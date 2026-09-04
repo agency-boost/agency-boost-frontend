@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Design tokens, defined once. Components reference the Tailwind theme, which maps to
+ * these — never a raw hex value. See docs/02-specs/design-system/tokens.md.
+ *
+ * Extracted from the two prototypes, which share one palette
+ * (Overall.html:11-24, KPM_Owner.html:11-23).
+ */
+:root {
+  /* Brand and surface */
+  --color-navy: #1b2b4b;
+  --color-navy-soft: #2e4370;
+  --color-amber: #f2994a;
+  --color-amber-dark: #d97f30;
+  /* A warm off-white, not a neutral grey — substituting one loses the product's character. */
+  --color-base: #faf9f7;
+  --color-card: #ffffff;
+  --color-muted: #5f5e5a;
+  --color-hairline: rgba(27, 43, 75, 0.12);
+
+  /* Status. Three values, not two: "not enough data" is never styled as failure. */
+  --color-success: #3b6d11;
+  --color-alert: #a32d2d;
+  --color-neutral: #5f5e5a;
+
+  /* Role accents. Always paired with a text label — colour is never the only cue. */
+  --color-role-ab: #f2994a;
+  --color-role-aab: #2f80ed;
+  --color-role-agent: rgba(27, 43, 75, 0.32);
+
+  /* Typography */
+  --font-display: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Elevation. Surfaces separate by hairline and contrast, not by depth. */
+  --shadow-modal: 0 20px 50px rgba(27, 43, 75, 0.3);
+
+  /* Layout */
+  --sidebar-width: 228px;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-base);
+  color: var(--color-navy);
+  font-family: var(--font-body);
+  font-size: 0.8125rem; /* 13px — dense, suits the data tables this product is made of */
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+}
+
+/**
+ * The focus ring is from the prototype (Overall.html:2334) and must never be removed.
+ * `outline: none` without a replacement is a blocking accessibility defect.
+ */
+:focus-visible {
+  outline: 2px solid var(--color-amber);
+  outline-offset: 1px;
+}

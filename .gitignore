@@ -10,3 +10,7 @@ test-results/
 *.log
 .DS_Store
 .turbo/
+
+# typescript build artifacts — regenerated, never reviewed
+*.tsbuildinfo
+next-env.d.ts

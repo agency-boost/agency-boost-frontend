@@ -1,0 +1,78 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Coverage ratchet
+        run: pnpm test:coverage
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Production build
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_API_BASE_URL: http://localhost:3001/api/v1
+          NEXT_PUBLIC_APP_ENV: test
+
+      # The agent's daily loop runs on a mid-range Android over 4G. First Load JS is
+      # the budget that protects it (docs/02-specs/nfr/performance-and-scale.md).
+      - name: First Load JS budget
+        run: |
+          BUDGET_KB=200
+          SIZE=$(du -sk .next/static/chunks | cut -f1)
+          echo "static chunks: ${SIZE} kB (budget ${BUDGET_KB} kB for First Load JS)"
+          if [ "$SIZE" -gt $((BUDGET_KB * 4)) ]; then
+            echo "::error::Bundle grew well past the First Load JS budget — investigate before merging."
+            exit 1
+          fi
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Dependency audit
+        run: pnpm audit --audit-level high
