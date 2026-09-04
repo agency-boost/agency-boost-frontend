@@ -1,6 +1,6 @@
 # AgencyBoost — frontend
 
-Next.js app for a multi-tenant SaaS. **This is a separate git repository**
+Next.js app for a multi-tenant SaaS. **This is a git submodule** of the `agency-boost` superproject (ADR-0009) — a complete, independent repository
 (`agency-boost-frontend`). The documentation that governs it lives in the docs repo one level up:
 `../docs/`, with the working rules in `../.claude/`.
 

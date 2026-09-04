@@ -2,8 +2,11 @@
 
 Next.js app for AgencyBoost, a multi-tenant SaaS for insurance agency offices (KPM).
 
-**The documentation that governs this repository lives in `agency-boost-docs`**, checked out one
-level up as `../docs/`, with the working rules in `../.claude/`. Start at
+**This repository is a submodule of the `agency-boost` superproject** (ADR-0009). It is a complete,
+independent repository — branch, commit and push here normally.
+
+The documentation that governs it lives in the superproject, one level up as `../docs/`, with the
+working rules in `../.claude/`. Start at
 [`../CLAUDE.md`](../CLAUDE.md) and [`frontend/CLAUDE.md`](CLAUDE.md).
 
 ## Stack
@@ -28,6 +31,22 @@ pnpm dev                  # http://localhost:3000
   labels. Divergences are registered in `../docs/02-specs/design-system/prototype-parity.md`.
 - **Role gating here is convenience, not control.** The API must refuse it too.
 - Every state: loading, empty, error, permission-denied.
+
+## Working as a submodule
+
+Day-to-day development is unchanged. The one addition: after pushing here, the superproject needs a
+**pointer bump** so it records which commit of this repository belongs with the current docs.
+
+```bash
+# here
+git commit -m "feat(...): …" && git push
+
+# in the superproject
+cd .. && git add frontend && git commit -m "chore(frontend): bump pointer to <sha>"
+```
+
+Merge the PR here first, then the superproject bump — a pointer to a commit that only exists on a
+deleted feature branch breaks every fresh clone.
 
 ## Status
 
