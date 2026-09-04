@@ -9,11 +9,11 @@ jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: pnpm
@@ -34,42 +34,40 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
       - name: Production build
-        run: pnpm build
+        run: pnpm build | tee build.log
         env:
           NEXT_PUBLIC_API_ORIGIN: http://localhost:3001
           NEXT_PUBLIC_APP_ENV: test
 
       # The agent's daily loop runs on a mid-range Android over 4G. First Load JS is
       # the budget that protects it (docs/02-specs/nfr/performance-and-scale.md).
+      #
+      # It reads Next's own First Load JS figure — gzipped, shared chunks only. An
+      # earlier version measured `du .next/static/chunks`, which is uncompressed,
+      # counts every route's chunk and the legacy polyfills, and so reported 766 kB
+      # for a page whose real cost is 102 kB.
       - name: First Load JS budget
-        run: |
-          BUDGET_KB=200
-          SIZE=$(du -sk .next/static/chunks | cut -f1)
-          echo "static chunks: ${SIZE} kB (budget ${BUDGET_KB} kB for First Load JS)"
-          if [ "$SIZE" -gt $((BUDGET_KB * 4)) ]; then
-            echo "::error::Bundle grew well past the First Load JS budget — investigate before merging."
-            exit 1
-          fi
+        run: node scripts/check-bundle-size.mjs < build.log
 
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: pnpm
