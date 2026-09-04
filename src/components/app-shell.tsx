@@ -37,7 +37,7 @@ export function AppShell({
 }) {
   return (
     <div className="flex min-h-screen">
-      <aside className="sticky top-0 hidden h-screen w-sidebar shrink-0 flex-col bg-navy px-4 py-5 text-[#EDEFF5] md:flex">
+      <aside className="sticky top-0 hidden h-screen w-sidebar shrink-0 flex-col bg-navy px-4 py-5 text-sidebar-text md:flex">
         <div className="mb-3 flex items-center gap-2 border-b border-white/10 px-1 pb-4">
           <span className="font-display text-[17px] font-extrabold tracking-tight text-white">
             AgencyBoost

@@ -16,6 +16,8 @@ const config: Config = {
         card: 'var(--color-card)',
         muted: 'var(--color-muted)',
         hairline: 'var(--color-hairline)',
+        'sidebar-text': 'var(--color-sidebar-text)',
+        'input-focus': 'var(--color-input-focus)',
         success: 'var(--color-success)',
         alert: 'var(--color-alert)',
         neutral: 'var(--color-neutral)',

@@ -20,6 +20,10 @@
   --color-card: #ffffff;
   --color-muted: #5f5e5a;
   --color-hairline: rgba(27, 43, 75, 0.12);
+  /* Sidebar body text: light grey on navy, from the prototype's --navy surface. */
+  --color-sidebar-text: #edeff5;
+  /* Warm wash on a focused numeric input, from the prototype's stepper. */
+  --color-input-focus: #fff6ec;
 
   /* Status. Three values, not two: "not enough data" is never styled as failure. */
   --color-success: #3b6d11;

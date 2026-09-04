@@ -53,7 +53,7 @@ export function Stepper({
         onChange={(e) => set(parseInt(e.target.value, 10) || 0)}
         className={cn(
           'h-11 w-14 rounded-md border border-hairline bg-card text-center text-base font-semibold',
-          'focus:bg-[#FFF6EC] [appearance:textfield]',
+          'focus:bg-input-focus [appearance:textfield]',
           '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none',
         )}
       />

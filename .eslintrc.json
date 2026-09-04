@@ -1,11 +1,44 @@
 {
-  "extends": ["next/core-web-vitals", "next/typescript"],
+  "extends": [
+    "next/core-web-vitals",
+    "next/typescript"
+  ],
   "rules": {
     "@typescript-eslint/no-explicit-any": "error",
     "@typescript-eslint/no-unused-vars": [
       "error",
-      { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ],
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}/]",
+        "message": "No raw hex colours. Use a design token (e.g. text-navy, bg-amber, bg-input-focus). Define new ones in globals.css and tailwind.config.ts \u2014 see docs/02-specs/design-system/tokens.md."
+      },
+      {
+        "selector": "TemplateElement[value.raw=/#[0-9a-fA-F]{3,8}/]",
+        "message": "No raw hex colours in template literals. Use a design token."
+      }
     ]
   },
-  "ignorePatterns": ["node_modules/", ".next/", "coverage/"]
+  "ignorePatterns": [
+    "node_modules/",
+    ".next/",
+    "coverage/"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "test/**/*"
+      ],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
+    }
+  ]
 }
