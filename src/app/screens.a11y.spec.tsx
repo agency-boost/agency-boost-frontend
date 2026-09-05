@@ -14,6 +14,7 @@ import TenantsPage from './admin/tenants/page';
 import NewTenantPage from './admin/tenants/new/page';
 import CompaniesPage from './admin/companies/page';
 import AuditPage from './admin/audit/page';
+import MembersPage from './people/members/page';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -152,6 +153,35 @@ describe('Phase 2 screens have no axe violations', () => {
     renderWithSession(<CompaniesPage />, { me: SUPER_ADMIN });
     await screen.findByRole('table');
     await expectClean('admin/companies');
+  });
+
+  it('the office roster, populated', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false,
+      },
+      permissions: ['member:read_profile'],
+    });
+    stubFetch({
+      '/members': {
+        body: {
+          members: [
+            {
+              membershipId: 'mem-1', agentCode: 'KPM0417-001', role: 'agent', status: 'active',
+              fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test',
+              initials: 'RW', leaderId: null, leaderName: 'Wilson Tanoto', depth: 1,
+              directCount: 0, subtreeCount: 0, isLeader: false, isKpmOwner: false,
+              isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z',
+            },
+          ],
+          nextCursor: '25',
+        },
+      },
+    });
+    renderWithSession(<MembersPage />, { me: owner });
+    await screen.findByRole('table');
+    await expectClean('people/members');
   });
 
   it('audit log', async () => {
