@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { useSession } from '@/lib/session';
 import { RoleBadge } from '@/components/ui/role-badge';
 import {
   changeRole,
@@ -15,6 +16,12 @@ import {
   roleChangeExplanation,
   type HierarchyRole,
   type TeamMember,
+} from '@/lib/org';
+import {
+  isRemovalConfirmed,
+  REMOVAL_CONFIRMATION,
+  removeMember,
+  type SubtreeDisposition,
 } from '@/lib/org';
 import {
   INVITE_STATE_LABEL,
@@ -43,6 +50,7 @@ import {
 const NEVER = '';
 
 export default function AddAgentsPage() {
+  const { me } = useSession();
   const [invites, setInvites] = useState<Invite[] | null>(null);
   const [label, setLabel] = useState('');
   const [maxUses, setMaxUses] = useState(NEVER);
@@ -53,6 +61,10 @@ export default function AddAgentsPage() {
   const [team, setTeam] = useState<TeamMember[] | null>(null);
   const [proposal, setProposal] = useState<{ member: TeamMember; toRole: HierarchyRole } | null>(null);
   const [roleReason, setRoleReason] = useState('');
+  const [removing, setRemoving] = useState<TeamMember | null>(null);
+  const [removeWord, setRemoveWord] = useState('');
+  const [removeReason, setRemoveReason] = useState('');
+  const [disposition, setDisposition] = useState<'reassign' | 'orphan'>('reassign');
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -81,6 +93,45 @@ export default function AddAgentsPage() {
       // Refused — reload so the select shows what is true rather than what was picked.
       await load();
       setProposal(null);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function closeRemoval() {
+    setRemoving(null);
+    setRemoveWord('');
+    setRemoveReason('');
+    setDisposition('reassign');
+  }
+
+  async function applyRemoval() {
+    if (!removing || !isRemovalConfirmed(removeWord)) return;
+    setBusy('remove');
+    setError(null);
+    try {
+      // Only sent when they actually lead people — the server refuses a disposition
+      // for somebody who leads nobody, and rightly: it would be describing a move that
+      // is not happening.
+      const subtree: SubtreeDisposition | undefined =
+        removing.directCount > 0
+          ? disposition === 'orphan'
+            ? { action: 'orphan' }
+            : { action: 'reassign', toMembershipId: me?.membership?.membershipId ?? '' }
+          : undefined;
+
+      setTeam(
+        await removeMember(removing.membershipId, {
+          confirmation: removeWord,
+          reason: removeReason.trim() || undefined,
+          subtree,
+        }),
+      );
+      closeRemoval();
+    } catch (err) {
+      setError(toDisplayError(err));
+      await load();
+      closeRemoval();
     } finally {
       setBusy(null);
     }
@@ -415,6 +466,21 @@ export default function AddAgentsPage() {
                 // decides that and sends the answer; this only renders it.
                 <RoleBadge role={member.role} />
               )}
+
+              <Button
+                variant="danger"
+                aria-label={`Remove ${member.fullName}`}
+                disabled={busy !== null}
+                onClick={() => {
+                  setProposal(null);
+                  setRemoving(member);
+                  setRemoveWord('');
+                  setRemoveReason('');
+                  setDisposition('reassign');
+                }}
+              >
+                Remove
+              </Button>
             </li>
           ))}
         </ul>
@@ -454,6 +520,97 @@ export default function AddAgentsPage() {
                   setRoleReason('');
                 }}
               >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {removing && (
+          <div className="mt-4 rounded-md border border-alert bg-base p-4">
+            <h3 className="font-display text-md font-bold text-navy">
+              Remove {removing.fullName}?
+            </h3>
+            <p className="mt-1 text-md text-navy">
+              This removes them from your team immediately. They&apos;ll need to search and request
+              a new leader if they want to rejoin under you or someone else.
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              Nothing is deleted. Their record and everything they logged stays with the office, on
+              the Removed list.
+            </p>
+
+            {removing.directCount > 0 && (
+              <fieldset className="mt-3 rounded-md border border-hairline p-3">
+                <legend className="px-1 text-sm font-semibold text-navy">
+                  {removing.directCount === 1
+                    ? '1 person reports to them'
+                    : `${removing.directCount} people report to them`}
+                </legend>
+                <p className="text-sm text-muted">
+                  Say where they go. Removing a leader without deciding this would leave them
+                  reporting to somebody who has left.
+                </p>
+                <label className="mt-2 flex items-center gap-2 text-md text-navy">
+                  <input
+                    type="radio"
+                    name="disposition"
+                    value="reassign"
+                    checked={disposition === 'reassign'}
+                    onChange={() => setDisposition('reassign')}
+                  />
+                  Move them to my unit
+                </label>
+                <label className="mt-1 flex items-center gap-2 text-md text-navy">
+                  <input
+                    type="radio"
+                    name="disposition"
+                    value="orphan"
+                    checked={disposition === 'orphan'}
+                    onChange={() => setDisposition('orphan')}
+                  />
+                  Leave them unassigned, for another leader to pick up
+                </label>
+              </fieldset>
+            )}
+
+            <Field
+              label="Why?"
+              htmlFor="remove-reason"
+              hint="Kept on their record, and sent to them."
+              className="mt-3"
+            >
+              <TextInput
+                id="remove-reason"
+                value={removeReason}
+                onChange={(e) => setRemoveReason(e.target.value)}
+                placeholder="Left the industry"
+              />
+            </Field>
+
+            <Field
+              label={`Type ${REMOVAL_CONFIRMATION} to confirm`}
+              htmlFor="remove-confirm"
+              className="mt-3"
+            >
+              <TextInput
+                id="remove-confirm"
+                value={removeWord}
+                autoComplete="off"
+                placeholder={`Type ${REMOVAL_CONFIRMATION}`}
+                onChange={(e) => setRemoveWord(e.target.value)}
+              />
+            </Field>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                variant="danger"
+                disabled={busy !== null || !isRemovalConfirmed(removeWord)}
+                onClick={() => void applyRemoval()}
+              >
+                {busy === 'remove' ? 'Removing…' : 'Remove from team'}
+              </Button>
+              <Button variant="secondary" disabled={busy !== null} onClick={closeRemoval}>
                 Cancel
               </Button>
             </div>

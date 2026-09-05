@@ -144,6 +144,14 @@ describe('accessibility', () => {
       expect(ratio(ALERT, CARD)).toBeGreaterThanOrEqual(4.5);
     });
 
+    it('the danger button clears 4.5:1 on both surfaces it appears on', () => {
+      // It is alert-red text on a transparent ground, so whichever surface is behind it
+      // is the one that has to clear. The removal panel sits on base, the row it came
+      // from on card, and only card was pinned before P3-T7.
+      expect(ratio(ALERT, BASE)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(ALERT, CARD)).toBeGreaterThanOrEqual(4.5);
+    });
+
     it('sidebar text clears 4.5:1 on navy', () => {
       expect(ratio(SIDEBAR_TEXT, NAVY)).toBeGreaterThanOrEqual(4.5);
     });

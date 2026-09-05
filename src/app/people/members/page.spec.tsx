@@ -121,6 +121,33 @@ describe('members directory (P3-T1 AC-3)', () => {
     expect(await screen.findByText('Nobody has been removed from this office.')).toBeInTheDocument();
   });
 
+  it('P3-T7 AC-2: the Removed tab says when they left, not that they are removed', async () => {
+    // Every row on this tab reads "Removed", so a Status column answers nothing. When
+    // is the question the list is actually asked.
+    const { calls } = stubFetch({
+      '/members': {
+        body: {
+          members: [
+            member({ status: 'removed', removedAt: '2026-07-19T04:00:00.000Z' }),
+          ],
+          nextCursor: null,
+        },
+      },
+    });
+    renderWithSession(<MembersPage />, { me: OWNER });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Removed' }));
+    await vi.waitFor(() => expect(calls[calls.length - 1].url).toContain('status=removed'));
+
+    const table = await screen.findByRole('table');
+    expect(within(table).getByRole('columnheader', { name: 'Removed' })).toBeInTheDocument();
+    expect(within(table).queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument();
+    expect(within(table).getByRole('row', { name: /Rina/ })).toHaveTextContent('19/07/2026');
+
+    // Their code and their leader are still there — the row is kept, not blanked.
+    expect(within(table).getByRole('row', { name: /Rina/ })).toHaveTextContent('KPM0417-001');
+  });
+
   it('keeps the tabs it has not built visible rather than hiding the roadmap', async () => {
     stubFetch({ '/members': { body: { members: [], nextCursor: null } } });
     renderWithSession(<MembersPage />, { me: OWNER });

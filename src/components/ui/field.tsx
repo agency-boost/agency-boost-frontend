@@ -92,13 +92,19 @@ const BUTTON_BASE =
 const BUTTON_VARIANT = {
   primary: 'bg-amber text-navy hover:bg-amber-dark',
   secondary: 'border border-hairline bg-card text-navy',
+  // The prototype's `.btn-danger` (`Overall.html:2244-2245`): transparent, with an
+  // alert-red border and alert-red text. Deliberately quieter than the primary — a
+  // destructive action should not be the most inviting thing on the card.
+  danger: 'border-[1.5px] border-alert bg-transparent text-alert hover:bg-alert/5',
 } as const;
 
 export function Button({
   variant = 'primary',
   className,
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'secondary' }) {
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'primary' | 'secondary' | 'danger';
+}) {
   return (
     <button
       {...props}

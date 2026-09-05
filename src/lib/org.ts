@@ -26,6 +26,8 @@ export interface Member {
   isKpmOwner: boolean;
   isKpmAdmin: boolean;
   joinedAt: string | null;
+  /** Set only on a removed row. */
+  removedAt: string | null;
 }
 
 export interface MemberPage {
@@ -93,6 +95,33 @@ export const changeRole = (membershipId: string, toRole: HierarchyRole, reason?:
   });
 
 export const readRoleChangeLog = () => api<RoleChangeEntry[]>('/members/role-changes');
+
+/** Where the reports of somebody being removed go. There is no default — see P3-T7 AC-3. */
+export type SubtreeDisposition =
+  | { action: 'reassign'; toMembershipId: string }
+  | { action: 'orphan' };
+
+/**
+ * The word the server checks. Exported so the screen's gate and the request body cannot
+ * disagree about what it is.
+ */
+export const REMOVAL_CONFIRMATION = 'REMOVE';
+
+export const isRemovalConfirmed = (typed: string) =>
+  typed.trim().toUpperCase() === REMOVAL_CONFIRMATION;
+
+export const removeMember = (
+  membershipId: string,
+  input: { confirmation: string; reason?: string; subtree?: SubtreeDisposition },
+) =>
+  api<TeamMember[]>(`/members/${membershipId}`, {
+    method: 'DELETE',
+    body: {
+      confirmation: input.confirmation,
+      ...(input.reason ? { reason: input.reason } : {}),
+      ...(input.subtree ? { subtree: input.subtree } : {}),
+    },
+  });
 
 /**
  * What a role change means for the person, in their leader's words.

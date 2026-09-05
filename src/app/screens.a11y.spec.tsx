@@ -332,6 +332,61 @@ describe('Phase 2 screens have no axe violations', () => {
     await expectClean('user-management/add (role change)');
   });
 
+  it('the invite screen with a removal waiting to be confirmed', async () => {
+    // The disposition fieldset is the part with structure to get wrong — a legend, two
+    // radios sharing a name, and a reason field, all inside a panel that appeared.
+    const leader = makeMe({
+      membership: {
+        membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 1,
+      },
+      permissions: ['member:invite'],
+    });
+    stubFetch({
+      '/join/invites': { body: [] },
+      '/join/untagged': { body: [] },
+      '/members/my-team': {
+        body: [{
+          membershipId: 'mem-t1', fullName: 'Rina Wijaya', initials: 'RW',
+          agentCode: 'KPM0417-003', role: 'aab', directCount: 2, canChangeRole: true,
+        }],
+      },
+    });
+    renderWithSession(<AddAgentsPage />, { me: leader });
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove Rina Wijaya' }));
+    await screen.findByLabelText('Type REMOVE to confirm');
+    await expectClean('user-management/add (removal)');
+  });
+
+  it('the removed list, populated', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+      },
+      permissions: ['member:read_profile'],
+    });
+    stubFetch({
+      '/members': {
+        body: {
+          members: [{
+            membershipId: 'mem-1', agentCode: 'KPM0417-001', role: 'agent', status: 'removed',
+            fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test',
+            initials: 'RW', leaderId: null, leaderName: 'Wilson Tanoto', depth: 1,
+            directCount: 0, subtreeCount: 0, isLeader: false, isKpmOwner: false,
+            isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z',
+            removedAt: '2026-07-19T04:00:00.000Z',
+          }],
+          nextCursor: null,
+        },
+      },
+    });
+    renderWithSession(<MembersPage />, { me: owner });
+    await userEvent.click(await screen.findByRole('button', { name: 'Removed' }));
+    await screen.findByRole('table');
+    await expectClean('people/members (removed)');
+  });
+
   it('the role change log, populated', async () => {
     const owner = makeMe({
       membership: {

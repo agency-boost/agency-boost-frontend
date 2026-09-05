@@ -232,8 +232,17 @@ export default function MembersPage() {
       {tab !== 'rolelog' && page && page.length > 0 && (
         <>
           <DataTable
-            caption="Office roster"
-            columns={['Name', 'Agent code', 'Role', 'Reports to', 'Unit', 'Status']}
+            caption={tab === 'removed' ? 'Removed members' : 'Office roster'}
+            columns={[
+              'Name',
+              'Agent code',
+              'Role',
+              'Reports to',
+              'Unit',
+              // On the Removed tab every row reads "Removed", which answers nothing.
+              // When they left is the question actually asked of this list.
+              tab === 'removed' ? 'Removed' : 'Status',
+            ]}
           >
             {page.map((m) => (
               <Row key={m.membershipId}>
@@ -259,8 +268,21 @@ export default function MembersPage() {
                       reports leads nobody, and this column says so. */}
                   {m.isLeader ? `${m.directCount} direct · ${m.subtreeCount} in unit` : 'Leads nobody'}
                 </Cell>
-                <Cell>
-                  <StatusPill status={STATUS_TO_PILL[m.status]} label={MEMBER_STATUS_LABEL[m.status]} />
+                <Cell className={tab === 'removed' ? 'whitespace-nowrap text-muted' : undefined}>
+                  {tab === 'removed' ? (
+                    m.removedAt ? (
+                      <time dateTime={m.removedAt}>
+                        {new Date(m.removedAt).toLocaleDateString('en-GB')}
+                      </time>
+                    ) : (
+                      '—'
+                    )
+                  ) : (
+                    <StatusPill
+                      status={STATUS_TO_PILL[m.status]}
+                      label={MEMBER_STATUS_LABEL[m.status]}
+                    />
+                  )}
                 </Cell>
               </Row>
             ))}

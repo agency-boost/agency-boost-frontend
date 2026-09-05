@@ -261,6 +261,163 @@ describe('inviting people (P3-T4)', () => {
     });
   });
 
+  describe('removing somebody (P3-T7)', () => {
+    const teamMember = (over: Record<string, unknown> = {}) => ({
+      membershipId: 'mem-t1', fullName: 'Rina Wijaya', initials: 'RW',
+      agentCode: 'KPM0417-003', role: 'agent', directCount: 0, canChangeRole: true, ...over,
+    });
+
+    function stub(team: Record<string, unknown>[], extra: Record<string, unknown> = {}) {
+      return stubFetch({
+        '/join/invites': { body: [] },
+        '/join/untagged': { body: [] },
+        '/members/my-team': { body: team },
+        ...extra,
+      });
+    }
+
+    async function open(team = [teamMember()], extra: Record<string, unknown> = {}) {
+      const stubbed = stub(team, extra);
+      renderWithSession(<AddAgentsPage />, { me: LEADER });
+      await userEvent.click(await screen.findByRole('button', { name: 'Remove Rina Wijaya' }));
+      return stubbed;
+    }
+
+    it('says what removal does and does not do, in the prototype own words', async () => {
+      await open();
+      expect(screen.getByText(/removes them from your team immediately/)).toBeInTheDocument();
+      expect(screen.getByText(/search and request a new leader/)).toBeInTheDocument();
+      // The half the prototype does not say, because its version really does delete.
+      expect(screen.getByText(/Nothing is deleted/)).toBeInTheDocument();
+    });
+
+    it('AC-1: the button stays disabled until the word is typed exactly', async () => {
+      await open();
+      const confirm = screen.getByRole('button', { name: 'Remove from team' });
+      expect(confirm).toBeDisabled();
+
+      await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), 'REMOV');
+      expect(confirm).toBeDisabled();
+
+      await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), 'E');
+      expect(confirm).toBeEnabled();
+    });
+
+    it('AC-1: accepts it trimmed and in any case, as the prototype does', async () => {
+      await open();
+      await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), '  remove  ');
+      expect(screen.getByRole('button', { name: 'Remove from team' })).toBeEnabled();
+    });
+
+    it('sends the word rather than a flag, so the server does the checking', async () => {
+      const { calls } = await open([teamMember()], { '/members/mem-t1': { body: [] } });
+      await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), 'REMOVE');
+      await userEvent.type(screen.getByLabelText('Why?'), '  Left the industry  ');
+      await userEvent.click(screen.getByRole('button', { name: 'Remove from team' }));
+
+      const sent = calls.find((c) => c.init.method === 'DELETE')!;
+      expect(sent.url).toContain('/members/mem-t1');
+      expect(JSON.parse(sent.init.body as string)).toEqual({
+        confirmation: 'REMOVE',
+        reason: 'Left the industry',
+      });
+    });
+
+    it('changes nothing until it is confirmed, and Cancel forgets what was typed', async () => {
+      const { calls } = await open();
+      await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), 'REMOVE');
+      expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false);
+
+      await userEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[0]);
+      await userEvent.click(screen.getByRole('button', { name: 'Remove Rina Wijaya' }));
+      expect(screen.getByRole('button', { name: 'Remove from team' })).toBeDisabled();
+    });
+
+    describe('AC-3: when they lead people', () => {
+      const leader = [teamMember({ role: 'aab', directCount: 2 })];
+
+      it('asks where the reports go, and says why it is asking', async () => {
+        await open(leader);
+        expect(screen.getByText('2 people report to them')).toBeInTheDocument();
+        expect(screen.getByText(/reporting to somebody who has left/)).toBeInTheDocument();
+        expect(screen.getByLabelText('Move them to my unit')).toBeInTheDocument();
+        expect(
+          screen.getByLabelText('Leave them unassigned, for another leader to pick up'),
+        ).toBeInTheDocument();
+      });
+
+      it('sends the disposition, with my own membership as the destination', async () => {
+        const { calls } = await open(leader, { '/members/mem-t1': { body: [] } });
+        await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), 'REMOVE');
+        await userEvent.click(screen.getByRole('button', { name: 'Remove from team' }));
+
+        const sent = calls.find((c) => c.init.method === 'DELETE')!;
+        expect(JSON.parse(sent.init.body as string).subtree).toEqual({
+          action: 'reassign',
+          toMembershipId: LEADER.membership!.membershipId,
+        });
+      });
+
+      it('sends orphan when that is what was picked', async () => {
+        const { calls } = await open(leader, { '/members/mem-t1': { body: [] } });
+        await userEvent.click(
+          screen.getByLabelText('Leave them unassigned, for another leader to pick up'),
+        );
+        await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), 'REMOVE');
+        await userEvent.click(screen.getByRole('button', { name: 'Remove from team' }));
+
+        expect(JSON.parse(calls.find((c) => c.init.method === 'DELETE')!.init.body as string).subtree)
+          .toEqual({ action: 'orphan' });
+      });
+
+      it('does not ask, or send, for somebody who leads nobody', async () => {
+        const { calls } = await open([teamMember()], { '/members/mem-t1': { body: [] } });
+        expect(screen.queryByLabelText('Move them to my unit')).not.toBeInTheDocument();
+
+        await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), 'REMOVE');
+        await userEvent.click(screen.getByRole('button', { name: 'Remove from team' }));
+        expect(
+          JSON.parse(calls.find((c) => c.init.method === 'DELETE')!.init.body as string),
+        ).not.toHaveProperty('subtree');
+      });
+
+      it('surfaces a refusal and reloads, rather than leaving a stale panel open', async () => {
+        const { calls } = await open(leader, {
+          '/members/mem-t1': {
+            status: 400,
+            body: {
+              error: {
+                code: 'ORG_SUBTREE_DISPOSITION_REQUIRED',
+                message: '2 people report to them. Say where they go before removing this leader.',
+                requestId: 'r-2',
+              },
+            },
+          },
+        });
+        await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), 'REMOVE');
+        await userEvent.click(screen.getByRole('button', { name: 'Remove from team' }));
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('2 people report to them');
+        expect(screen.queryByRole('button', { name: 'Remove from team' })).not.toBeInTheDocument();
+        expect(calls.filter((c) => c.url.endsWith('/members/my-team')).length).toBeGreaterThan(1);
+      });
+    });
+
+    it('opening removal closes a role change that was half-made', async () => {
+      // Both panels sit in the same place. Two open at once is a screen asking two
+      // questions about the same person and answering neither.
+      stub([teamMember()]);
+      renderWithSession(<AddAgentsPage />, { me: LEADER });
+
+      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
+      expect(screen.getByText(/can now recruit/)).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove Rina Wijaya' }));
+      expect(screen.queryByText(/can now recruit/)).not.toBeInTheDocument();
+      expect(screen.getByText(/removes them from your team immediately/)).toBeInTheDocument();
+    });
+  });
+
   describe('pulling in somebody already here (P3-T5 AC-3)', () => {
     const untagged = (over: Record<string, unknown> = {}) => ({
       membershipId: 'mem-un', fullName: 'Fajar Nugroho', initials: 'FN',
