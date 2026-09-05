@@ -22,6 +22,8 @@ import LogActivityPage from './activity/log/page';
 import FindLeaderPage from './user-management/leader/page';
 import AddAgentsPage from './user-management/add/page';
 import PendingPage from './user-management/pending/page';
+import GroupTreePage from './group-tree/page';
+import OrgTreePage from './people/org-tree/page';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -58,6 +60,12 @@ const AUDIT = {
   action: 'kpm.created', targetCollection: 'kpms', targetId: 'kpm-1',
   onBehalfOf: true, createdAt: '2026-09-04T02:00:00.000Z',
 };
+
+const treeNode = (over: Record<string, unknown>) => ({
+  fullName: 'Somebody', preferredName: null, initials: 'SB', agentCode: 'KPM0417-000',
+  role: 'agent', depth: 0, layer: 1, leaderId: null, directCount: 0, subtreeCount: 0,
+  isLeader: false, isSelf: false, ...over,
+});
 
 async function expectClean(name: string) {
   const results = await axe(document.body, {
@@ -434,6 +442,70 @@ describe('Phase 2 screens have no axe violations', () => {
     renderWithSession(<PendingPage />, { me: ab });
     await screen.findByLabelText('Add to');
     await expectClean('user-management/pending');
+  });
+
+  it('the group tree, populated and with a unit closed', async () => {
+    // The closed state is the one with an aria-expanded toggle and a hidden subtree to
+    // get wrong; the open one is just more cards.
+    const leader = makeMe({
+      membership: {
+        membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 1,
+      },
+      permissions: ['org_tree:read'],
+    });
+    stubFetch({
+      '/members/tree': {
+        body: {
+          nodes: [
+            treeNode({ membershipId: 'mem-ab', fullName: 'Agus Prasetyo', initials: 'AP',
+                       role: 'ab', layer: 1, isLeader: true, directCount: 1, isSelf: true }),
+            treeNode({ membershipId: 'mem-sari', fullName: 'Sari Puspita', initials: 'SP',
+                       role: 'aab', layer: 2, leaderId: 'mem-ab', isLeader: true, directCount: 1 }),
+            treeNode({ membershipId: 'mem-rina', fullName: 'Rina Wijaya', initials: 'RW',
+                       layer: 3, leaderId: 'mem-sari' }),
+          ],
+          leader: { membershipId: 'mem-owner', fullName: 'Wilson Tanoto', initials: 'WT', role: 'ab' },
+          rootIds: ['mem-ab'],
+          selfId: 'mem-ab',
+          counts: { ab: 0, aab: 1, agent: 1, total: 2 },
+        },
+      },
+    });
+    renderWithSession(<GroupTreePage />, { me: leader });
+    await screen.findByText('Layer 1');
+    await expectClean('group-tree');
+  });
+
+  it('the org tree, populated, with a second root', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 1,
+      },
+      permissions: ['org_tree:read'],
+    });
+    stubFetch({
+      '/members/tree': {
+        body: {
+          nodes: [
+            treeNode({ membershipId: 'mem-owner', fullName: 'Wilson Tanoto', initials: 'WT',
+                       role: 'ab', layer: 1, isLeader: true, directCount: 1, isSelf: true }),
+            treeNode({ membershipId: 'mem-ab', fullName: 'Agus Prasetyo', initials: 'AP',
+                       role: 'ab', layer: 2, leaderId: 'mem-owner' }),
+            treeNode({ membershipId: 'mem-orphan', fullName: 'Sari Puspita', initials: 'SP',
+                       role: 'aab', layer: 1 }),
+          ],
+          leader: null,
+          rootIds: ['mem-owner', 'mem-orphan'],
+          selfId: 'mem-owner',
+          counts: { ab: 1, aab: 1, agent: 0, total: 2 },
+        },
+      },
+    });
+    renderWithSession(<OrgTreePage />, { me: owner });
+    await screen.findByText('Layer 1');
+    await expectClean('people/org-tree');
   });
 
   it('audit log', async () => {

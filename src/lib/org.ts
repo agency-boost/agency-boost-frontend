@@ -96,6 +96,44 @@ export const changeRole = (membershipId: string, toRole: HierarchyRole, reason?:
 
 export const readRoleChangeLog = () => api<RoleChangeEntry[]>('/members/role-changes');
 
+/** One person in the tree. `layer` is one-based within this projection, not office depth. */
+export interface OrgTreeNode {
+  membershipId: string;
+  fullName: string;
+  preferredName: string | null;
+  initials: string;
+  agentCode: string;
+  role: HierarchyRole;
+  depth: number;
+  layer: number;
+  leaderId: string | null;
+  directCount: number;
+  subtreeCount: number;
+  isLeader: boolean;
+  isSelf: boolean;
+}
+
+/**
+ * Your own leader. A different type from a node on purpose: it has no layer and no
+ * leaderId, so it cannot be drawn as one (AC-1).
+ */
+export interface OrgTreeLeader {
+  membershipId: string;
+  fullName: string;
+  initials: string;
+  role: HierarchyRole;
+}
+
+export interface OrgTree {
+  nodes: OrgTreeNode[];
+  leader: OrgTreeLeader | null;
+  rootIds: string[];
+  selfId: string | null;
+  counts: { ab: number; aab: number; agent: number; total: number };
+}
+
+export const readOrgTree = () => api<OrgTree>('/members/tree');
+
 /** Where the reports of somebody being removed go. There is no default — see P3-T7 AC-3. */
 export type SubtreeDisposition =
   | { action: 'reassign'; toMembershipId: string }

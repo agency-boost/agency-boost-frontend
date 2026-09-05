@@ -78,7 +78,7 @@ function Chrome({
       label: 'Your office',
       items: [
         { label: 'User management', href: '/user-management/kpm', active: pathname.startsWith('/user-management') },
-        { label: 'Group tree', href: '/group-tree', upcoming: true },
+        { label: 'Group tree', href: '/group-tree' },
       ],
     },
     {

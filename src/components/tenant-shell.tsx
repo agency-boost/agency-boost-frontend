@@ -27,7 +27,7 @@ const SECTIONS: readonly { label: string; items: { label: string; href: string; 
     label: 'People',
     items: [
       { label: 'All members', href: '/people/members' },
-      { label: 'Org tree', href: '/people/org-tree', upcoming: true },
+      { label: 'Org tree', href: '/people/org-tree' },
       { label: 'KPM admins', href: '/people/admins', upcoming: true },
     ],
   },
@@ -46,15 +46,18 @@ export function TenantShell({
   title,
   subtitle,
   actions,
+  permission = 'member:read_profile',
   children,
 }: {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  /** What this screen needs. Most tenant-admin screens read the roster; the tree does not. */
+  permission?: string;
   children: React.ReactNode;
 }) {
   return (
-    <RequireSession permission="member:read_profile">
+    <RequireSession permission={permission}>
       <TenantChrome title={title} subtitle={subtitle} actions={actions}>
         {children}
       </TenantChrome>
