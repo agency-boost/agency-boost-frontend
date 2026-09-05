@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { cn } from '@/lib/cn';
 
 /**
@@ -18,6 +19,48 @@ export interface NavItem {
 export interface NavSection {
   readonly label: string | null;
   readonly items: readonly NavItem[];
+}
+
+/**
+ * Navigation is client-side. That is not only a speed choice: the access token lives in
+ * memory, so a full page load drops it and forces a refresh round-trip before the first
+ * request on every screen. `next/link` keeps the session in hand.
+ *
+ * An upcoming item keeps its `<a>` shell without an href — announced, focusable in the
+ * reading order, and not navigable.
+ */
+function NavLink({ item }: { item: NavItem }) {
+  const className = cn(
+    'flex items-center gap-2 rounded-md px-2 py-1.5 text-md font-medium',
+    item.active ? 'bg-amber/15 font-semibold text-white' : 'text-white/[0.78] hover:text-white',
+    item.upcoming && 'cursor-default text-white/30 hover:text-white/30',
+  );
+  const body = (
+    <>
+      <span
+        className={cn('h-1.5 w-1.5 shrink-0 rounded-full', item.active ? 'bg-amber' : 'bg-white/35')}
+      />
+      {item.label}
+      {item.upcoming && (
+        <span className="ml-auto rounded-pill bg-white/[0.06] px-1.5 py-0.5 text-2xs font-bold uppercase text-white/40">
+          Upcoming
+        </span>
+      )}
+    </>
+  );
+
+  if (item.upcoming) {
+    return (
+      <a aria-disabled className={className}>
+        {body}
+      </a>
+    );
+  }
+  return (
+    <Link href={item.href} aria-current={item.active ? 'page' : undefined} className={className}>
+      {body}
+    </Link>
+  );
 }
 
 export function AppShell({
@@ -55,31 +98,7 @@ export function AppShell({
               <ul className="mb-2.5 flex flex-col gap-px">
                 {section.items.map((item) => (
                   <li key={item.href}>
-                    <a
-                      href={item.upcoming ? undefined : item.href}
-                      aria-disabled={item.upcoming || undefined}
-                      aria-current={item.active ? 'page' : undefined}
-                      className={cn(
-                        'flex items-center gap-2 rounded-md px-2 py-1.5 text-md font-medium',
-                        item.active
-                          ? 'bg-amber/15 font-semibold text-white'
-                          : 'text-white/[0.78] hover:text-white',
-                        item.upcoming && 'cursor-default text-white/30 hover:text-white/30',
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'h-1.5 w-1.5 shrink-0 rounded-full',
-                          item.active ? 'bg-amber' : 'bg-white/35',
-                        )}
-                      />
-                      {item.label}
-                      {item.upcoming && (
-                        <span className="ml-auto rounded-pill bg-white/[0.06] px-1.5 py-0.5 text-2xs font-bold uppercase text-white/40">
-                          Upcoming
-                        </span>
-                      )}
-                    </a>
+                    <NavLink item={item} />
                   </li>
                 ))}
               </ul>

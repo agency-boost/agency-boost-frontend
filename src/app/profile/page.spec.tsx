@@ -1,0 +1,146 @@
+import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { makeMe, renderWithSession, stubFetch } from '../../../test/harness';
+import ProfilePage from './page';
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => '/profile',
+}));
+
+describe('profile', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('shows the permissions the server resolved, not a guess from the role', async () => {
+    renderWithSession(<ProfilePage />, {
+      me: makeMe({ permissions: ['activity_log:create_own', 'lead:create_own'] }),
+    });
+    await userEvent.click(screen.getByText('2 granted'));
+    expect(screen.getByText('activity_log:create_own')).toBeInTheDocument();
+  });
+
+  it('names a person without a KPM honestly instead of showing a blank office', () => {
+    renderWithSession(<ProfilePage />, { me: makeMe({ membership: null }) });
+    expect(screen.getByText('Not in an office yet')).toBeInTheDocument();
+  });
+
+  it('shows tenant-admin rights alongside the hierarchy role, not instead of it', () => {
+    // The two are orthogonal: a person can be an AB and a KPM Admin at once.
+    renderWithSession(<ProfilePage />, {
+      me: makeMe({
+        membership: {
+          membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'ab',
+          isKpmOwner: false, isKpmAdmin: true,
+        },
+      }),
+    });
+    expect(screen.getByTitle('Agency Builder')).toBeInTheDocument();
+    expect(screen.getByText('KPM Admin')).toBeInTheDocument();
+  });
+
+  it('offers the platform console only to a Super Admin', () => {
+    const { unmount } = renderWithSession(<ProfilePage />);
+    expect(screen.queryByRole('link', { name: /platform console/ })).not.toBeInTheDocument();
+    unmount();
+
+    renderWithSession(<ProfilePage />, {
+      me: makeMe({
+        user: {
+          id: 'u-root', email: 'root@agencyboost.test', fullName: 'Root', preferredName: null,
+          pronoun: 'they', initials: 'R', platformRole: 'super_admin',
+        },
+      }),
+    });
+    expect(screen.getByRole('link', { name: /platform console/ })).toHaveAttribute('href', '/admin');
+  });
+
+  it('saves the details and confirms it', async () => {
+    const { calls } = stubFetch({ '/auth/me': { body: {} } });
+    renderWithSession(<ProfilePage />);
+
+    await userEvent.clear(screen.getByLabelText('Preferred name'));
+    await userEvent.type(screen.getByLabelText('Preferred name'), 'Rin');
+    await userEvent.selectOptions(screen.getByLabelText('Pronoun'), 'she');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const patch = calls.find((c) => c.init.method === 'PATCH')!;
+    expect(JSON.parse(patch.init.body as string)).toMatchObject({
+      preferredName: 'Rin',
+      pronoun: 'she',
+    });
+    expect(await screen.findByText('Saved.')).toBeInTheDocument();
+  });
+
+  it('signs out', async () => {
+    const { session } = renderWithSession(<ProfilePage />);
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(session.signOut).toHaveBeenCalled();
+  });
+
+  it('surfaces a rejected profile save instead of a silent no-op', async () => {
+    stubFetch({
+      '/auth/me': {
+        status: 400,
+        body: { error: { code: 'VALIDATION_FAILED', message: 'Name is required.', requestId: 'req-12' } },
+      },
+    });
+    renderWithSession(<ProfilePage />);
+
+    await userEvent.type(screen.getByLabelText('Full name'), 'x');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Name is required.');
+    expect(screen.queryByText('Saved.')).not.toBeInTheDocument();
+  });
+
+  it('clears both password fields once the change succeeds', async () => {
+    // Leaving them filled invites a second submit that would now fail, because the
+    // current password is no longer current.
+    stubFetch({ '/auth/change-password': { body: { status: 'changed' } } });
+    renderWithSession(<ProfilePage />);
+
+    await userEvent.type(screen.getByLabelText('Current password'), 'old password');
+    await userEvent.type(screen.getByLabelText('New password'), 'a long enough password');
+    await userEvent.click(screen.getByRole('button', { name: 'Change password' }));
+
+    expect(await screen.findByText(/Password changed/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Current password')).toHaveValue('');
+    expect(screen.getByLabelText('New password')).toHaveValue('');
+  });
+
+  it('says the current password was wrong rather than appearing to succeed', async () => {
+    stubFetch({
+      '/auth/change-password': {
+        status: 401,
+        body: { error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'That is not your current password.', requestId: 'req-13' } },
+      },
+    });
+    renderWithSession(<ProfilePage />);
+
+    await userEvent.type(screen.getByLabelText('Current password'), 'wrong password');
+    await userEvent.type(screen.getByLabelText('New password'), 'a long enough password');
+    await userEvent.click(screen.getByRole('button', { name: 'Change password' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('not your current password');
+    expect(screen.queryByText(/Password changed/)).not.toBeInTheDocument();
+  });
+
+  it('warns that a password change signs out the other sessions', () => {
+    renderWithSession(<ProfilePage />);
+    expect(screen.getByText(/signs out your other sessions/)).toBeInTheDocument();
+  });
+
+  it('holds the password button until both fields are usable', async () => {
+    renderWithSession(<ProfilePage />);
+    const submit = screen.getByRole('button', { name: 'Change password' });
+    expect(submit).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('Current password'), 'old password');
+    await userEvent.type(screen.getByLabelText('New password'), 'short');
+    expect(submit).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('New password'), ' but now long enough');
+    expect(submit).toBeEnabled();
+  });
+});

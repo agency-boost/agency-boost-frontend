@@ -26,7 +26,18 @@ including Indonesian labels. Any divergence is registered in
 `prototype-parity-check` skill before handing off a screen.
 
 **Role gating here is convenience, not control.** Hide what a role cannot use — but the API must
-refuse it too. A permission enforced only in this repo is a blocking defect.
+refuse it too. A permission enforced only in this repo is a blocking defect. `RequireSession` and
+`useCan` decide what to *render*; the server decides what happens.
+
+**The access token lives in memory and nowhere else.** Never `localStorage`, never `sessionStorage`,
+never a non-httpOnly cookie — any XSS reads all three. The refresh token is an httpOnly cookie the
+browser sends on its own; a reload re-authenticates through `/auth/refresh` without script ever
+touching it. This is why navigation uses `next/link`: a full page load drops the token and costs a
+refresh round-trip before the first request on the next screen.
+
+**Impersonation suppresses the transparent 401 retry.** The refresh cookie belongs to the real Super
+Admin, so refreshing during a support session would replay the request as *them*. See
+`src/lib/api-client.ts` and `../docs/02-specs/api/auth-and-sessions.md`.
 
 **Every state.** Loading, empty, error, permission-denied, and conditional visibility. The prototypes
 have almost none of these; each flow doc lists what is missing for its screen.
@@ -46,11 +57,21 @@ not a pattern.
 
 ```
 src/
-├── app/(app)/<route>/     page.tsx · <screen>-client.tsx · components · __tests__
-├── components/ui/         shadcn, re-themed
-├── lib/                   api client, formatters, hooks
-└── styles/globals.css     the token definitions
+├── app/<route>/page.tsx      the screen, with page.spec.tsx beside it
+├── app/screens.a11y.spec.tsx every screen through axe, in its populated state
+├── components/               app-shell, admin-shell, session-provider, require-session
+├── components/ui/            the primitives — field, data-table, status-pill, role-badge, …
+├── lib/                      api.ts (URLs) · api-client.ts (fetch, tokens) · session.ts · admin.ts
+└── styles/globals.css        the token definitions
+test/
+├── setup.ts                  jest-dom, and the API origin every test needs
+└── harness.tsx               renderWithSession · stubFetch · routeParams · makeMe
 ```
+
+Tests live beside what they test. `test/harness.tsx` holds the doubles: a session provider, a
+URL-routed `fetch` stub, and `routeParams`, which builds the settled thenable `use(params)` needs —
+a bare `Promise.resolve` suspends and never resumes under jsdom, and the failure reads as a missing
+element rather than a missing boundary.
 
 ## Working
 
@@ -59,3 +80,10 @@ new route to `../docs/02-specs/route-registry.md` and
 `../docs/06-manuals/shared/screens-to-manual-map.md` in the same change.
 
 A PR touching `src/` must name its companion docs PR or CI fails.
+
+Before handing off:
+
+```bash
+pnpm lint && pnpm typecheck && pnpm test:coverage
+pnpm build | node scripts/check-bundle-size.mjs
+```
