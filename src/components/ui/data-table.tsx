@@ -7,6 +7,16 @@ import { cn } from '@/lib/cn';
  * users the row/column relationships entirely. Real `<th scope>` and a `<caption>` are
  * the whole point — the caption is visually hidden, not absent.
  */
+/**
+ * A column heading. A string shows; `{ label, visuallyHidden }` is announced and not
+ * drawn — for the column of buttons at the end of a row, which needs a name for anybody
+ * navigating by column and no name in the design.
+ *
+ * An empty string is not an option, deliberately: axe's `empty-table-header` caught one,
+ * and the fix is a name nobody can see rather than no name at all.
+ */
+export type Column = string | { label: string; visuallyHidden: true };
+
 export function DataTable({
   caption,
   columns,
@@ -14,7 +24,7 @@ export function DataTable({
   className,
 }: {
   caption: string;
-  columns: readonly string[];
+  columns: readonly Column[];
   children: React.ReactNode;
   className?: string;
 }) {
@@ -24,15 +34,19 @@ export function DataTable({
         <caption className="sr-only">{caption}</caption>
         <thead>
           <tr className="border-b border-hairline">
-            {columns.map((c) => (
-              <th
-                key={c}
-                scope="col"
-                className="px-4 py-2.5 text-sm font-semibold uppercase tracking-wide text-muted"
-              >
-                {c}
-              </th>
-            ))}
+            {columns.map((column) => {
+              const label = typeof column === 'string' ? column : column.label;
+              const hidden = typeof column !== 'string';
+              return (
+                <th
+                  key={label}
+                  scope="col"
+                  className="px-4 py-2.5 text-sm font-semibold uppercase tracking-wide text-muted"
+                >
+                  <span className={hidden ? 'sr-only' : undefined}>{label}</span>
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>{children}</tbody>

@@ -110,6 +110,23 @@ export default function FindLeaderPage() {
 
       {state && registered && (
         <>
+          <Card className="mb-4">
+            <h2 className="font-display text-lg font-bold text-navy">
+              Have a leader&apos;s code, link or QR?
+            </h2>
+            <p className="mt-1 text-md text-muted">
+              Any of the three does the same thing: it joins you and tags you to them in one step,
+              with no approval. Opening their link or scanning their QR takes you to the same place.
+            </p>
+            <ButtonLink href="/join" variant="secondary" className="mt-3">
+              Use an invite instead
+            </ButtonLink>
+          </Card>
+        </>
+      )}
+
+      {state && registered && (
+        <>
           {state.leaderName && (
             <Card className="mb-4 border-l-4 border-l-amber">
               <p className="text-sm font-semibold uppercase tracking-wide text-muted">

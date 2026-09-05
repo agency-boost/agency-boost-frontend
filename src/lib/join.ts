@@ -46,3 +46,45 @@ export const requestLeader = (leaderMembershipId: string) =>
 
 export const cancelLeaderRequest = () =>
   api<JoinState>('/join/leader-request', { method: 'DELETE' });
+
+/** One invite, three presentations: the code, the link, and a QR of the link. */
+export interface Invite {
+  inviteId: string;
+  code: string;
+  url: string;
+  label: string | null;
+  autoApprove: boolean;
+  maxUses: number | null;
+  useCount: number;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  /** Derived server-side, because "why can nobody use this" needs one answer. */
+  state: 'active' | 'revoked' | 'expired' | 'exhausted';
+}
+
+export interface InvitePreview {
+  code: string;
+  kpmLabel: string;
+  leaderName: string;
+}
+
+export const listInvites = () => api<Invite[]>('/join/invites');
+
+export const issueInvite = (body: { label?: string; maxUses?: number; expiresInDays?: number }) =>
+  api<Invite>('/join/invites', { method: 'POST', body });
+
+export const revokeInvite = (inviteId: string) =>
+  api<Invite>(`/join/invites/${inviteId}`, { method: 'DELETE' });
+
+export const previewInvite = (code: string) =>
+  api<InvitePreview>(`/join/invite?code=${encodeURIComponent(code)}`);
+
+export const redeemInvite = (code: string) =>
+  api<{ kpmId: string; leaderName: string }>('/join/redeem', { method: 'POST', body: { code } });
+
+export const INVITE_STATE_LABEL: Record<Invite['state'], string> = {
+  active: 'Working',
+  revoked: 'Withdrawn',
+  expired: 'Expired',
+  exhausted: 'Fully used',
+};

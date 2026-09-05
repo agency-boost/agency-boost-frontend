@@ -20,7 +20,7 @@ import { useSignOut } from '@/lib/use-sign-out';
 const SUBTABS = [
   { href: '/user-management/kpm', label: 'Register KPM' },
   { href: '/user-management/leader', label: 'Find your leader' },
-  { href: '/user-management/add', label: 'Add new agents', upcoming: true },
+  { href: '/user-management/add', label: 'Add new agents' },
   { href: '/user-management/pending', label: 'Pending requests', upcoming: true },
 ];
 

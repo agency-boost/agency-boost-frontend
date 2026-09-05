@@ -20,6 +20,7 @@ import KpmOverviewPage from './kpm/overview/page';
 import UnitDashboardPage from './unit/dashboard/page';
 import LogActivityPage from './activity/log/page';
 import FindLeaderPage from './user-management/leader/page';
+import AddAgentsPage from './user-management/add/page';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -266,6 +267,30 @@ describe('Phase 2 screens have no axe violations', () => {
     renderWithSession(<LogActivityPage />, { me: makeMe() });
     await screen.findByText('Arrives in phase 6');
     await expectClean('activity/log');
+  });
+
+  it('the invite screen, with an invite to share and a list of them', async () => {
+    const leader = makeMe({
+      membership: {
+        membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: ['member:invite', 'member:revoke_invite'],
+    });
+    stubFetch({
+      '/join/invites': {
+        body: [
+          {
+            inviteId: 'inv-1', code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417',
+            label: 'September', autoApprove: true, maxUses: 5, useCount: 1,
+            expiresAt: '2026-10-01T00:00:00.000Z', revokedAt: null, state: 'active',
+          },
+        ],
+      },
+    });
+    renderWithSession(<AddAgentsPage />, { me: leader });
+    await screen.findByRole('table');
+    await expectClean('user-management/add');
   });
 
   it('audit log', async () => {
