@@ -10,9 +10,15 @@ import { RoleBadge } from '@/components/ui/role-badge';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
+  archiveGroup,
+  createGroup,
+  listGroups,
   listMembers,
   MEMBER_STATUS_LABEL,
+  readOrgTree,
   readRoleChangeLog,
+  updateGroup,
+  type GroupSummary,
   type HierarchyRole,
   type Member,
   type MemberStatus,
@@ -38,6 +44,7 @@ const TABS = [
   { key: 'directory', label: 'Directory' },
   { key: 'removed', label: 'Removed' },
   { key: 'rolelog', label: 'Role change log' },
+  { key: 'groups', label: 'Groups' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -45,6 +52,18 @@ type TabKey = (typeof TABS)[number]['key'];
 export default function MembersPage() {
   const [tab, setTab] = useState<TabKey>('directory');
   const [log, setLog] = useState<RoleChangeEntry[] | null>(null);
+  const [groups, setGroups] = useState<GroupSummary[] | null>(null);
+  const [editing, setEditing] = useState<{ groupId: string | null; name: string; owner: string } | null>(null);
+  const [retiring, setRetiring] = useState<GroupSummary | null>(null);
+  /**
+   * Everybody who could own a group.
+   *
+   * From the tree rather than the roster: the roster is paginated at 25, so picking the
+   * owner from it would silently fail to offer most of the office — and the person you
+   * want is as likely to be on page 8 as page 1.
+   */
+  const [candidates, setCandidates] = useState<{ membershipId: string; fullName: string }[]>([]);
+  const [busy, setBusy] = useState(false);
   const [q, setQ] = useState('');
   const [role, setRole] = useState<HierarchyRole | ''>('');
   const [page, setPage] = useState<Member[] | null>(null);
@@ -64,6 +83,21 @@ export default function MembersPage() {
         }
         return;
       }
+      if (tab === 'groups') {
+        try {
+          const [mine, office] = await Promise.all([listGroups(), readOrgTree()]);
+          setGroups(mine);
+          setCandidates(
+            office.nodes
+              .map((n) => ({ membershipId: n.membershipId, fullName: n.preferredName ?? n.fullName }))
+              .sort((a, b) => a.fullName.localeCompare(b.fullName)),
+          );
+        } catch (err) {
+          setError(toDisplayError(err));
+          setGroups([]);
+        }
+        return;
+      }
       try {
         const result = await listMembers({
           ...(q ? { q } : {}),
@@ -80,6 +114,38 @@ export default function MembersPage() {
     },
     [q, role, tab],
   );
+
+  async function saveGroup() {
+    if (!editing || editing.name.trim() === '') return;
+    setBusy(true);
+    setError(null);
+    try {
+      setGroups(
+        editing.groupId === null
+          ? await createGroup(editing.name, editing.owner)
+          : await updateGroup(editing.groupId, editing.name, editing.owner),
+      );
+      setEditing(null);
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function retire() {
+    if (!retiring) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setGroups(await archiveGroup(retiring.groupId));
+      setRetiring(null);
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   // A filter change starts a new run of pages — keeping the old cursors would page
   // through a list that no longer exists.
@@ -112,7 +178,7 @@ export default function MembersPage() {
           </button>
         ))}
         {/* Visible but not yet built, as the prototype's own nav does for Upcoming. */}
-        {['Pending', 'Groups'].map((label) => (
+        {['Pending'].map((label) => (
           <span
             key={label}
             aria-disabled
@@ -124,7 +190,7 @@ export default function MembersPage() {
         ))}
       </div>
 
-      {tab !== 'rolelog' && (
+      {tab !== 'rolelog' && tab !== 'groups' && (
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <Field label="Search" htmlFor="q" className="min-w-56 flex-1">
           <TextInput
@@ -195,13 +261,163 @@ export default function MembersPage() {
         </>
       )}
 
-      {tab !== 'rolelog' && page === null && (
+      {tab === 'groups' && (
+        <>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-md text-muted">
+              Labels this office defines for its own organising — a mentoring circle, a task force.
+              A group is <strong>not</strong> hierarchy and grants nobody access to anything.
+            </p>
+            <Button
+              disabled={busy || editing !== null}
+              onClick={() => setEditing({ groupId: null, name: '', owner: '' })}
+            >
+              Create group
+            </Button>
+          </div>
+
+          {editing && (
+            <div className="mb-4 rounded-md border border-amber bg-base p-4">
+              <h2 className="font-display text-md font-bold text-navy">
+                {editing.groupId === null ? 'Create group' : 'Edit group'}
+              </h2>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <Field label="Group name" htmlFor="group-name" className="min-w-56 flex-1">
+                  <TextInput
+                    id="group-name"
+                    value={editing.name}
+                    placeholder="New Agent Mentoring Circle"
+                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                  />
+                </Field>
+                <Field
+                  label="Owner"
+                  htmlFor="group-owner"
+                  hint="Who runs it. Stored as their membership, so renaming them changes nothing."
+                  className="min-w-56 flex-1"
+                >
+                  <Select
+                    id="group-owner"
+                    value={editing.owner}
+                    onChange={(e) => setEditing({ ...editing, owner: e.target.value })}
+                  >
+                    <option value="">Choose somebody</option>
+                    {candidates.map((m) => (
+                      <option key={m.membershipId} value={m.membershipId}>
+                        {m.fullName}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  disabled={busy || editing.name.trim() === '' || editing.owner === ''}
+                  onClick={() => void saveGroup()}
+                >
+                  {busy ? 'Saving…' : 'Save'}
+                </Button>
+                <Button variant="secondary" disabled={busy} onClick={() => setEditing(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {retiring && (
+            <div className="mb-4 rounded-md border border-alert bg-base p-4">
+              <h2 className="font-display text-md font-bold text-navy">
+                Retire {retiring.name}?
+              </h2>
+              <p className="mt-1 text-md text-navy">
+                It stops being offered and stops being counted. Nothing is deleted:{' '}
+                {retiring.memberCount === 1 ? 'the person' : `all ${retiring.memberCount} people`} tagged
+                into it keep the tag, so who was in it stays readable.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button variant="danger" disabled={busy} onClick={() => void retire()}>
+                  {busy ? 'Retiring…' : 'Retire group'}
+                </Button>
+                <Button variant="secondary" disabled={busy} onClick={() => setRetiring(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {groups === null && !error && (
+            <p role="status" className="text-md text-muted">
+              Loading…
+            </p>
+          )}
+
+          {groups?.length === 0 && !error && (
+            <div className="rounded-lg border border-hairline bg-card">
+              <EmptyState title="No groups yet — create one to start organising people." />
+            </div>
+          )}
+
+          {groups && groups.length > 0 && (
+            <DataTable
+              caption="Informal groups"
+              columns={['Group', 'Owner', 'Tagged', { label: 'Actions', visuallyHidden: true }]}
+            >
+              {groups.map((group) => (
+                <Row key={group.groupId}>
+                  <Cell className="font-semibold">{group.name}</Cell>
+                  <Cell className="text-muted">
+                    {group.ownerName}
+                    {group.ownerHasLeft && (
+                      <span className="block text-sm text-alert">
+                        No longer in this office — hand it to somebody else
+                      </span>
+                    )}
+                  </Cell>
+                  <Cell className="text-muted">
+                    {group.memberCount} {group.memberCount === 1 ? 'person' : 'people'}
+                  </Cell>
+                  <Cell>
+                    <span className="flex flex-wrap gap-2">
+                      <Button
+                        variant="secondary"
+                        disabled={busy}
+                        onClick={() => {
+                          setRetiring(null);
+                          setEditing({
+                            groupId: group.groupId,
+                            name: group.name,
+                            owner: group.ownerMembershipId,
+                          });
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="danger"
+                        disabled={busy}
+                        onClick={() => {
+                          setEditing(null);
+                          setRetiring(group);
+                        }}
+                      >
+                        Retire
+                      </Button>
+                    </span>
+                  </Cell>
+                </Row>
+              ))}
+            </DataTable>
+          )}
+        </>
+      )}
+
+      {tab !== 'rolelog' && tab !== 'groups' && page === null && (
         <p role="status" className="text-md text-muted">
           Loading…
         </p>
       )}
 
-      {tab !== 'rolelog' && page?.length === 0 && !error && (
+      {tab !== 'rolelog' && tab !== 'groups' && page?.length === 0 && !error && (
         <div className="rounded-lg border border-hairline bg-card">
           <EmptyState
             variant={filtered ? 'filtered' : 'empty'}
@@ -229,7 +445,7 @@ export default function MembersPage() {
         </div>
       )}
 
-      {tab !== 'rolelog' && page && page.length > 0 && (
+      {tab !== 'rolelog' && tab !== 'groups' && page && page.length > 0 && (
         <>
           <DataTable
             caption={tab === 'removed' ? 'Removed members' : 'Office roster'}

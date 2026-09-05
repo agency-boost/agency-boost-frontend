@@ -151,7 +151,7 @@ describe('members directory (P3-T1 AC-3)', () => {
   it('keeps the tabs it has not built visible rather than hiding the roadmap', async () => {
     stubFetch({ '/members': { body: { members: [], nextCursor: null } } });
     renderWithSession(<MembersPage />, { me: OWNER });
-    for (const label of ['Pending', 'Groups']) {
+    for (const label of ['Pending']) {
       expect(await screen.findByText(label)).toHaveAttribute('aria-disabled', 'true');
     }
   });
@@ -229,6 +229,167 @@ describe('members directory (P3-T1 AC-3)', () => {
       await vi.waitFor(() =>
         expect(calls[calls.length - 1].url).not.toContain('/members/role-changes'),
       );
+    });
+  });
+
+  describe('the Groups tab (P3-T9)', () => {
+    const group = (over: Record<string, unknown> = {}) => ({
+      groupId: 'grp-1', name: 'New Agent Mentoring Circle', ownerMembershipId: 'mem-1',
+      ownerName: 'Rina Wijaya', ownerHasLeft: false, memberCount: 2, ...over,
+    });
+
+    const office = {
+      nodes: [
+        {
+          membershipId: 'mem-1', fullName: 'Rina Wijaya', preferredName: 'Rina', initials: 'RW',
+          agentCode: 'KPM0417-001', role: 'agent', depth: 0, layer: 1, leaderId: null,
+          directCount: 0, subtreeCount: 0, isLeader: false, isSelf: false,
+        },
+      ],
+      leader: null, rootIds: ['mem-1'], selfId: null,
+      counts: { ab: 0, aab: 0, agent: 1, total: 1 },
+    };
+
+    function stub(groups: Record<string, unknown>[], extra: Record<string, unknown> = {}) {
+      return stubFetch({
+        '/members/groups': { body: groups },
+        '/members/tree': { body: office },
+        '/members': { body: { members: [member()], nextCursor: null } },
+        ...extra,
+      });
+    }
+
+    async function openTab(groups: Record<string, unknown>[] = [group()], extra = {}) {
+      const stubbed = stub(groups, extra);
+      renderWithSession(<MembersPage />, { me: OWNER });
+      await userEvent.click(await screen.findByRole('button', { name: 'Groups' }));
+      return stubbed;
+    }
+
+    it('AC-1: says plainly that a group is not hierarchy and grants nothing', async () => {
+      // The one thing a reader could reasonably get wrong, so the screen says it.
+      await openTab();
+      expect(await screen.findByText(/grants nobody access to anything/)).toBeInTheDocument();
+    });
+
+    it('lists each group with its owner and how many are tagged', async () => {
+      await openTab();
+      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Mentoring/ });
+      expect(row).toHaveTextContent('Rina Wijaya');
+      expect(row).toHaveTextContent('2 people');
+    });
+
+    it('drops the roster filters, which would filter nothing here', async () => {
+      await openTab();
+      await screen.findByRole('table');
+      expect(screen.queryByLabelText('Search')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Role')).not.toBeInTheDocument();
+    });
+
+    it('creates one, sending the owner as a membership and not a name', async () => {
+      const { calls } = await openTab([], { '/members/groups': { body: [] } });
+      await userEvent.click(await screen.findByRole('button', { name: 'Create group' }));
+
+      await userEvent.type(screen.getByLabelText('Group name'), '  Top Producers 2026  ');
+      await userEvent.selectOptions(screen.getByLabelText('Owner'), 'mem-1');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      const sent = calls.find((c) => c.init.method === 'POST')!;
+      expect(JSON.parse(sent.init.body as string)).toEqual({
+        name: '  Top Producers 2026  ',
+        ownerMembershipId: 'mem-1',
+      });
+    });
+
+    it('offers the whole office as owner, not just the roster first page', async () => {
+      // The roster pages at 25. Picking an owner from it would silently fail to offer
+      // most of the office.
+      const { calls } = await openTab();
+      await userEvent.click(await screen.findByRole('button', { name: 'Create group' }));
+
+      expect(calls.some((c) => c.url.includes('/members/tree'))).toBe(true);
+      expect(within(screen.getByLabelText('Owner')).getByRole('option', { name: 'Rina' }))
+        .toBeInTheDocument();
+    });
+
+    it('will not save a group with no name or no owner', async () => {
+      await openTab([]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Create group' }));
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+
+      await userEvent.type(screen.getByLabelText('Group name'), 'Named');
+      expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+
+      await userEvent.selectOptions(screen.getByLabelText('Owner'), 'mem-1');
+      expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    });
+
+    it('edits an existing one through the same form, prefilled', async () => {
+      const { calls } = await openTab();
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+      expect(screen.getByLabelText('Group name')).toHaveValue('New Agent Mentoring Circle');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(calls.find((c) => c.init.method === 'PUT')!.url).toContain('/members/groups/grp-1');
+    });
+
+    it('says what retiring does and does not do before doing it', async () => {
+      const { calls } = await openTab();
+      await userEvent.click(await screen.findByRole('button', { name: 'Retire' }));
+
+      expect(screen.getByText(/Retire New Agent Mentoring Circle\?/)).toBeInTheDocument();
+      expect(screen.getByText(/all 2 people tagged into it keep the tag/)).toBeInTheDocument();
+      expect(calls.some((c) => c.init.method === 'DELETE')).toBe(false);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Retire group' }));
+      expect(calls.find((c) => c.init.method === 'DELETE')!.url).toContain('/members/groups/grp-1');
+    });
+
+    it('counts one person in the singular', async () => {
+      await openTab([group({ memberCount: 1 })]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Retire' }));
+      expect(screen.getByText(/the person tagged into it keep the tag/)).toBeInTheDocument();
+    });
+
+    it('says when a group has lost its owner, and what to do about it', async () => {
+      // Soft delete means a removed owner is still nameable. Naming them and saying
+      // they have gone beats either half on its own.
+      await openTab([group({ ownerHasLeft: true })]);
+      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Mentoring/ });
+      expect(row).toHaveTextContent('Rina Wijaya');
+      expect(row).toHaveTextContent('No longer in this office — hand it to somebody else');
+    });
+
+    it('has an empty state that says what to do', async () => {
+      await openTab([]);
+      expect(await screen.findByText(/No groups yet — create one/)).toBeInTheDocument();
+    });
+
+    it('surfaces a clashing name rather than looking like it saved', async () => {
+      // The list load answers first, the create answers second.
+      await openTab([], {
+        '/members/groups': [
+          { body: [] },
+          {
+            status: 409,
+            body: {
+              error: {
+                code: 'ORG_GROUP_NAME_TAKEN',
+                message: 'This office already has a group called “Task Force”.',
+                requestId: 'r-1',
+              },
+            },
+          },
+        ],
+      });
+      await userEvent.click(await screen.findByRole('button', { name: 'Create group' }));
+      await userEvent.type(screen.getByLabelText('Group name'), 'Task Force');
+      await userEvent.selectOptions(screen.getByLabelText('Owner'), 'mem-1');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('already has a group called');
+      // And the form stays open with what was typed, so it can be corrected.
+      expect(screen.getByLabelText('Group name')).toHaveValue('Task Force');
     });
   });
 

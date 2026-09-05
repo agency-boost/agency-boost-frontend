@@ -15,6 +15,7 @@ import NewTenantPage from './admin/tenants/new/page';
 import CompaniesPage from './admin/companies/page';
 import AuditPage from './admin/audit/page';
 import MembersPage from './people/members/page';
+import MemberPage from './people/members/[membershipId]/page';
 import RegisterKpmPage from './user-management/kpm/page';
 import KpmOverviewPage from './kpm/overview/page';
 import UnitDashboardPage from './unit/dashboard/page';
@@ -506,6 +507,74 @@ describe('Phase 2 screens have no axe violations', () => {
     renderWithSession(<OrgTreePage />, { me: owner });
     await screen.findByText('Layer 1');
     await expectClean('people/org-tree');
+  });
+
+  it('the Groups tab with a create form open', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+      },
+      permissions: ['member:read_profile'],
+    });
+    stubFetch({
+      '/members/groups': {
+        body: [{
+          groupId: 'grp-1', name: 'New Agent Mentoring Circle', ownerMembershipId: 'mem-1',
+          ownerName: 'Rina Wijaya', ownerHasLeft: false, memberCount: 2,
+        }],
+      },
+      '/members/tree': {
+        body: {
+          nodes: [treeNode({ membershipId: 'mem-1', fullName: 'Rina Wijaya', initials: 'RW' })],
+          leader: null, rootIds: ['mem-1'], selfId: null,
+          counts: { ab: 0, aab: 0, agent: 1, total: 1 },
+        },
+      },
+      '/members': { body: { members: [], nextCursor: null } },
+    });
+    renderWithSession(<MembersPage />, { me: owner });
+    await userEvent.click(await screen.findByRole('button', { name: 'Groups' }));
+    await screen.findByRole('table');
+    // The form is where a label, a legend or a select can be got wrong.
+    await userEvent.click(screen.getByRole('button', { name: 'Create group' }));
+    await screen.findByLabelText('Group name');
+    await expectClean('people/members (groups)');
+  });
+
+  it('the person page with the tag panel open', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+      },
+      permissions: ['member:read_profile'],
+    });
+    stubFetch({
+      '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/tags': {
+        body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: ['grp-1'], isCoreLeader: true },
+      },
+      '/members/groups': {
+        body: [{
+          groupId: 'grp-1', name: 'New Agent Mentoring Circle', ownerMembershipId: 'mem-9',
+          ownerName: 'Wilson Tanoto', ownerHasLeft: false, memberCount: 1,
+        }],
+      },
+      '/members/mem-1': {
+        body: {
+          membershipId: 'mem-1', agentCode: 'KPM0417-001', role: 'agent', status: 'active',
+          fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test',
+          initials: 'RW', leaderId: null, leaderName: 'Wilson Tanoto', depth: 1,
+          directCount: 0, subtreeCount: 0, isLeader: false, isKpmOwner: false,
+          isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z', removedAt: null,
+        },
+      },
+    });
+    renderWithSession(<MemberPage params={routeParams({ membershipId: 'mem-1' })} />, { me: owner });
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit tags' }));
+    await screen.findByLabelText('Core Leader');
+    await expectClean('people/members/[id] (tags)');
   });
 
   it('audit log', async () => {

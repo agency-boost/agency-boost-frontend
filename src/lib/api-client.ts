@@ -81,7 +81,7 @@ export function isImpersonating(): boolean {
 }
 
 interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   /** Set on the refresh call itself, so a failed refresh cannot recurse. */
   skipRefresh?: boolean;

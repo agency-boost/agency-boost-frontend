@@ -134,6 +134,47 @@ export interface OrgTree {
 
 export const readOrgTree = () => api<OrgTree>('/members/tree');
 
+/** An informal group. A label the office defines — never hierarchy, never access. */
+export interface GroupSummary {
+  groupId: string;
+  name: string;
+  ownerMembershipId: string;
+  ownerName: string;
+  /** They have been removed from the office, so the group has nobody running it. */
+  ownerHasLeft: boolean;
+  memberCount: number;
+}
+
+export interface MemberTags {
+  membershipId: string;
+  fullName: string;
+  groupIds: string[];
+  isCoreLeader: boolean;
+}
+
+export const listGroups = () => api<GroupSummary[]>('/members/groups');
+
+export const createGroup = (name: string, ownerMembershipId: string) =>
+  api<GroupSummary[]>('/members/groups', { method: 'POST', body: { name, ownerMembershipId } });
+
+export const updateGroup = (groupId: string, name: string, ownerMembershipId: string) =>
+  api<GroupSummary[]>(`/members/groups/${groupId}`, {
+    method: 'PUT',
+    body: { name, ownerMembershipId },
+  });
+
+export const archiveGroup = (groupId: string) =>
+  api<GroupSummary[]>(`/members/groups/${groupId}`, { method: 'DELETE' });
+
+export const readTags = (membershipId: string) =>
+  api<MemberTags>(`/members/${membershipId}/tags`);
+
+export const setTags = (membershipId: string, groupIds: string[], isCoreLeader: boolean) =>
+  api<MemberTags>(`/members/${membershipId}/tags`, {
+    method: 'PUT',
+    body: { groupIds, isCoreLeader },
+  });
+
 /** Where the reports of somebody being removed go. There is no default — see P3-T7 AC-3. */
 export type SubtreeDisposition =
   | { action: 'reassign'; toMembershipId: string }
