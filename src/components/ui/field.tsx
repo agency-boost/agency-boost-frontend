@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { cn } from '@/lib/cn';
 
 export function Field({
@@ -86,6 +87,13 @@ export function Textarea({
   );
 }
 
+const BUTTON_BASE =
+  'inline-flex h-10 items-center justify-center rounded-md px-4 text-md font-semibold';
+const BUTTON_VARIANT = {
+  primary: 'bg-amber text-navy hover:bg-amber-dark',
+  secondary: 'border border-hairline bg-card text-navy',
+} as const;
+
 export function Button({
   variant = 'primary',
   className,
@@ -95,14 +103,37 @@ export function Button({
     <button
       {...props}
       className={cn(
-        'inline-flex h-10 items-center justify-center rounded-md px-4 text-md font-semibold',
+        BUTTON_BASE,
         'disabled:cursor-not-allowed disabled:opacity-40',
-        variant === 'primary'
-          ? 'bg-amber text-navy hover:bg-amber-dark'
-          : 'border border-hairline bg-card text-navy',
+        BUTTON_VARIANT[variant],
         className,
       )}
     />
+  );
+}
+
+/**
+ * A link that looks like a button.
+ *
+ * Not `<Link><Button/></Link>`: interactive content inside an anchor is invalid, the
+ * accessible name and activation behaviour both become ambiguous, and a screen reader
+ * announces a control that is really navigation. If it navigates, it is a link.
+ */
+export function ButtonLink({
+  href,
+  variant = 'primary',
+  className,
+  children,
+}: {
+  href: string;
+  variant?: 'primary' | 'secondary';
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link href={href} className={cn(BUTTON_BASE, BUTTON_VARIANT[variant], className)}>
+      {children}
+    </Link>
   );
 }
 

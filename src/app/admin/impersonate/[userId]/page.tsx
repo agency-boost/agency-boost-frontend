@@ -1,10 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { AdminShell } from '@/components/admin-shell';
-import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { startImpersonation } from '@/lib/admin';
 import { setAccessToken, setImpersonating, toDisplayError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
@@ -95,11 +94,9 @@ export default function ImpersonatePage({ params }: { params: Promise<{ userId: 
             <Button type="submit" disabled={busy || badDuration || reason.trim().length < 3}>
               {busy ? 'Starting…' : 'Start session'}
             </Button>
-            <Link href="/admin/tenants">
-              <Button type="button" variant="secondary">
+            <ButtonLink href="/admin/tenants" variant="secondary">
                 Cancel
-              </Button>
-            </Link>
+              </ButtonLink>
           </div>
         </form>
       </Card>

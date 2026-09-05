@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 import { AdminShell } from '@/components/admin-shell';
-import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { assignOwner, readTenant, type Kpm } from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
 
@@ -87,11 +87,9 @@ export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: s
             <Button type="submit" disabled={busy || !email.trim()}>
               {busy ? 'Saving…' : transferring ? 'Transfer' : 'Assign'}
             </Button>
-            <Link href={`/admin/tenants/${kpmId}`}>
-              <Button type="button" variant="secondary">
+            <ButtonLink href={`/admin/tenants/${kpmId}`} variant="secondary">
                 Cancel
-              </Button>
-            </Link>
+              </ButtonLink>
           </div>
         </form>
       </Card>

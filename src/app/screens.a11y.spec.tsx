@@ -15,6 +15,8 @@ import NewTenantPage from './admin/tenants/new/page';
 import CompaniesPage from './admin/companies/page';
 import AuditPage from './admin/audit/page';
 import MembersPage from './people/members/page';
+import RegisterKpmPage from './user-management/kpm/page';
+import FindLeaderPage from './user-management/leader/page';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -182,6 +184,54 @@ describe('Phase 2 screens have no axe violations', () => {
     renderWithSession(<MembersPage />, { me: owner });
     await screen.findByRole('table');
     await expectClean('people/members');
+  });
+
+  it('register KPM, with the directory listed and the leader tab locked', async () => {
+    stubFetch({
+      '/join/me': {
+        body: {
+          kpmId: null, kpmLabel: null, registeredAt: null, leaderMembershipId: null,
+          leaderName: null, status: 'none', pendingRequestTo: null,
+        },
+      },
+      '/join/kpms': {
+        body: [{
+          kpmId: 'kpm-1', code: '0417', branchName: 'BSD City Branch',
+          companyName: 'Prudential', city: 'Tangerang',
+        }],
+      },
+    });
+    renderWithSession(<RegisterKpmPage />, { me: makeMe({ membership: null }) });
+    await screen.findByText('Prudential — KPM 0417');
+    await expectClean('user-management/kpm');
+  });
+
+  it('find your leader, with a request already sent', async () => {
+    const joiner = makeMe({
+      membership: {
+        membershipId: 'mem-me', kpmId: 'kpm-1', hierarchyRole: 'agent',
+        isKpmOwner: false, isKpmAdmin: false,
+      },
+      permissions: ['leader:search_directory', 'leader_request:create'],
+    });
+    stubFetch({
+      '/join/me': {
+        body: {
+          kpmId: 'kpm-1', kpmLabel: 'Prudential — KPM 0417 · BSD City Branch',
+          registeredAt: null, leaderMembershipId: null, leaderName: null,
+          status: 'pending', pendingRequestTo: 'mem-ab',
+        },
+      },
+      '/join/leaders': {
+        body: [
+          { membershipId: 'mem-ab', fullName: 'Wilson Tanoto', role: 'ab', unitSize: 4, isCurrentLeader: false, requestSent: true },
+          { membershipId: 'mem-aab', fullName: 'Dewi Lestari', role: 'aab', unitSize: 0, isCurrentLeader: false, requestSent: false },
+        ],
+      },
+    });
+    renderWithSession(<FindLeaderPage />, { me: joiner });
+    await screen.findByText('Request sent');
+    await expectClean('user-management/leader');
   });
 
   it('audit log', async () => {

@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { AdminShell } from '@/components/admin-shell';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, ErrorBanner } from '@/components/ui/field';
+import { ButtonLink, ErrorBanner } from '@/components/ui/field';
 import { StatusPill } from '@/components/ui/status-pill';
 import { listCompanies, listTenants, TENANT_STATUS_LABEL, type Company, type Kpm } from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
@@ -33,9 +33,7 @@ export default function TenantsPage() {
       title="Tenants"
       subtitle="Every office on the platform. An office exists only because someone here created it."
       actions={
-        <Link href="/admin/tenants/new">
-          <Button>New office</Button>
-        </Link>
+        <ButtonLink href="/admin/tenants/new">New office</ButtonLink>
       }
     >
       {error && <ErrorBanner {...error} />}

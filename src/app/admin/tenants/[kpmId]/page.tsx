@@ -1,9 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { use, useCallback, useEffect, useState } from 'react';
 import { AdminShell } from '@/components/admin-shell';
-import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import { Button, ButtonLink, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { StatusPill } from '@/components/ui/status-pill';
 import {
   readTenant,
@@ -85,9 +84,9 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
               No owner. Nobody can administer this office until one is assigned.
             </p>
           )}
-          <Link href={`/admin/tenants/${kpm._id}/owner`} className="mt-3 inline-block">
-            <Button variant="secondary">{kpm.ownerUserId ? 'Transfer owner' : 'Assign owner'}</Button>
-          </Link>
+          <ButtonLink href={`/admin/tenants/${kpm._id}/owner`} variant="secondary" className="mt-3">
+            {kpm.ownerUserId ? 'Transfer owner' : 'Assign owner'}
+          </ButtonLink>
         </Card>
 
         <StatusCard kpm={kpm} onChanged={load} />

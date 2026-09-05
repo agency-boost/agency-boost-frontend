@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { AdminShell } from '@/components/admin-shell';
-import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import { Button, ButtonLink, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { createTenant, listCompanies, type Company } from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
 
@@ -117,11 +117,9 @@ export default function NewTenantPage() {
               <Button type="submit" disabled={busy || badCode || !form.code || !form.branchName}>
                 {busy ? 'Creating…' : 'Create office'}
               </Button>
-              <Link href="/admin/tenants">
-                <Button type="button" variant="secondary">
-                  Cancel
-                </Button>
-              </Link>
+              <ButtonLink href="/admin/tenants" variant="secondary">
+                Cancel
+              </ButtonLink>
             </div>
           </form>
         )}
