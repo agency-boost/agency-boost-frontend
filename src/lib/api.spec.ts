@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { apiOrigin, apiUrl, healthUrl, DEFAULT_API_VERSION } from './api';
+import { ApiConfigError, apiOrigin, apiUrl, healthUrl, DEFAULT_API_VERSION } from './api';
 
 const ORIGINAL = process.env.NEXT_PUBLIC_API_ORIGIN;
 
@@ -52,6 +52,30 @@ describe('API URLs', () => {
     it('fails loudly when unset rather than building a URL against undefined', () => {
       delete process.env.NEXT_PUBLIC_API_ORIGIN;
       expect(() => apiUrl('/leads')).toThrow(/NEXT_PUBLIC_API_ORIGIN is not set/);
+    });
+
+    it('throws a config error, not a bare one, so a screen can tell it from a dead server', () => {
+      // This is the whole point of the distinct type. A renamed variable once surfaced
+      // as "could not reach the server", sending a developer to debug a backend that
+      // was running perfectly.
+      delete process.env.NEXT_PUBLIC_API_ORIGIN;
+      try {
+        apiOrigin();
+        throw new Error('expected apiOrigin to throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiConfigError);
+        expect((err as ApiConfigError).variable).toBe('NEXT_PUBLIC_API_ORIGIN');
+      }
+    });
+
+    it('says a restart is needed, because Next inlines NEXT_PUBLIC_* at build time', () => {
+      delete process.env.NEXT_PUBLIC_API_ORIGIN;
+      expect(() => apiOrigin()).toThrow(/restart the dev server/);
+    });
+
+    it('tags a malformed origin as configuration too', () => {
+      process.env.NEXT_PUBLIC_API_ORIGIN = 'http://localhost:3001/api/v1';
+      expect(() => apiOrigin()).toThrow(ApiConfigError);
     });
   });
 });

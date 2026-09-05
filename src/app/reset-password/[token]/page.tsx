@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
-import { api, ApiRequestError } from '@/lib/api-client';
+import { api, toDisplayError } from '@/lib/api-client';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 
 const MIN_LENGTH = 10;
@@ -27,11 +27,7 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
       await api('/auth/reset-password', { method: 'POST', body: { token, newPassword: password } });
       router.push('/login');
     } catch (err) {
-      setError(
-        err instanceof ApiRequestError
-          ? err.error
-          : { code: 'NETWORK', message: 'Could not reach the server.', requestId: 'unknown' },
-      );
+      setError(toDisplayError(err));
     } finally {
       setBusy(false);
     }

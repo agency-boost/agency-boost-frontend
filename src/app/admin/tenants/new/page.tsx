@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { AdminShell } from '@/components/admin-shell';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { createTenant, listCompanies, type Company } from '@/lib/admin';
-import { ApiRequestError } from '@/lib/api-client';
+import { toDisplayError } from '@/lib/api-client';
 
 const CODE = /^[A-Za-z0-9-]{2,16}$/;
 
@@ -52,11 +52,7 @@ export default function NewTenantPage() {
       });
       router.push(`/admin/tenants/${kpm._id}`);
     } catch (err) {
-      setError(
-        err instanceof ApiRequestError
-          ? err.error
-          : { code: 'NETWORK', message: 'Could not reach the server.', requestId: 'unknown' },
-      );
+      setError(toDisplayError(err));
       setBusy(false);
     }
   }

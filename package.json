@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "check:secrets": "node scripts/check-no-demo-credentials.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

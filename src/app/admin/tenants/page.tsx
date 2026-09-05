@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { StatusPill } from '@/components/ui/status-pill';
 import { listCompanies, listTenants, TENANT_STATUS_LABEL, type Company, type Kpm } from '@/lib/admin';
-import { ApiRequestError } from '@/lib/api-client';
+import { toDisplayError } from '@/lib/api-client';
 
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Kpm[] | null>(null);
@@ -22,7 +22,7 @@ export default function TenantsPage() {
         setTenants(kpms);
         setCompanies(Object.fromEntries(cos.map((c: Company) => [c._id, c.name])));
       } catch (err) {
-        setError(err instanceof ApiRequestError ? err.error : null);
+        setError(toDisplayError(err));
         setTenants([]);
       }
     })();

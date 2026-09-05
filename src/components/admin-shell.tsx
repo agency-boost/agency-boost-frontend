@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { AppShell, type NavSection } from '@/components/app-shell';
 import { RequireSession } from '@/components/require-session';
 import { useSession } from '@/lib/session';
+import { useSignOut } from '@/lib/use-sign-out';
 
 /**
  * The chrome around every Super Admin screen.
@@ -57,6 +58,7 @@ function AdminChrome({
   children: React.ReactNode;
 }) {
   const { me } = useSession();
+  const { signOut, busy } = useSignOut();
   const pathname = usePathname();
 
   // `/admin` is a prefix of every other admin route, so it only matches exactly.
@@ -75,7 +77,9 @@ function AdminChrome({
         name: me?.user.preferredName ?? me?.user.fullName ?? 'Super Admin',
         role: 'Super Admin',
         initials: me?.user.initials ?? 'SA',
+        email: me?.user.email,
       }}
+      account={{ href: '/profile', onSignOut: () => void signOut(), signingOut: busy }}
       title={title}
       subtitle={subtitle}
       actions={actions}

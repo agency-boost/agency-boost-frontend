@@ -1,6 +1,12 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 import { AppShell, type NavSection } from './app-shell';
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => '/admin',
+}));
 
 const SECTIONS: readonly NavSection[] = [
   {
@@ -65,5 +71,35 @@ describe('AppShell', () => {
   it('renders its children', () => {
     renderShell();
     expect(screen.getByText('content')).toBeInTheDocument();
+  });
+
+  describe('the account menu at the foot of the sidebar', () => {
+    it('is a plain label when no account is wired', () => {
+      // A shell rendered outside a session has nothing to sign out of. Offering a dead
+      // control would be worse than offering none.
+      renderShell();
+      expect(screen.queryByRole('button', { name: /Rina Wijaya/ })).not.toBeInTheDocument();
+      expect(screen.getByText('Rina Wijaya')).toBeInTheDocument();
+    });
+
+    it('becomes a menu with an account link and sign out when it is', async () => {
+      const onSignOut = vi.fn();
+      render(
+        <AppShell
+          sections={SECTIONS}
+          user={USER}
+          account={{ href: '/profile', onSignOut }}
+          title="Log Activity"
+        >
+          <p>content</p>
+        </AppShell>,
+      );
+
+      await userEvent.click(screen.getByRole('button', { name: /Rina Wijaya/ }));
+      expect(screen.getByRole('link', { name: 'Your account' })).toHaveAttribute('href', '/profile');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+      expect(onSignOut).toHaveBeenCalled();
+    });
   });
 });

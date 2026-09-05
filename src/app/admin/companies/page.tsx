@@ -6,7 +6,7 @@ import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { createCompany, listCompanies, type Company } from '@/lib/admin';
-import { ApiRequestError } from '@/lib/api-client';
+import { toDisplayError } from '@/lib/api-client';
 
 const SLUG = /^[a-z0-9-]+$/;
 
@@ -33,11 +33,7 @@ export default function CompaniesPage() {
       setName('');
       setSlug('');
     } catch (err) {
-      setError(
-        err instanceof ApiRequestError
-          ? err.error
-          : { code: 'NETWORK', message: 'Could not reach the server.', requestId: 'unknown' },
-      );
+      setError(toDisplayError(err));
     } finally {
       setBusy(false);
     }

@@ -1,10 +1,12 @@
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '../../../test/harness';
 import AdminOverviewPage from './page';
 
+const replace = vi.fn();
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace }),
   usePathname: () => '/admin',
 }));
 
@@ -25,7 +27,10 @@ const kpm = (over: Record<string, unknown>) => ({
 });
 
 describe('admin overview', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    replace.mockClear();
+    vi.unstubAllGlobals();
+  });
 
   it('counts offices by lifecycle state', async () => {
     stubFetch({
@@ -65,6 +70,28 @@ describe('admin overview', () => {
 
     await screen.findByText('Offices');
     expect(screen.queryByText(/without an owner/)).not.toBeInTheDocument();
+  });
+
+  it('signs out from the sidebar, without needing the account screen first', async () => {
+    // The console is where a Super Admin spends their session, so ending it has to be
+    // reachable from the sidebar rather than only from /profile.
+    stubFetch({ '/admin/tenants': { body: [] }, '/admin/companies': { body: [] } });
+    const { session } = renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
+
+    await userEvent.click(await screen.findByRole('button', { name: /Root/ }));
+    expect(screen.getByRole('link', { name: 'Your account' })).toHaveAttribute('href', '/profile');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    expect(session.signOut).toHaveBeenCalled();
+    await vi.waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
+  });
+
+  it('names the account in the menu, so you can confirm it before leaving', async () => {
+    stubFetch({ '/admin/tenants': { body: [] }, '/admin/companies': { body: [] } });
+    renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
+
+    await userEvent.click(await screen.findByRole('button', { name: /Root/ }));
+    expect(screen.getByText('root@agencyboost.test')).toBeInTheDocument();
   });
 
   it('shows a placeholder rather than a misleading zero before the counts arrive', () => {

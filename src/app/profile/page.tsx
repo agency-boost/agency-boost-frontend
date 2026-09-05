@@ -5,8 +5,9 @@ import { useEffect, useState } from 'react';
 import { RequireSession } from '@/components/require-session';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
-import { api, ApiRequestError } from '@/lib/api-client';
+import { api, toDisplayError } from '@/lib/api-client';
 import { useSession, type Me } from '@/lib/session';
+import { useSignOut } from '@/lib/use-sign-out';
 
 export default function ProfilePage() {
   return (
@@ -23,7 +24,9 @@ const PRONOUNS: { value: Me['user']['pronoun']; label: string }[] = [
 ];
 
 function Profile() {
-  const { me, signOut, reload } = useSession();
+  const { me, reload } = useSession();
+  // The same hook the sidebar menu uses, so the two cannot end a session differently.
+  const { signOut, busy } = useSignOut();
 
   return (
     <main className="mx-auto max-w-3xl px-5 py-8">
@@ -32,8 +35,8 @@ function Profile() {
           <h1 className="font-display text-3xl font-bold text-navy">Your account</h1>
           <p className="mt-1 text-md text-muted">{me?.user.email}</p>
         </div>
-        <Button variant="secondary" onClick={() => void signOut()}>
-          Sign out
+        <Button variant="secondary" disabled={busy} onClick={() => void signOut()}>
+          {busy ? 'Signing out…' : 'Sign out'}
         </Button>
       </div>
 
@@ -141,11 +144,7 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
       await onSaved();
       setSaved(true);
     } catch (err) {
-      setError(
-        err instanceof ApiRequestError
-          ? err.error
-          : { code: 'NETWORK', message: 'Could not reach the server.', requestId: 'unknown' },
-      );
+      setError(toDisplayError(err));
     } finally {
       setBusy(false);
     }
@@ -221,11 +220,7 @@ function PasswordForm() {
       setNewPassword('');
       setDone(true);
     } catch (err) {
-      setError(
-        err instanceof ApiRequestError
-          ? err.error
-          : { code: 'NETWORK', message: 'Could not reach the server.', requestId: 'unknown' },
-      );
+      setError(toDisplayError(err));
     } finally {
       setBusy(false);
     }

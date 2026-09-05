@@ -53,6 +53,17 @@ performance budget.
 re-implement one; the prototype has three inconsistent currency formats and that is a defect list,
 not a pattern.
 
+**Errors go through `toDisplayError`.** Three outcomes, and they send the reader to three different
+places: the server said no, the app is misconfigured, the request never arrived. Collapsing the last
+two — which every screen did while this was an inline ternary — points whoever hits a missing
+environment variable at a backend that is running perfectly.
+
+**Hiding is not excluding.** A runtime guard keeps something off the screen; it does not keep it out
+of the bundle. Anything that must not ship needs a `process.env.NODE_ENV === 'production'` fold the
+compiler can eliminate, plus a check on the build output. See `src/lib/demo-accounts.ts` and
+`scripts/check-no-demo-credentials.mjs` — the first version of that panel was correctly hidden and
+still shipped its credentials.
+
 ## Layout
 
 ```

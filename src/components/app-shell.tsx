@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { SidebarUserMenu } from '@/components/sidebar-user-menu';
 import { cn } from '@/lib/cn';
 
 /**
@@ -63,16 +64,35 @@ function NavLink({ item }: { item: NavItem }) {
   );
 }
 
+export interface ShellUser {
+  readonly name: string;
+  readonly role: string;
+  readonly initials: string;
+  /** Shown in the account menu, so you can confirm who you are before signing out. */
+  readonly email?: string;
+}
+
 export function AppShell({
   sections,
   user,
+  account,
   title,
   subtitle,
   actions,
   children,
 }: {
   sections: readonly NavSection[];
-  user: { name: string; role: string; initials: string };
+  user: ShellUser;
+  /**
+   * Wires the identity chip to the actions behind it. Omitted, the chip is a plain
+   * label — a shell rendered outside a session has no account to reach and nothing to
+   * sign out of, and offering a dead control would be worse than offering none.
+   */
+  account?: {
+    href: string;
+    onSignOut: () => void;
+    signingOut?: boolean;
+  };
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
@@ -107,15 +127,24 @@ export function AppShell({
         </nav>
 
         <div className="shrink-0 border-t border-white/10 pt-3">
-          <div className="flex items-center gap-2 px-1 py-1.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber text-base font-bold text-navy">
-              {user.initials}
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate text-md font-semibold text-white">{user.name}</span>
-              <span className="block truncate text-xs text-white/55">{user.role}</span>
-            </span>
-          </div>
+          {account ? (
+            <SidebarUserMenu
+              user={user}
+              accountHref={account.href}
+              onSignOut={account.onSignOut}
+              signingOut={account.signingOut}
+            />
+          ) : (
+            <div className="flex items-center gap-2 px-1 py-1.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber text-base font-bold text-navy">
+                {user.initials}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-md font-semibold text-white">{user.name}</span>
+                <span className="block truncate text-xs text-white/55">{user.role}</span>
+              </span>
+            </div>
+          )}
         </div>
       </aside>
 

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { use, useEffect, useState } from 'react';
-import { api, ApiRequestError } from '@/lib/api-client';
+import { api, toDisplayError } from '@/lib/api-client';
 import { Card, ErrorBanner } from '@/components/ui/field';
 
 export default function VerifyEmailPage({ params }: { params: Promise<{ token: string }> }) {
@@ -16,11 +16,7 @@ export default function VerifyEmailPage({ params }: { params: Promise<{ token: s
         await api('/auth/verify-email', { method: 'POST', body: { token } });
         setState('done');
       } catch (err) {
-        setError(
-          err instanceof ApiRequestError
-            ? err.error
-            : { code: 'NETWORK', message: 'Could not reach the server.', requestId: 'unknown' },
-        );
+      setError(toDisplayError(err));
         setState('failed');
       }
     })();

@@ -12,7 +12,7 @@ import {
   type Kpm,
   type TenantStatus,
 } from '@/lib/admin';
-import { ApiRequestError } from '@/lib/api-client';
+import { toDisplayError } from '@/lib/api-client';
 
 export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: string }> }) {
   const { kpmId } = use(params);
@@ -23,7 +23,7 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
     try {
       setKpm(await readTenant(kpmId));
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.error : null);
+      setError(toDisplayError(err));
     }
   }, [kpmId]);
 
@@ -134,11 +134,7 @@ function StatusCard({ kpm, onChanged }: { kpm: Kpm; onChanged: () => Promise<voi
       setReason('');
       await onChanged();
     } catch (err) {
-      setError(
-        err instanceof ApiRequestError
-          ? err.error
-          : { code: 'NETWORK', message: 'Could not reach the server.', requestId: 'unknown' },
-      );
+      setError(toDisplayError(err));
     } finally {
       setBusy(false);
     }

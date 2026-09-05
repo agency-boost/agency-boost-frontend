@@ -6,7 +6,7 @@ import { use, useEffect, useState } from 'react';
 import { AdminShell } from '@/components/admin-shell';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { assignOwner, readTenant, type Kpm } from '@/lib/admin';
-import { ApiRequestError } from '@/lib/api-client';
+import { toDisplayError } from '@/lib/api-client';
 
 export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: string }> }) {
   const { kpmId } = use(params);
@@ -30,11 +30,7 @@ export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: s
       await assignOwner(kpmId, userId.trim());
       router.push(`/admin/tenants/${kpmId}`);
     } catch (err) {
-      setError(
-        err instanceof ApiRequestError
-          ? err.error
-          : { code: 'NETWORK', message: 'Could not reach the server.', requestId: 'unknown' },
-      );
+      setError(toDisplayError(err));
       setBusy(false);
     }
   }

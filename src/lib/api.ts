@@ -13,6 +13,24 @@
  * contract shape it was written against.
  */
 
+/**
+ * A misconfiguration, not a failed request.
+ *
+ * These are told apart deliberately. Reporting a missing environment variable as
+ * "could not reach the server" sends whoever hits it to debug a backend that is
+ * running perfectly — which is exactly what happened when `NEXT_PUBLIC_API_BASE_URL`
+ * was renamed and a local `.env.local` kept the old name.
+ */
+export class ApiConfigError extends Error {
+  constructor(
+    message: string,
+    readonly variable: string,
+  ) {
+    super(message);
+    this.name = 'ApiConfigError';
+  }
+}
+
 export const API_VERSIONS = ['v1'] as const;
 export type ApiVersion = (typeof API_VERSIONS)[number];
 
@@ -22,15 +40,19 @@ export const DEFAULT_API_VERSION: ApiVersion = 'v1';
 export function apiOrigin(): string {
   const origin = process.env.NEXT_PUBLIC_API_ORIGIN;
   if (!origin) {
-    throw new Error(
+    throw new ApiConfigError(
       'NEXT_PUBLIC_API_ORIGIN is not set. It is the API origin only — no path and no ' +
-        'version. See .env.example.',
+        'version, e.g. http://localhost:3001. Set it in .env.local and restart the dev ' +
+        'server; Next.js inlines NEXT_PUBLIC_* at build time, so an edit alone is not ' +
+        'enough. See .env.example.',
+      'NEXT_PUBLIC_API_ORIGIN',
     );
   }
   if (/\/api(\/v\d+)?\/?$/.test(origin)) {
-    throw new Error(
+    throw new ApiConfigError(
       `NEXT_PUBLIC_API_ORIGIN must not include the API path or version, received "${origin}". ` +
         'Set the origin alone, e.g. http://localhost:3001 — the version lives in src/lib/api.ts.',
+      'NEXT_PUBLIC_API_ORIGIN',
     );
   }
   return origin.replace(/\/+$/, '');

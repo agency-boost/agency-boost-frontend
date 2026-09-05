@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { ApiRequestError } from '@/lib/api-client';
+import { useCallback, useState } from 'react';
+import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
+import { type DemoAccount } from '@/lib/demo-accounts';
+import { DemoAccountsPanel } from '@/components/demo-accounts-panel';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 
 export default function LoginPage() {
@@ -12,31 +14,44 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function submit(event: React.FormEvent) {
+  const attempt = useCallback(
+    async (withEmail: string, withPassword: string) => {
+      setBusy(true);
+      setError(null);
+      try {
+        await signIn(withEmail, withPassword);
+        // `/` forwards by role: a Super Admin to the console, a tenant admin to their
+        // office, everyone else to their account.
+        router.push('/');
+      } catch (err) {
+        setError(toDisplayError(err));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [router, signIn],
+  );
+
+  function submit(event: React.FormEvent) {
     event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      await signIn(email, password);
-      // Where you land depends on what you are. The Owner's Overview does not exist
-      // until Phase 14, so an Owner lands on their profile for now.
-      router.push('/');
-    } catch (err) {
-      setError(
-        err instanceof ApiRequestError
-          ? err.error
-          : { code: 'NETWORK', message: 'Could not reach the server.', requestId: 'unknown' },
-      );
-    } finally {
-      setBusy(false);
-    }
+    void attempt(email, password);
   }
 
+  function chooseDemo(account: DemoAccount) {
+    // The fields are filled before signing in, so the values stay on screen and a
+    // failure is diagnosable rather than magic.
+    setEmail(account.email);
+    setPassword(account.password);
+    void attempt(account.email, account.password);
+  }
+
+  const credentialsRejected = error?.code === 'AUTH_INVALID_CREDENTIALS';
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5">
+    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
       <h1 className="font-display text-3xl font-bold text-navy">AgencyBoost</h1>
       <p className="mb-6 mt-1 text-md text-muted">Sign in to continue.</p>
 
@@ -53,7 +68,7 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              invalid={error?.code === 'AUTH_INVALID_CREDENTIALS'}
+              invalid={credentialsRejected}
             />
           </Field>
 
@@ -66,7 +81,7 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              invalid={error?.code === 'AUTH_INVALID_CREDENTIALS'}
+              invalid={credentialsRejected}
             />
           </Field>
 
@@ -79,6 +94,8 @@ export default function LoginPage() {
           </Link>
         </form>
       </Card>
+
+      <DemoAccountsPanel onChoose={chooseDemo} disabled={busy} />
     </main>
   );
 }

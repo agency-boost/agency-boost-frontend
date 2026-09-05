@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '../../test/harness';
+import { ApiConfigError } from './api';
 import {
   api,
   ApiRequestError,
@@ -7,6 +8,7 @@ import {
   isImpersonating,
   setAccessToken,
   setImpersonating,
+  toDisplayError,
   tryRefresh,
 } from './api-client';
 
@@ -102,5 +104,40 @@ describe('api client', () => {
   it('treats a network failure during refresh as "not refreshed", not a crash', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
     await expect(tryRefresh()).resolves.toBe(false);
+  });
+
+  it('lets a misconfigured origin out of the refresh path instead of swallowing it', async () => {
+    // "Not refreshed" is right for a network failure. For a missing environment
+    // variable it would render a signed-out shell on every screen and never say why.
+    const original = process.env.NEXT_PUBLIC_API_ORIGIN;
+    delete process.env.NEXT_PUBLIC_API_ORIGIN;
+    try {
+      await expect(tryRefresh()).rejects.toBeInstanceOf(ApiConfigError);
+    } finally {
+      process.env.NEXT_PUBLIC_API_ORIGIN = original;
+    }
+  });
+
+  describe('toDisplayError keeps three outcomes apart', () => {
+    it('passes a server envelope through unchanged', () => {
+      const error = { code: 'PERM_DENIED', message: 'No.', requestId: 'req-1' };
+      expect(toDisplayError(new ApiRequestError(403, error))).toEqual(error);
+    });
+
+    it('reports a misconfiguration as configuration, naming what to fix', () => {
+      const shown = toDisplayError(
+        new ApiConfigError('NEXT_PUBLIC_API_ORIGIN is not set.', 'NEXT_PUBLIC_API_ORIGIN'),
+      );
+      expect(shown.code).toBe('CONFIG');
+      expect(shown.message).toContain('NEXT_PUBLIC_API_ORIGIN');
+      // Never the network message — that is what sent people to the wrong place.
+      expect(shown.message).not.toMatch(/could not reach/i);
+    });
+
+    it('reports anything else as a network failure, and says to check the API', () => {
+      const shown = toDisplayError(new TypeError('Failed to fetch'));
+      expect(shown.code).toBe('NETWORK');
+      expect(shown.message).toMatch(/Check your connection/);
+    });
   });
 });

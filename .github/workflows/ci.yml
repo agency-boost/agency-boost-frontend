@@ -60,6 +60,16 @@ jobs:
       - name: First Load JS budget
         run: node scripts/check-bundle-size.mjs < build.log
 
+      # The sign-in screen offers the seeded development accounts, which is safe only
+      # while it is true in `next dev` and nowhere else. Two build-time gates keep the
+      # strings out of the output; this proves they worked, because a runtime-only
+      # guard hid the panel and shipped the credentials anyway.
+      #
+      # Note the build above sets NEXT_PUBLIC_APP_ENV=test — but this check must hold
+      # whatever that value is, so it is asserted against the artifact, not the config.
+      - name: No development credentials in the build output
+        run: pnpm check:secrets
+
   audit:
     runs-on: ubuntu-latest
     steps:

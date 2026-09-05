@@ -1,6 +1,6 @@
 'use client';
 
-import { apiUrl } from './api';
+import { ApiConfigError, apiUrl } from './api';
 
 /**
  * The API client.
@@ -16,6 +16,29 @@ export interface ApiError {
   message: string;
   details?: Record<string, unknown>;
   requestId: string;
+}
+
+/**
+ * The one way a screen turns a thrown value into something to show.
+ *
+ * Three outcomes, kept apart because they send the reader to three different places:
+ * the server said no, the app is misconfigured, or the request never arrived. Collapsing
+ * the last two — as every screen did while this was an inline ternary — points whoever
+ * hits a missing environment variable at a backend that is running perfectly.
+ */
+export function toDisplayError(err: unknown): ApiError {
+  if (err instanceof ApiRequestError) return err.error;
+  if (err instanceof ApiConfigError) {
+    return { code: 'CONFIG', message: err.message, requestId: 'unknown' };
+  }
+  // Written for the person most likely to see it — an agent on a phone with poor
+  // signal, not a developer. A developer hitting a misconfiguration gets the CONFIG
+  // branch above, which names the variable.
+  return {
+    code: 'NETWORK',
+    message: 'Could not reach the server. Check your connection and try again.',
+    requestId: 'unknown',
+  };
 }
 
 export class ApiRequestError extends Error {
@@ -112,7 +135,11 @@ export async function tryRefresh(): Promise<boolean> {
     const { accessToken: token } = (await response.json()) as { accessToken: string };
     setAccessToken(token);
     return true;
-  } catch {
+  } catch (err) {
+    // "Not refreshed" is the right answer to a network failure or a rejected cookie.
+    // It is the wrong answer to a misconfigured origin: the app would show a signed-out
+    // shell and never say why, on every screen at once.
+    if (err instanceof ApiConfigError) throw err;
     return false;
   }
 }

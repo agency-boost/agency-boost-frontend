@@ -1,4 +1,5 @@
 import { cleanup, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { makeMe, renderWithSession, routeParams, stubFetch } from '../../test/harness';
@@ -75,6 +76,18 @@ describe('Phase 2 screens have no axe violations', () => {
     await expectClean('login');
   });
 
+  it('login with the development accounts panel, which only renders there', async () => {
+    const original = process.env.NEXT_PUBLIC_APP_ENV;
+    process.env.NEXT_PUBLIC_APP_ENV = 'development';
+    try {
+      renderWithSession(<LoginPage />, { me: null });
+      expect(screen.getByText('Development accounts')).toBeInTheDocument();
+      await expectClean('login (dev accounts)');
+    } finally {
+      process.env.NEXT_PUBLIC_APP_ENV = original;
+    }
+  });
+
   it('forgot password', async () => {
     renderWithSession(<ForgotPasswordPage />, { me: null });
     await expectClean('forgot-password');
@@ -102,6 +115,16 @@ describe('Phase 2 screens have no axe violations', () => {
     renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
     await screen.findByText(/without an owner/);
     await expectClean('admin');
+  });
+
+  it('admin overview with the sidebar account menu open', async () => {
+    // Closed, the menu contributes nothing to check. The open state is the one that
+    // can get aria-expanded, focus order or labelling wrong.
+    stubFetch({ '/admin/tenants': { body: [KPM] }, '/admin/companies': { body: [COMPANY] } });
+    renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
+    await userEvent.click(await screen.findByRole('button', { name: /Root/ }));
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    await expectClean('admin (account menu open)');
   });
 
   it('tenants, populated', async () => {

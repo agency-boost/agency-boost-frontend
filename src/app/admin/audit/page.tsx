@@ -6,7 +6,7 @@ import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Field, Select } from '@/components/ui/field';
 import { listTenants, readAudit, type AuditEntry, type Kpm } from '@/lib/admin';
-import { ApiRequestError } from '@/lib/api-client';
+import { toDisplayError } from '@/lib/api-client';
 
 /** The append-only record. Read-only by construction — there is no edit or delete. */
 export default function AuditPage() {
@@ -24,7 +24,7 @@ export default function AuditPage() {
     void readAudit(scope || undefined)
       .then(setEntries)
       .catch((err) => {
-        setError(err instanceof ApiRequestError ? err.error : null);
+        setError(toDisplayError(err));
         setEntries([]);
       });
   }, [scope]);

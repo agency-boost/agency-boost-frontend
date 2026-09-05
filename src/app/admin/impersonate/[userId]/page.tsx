@@ -6,7 +6,7 @@ import { use, useState } from 'react';
 import { AdminShell } from '@/components/admin-shell';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { startImpersonation } from '@/lib/admin';
-import { ApiRequestError, setAccessToken, setImpersonating } from '@/lib/api-client';
+import { setAccessToken, setImpersonating, toDisplayError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
 
 const MAX_MINUTES = 60;
@@ -41,11 +41,7 @@ export default function ImpersonatePage({ params }: { params: Promise<{ userId: 
       await reload();
       router.push('/profile');
     } catch (err) {
-      setError(
-        err instanceof ApiRequestError
-          ? err.error
-          : { code: 'NETWORK', message: 'Could not reach the server.', requestId: 'unknown' },
-      );
+      setError(toDisplayError(err));
       setBusy(false);
     }
   }
