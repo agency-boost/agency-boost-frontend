@@ -10,6 +10,10 @@ function inDevelopment() {
   process.env.NEXT_PUBLIC_APP_ENV = 'development';
 }
 
+async function expand() {
+  await userEvent.click(screen.getByRole('button', { name: /Show all \d+ accounts/ }));
+}
+
 describe('DemoAccountsPanel', () => {
   afterEach(() => {
     process.env.NEXT_PUBLIC_APP_ENV = ORIGINAL;
@@ -27,16 +31,44 @@ describe('DemoAccountsPanel', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('lists each account with its credentials and where it lands', () => {
+  it('starts collapsed, so fifteen accounts do not push the form off the screen', () => {
     inDevelopment();
     render(<DemoAccountsPanel onChoose={vi.fn()} />);
 
-    const buttons = screen.getAllByRole('button');
-    expect(buttons).toHaveLength(3);
-    expect(buttons[0]).toHaveTextContent('Super Admin');
-    expect(buttons[0]).toHaveTextContent('superadmin@agencyboost.test · demo super admin');
-    expect(buttons[0]).toHaveTextContent('platform console');
-    expect(buttons[2]).toHaveTextContent('no office yet');
+    const toggle = screen.getByRole('button', { name: /Show all \d+ accounts/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('superadmin@agencyboost.test · demo super admin')).not.toBeInTheDocument();
+  });
+
+  it('lists each account with its credentials and where it lands', async () => {
+    inDevelopment();
+    render(<DemoAccountsPanel onChoose={vi.fn()} />);
+    await expand();
+
+    expect(screen.getByText('superadmin@agencyboost.test · demo super admin')).toBeInTheDocument();
+    expect(screen.getByText(/platform console/)).toBeInTheDocument();
+    expect(screen.getByText('rina@kpm0417.test · demo password rina')).toBeInTheDocument();
+  });
+
+  it('groups them by office, so it is obvious which two are different tenants', async () => {
+    inDevelopment();
+    render(<DemoAccountsPanel onChoose={vi.fn()} />);
+    await expand();
+
+    for (const label of ['Platform', 'KPM 0417 · BSD City Branch', 'KPM 0555 · Kelapa Gading Branch', 'Edge cases']) {
+      expect(screen.getByRole('heading', { name: label, level: 3 })).toBeInTheDocument();
+    }
+  });
+
+  it('offers the states a role alone cannot reach', async () => {
+    inDevelopment();
+    render(<DemoAccountsPanel onChoose={vi.fn()} />);
+    await expand();
+
+    expect(screen.getByText('Associate AB · leads nobody')).toBeInTheDocument();
+    expect(screen.getByText('Waiting on a leader')).toBeInTheDocument();
+    expect(screen.getByText('Removed')).toBeInTheDocument();
+    expect(screen.getByText('Office suspended')).toBeInTheDocument();
   });
 
   it('says where the accounts come from, so a mismatch is self-diagnosing', () => {
@@ -46,15 +78,15 @@ describe('DemoAccountsPanel', () => {
     expect(screen.getByText(/development only/)).toBeInTheDocument();
   });
 
-  it('hands the whole account back on a choice', () => {
+  it('hands the whole account back on a choice', async () => {
     inDevelopment();
     const onChoose = vi.fn();
     render(<DemoAccountsPanel onChoose={onChoose} />);
-    void userEvent.click(screen.getByRole('button', { name: /KPM Owner/ }));
-    return vi.waitFor(() =>
-      expect(onChoose).toHaveBeenCalledWith(
-        expect.objectContaining({ email: 'owner@kpm0417.test', password: 'demo password 0417' }),
-      ),
+    await expand();
+    await userEvent.click(screen.getByRole('button', { name: /KPM Owner.*owner@kpm0417/s }));
+
+    expect(onChoose).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'owner@kpm0417.test', password: 'demo password 0417' }),
     );
   });
 
@@ -62,13 +94,15 @@ describe('DemoAccountsPanel', () => {
     inDevelopment();
     const onChoose = vi.fn();
     render(<DemoAccountsPanel onChoose={onChoose} disabled />);
+    await expand();
 
-    for (const button of screen.getAllByRole('button')) expect(button).toBeDisabled();
-    await userEvent.click(screen.getAllByRole('button')[0]);
+    const account = screen.getByRole('button', { name: /Super Admin.*superadmin@/s });
+    expect(account).toBeDisabled();
+    await userEvent.click(account);
     expect(onChoose).not.toHaveBeenCalled();
   });
 
-  it('has no axe violations, and is a labelled region rather than loose text', async () => {
+  it('has no axe violations, collapsed or expanded', async () => {
     inDevelopment();
     const { container } = render(
       // A heading needs something above it in the document order to be valid at h2.
@@ -77,7 +111,13 @@ describe('DemoAccountsPanel', () => {
         <DemoAccountsPanel onChoose={vi.fn()} />
       </div>,
     );
-    const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
-    expect(results.violations ?? []).toHaveLength(0);
+    const clean = async () =>
+      expect(
+        (await axe(container, { rules: { 'color-contrast': { enabled: false } } })).violations ?? [],
+      ).toHaveLength(0);
+
+    await clean();
+    await expand();
+    await clean();
   });
 });

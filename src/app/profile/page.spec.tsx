@@ -31,7 +31,7 @@ describe('profile', () => {
       me: makeMe({
         membership: {
           membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'ab',
-          isKpmOwner: false, isKpmAdmin: true,
+          isKpmOwner: false, isKpmAdmin: true, status: 'active', directCount: 0,
         },
       }),
     });

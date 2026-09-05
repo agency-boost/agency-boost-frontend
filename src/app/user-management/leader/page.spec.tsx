@@ -12,7 +12,7 @@ vi.mock('next/navigation', () => ({
 const JOINER = makeMe({
   membership: {
     membershipId: 'mem-me', kpmId: 'kpm-1', hierarchyRole: 'agent',
-    isKpmOwner: false, isKpmAdmin: false,
+    isKpmOwner: false, isKpmAdmin: false, status: 'active', directCount: 0,
   },
   permissions: ['leader:search_directory', 'leader_request:create', 'leader_request:cancel'],
 });

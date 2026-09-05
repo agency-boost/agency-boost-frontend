@@ -16,6 +16,9 @@ import CompaniesPage from './admin/companies/page';
 import AuditPage from './admin/audit/page';
 import MembersPage from './people/members/page';
 import RegisterKpmPage from './user-management/kpm/page';
+import KpmOverviewPage from './kpm/overview/page';
+import UnitDashboardPage from './unit/dashboard/page';
+import LogActivityPage from './activity/log/page';
 import FindLeaderPage from './user-management/leader/page';
 
 vi.mock('next/navigation', () => ({
@@ -161,7 +164,7 @@ describe('Phase 2 screens have no axe violations', () => {
     const owner = makeMe({
       membership: {
         membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
-        isKpmOwner: true, isKpmAdmin: false,
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
       },
       permissions: ['member:read_profile'],
     });
@@ -210,7 +213,7 @@ describe('Phase 2 screens have no axe violations', () => {
     const joiner = makeMe({
       membership: {
         membershipId: 'mem-me', kpmId: 'kpm-1', hierarchyRole: 'agent',
-        isKpmOwner: false, isKpmAdmin: false,
+        isKpmOwner: false, isKpmAdmin: false, status: 'active', directCount: 0,
       },
       permissions: ['leader:search_directory', 'leader_request:create'],
     });
@@ -232,6 +235,37 @@ describe('Phase 2 screens have no axe violations', () => {
     renderWithSession(<FindLeaderPage />, { me: joiner });
     await screen.findByText('Request sent');
     await expectClean('user-management/leader');
+  });
+
+  it('the office overview, real half and placeholder half together', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: true, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: ['member:read_profile'],
+    });
+    stubFetch({ '/admin/tenants/kpm-1': { body: { ...KPM, settings: { activationWindowDays: 90 } } } });
+    renderWithSession(<KpmOverviewPage />, { me: owner });
+    await screen.findByText('Arrives in phase 14');
+    await expectClean('kpm/overview');
+  });
+
+  it('the placeholder landings a leader and an agent reach', async () => {
+    const leader = makeMe({
+      membership: {
+        membershipId: 'mem-aab', kpmId: 'kpm-1', hierarchyRole: 'aab', status: 'active',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 2,
+      },
+    });
+    renderWithSession(<UnitDashboardPage />, { me: leader });
+    await screen.findByText('Arrives in phase 13');
+    await expectClean('unit/dashboard');
+
+    cleanup();
+    renderWithSession(<LogActivityPage />, { me: makeMe() });
+    await screen.findByText('Arrives in phase 6');
+    await expectClean('activity/log');
   });
 
   it('audit log', async () => {

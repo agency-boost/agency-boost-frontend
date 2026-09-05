@@ -18,8 +18,11 @@ export interface Me {
     membershipId: string;
     kpmId: string;
     hierarchyRole: HierarchyRole;
+    status: 'active' | 'pending' | 'removed';
     isKpmOwner: boolean;
     isKpmAdmin: boolean;
+    /** Active direct reports. Leadership is this, not the role (OD-23). */
+    directCount: number;
   } | null;
   isImpersonating: boolean;
   impersonatedBy: string | null;

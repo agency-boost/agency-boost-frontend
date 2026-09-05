@@ -110,7 +110,8 @@ describe('login', () => {
       process.env.NEXT_PUBLIC_APP_ENV = 'development';
       const { session } = renderWithSession(<LoginPage />);
 
-      await userEvent.click(screen.getByRole('button', { name: /Super Admin/ }));
+      await userEvent.click(screen.getByRole('button', { name: /Show all \d+ accounts/ }));
+      await userEvent.click(screen.getByRole('button', { name: /Super Admin.*superadmin@/s }));
 
       expect(session.signIn).toHaveBeenCalledWith(
         'superadmin@agencyboost.test',
@@ -134,7 +135,8 @@ describe('login', () => {
       });
       renderWithSession(<LoginPage />, { signIn });
 
-      await userEvent.click(screen.getByRole('button', { name: /KPM Owner/ }));
+      await userEvent.click(screen.getByRole('button', { name: /Show all \d+ accounts/ }));
+      await userEvent.click(screen.getByRole('button', { name: /KPM Owner.*owner@kpm0417/s }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent('incorrect');
       expect(screen.getByLabelText('Email')).toHaveValue('owner@kpm0417.test');

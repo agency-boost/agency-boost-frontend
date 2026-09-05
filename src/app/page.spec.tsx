@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '../../test/harness';
+import { makeMe, renderWithSession } from '../../test/harness';
 import Home from './page';
 
 const replace = vi.fn();
@@ -9,32 +9,25 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/',
 }));
 
-const KPM = {
-  _id: 'kpm-1', companyId: 'co-1', code: '0417', branchName: 'BSD City Branch',
-  address: null, contactPhone: null, ownerUserId: 'u-owner', timezone: 'Asia/Jakarta',
-  locale: 'id-ID', currency: 'IDR', status: 'active', suspendedAt: null, suspendedReason: null,
-  createdAt: '2026-09-01T00:00:00.000Z',
-  settings: { activationWindowDays: 90, weeksPerMonth: 4.33 },
-};
-
-const owner = makeMe({
-  membership: {
-    membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'ab',
-    isKpmOwner: true, isKpmAdmin: false,
-  },
-  permissions: ['kpm:read_profile'],
-});
-
+/**
+ * The landing hands off and nothing else. Which destination it picks is
+ * `lib/landing.spec.ts`; this is about the hand-off itself.
+ */
 describe('landing', () => {
-  afterEach(() => {
-    replace.mockClear();
-    vi.unstubAllGlobals();
-  });
+  afterEach(() => replace.mockClear());
 
-  it('waits rather than bouncing an anonymous visitor before the session is known', () => {
+  it('waits rather than bouncing before the session is known', () => {
     renderWithSession(<Home />, { me: null, loading: true });
     expect(replace).not.toHaveBeenCalled();
     expect(screen.getByRole('status')).toHaveTextContent('Loading');
+  });
+
+  it('renders no content of its own, whoever is signed in', () => {
+    // Two screens claiming to be home would mean the one you saw depended on how fast
+    // the redirect ran.
+    renderWithSession(<Home />, { me: makeMe() });
+    expect(screen.getByRole('status')).toHaveTextContent('Loading');
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
   });
 
   it('sends an anonymous visitor to sign in', () => {
@@ -55,27 +48,22 @@ describe('landing', () => {
     expect(replace).toHaveBeenCalledWith('/admin');
   });
 
-  it('sends an agent to their account, since their screens start in Phase 6', () => {
+  it('sends a KPM Owner to their office overview', () => {
+    renderWithSession(<Home />, {
+      me: makeMe({
+        membership: {
+          membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+          isKpmOwner: true, isKpmAdmin: false, directCount: 2,
+        },
+      }),
+    });
+    expect(replace).toHaveBeenCalledWith('/kpm/overview');
+  });
+
+  it('sends an agent to their own day, not to their profile', () => {
+    // Landing on a profile with a sign-out button and nothing else is what this
+    // replaced: it read as though the product had nothing for them.
     renderWithSession(<Home />, { me: makeMe() });
-    expect(replace).toHaveBeenCalledWith('/profile');
-  });
-
-  it("lands a KPM Owner on their office with the seeded configuration present", async () => {
-    // Phase 2 AC: the Owner's first sign-in shows their office and the settings
-    // provisioning seeded. The full Overview arrives in Phase 14 with its data.
-    stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
-    renderWithSession(<Home />, { me: owner });
-
-    expect(await screen.findByRole('heading', { name: /0417 · BSD City Branch/ })).toBeInTheDocument();
-    expect(screen.getByText('Asia/Jakarta')).toBeInTheDocument();
-    expect(screen.getByText('90')).toBeInTheDocument();
-    expect(screen.getByText('4.33')).toBeInTheDocument();
-    expect(replace).not.toHaveBeenCalled();
-  });
-
-  it('says so when the office profile cannot be read, rather than showing an empty page', async () => {
-    stubFetch({ '/admin/tenants/kpm-1': { status: 404, body: {} } });
-    renderWithSession(<Home />, { me: owner });
-    expect(await screen.findByText('Your office profile could not be loaded.')).toBeInTheDocument();
+    expect(replace).toHaveBeenCalledWith('/activity/log');
   });
 });

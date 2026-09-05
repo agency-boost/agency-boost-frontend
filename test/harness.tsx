@@ -24,7 +24,7 @@ export function makeMe(overrides: Partial<Me> = {}): Me {
       kpmId: 'kpm-1',
       hierarchyRole: 'agent',
       isKpmOwner: false,
-      isKpmAdmin: false,
+      isKpmAdmin: false, status: 'active', directCount: 0,
     },
     isImpersonating: false,
     impersonatedBy: null,
