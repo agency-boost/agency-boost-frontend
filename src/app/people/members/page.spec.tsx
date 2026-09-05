@@ -124,9 +124,85 @@ describe('members directory (P3-T1 AC-3)', () => {
   it('keeps the tabs it has not built visible rather than hiding the roadmap', async () => {
     stubFetch({ '/members': { body: { members: [], nextCursor: null } } });
     renderWithSession(<MembersPage />, { me: OWNER });
-    for (const label of ['Pending', 'Role change log', 'Groups']) {
+    for (const label of ['Pending', 'Groups']) {
       expect(await screen.findByText(label)).toHaveAttribute('aria-disabled', 'true');
     }
+  });
+
+  describe('the role change log tab (P3-T6 AC-4)', () => {
+    const entry = (over: Record<string, unknown> = {}) => ({
+      membershipId: 'mem-1', fullName: 'Rina Wijaya', agentCode: 'KPM0417-001',
+      fromRole: 'agent', toRole: 'aab', reason: 'Ready to lead a unit',
+      actorName: 'Wilson Tanoto', changedAt: '2026-08-14T03:20:00.000Z', ...over,
+    });
+
+    function open(body: unknown) {
+      const stub = stubFetch({
+        '/members/role-changes': { body },
+        '/members': { body: { members: [], nextCursor: null } },
+      });
+      renderWithSession(<MembersPage />, { me: OWNER });
+      return stub;
+    }
+
+    it('reads the log, not the roster, and drops the roster filters while it is open', async () => {
+      const { calls } = open([entry()]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
+
+      await screen.findByRole('table');
+      expect(calls.some((c) => c.url.includes('/members/role-changes'))).toBe(true);
+      // Search and Role filter the roster; leaving them over the log would offer
+      // controls that change nothing.
+      expect(screen.queryByLabelText('Search')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Role')).not.toBeInTheDocument();
+    });
+
+    it('shows what changed, why, and who did it', async () => {
+      open([entry()]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
+
+      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Rina/ });
+      expect(row).toHaveTextContent('Agent→AAB');
+      // The badge abbreviates; the full name has to stay reachable, because "AAB"
+      // means nothing to somebody reading their first role change.
+      expect(within(row).getByTitle('Associate Agency Builder')).toBeInTheDocument();
+      expect(row).toHaveTextContent('Ready to lead a unit');
+      expect(row).toHaveTextContent('Wilson Tanoto');
+      expect(within(row).getByRole('link', { name: 'Rina Wijaya' })).toHaveAttribute(
+        'href',
+        '/people/members/mem-1',
+      );
+    });
+
+    it('says nothing rather than nothing-happened when a reason was not given', async () => {
+      // A blank cell reads as a rendering fault; an em dash reads as "not recorded".
+      open([entry({ reason: null, actorName: null })]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
+
+      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Rina/ });
+      expect(within(row).getAllByText('—')).toHaveLength(2);
+    });
+
+    it('has an empty state of its own, not the roster one', async () => {
+      open([]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
+      expect(
+        await screen.findByText('Nobody has changed role in this office yet.'),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('This office has no members yet.')).not.toBeInTheDocument();
+    });
+
+    it('goes back to the roster, and asks for it again', async () => {
+      const { calls } = open([entry()]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
+      await screen.findByRole('table');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Directory' }));
+      expect(await screen.findByLabelText('Search')).toBeInTheDocument();
+      await vi.waitFor(() =>
+        expect(calls[calls.length - 1].url).not.toContain('/members/role-changes'),
+      );
+    });
   });
 
   it('never renders for a session without the permission', () => {

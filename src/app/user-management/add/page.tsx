@@ -8,6 +8,14 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { RoleBadge } from '@/components/ui/role-badge';
+import {
+  changeRole,
+  readMyTeam,
+  roleChangeExplanation,
+  type HierarchyRole,
+  type TeamMember,
+} from '@/lib/org';
 import {
   INVITE_STATE_LABEL,
   issueInvite,
@@ -42,17 +50,41 @@ export default function AddAgentsPage() {
   const [untagged, setUntagged] = useState<UntaggedMember[] | null>(null);
   const [pool, setPool] = useState('');
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [team, setTeam] = useState<TeamMember[] | null>(null);
+  const [proposal, setProposal] = useState<{ member: TeamMember; toRole: HierarchyRole } | null>(null);
+  const [roleReason, setRoleReason] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setInvites(await listInvites());
+      const [issued, mine] = await Promise.all([listInvites(), readMyTeam()]);
+      setInvites(issued);
+      setTeam(mine);
     } catch (err) {
       setError(toDisplayError(err));
       setInvites([]);
+      setTeam([]);
     }
   }, []);
+
+  async function applyRole() {
+    if (!proposal) return;
+    setBusy('role');
+    setError(null);
+    try {
+      setTeam(await changeRole(proposal.member.membershipId, proposal.toRole, roleReason.trim() || undefined));
+      setProposal(null);
+      setRoleReason('');
+    } catch (err) {
+      setError(toDisplayError(err));
+      // Refused — reload so the select shows what is true rather than what was picked.
+      await load();
+      setProposal(null);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   useEffect(() => {
     void load();
@@ -324,6 +356,109 @@ export default function AddAgentsPage() {
             </li>
           ))}
         </ul>
+      </Card>
+
+      <Card className="mt-6">
+        <h2 className="font-display text-lg font-bold text-navy">Your team</h2>
+        <p className="mt-1 text-md text-muted">
+          People who report to you. Only somebody&apos;s direct leader can change their role, and
+          changing it moves nobody — they keep reporting to you either way.
+        </p>
+
+        {team === null && (
+          <p role="status" className="mt-3 text-md text-muted">
+            Loading…
+          </p>
+        )}
+
+        {team?.length === 0 && <EmptyState title="Nobody reports to you yet." />}
+
+        <ul className="mt-3 flex flex-col gap-2">
+          {team?.map((member) => (
+            <li
+              key={member.membershipId}
+              className="flex flex-wrap items-center gap-3 rounded-md border border-hairline p-3"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy-soft text-md font-bold text-card">
+                {member.initials}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-md font-semibold text-navy">{member.fullName}</span>
+                <span className="block text-sm text-muted">
+                  {member.agentCode} ·{' '}
+                  {member.directCount > 0
+                    ? `leads ${member.directCount}`
+                    : 'reports to you'}
+                </span>
+              </span>
+
+              {member.canChangeRole ? (
+                <Field
+                  label="Role"
+                  htmlFor={`role-${member.membershipId}`}
+                  className="w-52"
+                >
+                  <Select
+                    id={`role-${member.membershipId}`}
+                    value={member.role}
+                    disabled={busy !== null}
+                    onChange={(e) =>
+                      setProposal({ member, toRole: e.target.value as HierarchyRole })
+                    }
+                  >
+                    <option value="agent">Agent</option>
+                    <option value="aab">Associate Agency Builder</option>
+                  </Select>
+                </Field>
+              ) : (
+                // An AB report never gets the control, whoever is looking. The server
+                // decides that and sends the answer; this only renders it.
+                <RoleBadge role={member.role} />
+              )}
+            </li>
+          ))}
+        </ul>
+
+        {proposal && (
+          <div className="mt-4 rounded-md border border-amber bg-base p-4">
+            <h3 className="font-display text-md font-bold text-navy">
+              Change {proposal.member.fullName}&apos;s role?
+            </h3>
+            <p className="mt-1 text-md text-navy">
+              {roleChangeExplanation(proposal.member.fullName, proposal.member.role, proposal.toRole)}
+            </p>
+
+            <Field
+              label="Why?"
+              htmlFor="role-reason"
+              hint="Kept in the role change log, which is the only place this can be read back."
+              className="mt-3"
+            >
+              <TextInput
+                id="role-reason"
+                value={roleReason}
+                onChange={(e) => setRoleReason(e.target.value)}
+                placeholder="Ready to bring on their own agents"
+              />
+            </Field>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button disabled={busy !== null} onClick={() => void applyRole()}>
+                {busy === 'role' ? 'Changing…' : 'Confirm change'}
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={busy !== null}
+                onClick={() => {
+                  setProposal(null);
+                  setRoleReason('');
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
     </UserManagementShell>
   );

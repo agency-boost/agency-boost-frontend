@@ -12,9 +12,11 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   listMembers,
   MEMBER_STATUS_LABEL,
+  readRoleChangeLog,
   type HierarchyRole,
   type Member,
   type MemberStatus,
+  type RoleChangeEntry,
 } from '@/lib/org';
 
 /**
@@ -33,12 +35,16 @@ const STATUS_TO_PILL: Record<MemberStatus, 'success' | 'alert' | 'neutral'> = {
 };
 
 const TABS = [
-  { key: 'directory', label: 'Directory', status: undefined },
-  { key: 'removed', label: 'Removed', status: 'removed' as const },
-];
+  { key: 'directory', label: 'Directory' },
+  { key: 'removed', label: 'Removed' },
+  { key: 'rolelog', label: 'Role change log' },
+] as const;
+
+type TabKey = (typeof TABS)[number]['key'];
 
 export default function MembersPage() {
-  const [tab, setTab] = useState<'directory' | 'removed'>('directory');
+  const [tab, setTab] = useState<TabKey>('directory');
+  const [log, setLog] = useState<RoleChangeEntry[] | null>(null);
   const [q, setQ] = useState('');
   const [role, setRole] = useState<HierarchyRole | ''>('');
   const [page, setPage] = useState<Member[] | null>(null);
@@ -49,6 +55,15 @@ export default function MembersPage() {
   const load = useCallback(
     async (cursor?: string) => {
       setError(null);
+      if (tab === 'rolelog') {
+        try {
+          setLog(await readRoleChangeLog());
+        } catch (err) {
+          setError(toDisplayError(err));
+          setLog([]);
+        }
+        return;
+      }
       try {
         const result = await listMembers({
           ...(q ? { q } : {}),
@@ -85,7 +100,7 @@ export default function MembersPage() {
           <button
             key={t.key}
             type="button"
-            onClick={() => setTab(t.key as 'directory' | 'removed')}
+            onClick={() => setTab(t.key)}
             aria-current={tab === t.key ? 'page' : undefined}
             className={
               tab === t.key
@@ -97,7 +112,7 @@ export default function MembersPage() {
           </button>
         ))}
         {/* Visible but not yet built, as the prototype's own nav does for Upcoming. */}
-        {['Pending', 'Role change log', 'Groups'].map((label) => (
+        {['Pending', 'Groups'].map((label) => (
           <span
             key={label}
             aria-disabled
@@ -109,6 +124,7 @@ export default function MembersPage() {
         ))}
       </div>
 
+      {tab !== 'rolelog' && (
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <Field label="Search" htmlFor="q" className="min-w-56 flex-1">
           <TextInput
@@ -127,16 +143,65 @@ export default function MembersPage() {
           </Select>
         </Field>
       </div>
+      )}
 
       {error && <ErrorBanner {...error} />}
 
-      {page === null && (
+      {tab === 'rolelog' && (
+        <>
+          {log === null && (
+            <p role="status" className="text-md text-muted">
+              Loading…
+            </p>
+          )}
+          {log?.length === 0 && !error && (
+            <div className="rounded-lg border border-hairline bg-card">
+              <EmptyState title="Nobody has changed role in this office yet." />
+            </div>
+          )}
+          {log && log.length > 0 && (
+            <DataTable
+              caption="Role changes, newest first"
+              columns={['When', 'Who', 'Change', 'Why', 'Changed by']}
+            >
+              {log.map((entry) => (
+                <Row key={`${entry.membershipId}-${entry.changedAt}`}>
+                  <Cell className="whitespace-nowrap text-muted">
+                    <time dateTime={entry.changedAt}>
+                      {new Date(entry.changedAt).toLocaleString('en-GB')}
+                    </time>
+                  </Cell>
+                  <Cell className="font-semibold">
+                    <Link href={`/people/members/${entry.membershipId}`} className="underline">
+                      {entry.fullName}
+                    </Link>
+                    <span className="block text-sm font-normal text-muted">{entry.agentCode}</span>
+                  </Cell>
+                  <Cell>
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {entry.fromRole && <RoleBadge role={entry.fromRole} />}
+                      <span aria-label="became" className="text-muted">
+                        →
+                      </span>
+                      {entry.toRole && <RoleBadge role={entry.toRole} />}
+                    </span>
+                  </Cell>
+                  <Cell className="text-muted">{entry.reason ?? '—'}</Cell>
+                  <Cell className="text-muted">{entry.actorName ?? '—'}</Cell>
+                </Row>
+              ))}
+            </DataTable>
+          )}
+        </>
+      )}
+
+      {tab !== 'rolelog' && page === null && (
         <p role="status" className="text-md text-muted">
           Loading…
         </p>
       )}
 
-      {page?.length === 0 && !error && (
+      {tab !== 'rolelog' && page?.length === 0 && !error && (
         <div className="rounded-lg border border-hairline bg-card">
           <EmptyState
             variant={filtered ? 'filtered' : 'empty'}
@@ -164,7 +229,7 @@ export default function MembersPage() {
         </div>
       )}
 
-      {page && page.length > 0 && (
+      {tab !== 'rolelog' && page && page.length > 0 && (
         <>
           <DataTable
             caption="Office roster"

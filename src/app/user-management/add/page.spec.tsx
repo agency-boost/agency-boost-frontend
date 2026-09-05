@@ -29,14 +29,18 @@ describe('inviting people (P3-T4)', () => {
   it('says plainly that an invite skips approval', async () => {
     // It is the whole difference from asking a leader, and the reason a limit and an
     // expiry are offered at all.
-    stubFetch({ '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
     renderWithSession(<AddAgentsPage />, { me: LEADER });
 
     expect(await screen.findByText(/Nobody approves it/)).toBeInTheDocument();
   });
 
   it('AC-1: shows the code and the link as one invite, not two', async () => {
-    stubFetch({ '/join/invites': { body: [invite()] }, '/join/untagged': { body: [] } });
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [invite()] }, '/join/untagged': { body: [] } });
     renderWithSession(<AddAgentsPage />, { me: LEADER });
 
     // Twice on purpose: once to share and once in the list of what you have issued.
@@ -46,7 +50,9 @@ describe('inviting people (P3-T4)', () => {
   });
 
   it('sends only the limits that were chosen', async () => {
-    const { calls } = stubFetch({ '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+    const { calls } = stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
     renderWithSession(<AddAgentsPage />, { me: LEADER });
 
     await userEvent.type(await screen.findByLabelText('What is it for'), '  September  ');
@@ -60,7 +66,9 @@ describe('inviting people (P3-T4)', () => {
   });
 
   it('clears the form after issuing, so a second invite is not a copy of the first', async () => {
-    stubFetch({ '/join/invites': [{ body: [] }, { body: [invite()] }], '/join/untagged': { body: [] } });
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': [{ body: [] }, { body: [invite()] }], '/join/untagged': { body: [] } });
     renderWithSession(<AddAgentsPage />, { me: LEADER });
 
     await userEvent.type(await screen.findByLabelText('What is it for'), 'September');
@@ -72,6 +80,7 @@ describe('inviting people (P3-T4)', () => {
   it('lists withdrawn and spent invites too, not only the working one', async () => {
     // What has been out there is worth seeing, not only what still works.
     stubFetch({
+      '/members/my-team': { body: [] },
       '/join/untagged': { body: [] },
       '/join/invites': {
         body: [
@@ -91,6 +100,7 @@ describe('inviting people (P3-T4)', () => {
 
   it('offers Withdraw only on one that still works', async () => {
     stubFetch({
+      '/members/my-team': { body: [] },
       '/join/untagged': { body: [] },
       '/join/invites': {
         body: [invite(), invite({ inviteId: 'inv-2', code: 'OLD222', state: 'revoked' })],
@@ -104,6 +114,7 @@ describe('inviting people (P3-T4)', () => {
 
   it('withdraws, then reloads rather than guessing the new state', async () => {
     const { calls } = stubFetch({
+      '/members/my-team': { body: [] },
       '/join/untagged': { body: [] },
       '/join/invites/inv-1': { body: invite({ state: 'revoked' }) },
       '/join/invites': [{ body: [invite()] }, { body: [invite({ state: 'revoked' })] }],
@@ -117,15 +128,137 @@ describe('inviting people (P3-T4)', () => {
   });
 
   it('says how long an unlimited invite lasts, rather than leaving the cell blank', async () => {
-    stubFetch({ '/join/invites': { body: [invite()] }, '/join/untagged': { body: [] } });
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [invite()] }, '/join/untagged': { body: [] } });
     renderWithSession(<AddAgentsPage />, { me: LEADER });
     expect(await screen.findByText('When you withdraw it')).toBeInTheDocument();
   });
 
   it('tells somebody with no invites what is missing', async () => {
-    stubFetch({ '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
     renderWithSession(<AddAgentsPage />, { me: LEADER });
     expect(await screen.findByText('You have not made an invite yet.')).toBeInTheDocument();
+  });
+
+  describe('changing a role (P3-T6)', () => {
+    const teamMember = (over: Record<string, unknown> = {}) => ({
+      membershipId: 'mem-t1', fullName: 'Rina Wijaya', initials: 'RW',
+      agentCode: 'KPM0417-003', role: 'agent', directCount: 0, canChangeRole: true, ...over,
+    });
+
+    function stub(team: Record<string, unknown>[], extra: Record<string, unknown> = {}) {
+      return stubFetch({
+        '/join/invites': { body: [] },
+        '/join/untagged': { body: [] },
+        '/members/my-team': { body: team },
+        ...extra,
+      });
+    }
+
+    it('says a role change moves nobody, which is the thing people assume it does', async () => {
+      stub([teamMember()]);
+      renderWithSession(<AddAgentsPage />, { me: LEADER });
+      expect(await screen.findByText(/changing it moves nobody/)).toBeInTheDocument();
+    });
+
+    it('AC-1: shows the control only where the server says it may', async () => {
+      // The rule is a server rule, and the row carries the answer — the screen keeps no
+      // second copy of it that could drift.
+      stub([
+        teamMember(),
+        teamMember({ membershipId: 'mem-ab', fullName: 'An AB', role: 'ab', canChangeRole: false }),
+      ]);
+      renderWithSession(<AddAgentsPage />, { me: LEADER });
+
+      expect(await screen.findByLabelText('Role')).toBeInTheDocument();
+      expect(screen.getByTitle('Agency Builder')).toBeInTheDocument();
+      expect(screen.getAllByLabelText('Role')).toHaveLength(1);
+    });
+
+    it('explains the change in the prototype own words before confirming', async () => {
+      stub([teamMember()]);
+      renderWithSession(<AddAgentsPage />, { me: LEADER });
+
+      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
+      // The card says it in general; the confirmation says it about this person, which
+      // is the one somebody reads before pressing the button.
+      const explanation = screen.getByText(/can now recruit and manage their own agents/);
+      expect(explanation).toHaveTextContent('They keep reporting to you');
+      expect(explanation).toHaveTextContent('Rina Wijaya');
+    });
+
+    it('explains a demotion the other way round', async () => {
+      stub([teamMember({ role: 'aab' })]);
+      renderWithSession(<AddAgentsPage />, { me: LEADER });
+
+      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'agent');
+      expect(screen.getByText(/no longer manage their own agents/)).toBeInTheDocument();
+    });
+
+    it('changes nothing until it is confirmed', async () => {
+      const { calls } = stub([teamMember()]);
+      renderWithSession(<AddAgentsPage />, { me: LEADER });
+
+      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
+      expect(calls.some((c) => c.init.method === 'PATCH')).toBe(false);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByText(/can now recruit/)).not.toBeInTheDocument();
+    });
+
+    it('AC-2: sends the reason, because the log is the only place it can be read back', async () => {
+      const { calls } = stub([teamMember()], { '/members/mem-t1/role': { body: [] } });
+      renderWithSession(<AddAgentsPage />, { me: LEADER });
+
+      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
+      await userEvent.type(screen.getByLabelText('Why?'), '  Ready to lead  ');
+      await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
+
+      const patch = calls.find((c) => c.init.method === 'PATCH')!;
+      expect(JSON.parse(patch.init.body as string)).toEqual({
+        toRole: 'aab',
+        reason: 'Ready to lead',
+      });
+    });
+
+    it('AC-3: surfaces a refused demotion with the count, and puts the select back', async () => {
+      const { calls } = stub([teamMember({ role: 'aab', directCount: 2 })], {
+        '/members/mem-t1/role': {
+          status: 409,
+          body: {
+            error: {
+              code: 'ORG_HAS_DIRECT_REPORTS',
+              message: '2 people report to them. Move them to another leader first.',
+              requestId: 'r-1',
+            },
+          },
+        },
+      });
+      renderWithSession(<AddAgentsPage />, { me: LEADER });
+
+      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'agent');
+      await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('2 people report to them');
+      // Reloaded, so the select shows what is true rather than what was picked.
+      expect(calls.filter((c) => c.url.endsWith('/members/my-team')).length).toBeGreaterThan(1);
+      expect(screen.queryByRole('button', { name: 'Confirm change' })).not.toBeInTheDocument();
+    });
+
+    it('says how many somebody leads, so a demotion is not a surprise', async () => {
+      stub([teamMember({ role: 'aab', directCount: 3 })]);
+      renderWithSession(<AddAgentsPage />, { me: LEADER });
+      expect(await screen.findByText(/leads 3/)).toBeInTheDocument();
+    });
+
+    it('tells a leader with nobody under them', async () => {
+      stub([]);
+      renderWithSession(<AddAgentsPage />, { me: LEADER });
+      expect(await screen.findByText('Nobody reports to you yet.')).toBeInTheDocument();
+    });
   });
 
   describe('pulling in somebody already here (P3-T5 AC-3)', () => {
@@ -135,14 +268,18 @@ describe('inviting people (P3-T4)', () => {
     });
 
     it('says plainly that they do not have to approve it', async () => {
-      stubFetch({ '/join/invites': { body: [] }, '/join/untagged': { body: [untagged()] } });
+      stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] }, '/join/untagged': { body: [untagged()] } });
       renderWithSession(<AddAgentsPage />, { me: LEADER });
 
       expect(await screen.findByText(/they do not have to approve it/)).toBeInTheDocument();
     });
 
     it('lists people who report to nobody', async () => {
-      stubFetch({ '/join/invites': { body: [] }, '/join/untagged': { body: [untagged()] } });
+      stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] }, '/join/untagged': { body: [untagged()] } });
       renderWithSession(<AddAgentsPage />, { me: LEADER });
 
       expect(await screen.findByText('Fajar Nugroho')).toBeInTheDocument();
@@ -151,7 +288,9 @@ describe('inviting people (P3-T4)', () => {
 
     it('confirms in the row rather than in a modal', async () => {
       // A modal for one row is heavier than the decision, and the prototype agrees.
-      stubFetch({ '/join/invites': { body: [] }, '/join/untagged': { body: [untagged()] } });
+      stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] }, '/join/untagged': { body: [untagged()] } });
       renderWithSession(<AddAgentsPage />, { me: LEADER });
 
       await userEvent.click(await screen.findByRole('button', { name: 'Add to my unit' }));
@@ -164,7 +303,8 @@ describe('inviting people (P3-T4)', () => {
 
     it('adds them on confirm, and takes the pool the server returned', async () => {
       const { calls } = stubFetch({
-        '/join/invites': { body: [] },
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] },
         '/join/untagged/mem-un': { body: [] },
         '/join/untagged': { body: [untagged()] },
       });
@@ -180,7 +320,9 @@ describe('inviting people (P3-T4)', () => {
     });
 
     it('searches at the server', async () => {
-      const { calls } = stubFetch({ '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+      const { calls } = stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
       renderWithSession(<AddAgentsPage />, { me: LEADER });
 
       await userEvent.type(await screen.findByLabelText('Search by name'), 'fajar');
@@ -188,7 +330,9 @@ describe('inviting people (P3-T4)', () => {
     });
 
     it('tells an empty office apart from a search that matched nobody', async () => {
-      stubFetch({ '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+      stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
       renderWithSession(<AddAgentsPage />, { me: LEADER });
 
       expect(
@@ -200,7 +344,8 @@ describe('inviting people (P3-T4)', () => {
 
     it('surfaces a refusal, such as somebody who already has a leader', async () => {
       stubFetch({
-        '/join/invites': { body: [] },
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] },
         '/join/untagged/mem-un': {
           status: 409,
           body: {
@@ -223,6 +368,7 @@ describe('inviting people (P3-T4)', () => {
 
   it('surfaces a refusal rather than appearing to issue one', async () => {
     stubFetch({
+      '/members/my-team': { body: [] },
       '/join/untagged': { body: [] },
       '/join/invites': [
         { body: [] },

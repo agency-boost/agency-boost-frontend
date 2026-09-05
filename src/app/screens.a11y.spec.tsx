@@ -279,6 +279,12 @@ describe('Phase 2 screens have no axe violations', () => {
       permissions: ['member:invite', 'member:revoke_invite'],
     });
     stubFetch({
+      '/members/my-team': {
+        body: [{
+          membershipId: 'mem-t1', fullName: 'Rina Wijaya', initials: 'RW',
+          agentCode: 'KPM0417-003', role: 'agent', directCount: 0, canChangeRole: true,
+        }],
+      },
       '/join/untagged': {
         body: [{
           membershipId: 'mem-un', fullName: 'Fajar Nugroho', initials: 'FN',
@@ -298,6 +304,56 @@ describe('Phase 2 screens have no axe violations', () => {
     renderWithSession(<AddAgentsPage />, { me: leader });
     await screen.findByRole('table');
     await expectClean('user-management/add');
+  });
+
+  it('the invite screen with a role change waiting to be confirmed', async () => {
+    // The confirmation is an inline panel, not a modal — it appears between the row and
+    // the rest of the list, which is where a focus or labelling mistake would land.
+    const leader = makeMe({
+      membership: {
+        membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 1,
+      },
+      permissions: ['member:invite'],
+    });
+    stubFetch({
+      '/join/invites': { body: [] },
+      '/join/untagged': { body: [] },
+      '/members/my-team': {
+        body: [{
+          membershipId: 'mem-t1', fullName: 'Rina Wijaya', initials: 'RW',
+          agentCode: 'KPM0417-003', role: 'agent', directCount: 0, canChangeRole: true,
+        }],
+      },
+    });
+    renderWithSession(<AddAgentsPage />, { me: leader });
+    await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
+    await screen.findByLabelText('Why?');
+    await expectClean('user-management/add (role change)');
+  });
+
+  it('the role change log, populated', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+      },
+      permissions: ['member:read_profile'],
+    });
+    stubFetch({
+      '/members/role-changes': {
+        body: [{
+          membershipId: 'mem-1', fullName: 'Rina Wijaya', agentCode: 'KPM0417-001',
+          fromRole: 'agent', toRole: 'aab', reason: 'Ready to lead a unit',
+          actorName: 'Wilson Tanoto', changedAt: '2026-08-14T03:20:00.000Z',
+        }],
+      },
+      '/members': { body: { members: [], nextCursor: null } },
+    });
+    renderWithSession(<MembersPage />, { me: owner });
+    await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
+    await screen.findByRole('table');
+    await expectClean('people/members (role change log)');
   });
 
   it('the approval inbox, with a request and somewhere to route it', async () => {

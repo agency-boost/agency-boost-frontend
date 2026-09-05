@@ -10,7 +10,7 @@
  *
  * Usage: pnpm build && node scripts/check-no-demo-credentials.mjs
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
@@ -79,6 +79,18 @@ console.log(`checked ${present.join(', ')} for ${secrets.length} seeded credenti
 if (hits.length > 0) {
   console.error('\n::error::Development credentials reached the build output:');
   for (const { file, secret } of hits) console.error(`  ${file} contains "${secret}"`);
+
+  // `next dev` writes to the same `.next`, and a dev build is *supposed* to carry these.
+  // Scanning one produces this exact failure with nothing wrong, so say so first.
+  if (existsSync('.next/trace') && !existsSync('.next/BUILD_ID')) {
+    console.error(
+      '\n`.next` holds a development build — `pnpm dev` overwrites the same directory,\n' +
+        'and a dev build carries the panel by design. Run `pnpm build` and check again\n' +
+        'before reading anything into the list above.',
+    );
+    process.exit(1);
+  }
+
   console.error(
     '\nTwo build-time gates keep these out, and either one alone is enough — so both\n' +
       'have been removed or defeated:\n' +
