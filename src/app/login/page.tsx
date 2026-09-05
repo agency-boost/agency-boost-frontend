@@ -92,6 +92,10 @@ export default function LoginPage() {
           <Link href="/forgot-password" className="text-center text-sm text-muted underline">
             Forgot your password?
           </Link>
+
+          <Link href="/register" className="text-center text-sm text-muted underline">
+            Create an account
+          </Link>
         </form>
       </Card>
 

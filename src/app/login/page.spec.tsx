@@ -65,11 +65,15 @@ describe('login', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach the server.');
   });
 
-  it('offers the reset path', () => {
+  it('offers the reset path and the way to an account', () => {
     renderWithSession(<LoginPage />);
     expect(screen.getByRole('link', { name: /Forgot your password/ })).toHaveAttribute(
       'href',
       '/forgot-password',
+    );
+    expect(screen.getByRole('link', { name: 'Create an account' })).toHaveAttribute(
+      'href',
+      '/register',
     );
   });
 

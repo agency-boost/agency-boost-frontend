@@ -72,8 +72,9 @@ export interface CreateKpmInput {
 export const createTenant = (body: CreateKpmInput) =>
   api<Kpm>('/admin/tenants', { method: 'POST', body });
 
-export const assignOwner = (id: string, userId: string) =>
-  api<Kpm>(`/admin/tenants/${id}/owner`, { method: 'PATCH', body: { userId } });
+/** By email, which is what a Super Admin knows. The id is accepted too, for Swagger. */
+export const assignOwner = (id: string, who: { email?: string; userId?: string }) =>
+  api<Kpm>(`/admin/tenants/${id}/owner`, { method: 'PATCH', body: who });
 
 export const setTenantStatus = (id: string, status: TenantStatus, reason?: string) =>
   api<Kpm>(`/admin/tenants/${id}/status`, { method: 'PATCH', body: { status, reason } });

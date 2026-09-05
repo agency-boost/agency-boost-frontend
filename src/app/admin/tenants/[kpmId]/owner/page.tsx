@@ -12,7 +12,7 @@ export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: s
   const { kpmId } = use(params);
   const router = useRouter();
   const [kpm, setKpm] = useState<Kpm | null>(null);
-  const [userId, setUserId] = useState('');
+  const [email, setEmail] = useState('');
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -21,13 +21,14 @@ export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: s
   }, [kpmId]);
 
   const transferring = Boolean(kpm?.ownerUserId);
+  const unknownAddress = error?.code === 'NOT_FOUND';
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await assignOwner(kpmId, userId.trim());
+      await assignOwner(kpmId, { email: email.trim() });
       router.push(`/admin/tenants/${kpmId}`);
     } catch (err) {
       setError(toDisplayError(err));
@@ -42,7 +43,12 @@ export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: s
     >
       <Card className="max-w-xl">
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-          {error && <ErrorBanner {...error} />}
+          {/*
+            An unknown address is explained on the field, so the banner would announce
+            the same failure a second time — a screen reader reads both. The banner is
+            for failures that belong to no single field.
+          */}
+          {error && !unknownAddress && <ErrorBanner {...error} />}
 
           {transferring && (
             <p className="rounded-md border border-hairline bg-base p-3 text-md text-navy">
@@ -53,21 +59,32 @@ export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: s
           )}
 
           <Field
-            label="User id"
-            htmlFor="userId"
-            hint="The account must already exist. Register it first, then paste its id here."
+            label="Email"
+            htmlFor="email"
+            hint="The account must already exist. If it does not, send them to Create an account first."
+            error={unknownAddress ? 'No account uses that address.' : undefined}
           >
             <TextInput
-              id="userId"
+              id="email"
+              type="email"
+              autoComplete="off"
               required
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              invalid={error?.code === 'NOT_FOUND'}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              invalid={unknownAddress}
             />
           </Field>
 
+          <p className="text-sm text-muted">
+            No account yet?{' '}
+            <Link href="/register" className="underline">
+              Create one
+            </Link>{' '}
+            — the office cannot be owned by someone who has not registered.
+          </p>
+
           <div className="flex gap-2">
-            <Button type="submit" disabled={busy || !userId.trim()}>
+            <Button type="submit" disabled={busy || !email.trim()}>
               {busy ? 'Saving…' : transferring ? 'Transfer' : 'Assign'}
             </Button>
             <Link href={`/admin/tenants/${kpmId}`}>

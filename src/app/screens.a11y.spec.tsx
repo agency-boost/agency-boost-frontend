@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { makeMe, renderWithSession, routeParams, stubFetch } from '../../test/harness';
 import LoginPage from './login/page';
+import RegisterPage from './register/page';
 import ForgotPasswordPage from './forgot-password/page';
 import ResetPasswordPage from './reset-password/[token]/page';
 import VerifyEmailPage from './verify-email/[token]/page';
@@ -86,6 +87,11 @@ describe('Phase 2 screens have no axe violations', () => {
     } finally {
       process.env.NEXT_PUBLIC_APP_ENV = original;
     }
+  });
+
+  it('register', async () => {
+    renderWithSession(<RegisterPage />, { me: null });
+    await expectClean('register');
   });
 
   it('forgot password', async () => {
