@@ -17,27 +17,40 @@ import { useSignOut } from '@/lib/use-sign-out';
  * entirely until a KPM exists"* (`Overall.html:8824`). A locked tab stays visible and
  * says why, rather than disappearing.
  */
-const SUBTABS = [
+interface SubTab {
+  readonly href: string;
+  readonly label: string;
+  /** Built by a later phase. Shown and disabled, so the roadmap stays legible. */
+  readonly upcoming?: boolean;
+}
+
+const SUBTABS: readonly SubTab[] = [
   { href: '/user-management/kpm', label: 'Register KPM' },
   { href: '/user-management/leader', label: 'Find your leader' },
   { href: '/user-management/add', label: 'Add new agents' },
-  { href: '/user-management/pending', label: 'Pending requests', upcoming: true },
+  { href: '/user-management/pending', label: 'Pending requests' },
 ];
 
 export function UserManagementShell({
   title,
   subtitle,
   leaderLocked,
+  permission,
   children,
 }: {
   title: string;
   subtitle?: string;
   /** Set on the leader screen when no office is registered yet. */
   leaderLocked?: boolean;
+  /**
+   * Narrows the whole screen. Most of these are reachable by everybody in an office;
+   * the approval inbox is not, and AC-1 says only AB and AAB may see it.
+   */
+  permission?: string;
   children: React.ReactNode;
 }) {
   return (
-    <RequireSession>
+    <RequireSession permission={permission}>
       <Chrome title={title} subtitle={subtitle} leaderLocked={leaderLocked}>
         {children}
       </Chrome>

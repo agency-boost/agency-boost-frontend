@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { UserManagementShell } from '@/components/user-management-shell';
-import { ComingInPhase } from '@/components/coming-in-phase';
 import { CopyableValue } from '@/components/ui/copyable-value';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -14,7 +13,10 @@ import {
   issueInvite,
   listInvites,
   revokeInvite,
+  searchUntagged,
+  tagUntagged,
   type Invite,
+  type UntaggedMember,
 } from '@/lib/join';
 
 /**
@@ -37,6 +39,9 @@ export default function AddAgentsPage() {
   const [label, setLabel] = useState('');
   const [maxUses, setMaxUses] = useState(NEVER);
   const [expiresInDays, setExpiresInDays] = useState(NEVER);
+  const [untagged, setUntagged] = useState<UntaggedMember[] | null>(null);
+  const [pool, setPool] = useState('');
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -52,6 +57,28 @@ export default function AddAgentsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void searchUntagged(pool || undefined)
+      .then(setUntagged)
+      .catch((err) => {
+        setError(toDisplayError(err));
+        setUntagged([]);
+      });
+  }, [pool]);
+
+  async function add(membershipId: string) {
+    setBusy(membershipId);
+    setError(null);
+    try {
+      setUntagged(await tagUntagged(membershipId));
+      setConfirming(null);
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function issue(event: React.FormEvent) {
     event.preventDefault();
@@ -220,19 +247,84 @@ export default function AddAgentsPage() {
         </DataTable>
       )}
 
-      <div className="mt-6">
-        <ComingInPhase
-          phase={3}
-          what="Pulling somebody already in this office into your unit, and managing the people already in it."
-          elsewhere={[
-            {
-              href: '/user-management/pending',
-              label: 'Pending requests',
-              detail: 'Approving people who asked for you — arrives with the same task.',
-            },
-          ]}
-        />
-      </div>
+      <Card className="mt-6">
+        <h2 className="font-display text-lg font-bold text-navy">Find someone already here</h2>
+        <p className="mt-1 text-md text-muted">
+          People registered in this office who report to nobody. Adding them puts them in your unit
+          right away — they do not have to approve it, because the office has already let them in.
+        </p>
+
+        <Field label="Search by name" htmlFor="untagged-search" className="mt-3">
+          <TextInput
+            id="untagged-search"
+            placeholder="Name"
+            value={pool}
+            onChange={(e) => setPool(e.target.value)}
+          />
+        </Field>
+
+        {untagged === null && (
+          <p role="status" className="mt-3 text-md text-muted">
+            Loading…
+          </p>
+        )}
+
+        {untagged?.length === 0 && (
+          <EmptyState
+            variant={pool ? 'filtered' : 'empty'}
+            title={
+              pool
+                ? 'Nobody untagged matches that name.'
+                : 'Everybody in this office already reports to somebody.'
+            }
+          />
+        )}
+
+        <ul className="mt-3 flex flex-col gap-2">
+          {untagged?.map((member) => (
+            <li
+              key={member.membershipId}
+              className="flex flex-wrap items-center gap-3 rounded-md border border-hairline p-3"
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-md font-bold text-card">
+                {member.initials}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-md font-semibold text-navy">{member.fullName}</span>
+                <span className="block text-sm text-muted">
+                  {member.agentCode} · reports to nobody
+                </span>
+              </span>
+
+              {confirming === member.membershipId ? (
+                // Inline, as the prototype does it — a modal for one row is heavier than
+                // the decision.
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-md text-navy">Add them to your unit?</span>
+                  <Button
+                    variant="secondary"
+                    disabled={busy !== null}
+                    onClick={() => setConfirming(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button disabled={busy !== null} onClick={() => void add(member.membershipId)}>
+                    {busy === member.membershipId ? 'Adding…' : 'Confirm'}
+                  </Button>
+                </span>
+              ) : (
+                <Button
+                  variant="secondary"
+                  disabled={busy !== null}
+                  onClick={() => setConfirming(member.membershipId)}
+                >
+                  Add to my unit
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      </Card>
     </UserManagementShell>
   );
 }

@@ -21,6 +21,7 @@ import UnitDashboardPage from './unit/dashboard/page';
 import LogActivityPage from './activity/log/page';
 import FindLeaderPage from './user-management/leader/page';
 import AddAgentsPage from './user-management/add/page';
+import PendingPage from './user-management/pending/page';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -278,6 +279,12 @@ describe('Phase 2 screens have no axe violations', () => {
       permissions: ['member:invite', 'member:revoke_invite'],
     });
     stubFetch({
+      '/join/untagged': {
+        body: [{
+          membershipId: 'mem-un', fullName: 'Fajar Nugroho', initials: 'FN',
+          email: 'fajar@kpm0417.test', agentCode: 'KPM0417-011', role: 'agent',
+        }],
+      },
       '/join/invites': {
         body: [
           {
@@ -291,6 +298,31 @@ describe('Phase 2 screens have no axe violations', () => {
     renderWithSession(<AddAgentsPage />, { me: leader });
     await screen.findByRole('table');
     await expectClean('user-management/add');
+  });
+
+  it('the approval inbox, with a request and somewhere to route it', async () => {
+    const ab = makeMe({
+      membership: {
+        membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: ['leader_request:read_inbox', 'leader_request:approve'],
+    });
+    stubFetch({
+      '/join/requests/routing': {
+        body: [{ membershipId: 'mem-aab', fullName: 'Sari Puspita', unitSize: 2 }],
+      },
+      '/join/requests': {
+        body: [{
+          requestId: 'req-1', membershipId: 'mem-joiner', fullName: 'Putri Anggraini',
+          initials: 'PA', email: 'putri@kpm0417.test', agentCode: 'KPM0417-009',
+          role: 'agent', requestedAt: '2026-09-01T00:00:00.000Z', routedFromName: null,
+        }],
+      },
+    });
+    renderWithSession(<PendingPage />, { me: ab });
+    await screen.findByLabelText('Add to');
+    await expectClean('user-management/pending');
   });
 
   it('audit log', async () => {

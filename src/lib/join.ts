@@ -88,3 +88,54 @@ export const INVITE_STATE_LABEL: Record<Invite['state'], string> = {
   expired: 'Expired',
   exhausted: 'Fully used',
 };
+
+/** The leader's side: deciding who gets in, and pulling in somebody already here. */
+export interface PendingRequest {
+  requestId: string;
+  membershipId: string;
+  fullName: string;
+  initials: string;
+  email: string;
+  agentCode: string;
+  role: 'ab' | 'aab' | 'agent';
+  requestedAt: string;
+  /** Set when somebody above routed this to you instead of deciding it themselves. */
+  routedFromName: string | null;
+}
+
+export interface RoutingChoice {
+  membershipId: string;
+  fullName: string;
+  unitSize: number;
+}
+
+export interface UntaggedMember {
+  membershipId: string;
+  fullName: string;
+  initials: string;
+  email: string;
+  agentCode: string;
+  role: 'ab' | 'aab' | 'agent';
+}
+
+export const readInbox = () => api<PendingRequest[]>('/join/requests');
+
+export const readRoutingChoices = () => api<RoutingChoice[]>('/join/requests/routing');
+
+export const approveRequest = (requestId: string, routeToMembershipId?: string) =>
+  api<PendingRequest[]>(`/join/requests/${requestId}/approve`, {
+    method: 'POST',
+    body: routeToMembershipId ? { routeToMembershipId } : {},
+  });
+
+export const declineRequest = (requestId: string, reason?: string) =>
+  api<PendingRequest[]>(`/join/requests/${requestId}/decline`, {
+    method: 'POST',
+    body: reason ? { reason } : {},
+  });
+
+export const searchUntagged = (q?: string) =>
+  api<UntaggedMember[]>(`/join/untagged${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+
+export const tagUntagged = (membershipId: string) =>
+  api<UntaggedMember[]>(`/join/untagged/${membershipId}`, { method: 'POST' });
