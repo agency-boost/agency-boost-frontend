@@ -15,7 +15,10 @@ import { useSignOut } from '@/lib/use-sign-out';
  * that do not exist yet visible as *Upcoming* rather than hiding them, so the roadmap is
  * legible instead of being a surprise.
  */
-const SECTIONS: readonly { label: string; items: { label: string; href: string; upcoming?: boolean }[] }[] = [
+const SECTIONS: readonly {
+  label: string;
+  items: { label: string; href: string; upcoming?: boolean; ownerOnly?: boolean }[];
+}[] = [
   {
     label: 'Office',
     items: [
@@ -28,7 +31,7 @@ const SECTIONS: readonly { label: string; items: { label: string; href: string; 
     items: [
       { label: 'All members', href: '/people/members' },
       { label: 'Org tree', href: '/people/org-tree' },
-      { label: 'KPM admins', href: '/people/admins', upcoming: true },
+      { label: 'KPM admins', href: '/people/admins', ownerOnly: true },
     ],
   },
   {
@@ -37,7 +40,7 @@ const SECTIONS: readonly { label: string; items: { label: string; href: string; 
       { label: 'Activity types', href: '/kpm/settings/activity-types', upcoming: true },
       { label: 'Ratio benchmarks', href: '/kpm/settings/ratio-benchmarks', upcoming: true },
       { label: 'Lead statuses', href: '/kpm/settings/lead-statuses', upcoming: true },
-      { label: 'Branch info', href: '/kpm/settings/branch-info', upcoming: true },
+      { label: 'Branch info', href: '/kpm/settings/branch-info', upcoming: true, ownerOnly: true },
     ],
   },
 ];
@@ -80,13 +83,19 @@ function TenantChrome({
   const { signOut, busy } = useSignOut();
   const pathname = usePathname();
 
+  // The four Owner-reserved powers are hidden from an Admin entirely, rather than shown
+  // and then refused (`roles-and-permissions.md` §1.6). The API still decides: hiding a
+  // nav item is a courtesy, not a control.
+  const isOwner = Boolean(me?.membership?.isKpmOwner);
   const sections: readonly NavSection[] = SECTIONS.map((section) => ({
     label: section.label,
-    items: section.items.map((item) => ({
-      ...item,
-      active: !item.upcoming && pathname.startsWith(item.href),
-    })),
-  }));
+    items: section.items
+      .filter((item) => !item.ownerOnly || isOwner)
+      .map((item) => ({
+        ...item,
+        active: !item.upcoming && pathname.startsWith(item.href),
+      })),
+  })).filter((section) => section.items.length > 0);
 
   const membership = me?.membership;
   const capacity = membership?.isKpmOwner

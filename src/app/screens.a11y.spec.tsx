@@ -16,6 +16,7 @@ import CompaniesPage from './admin/companies/page';
 import AuditPage from './admin/audit/page';
 import MembersPage from './people/members/page';
 import MemberPage from './people/members/[membershipId]/page';
+import AdminsPage from './people/admins/page';
 import RegisterKpmPage from './user-management/kpm/page';
 import KpmOverviewPage from './kpm/overview/page';
 import UnitDashboardPage from './unit/dashboard/page';
@@ -575,6 +576,36 @@ describe('Phase 2 screens have no axe violations', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit tags' }));
     await screen.findByLabelText('Core Leader');
     await expectClean('people/members/[id] (tags)');
+  });
+
+  it('manage KPM admins, populated and with a revoke waiting', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 1,
+      },
+      permissions: ['kpm_admin:grant', 'kpm_admin:revoke', 'kpm_admin:list'],
+    });
+    stubFetch({
+      '/members/admins': {
+        body: [{
+          membershipId: 'mem-admin', fullName: 'Maya Halim', initials: 'MH',
+          agentCode: 'KPM0417-002', role: 'ab', grantedAt: '2026-01-14T00:00:00.000Z',
+          grantedByName: 'Wilson Tanoto', canRevoke: true,
+        }],
+      },
+      '/members/tree': {
+        body: {
+          nodes: [treeNode({ membershipId: 'mem-agus', fullName: 'Agus Prasetyo', role: 'ab' })],
+          leader: null, rootIds: ['mem-agus'], selfId: null,
+          counts: { ab: 1, aab: 0, agent: 0, total: 1 },
+        },
+      },
+    });
+    renderWithSession(<AdminsPage />, { me: owner });
+    await userEvent.click(await screen.findByRole('button', { name: 'Revoke' }));
+    await screen.findByRole('button', { name: 'Revoke access' });
+    await expectClean('people/admins');
   });
 
   it('audit log', async () => {

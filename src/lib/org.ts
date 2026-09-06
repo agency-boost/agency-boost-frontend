@@ -152,6 +152,27 @@ export interface MemberTags {
   isCoreLeader: boolean;
 }
 
+/** Somebody the Owner has handed the office's administration to. */
+export interface DelegatedAdmin {
+  membershipId: string;
+  fullName: string;
+  initials: string;
+  agentCode: string;
+  /** Independent of admin rights — an AB with a unit of forty can hold them. */
+  role: HierarchyRole;
+  grantedAt: string | null;
+  grantedByName: string | null;
+  canRevoke: boolean;
+}
+
+export const listAdmins = () => api<DelegatedAdmin[]>('/members/admins');
+
+export const grantAdmin = (membershipId: string) =>
+  api<DelegatedAdmin[]>(`/members/${membershipId}/admin`, { method: 'POST' });
+
+export const revokeAdmin = (membershipId: string) =>
+  api<DelegatedAdmin[]>(`/members/${membershipId}/admin`, { method: 'DELETE' });
+
 export const listGroups = () => api<GroupSummary[]>('/members/groups');
 
 export const createGroup = (name: string, ownerMembershipId: string) =>
