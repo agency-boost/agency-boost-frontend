@@ -1,12 +1,12 @@
 'use client';
 
 import { ComingInPhase } from '@/components/coming-in-phase';
-import { UserManagementShell } from '@/components/user-management-shell';
+import { AgentShell } from '@/components/agent-shell';
 
 /** A leader's landing. Built in Phase 13, once activity and coaching data exist. */
 export default function UnitDashboardPage() {
   return (
-    <UserManagementShell title="Your unit" subtitle="Who needs you this week.">
+    <AgentShell title="Your unit" subtitle="Who needs you this week.">
       <ComingInPhase
         phase={13}
         what="Your unit's activity, ratios and coaching coverage, so you can see who to spend time with."
@@ -23,6 +23,6 @@ export default function UnitDashboardPage() {
           },
         ]}
       />
-    </UserManagementShell>
+    </AgentShell>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { UserManagementShell } from '@/components/user-management-shell';
+import { AgentShell } from '@/components/agent-shell';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -56,9 +56,10 @@ export default function RegisterKpmPage() {
   const registered = Boolean(state?.kpmId);
 
   return (
-    <UserManagementShell
-      title="User management"
-      subtitle="Attach yourself to an office, then find a leader."
+    <AgentShell
+      subtabs
+      title="Register KPM"
+      subtitle="Find the Prudential KPM your branch belongs to."
       leaderLocked={!registered}
     >
       {error && <ErrorBanner {...error} />}
@@ -87,7 +88,7 @@ export default function RegisterKpmPage() {
           </p>
           {state.status === 'pending' && (
             <ButtonLink href="/user-management/leader" className="mt-4">
-              Find your leader
+              Find Your Leader
             </ButtonLink>
           )}
         </Card>
@@ -156,6 +157,6 @@ export default function RegisterKpmPage() {
           </Card>
         </>
       )}
-    </UserManagementShell>
+    </AgentShell>
   );
 }

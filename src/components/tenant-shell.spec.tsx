@@ -24,7 +24,7 @@ describe('the tenant shell (P3-T10 AC-4)', () => {
     renderWithSession(<TenantShell title="All members">body</TenantShell>, {
       me: tenantAdmin(true),
     });
-    expect(screen.getByRole('link', { name: 'KPM admins' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Manage KPM admins' })).toBeInTheDocument();
     expect(screen.getByText('Branch info')).toBeInTheDocument();
     expect(screen.getByText('KPM Owner')).toBeInTheDocument();
   });
@@ -35,7 +35,7 @@ describe('the tenant shell (P3-T10 AC-4)', () => {
     renderWithSession(<TenantShell title="All members">body</TenantShell>, {
       me: tenantAdmin(false),
     });
-    expect(screen.queryByRole('link', { name: 'KPM admins' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Manage KPM admins' })).not.toBeInTheDocument();
     expect(screen.queryByText('Branch info')).not.toBeInTheDocument();
 
     // Everything else they do have is still there.

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { UserManagementShell } from '@/components/user-management-shell';
+import { AgentShell } from '@/components/agent-shell';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { RoleBadge } from '@/components/ui/role-badge';
@@ -82,9 +82,10 @@ export default function FindLeaderPage() {
   }
 
   return (
-    <UserManagementShell
-      title="User management"
-      subtitle="Ask an Agency Builder or Associate Agency Builder to take you on."
+    <AgentShell
+      subtabs
+      title="Find Your Leader"
+      subtitle="Search leaders in your KPM and request to be tagged."
       leaderLocked={!registered}
     >
       {error && <ErrorBanner {...error} />}
@@ -227,6 +228,6 @@ export default function FindLeaderPage() {
           )}
         </>
       )}
-    </UserManagementShell>
+    </AgentShell>
   );
 }

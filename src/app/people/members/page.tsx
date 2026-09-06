@@ -42,12 +42,13 @@ const STATUS_TO_PILL: Record<MemberStatus, 'success' | 'alert' | 'neutral'> = {
 
 const TABS = [
   { key: 'directory', label: 'Directory' },
+  { key: 'pending', label: 'Pending', upcoming: true },
   { key: 'removed', label: 'Removed' },
   { key: 'rolelog', label: 'Role change log' },
   { key: 'groups', label: 'Groups' },
 ] as const;
 
-type TabKey = (typeof TABS)[number]['key'];
+type TabKey = Exclude<(typeof TABS)[number]['key'], 'pending'>;
 
 export default function MembersPage() {
   const [tab, setTab] = useState<TabKey>('directory');
@@ -158,36 +159,39 @@ export default function MembersPage() {
 
   return (
     <TenantShell
-      title="All members"
-      subtitle="The office roster. Everyone here has an agent code, issued once and never changed."
+      title="All Members"
+      subtitle="Directory, pending requests, removed, and role history"
     >
-      <div className="mb-4 flex gap-1 border-b border-hairline">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => setTab(t.key)}
-            aria-current={tab === t.key ? 'page' : undefined}
-            className={
-              tab === t.key
-                ? 'border-b-2 border-amber px-3 py-2 text-md font-semibold text-navy'
-                : 'border-b-2 border-transparent px-3 py-2 text-md text-muted hover:text-navy'
-            }
-          >
-            {t.label}
-          </button>
-        ))}
-        {/* Visible but not yet built, as the prototype's own nav does for Upcoming. */}
-        {['Pending'].map((label) => (
-          <span
-            key={label}
-            aria-disabled
-            title="Arrives with its phase"
-            className="cursor-default border-b-2 border-transparent px-3 py-2 text-md text-muted/50"
-          >
-            {label}
-          </span>
-        ))}
+      {/* The prototype's metrics: 24px between tabs, the underline on the hairline, and
+          inactive tabs at the same weight as active — they differ by colour and the amber
+          rule, never by weight (`Overall.html:81-89`). */}
+      <div className="mb-6 flex flex-wrap gap-6 border-b border-hairline">
+        {TABS.map((t) =>
+          'upcoming' in t && t.upcoming ? (
+            <span
+              key={t.key}
+              aria-disabled
+              title="Arrives with its phase"
+              className="-mb-px cursor-default border-b-2 border-transparent px-0.5 pb-3 text-md font-semibold text-muted/50"
+            >
+              {t.label}
+            </span>
+          ) : (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key as TabKey)}
+              aria-current={tab === t.key ? 'page' : undefined}
+              className={
+                tab === t.key
+                  ? '-mb-px border-b-2 border-amber px-0.5 pb-3 text-md font-semibold text-navy'
+                  : '-mb-px border-b-2 border-transparent px-0.5 pb-3 text-md font-semibold text-muted'
+              }
+            >
+              {t.label}
+            </button>
+          ),
+        )}
       </div>
 
       {tab !== 'rolelog' && tab !== 'groups' && (

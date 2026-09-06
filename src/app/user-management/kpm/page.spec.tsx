@@ -39,7 +39,7 @@ describe('register KPM (P3-T3)', () => {
     stubFetch({ '/join/me': { body: NO_OFFICE }, '/join/kpms': { body: OFFICES } });
     renderWithSession(<RegisterKpmPage />, { me: NEWCOMER });
 
-    const locked = await screen.findByText('Find your leader');
+    const locked = await screen.findByText('Find Your Leader');
     expect(locked).toHaveAttribute('aria-disabled', 'true');
     expect(locked).toHaveAttribute('title', 'Register an office first');
   });
@@ -75,10 +75,10 @@ describe('register KPM (P3-T3)', () => {
     // Two of them: the sub-tab, now navigable rather than locked, and the call to
     // action on the card. Both are links — a control that navigates is a link, never a
     // button wrapped in one.
-    const links = await screen.findAllByRole('link', { name: 'Find your leader' });
+    const links = await screen.findAllByRole('link', { name: 'Find Your Leader' });
     expect(links).toHaveLength(2);
     for (const link of links) expect(link).toHaveAttribute('href', '/user-management/leader');
-    expect(screen.queryByRole('button', { name: 'Find your leader' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Find Your Leader' })).not.toBeInTheDocument();
   });
 
   it('says registering is not membership, so nobody waits for nothing', async () => {

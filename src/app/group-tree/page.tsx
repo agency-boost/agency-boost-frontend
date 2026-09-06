@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { OrgTree } from '@/components/org-tree/org-tree';
-import { UserManagementShell } from '@/components/user-management-shell';
+import { AgentShell } from '@/components/agent-shell';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Card, ErrorBanner } from '@/components/ui/field';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -31,9 +31,9 @@ export default function GroupTreePage() {
   }, []);
 
   return (
-    <UserManagementShell
-      title="Group tree"
-      subtitle="Your unit, and everyone below it."
+    <AgentShell
+      title="Group Overview"
+      subtitle="Your leader, you, and your full downline, laid out by layer."
       permission="org_tree:read"
     >
       {error && <ErrorBanner {...error} />}
@@ -51,6 +51,6 @@ export default function GroupTreePage() {
 
         {tree && tree.nodes.length > 1 && <OrgTree tree={tree} />}
       </Card>
-    </UserManagementShell>
+    </AgentShell>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { UserManagementShell } from '@/components/user-management-shell';
+import { AgentShell } from '@/components/agent-shell';
 import { CopyableValue } from '@/components/ui/copyable-value';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -200,9 +200,10 @@ export default function AddAgentsPage() {
   const live = invites?.filter((i) => i.state === 'active') ?? [];
 
   return (
-    <UserManagementShell
-      title="User management"
-      subtitle="Bring people into your unit."
+    <AgentShell
+      subtabs
+      title="Add New Agents"
+      subtitle="Invite new people or tag existing agents to your team."
     >
       {error && <ErrorBanner {...error} />}
 
@@ -617,6 +618,6 @@ export default function AddAgentsPage() {
           </div>
         )}
       </Card>
-    </UserManagementShell>
+    </AgentShell>
   );
 }

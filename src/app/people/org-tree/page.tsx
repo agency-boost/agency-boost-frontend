@@ -31,8 +31,8 @@ export default function OrgTreePage() {
 
   return (
     <TenantShell
-      title="Org tree"
-      subtitle="Every unit in this office, and who leads it."
+      title="Org Tree"
+      subtitle="Every AB in this KPM and their full downline"
       permission="org_tree:read"
     >
       {error && <ErrorBanner {...error} />}

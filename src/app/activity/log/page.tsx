@@ -1,12 +1,12 @@
 'use client';
 
 import { ComingInPhase } from '@/components/coming-in-phase';
-import { UserManagementShell } from '@/components/user-management-shell';
+import { AgentShell } from '@/components/agent-shell';
 
 /** Every field role's landing. Built in Phase 6 — the daily minute. */
 export default function LogActivityPage() {
   return (
-    <UserManagementShell title="Log activity" subtitle="Today's work, in about a minute.">
+    <AgentShell title="Log activity" subtitle="Today's work, in about a minute.">
       <ComingInPhase
         phase={6}
         what="Recording what you did today — approaches, presentations, submissions — against your office's own activity types."
@@ -23,6 +23,6 @@ export default function LogActivityPage() {
           },
         ]}
       />
-    </UserManagementShell>
+    </AgentShell>
   );
 }

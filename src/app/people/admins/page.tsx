@@ -78,8 +78,8 @@ export default function AdminsPage() {
 
   return (
     <TenantShell
-      title="Manage KPM admins"
-      subtitle="Who has delegated admin access to this office."
+      title="Manage KPM Admins"
+      subtitle="Who has delegated admin access to this KPM"
       permission="kpm_admin:grant"
     >
       {error && <ErrorBanner {...error} />}

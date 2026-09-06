@@ -16,31 +16,51 @@ import { useSignOut } from '@/lib/use-sign-out';
  * legible instead of being a surprise.
  */
 const SECTIONS: readonly {
-  label: string;
+  label: string | null;
+  divider?: boolean;
   items: { label: string; href: string; upcoming?: boolean; ownerOnly?: boolean }[];
 }[] = [
+  // The prototype's order, verbatim (`KPM_Owner.html:872-913`): Overview alone and
+  // unlabelled at the top, then Reporting, Leader Meetings, Settings, and People last.
+  // It used to be an invented `Office` group with People above Settings.
+  { label: null, items: [{ label: 'Overview', href: '/kpm/overview' }], divider: true },
   {
-    label: 'Office',
+    label: 'Reporting',
     items: [
-      { label: 'Overview', href: '/kpm/overview', upcoming: true },
-      { label: 'Analytics', href: '/kpm/analytics', upcoming: true },
+      { label: 'KPM analytics', href: '/kpm/analytics', upcoming: true },
+      { label: 'Data upload', href: '/kpm/data-upload', upcoming: true },
+      { label: 'Advanced analytics', href: '/kpm/advanced-analytics', upcoming: true },
     ],
+    divider: true,
+  },
+  {
+    label: 'Leader Meetings',
+    items: [{ label: 'Strategic Leader Forum', href: '/leader-meetings', upcoming: true }],
+    divider: true,
+  },
+  {
+    label: 'Settings',
+    // Eight items, in the prototype's order. Ratio benchmarks is deliberately absent:
+    // the prototype has it as a sub-tab of Activity types (`KPM_Owner.html:1330`), not
+    // as a sidebar destination.
+    items: [
+      { label: 'Activity types', href: '/kpm/settings/activity-types', upcoming: true },
+      { label: 'Lead statuses', href: '/kpm/settings/lead-statuses', upcoming: true },
+      { label: 'Activation checklist', href: '/kpm/settings/activation-checklist', upcoming: true },
+      { label: 'Training', href: '/kpm/settings/training', upcoming: true },
+      { label: 'Events', href: '/kpm/settings/events', upcoming: true },
+      { label: 'Campaigns', href: '/kpm/settings/campaigns', upcoming: true },
+      { label: 'Products', href: '/kpm/settings/products', upcoming: true },
+      { label: 'Branch info', href: '/kpm/settings/branch-info', upcoming: true, ownerOnly: true },
+    ],
+    divider: true,
   },
   {
     label: 'People',
     items: [
       { label: 'All members', href: '/people/members' },
       { label: 'Org tree', href: '/people/org-tree' },
-      { label: 'KPM admins', href: '/people/admins', ownerOnly: true },
-    ],
-  },
-  {
-    label: 'Settings',
-    items: [
-      { label: 'Activity types', href: '/kpm/settings/activity-types', upcoming: true },
-      { label: 'Ratio benchmarks', href: '/kpm/settings/ratio-benchmarks', upcoming: true },
-      { label: 'Lead statuses', href: '/kpm/settings/lead-statuses', upcoming: true },
-      { label: 'Branch info', href: '/kpm/settings/branch-info', upcoming: true, ownerOnly: true },
+      { label: 'Manage KPM admins', href: '/people/admins', ownerOnly: true },
     ],
   },
 ];
@@ -95,6 +115,7 @@ function TenantChrome({
         ...item,
         active: !item.upcoming && pathname.startsWith(item.href),
       })),
+    divider: section.divider,
   })).filter((section) => section.items.length > 0);
 
   const membership = me?.membership;
@@ -115,6 +136,7 @@ function TenantChrome({
         initials: me?.user.initials ?? '??',
         email: me?.user.email,
       }}
+      brandTag="KPM OWNER"
       account={{ href: '/profile', onSignOut: () => void signOut(), signingOut: busy }}
       title={title}
       subtitle={subtitle}

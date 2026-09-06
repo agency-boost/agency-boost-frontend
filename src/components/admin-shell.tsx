@@ -13,17 +13,49 @@ import { useSignOut } from '@/lib/use-sign-out';
  * the same choice the prototype makes for advanced analytics. Hiding them would let a
  * reviewer conclude the surface is finished when it is not.
  */
-const NAV: readonly { label: string; href: string; upcoming?: boolean }[] = [
-  { label: 'Overview', href: '/admin' },
-  { label: 'Tenants', href: '/admin/tenants' },
-  { label: 'Companies', href: '/admin/companies' },
-  { label: 'Audit log', href: '/admin/audit' },
-];
+type AdminNavItem = { label: string; href: string; upcoming?: boolean };
 
-const UPCOMING: readonly { label: string; href: string }[] = [
-  { label: 'Products', href: '/admin/products' },
-  { label: 'Templates', href: '/admin/templates' },
-  { label: 'Qualification rules', href: '/admin/qualification-rules' },
+/**
+ * The Superadmin nav (`Superadmin.html:169-205`), verbatim.
+ *
+ * Five groups, `Overview` alone and unlabelled at the top. Until 2026-09-06 there was no
+ * Super Admin prototype and this was two invented groups — `Platform` and `Later phases`.
+ * Six of these ten destinations are surfaces we have not built; they carry the prototype's
+ * own `Soon` pill rather than being hidden, which is what it does too.
+ */
+const SECTIONS: readonly { label: string | null; divider?: boolean; items: AdminNavItem[] }[] = [
+  { label: null, items: [{ label: 'Overview', href: '/admin' }], divider: true },
+  {
+    label: 'Companies',
+    items: [
+      { label: 'Manage companies', href: '/admin/companies' },
+      { label: 'Org role ladder', href: '/admin/org-levels', upcoming: true },
+      { label: 'KPM template', href: '/admin/templates', upcoming: true },
+      { label: 'Product catalog', href: '/admin/products', upcoming: true },
+    ],
+    divider: true,
+  },
+  {
+    label: 'KPMs',
+    items: [
+      { label: 'All KPMs', href: '/admin/tenants' },
+      { label: 'Create / assign KPM', href: '/admin/tenants/new' },
+      { label: 'Pending KPM requests', href: '/admin/kpm-requests', upcoming: true },
+    ],
+    divider: true,
+  },
+  {
+    label: 'Platform admin',
+    items: [
+      { label: 'KPM Owners & Admins', href: '/admin/tenant-admins', upcoming: true },
+      { label: 'Audit / role change log', href: '/admin/audit' },
+    ],
+    divider: true,
+  },
+  {
+    label: 'Reporting',
+    items: [{ label: 'Cross-platform analytics', href: '/admin/analytics', upcoming: true }],
+  },
 ];
 
 export function AdminShell({
@@ -65,20 +97,23 @@ function AdminChrome({
   const isActive = (href: string) =>
     href === '/admin' ? pathname === '/admin' : pathname.startsWith(href);
 
-  const sections: readonly NavSection[] = [
-    { label: 'Platform', items: NAV.map((i) => ({ ...i, active: isActive(i.href) })) },
-    { label: 'Later phases', items: UPCOMING.map((i) => ({ ...i, upcoming: true })) },
-  ];
+  const sections: readonly NavSection[] = SECTIONS.map((section) => ({
+    label: section.label,
+    divider: section.divider,
+    items: section.items.map((i) => ({ ...i, active: !i.upcoming && isActive(i.href) })),
+  }));
 
   return (
     <AppShell
       sections={sections}
       user={{
         name: me?.user.preferredName ?? me?.user.fullName ?? 'Super Admin',
-        role: 'Super Admin',
+        role: 'Superadmin',
         initials: me?.user.initials ?? 'SA',
         email: me?.user.email,
       }}
+      brandTag="SUPERADMIN"
+      upcomingLabel="Soon"
       account={{ href: '/profile', onSignOut: () => void signOut(), signingOut: busy }}
       title={title}
       subtitle={subtitle}

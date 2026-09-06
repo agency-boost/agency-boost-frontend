@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { UserManagementShell } from '@/components/user-management-shell';
+import { AgentShell } from '@/components/agent-shell';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { RoleBadge } from '@/components/ui/role-badge';
@@ -77,9 +77,10 @@ export default function PendingPage() {
   }
 
   return (
-    <UserManagementShell
-      title="User management"
-      subtitle="People who have asked you to be their leader."
+    <AgentShell
+      subtabs
+      title="Pending Requests"
+      subtitle="Approve or decline agents who requested to be tagged to you."
       permission="leader_request:read_inbox"
     >
       {error && <ErrorBanner {...error} />}
@@ -87,7 +88,7 @@ export default function PendingPage() {
       <Card>
         <h2 className="font-display text-lg font-bold text-navy">Incoming requests</h2>
         <p className="mt-1 text-md text-muted">
-          These are people who found you under Find your leader. Approving adds them to your unit.
+          These are people who found you under Find Your Leader. Approving adds them to your unit.
           Declining leaves them in the office, free to ask somebody else.
         </p>
 
@@ -200,6 +201,6 @@ export default function PendingPage() {
           ))}
         </ul>
       </Card>
-    </UserManagementShell>
+    </AgentShell>
   );
 }
