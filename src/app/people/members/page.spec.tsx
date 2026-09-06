@@ -234,16 +234,29 @@ describe('members directory (P3-T1 AC-3)', () => {
 
   describe('the Pending tab (P3.5)', () => {
     const request = (over: Record<string, unknown> = {}) => ({
-      requestId: 'req-1', membershipId: 'mem-9', fullName: 'Putri Anggraini', initials: 'PA',
-      email: 'putri@kpm0417.test', agentCode: 'KPM0417-009', role: 'agent',
+      requestId: 'req-1', membershipId: 'mem-asked', fullName: 'Putri Anggraini', initials: 'PA',
+      email: 'putri@kpm0417.test', agentCode: 'KPM0417-008', role: 'agent',
       requestedAt: '2026-09-01T00:00:00.000Z', routedFromName: null, ...over,
     });
 
-    function open(rows: Record<string, unknown>[] = [request()], extra = {}) {
+    const asked = member({
+      membershipId: 'mem-asked', fullName: 'Putri Anggraini', preferredName: null,
+      agentCode: 'KPM0417-008', email: 'putri@kpm0417.test', status: 'pending',
+    });
+    const unasked = member({
+      membershipId: 'mem-unasked', fullName: 'Fajar Nugroho', preferredName: null,
+      agentCode: 'KPM0417-009', email: 'fajar@kpm0417.test', status: 'pending',
+    });
+
+    function open(waiting = [asked, unasked], queue = [request()], extra = {}) {
       const stub = stubFetch({
-        '/join/requests': { body: rows },
+        '/join/requests': { body: queue },
         '/members': {
-          body: { members: [], nextCursor: null, counts: { directory: 8, pending: 2, removed: 1 } },
+          body: {
+            members: waiting,
+            nextCursor: null,
+            counts: { directory: 8, pending: waiting.length, removed: 1 },
+          },
         },
         ...extra,
       });
@@ -251,48 +264,62 @@ describe('members directory (P3-T1 AC-3)', () => {
       return stub;
     }
 
-    it('is clickable, and reads the office queue rather than the roster', async () => {
-      const { calls } = open();
-      await userEvent.click(await screen.findByRole('button', { name: 'Pending (2)' }));
-
+    async function openTab(...args: Parameters<typeof open>) {
+      const stub = open(...args);
+      await userEvent.click(await screen.findByRole('button', { name: /^Pending/ }));
       await screen.findByRole('table');
-      expect(calls.some((c) => c.url.includes('/join/requests'))).toBe(true);
-      // The roster filters would filter nothing here.
-      expect(screen.queryByLabelText('Search')).not.toBeInTheDocument();
+      return stub;
+    }
+
+    it('lists everybody registered but not yet in a unit, not only those who asked', async () => {
+      // The bug this closes: the tab counted pending memberships and rendered open
+      // requests. Somebody who registered and asked nobody was counted and never shown —
+      // and they are the ones most in need of finding.
+      await openTab();
+      const table = screen.getByRole('table');
+      expect(within(table).getByRole('row', { name: /Putri/ })).toBeInTheDocument();
+      expect(within(table).getByRole('row', { name: /Fajar/ })).toBeInTheDocument();
+    });
+
+    it('the count matches the rows, because both are the same population', async () => {
+      await openTab();
+      expect(screen.getByRole('button', { name: 'Pending (2)' })).toBeInTheDocument();
+      expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(3); // header + 2
+    });
+
+    it('offers a decision only where there is one to make', async () => {
+      await openTab();
+      const table = screen.getByRole('table');
+
+      const withAsk = within(table).getByRole('row', { name: /Putri/ });
+      expect(within(withAsk).getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+
+      const without = within(table).getByRole('row', { name: /Fajar/ });
+      expect(within(without).queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+      expect(without).toHaveTextContent('They have asked no leader');
     });
 
     it('says approving puts them under the leader they asked for, not under you', async () => {
-      // The trap the server fix closed: an Owner clearing the queue would otherwise have
-      // moved every joiner into their own unit.
-      open();
-      await userEvent.click(await screen.findByRole('button', { name: 'Pending (2)' }));
-      expect(await screen.findByText(/the leader they asked for/)).toBeInTheDocument();
+      await openTab();
+      expect(screen.getByText(/the leader they asked for/)).toBeInTheDocument();
     });
 
-    it('shows who is waiting, and since when', async () => {
-      open();
-      await userEvent.click(await screen.findByRole('button', { name: 'Pending (2)' }));
-      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Putri/ });
-      expect(row).toHaveTextContent('KPM0417-009');
-      expect(row).toHaveTextContent('01/09/2026');
-    });
-
-    it('approves and declines through the queue', async () => {
-      const { calls } = open([request()], { '/join/requests/req-1/approve': { body: [] } });
-      await userEvent.click(await screen.findByRole('button', { name: 'Pending (2)' }));
-      await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
-
+    it('approves through the queue', async () => {
+      const { calls } = await openTab([asked], [request()], {
+        '/join/requests/req-1/approve': { body: [] },
+      });
+      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
       expect(calls.find((c) => c.init.method === 'POST')!.url).toContain('/req-1/approve');
     });
 
-    it('has an empty state of its own', async () => {
-      open([]);
-      await userEvent.click(await screen.findByRole('button', { name: 'Pending (2)' }));
-      expect(await screen.findByText('Nobody is waiting on a decision right now.')).toBeInTheDocument();
+    it('has an empty state that says the office is clear', async () => {
+      open([], []);
+      await userEvent.click(await screen.findByRole('button', { name: /^Pending/ }));
+      expect(await screen.findByText('Everybody who has registered is in a unit.')).toBeInTheDocument();
     });
 
     it('surfaces a refusal rather than looking like it worked', async () => {
-      open([request()], {
+      await openTab([asked], [request()], {
         '/join/requests/req-1/approve': {
           status: 409,
           body: {
@@ -304,9 +331,7 @@ describe('members directory (P3-T1 AC-3)', () => {
           },
         },
       });
-      await userEvent.click(await screen.findByRole('button', { name: 'Pending (2)' }));
-      await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
-
+      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
       expect(await screen.findByRole('alert')).toHaveTextContent('already approved');
     });
   });

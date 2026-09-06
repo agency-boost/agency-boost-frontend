@@ -414,7 +414,17 @@ describe('Phase 2 screens have no axe violations', () => {
         }],
       },
       '/members': {
-        body: { members: [], nextCursor: null, counts: { directory: 8, pending: 1, removed: 0 } },
+        body: {
+          members: [{
+            membershipId: 'mem-9', agentCode: 'KPM0417-009', role: 'agent', status: 'pending',
+            fullName: 'Putri Anggraini', preferredName: null, email: 'putri@kpm0417.test',
+            initials: 'PA', leaderId: null, leaderName: null, depth: 0, directCount: 0,
+            subtreeCount: 0, isLeader: false, isKpmOwner: false, isKpmAdmin: false,
+            joinedAt: null, removedAt: null,
+          }],
+          nextCursor: null,
+          counts: { directory: 8, pending: 1, removed: 0 },
+        },
       },
     });
     renderWithSession(<MembersPage />, { me: owner });

@@ -105,12 +105,20 @@ export default function MembersPage() {
       }
       if (tab === 'pending') {
         try {
-          // The office's whole queue, not this reader's own — the Owner and an Admin
-          // hold `leader_request:approve` at `own-kpm`, and a request nobody answers is
-          // what this screen exists to catch.
-          setRequests(await readInbox());
+          // Two reads, because they are two different populations and the tab is the
+          // union: everybody who has registered and not yet joined a unit, plus the open
+          // requests among them. Counting only the requests would hide anybody who
+          // registered and asked nobody — and they are the ones most in need of finding.
+          const [waiting, queue] = await Promise.all([
+            listMembers({ status: 'pending' }),
+            readInbox(),
+          ]);
+          setPage(waiting.members);
+          setCounts(waiting.counts);
+          setRequests(queue);
         } catch (err) {
           setError(toDisplayError(err));
+          setPage([]);
           setRequests([]);
         }
         return;
@@ -157,6 +165,10 @@ export default function MembersPage() {
       setRequests(
         action === 'approve' ? await approveRequest(requestId) : await declineRequest(requestId),
       );
+      // The decided person leaves this population, so the list and its count move too.
+      const waiting = await listMembers({ status: 'pending' });
+      setPage(waiting.members);
+      setCounts(waiting.counts);
     } catch (err) {
       setError(toDisplayError(err));
       // Re-read the queue directly rather than through `load()`, which clears the error
@@ -329,55 +341,80 @@ export default function MembersPage() {
             under <strong>the leader they asked for</strong>, not under you.
           </p>
 
-          {requests === null && !error && (
+          {page === null && !error && (
             <p role="status" className="text-md text-muted">
               Loading…
             </p>
           )}
 
-          {requests?.length === 0 && !error && (
+          {page?.length === 0 && !error && (
             <div className="rounded-lg border border-hairline bg-card">
-              <EmptyState title="Nobody is waiting on a decision right now." />
+              <EmptyState title="Everybody who has registered is in a unit." />
             </div>
           )}
 
-          {requests && requests.length > 0 && (
+          {page && page.length > 0 && requests && (
             <DataTable
-              caption="Requests waiting on a decision"
-              columns={['Who', 'Asking to join', 'Waiting since', { label: 'Actions', visuallyHidden: true }]}
+              caption="Registered, not yet in a unit"
+              columns={['Who', 'Waiting on', { label: 'Actions', visuallyHidden: true }]}
             >
-              {requests.map((r) => (
-                <Row key={r.requestId}>
-                  <Cell className="font-semibold">
-                    {r.fullName}
-                    <span className="block text-sm font-normal text-muted">
-                      {r.agentCode} · {r.email}
-                    </span>
-                  </Cell>
-                  <Cell className="text-muted">
-                    {r.routedFromName ? `${r.routedFromName}’s unit` : 'a leader in this office'}
-                  </Cell>
-                  <Cell className="whitespace-nowrap text-muted">
-                    <time dateTime={r.requestedAt}>
-                      {new Date(r.requestedAt).toLocaleDateString('en-GB')}
-                    </time>
-                  </Cell>
-                  <Cell>
-                    <span className="flex flex-wrap gap-2">
-                      <Button disabled={busy} onClick={() => void decide(r.requestId, 'approve')}>
-                        Approve
-                      </Button>
-                      <Button
-                        variant="danger"
-                        disabled={busy}
-                        onClick={() => void decide(r.requestId, 'decline')}
-                      >
-                        Decline
-                      </Button>
-                    </span>
-                  </Cell>
-                </Row>
-              ))}
+              {page.map((m) => {
+                const ask = requests.find((r) => r.membershipId === m.membershipId);
+                return (
+                  <Row key={m.membershipId}>
+                    <Cell className="font-semibold">
+                      {m.preferredName ?? m.fullName}
+                      <span className="block text-sm font-normal text-muted">
+                        {m.agentCode} · {m.email}
+                      </span>
+                    </Cell>
+                    <Cell className="text-muted">
+                      {ask ? (
+                        <>
+                          A decision
+                          <span className="block text-sm">
+                            Asked{' '}
+                            <time dateTime={ask.requestedAt}>
+                              {new Date(ask.requestedAt).toLocaleDateString('en-GB')}
+                            </time>
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          Nobody
+                          <span className="block text-sm">
+                            They have asked no leader — a leader can pick them up from{' '}
+                            <strong>Add new agents</strong>
+                          </span>
+                        </>
+                      )}
+                    </Cell>
+                    <Cell>
+                      {ask ? (
+                        <span className="flex flex-wrap gap-2">
+                          <Button
+                            disabled={busy}
+                            onClick={() => void decide(ask.requestId, 'approve')}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            variant="danger"
+                            disabled={busy}
+                            onClick={() => void decide(ask.requestId, 'decline')}
+                          >
+                            Decline
+                          </Button>
+                        </span>
+                      ) : (
+                        // Nothing to approve. Offering a dead button would be worse than
+                        // offering none.
+                        <span className="text-sm text-muted">—</span>
+                      )}
+                    </Cell>
+                  </Row>
+                );
+              })}
             </DataTable>
           )}
         </>
