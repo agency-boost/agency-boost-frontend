@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AgentShell } from '@/components/agent-shell';
 import { CopyableValue } from '@/components/ui/copyable-value';
+import { InviteQr } from '@/components/ui/invite-qr';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
@@ -51,6 +52,9 @@ const NEVER = '';
 
 export default function AddAgentsPage() {
   const { me } = useSession();
+  const canManageTeam =
+    me?.permissions.includes('member:change_role') ||
+    me?.permissions.includes('member:remove_from_team');
   const [invites, setInvites] = useState<Invite[] | null>(null);
   const [label, setLabel] = useState('');
   const [maxUses, setMaxUses] = useState(NEVER);
@@ -262,11 +266,30 @@ export default function AddAgentsPage() {
         <Card className="mb-4">
           <h2 className="font-display text-lg font-bold text-navy">Share it</h2>
           <p className="mt-1 text-md text-muted">
-            The code and the link are the same invite. Withdrawing it stops both.
+            Share your link, code, or QR with someone who is not registered yet. Any of the
+            three pre-fills them into this office and tags them to you automatically — no
+            approval needed. Withdrawing the invite stops all three, because they are one
+            invite.
           </p>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <CopyableValue label="Leader code" value={live[0].code} mono />
-            <CopyableValue label="Invite link" value={live[0].url} />
+          {/* `User_Management_Section.html:444-455`: a wrapping row of co-equal artefacts,
+              the link box growing and the code box holding its width — not an even grid.
+              The section file supersedes `Overall.html` for this module, and its version
+              shows the **full** URL rather than a truncated one. */}
+          <div className="mt-3 flex flex-wrap items-stretch gap-3.5">
+            <div className="min-w-[260px] flex-1">
+              <CopyableValue
+                label="Invite link"
+                value={live[0].url}
+                action="Copy link"
+                border="dashed"
+              />
+            </div>
+            <div className="min-w-[170px]">
+              <CopyableValue label="Leader code" value={live[0].code} mono action="Copy code" />
+            </div>
+            {/* The third artefact (`:454`). The prototype's is a static tile; ours draws
+                the real code, which is the whole point of offering one. */}
+            <InviteQr url={live[0].url} />
           </div>
         </Card>
       )}
@@ -410,6 +433,13 @@ export default function AddAgentsPage() {
         </ul>
       </Card>
 
+      {/* Hidden from anybody who cannot act on a team. The prototype hides this card for
+          an Agent alongside the Pending tab (`User_Management_Section.html:999`), and the
+          reason it gives — that an Agent has no team — is not one we can rely on: OD-23
+          makes leadership the graph, so an Agent may well have reports. What an Agent
+          cannot do is change a role or remove somebody, and that is what this card is
+          for, so the permission is the honest gate. */}
+      {canManageTeam && (
       <Card className="mt-6">
         <h2 className="font-display text-lg font-bold text-navy">Your team</h2>
         <p className="mt-1 text-md text-muted">
@@ -618,6 +648,7 @@ export default function AddAgentsPage() {
           </div>
         )}
       </Card>
+      )}
     </AgentShell>
   );
 }

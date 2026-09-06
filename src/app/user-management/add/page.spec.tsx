@@ -14,6 +14,20 @@ const LEADER = makeMe({
     membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
     isKpmOwner: false, isKpmAdmin: false, directCount: 2,
   },
+  permissions: [
+    'member:invite', 'member:revoke_invite',
+    // A leader manages their team from this screen; the card is gated on being able to
+    // act on it, not on the role (`agent-shell` gates the Pending tab the same way).
+    'member:change_role', 'member:remove_from_team',
+  ],
+});
+
+/** An agent: invites people, but cannot change a role or remove anybody. */
+const AGENT = makeMe({
+  membership: {
+    membershipId: 'mem-agent', kpmId: 'kpm-1', hierarchyRole: 'agent', status: 'active',
+    isKpmOwner: false, isKpmAdmin: false, directCount: 0,
+  },
   permissions: ['member:invite', 'member:revoke_invite'],
 });
 
@@ -46,7 +60,77 @@ describe('inviting people (P3-T4)', () => {
     // Twice on purpose: once to share and once in the list of what you have issued.
     expect(await screen.findAllByText('JOR417')).toHaveLength(2);
     expect(screen.getByText('https://agencyboost.app/join?code=JOR417')).toBeInTheDocument();
-    expect(screen.getByText(/the same invite. Withdrawing it stops both/)).toBeInTheDocument();
+    expect(screen.getByText(/Withdrawing the invite stops all three, because they are one invite/))
+      .toBeInTheDocument();
+  });
+
+  it('AC-1: shows the whole link, and names what each button copies', async () => {
+    // `User_Management_Section.html:446` shows the full URL; `Overall.html:3580`
+    // truncates it and copies something longer. The section file supersedes for this
+    // module, and what is shown must be what is copied either way.
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [invite()] }, '/join/untagged': { body: [] } });
+    renderWithSession(<AddAgentsPage />, { me: LEADER });
+
+    const link = await screen.findByText('https://agencyboost.app/join?code=JOR417');
+    expect(link.textContent).toBe('https://agencyboost.app/join?code=JOR417');
+    expect(link.textContent).not.toMatch(/…|\.\.\./);
+
+    // Two artefacts, two buttons that say which is which (`:447`, `:452`). A bare
+    // "Copy" twice is indistinguishable to anybody reading the buttons alone.
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy code' })).toBeInTheDocument();
+  });
+
+  it('AC-2: hides the team card from somebody who cannot act on a team', async () => {
+    // The prototype hides this card for an Agent alongside the Pending tab
+    // (`User_Management_Section.html:999`). It gives the reason as "an Agent has no
+    // team", which OD-23 makes unreliable — an Agent may have reports. What an Agent
+    // cannot do is change a role or remove anybody, so that is the gate.
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+    renderWithSession(<AddAgentsPage />, { me: AGENT });
+
+    expect(await screen.findByText('Invite someone')).toBeInTheDocument();
+    expect(screen.queryByText('Your team')).toBeNull();
+  });
+
+  it('AC-2: keeps the team card for a leader who can act on it', async () => {
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+    renderWithSession(<AddAgentsPage />, { me: LEADER });
+
+    expect(await screen.findByText('Your team')).toBeInTheDocument();
+  });
+
+  it('AC-1: hides the Pending Requests tab from somebody with no inbox', async () => {
+    // The prototype hides it by role (`User_Management_Section.html:996`); we hide it by
+    // the permission that decides the same thing, so it survives the role becoming a
+    // ladder reference. Hiding is a convenience — the API refuses an Agent regardless.
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+    renderWithSession(<AddAgentsPage />, { me: AGENT });
+
+    expect(await screen.findByRole('link', { name: 'Add New Agents' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Pending Requests' })).toBeNull();
+  });
+
+  it('AC-1: shows it to a leader who has an inbox', async () => {
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+    renderWithSession(<AddAgentsPage />, {
+      me: makeMe({
+        membership: LEADER.membership,
+        permissions: [...LEADER.permissions, 'leader_request:read_inbox'],
+      }),
+    });
+
+    expect(await screen.findByRole('link', { name: 'Pending Requests' })).toBeInTheDocument();
   });
 
   it('sends only the limits that were chosen', async () => {

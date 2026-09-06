@@ -286,7 +286,12 @@ describe('Phase 2 screens have no axe violations', () => {
         membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 2,
       },
-      permissions: ['member:invite', 'member:revoke_invite'],
+      permissions: [
+        'member:invite', 'member:revoke_invite',
+        // The team card is gated on being able to act on a team, so the axe sweep needs
+        // these or it scans a screen with the card missing.
+        'member:change_role', 'member:remove_from_team',
+      ],
     });
     stubFetch({
       '/members/my-team': {
@@ -324,7 +329,9 @@ describe('Phase 2 screens have no axe violations', () => {
         membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 1,
       },
-      permissions: ['member:invite'],
+      // The team card is gated on being able to act on a team, so these are needed or
+      // the sweep scans a screen with the card missing.
+      permissions: ['member:invite', 'member:change_role', 'member:remove_from_team'],
     });
     stubFetch({
       '/join/invites': { body: [] },
@@ -350,7 +357,9 @@ describe('Phase 2 screens have no axe violations', () => {
         membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 1,
       },
-      permissions: ['member:invite'],
+      // The team card is gated on being able to act on a team, so these are needed or
+      // the sweep scans a screen with the card missing.
+      permissions: ['member:invite', 'member:change_role', 'member:remove_from_team'],
     });
     stubFetch({
       '/join/invites': { body: [] },

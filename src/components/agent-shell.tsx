@@ -22,6 +22,8 @@ import { useSignOut } from '@/lib/use-sign-out';
 interface SubTab {
   readonly href: string;
   readonly label: string;
+  /** Hidden unless the reader holds this. Absent means everybody sees it. */
+  readonly needs?: string;
 }
 
 /**
@@ -35,7 +37,12 @@ const SUBTABS: readonly SubTab[] = [
   { href: '/user-management/kpm', label: 'Register KPM' },
   { href: '/user-management/leader', label: 'Find Your Leader' },
   { href: '/user-management/add', label: 'Add New Agents' },
-  { href: '/user-management/pending', label: 'Pending Requests' },
+  // Hidden from anybody who cannot read an inbox — an Agent. The prototype hides it by
+  // role (`User_Management_Section.html:996`, `role === 'AB' || role === 'AAB'`); we hide
+  // it by the permission that decides the same thing, so it survives P3.5-T8 replacing
+  // the role with a ladder reference. Hiding is a convenience either way: the API refuses
+  // an Agent the inbox regardless, and there is a test for that.
+  { href: '/user-management/pending', label: 'Pending Requests', needs: 'leader_request:read_inbox' },
 ];
 
 export function AgentShell({
@@ -98,6 +105,7 @@ function Chrome({
   children: React.ReactNode;
 }) {
   const { me } = useSession();
+  const permissions = me?.permissions ?? [];
   const { signOut, busy } = useSignOut();
   const pathname = usePathname();
 
@@ -180,7 +188,7 @@ function Chrome({
         // hairline, and inactive tabs at the same weight as active — they differ by
         // colour and the amber rule, not by weight (`Overall.html:81-89`).
         <div className="mb-6 flex flex-wrap gap-6 border-b border-hairline">
-          {SUBTABS.map((tab) => {
+          {SUBTABS.filter((tab) => !tab.needs || permissions.includes(tab.needs)).map((tab) => {
             const locked = tab.href.endsWith('/leader') && leaderLocked;
             const active = pathname === tab.href;
             if (locked) {

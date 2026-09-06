@@ -21,10 +21,20 @@ export function CopyableValue({
   label,
   value,
   mono,
+  action = 'Copy',
+  border = 'solid',
 }: {
   label: string;
   value: string;
   mono?: boolean;
+  /**
+   * The button's own words. `User_Management_Section.html:447` and `:452` label them
+   * `Copy link` and `Copy code` rather than a bare `Copy`, and with three artefacts side
+   * by side a bare one leaves three identical buttons for a screen reader to distinguish.
+   */
+  action?: string;
+  /** The prototype dashes the link box and leaves the code box solid (`:181`, `:190`). */
+  border?: 'solid' | 'dashed';
 }) {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
@@ -47,7 +57,12 @@ export function CopyableValue({
   }
 
   return (
-    <div className="rounded-md border border-hairline bg-base p-3">
+    <div
+      className={cn(
+        'rounded-md border border-hairline bg-base p-3',
+        border === 'dashed' && 'border-dashed',
+      )}
+    >
       <p className="text-sm font-semibold uppercase tracking-wide text-muted">{label}</p>
       <p
         className={cn(
@@ -62,7 +77,7 @@ export function CopyableValue({
         onClick={() => void copy()}
         className="mt-2 text-md font-semibold text-navy underline"
       >
-        Copy
+        {action}
       </button>
       {state !== 'idle' && (
         <p role="status" className={cn('mt-1 text-sm', state === 'copied' ? 'text-success' : 'text-alert')}>
