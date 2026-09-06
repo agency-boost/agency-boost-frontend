@@ -73,15 +73,23 @@ export function AdminShell({
   title,
   subtitle,
   actions,
+  permission = 'kpm:list_all',
   children,
 }: {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+  /**
+   * The gate. Defaults to the console's own, and is overridable so a **cross-family**
+   * route rendered in this chrome is gated on what that route actually needs — a Super
+   * Admin reading their notifications is not exercising `kpm:list_all`, and saying they
+   * are would make the refusal, when it came, name the wrong thing.
+   */
+  permission?: string;
   children: React.ReactNode;
 }) {
   return (
-    <RequireSession permission="kpm:list_all">
+    <RequireSession permission={permission}>
       <AdminChrome title={title} subtitle={subtitle} actions={actions}>
         {children}
       </AdminChrome>

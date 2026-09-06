@@ -2,19 +2,23 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { RequireSession } from '@/components/require-session';
+import { RoleShell } from '@/components/role-shell';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { api, toDisplayError } from '@/lib/api-client';
 import { useSession, type Me } from '@/lib/session';
 import { useSignOut } from '@/lib/use-sign-out';
 
+/**
+ * Your account.
+ *
+ * **`RoleShell`, so the sidebar survives.** This rendered a bare `RequireSession` with no
+ * chrome at all until 2026-09-06: you signed in as a Super Admin, clicked your own name,
+ * and every link on the screen vanished. Everybody has an account, so the route belongs
+ * to no one role family and wears whichever chrome its reader came in with.
+ */
 export default function ProfilePage() {
-  return (
-    <RequireSession>
-      <Profile />
-    </RequireSession>
-  );
+  return <Profile />;
 }
 
 const PRONOUNS: { value: Me['user']['pronoun']; label: string }[] = [
@@ -29,23 +33,25 @@ function Profile() {
   const { signOut, busy } = useSignOut();
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-8">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-3xl font-bold text-navy">Your account</h1>
-          <p className="mt-1 text-md text-muted">{me?.user.email}</p>
-        </div>
+    <RoleShell
+      title="Your account"
+      subtitle={me?.user.email}
+      // Everybody may read their own account, and the matrix says so at `own` in all six
+      // columns. Naming it here overrides the chrome's own gate, which is about the
+      // application that chrome belongs to and not about this route.
+      permission="profile:read_self"
+      actions={
         <Button variant="secondary" disabled={busy} onClick={() => void signOut()}>
           {busy ? 'Signing out…' : 'Sign out'}
         </Button>
-      </div>
-
-      <div className="flex flex-col gap-4">
+      }
+    >
+      <div className="flex max-w-3xl flex-col gap-4">
         <WhoAmI />
         <ProfileForm onSaved={reload} />
         <PasswordForm />
       </div>
-    </main>
+    </RoleShell>
   );
 }
 

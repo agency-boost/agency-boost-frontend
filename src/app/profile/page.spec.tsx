@@ -9,19 +9,25 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/profile',
 }));
 
+/**
+ * `/profile` is gated on `profile:read_self` since it gained a shell — the matrix grants
+ * it at `own` in all six columns, so it refuses nobody, but a fixture still has to hold it.
+ */
+const ME = makeMe({ permissions: ['profile:read_self'] });
+
 describe('profile', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('shows the permissions the server resolved, not a guess from the role', async () => {
     renderWithSession(<ProfilePage />, {
-      me: makeMe({ permissions: ['activity_log:create_own', 'lead:create_own'] }),
+      me: makeMe({ permissions: ['profile:read_self', 'activity_log:create_own', 'lead:create_own'] }),
     });
-    await userEvent.click(screen.getByText('2 granted'));
+    await userEvent.click(screen.getByText('3 granted'));
     expect(screen.getByText('activity_log:create_own')).toBeInTheDocument();
   });
 
   it('names a person without a KPM honestly instead of showing a blank office', () => {
-    renderWithSession(<ProfilePage />, { me: makeMe({ membership: null }) });
+    renderWithSession(<ProfilePage />, { me: makeMe({ membership: null, permissions: ['profile:read_self'] }) });
     expect(screen.getByText('Not in an office yet')).toBeInTheDocument();
   });
 
@@ -33,14 +39,17 @@ describe('profile', () => {
           membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'ab',
           isKpmOwner: false, isKpmAdmin: true, status: 'active', directCount: 0,
         },
+        permissions: ['profile:read_self'],
       }),
     });
     expect(screen.getByTitle('Agency Builder')).toBeInTheDocument();
-    expect(screen.getByText('KPM Admin')).toBeInTheDocument();
+    // Twice on purpose: the profile's own badge, and the sidebar identity chip that the
+    // shell now renders — which is what makes the chrome worth having.
+    expect(screen.getAllByText('KPM Admin').length).toBeGreaterThan(1);
   });
 
   it('offers the platform console only to a Super Admin', () => {
-    const { unmount } = renderWithSession(<ProfilePage />);
+    const { unmount } = renderWithSession(<ProfilePage />, { me: ME });
     expect(screen.queryByRole('link', { name: /platform console/ })).not.toBeInTheDocument();
     unmount();
 
@@ -50,6 +59,7 @@ describe('profile', () => {
           id: 'u-root', email: 'root@agencyboost.test', fullName: 'Root', preferredName: null,
           pronoun: 'they', initials: 'R', platformRole: 'super_admin',
         },
+        permissions: ['profile:read_self'],
       }),
     });
     expect(screen.getByRole('link', { name: /platform console/ })).toHaveAttribute('href', '/admin');
@@ -57,7 +67,7 @@ describe('profile', () => {
 
   it('saves the details and confirms it', async () => {
     const { calls } = stubFetch({ '/auth/me': { body: {} } });
-    renderWithSession(<ProfilePage />);
+    renderWithSession(<ProfilePage />, { me: ME });
 
     await userEvent.clear(screen.getByLabelText('Preferred name'));
     await userEvent.type(screen.getByLabelText('Preferred name'), 'Rin');
@@ -73,7 +83,7 @@ describe('profile', () => {
   });
 
   it('signs out', async () => {
-    const { session } = renderWithSession(<ProfilePage />);
+    const { session } = renderWithSession(<ProfilePage />, { me: ME });
     await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(session.signOut).toHaveBeenCalled();
   });
@@ -85,7 +95,7 @@ describe('profile', () => {
         body: { error: { code: 'VALIDATION_FAILED', message: 'Name is required.', requestId: 'req-12' } },
       },
     });
-    renderWithSession(<ProfilePage />);
+    renderWithSession(<ProfilePage />, { me: ME });
 
     await userEvent.type(screen.getByLabelText('Full name'), 'x');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -98,7 +108,7 @@ describe('profile', () => {
     // Leaving them filled invites a second submit that would now fail, because the
     // current password is no longer current.
     stubFetch({ '/auth/change-password': { body: { status: 'changed' } } });
-    renderWithSession(<ProfilePage />);
+    renderWithSession(<ProfilePage />, { me: ME });
 
     await userEvent.type(screen.getByLabelText('Current password'), 'old password');
     await userEvent.type(screen.getByLabelText('New password'), 'a long enough password');
@@ -116,7 +126,7 @@ describe('profile', () => {
         body: { error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'That is not your current password.', requestId: 'req-13' } },
       },
     });
-    renderWithSession(<ProfilePage />);
+    renderWithSession(<ProfilePage />, { me: ME });
 
     await userEvent.type(screen.getByLabelText('Current password'), 'wrong password');
     await userEvent.type(screen.getByLabelText('New password'), 'a long enough password');
@@ -127,12 +137,12 @@ describe('profile', () => {
   });
 
   it('warns that a password change signs out the other sessions', () => {
-    renderWithSession(<ProfilePage />);
+    renderWithSession(<ProfilePage />, { me: ME });
     expect(screen.getByText(/signs out your other sessions/)).toBeInTheDocument();
   });
 
   it('holds the password button until both fields are usable', async () => {
-    renderWithSession(<ProfilePage />);
+    renderWithSession(<ProfilePage />, { me: ME });
     const submit = screen.getByRole('button', { name: 'Change password' });
     expect(submit).toBeDisabled();
 

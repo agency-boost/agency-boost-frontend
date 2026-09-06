@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AgentShell } from '@/components/agent-shell';
+import { RoleShell } from '@/components/role-shell';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -18,6 +18,10 @@ import {
  * **No prototype counterpart** — none of the fourteen files has a notifications surface,
  * even though `Overall.html` fires toasts. Registered as a Fill, and designed in the
  * prototype's idiom: the same shell, the same card and empty-state vocabulary.
+ *
+ * **`RoleShell`, not `AgentShell`.** Everybody has an inbox, so this route belongs to no
+ * one role family. It rendered `AgentShell` until 2026-09-06, which dropped a Super Admin
+ * or an Owner into the agent application with no way back to their own.
  *
  * ADR-0010 makes this the **authoritative channel** — *"v1 notifications will be
  * under-read, because agents live in WhatsApp… the in-app inbox, not email, is treated as
@@ -59,7 +63,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <AgentShell
+    <RoleShell
       title="Notifications"
       subtitle="What has happened that you should know about."
       permission="notification:read_inbox"
@@ -130,6 +134,6 @@ export default function NotificationsPage() {
           })}
         </ul>
       )}
-    </AgentShell>
+    </RoleShell>
   );
 }
