@@ -91,6 +91,20 @@ export interface KpmRequestRow {
   createdKpmId: string | null;
 }
 
+export interface PlatformAdminRow {
+  membershipId: string;
+  fullName: string;
+  email: string;
+  initials: string;
+  kpmId: string;
+  kpmLabel: string;
+  isOwner: boolean;
+  isAdmin: boolean;
+  grantedAt: string | null;
+}
+
+export const readTenantAdmins = () => api<PlatformAdminRow[]>('/admin/tenant-admins');
+
 export const readKpmRequests = () => api<KpmRequestRow[]>('/admin/kpm-requests');
 
 export const approveKpmRequest = (requestId: string, code: string) =>

@@ -157,7 +157,10 @@ export interface MyKpmRequest {
   createdKpmId: string | null;
 }
 
-export const readMyKpmRequest = () => api<MyKpmRequest | null>('/join/kpm-request');
+export const readMyKpmRequest = async (): Promise<MyKpmRequest | null> =>
+  // Wrapped on the wire: a bare `null` arrives as an empty body, which is
+  // indistinguishable from a response that failed to serialise.
+  (await api<{ request: MyKpmRequest | null }>('/join/kpm-request')).request;
 
 export const askForKpm = (body: { companyId: string; branchName: string; note?: string }) =>
   api<MyKpmRequest>('/join/kpm-request', { method: 'POST', body });

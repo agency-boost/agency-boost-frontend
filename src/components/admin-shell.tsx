@@ -47,7 +47,7 @@ const SECTIONS: readonly { label: string | null; divider?: boolean; items: Admin
   {
     label: 'Platform admin',
     items: [
-      { label: 'KPM Owners & Admins', href: '/admin/tenant-admins', upcoming: true },
+      { label: 'KPM Owners & Admins', href: '/admin/tenant-admins' },
       { label: 'Audit / role change log', href: '/admin/audit' },
     ],
     divider: true,
