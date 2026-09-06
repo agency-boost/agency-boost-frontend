@@ -76,7 +76,12 @@ export function AdminShell({
   permission = 'kpm:list_all',
   children,
 }: {
-  title: string;
+  /**
+   * Omitted when a **group layout** renders this shell: a layout serves every route
+   * beneath it and cannot know their titles, so those pages render `PageHeader`
+   * themselves.
+   */
+  title?: string;
   subtitle?: string;
   actions?: React.ReactNode;
   /**
@@ -103,7 +108,7 @@ function AdminChrome({
   actions,
   children,
 }: {
-  title: string;
+  title?: string;
   subtitle?: string;
   actions?: React.ReactNode;
   children: React.ReactNode;

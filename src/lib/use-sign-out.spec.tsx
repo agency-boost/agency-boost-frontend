@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { renderWithSession } from '../../test/harness';
+import { renderWithSession } from '@test/harness';
 import { useSignOut } from './use-sign-out';
 
 const replace = vi.fn();

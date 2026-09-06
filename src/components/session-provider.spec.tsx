@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { stubFetch } from '../../test/harness';
+import { stubFetch } from '@test/harness';
 import { getAccessToken, setAccessToken, setImpersonating } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
 import { SessionProvider } from './session-provider';

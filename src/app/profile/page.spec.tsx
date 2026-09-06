@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '../../../test/harness';
+import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import ProfilePage from './page';
 
 vi.mock('next/navigation', () => ({

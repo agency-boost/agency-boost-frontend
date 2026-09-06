@@ -107,6 +107,37 @@ export interface ShellUser {
   readonly email?: string;
 }
 
+/**
+ * A page's heading block: the `<h1>`, its sub-line, and the actions beside it.
+ *
+ * Split out of `AppShell` on 2026-09-06 so a **group layout** can own the sidebar. A
+ * layout is rendered once for every route beneath it and cannot know their titles, so
+ * either the header moves out or the chrome stays duplicated in 23 pages — and duplicated
+ * chrome is what let `/notifications` wear the wrong one.
+ *
+ * There is exactly one `<h1>` per screen either way: the shell renders this itself when a
+ * page passes a `title`, and does not when a page renders it.
+ */
+export function PageHeader({
+  title,
+  subtitle,
+  actions,
+}: {
+  title: string;
+  subtitle?: string;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <h1 className="font-display text-3xl font-bold text-navy">{title}</h1>
+        {subtitle && <p className="mt-1 text-md text-muted">{subtitle}</p>}
+      </div>
+      {actions}
+    </div>
+  );
+}
+
 export function AppShell({
   sections,
   user,
@@ -137,7 +168,14 @@ export function AppShell({
     onSignOut: () => void;
     signingOut?: boolean;
   };
-  title: string;
+  /**
+   * The page's own heading, when the shell is rendered by a page.
+   *
+   * Optional because a **group layout** renders this shell without knowing any page's
+   * title — that is the whole reason a layout can own the sidebar. A page inside such a
+   * layout renders `PageHeader` itself and passes nothing here.
+   */
+  title?: string;
   subtitle?: string;
   actions?: React.ReactNode;
   children: React.ReactNode;
@@ -203,13 +241,9 @@ export function AppShell({
       </aside>
 
       <main className="min-w-0 flex-1 px-5 py-6 md:px-10 md:pb-14 md:pt-8">
-        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="font-display text-3xl font-bold text-navy">{title}</h1>
-            {subtitle && <p className="mt-1 text-md text-muted">{subtitle}</p>}
-          </div>
-          {actions}
-        </div>
+        {title !== undefined && (
+          <PageHeader title={title} subtitle={subtitle} actions={actions} />
+        )}
         {children}
       </main>
     </div>

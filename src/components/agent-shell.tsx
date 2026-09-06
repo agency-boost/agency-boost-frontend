@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AppShell, type NavSection } from '@/components/app-shell';
 import { RequireSession } from '@/components/require-session';
@@ -20,43 +19,20 @@ import { useSignOut } from '@/lib/use-sign-out';
  * visible; that is the prototype's own choice, and `components-and-patterns.md` already
  * documented both the sections and the treatment before the code caught up.
  */
-interface SubTab {
-  readonly href: string;
-  readonly label: string;
-  /** Hidden unless the reader holds this. Absent means everybody sees it. */
-  readonly needs?: string;
-}
-
-/**
- * User Management's sub-tabs (`Overall.html:3471-3474`).
- *
- * Title Case, because these are the prototype's strings. They are a **chain**, not four
- * peers: Find Your Leader is locked until an office is registered, exactly as the
- * prototype locks it (`Overall.html:8824`). A locked tab stays visible and says why.
- */
-const SUBTABS: readonly SubTab[] = [
-  { href: '/user-management/kpm', label: 'Register KPM' },
-  { href: '/user-management/leader', label: 'Find Your Leader' },
-  { href: '/user-management/add', label: 'Add New Agents' },
-  // Hidden from anybody who cannot read an inbox — an Agent. The prototype hides it by
-  // role (`User_Management_Section.html:996`, `role === 'AB' || role === 'AAB'`); we hide
-  // it by the permission that decides the same thing, so it survives P3.5-T8 replacing
-  // the role with a ladder reference. Hiding is a convenience either way: the API refuses
-  // an Agent the inbox regardless, and there is a test for that.
-  { href: '/user-management/pending', label: 'Pending Requests', needs: 'leader_request:read_inbox' },
-];
 
 export function AgentShell({
   title,
   subtitle,
-  leaderLocked,
   permission,
-  subtabs,
-  pendingCount,
   actions,
   children,
 }: {
-  title: string;
+  /**
+   * Omitted when a **group layout** renders this shell: a layout serves every route
+   * beneath it and cannot know their titles, so those pages render `PageHeader`
+   * themselves.
+   */
+  title?: string;
   subtitle?: string;
   /** Set on the leader screen when no office is registered yet. */
   leaderLocked?: boolean;
@@ -77,9 +53,6 @@ export function AgentShell({
       <Chrome
         title={title}
         subtitle={subtitle}
-        leaderLocked={leaderLocked}
-        subtabs={subtabs}
-        pendingCount={pendingCount}
         actions={actions}
       >
         {children}
@@ -91,13 +64,10 @@ export function AgentShell({
 function Chrome({
   title,
   subtitle,
-  leaderLocked,
-  subtabs,
-  pendingCount,
   actions,
   children,
 }: {
-  title: string;
+  title?: string;
   subtitle?: string;
   leaderLocked?: boolean;
   subtabs?: boolean;
@@ -106,7 +76,6 @@ function Chrome({
   children: React.ReactNode;
 }) {
   const { me } = useSession();
-  const permissions = me?.permissions ?? [];
   const unread = useUnreadCount();
   const { signOut, busy } = useSignOut();
   const pathname = usePathname();
@@ -168,7 +137,10 @@ function Chrome({
           label: 'User management',
           href: '/user-management/kpm',
           active: on('/user-management'),
-          badge: pendingCount,
+          // No badge. P3.5-T5 AC-3 settled this: no prototype puts a count inside a nav
+          // anchor — `tab-badge` appears only on the sub-tab — and the count reached the
+          // shell as a prop from one page, which a group layout cannot receive. The
+          // specified badge lives on the Pending Requests sub-tab and still does.
         },
       ],
     },
@@ -190,50 +162,6 @@ function Chrome({
       subtitle={subtitle}
       actions={actions}
     >
-      {subtabs && (
-        // The prototype's metrics: 24px between tabs, the underline sitting on the
-        // hairline, and inactive tabs at the same weight as active — they differ by
-        // colour and the amber rule, not by weight (`Overall.html:81-89`).
-        <div className="mb-6 flex flex-wrap gap-6 border-b border-hairline">
-          {SUBTABS.filter((tab) => !tab.needs || permissions.includes(tab.needs)).map((tab) => {
-            const locked = tab.href.endsWith('/leader') && leaderLocked;
-            const active = pathname === tab.href;
-            if (locked) {
-              return (
-                <span
-                  key={tab.href}
-                  aria-disabled
-                  title="Register an office first"
-                  className="-mb-px cursor-default border-b-2 border-transparent px-0.5 pb-3 text-md font-semibold text-muted/50"
-                >
-                  {tab.label}
-                </span>
-              );
-            }
-            return (
-              <Link
-                key={tab.href}
-                href={tab.href}
-                aria-current={active ? 'page' : undefined}
-                className={
-                  active
-                    ? '-mb-px border-b-2 border-amber px-0.5 pb-3 text-md font-semibold text-navy'
-                    : '-mb-px border-b-2 border-transparent px-0.5 pb-3 text-md font-semibold text-muted'
-                }
-              >
-                <span className="flex items-center gap-1.5">
-                  {tab.label}
-                  {tab.href.endsWith('/pending') && pendingCount !== undefined && pendingCount > 0 && (
-                    <span className="inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-pill bg-alert px-1.5 text-2xs font-bold text-card">
-                      {pendingCount}
-                    </span>
-                  )}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      )}
       {children}
     </AppShell>
   );

@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { makeMe, renderWithSession } from '../../test/harness';
+import { makeMe, renderWithSession } from '@test/harness';
 import { useCan } from './session';
 
 function Probe({ permission }: { permission: string }) {

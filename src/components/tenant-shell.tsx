@@ -83,7 +83,12 @@ export function TenantShell({
   permission = 'member:read_profile',
   children,
 }: {
-  title: string;
+  /**
+   * Omitted when a **group layout** renders this shell: a layout serves every route
+   * beneath it and cannot know their titles, so those pages render `PageHeader`
+   * themselves.
+   */
+  title?: string;
   subtitle?: string;
   actions?: React.ReactNode;
   /** What this screen needs. Most tenant-admin screens read the roster; the tree does not. */
@@ -105,7 +110,7 @@ function TenantChrome({
   actions,
   children,
 }: {
-  title: string;
+  title?: string;
   subtitle?: string;
   actions?: React.ReactNode;
   children: React.ReactNode;

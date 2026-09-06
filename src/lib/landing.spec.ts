@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { makeMe } from '../../test/harness';
+import { makeMe } from '@test/harness';
 import { landingFor } from './landing';
 import type { Me } from './session';
 

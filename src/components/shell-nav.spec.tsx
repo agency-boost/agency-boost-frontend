@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession } from '../../test/harness';
+import { makeMe, renderWithSession } from '@test/harness';
 import { AgentShell } from './agent-shell';
 import { AdminShell } from './admin-shell';
 import { TenantShell } from './tenant-shell';
@@ -66,14 +66,22 @@ describe('the sidebar matches the prototype', () => {
     expect(labels.indexOf('Group tree')).toBeLessThan(labels.indexOf('User management'));
   });
 
-  it('agent app: no User Management sub-tabs unless the screen asks for them', () => {
-    // Three screens used to show them: the group tree, the unit dashboard and the
-    // activity log — tabs for a module they are not part of.
+  it('agent app: the shell carries no User Management sub-tabs', () => {
+    // Three screens used to show them — the group tree, the unit dashboard and the
+    // activity log — tabs for a module they are not part of. That was fixed with a
+    // `subtabs` opt-in; route groups then made the opt-in unnecessary. A layout renders
+    // for everything beneath it, so a strip that belongs to four of its routes belongs to
+    // those four: `UserManagementTabs`, rendered by the page.
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
     expect(screen.queryByRole('link', { name: 'Register KPM' })).not.toBeInTheDocument();
+  });
 
-    renderWithSession(<AgentShell title="x" subtabs>body</AgentShell>, { me: AGENT });
-    expect(screen.getAllByRole('link', { name: 'Register KPM' }).length).toBeGreaterThan(0);
+  it('agent app: the nav item carries no count', () => {
+    // P3.5-T5 AC-3: no prototype puts a badge inside a nav anchor — `tab-badge` appears
+    // only on the sub-tab. The specified one lives on Pending Requests and still does.
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+    const item = screen.getByText('User management').closest('a')!;
+    expect(item.textContent).toBe('User management');
   });
 
   it('agent app: an unbuilt item is disabled and keeps its pill', () => {

@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '../../test/harness';
+import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { RoleShell } from './role-shell';
 import { landingFor } from '@/lib/landing';
 

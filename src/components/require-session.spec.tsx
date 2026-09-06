@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession } from '../../test/harness';
+import { makeMe, renderWithSession } from '@test/harness';
 import { RequireSession } from './require-session';
 
 const replace = vi.fn();

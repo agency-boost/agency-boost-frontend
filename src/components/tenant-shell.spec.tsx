@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession } from '../../test/harness';
+import { makeMe, renderWithSession } from '@test/harness';
 import { TenantShell } from './tenant-shell';
 
 vi.mock('next/navigation', () => ({

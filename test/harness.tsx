@@ -117,3 +117,18 @@ export function stubFetch(routes: Record<string, StubResponse | StubResponse[]>)
   vi.stubGlobal('fetch', mock);
   return { calls, mock };
 }
+
+/**
+ * Render a page inside its group layout, which is how a reader meets it.
+ *
+ * Route groups moved the chrome out of the page and into the layout above it, so a spec
+ * that renders the page alone is testing half a screen — no sidebar, no sign-out, and no
+ * session gate. Anything asserting either belongs in here.
+ */
+export function renderInLayout(
+  Layout: (props: { children: React.ReactNode }) => React.ReactNode,
+  ui: React.ReactNode,
+  session: Parameters<typeof renderWithSession>[1] = {},
+) {
+  return renderWithSession(<Layout>{ui}</Layout>, session);
+}

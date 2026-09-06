@@ -2,30 +2,36 @@ import { cleanup, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
-import { makeMe, renderWithSession, routeParams, stubFetch } from '../../test/harness';
-import LoginPage from './login/page';
-import RegisterPage from './register/page';
-import ForgotPasswordPage from './forgot-password/page';
-import ResetPasswordPage from './reset-password/[token]/page';
-import VerifyEmailPage from './verify-email/[token]/page';
+import AdminLayout from '@/app/(admin)/layout';
+import KpmRequestsPage from './(admin)/admin/kpm-requests/page';
+import TenantAdminsPage from './(admin)/admin/tenant-admins/page';
+import NotificationsPage from './notifications/page';
+import TenantLayout from '@/app/(tenant)/layout';
+import AgentLayout from '@/app/(agent)/layout';
+import { makeMe, renderInLayout, renderWithSession, routeParams, stubFetch } from '@test/harness';
+import LoginPage from './(auth)/login/page';
+import RegisterPage from './(auth)/register/page';
+import ForgotPasswordPage from './(auth)/forgot-password/page';
+import ResetPasswordPage from './(auth)/reset-password/[token]/page';
+import VerifyEmailPage from './(auth)/verify-email/[token]/page';
 import ProfilePage from './profile/page';
-import AdminOverviewPage from './admin/page';
-import TenantsPage from './admin/tenants/page';
-import NewTenantPage from './admin/tenants/new/page';
-import CompaniesPage from './admin/companies/page';
-import AuditPage from './admin/audit/page';
-import MembersPage from './people/members/page';
-import MemberPage from './people/members/[membershipId]/page';
-import AdminsPage from './people/admins/page';
-import RegisterKpmPage from './user-management/kpm/page';
-import KpmOverviewPage from './kpm/overview/page';
-import UnitDashboardPage from './unit/dashboard/page';
-import LogActivityPage from './activity/log/page';
-import FindLeaderPage from './user-management/leader/page';
-import AddAgentsPage from './user-management/add/page';
-import PendingPage from './user-management/pending/page';
-import GroupTreePage from './group-tree/page';
-import OrgTreePage from './people/org-tree/page';
+import AdminOverviewPage from './(admin)/admin/page';
+import TenantsPage from './(admin)/admin/tenants/page';
+import NewTenantPage from './(admin)/admin/tenants/new/page';
+import CompaniesPage from './(admin)/admin/companies/page';
+import AuditPage from './(admin)/admin/audit/page';
+import MembersPage from './(tenant)/people/members/page';
+import MemberPage from './(tenant)/people/members/[membershipId]/page';
+import AdminsPage from './(tenant)/people/admins/page';
+import RegisterKpmPage from './(agent)/user-management/kpm/page';
+import KpmOverviewPage from './(tenant)/kpm/overview/page';
+import UnitDashboardPage from './(agent)/unit/dashboard/page';
+import LogActivityPage from './(agent)/activity/log/page';
+import FindLeaderPage from './(agent)/user-management/leader/page';
+import AddAgentsPage from './(agent)/user-management/add/page';
+import PendingPage from './(agent)/user-management/pending/page';
+import GroupTreePage from './(agent)/group-tree/page';
+import OrgTreePage from './(tenant)/people/org-tree/page';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -43,7 +49,11 @@ const SUPER_ADMIN = makeMe({
     pronoun: 'they', initials: 'R', platformRole: 'super_admin',
   },
   membership: null,
-  permissions: ['kpm:list_all', 'kpm:create', 'company:crud', 'audit_log:read'],
+  permissions: [
+    'kpm:list_all', 'kpm:create', 'company:crud', 'audit_log:read',
+    // Everybody signed in has an inbox, whatever application they live in.
+    'notification:read_inbox', 'notification:mark_read',
+  ],
 });
 
 const KPM = {
@@ -149,7 +159,7 @@ describe('Phase 2 screens have no axe violations', () => {
 
   it('admin overview, with the unowned-office warning showing', async () => {
     stubFetch({ '/admin/overview': { body: OVERVIEW } });
-    renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
+    renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
     await screen.findByText('2 offices have no Owner');
     await expectClean('admin');
   });
@@ -158,7 +168,7 @@ describe('Phase 2 screens have no axe violations', () => {
     // Closed, the menu contributes nothing to check. The open state is the one that
     // can get aria-expanded, focus order or labelling wrong.
     stubFetch({ '/admin/overview': { body: OVERVIEW } });
-    renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
+    renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
     await userEvent.click(await screen.findByRole('button', { name: /Root/ }));
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
     await expectClean('admin (account menu open)');
@@ -166,21 +176,21 @@ describe('Phase 2 screens have no axe violations', () => {
 
   it('tenants, populated', async () => {
     stubFetch({ '/admin/tenants': { body: [KPM] }, '/admin/companies': { body: [COMPANY] } });
-    renderWithSession(<TenantsPage />, { me: SUPER_ADMIN });
+    renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
     await screen.findByRole('table');
     await expectClean('admin/tenants');
   });
 
   it('new tenant', async () => {
     stubFetch({ '/admin/companies': { body: [COMPANY] } });
-    renderWithSession(<NewTenantPage />, { me: SUPER_ADMIN });
+    renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
     await screen.findByLabelText('Office code');
     await expectClean('admin/tenants/new');
   });
 
   it('companies, list and form together', async () => {
     stubFetch({ '/admin/companies': { body: [COMPANY] } });
-    renderWithSession(<CompaniesPage />, { me: SUPER_ADMIN });
+    renderInLayout(AdminLayout, <CompaniesPage />, { me: SUPER_ADMIN });
     await screen.findByRole('table');
     await expectClean('admin/companies');
   });
@@ -209,7 +219,7 @@ describe('Phase 2 screens have no axe violations', () => {
         },
       },
     });
-    renderWithSession(<MembersPage />, { me: owner });
+    renderInLayout(TenantLayout, <MembersPage />, { me: owner });
     await screen.findByRole('table');
     await expectClean('people/members');
   });
@@ -229,7 +239,7 @@ describe('Phase 2 screens have no axe violations', () => {
         }],
       },
     });
-    renderWithSession(<RegisterKpmPage />, { me: makeMe({ membership: null }) });
+    renderInLayout(AgentLayout, <RegisterKpmPage />, { me: makeMe({ membership: null }) });
     await screen.findByText('Prudential — KPM 0417');
     await expectClean('user-management/kpm');
   });
@@ -257,7 +267,7 @@ describe('Phase 2 screens have no axe violations', () => {
         ],
       },
     });
-    renderWithSession(<FindLeaderPage />, { me: joiner });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: joiner });
     await screen.findByText('Request sent');
     await expectClean('user-management/leader');
   });
@@ -271,7 +281,7 @@ describe('Phase 2 screens have no axe violations', () => {
       permissions: ['member:read_profile'],
     });
     stubFetch({ '/admin/tenants/kpm-1': { body: { ...KPM, settings: { activationWindowDays: 90 } } } });
-    renderWithSession(<KpmOverviewPage />, { me: owner });
+    renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
     await screen.findByText('Arrives in phase 14');
     await expectClean('kpm/overview');
   });
@@ -283,12 +293,12 @@ describe('Phase 2 screens have no axe violations', () => {
         isKpmOwner: false, isKpmAdmin: false, directCount: 2,
       },
     });
-    renderWithSession(<UnitDashboardPage />, { me: leader });
+    renderInLayout(AgentLayout, <UnitDashboardPage />, { me: leader });
     await screen.findByText('Arrives in phase 13');
     await expectClean('unit/dashboard');
 
     cleanup();
-    renderWithSession(<LogActivityPage />, { me: makeMe() });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: makeMe() });
     await screen.findByText('Arrives in phase 6');
     await expectClean('activity/log');
   });
@@ -329,7 +339,7 @@ describe('Phase 2 screens have no axe violations', () => {
         ],
       },
     });
-    renderWithSession(<AddAgentsPage />, { me: leader });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: leader });
     await screen.findByRole('table');
     await expectClean('user-management/add');
   });
@@ -356,7 +366,7 @@ describe('Phase 2 screens have no axe violations', () => {
         }],
       },
     });
-    renderWithSession(<AddAgentsPage />, { me: leader });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: leader });
     await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
     await screen.findByLabelText('Why?');
     await expectClean('user-management/add (role change)');
@@ -384,7 +394,7 @@ describe('Phase 2 screens have no axe violations', () => {
         }],
       },
     });
-    renderWithSession(<AddAgentsPage />, { me: leader });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: leader });
     await userEvent.click(await screen.findByRole('button', { name: 'Remove Rina Wijaya' }));
     await screen.findByLabelText('Type REMOVE to confirm');
     await expectClean('user-management/add (removal)');
@@ -413,7 +423,7 @@ describe('Phase 2 screens have no axe violations', () => {
         },
       },
     });
-    renderWithSession(<MembersPage />, { me: owner });
+    renderInLayout(TenantLayout, <MembersPage />, { me: owner });
     await userEvent.click(await screen.findByRole('button', { name: 'Removed' }));
     await screen.findByRole('table');
     await expectClean('people/members (removed)');
@@ -449,7 +459,7 @@ describe('Phase 2 screens have no axe violations', () => {
         },
       },
     });
-    renderWithSession(<MembersPage />, { me: owner });
+    renderInLayout(TenantLayout, <MembersPage />, { me: owner });
     await userEvent.click(await screen.findByRole('button', { name: 'Pending (1)' }));
     await screen.findByRole('table');
     await expectClean('people/members (pending)');
@@ -473,7 +483,7 @@ describe('Phase 2 screens have no axe violations', () => {
       },
       '/members': { body: { members: [], nextCursor: null } },
     });
-    renderWithSession(<MembersPage />, { me: owner });
+    renderInLayout(TenantLayout, <MembersPage />, { me: owner });
     await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
     await screen.findByRole('table');
     await expectClean('people/members (role change log)');
@@ -499,7 +509,7 @@ describe('Phase 2 screens have no axe violations', () => {
         }],
       },
     });
-    renderWithSession(<PendingPage />, { me: ab });
+    renderInLayout(AgentLayout, <PendingPage />, { me: ab });
     await screen.findByLabelText('Add to');
     await expectClean('user-management/pending');
   });
@@ -512,7 +522,7 @@ describe('Phase 2 screens have no axe violations', () => {
         membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 1,
       },
-      permissions: ['org_tree:read'],
+      permissions: ['member:read_profile', 'org_tree:read'],
     });
     stubFetch({
       '/members/tree': {
@@ -532,7 +542,7 @@ describe('Phase 2 screens have no axe violations', () => {
         },
       },
     });
-    renderWithSession(<GroupTreePage />, { me: leader });
+    renderInLayout(AgentLayout, <GroupTreePage />, { me: leader });
     await screen.findByText('Layer 1');
     await expectClean('group-tree');
   });
@@ -543,7 +553,7 @@ describe('Phase 2 screens have no axe violations', () => {
         membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
         isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 1,
       },
-      permissions: ['org_tree:read'],
+      permissions: ['member:read_profile', 'org_tree:read'],
     });
     stubFetch({
       '/members/tree': {
@@ -563,7 +573,7 @@ describe('Phase 2 screens have no axe violations', () => {
         },
       },
     });
-    renderWithSession(<OrgTreePage />, { me: owner });
+    renderInLayout(TenantLayout, <OrgTreePage />, { me: owner });
     await screen.findByText('Layer 1');
     await expectClean('people/org-tree');
   });
@@ -592,7 +602,7 @@ describe('Phase 2 screens have no axe violations', () => {
       },
       '/members': { body: { members: [], nextCursor: null } },
     });
-    renderWithSession(<MembersPage />, { me: owner });
+    renderInLayout(TenantLayout, <MembersPage />, { me: owner });
     await userEvent.click(await screen.findByRole('button', { name: 'Groups' }));
     await screen.findByRole('table');
     // The form is where a label, a legend or a select can be got wrong.
@@ -630,7 +640,7 @@ describe('Phase 2 screens have no axe violations', () => {
         },
       },
     });
-    renderWithSession(<MemberPage params={routeParams({ membershipId: 'mem-1' })} />, { me: owner });
+    renderInLayout(TenantLayout, <MemberPage params={routeParams({ membershipId: 'mem-1' })} />, { me: owner });
     await userEvent.click(await screen.findByRole('button', { name: 'Edit tags' }));
     await screen.findByLabelText('Core Leader');
     await expectClean('people/members/[id] (tags)');
@@ -642,7 +652,7 @@ describe('Phase 2 screens have no axe violations', () => {
         membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
         isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 1,
       },
-      permissions: ['kpm_admin:grant', 'kpm_admin:revoke', 'kpm_admin:list'],
+      permissions: ['member:read_profile', 'kpm_admin:grant', 'kpm_admin:revoke', 'kpm_admin:list'],
     });
     stubFetch({
       '/members/admins': {
@@ -660,7 +670,7 @@ describe('Phase 2 screens have no axe violations', () => {
         },
       },
     });
-    renderWithSession(<AdminsPage />, { me: owner });
+    renderInLayout(TenantLayout, <AdminsPage />, { me: owner });
     await userEvent.click(await screen.findByRole('button', { name: 'Revoke' }));
     await screen.findByRole('button', { name: 'Revoke access' });
     await expectClean('people/admins');
@@ -668,8 +678,63 @@ describe('Phase 2 screens have no axe violations', () => {
 
   it('audit log', async () => {
     stubFetch({ '/admin/audit': { body: [AUDIT] }, '/admin/tenants': { body: [KPM] } });
-    renderWithSession(<AuditPage />, { me: SUPER_ADMIN });
+    renderInLayout(AdminLayout, <AuditPage />, { me: SUPER_ADMIN });
     await screen.findByRole('table');
     await expectClean('admin/audit');
+  });
+
+  // Three screens the sweep had never seen. It covered 23 of 31 when route groups landed,
+  // and the gap was invisible because nothing counts the file against the route tree.
+
+  it('KPM registration requests, with one waiting to be decided', async () => {
+    stubFetch({
+      '/admin/kpm-requests': {
+        body: [{
+          requestId: 'req-1', branchName: 'Surabaya Branch', companyId: 'co-1',
+          companyName: 'Prudential', requestedByName: 'Rangga Wibisono',
+          requestedByEmail: 'rangga@example.test', note: 'Twelve agents already here.',
+          status: 'pending', requestedAt: '2026-09-01T00:00:00.000Z',
+          decidedAt: null, reason: null, createdKpmId: null,
+        }],
+      },
+    });
+    renderInLayout(AdminLayout, <KpmRequestsPage />, { me: SUPER_ADMIN });
+    await screen.findByLabelText('KPM code');
+    await expectClean('admin/kpm-requests');
+  });
+
+  it('the office administrators roster, populated', async () => {
+    stubFetch({
+      '/admin/tenant-admins': {
+        body: [{
+          membershipId: 'mem-1', fullName: 'Wilson Tanoto', email: 'wilson@kpm0417.test',
+          initials: 'WT', kpmId: 'kpm-1', kpmLabel: 'KPM 0417 — BSD City Branch',
+          isOwner: true, isAdmin: false, grantedAt: null,
+        }],
+      },
+    });
+    renderInLayout(AdminLayout, <TenantAdminsPage />, { me: SUPER_ADMIN });
+    await screen.findByRole('table');
+    await expectClean('admin/tenant-admins');
+  });
+
+  it('the notifications inbox, with one unread', async () => {
+    // Cross-family, so it wears whichever chrome its reader signed in with — this checks
+    // it inside the platform console, which is the combination that was broken.
+    stubFetch({
+      '/notifications': {
+        body: {
+          items: [{
+            notificationId: 'n-1', templateId: 'join_request.approved',
+            title: 'You are in', detail: 'Your request was approved.',
+            kpmId: 'kpm-1', createdAt: '2026-09-01T00:00:00.000Z', readAt: null,
+          }],
+          unread: 1,
+        },
+      },
+    });
+    renderWithSession(<NotificationsPage />, { me: SUPER_ADMIN });
+    await screen.findByRole('button', { name: 'Mark read' });
+    await expectClean('notifications');
   });
 });

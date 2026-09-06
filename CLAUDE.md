@@ -68,7 +68,11 @@ still shipped its credentials.
 
 ```
 src/
-├── app/<route>/page.tsx      the screen, with page.spec.tsx beside it
+├── app/(group)/<route>/      one group per application — (auth) (agent) (tenant) (admin)
+│   ├── layout.tsx            renders that family's shell; the chrome lives here, not in pages
+│   └── page.tsx              the screen, with page.spec.tsx beside it
+├── app/<route>/page.tsx      cross-family routes only — /, /join, /notifications, /profile.
+│                             These render RoleShell, which picks the chrome by the reader
 ├── app/screens.a11y.spec.tsx every screen through axe, in its populated state
 ├── components/               app-shell, admin-shell, session-provider, require-session
 ├── components/ui/            the primitives — field, data-table, status-pill, role-badge, …

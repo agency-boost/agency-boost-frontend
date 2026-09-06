@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { stubFetch } from '../../test/harness';
+import { stubFetch } from '@test/harness';
 import { ApiConfigError } from './api';
 import {
   api,
