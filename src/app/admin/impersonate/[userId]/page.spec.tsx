@@ -68,7 +68,10 @@ describe('start impersonation', () => {
 
     await vi.waitFor(() => expect(getAccessToken()).toBe('imp-token'));
     expect(isImpersonating()).toBe(true);
-    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+    // Found rather than indexed: the shell reads the unread count on mount, so this is
+    // no longer the first call the page makes.
+    const started = calls.find((c) => c.url.includes('/admin/impersonate/u-owner'));
+    expect(JSON.parse(started!.init.body as string)).toEqual({
       reason: 'support ticket 42',
       durationMinutes: 60,
     });

@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { AppShell, type NavSection } from '@/components/app-shell';
 import { RequireSession } from '@/components/require-session';
 import { useSession } from '@/lib/session';
+import { useUnreadCount } from '@/lib/use-unread-count';
 import { useSignOut } from '@/lib/use-sign-out';
 
 /**
@@ -24,7 +25,17 @@ type AdminNavItem = { label: string; href: string; upcoming?: boolean };
  * own `Soon` pill rather than being hidden, which is what it does too.
  */
 const SECTIONS: readonly { label: string | null; divider?: boolean; items: AdminNavItem[] }[] = [
-  { label: null, items: [{ label: 'Overview', href: '/admin' }], divider: true },
+  // No prototype has a notifications nav item — none of the fourteen files has a
+  // notifications surface at all. Registered as a Fill. Unheaded and beside Overview,
+  // because it belongs to none of the groups below.
+  {
+    label: null,
+    items: [
+      { label: 'Overview', href: '/admin' },
+      { label: 'Notifications', href: '/notifications' },
+    ],
+    divider: true,
+  },
   {
     label: 'Companies',
     items: [
@@ -90,6 +101,7 @@ function AdminChrome({
   children: React.ReactNode;
 }) {
   const { me } = useSession();
+  const unread = useUnreadCount();
   const { signOut, busy } = useSignOut();
   const pathname = usePathname();
 
@@ -100,7 +112,11 @@ function AdminChrome({
   const sections: readonly NavSection[] = SECTIONS.map((section) => ({
     label: section.label,
     divider: section.divider,
-    items: section.items.map((i) => ({ ...i, active: !i.upcoming && isActive(i.href) })),
+    items: section.items.map((i) => ({
+      ...i,
+      active: !i.upcoming && isActive(i.href),
+      badge: i.href === '/notifications' ? unread || undefined : undefined,
+    })),
   }));
 
   return (

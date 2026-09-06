@@ -5,6 +5,7 @@ import { AppShell, type NavSection } from '@/components/app-shell';
 import { RequireSession } from '@/components/require-session';
 import { ROLE_SHORT } from '@/components/ui/role-badge';
 import { useSession } from '@/lib/session';
+import { useUnreadCount } from '@/lib/use-unread-count';
 import { useSignOut } from '@/lib/use-sign-out';
 
 /**
@@ -23,7 +24,17 @@ const SECTIONS: readonly {
   // The prototype's order, verbatim (`KPM_Owner.html:872-913`): Overview alone and
   // unlabelled at the top, then Reporting, Leader Meetings, Settings, and People last.
   // It used to be an invented `Office` group with People above Settings.
-  { label: null, items: [{ label: 'Overview', href: '/kpm/overview' }], divider: true },
+  // No prototype has a notifications nav item — none of the fourteen files has a
+  // notifications surface at all. Registered as a Fill. Unheaded and beside Overview,
+  // because it belongs to none of the groups below.
+  {
+    label: null,
+    items: [
+      { label: 'Overview', href: '/kpm/overview' },
+      { label: 'Notifications', href: '/notifications' },
+    ],
+    divider: true,
+  },
   {
     label: 'Reporting',
     items: [
@@ -100,6 +111,7 @@ function TenantChrome({
   children: React.ReactNode;
 }) {
   const { me } = useSession();
+  const unread = useUnreadCount();
   const { signOut, busy } = useSignOut();
   const pathname = usePathname();
 
@@ -114,6 +126,7 @@ function TenantChrome({
       .map((item) => ({
         ...item,
         active: !item.upcoming && pathname.startsWith(item.href),
+        badge: item.href === '/notifications' ? unread || undefined : undefined,
       })),
     divider: section.divider,
   })).filter((section) => section.items.length > 0);

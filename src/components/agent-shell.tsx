@@ -6,6 +6,7 @@ import { AppShell, type NavSection } from '@/components/app-shell';
 import { RequireSession } from '@/components/require-session';
 import { ROLE_SHORT } from '@/components/ui/role-badge';
 import { useSession } from '@/lib/session';
+import { useUnreadCount } from '@/lib/use-unread-count';
 import { useSignOut } from '@/lib/use-sign-out';
 
 /**
@@ -106,6 +107,7 @@ function Chrome({
 }) {
   const { me } = useSession();
   const permissions = me?.permissions ?? [];
+  const unread = useUnreadCount();
   const { signOut, busy } = useSignOut();
   const pathname = usePathname();
 
@@ -116,6 +118,11 @@ function Chrome({
     {
       label: 'Personal tools',
       items: [
+        // No prototype has a notifications nav item — none of the fourteen files has a
+        // notifications surface at all. Registered as a Fill. It sits in Personal tools
+        // because that is what it is, and it carries the unread count on the badge the
+        // shell already supports.
+        { label: 'Notifications', href: '/notifications', badge: unread || undefined },
         { label: 'Activity management', href: '/activity/log', active: on('/activity') },
         { label: 'Leads management', href: '/leads', upcoming: true },
         { label: 'Goal settings', href: '/goals', upcoming: true },
