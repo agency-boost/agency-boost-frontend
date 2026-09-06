@@ -59,7 +59,7 @@ describe('tenants list', () => {
     stubFetch({ '/admin/tenants': { body: [] }, '/admin/companies': { body: [] } });
     renderWithSession(<TenantsPage />, { me: SUPER_ADMIN });
 
-    expect(await screen.findByText('No offices yet.')).toBeInTheDocument();
+    expect(await screen.findByText('No KPMs yet.')).toBeInTheDocument();
     const links = screen.getAllByRole('link', { name: /New office|Create the first one/ });
     expect(links.length).toBeGreaterThanOrEqual(2);
   });

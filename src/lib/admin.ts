@@ -51,6 +51,31 @@ export interface AuditEntry {
   createdAt: string;
 }
 
+export interface AttentionItem {
+  tag: string;
+  severity: 'structural' | 'approval' | 'template';
+  title: string;
+  detail: string;
+  href: string;
+  actionLabel: string;
+}
+
+export interface CompanyCard {
+  companyId: string;
+  name: string;
+  initials: string;
+  kpmCount: number;
+  memberCount: number;
+}
+
+export interface PlatformOverview {
+  tiles: { companies: number; kpms: number; totalMembers: number; agencyBuilders: number };
+  attention: AttentionItem[];
+  companies: CompanyCard[];
+}
+
+export const readPlatformOverview = () => api<PlatformOverview>('/admin/overview');
+
 export const listCompanies = () => api<Company[]>('/admin/companies');
 
 export const createCompany = (body: { name: string; slug: string }) =>

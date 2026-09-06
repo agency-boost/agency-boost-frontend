@@ -74,7 +74,7 @@ export default function NewTenantPage() {
           <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
             {error && <ErrorBanner {...error} />}
 
-            <Field label="Principal insurer" htmlFor="companyId">
+            <Field label="Company" htmlFor="companyId">
               <Select id="companyId" required value={form.companyId} onChange={set('companyId')}>
                 {companies.map((c) => (
                   <option key={c._id} value={c._id}>

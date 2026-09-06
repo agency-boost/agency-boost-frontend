@@ -21,6 +21,7 @@ const config: Config = {
         success: 'var(--color-success)',
         alert: 'var(--color-alert)',
         neutral: 'var(--color-neutral)',
+        info: 'var(--color-info)',
         role: {
           ab: 'var(--color-role-ab)',
           aab: 'var(--color-role-aab)',

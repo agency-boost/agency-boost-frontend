@@ -16,15 +16,24 @@ const SUPER_ADMIN = makeMe({
     pronoun: 'they', initials: 'R', platformRole: 'super_admin',
   },
   membership: null,
-  permissions: ['kpm:list_all', 'company:crud'],
+  permissions: ['kpm:list_all', 'company:crud', 'platform_metrics:read'],
 });
 
-const kpm = (over: Record<string, unknown>) => ({
-  _id: 'kpm-1', companyId: 'co-1', code: '0417', branchName: 'B', address: null,
-  contactPhone: null, ownerUserId: 'u-owner', timezone: 'Asia/Jakarta', locale: 'id-ID',
-  currency: 'IDR', status: 'active', suspendedAt: null, suspendedReason: null,
-  createdAt: '2026-09-01T00:00:00.000Z', settings: {}, ...over,
+const overview = (over: Record<string, unknown> = {}) => ({
+  tiles: { companies: 1, kpms: 8, totalMembers: 1340, agencyBuilders: 61 },
+  attention: [],
+  companies: [
+    { companyId: 'co-1', name: 'Prudential', initials: 'PR', kpmCount: 8, memberCount: 1340 },
+  ],
+  ...over,
 });
+
+const UNOWNED = {
+  tag: 'KPM owner', severity: 'structural' as const,
+  title: '2 offices have no Owner',
+  detail: 'Nobody can administer an office until an Owner is assigned, and only the platform can assign one.',
+  href: '/admin/tenants', actionLabel: 'Review',
+};
 
 describe('admin overview', () => {
   afterEach(() => {
@@ -32,44 +41,67 @@ describe('admin overview', () => {
     vi.unstubAllGlobals();
   });
 
-  it('counts offices by lifecycle state', async () => {
-    stubFetch({
-      '/admin/tenants': {
-        body: [
-          kpm({ _id: 'a' }),
-          kpm({ _id: 'b', status: 'suspended' }),
-          kpm({ _id: 'c', status: 'archived' }),
-        ],
-      },
-      '/admin/companies': { body: [{ _id: 'co-1', name: 'Prudential', slug: 'prudential' }] },
-    });
+  it('AC-1: puts the queue above the tiles, because the console is a work list', async () => {
+    // `Superadmin.html:232` puts `Needs your attention` first in the DOM and its footer
+    // says why: nothing in it can be delegated. Tiles first reads as a dashboard.
+    stubFetch({ '/admin/overview': { body: overview({ attention: [UNOWNED] }) } });
     renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
 
-    const value = async (label: string) =>
-      (await screen.findByText(label)).parentElement?.querySelector('p:last-child')?.textContent;
+    const headings = await screen.findAllByRole('heading', { level: 2 });
+    expect(headings.map((h) => h.textContent)).toEqual([
+      'Needs your attention', 'At a glance', 'Companies',
+    ]);
+  });
 
-    expect(await value('Offices')).toBe('3');
-    expect(await value('Active')).toBe('1');
-    expect(await value('Suspended')).toBe('1');
-    expect(await value('Principals')).toBe('1');
+  it('AC-2: shows the four tiles the prototype names, headcounts included', async () => {
+    stubFetch({ '/admin/overview': { body: overview() } });
+    renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
+
+    // `Companies` and `KPMs` are also a section heading and a sidebar group, so match
+    // each tile by its own number rather than by the word.
+    expect(await screen.findByText('Total members')).toBeInTheDocument();
+    expect(screen.getByText('Agency Builders')).toBeInTheDocument();
+    expect(screen.getByText('61')).toBeInTheDocument();
+    // `KPMs` is a tile label, a section in the sidebar and a figure on the company card,
+    // so it appears more than once by design.
+    expect(screen.getAllByText('KPMs').length).toBeGreaterThan(1);
+    // Grouped, as the prototype writes it — `1,340`, not `1340`. It appears on the tile
+    // and again on the company card, which is why this counts rather than picks.
+    expect(screen.getAllByText('1,340').length).toBeGreaterThan(0);
+    expect(screen.queryByText('1340')).toBeNull();
+  });
+
+  it('AC-3: no longer claims it never reads an office\'s business data', async () => {
+    // ADR-0011 retracted that clause: two of the tiles are cross-tenant headcounts.
+    stubFetch({ '/admin/overview': { body: overview() } });
+    renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
+
+    expect(await screen.findByText('Every company and KPM on AgencyBoost')).toBeInTheDocument();
+    expect(screen.queryByText(/never reads an office/)).toBeNull();
+  });
+
+  it('AC-4: gives a company its office and member totals', async () => {
+    stubFetch({ '/admin/overview': { body: overview() } });
+    renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
+
+    expect(await screen.findByText('Prudential')).toBeInTheDocument();
+    expect(screen.getByText('PR')).toBeInTheDocument();
   });
 
   it('raises an office with no owner, since nobody can administer it until one exists', async () => {
-    stubFetch({
-      '/admin/tenants': { body: [kpm({ _id: 'a', ownerUserId: null })] },
-      '/admin/companies': { body: [] },
-    });
+    stubFetch({ '/admin/overview': { body: overview({ attention: [UNOWNED] }) } });
     renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
 
-    expect(await screen.findByText('1 office without an owner')).toBeInTheDocument();
+    expect(await screen.findByText('2 offices have no Owner')).toBeInTheDocument();
+    expect(screen.getByText(/nothing here can be delegated/)).toBeInTheDocument();
   });
 
-  it('stays quiet when every office has an owner', async () => {
-    stubFetch({ '/admin/tenants': { body: [kpm({ _id: 'a' })] }, '/admin/companies': { body: [] } });
+  it('stays quiet when there is nothing to act on', async () => {
+    stubFetch({ '/admin/overview': { body: overview() } });
     renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
 
-    await screen.findByText('Offices');
-    expect(screen.queryByText(/without an owner/)).not.toBeInTheDocument();
+    expect(await screen.findByText('Nothing needs the platform right now.')).toBeInTheDocument();
+    expect(screen.queryByText(/needs Superadmin action/)).toBeNull();
   });
 
   it('signs out from the sidebar, without needing the account screen first', async () => {
@@ -94,11 +126,11 @@ describe('admin overview', () => {
     expect(screen.getByText('root@agencyboost.test')).toBeInTheDocument();
   });
 
-  it('shows a placeholder rather than a misleading zero before the counts arrive', () => {
-    stubFetch({ '/admin/tenants': { body: [] }, '/admin/companies': { body: [] } });
+  it('says it is loading rather than showing a misleading zero', () => {
+    stubFetch({ '/admin/overview': { body: overview() } });
     renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
-    // A zero here would read as "there are no offices", which is a different claim
-    // from "we have not been told yet".
-    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+
+    expect(screen.getByRole('status')).toHaveTextContent('Loading…');
   });
+
 });

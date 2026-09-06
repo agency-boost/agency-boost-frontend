@@ -84,6 +84,19 @@ async function expectClean(name: string) {
   expect(violations).toHaveLength(0);
 }
 
+const OVERVIEW = {
+  tiles: { companies: 1, kpms: 8, totalMembers: 1340, agencyBuilders: 61 },
+  attention: [{
+    tag: 'KPM owner', severity: 'structural' as const,
+    title: '2 offices have no Owner',
+    detail: 'Nobody can administer an office until an Owner is assigned, and only the platform can assign one.',
+    href: '/admin/tenants', actionLabel: 'Review',
+  }],
+  companies: [
+    { companyId: 'co-1', name: 'Prudential', initials: 'PR', kpmCount: 8, memberCount: 1340 },
+  ],
+};
+
 describe('Phase 2 screens have no axe violations', () => {
   afterEach(() => {
     cleanup();
@@ -135,16 +148,16 @@ describe('Phase 2 screens have no axe violations', () => {
   });
 
   it('admin overview, with the unowned-office warning showing', async () => {
-    stubFetch({ '/admin/tenants': { body: [KPM] }, '/admin/companies': { body: [COMPANY] } });
+    stubFetch({ '/admin/overview': { body: OVERVIEW } });
     renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
-    await screen.findByText(/without an owner/);
+    await screen.findByText('2 offices have no Owner');
     await expectClean('admin');
   });
 
   it('admin overview with the sidebar account menu open', async () => {
     // Closed, the menu contributes nothing to check. The open state is the one that
     // can get aria-expanded, focus order or labelling wrong.
-    stubFetch({ '/admin/tenants': { body: [KPM] }, '/admin/companies': { body: [COMPANY] } });
+    stubFetch({ '/admin/overview': { body: OVERVIEW } });
     renderWithSession(<AdminOverviewPage />, { me: SUPER_ADMIN });
     await userEvent.click(await screen.findByRole('button', { name: /Root/ }));
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();

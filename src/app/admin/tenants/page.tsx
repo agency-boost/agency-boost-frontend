@@ -30,8 +30,8 @@ export default function TenantsPage() {
 
   return (
     <AdminShell
-      title="Tenants"
-      subtitle="Every office on the platform. An office exists only because someone here created it."
+      title="All KPMs"
+      subtitle="Every KPM on the platform. One exists only because somebody here created it."
       actions={
         <ButtonLink href="/admin/tenants/new">New office</ButtonLink>
       }
@@ -47,7 +47,7 @@ export default function TenantsPage() {
       {tenants?.length === 0 && !error && (
         <div className="rounded-lg border border-hairline bg-card">
           <EmptyState
-            title="No offices yet."
+            title="No KPMs yet."
             action={
               <Link href="/admin/tenants/new" className="text-md text-navy underline">
                 Create the first one

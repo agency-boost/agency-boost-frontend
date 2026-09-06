@@ -33,6 +33,11 @@
   /* Role accents. Always paired with a text label — colour is never the only cue. */
   --color-role-ab: #f2994a;
   --color-role-aab: #2f80ed;
+  /* The prototype's `--blue` (`Superadmin.html:17`), which it uses for both the AAB tile
+     and the `approval` chip on the attention queue. Held as its own token because a role
+     colour and a severity are different ideas; that they share a hex today is a fact
+     about this palette, not a reason to make one stand for the other. */
+  --color-info: #2f80ed;
   --color-role-agent: rgba(27, 43, 75, 0.32);
 
   /* Typography */

@@ -41,8 +41,8 @@ export default function CompaniesPage() {
 
   return (
     <AdminShell
-      title="Principal insurers"
-      subtitle="An office belongs to exactly one insurer, and inherits its currency, locale and time zone."
+      title="Companies"
+      subtitle="Each company has its own role ladder, product catalog, and KPM template. A KPM belongs to exactly one, and inherits its currency, locale and time zone."
     >
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <div>
@@ -57,7 +57,7 @@ export default function CompaniesPage() {
             </div>
           )}
           {companies && companies.length > 0 && (
-            <DataTable caption="Principal insurers" columns={['Name', 'Slug', 'Currency', 'Time zone']}>
+            <DataTable caption="Companies" columns={['Name', 'Slug', 'Currency', 'Time zone']}>
               {companies.map((c) => (
                 <Row key={c._id}>
                   <Cell className="font-semibold">{c.name}</Cell>
