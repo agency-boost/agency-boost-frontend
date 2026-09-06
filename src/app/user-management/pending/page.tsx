@@ -112,7 +112,7 @@ export default function PendingPage() {
         )}
 
         {requests?.length === 0 && (
-          <EmptyState title="Nothing is waiting on you right now." />
+          <EmptyState title="No pending requests right now." />
         )}
 
         <ul className="mt-4 flex flex-col gap-3">

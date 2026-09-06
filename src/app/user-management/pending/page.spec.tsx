@@ -163,7 +163,7 @@ describe('the approval inbox (P3-T5)', () => {
     renderWithSession(<PendingPage />, { me: AB });
 
     await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
-    expect(await screen.findByText('Nothing is waiting on you right now.')).toBeInTheDocument();
+    expect(await screen.findByText('No pending requests right now.')).toBeInTheDocument();
   });
 
   it('asks why before declining, and sends it', async () => {

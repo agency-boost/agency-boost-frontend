@@ -213,7 +213,7 @@ export default function FindLeaderPage() {
                 variant={q ? 'filtered' : 'empty'}
                 title={
                   q
-                    ? 'No leaders match that name.'
+                    ? 'No leaders match that search.'
                     : 'This office has no Agency Builders or Associate Agency Builders yet.'
                 }
               />

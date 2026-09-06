@@ -239,10 +239,10 @@ export function roleChangeExplanation(
   to: HierarchyRole,
 ): string {
   if (from === 'agent' && to === 'aab') {
-    return `${name} will change from Agent to Associate Agency Builder. They keep reporting to you, and can now recruit and manage their own agents.`;
+    return `${name} will change from Agent to Associate Agency Builder. They keep reporting to you, and can now recruit and manage their own direct agents.`;
   }
   if (from === 'aab' && to === 'agent') {
-    return `${name} will change from Associate Agency Builder back to Agent. They keep reporting to you, but will no longer manage their own agents.`;
+    return `${name} will change from Associate Agency Builder back to Agent. They keep reporting to you, but will no longer manage their own direct agents.`;
   }
   return `${name} will change from ${ROLE_LABEL[from]} to ${ROLE_LABEL[to]}. Nobody moves — they keep reporting to whoever they report to now.`;
 }

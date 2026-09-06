@@ -269,7 +269,7 @@ describe('inviting people (P3-T4)', () => {
       await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
       // The card says it in general; the confirmation says it about this person, which
       // is the one somebody reads before pressing the button.
-      const explanation = screen.getByText(/can now recruit and manage their own agents/);
+      const explanation = screen.getByText(/can now recruit and manage their own direct agents/);
       expect(explanation).toHaveTextContent('They keep reporting to you');
       expect(explanation).toHaveTextContent('Rina Wijaya');
     });
@@ -279,7 +279,7 @@ describe('inviting people (P3-T4)', () => {
       renderWithSession(<AddAgentsPage />, { me: LEADER });
 
       await userEvent.selectOptions(await screen.findByLabelText('Role'), 'agent');
-      expect(screen.getByText(/no longer manage their own agents/)).toBeInTheDocument();
+      expect(screen.getByText(/no longer manage their own direct agents/)).toBeInTheDocument();
     });
 
     it('changes nothing until it is confirmed', async () => {
@@ -580,7 +580,7 @@ describe('inviting people (P3-T4)', () => {
         await screen.findByText('Everybody in this office already reports to somebody.'),
       ).toBeInTheDocument();
       await userEvent.type(screen.getByLabelText('Search by name'), 'zzz');
-      expect(await screen.findByText('Nobody untagged matches that name.')).toBeInTheDocument();
+      expect(await screen.findByText('No untagged agents match that search.')).toBeInTheDocument();
     });
 
     it('surfaces a refusal, such as somebody who already has a leader', async () => {

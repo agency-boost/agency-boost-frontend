@@ -131,7 +131,7 @@ describe('find your leader (P3-T3)', () => {
     ).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText('Search by name'), 'zzz');
-    expect(await screen.findByText('No leaders match that name.')).toBeInTheDocument();
+    expect(await screen.findByText('No leaders match that search.')).toBeInTheDocument();
   });
 
   it('surfaces a refused request rather than appearing to send it', async () => {

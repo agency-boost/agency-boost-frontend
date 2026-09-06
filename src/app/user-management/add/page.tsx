@@ -381,7 +381,7 @@ export default function AddAgentsPage() {
             variant={pool ? 'filtered' : 'empty'}
             title={
               pool
-                ? 'Nobody untagged matches that name.'
+                ? 'No untagged agents match that search.'
                 : 'Everybody in this office already reports to somebody.'
             }
           />
