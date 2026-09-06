@@ -9,6 +9,7 @@ import { Button, ErrorBanner, Field, Select, TextInput } from '@/components/ui/f
 import { RoleBadge } from '@/components/ui/role-badge';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { declineRequest, readInbox, approveRequest, type PendingRequest } from '@/lib/join';
 import {
   archiveGroup,
   createGroup,
@@ -58,13 +59,13 @@ const STATUS_TO_PILL: Record<MemberStatus, 'success' | 'alert' | 'neutral'> = {
  */
 const TABS = [
   { key: 'directory', label: 'Directory', count: 'directory' },
-  { key: 'pending', label: 'Pending', count: 'pending', upcoming: true },
+  { key: 'pending', label: 'Pending', count: 'pending' },
   { key: 'removed', label: 'Removed', count: 'removed' },
   { key: 'rolelog', label: 'Role change log' },
   { key: 'groups', label: 'Groups' },
 ] as const;
 
-type TabKey = Exclude<(typeof TABS)[number]['key'], 'pending'>;
+type TabKey = (typeof TABS)[number]['key'];
 
 export default function MembersPage() {
   const [tab, setTab] = useState<TabKey>('directory');
@@ -87,6 +88,7 @@ export default function MembersPage() {
   const [cursors, setCursors] = useState<string[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [counts, setCounts] = useState<MemberPage['counts'] | null>(null);
+  const [requests, setRequests] = useState<PendingRequest[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
   const load = useCallback(
@@ -98,6 +100,18 @@ export default function MembersPage() {
         } catch (err) {
           setError(toDisplayError(err));
           setLog([]);
+        }
+        return;
+      }
+      if (tab === 'pending') {
+        try {
+          // The office's whole queue, not this reader's own — the Owner and an Admin
+          // hold `leader_request:approve` at `own-kpm`, and a request nobody answers is
+          // what this screen exists to catch.
+          setRequests(await readInbox());
+        } catch (err) {
+          setError(toDisplayError(err));
+          setRequests([]);
         }
         return;
       }
@@ -133,6 +147,26 @@ export default function MembersPage() {
     },
     [q, role, tab],
   );
+
+  async function decide(requestId: string, action: 'approve' | 'decline') {
+    setBusy(true);
+    setError(null);
+    try {
+      // The server answers with the queue as it now stands, so two admins deciding at
+      // once see the truth rather than their own guess about it.
+      setRequests(
+        action === 'approve' ? await approveRequest(requestId) : await declineRequest(requestId),
+      );
+    } catch (err) {
+      setError(toDisplayError(err));
+      // Re-read the queue directly rather than through `load()`, which clears the error
+      // on its first line — the refusal would vanish before it could be read. A conflict
+      // usually means somebody else decided it first, so the list does need refreshing.
+      await readInbox().then(setRequests).catch(() => undefined);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function saveGroup() {
     if (!editing || editing.name.trim() === '') return;
@@ -217,7 +251,7 @@ export default function MembersPage() {
         )}
       </div>
 
-      {tab !== 'rolelog' && tab !== 'groups' && (
+      {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && (
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <Field label="Search" htmlFor="q" className="min-w-56 flex-1">
           <TextInput
@@ -281,6 +315,67 @@ export default function MembersPage() {
                   </Cell>
                   <Cell className="text-muted">{entry.reason ?? '—'}</Cell>
                   <Cell className="text-muted">{entry.actorName ?? '—'}</Cell>
+                </Row>
+              ))}
+            </DataTable>
+          )}
+        </>
+      )}
+
+      {tab === 'pending' && (
+        <>
+          <p className="mb-3 text-md text-muted">
+            Approve or decline requests from agents asking to join your KPM. Approving adds them
+            under <strong>the leader they asked for</strong>, not under you.
+          </p>
+
+          {requests === null && !error && (
+            <p role="status" className="text-md text-muted">
+              Loading…
+            </p>
+          )}
+
+          {requests?.length === 0 && !error && (
+            <div className="rounded-lg border border-hairline bg-card">
+              <EmptyState title="Nobody is waiting on a decision right now." />
+            </div>
+          )}
+
+          {requests && requests.length > 0 && (
+            <DataTable
+              caption="Requests waiting on a decision"
+              columns={['Who', 'Asking to join', 'Waiting since', { label: 'Actions', visuallyHidden: true }]}
+            >
+              {requests.map((r) => (
+                <Row key={r.requestId}>
+                  <Cell className="font-semibold">
+                    {r.fullName}
+                    <span className="block text-sm font-normal text-muted">
+                      {r.agentCode} · {r.email}
+                    </span>
+                  </Cell>
+                  <Cell className="text-muted">
+                    {r.routedFromName ? `${r.routedFromName}’s unit` : 'a leader in this office'}
+                  </Cell>
+                  <Cell className="whitespace-nowrap text-muted">
+                    <time dateTime={r.requestedAt}>
+                      {new Date(r.requestedAt).toLocaleDateString('en-GB')}
+                    </time>
+                  </Cell>
+                  <Cell>
+                    <span className="flex flex-wrap gap-2">
+                      <Button disabled={busy} onClick={() => void decide(r.requestId, 'approve')}>
+                        Approve
+                      </Button>
+                      <Button
+                        variant="danger"
+                        disabled={busy}
+                        onClick={() => void decide(r.requestId, 'decline')}
+                      >
+                        Decline
+                      </Button>
+                    </span>
+                  </Cell>
                 </Row>
               ))}
             </DataTable>
@@ -438,13 +533,13 @@ export default function MembersPage() {
         </>
       )}
 
-      {tab !== 'rolelog' && tab !== 'groups' && page === null && (
+      {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && page === null && (
         <p role="status" className="text-md text-muted">
           Loading…
         </p>
       )}
 
-      {tab !== 'rolelog' && tab !== 'groups' && page?.length === 0 && !error && (
+      {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && page?.length === 0 && !error && (
         <div className="rounded-lg border border-hairline bg-card">
           <EmptyState
             variant={filtered ? 'filtered' : 'empty'}
@@ -472,7 +567,7 @@ export default function MembersPage() {
         </div>
       )}
 
-      {tab !== 'rolelog' && tab !== 'groups' && page && page.length > 0 && (
+      {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && page && page.length > 0 && (
         <>
           <DataTable
             caption={tab === 'removed' ? 'Removed members' : 'Office roster'}

@@ -397,6 +397,32 @@ describe('Phase 2 screens have no axe violations', () => {
     await expectClean('people/members (removed)');
   });
 
+  it('the Pending queue, populated', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+      },
+      permissions: ['member:read_profile'],
+    });
+    stubFetch({
+      '/join/requests': {
+        body: [{
+          requestId: 'req-1', membershipId: 'mem-9', fullName: 'Putri Anggraini', initials: 'PA',
+          email: 'putri@kpm0417.test', agentCode: 'KPM0417-009', role: 'agent',
+          requestedAt: '2026-09-01T00:00:00.000Z', routedFromName: null,
+        }],
+      },
+      '/members': {
+        body: { members: [], nextCursor: null, counts: { directory: 8, pending: 1, removed: 0 } },
+      },
+    });
+    renderWithSession(<MembersPage />, { me: owner });
+    await userEvent.click(await screen.findByRole('button', { name: 'Pending (1)' }));
+    await screen.findByRole('table');
+    await expectClean('people/members (pending)');
+  });
+
   it('the role change log, populated', async () => {
     const owner = makeMe({
       membership: {

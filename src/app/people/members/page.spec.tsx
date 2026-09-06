@@ -151,7 +151,7 @@ describe('members directory (P3-T1 AC-3)', () => {
   it('keeps the tabs it has not built visible rather than hiding the roadmap', async () => {
     stubFetch({ '/members': { body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } } } });
     renderWithSession(<MembersPage />, { me: OWNER });
-    for (const label of ['Pending']) {
+    for (const label of []) {
       expect(await screen.findByText(label)).toHaveAttribute('aria-disabled', 'true');
     }
   });
@@ -229,6 +229,85 @@ describe('members directory (P3-T1 AC-3)', () => {
       await vi.waitFor(() =>
         expect(calls[calls.length - 1].url).not.toContain('/members/role-changes'),
       );
+    });
+  });
+
+  describe('the Pending tab (P3.5)', () => {
+    const request = (over: Record<string, unknown> = {}) => ({
+      requestId: 'req-1', membershipId: 'mem-9', fullName: 'Putri Anggraini', initials: 'PA',
+      email: 'putri@kpm0417.test', agentCode: 'KPM0417-009', role: 'agent',
+      requestedAt: '2026-09-01T00:00:00.000Z', routedFromName: null, ...over,
+    });
+
+    function open(rows: Record<string, unknown>[] = [request()], extra = {}) {
+      const stub = stubFetch({
+        '/join/requests': { body: rows },
+        '/members': {
+          body: { members: [], nextCursor: null, counts: { directory: 8, pending: 2, removed: 1 } },
+        },
+        ...extra,
+      });
+      renderWithSession(<MembersPage />, { me: OWNER });
+      return stub;
+    }
+
+    it('is clickable, and reads the office queue rather than the roster', async () => {
+      const { calls } = open();
+      await userEvent.click(await screen.findByRole('button', { name: 'Pending (2)' }));
+
+      await screen.findByRole('table');
+      expect(calls.some((c) => c.url.includes('/join/requests'))).toBe(true);
+      // The roster filters would filter nothing here.
+      expect(screen.queryByLabelText('Search')).not.toBeInTheDocument();
+    });
+
+    it('says approving puts them under the leader they asked for, not under you', async () => {
+      // The trap the server fix closed: an Owner clearing the queue would otherwise have
+      // moved every joiner into their own unit.
+      open();
+      await userEvent.click(await screen.findByRole('button', { name: 'Pending (2)' }));
+      expect(await screen.findByText(/the leader they asked for/)).toBeInTheDocument();
+    });
+
+    it('shows who is waiting, and since when', async () => {
+      open();
+      await userEvent.click(await screen.findByRole('button', { name: 'Pending (2)' }));
+      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Putri/ });
+      expect(row).toHaveTextContent('KPM0417-009');
+      expect(row).toHaveTextContent('01/09/2026');
+    });
+
+    it('approves and declines through the queue', async () => {
+      const { calls } = open([request()], { '/join/requests/req-1/approve': { body: [] } });
+      await userEvent.click(await screen.findByRole('button', { name: 'Pending (2)' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+
+      expect(calls.find((c) => c.init.method === 'POST')!.url).toContain('/req-1/approve');
+    });
+
+    it('has an empty state of its own', async () => {
+      open([]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Pending (2)' }));
+      expect(await screen.findByText('Nobody is waiting on a decision right now.')).toBeInTheDocument();
+    });
+
+    it('surfaces a refusal rather than looking like it worked', async () => {
+      open([request()], {
+        '/join/requests/req-1/approve': {
+          status: 409,
+          body: {
+            error: {
+              code: 'ORG_REQUEST_ALREADY_DECIDED',
+              message: 'That request was already approved.',
+              requestId: 'r-1',
+            },
+          },
+        },
+      });
+      await userEvent.click(await screen.findByRole('button', { name: 'Pending (2)' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('already approved');
     });
   });
 
