@@ -76,6 +76,35 @@ export interface PlatformOverview {
 
 export const readPlatformOverview = () => api<PlatformOverview>('/admin/overview');
 
+export interface KpmRequestRow {
+  requestId: string;
+  branchName: string;
+  companyId: string;
+  companyName: string;
+  requestedByName: string;
+  requestedByEmail: string;
+  note: string | null;
+  status: 'pending' | 'approved' | 'declined';
+  requestedAt: string;
+  decidedAt: string | null;
+  reason: string | null;
+  createdKpmId: string | null;
+}
+
+export const readKpmRequests = () => api<KpmRequestRow[]>('/admin/kpm-requests');
+
+export const approveKpmRequest = (requestId: string, code: string) =>
+  api<KpmRequestRow[]>(`/admin/kpm-requests/${requestId}/approve`, {
+    method: 'POST',
+    body: { code },
+  });
+
+export const declineKpmRequest = (requestId: string, reason?: string) =>
+  api<KpmRequestRow[]>(`/admin/kpm-requests/${requestId}/decline`, {
+    method: 'POST',
+    body: { reason },
+  });
+
 export const listCompanies = () => api<Company[]>('/admin/companies');
 
 export const createCompany = (body: { name: string; slug: string }) =>

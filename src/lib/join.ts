@@ -7,6 +7,8 @@ export interface KpmDirectoryEntry {
   kpmId: string;
   code: string;
   branchName: string;
+  /** Needed by somebody asking for an office that does not exist yet. */
+  companyId: string;
   companyName: string;
   city: string | null;
 }
@@ -144,3 +146,18 @@ export const searchUntagged = (q?: string) =>
 
 export const tagUntagged = (membershipId: string) =>
   api<UntaggedMember[]>(`/join/untagged/${membershipId}`, { method: 'POST' });
+
+export interface MyKpmRequest {
+  requestId: string;
+  branchName: string;
+  companyName: string;
+  status: 'pending' | 'approved' | 'declined';
+  requestedAt: string;
+  reason: string | null;
+  createdKpmId: string | null;
+}
+
+export const readMyKpmRequest = () => api<MyKpmRequest | null>('/join/kpm-request');
+
+export const askForKpm = (body: { companyId: string; branchName: string; note?: string }) =>
+  api<MyKpmRequest>('/join/kpm-request', { method: 'POST', body });

@@ -27,7 +27,7 @@ describe('register KPM (P3-T3)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('shows the empty state and an open search for somebody in no office', async () => {
-    stubFetch({ '/join/me': { body: NO_OFFICE }, '/join/kpms': { body: OFFICES } });
+    stubFetch({ '/join/me': { body: NO_OFFICE }, '/join/kpm-request': { body: null }, '/join/kpms': { body: OFFICES } });
     renderWithSession(<RegisterKpmPage />, { me: NEWCOMER });
 
     expect(await screen.findByText('No office registered yet')).toBeInTheDocument();
@@ -36,7 +36,7 @@ describe('register KPM (P3-T3)', () => {
   });
 
   it('AC-2: locks Find your leader until an office is registered', async () => {
-    stubFetch({ '/join/me': { body: NO_OFFICE }, '/join/kpms': { body: OFFICES } });
+    stubFetch({ '/join/me': { body: NO_OFFICE }, '/join/kpm-request': { body: null }, '/join/kpms': { body: OFFICES } });
     renderWithSession(<RegisterKpmPage />, { me: NEWCOMER });
 
     const locked = await screen.findByText('Find Your Leader');
@@ -45,7 +45,7 @@ describe('register KPM (P3-T3)', () => {
   });
 
   it('searches the directory by code or branch name', async () => {
-    const { calls } = stubFetch({ '/join/me': { body: NO_OFFICE }, '/join/kpms': { body: OFFICES } });
+    const { calls } = stubFetch({ '/join/me': { body: NO_OFFICE }, '/join/kpm-request': { body: null }, '/join/kpms': { body: OFFICES } });
     renderWithSession(<RegisterKpmPage />, { me: NEWCOMER });
 
     await userEvent.type(await screen.findByLabelText('Search'), '0417');
@@ -57,7 +57,7 @@ describe('register KPM (P3-T3)', () => {
     // so the summary band keeps naming the office you did not pick.
     stubFetch({
       '/join/me': { body: NO_OFFICE },
-      '/join/kpms': { body: OFFICES },
+      '/join/kpm-request': { body: null }, '/join/kpms': { body: OFFICES },
       '/join/kpm': { body: REGISTERED },
     });
     renderWithSession(<RegisterKpmPage />, { me: NEWCOMER });
@@ -69,7 +69,7 @@ describe('register KPM (P3-T3)', () => {
   });
 
   it('unlocks Find your leader once registered, in the tabs and on the card', async () => {
-    stubFetch({ '/join/me': { body: REGISTERED }, '/join/kpms': { body: OFFICES } });
+    stubFetch({ '/join/me': { body: REGISTERED }, '/join/kpm-request': { body: null }, '/join/kpms': { body: OFFICES } });
     renderWithSession(<RegisterKpmPage />, { me: NEWCOMER });
 
     // Two of them: the sub-tab, now navigable rather than locked, and the call to
@@ -82,13 +82,13 @@ describe('register KPM (P3-T3)', () => {
   });
 
   it('says registering is not membership, so nobody waits for nothing', async () => {
-    stubFetch({ '/join/me': { body: REGISTERED }, '/join/kpms': { body: OFFICES } });
+    stubFetch({ '/join/me': { body: REGISTERED }, '/join/kpm-request': { body: null }, '/join/kpms': { body: OFFICES } });
     renderWithSession(<RegisterKpmPage />, { me: NEWCOMER });
     expect(await screen.findByText(/waiting for a leader to take you on/)).toBeInTheDocument();
   });
 
   it('offers no "switch office" button, because it would not switch anything', async () => {
-    stubFetch({ '/join/me': { body: REGISTERED }, '/join/kpms': { body: OFFICES } });
+    stubFetch({ '/join/me': { body: REGISTERED }, '/join/kpm-request': { body: null }, '/join/kpms': { body: OFFICES } });
     renderWithSession(<RegisterKpmPage />, { me: NEWCOMER });
 
     await screen.findByText(/Registered office/);
@@ -97,7 +97,7 @@ describe('register KPM (P3-T3)', () => {
   });
 
   it('tells an empty directory apart from an empty search', async () => {
-    stubFetch({ '/join/me': { body: NO_OFFICE }, '/join/kpms': { body: [] } });
+    stubFetch({ '/join/me': { body: NO_OFFICE }, '/join/kpm-request': { body: null }, '/join/kpms': { body: [] } });
     renderWithSession(<RegisterKpmPage />, { me: NEWCOMER });
 
     expect(await screen.findByText('No offices are available to join.')).toBeInTheDocument();
@@ -108,7 +108,7 @@ describe('register KPM (P3-T3)', () => {
   it('surfaces a refused registration rather than appearing to succeed', async () => {
     stubFetch({
       '/join/me': { body: NO_OFFICE },
-      '/join/kpms': { body: OFFICES },
+      '/join/kpm-request': { body: null }, '/join/kpms': { body: OFFICES },
       '/join/kpm': {
         status: 409,
         body: { error: { code: 'ORG_AGENT_ALREADY_TAGGED', message: 'You are already registered to an office.', requestId: 'r-1' } },
@@ -118,5 +118,56 @@ describe('register KPM (P3-T3)', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Select' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('already registered');
+  });
+  it('AC-1: offers asking for an office only after the search comes back empty', async () => {
+    // Below the search and quiet about it. Almost everybody here has an office to find,
+    // and offering "ask for a new one" as an equal choice would invite duplicates of
+    // offices that already exist.
+    stubFetch({
+      '/join/kpm-request': { body: null },
+      '/join/kpms': { body: [] },
+      '/join/me': { body: { kpmId: null, kpmLabel: null, status: null, leaderName: null, leaderMembershipId: null, pendingRequestTo: null } },
+    });
+    renderWithSession(<RegisterKpmPage />, { me: NEWCOMER });
+
+    expect(await screen.findByText('Cannot find your office?')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ask for an office' })).toBeInTheDocument();
+  });
+
+  it('AC-1: shows where an open request stands instead of inviting a second', async () => {
+    // The API allows one at a time. Offering the form again is how somebody ends up with
+    // two offices created for them.
+    stubFetch({
+      '/join/kpm-request': {
+        body: {
+          requestId: 'r1', branchName: 'Surabaya Branch', companyName: 'Prudential',
+          status: 'pending', requestedAt: '2026-09-01T00:00:00.000Z', reason: null,
+          createdKpmId: null,
+        },
+      },
+      '/join/kpms': { body: [] },
+      '/join/me': { body: { kpmId: null, kpmLabel: null, status: null, leaderName: null, leaderMembershipId: null, pendingRequestTo: null } },
+    });
+    renderWithSession(<RegisterKpmPage />, { me: NEWCOMER });
+
+    expect(await screen.findByText('You asked for an office')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Ask for an office' })).toBeNull();
+  });
+
+  it('gives a declined request its reason back, and lets them try again', async () => {
+    stubFetch({
+      '/join/kpm-request': {
+        body: {
+          requestId: 'r1', branchName: 'Surabaya Branch', companyName: 'Prudential',
+          status: 'declined', requestedAt: '2026-09-01T00:00:00.000Z',
+          reason: 'This branch already trades under KPM 0417.', createdKpmId: null,
+        },
+      },
+      '/join/kpms': { body: [] },
+      '/join/me': { body: { kpmId: null, kpmLabel: null, status: null, leaderName: null, leaderMembershipId: null, pendingRequestTo: null } },
+    });
+    renderWithSession(<RegisterKpmPage />, { me: NEWCOMER });
+
+    expect(await screen.findByText('This branch already trades under KPM 0417.')).toBeInTheDocument();
   });
 });
