@@ -101,12 +101,17 @@ export interface PendingRequest {
   requestedAt: string;
   /** Set when somebody above routed this to you instead of deciding it themselves. */
   routedFromName: string | null;
+  /** The leader this request names — always you in your own inbox, not in the office queue. */
+  leaderMembershipId: string;
+  leaderName: string;
 }
 
 export interface RoutingChoice {
   membershipId: string;
   fullName: string;
   unitSize: number;
+  /** Whose sub-unit this is. The office queue holds rows for many leaders. */
+  forLeaderMembershipId: string;
 }
 
 export interface UntaggedMember {

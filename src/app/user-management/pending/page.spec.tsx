@@ -20,10 +20,13 @@ const AB = makeMe({
 const request = (over: Record<string, unknown> = {}) => ({
   requestId: 'req-1', membershipId: 'mem-joiner', fullName: 'Putri Anggraini',
   initials: 'PA', email: 'putri@kpm0417.test', agentCode: 'KPM0417-009',
-  role: 'agent', requestedAt: '2026-09-01T00:00:00.000Z', routedFromName: null, ...over,
+  role: 'agent', requestedAt: '2026-09-01T00:00:00.000Z', routedFromName: null,
+  leaderMembershipId: 'mem-ab', leaderName: 'Agus Prasetyo', ...over,
 });
 
-const ROUTING = [{ membershipId: 'mem-aab', fullName: 'Sari Puspita', unitSize: 2 }];
+const ROUTING = [
+  { membershipId: 'mem-aab', fullName: 'Sari Puspita', unitSize: 2, forLeaderMembershipId: 'mem-ab' },
+];
 
 describe('the approval inbox (P3-T5)', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -59,6 +62,43 @@ describe('the approval inbox (P3-T5)', () => {
     const select = await screen.findByLabelText('Add to');
     expect(within(select).getByRole('option', { name: 'My own unit' })).toBeInTheDocument();
     expect(within(select).getByRole('option', { name: "Sari Puspita's unit (2)" })).toBeInTheDocument();
+  });
+
+  it('offers only the sub-units under the leader this row names', async () => {
+    // The office queue holds rows naming different leaders, and the API validates a
+    // destination against the leader the *request* names. An unfiltered list offered an
+    // Owner choices that were all refused with 422.
+    stubFetch({
+      '/join/requests/routing': {
+        body: [
+          ...ROUTING,
+          { membershipId: 'mem-other', fullName: 'Someone Else', unitSize: 4,
+            forLeaderMembershipId: 'mem-other-ab' },
+        ],
+      },
+      '/join/requests': { body: [request()] },
+    });
+    renderWithSession(<PendingPage />, { me: AB });
+
+    const select = await screen.findByLabelText('Add to');
+    expect(within(select).getByRole('option', { name: "Sari Puspita's unit (2)" })).toBeInTheDocument();
+    expect(within(select).queryByRole('option', { name: "Someone Else's unit (4)" })).toBeNull();
+  });
+
+  it('names the leader rather than saying "my own" when deciding for somebody else', async () => {
+    stubFetch({
+      '/join/requests/routing': {
+        body: [{ ...ROUTING[0], forLeaderMembershipId: 'mem-sari' }],
+      },
+      '/join/requests': {
+        body: [request({ leaderMembershipId: 'mem-sari', leaderName: 'Sari Puspita' })],
+      },
+    });
+    renderWithSession(<PendingPage />, { me: AB });
+
+    const select = await screen.findByLabelText('Add to');
+    expect(within(select).getByRole('option', { name: "Sari Puspita's own unit" })).toBeInTheDocument();
+    expect(within(select).queryByRole('option', { name: 'My own unit' })).toBeNull();
   });
 
   it('offers no destination for an AB or AAB — a leader is not placed in a unit', async () => {

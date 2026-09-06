@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { useSession } from '@/lib/session';
 import {
   approveRequest,
   declineRequest,
@@ -29,7 +30,19 @@ import {
  */
 const SELF = '';
 
+/**
+ * The sub-units on offer for one request.
+ *
+ * A destination must sit under the leader the request names — `approve()` validates
+ * exactly that — and the office queue holds rows naming different leaders. One unfiltered
+ * list offered an Owner every choice and had every one of them refused.
+ */
+function unitsUnder(choices: RoutingChoice[], request: PendingRequest): RoutingChoice[] {
+  return choices.filter((c) => c.forLeaderMembershipId === request.leaderMembershipId);
+}
+
 export default function PendingPage() {
+  const { me } = useSession();
   const [requests, setRequests] = useState<PendingRequest[] | null>(null);
   const [routing, setRouting] = useState<RoutingChoice[]>([]);
   const [destination, setDestination] = useState<Record<string, string>>({});
@@ -163,25 +176,36 @@ export default function PendingPage() {
                 <div className="mt-3 flex flex-wrap items-end gap-2">
                   {/* Only for an agent, and only when there is somewhere to send them.
                       An AB or AAB who asked for you is tagged to you directly — a leader
-                      is not placed in somebody else's unit. */}
-                  {request.role === 'agent' && routing.length > 0 && (
-                    <Field label="Add to" htmlFor={`to-${request.requestId}`} className="w-56">
-                      <Select
-                        id={`to-${request.requestId}`}
-                        value={destination[request.requestId] ?? SELF}
-                        onChange={(e) =>
-                          setDestination({ ...destination, [request.requestId]: e.target.value })
-                        }
-                      >
-                        <option value={SELF}>My own unit</option>
-                        {routing.map((choice) => (
-                          <option key={choice.membershipId} value={choice.membershipId}>
-                            {choice.fullName}&apos;s unit ({choice.unitSize})
+                      is not placed in somebody else's unit.
+
+                      Filtered to the leader *this row* names. The office queue holds
+                      requests addressed to different leaders, and a destination under
+                      one of them is refused for a request under another. */}
+                  {request.role === 'agent' &&
+                    unitsUnder(routing, request).length > 0 && (
+                      <Field label="Add to" htmlFor={`to-${request.requestId}`} className="w-56">
+                        <Select
+                          id={`to-${request.requestId}`}
+                          value={destination[request.requestId] ?? SELF}
+                          onChange={(e) =>
+                            setDestination({ ...destination, [request.requestId]: e.target.value })
+                          }
+                        >
+                          {/* Names the leader rather than saying "my own", which is false
+                              whenever an Owner or Admin decides somebody else's request. */}
+                          <option value={SELF}>
+                            {request.leaderMembershipId === me?.membership?.membershipId
+                              ? 'My own unit'
+                              : `${request.leaderName}'s own unit`}
                           </option>
-                        ))}
-                      </Select>
-                    </Field>
-                  )}
+                          {unitsUnder(routing, request).map((choice) => (
+                            <option key={choice.membershipId} value={choice.membershipId}>
+                              {choice.fullName}&apos;s unit ({choice.unitSize})
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    )}
                   <Button
                     disabled={busy !== null}
                     onClick={() => void decide(request, 'approve')}
