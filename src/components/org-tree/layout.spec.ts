@@ -19,6 +19,7 @@ const node = (over: Partial<OrgTreeNode> & { membershipId: string; layer: number
   depth: over.layer - 1,
   leaderId: null,
   directCount: 0,
+  directCounts: { ab: 0, aab: 0, agent: 0, total: 0 },
   subtreeCount: 0,
   isLeader: false,
   isSelf: false,

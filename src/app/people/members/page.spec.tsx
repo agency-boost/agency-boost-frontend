@@ -29,7 +29,7 @@ describe('members directory (P3-T1 AC-3)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('lists the roster with the agent code as issued', async () => {
-    stubFetch({ '/members': { body: { members: [member()], nextCursor: null } } });
+    stubFetch({ '/members': { body: { members: [member()], nextCursor: null, counts: { directory: 187, pending: 14, removed: 3 } } } });
     renderWithSession(<MembersPage />, { me: OWNER });
 
     const row = within(await screen.findByRole('table')).getByRole('row', { name: /Rina/ });
@@ -66,7 +66,7 @@ describe('members directory (P3-T1 AC-3)', () => {
   it('sends the search and role filters to the server, not just to the table', async () => {
     // A filter applied only in the browser would still have fetched every row, which is
     // the thing pagination exists to avoid.
-    const { calls } = stubFetch({ '/members': { body: { members: [], nextCursor: null } } });
+    const { calls } = stubFetch({ '/members': { body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } } } });
     renderWithSession(<MembersPage />, { me: OWNER });
 
     await userEvent.type(screen.getByLabelText('Search'), 'budi');
@@ -82,7 +82,7 @@ describe('members directory (P3-T1 AC-3)', () => {
   it('pages forward with the cursor the server returned', async () => {
     const { calls } = stubFetch({
       '/members': [
-        { body: { members: [member()], nextCursor: '25' } },
+        { body: { members: [member()], nextCursor: '25', counts: { directory: 187, pending: 14, removed: 3 } } },
         { body: { members: [member({ membershipId: 'mem-2', agentCode: 'KPM0417-026' })], nextCursor: null } },
       ],
     });
@@ -95,13 +95,13 @@ describe('members directory (P3-T1 AC-3)', () => {
   });
 
   it('offers Previous only once there is a page to go back to', async () => {
-    stubFetch({ '/members': { body: { members: [member()], nextCursor: '25' } } });
+    stubFetch({ '/members': { body: { members: [member()], nextCursor: '25', counts: { directory: 187, pending: 14, removed: 3 } } } });
     renderWithSession(<MembersPage />, { me: OWNER });
     expect(await screen.findByRole('button', { name: 'Previous' })).toBeDisabled();
   });
 
   it('tells an empty office apart from an empty filter', async () => {
-    stubFetch({ '/members': { body: { members: [], nextCursor: null } } });
+    stubFetch({ '/members': { body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } } } });
     renderWithSession(<MembersPage />, { me: OWNER });
 
     expect(await screen.findByText('This office has no members yet.')).toBeInTheDocument();
@@ -113,7 +113,7 @@ describe('members directory (P3-T1 AC-3)', () => {
   });
 
   it('asks for removed members explicitly, on their own tab', async () => {
-    const { calls } = stubFetch({ '/members': { body: { members: [], nextCursor: null } } });
+    const { calls } = stubFetch({ '/members': { body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } } } });
     renderWithSession(<MembersPage />, { me: OWNER });
 
     await userEvent.click(await screen.findByRole('button', { name: 'Removed' }));
@@ -149,7 +149,7 @@ describe('members directory (P3-T1 AC-3)', () => {
   });
 
   it('keeps the tabs it has not built visible rather than hiding the roadmap', async () => {
-    stubFetch({ '/members': { body: { members: [], nextCursor: null } } });
+    stubFetch({ '/members': { body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } } } });
     renderWithSession(<MembersPage />, { me: OWNER });
     for (const label of ['Pending']) {
       expect(await screen.findByText(label)).toHaveAttribute('aria-disabled', 'true');
@@ -166,7 +166,7 @@ describe('members directory (P3-T1 AC-3)', () => {
     function open(body: unknown) {
       const stub = stubFetch({
         '/members/role-changes': { body },
-        '/members': { body: { members: [], nextCursor: null } },
+        '/members': { body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } } },
       });
       renderWithSession(<MembersPage />, { me: OWNER });
       return stub;
@@ -224,12 +224,56 @@ describe('members directory (P3-T1 AC-3)', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Role change log' }));
       await screen.findByRole('table');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Directory' }));
+      await userEvent.click(screen.getByRole('button', { name: /^Directory/ }));
       expect(await screen.findByLabelText('Search')).toBeInTheDocument();
       await vi.waitFor(() =>
         expect(calls[calls.length - 1].url).not.toContain('/members/role-changes'),
       );
     });
+  });
+
+  it('P3.5: carries the population in the tab label, as the prototype does', async () => {
+    stubFetch({
+      '/members': {
+        body: {
+          members: [member()],
+          nextCursor: null,
+          counts: { directory: 187, pending: 14, removed: 3 },
+        },
+      },
+    });
+    renderWithSession(<MembersPage />, { me: OWNER });
+
+    expect(await screen.findByRole('button', { name: 'Directory (187)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Removed (3)' })).toBeInTheDocument();
+    expect(screen.getByText('Pending (14)')).toBeInTheDocument();
+    // Not a population, so no number — a count there would invite the wrong question.
+    expect(screen.getByRole('button', { name: 'Role change log' })).toBeInTheDocument();
+  });
+
+  it('P3.5: indents a name by role, so the roster reads as the tree it is', async () => {
+    stubFetch({
+      '/members': {
+        body: {
+          members: [
+            member({ membershipId: 'm-ab', fullName: 'An AB', preferredName: null, role: 'ab' }),
+            member({ membershipId: 'm-aab', fullName: 'An AAB', preferredName: null, role: 'aab' }),
+            member({ membershipId: 'm-agent', fullName: 'An Agent', preferredName: null, role: 'agent' }),
+          ],
+          nextCursor: null,
+          counts: { directory: 3, pending: 0, removed: 0 },
+        },
+      },
+    });
+    renderWithSession(<MembersPage />, { me: OWNER });
+
+    const table = await screen.findByRole('table');
+    const indent = (name: string) =>
+      within(table).getByRole('link', { name }).parentElement!.className;
+
+    expect(indent('An AB')).not.toMatch(/pl-/);
+    expect(indent('An AAB')).toContain('pl-4');
+    expect(indent('An Agent')).toContain('pl-8');
   });
 
   describe('the Groups tab (P3-T9)', () => {
@@ -254,7 +298,7 @@ describe('members directory (P3-T1 AC-3)', () => {
       return stubFetch({
         '/members/groups': { body: groups },
         '/members/tree': { body: office },
-        '/members': { body: { members: [member()], nextCursor: null } },
+        '/members': { body: { members: [member()], nextCursor: null, counts: { directory: 187, pending: 14, removed: 3 } } },
         ...extra,
       });
     }

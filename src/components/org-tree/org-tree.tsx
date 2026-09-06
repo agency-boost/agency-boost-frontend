@@ -2,15 +2,9 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { ROLE_LABEL, RoleBadge } from '@/components/ui/role-badge';
+import { ROLE_AVATAR_CLASS, ROLE_LABEL, RoleBadge } from '@/components/ui/role-badge';
 import type { OrgTree as OrgTreeData } from '@/lib/org';
-import {
-  defaultCollapsed,
-  layoutTree,
-  LABEL_HEIGHT,
-  NODE_HEIGHT,
-  NODE_WIDTH,
-} from './layout';
+import { defaultCollapsed, layoutTree, NODE_HEIGHT, NODE_WIDTH } from './layout';
 
 /**
  * The hierarchy, drawn.
@@ -23,6 +17,21 @@ import {
  * measures every card twice per edge on every render and every resize; this positions
  * from the model, so the picture is identical before paint, in a test, and at 500 members.
  */
+/**
+ * *"3 direct agents, 2 AAB"* — the prototype's own sentence (`Group_Overview.html:219-228`),
+ * pluralised, and always in the order agent → AAB → AB.
+ *
+ * A bare total cannot say this. "leads 5" is true of an AB with five agents and of one
+ * with five AABs, and those are different offices.
+ */
+export function unitBreakdown(counts: { ab: number; aab: number; agent: number }): string {
+  const parts: string[] = [];
+  if (counts.agent) parts.push(`${counts.agent} direct agent${counts.agent > 1 ? 's' : ''}`);
+  if (counts.aab) parts.push(`${counts.aab} AAB`);
+  if (counts.ab) parts.push(`${counts.ab} AB`);
+  return parts.join(', ');
+}
+
 export function OrgTree({
   tree,
   personHref,
@@ -55,8 +64,12 @@ export function OrgTree({
         <ul className="flex flex-wrap items-center gap-3">
           {(['ab', 'aab', 'agent'] as const).map((role) => (
             <li key={role} className="flex items-center gap-1.5 text-sm text-muted">
-              <RoleBadge role={role} />
-              {ROLE_LABEL[role]}
+              <span
+                aria-hidden="true"
+                className={`h-2.5 w-2.5 rounded-sm ${ROLE_AVATAR_CLASS[role].split(' ')[0]}`}
+              />
+              {/* The prototype's legend abbreviates the middle one: "Associate AB". */}
+              {role === 'aab' ? 'Associate AB' : ROLE_LABEL[role]}
             </li>
           ))}
         </ul>
@@ -69,12 +82,14 @@ export function OrgTree({
               above — contradicting its own comment. */}
           <p className="text-sm font-semibold uppercase tracking-wide text-muted">Your leader</p>
           <div className="mt-1 inline-flex items-center gap-3 rounded-md border border-dashed border-hairline bg-card p-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-navy-soft text-md font-bold text-card">
+            <span
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-md font-bold ${ROLE_AVATAR_CLASS[tree.leader.role]}`}
+            >
               {tree.leader.initials}
             </span>
             <span>
               <span className="block text-md font-semibold text-navy">{tree.leader.fullName}</span>
-              <RoleBadge role={tree.leader.role} />
+              <RoleBadge role={tree.leader.role} tone="muted" />
             </span>
           </div>
         </div>
@@ -83,13 +98,13 @@ export function OrgTree({
       <div className="mt-4 overflow-x-auto">
         <div
           className="relative inline-block min-w-full"
-          style={{ width: layout.width, height: layout.height + LABEL_HEIGHT }}
+          style={{ width: layout.width, height: layout.height }}
           data-testid="tree-canvas"
         >
           <svg
             className="pointer-events-none absolute inset-0 overflow-visible"
             width={layout.width}
-            height={layout.height + LABEL_HEIGHT}
+            height={layout.height}
             aria-hidden="true"
           >
             {layout.edges.map((edge) => (
@@ -122,9 +137,11 @@ export function OrgTree({
                     className={`absolute flex items-center gap-2 rounded-md border bg-card p-2 ${
                       node.isSelf ? 'border-amber' : 'border-hairline'
                     }`}
-                    style={{ left: x, top: y + LABEL_HEIGHT, width: NODE_WIDTH, height: NODE_HEIGHT }}
+                    style={{ left: x, top: y, width: NODE_WIDTH, height: NODE_HEIGHT }}
                   >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-soft text-sm font-bold text-card">
+                    <span
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-2xs font-bold ${ROLE_AVATAR_CLASS[node.role]}`}
+                    >
                       {node.initials}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -142,15 +159,17 @@ export function OrgTree({
                           </span>
                         )}
                       </span>
-                      <span className="flex items-center gap-1.5">
-                        <RoleBadge role={node.role} />
-                        {/* Their own unit, never cumulative — the prototype is explicit
-                            about this, and a cumulative number here would double-count
-                            everybody below. */}
-                        {node.isLeader && (
-                          <span className="text-sm text-muted">leads {node.directCount}</span>
-                        )}
+                      <span className="mt-0.5 flex items-center gap-1.5">
+                        <RoleBadge role={node.role} tone="muted" />
                       </span>
+                      {/* Their own unit, never cumulative — the prototype is explicit
+                          about this, and a cumulative number would double-count everybody
+                          below. */}
+                      {node.isLeader && (
+                        <span className="mt-0.5 block truncate text-2xs text-muted">
+                          {unitBreakdown(node.directCounts)}
+                        </span>
+                      )}
                     </span>
 
                     {node.isLeader && (

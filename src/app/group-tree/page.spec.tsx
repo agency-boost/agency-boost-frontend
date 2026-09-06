@@ -19,7 +19,7 @@ const LEADER = makeMe({
 
 const node = (over: Record<string, unknown>) => ({
   fullName: 'Somebody', preferredName: null, initials: 'SB', agentCode: 'KPM0417-000',
-  role: 'agent', depth: 0, layer: 1, leaderId: null, directCount: 0, subtreeCount: 0,
+  role: 'agent', depth: 0, layer: 1, leaderId: null, directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0,
   isLeader: false, isSelf: false, ...over,
 });
 
@@ -63,19 +63,50 @@ describe('group tree (P3-T8)', () => {
     expect(document.querySelector('[data-node="mem-owner"]')).toBeNull();
   });
 
+  it('joins cards edge-to-edge at their vertical centre, not at their top', async () => {
+    // The bug this pins: `layoutTree` already starts y at LABEL_HEIGHT, and the card
+    // added it a second time — so every card sat 28px below its own connector and the
+    // line met it at the top-left corner. One coordinate frame, applied once.
+    open();
+    await screen.findByText('Layer 1');
+
+    const card = document.querySelector('[data-node="mem-sari"]') as HTMLElement;
+    const top = Number.parseFloat(card.style.top);
+    const height = Number.parseFloat(card.style.height);
+    const centre = top + height / 2;
+
+    // Every path ends at some card's centre; one of them must end at this card's.
+    const ends = Array.from(document.querySelectorAll('path')).map((path) => {
+      const d = path.getAttribute('d')!;
+      return Number.parseFloat(d.slice(d.lastIndexOf(' ', d.length - 1) + 1));
+    });
+    expect(ends).toContain(centre);
+  });
+
   it('marks which card is you', async () => {
     open();
     const self = await screen.findByText('YOU');
     expect(self.closest('[data-node]')).toHaveAttribute('data-node', 'mem-ab');
   });
 
-  it('AC-4: every role badge carries its text, and the legend names all three', async () => {
+  it('AC-4: the legend names all three roles in words, never colour alone', async () => {
     open();
     await screen.findByText('Layer 1');
-    // Never colour alone: the badge renders its short label and titles the full one.
-    expect(screen.getAllByTitle('Agency Builder').length).toBeGreaterThan(0);
-    expect(screen.getAllByTitle('Associate Agency Builder').length).toBeGreaterThan(0);
-    expect(screen.getAllByTitle('Agent').length).toBeGreaterThan(0);
+    // The prototype's legend, verbatim — and it abbreviates the middle one.
+    expect(screen.getByText('Agency Builder')).toBeInTheDocument();
+    expect(screen.getByText('Associate AB')).toBeInTheDocument();
+    expect(screen.getByText('Agent')).toBeInTheDocument();
+  });
+
+  it('AC-4: a node badge carries its text, and the avatar carries the colour', async () => {
+    open();
+    await screen.findByText('Layer 1');
+    const card = document.querySelector('[data-node="mem-sari"]') as HTMLElement;
+
+    // Text on the badge…
+    expect(within(card).getByTitle('Associate Agency Builder')).toHaveTextContent('AAB');
+    // …and the role colour on the avatar beside it, which is where the prototype puts it.
+    expect(within(card).getByText('SP')).toHaveClass('bg-role-aab');
   });
 
   it('says how many are below, excluding you, as the prototype counts it', async () => {

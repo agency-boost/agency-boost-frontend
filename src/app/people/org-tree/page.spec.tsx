@@ -18,7 +18,7 @@ const OWNER = makeMe({
 
 const node = (over: Record<string, unknown>) => ({
   fullName: 'Somebody', preferredName: null, initials: 'SB', agentCode: 'KPM0417-000',
-  role: 'agent', depth: 0, layer: 1, leaderId: null, directCount: 0, subtreeCount: 0,
+  role: 'agent', depth: 0, layer: 1, leaderId: null, directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0,
   isLeader: false, isSelf: false, ...over,
 });
 

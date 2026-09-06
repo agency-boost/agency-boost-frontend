@@ -65,7 +65,7 @@ const AUDIT = {
 
 const treeNode = (over: Record<string, unknown>) => ({
   fullName: 'Somebody', preferredName: null, initials: 'SB', agentCode: 'KPM0417-000',
-  role: 'agent', depth: 0, layer: 1, leaderId: null, directCount: 0, subtreeCount: 0,
+  role: 'agent', depth: 0, layer: 1, leaderId: null, directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0,
   isLeader: false, isSelf: false, ...over,
 });
 
@@ -188,7 +188,7 @@ describe('Phase 2 screens have no axe violations', () => {
               membershipId: 'mem-1', agentCode: 'KPM0417-001', role: 'agent', status: 'active',
               fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test',
               initials: 'RW', leaderId: null, leaderName: 'Wilson Tanoto', depth: 1,
-              directCount: 0, subtreeCount: 0, isLeader: false, isKpmOwner: false,
+              directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0, isLeader: false, isKpmOwner: false,
               isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z',
             },
           ],
@@ -383,7 +383,7 @@ describe('Phase 2 screens have no axe violations', () => {
             membershipId: 'mem-1', agentCode: 'KPM0417-001', role: 'agent', status: 'removed',
             fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test',
             initials: 'RW', leaderId: null, leaderName: 'Wilson Tanoto', depth: 1,
-            directCount: 0, subtreeCount: 0, isLeader: false, isKpmOwner: false,
+            directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0, isLeader: false, isKpmOwner: false,
             isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z',
             removedAt: '2026-07-19T04:00:00.000Z',
           }],
@@ -567,7 +567,7 @@ describe('Phase 2 screens have no axe violations', () => {
           membershipId: 'mem-1', agentCode: 'KPM0417-001', role: 'agent', status: 'active',
           fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test',
           initials: 'RW', leaderId: null, leaderName: 'Wilson Tanoto', depth: 1,
-          directCount: 0, subtreeCount: 0, isLeader: false, isKpmOwner: false,
+          directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0, isLeader: false, isKpmOwner: false,
           isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z', removedAt: null,
         },
       },

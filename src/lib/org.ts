@@ -33,6 +33,8 @@ export interface Member {
 export interface MemberPage {
   members: Member[];
   nextCursor: string | null;
+  /** How many are in each tab, so the labels can carry counts as the prototype does. */
+  counts: { directory: number; pending: number; removed: number };
 }
 
 export interface DirectoryFilters {
@@ -108,6 +110,8 @@ export interface OrgTreeNode {
   layer: number;
   leaderId: string | null;
   directCount: number;
+  /** The direct reports split by role, so the node can write the prototype's sentence. */
+  directCounts: { ab: number; aab: number; agent: number; total: number };
   subtreeCount: number;
   isLeader: boolean;
   isSelf: boolean;

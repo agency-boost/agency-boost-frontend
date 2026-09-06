@@ -21,6 +21,7 @@ import {
   type GroupSummary,
   type HierarchyRole,
   type Member,
+  type MemberPage,
   type MemberStatus,
   type RoleChangeEntry,
 } from '@/lib/org';
@@ -34,16 +35,31 @@ import {
  * Two of its columns, Last activity and Last coached, are not here: the data arrives in
  * Phases 6 and 13, and a column of dashes reads as "never" rather than "not yet".
  */
+/**
+ * The roster indents a name by role, so the flat list still reads as a hierarchy
+ * (`KPM_Owner.html:218-219`). Presentation only — nothing sorts or scopes by it.
+ */
+const ROLE_INDENT: Record<HierarchyRole, string> = {
+  ab: 'block',
+  aab: 'block pl-4',
+  agent: 'block pl-8',
+};
+
 const STATUS_TO_PILL: Record<MemberStatus, 'success' | 'alert' | 'neutral'> = {
   active: 'success',
   pending: 'neutral',
   removed: 'alert',
 };
 
+/**
+ * `Directory (187)` · `Pending (14)` · `Removed (3)` · `Role change log` · `Groups`
+ * (`KPM_Owner.html:1822-1826`). Only the first three carry a count — the other two are
+ * not populations, and a number on them would invite the wrong question.
+ */
 const TABS = [
-  { key: 'directory', label: 'Directory' },
-  { key: 'pending', label: 'Pending', upcoming: true },
-  { key: 'removed', label: 'Removed' },
+  { key: 'directory', label: 'Directory', count: 'directory' },
+  { key: 'pending', label: 'Pending', count: 'pending', upcoming: true },
+  { key: 'removed', label: 'Removed', count: 'removed' },
   { key: 'rolelog', label: 'Role change log' },
   { key: 'groups', label: 'Groups' },
 ] as const;
@@ -70,6 +86,7 @@ export default function MembersPage() {
   const [page, setPage] = useState<Member[] | null>(null);
   const [cursors, setCursors] = useState<string[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [counts, setCounts] = useState<MemberPage['counts'] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
   const load = useCallback(
@@ -108,6 +125,7 @@ export default function MembersPage() {
         });
         setPage(result.members);
         setNextCursor(result.nextCursor);
+        setCounts(result.counts);
       } catch (err) {
         setError(toDisplayError(err));
         setPage([]);
@@ -157,6 +175,11 @@ export default function MembersPage() {
 
   const filtered = q !== '' || role !== '';
 
+  // The count is part of the label, not a badge: the prototype writes it inside the
+  // parentheses and it is a population, not an alert.
+  const label = (t: (typeof TABS)[number]) =>
+    'count' in t && counts ? `${t.label} (${counts[t.count]})` : t.label;
+
   return (
     <TenantShell
       title="All Members"
@@ -174,7 +197,7 @@ export default function MembersPage() {
               title="Arrives with its phase"
               className="-mb-px cursor-default border-b-2 border-transparent px-0.5 pb-3 text-md font-semibold text-muted/50"
             >
-              {t.label}
+              {label(t)}
             </span>
           ) : (
             <button
@@ -188,7 +211,7 @@ export default function MembersPage() {
                   : '-mb-px border-b-2 border-transparent px-0.5 pb-3 text-md font-semibold text-muted'
               }
             >
-              {t.label}
+              {label(t)}
             </button>
           ),
         )}
@@ -467,10 +490,15 @@ export default function MembersPage() {
             {page.map((m) => (
               <Row key={m.membershipId}>
                 <Cell className="font-semibold">
-                  <Link href={`/people/members/${m.membershipId}`} className="underline">
-                    {m.preferredName ?? m.fullName}
-                  </Link>
-                  <span className="block text-sm font-normal text-muted">{m.email}</span>
+                  {/* Indented by role, as the prototype's nested directory does it:
+                      AB flush, AAB 16px, Agent 32px (`KPM_Owner.html:218-219`). It makes
+                      the roster read as the tree it is, without becoming one. */}
+                  <span className={ROLE_INDENT[m.role]}>
+                    <Link href={`/people/members/${m.membershipId}`} className="underline">
+                      {m.preferredName ?? m.fullName}
+                    </Link>
+                    <span className="block text-sm font-normal text-muted">{m.email}</span>
+                  </span>
                 </Cell>
                 <Cell>
                   <code className="text-sm">{m.agentCode}</code>
