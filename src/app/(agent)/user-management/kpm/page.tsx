@@ -5,6 +5,7 @@ import { Page } from '@/components/page';
 import { UserManagementTabs } from '@/components/user-management-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   askForKpm,
@@ -79,9 +80,7 @@ export default function RegisterKpmPage() {
       {error && <ErrorBanner {...error} />}
 
       {state === null && (
-        <p role="status" className="text-md text-muted">
-          Loading…
-        </p>
+        <SkeletonCards count={2} label="Loading your office…" />
       )}
 
       {state && registered && (

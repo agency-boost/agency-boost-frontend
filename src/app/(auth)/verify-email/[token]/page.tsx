@@ -26,7 +26,13 @@ export default function VerifyEmailPage({ params }: { params: Promise<{ token: s
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5">
       <h1 className="font-display text-3xl font-bold text-navy">Verify your email</h1>
       <Card className="mt-6">
-        {state === 'working' && <p className="text-md text-muted">Checking your link…</p>}
+        {/* The only wait on the site that announced nothing: no `role="status"`, so a
+            screen reader reached a card and was told there was no content in it. */}
+        {state === 'working' && (
+          <p role="status" className="text-md text-muted">
+            Checking your link…
+          </p>
+        )}
         {state === 'done' && (
           <div>
             <p className="text-md text-navy">Your email is verified. You can sign in now.</p>

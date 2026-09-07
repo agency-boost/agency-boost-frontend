@@ -6,9 +6,17 @@ import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ButtonLink, ErrorBanner } from '@/components/ui/field';
+import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { listCompanies, listTenants, TENANT_STATUS_LABEL, type Company, type Kpm } from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
+
+/**
+ * The skeleton and the table read the same array, so a column added to one cannot
+ * be missing from the other — which is what keeps the placeholder the same width as
+ * the thing it stands in for.
+ */
+const COLUMNS = ['Code', 'Branch', 'Principal', 'Owner', 'Status'] as const;
 
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Kpm[] | null>(null);
@@ -39,9 +47,7 @@ export default function TenantsPage() {
       {error && <ErrorBanner {...error} />}
 
       {tenants === null && (
-        <p role="status" className="text-md text-muted">
-          Loading…
-        </p>
+        <SkeletonTable caption="Offices on the platform" columns={COLUMNS} rows={5} />
       )}
 
       {tenants?.length === 0 && !error && (
@@ -60,7 +66,7 @@ export default function TenantsPage() {
       {tenants && tenants.length > 0 && (
         <DataTable
           caption="Offices on the platform"
-          columns={['Code', 'Branch', 'Principal', 'Owner', 'Status']}
+          columns={COLUMNS}
         >
           {tenants.map((t) => (
             <Row key={t._id}>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { RoleShell } from '@/components/role-shell';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
+import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   markAllNotificationsRead,
@@ -82,9 +83,7 @@ export default function NotificationsPage() {
       {error && <ErrorBanner {...error} />}
 
       {inbox === null && !error && (
-        <p role="status" className="text-md text-muted">
-          Loading…
-        </p>
+        <SkeletonCards count={4} label="Loading your inbox…" />
       )}
 
       {inbox && inbox.items.length === 0 && (

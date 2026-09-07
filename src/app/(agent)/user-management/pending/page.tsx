@@ -6,6 +6,7 @@ import { UserManagementTabs } from '@/components/user-management-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { RoleBadge } from '@/components/ui/role-badge';
+import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
 import {
@@ -107,9 +108,7 @@ export default function PendingPage() {
         </p>
 
         {requests === null && (
-          <p role="status" className="mt-4 text-md text-muted">
-            Loading…
-          </p>
+          <SkeletonCards count={2} label="Loading requests…" className="mt-4" />
         )}
 
         {requests?.length === 0 && (

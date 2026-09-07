@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useSession } from '@/lib/session';
+import { PageSkeleton } from '@/components/ui/skeleton';
 
 /**
  * A client-side gate. It decides what to *render*, and nothing more — every API call it
@@ -28,9 +29,7 @@ export function RequireSession({
 
   if (loading) {
     return (
-      <p role="status" className="px-5 py-10 text-md text-muted">
-        Loading…
-      </p>
+      <PageSkeleton />
     );
   }
 

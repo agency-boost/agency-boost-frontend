@@ -7,6 +7,7 @@ import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { RoleBadge, ROLE_LABEL } from '@/components/ui/role-badge';
+import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
@@ -74,9 +75,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
   if (!member) {
     return (
       <Page title="Member">
-        <p role="status" className="text-md text-muted">
-          Loading…
-        </p>
+        <SkeletonCards count={3} label="Loading the member…" />
       </Page>
     );
   }

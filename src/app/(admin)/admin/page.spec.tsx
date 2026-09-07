@@ -131,7 +131,7 @@ describe('admin overview', () => {
     stubFetch({ '/admin/overview': { body: overview() } });
     renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
 
-    expect(screen.getByRole('status')).toHaveTextContent('Loading…');
+    expect(screen.getByRole('status')).toHaveTextContent('Loading the platform overview');
   });
 
 });

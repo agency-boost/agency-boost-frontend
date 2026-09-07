@@ -5,8 +5,16 @@ import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Field, Select } from '@/components/ui/field';
+import { SkeletonTable } from '@/components/ui/skeleton';
 import { listTenants, readAudit, type AuditEntry, type Kpm } from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
+
+/**
+ * The skeleton and the table read the same array, so a column added to one cannot
+ * be missing from the other — which is what keeps the placeholder the same width as
+ * the thing it stands in for.
+ */
+const COLUMNS = ['When', 'Action', 'Target', 'Actor'] as const;
 
 /** The append-only record. Read-only by construction — there is no edit or delete. */
 export default function AuditPage() {
@@ -49,9 +57,7 @@ export default function AuditPage() {
       {error && <ErrorBanner {...error} />}
 
       {entries === null && (
-        <p role="status" className="text-md text-muted">
-          Loading…
-        </p>
+        <SkeletonTable caption="Audit entries, newest first" columns={COLUMNS} rows={8} />
       )}
 
       {entries?.length === 0 && !error && (
@@ -69,7 +75,7 @@ export default function AuditPage() {
       )}
 
       {entries && entries.length > 0 && (
-        <DataTable caption="Audit entries, newest first" columns={['When', 'Action', 'Target', 'Actor']}>
+        <DataTable caption="Audit entries, newest first" columns={COLUMNS}>
           {entries.map((e) => (
             <Row key={e._id}>
               <Cell className="whitespace-nowrap text-muted">

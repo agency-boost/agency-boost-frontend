@@ -5,6 +5,7 @@ import { Page } from '@/components/page';
 import { DataTable, Row, Cell } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
@@ -74,9 +75,7 @@ export default function KpmRequestsPage() {
       {error && <ErrorBanner {...error} />}
 
       {rows === null && !error && (
-        <p role="status" className="text-md text-muted">
-          Loading…
-        </p>
+        <SkeletonCards count={3} label="Loading registrations…" className="mb-3" />
       )}
 
       {rows && pending.length === 0 && (

@@ -16,17 +16,19 @@ vi.mock('next/navigation', () => ({
 describe('landing', () => {
   afterEach(() => replace.mockClear());
 
+  // The assertions name the sentence, not the word "loading". It is the only thing a
+  // screen reader is told here, so what it actually says is the thing worth pinning.
   it('waits rather than bouncing before the session is known', () => {
     renderWithSession(<Home />, { me: null, loading: true });
     expect(replace).not.toHaveBeenCalled();
-    expect(screen.getByRole('status')).toHaveTextContent('Loading');
+    expect(screen.getByRole('status')).toHaveTextContent('Taking you to your work');
   });
 
   it('renders no content of its own, whoever is signed in', () => {
     // Two screens claiming to be home would mean the one you saw depended on how fast
     // the redirect ran.
     renderWithSession(<Home />, { me: makeMe() });
-    expect(screen.getByRole('status')).toHaveTextContent('Loading');
+    expect(screen.getByRole('status')).toHaveTextContent('Taking you to your work');
     expect(screen.queryByRole('heading')).not.toBeInTheDocument();
   });
 

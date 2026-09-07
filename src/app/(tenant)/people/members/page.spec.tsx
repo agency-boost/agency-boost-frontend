@@ -122,6 +122,71 @@ describe('members directory (P3-T1 AC-3)', () => {
     expect(await screen.findByText('Nobody has been removed from this office.')).toBeInTheDocument();
   });
 
+  it('P3.5-T14: asks the server once per pause, not once per letter', async () => {
+    // The search box had no debounce, so it fired a request per keystroke. Harmless while
+    // the old rows stayed put; a flicker per letter once they correctly clear. The two
+    // belong together.
+    const { calls } = stubFetch({
+      '/members': {
+        body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } },
+      },
+    });
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    await vi.waitFor(() => expect(calls.length).toBeGreaterThan(0));
+    const before = calls.length;
+
+    await userEvent.type(screen.getByLabelText('Search'), 'Rina');
+
+    await vi.waitFor(() => expect(calls[calls.length - 1].url).toContain('q=Rina'));
+    // Four letters, one request — and it carries the whole word, not the first letter.
+    expect(calls.length - before).toBe(1);
+  });
+
+  it('P3.5-T14: clears the previous tab before the next one arrives', async () => {
+    // The defect this pins. `load()` refetched on a tab switch but reset nothing, so the
+    // previous tab's rows stayed on screen for the whole request — under a column header
+    // that had already flipped, because the header reads `tab` synchronously. Switching
+    // Directory → Removed showed active members beneath a "Removed" heading, each one
+    // displaying an em dash where a removal date should be.
+    let release = () => {};
+    let memberCalls = 0;
+    const json = (body: unknown) =>
+      ({ ok: true, status: 200, json: async () => body }) as Response;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (!url.includes('/members')) return json({ items: [], unreadCount: 0 });
+        memberCalls += 1;
+        // The Removed request never settles here. That pending window is where the bug
+        // lived, and it is the only place the assertion can be made.
+        if (memberCalls > 1) await new Promise<void>((r) => { release = r; });
+        return json({
+          members: [member()],
+          nextCursor: null,
+          counts: { directory: 187, pending: 14, removed: 3 },
+        });
+      }),
+    );
+
+    renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+    expect(await screen.findByRole('row', { name: /Rina/ })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /^Removed/ }));
+
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('row', { name: /Rina/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent('Loading removed members…');
+    });
+
+    // The counts survive the switch: they are the same three numbers on every tab, so
+    // blanking them would put a flicker in the one part of the screen not changing.
+    expect(screen.getByRole('button', { name: 'Directory (187)' })).toBeInTheDocument();
+
+    release();
+    await screen.findByRole('row', { name: /Rina/ });
+  });
+
   it('P3-T7 AC-2: the Removed tab says when they left, not that they are removed', async () => {
     // Every row on this tab reads "Removed", so a Status column answers nothing. When
     // is the question the list is actually asked.

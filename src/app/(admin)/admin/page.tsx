@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Page } from '@/components/page';
 import { Card, ErrorBanner } from '@/components/ui/field';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readPlatformOverview, type AttentionItem, type PlatformOverview } from '@/lib/admin';
 
@@ -38,9 +39,7 @@ export default function AdminOverviewPage() {
       {error && <ErrorBanner {...error} />}
 
       {!overview && !error && (
-        <p role="status" className="text-md text-muted">
-          Loading…
-        </p>
+        <SkeletonCards count={2} label="Loading the platform overview…" />
       )}
 
       {overview && (

@@ -6,6 +6,7 @@ import { UserManagementTabs } from '@/components/user-management-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { RoleBadge } from '@/components/ui/role-badge';
+import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
@@ -91,9 +92,7 @@ export default function FindLeaderPage() {
       {error && <ErrorBanner {...error} />}
 
       {state === null && (
-        <p role="status" className="text-md text-muted">
-          Loading…
-        </p>
+        <SkeletonCards count={2} label="Loading your leader…" />
       )}
 
       {state && !registered && (

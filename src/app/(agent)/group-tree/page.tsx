@@ -5,6 +5,7 @@ import { OrgTree } from '@/components/org-tree/org-tree';
 import { Page } from '@/components/page';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Card, ErrorBanner } from '@/components/ui/field';
+import { SkeletonTree } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readOrgTree, type OrgTree as OrgTreeData } from '@/lib/org';
 
@@ -40,9 +41,7 @@ export default function GroupTreePage() {
 
       <Card>
         {tree === null && !error && (
-          <p role="status" className="text-md text-muted">
-            Loading…
-          </p>
+          <SkeletonTree label="Loading your unit…" />
         )}
 
         {tree && tree.nodes.length <= 1 && (

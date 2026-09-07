@@ -6,6 +6,7 @@ import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Field, Select } from '@/components/ui/field';
 import { RoleBadge } from '@/components/ui/role-badge';
+import { SkeletonTable } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   grantAdmin,
@@ -14,6 +15,13 @@ import {
   revokeAdmin,
   type DelegatedAdmin,
 } from '@/lib/org';
+
+/**
+ * The skeleton and the table read the same array, so a column added to one cannot
+ * be missing from the other — which is what keeps the placeholder the same width as
+ * the thing it stands in for.
+ */
+const COLUMNS = ['Name', 'Role', 'Admin since', 'Granted by', { label: 'Actions', visuallyHidden: true }] as const;
 
 /**
  * Manage KPM Admins (`KPM_Owner.html:1987-1997`).
@@ -139,9 +147,7 @@ export default function AdminsPage() {
       )}
 
       {admins === null && !error && (
-        <p role="status" className="text-md text-muted">
-          Loading…
-        </p>
+        <SkeletonTable caption="KPM Admins" columns={COLUMNS} rows={3} />
       )}
 
       {admins?.length === 0 && !error && (
@@ -157,7 +163,7 @@ export default function AdminsPage() {
           </p>
           <DataTable
             caption="KPM Admins"
-            columns={['Name', 'Role', 'Admin since', 'Granted by', { label: 'Actions', visuallyHidden: true }]}
+            columns={COLUMNS}
           >
             {admins.map((admin) => (
               <Row key={admin.membershipId}>

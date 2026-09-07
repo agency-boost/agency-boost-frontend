@@ -7,8 +7,10 @@ import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { RoleBadge } from '@/components/ui/role-badge';
+import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { useDebounced } from '@/lib/use-debounced';
 import { declineRequest, readInbox, approveRequest, type PendingRequest } from '@/lib/join';
 import {
   archiveGroup,
@@ -67,6 +69,32 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]['key'];
 
+/**
+ * Each tab's columns, declared once. The skeleton and the table read the same array, so
+ * the placeholder cannot be a different width from the rows that replace it.
+ */
+const LOG_COLUMNS = ['When', 'Who', 'Change', 'Why', 'Changed by'] as const;
+const PENDING_COLUMNS = ['Who', 'Waiting on', { label: 'Actions', visuallyHidden: true }] as const;
+const GROUP_COLUMNS = ['Group', 'Owner', 'Tagged', { label: 'Actions', visuallyHidden: true }] as const;
+
+/**
+ * The roster's last column depends on the tab, so the skeleton must be told which tab it
+ * is standing in for. Otherwise the placeholder is headed `Status` and the rows that land
+ * are headed `Removed` — a smaller version of exactly the flip this screen used to do for
+ * real, before the tab switch started clearing its data.
+ */
+const rosterColumns = (tab: TabKey) =>
+  [
+    'Name',
+    'Agent code',
+    'Role',
+    'Reports to',
+    'Unit',
+    // On the Removed tab every row reads "Removed", which answers nothing. When they left
+    // is the question actually asked of this list.
+    tab === 'removed' ? 'Removed' : 'Status',
+  ] as const;
+
 export default function MembersPage() {
   const [tab, setTab] = useState<TabKey>('directory');
   const [log, setLog] = useState<RoleChangeEntry[] | null>(null);
@@ -83,6 +111,9 @@ export default function MembersPage() {
   const [candidates, setCandidates] = useState<{ membershipId: string; fullName: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState('');
+  // The server is asked for the settled query, not the half-typed one. `q` still drives
+  // the input, so typing stays instant.
+  const query = useDebounced(q);
   const [role, setRole] = useState<HierarchyRole | ''>('');
   const [page, setPage] = useState<Member[] | null>(null);
   const [cursors, setCursors] = useState<string[]>([]);
@@ -94,7 +125,19 @@ export default function MembersPage() {
   const load = useCallback(
     async (cursor?: string) => {
       setError(null);
+      // Clear what is about to be refetched, **before** awaiting it.
+      //
+      // Without this the previous tab's rows stay on screen for the whole request while
+      // the column headers — which read `tab` directly — have already flipped. Switching
+      // Directory → Removed showed active members under a "Removed" heading, every one of
+      // them displaying an em dash. The `=== null` guards below could only ever fire on a
+      // first visit, so nothing indicated a wait was happening at all.
+      //
+      // `counts` is deliberately not cleared: the same three numbers serve every tab, so
+      // nulling them would blank the tab labels and put a flicker in the one part of the
+      // screen that did not need to change.
       if (tab === 'rolelog') {
+        setLog(null);
         try {
           setLog(await readRoleChangeLog());
         } catch (err) {
@@ -104,6 +147,8 @@ export default function MembersPage() {
         return;
       }
       if (tab === 'pending') {
+        setPage(null);
+        setRequests(null);
         try {
           // Two reads, because they are two different populations and the tab is the
           // union: everybody who has registered and not yet joined a unit, plus the open
@@ -124,6 +169,7 @@ export default function MembersPage() {
         return;
       }
       if (tab === 'groups') {
+        setGroups(null);
         try {
           const [mine, office] = await Promise.all([listGroups(), readOrgTree()]);
           setGroups(mine);
@@ -138,9 +184,10 @@ export default function MembersPage() {
         }
         return;
       }
+      setPage(null);
       try {
         const result = await listMembers({
-          ...(q ? { q } : {}),
+          ...(query ? { q: query } : {}),
           ...(role ? { role } : {}),
           ...(tab === 'removed' ? { status: 'removed' as const } : {}),
           ...(cursor ? { cursor } : {}),
@@ -153,7 +200,7 @@ export default function MembersPage() {
         setPage([]);
       }
     },
-    [q, role, tab],
+    [query, role, tab],
   );
 
   async function decide(requestId: string, action: 'approve' | 'decline') {
@@ -216,6 +263,7 @@ export default function MembersPage() {
   // through a list that no longer exists.
   useEffect(() => {
     setCursors([]);
+    setNextCursor(null);
     void load();
   }, [load]);
 
@@ -289,9 +337,7 @@ export default function MembersPage() {
       {tab === 'rolelog' && (
         <>
           {log === null && (
-            <p role="status" className="text-md text-muted">
-              Loading…
-            </p>
+            <SkeletonTable caption="Role changes, newest first" columns={LOG_COLUMNS} />
           )}
           {log?.length === 0 && !error && (
             <div className="rounded-lg border border-hairline bg-card">
@@ -301,7 +347,7 @@ export default function MembersPage() {
           {log && log.length > 0 && (
             <DataTable
               caption="Role changes, newest first"
-              columns={['When', 'Who', 'Change', 'Why', 'Changed by']}
+              columns={LOG_COLUMNS}
             >
               {log.map((entry) => (
                 <Row key={`${entry.membershipId}-${entry.changedAt}`}>
@@ -342,9 +388,7 @@ export default function MembersPage() {
           </p>
 
           {page === null && !error && (
-            <p role="status" className="text-md text-muted">
-              Loading…
-            </p>
+            <SkeletonTable caption="Registered, not yet in a unit" columns={PENDING_COLUMNS} rows={3} />
           )}
 
           {page?.length === 0 && !error && (
@@ -356,7 +400,7 @@ export default function MembersPage() {
           {page && page.length > 0 && requests && (
             <DataTable
               caption="Registered, not yet in a unit"
-              columns={['Who', 'Waiting on', { label: 'Actions', visuallyHidden: true }]}
+              columns={PENDING_COLUMNS}
             >
               {page.map((m) => {
                 const ask = requests.find((r) => r.membershipId === m.membershipId);
@@ -505,9 +549,7 @@ export default function MembersPage() {
           )}
 
           {groups === null && !error && (
-            <p role="status" className="text-md text-muted">
-              Loading…
-            </p>
+            <SkeletonTable caption="Informal groups" columns={GROUP_COLUMNS} rows={3} />
           )}
 
           {groups?.length === 0 && !error && (
@@ -519,7 +561,7 @@ export default function MembersPage() {
           {groups && groups.length > 0 && (
             <DataTable
               caption="Informal groups"
-              columns={['Group', 'Owner', 'Tagged', { label: 'Actions', visuallyHidden: true }]}
+              columns={GROUP_COLUMNS}
             >
               {groups.map((group) => (
                 <Row key={group.groupId}>
@@ -571,9 +613,10 @@ export default function MembersPage() {
       )}
 
       {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && page === null && (
-        <p role="status" className="text-md text-muted">
-          Loading…
-        </p>
+        <SkeletonTable
+          caption={tab === 'removed' ? 'Removed members' : 'Office roster'}
+          columns={rosterColumns(tab)}
+        />
       )}
 
       {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && page?.length === 0 && !error && (
@@ -608,16 +651,7 @@ export default function MembersPage() {
         <>
           <DataTable
             caption={tab === 'removed' ? 'Removed members' : 'Office roster'}
-            columns={[
-              'Name',
-              'Agent code',
-              'Role',
-              'Reports to',
-              'Unit',
-              // On the Removed tab every row reads "Removed", which answers nothing.
-              // When they left is the question actually asked of this list.
-              tab === 'removed' ? 'Removed' : 'Status',
-            ]}
+            columns={rosterColumns(tab)}
           >
             {page.map((m) => (
               <Row key={m.membershipId}>

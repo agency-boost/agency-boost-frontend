@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { Skeleton, SkeletonText } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { previewInvite, redeemInvite, type InvitePreview } from '@/lib/join';
 import { useSession } from '@/lib/session';
@@ -31,9 +32,9 @@ export default function JoinPage() {
 function Waiting() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5">
-      <p role="status" className="text-md text-muted">
-        Loading…
-      </p>
+      <Skeleton>
+        <SkeletonText lines={3} />
+      </Skeleton>
     </main>
   );
 }

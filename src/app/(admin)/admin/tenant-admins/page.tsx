@@ -5,9 +5,17 @@ import { Page } from '@/components/page';
 import { DataTable, Row, Cell } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Card, ErrorBanner } from '@/components/ui/field';
+import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readTenantAdmins, type PlatformAdminRow } from '@/lib/admin';
+
+/**
+ * The skeleton and the table read the same array, so a column added to one cannot
+ * be missing from the other — which is what keeps the placeholder the same width as
+ * the thing it stands in for.
+ */
+const COLUMNS = ['Who', 'Office', 'Access', 'Granted'] as const;
 
 /**
  * KPM Owners & Admins (`Superadmin.html:196`).
@@ -44,9 +52,7 @@ export default function TenantAdminsPage() {
       {error && <ErrorBanner {...error} />}
 
       {rows === null && !error && (
-        <p role="status" className="text-md text-muted">
-          Loading…
-        </p>
+        <SkeletonTable caption="Office administrators" columns={COLUMNS} rows={4} />
       )}
 
       {rows && rows.length === 0 && !error && (
@@ -63,7 +69,7 @@ export default function TenantAdminsPage() {
           </p>
           <DataTable
             caption="Office administrators"
-            columns={['Who', 'Office', 'Access', 'Granted']}
+            columns={COLUMNS}
           >
             {rows.map((r) => (
               <Row key={r.membershipId}>

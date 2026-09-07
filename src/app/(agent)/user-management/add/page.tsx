@@ -10,8 +10,10 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { useDebounced } from '@/lib/use-debounced';
 import { useSession } from '@/lib/session';
 import { RoleBadge } from '@/components/ui/role-badge';
+import { SkeletonPeople, SkeletonTable } from '@/components/ui/skeleton';
 import {
   changeRole,
   readMyTeam,
@@ -35,6 +37,19 @@ import {
   type Invite,
   type UntaggedMember,
 } from '@/lib/join';
+
+/**
+ * The skeleton and the table read the same array, so the placeholder is the width of the
+ * invite list it stands in for.
+ */
+const INVITE_COLUMNS = [
+  'Code',
+  'What for',
+  'Used',
+  'Ends',
+  'State',
+  { label: 'Actions', visuallyHidden: true },
+] as const;
 
 /**
  * Add new agents → Invite (`Overall.html:3574-3596`).
@@ -62,6 +77,7 @@ export default function AddAgentsPage() {
   const [expiresInDays, setExpiresInDays] = useState(NEVER);
   const [untagged, setUntagged] = useState<UntaggedMember[] | null>(null);
   const [pool, setPool] = useState('');
+  const poolQuery = useDebounced(pool);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [team, setTeam] = useState<TeamMember[] | null>(null);
   const [proposal, setProposal] = useState<{ member: TeamMember; toRole: HierarchyRole } | null>(null);
@@ -147,13 +163,17 @@ export default function AddAgentsPage() {
   }, [load]);
 
   useEffect(() => {
-    void searchUntagged(pool || undefined)
+    // Clear first. Otherwise the previous query's results stay on screen while the new
+    // ones are in flight — and since they look exactly like an answer, somebody types
+    // three more letters and acts on a list that answers the search before it.
+    setUntagged(null);
+    void searchUntagged(poolQuery || undefined)
       .then(setUntagged)
       .catch((err) => {
         setError(toDisplayError(err));
         setUntagged([]);
       });
-  }, [pool]);
+  }, [poolQuery]);
 
   async function add(membershipId: string) {
     setBusy(membershipId);
@@ -298,9 +318,7 @@ export default function AddAgentsPage() {
       <h2 className="mb-3 font-display text-lg font-bold text-navy">Your invites</h2>
 
       {invites === null && (
-        <p role="status" className="text-md text-muted">
-          Loading…
-        </p>
+        <SkeletonTable caption="Invites you have issued" columns={INVITE_COLUMNS} rows={3} />
       )}
 
       {invites?.length === 0 && (
@@ -312,7 +330,7 @@ export default function AddAgentsPage() {
       {invites && invites.length > 0 && (
         <DataTable
           caption="Invites you have issued"
-          columns={['Code', 'What for', 'Used', 'Ends', 'State', { label: 'Actions', visuallyHidden: true }]}
+          columns={INVITE_COLUMNS}
         >
           {invites.map((invite) => (
             <Row key={invite.inviteId}>
@@ -372,9 +390,7 @@ export default function AddAgentsPage() {
         </Field>
 
         {untagged === null && (
-          <p role="status" className="mt-3 text-md text-muted">
-            Loading…
-          </p>
+          <SkeletonPeople count={3} label="Searching untagged agents…" className="mt-3" />
         )}
 
         {untagged?.length === 0 && (
@@ -449,9 +465,7 @@ export default function AddAgentsPage() {
         </p>
 
         {team === null && (
-          <p role="status" className="mt-3 text-md text-muted">
-            Loading…
-          </p>
+          <SkeletonPeople count={3} label="Loading your unit…" className="mt-3" />
         )}
 
         {team?.length === 0 && <EmptyState title="Nobody reports to you yet." />}

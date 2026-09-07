@@ -41,6 +41,48 @@ const invite = (over: Record<string, unknown> = {}) => ({
 describe('inviting people (P3-T4)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('P3.5-T14: clears the search results before the next search answers', async () => {
+    // The untagged search refetched on every keystroke and cleared nothing, so the
+    // previous query's people sat there looking exactly like an answer to the new one.
+    // Somebody types three more letters and acts on a list that answers the search
+    // before it.
+    let release = () => {};
+    let searches = 0;
+    const json = (body: unknown) =>
+      ({ ok: true, status: 200, json: async () => body }) as Response;
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/join/untagged')) {
+          searches += 1;
+          if (searches > 1) await new Promise<void>((r) => { release = r; });
+          return json([
+            {
+              membershipId: 'mem-x', fullName: 'Budi Santoso', preferredName: null,
+              initials: 'BS', agentCode: 'KPM0417-009', directCount: 0,
+            },
+          ]);
+        }
+        if (url.includes('/join/invites') || url.includes('/members/my-team')) return json([]);
+        return json({ items: [], unreadCount: 0 });
+      }),
+    );
+
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+    expect(await screen.findByText('Budi Santoso')).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Search by name'), 'z');
+
+    await vi.waitFor(() => {
+      expect(screen.queryByText('Budi Santoso')).not.toBeInTheDocument();
+      expect(screen.getByText('Searching untagged agents…')).toBeInTheDocument();
+    });
+
+    release();
+    await screen.findByText('Budi Santoso');
+  });
+
   it('says plainly that an invite skips approval', async () => {
     // It is the whole difference from asking a leader, and the reason a limit and an
     // expiry are offered at all.

@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { Button, ButtonLink, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import {
   readTenant,
@@ -41,9 +42,7 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
   if (!kpm) {
     return (
       <Page title="Office">
-        <p role="status" className="text-md text-muted">
-          Loading…
-        </p>
+        <SkeletonCards count={3} label="Loading the office…" />
       </Page>
     );
   }

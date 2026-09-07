@@ -676,6 +676,39 @@ describe('Phase 2 screens have no axe violations', () => {
     await expectClean('people/admins');
   });
 
+  /**
+   * The sweep deliberately tests populated screens, which leaves the state every one of
+   * them opens in untested. A skeleton is a grid of `aria-hidden` bars inside a live
+   * region, and getting that wrong is silent — nothing looks broken, a screen reader is
+   * simply told nothing, or told about forty empty cells.
+   */
+  it('a screen in its loading state, held there', async () => {
+    let release = () => {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/members')) {
+          await new Promise<void>((r) => { release = r; });
+        }
+        return { ok: true, status: 200, json: async () => ({ items: [], unreadCount: 0 }) } as Response;
+      }),
+    );
+
+    renderInLayout(TenantLayout, <MembersPage />, {
+      me: makeMe({
+        membership: {
+          membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+          isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+        },
+        permissions: ['member:read_profile'],
+      }),
+    });
+
+    await screen.findByRole('status');
+    await expectClean('members (loading)');
+    release();
+  });
+
   it('audit log', async () => {
     stubFetch({ '/admin/audit': { body: [AUDIT] }, '/admin/tenants': { body: [KPM] } });
     renderInLayout(AdminLayout, <AuditPage />, { me: SUPER_ADMIN });

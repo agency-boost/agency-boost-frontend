@@ -5,10 +5,18 @@ import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { SkeletonTable } from '@/components/ui/skeleton';
 import { createCompany, listCompanies, type Company } from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
 
 const SLUG = /^[a-z0-9-]+$/;
+
+/**
+ * The skeleton and the table read the same array, so a column added to one cannot
+ * be missing from the other — which is what keeps the placeholder the same width as
+ * the thing it stands in for.
+ */
+const COLUMNS = ['Name', 'Slug', 'Currency', 'Time zone'] as const;
 
 export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[] | null>(null);
@@ -47,9 +55,7 @@ export default function CompaniesPage() {
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <div>
           {companies === null && (
-            <p role="status" className="text-md text-muted">
-              Loading…
-            </p>
+            <SkeletonTable caption="Companies" columns={COLUMNS} rows={4} />
           )}
           {companies?.length === 0 && (
             <div className="rounded-lg border border-hairline bg-card">
@@ -57,7 +63,7 @@ export default function CompaniesPage() {
             </div>
           )}
           {companies && companies.length > 0 && (
-            <DataTable caption="Companies" columns={['Name', 'Slug', 'Currency', 'Time zone']}>
+            <DataTable caption="Companies" columns={COLUMNS}>
               {companies.map((c) => (
                 <Row key={c._id}>
                   <Cell className="font-semibold">{c.name}</Cell>
