@@ -1,23 +1,29 @@
 'use client';
 
 import Link from 'next/link';
-import { use, useEffect, useState } from 'react';
+import { use, useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, Card, ErrorBanner } from '@/components/ui/field';
+import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { RoleBadge, ROLE_LABEL } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
+  changeRole,
+  isRemovalConfirmed,
   listGroups,
   listReports,
   MEMBER_STATUS_LABEL,
   readMember,
   readTags,
+  removeMember,
+  REMOVAL_CONFIRMATION,
+  roleChangeExplanation,
   setTags,
   type GroupSummary,
+  type HierarchyRole,
   type Member,
   type MemberTags,
 } from '@/lib/org';
@@ -36,26 +42,96 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
   const [tags, setLocalTags] = useState<MemberTags | null>(null);
   const [draft, setDraft] = useState<{ groupIds: string[]; isCoreLeader: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  // P3.5-T13. Both controls live here rather than on a roster row, which is where the
+  // prototype puts them (`KPM_Owner.html:4515-4522`) — a bare `onchange` and a `Remove`
+  // link, no confirmation and no reason. There is no room on a row to ask why.
+  const [toRole, setToRole] = useState<HierarchyRole | ''>('');
+  const [roleReason, setRoleReason] = useState('');
+  const [removing, setRemoving] = useState(false);
+  const [removeWord, setRemoveWord] = useState('');
+  const [removeReason, setRemoveReason] = useState('');
+  const [disposition, setDisposition] = useState<'reassign' | 'orphan'>('orphan');
   const [error, setError] = useState<ApiError | null>(null);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        const [one, theirs, mine, all] = await Promise.all([
-          readMember(membershipId),
-          listReports(membershipId),
-          readTags(membershipId),
-          listGroups(),
-        ]);
-        setMember(one);
-        setReports(theirs);
-        setLocalTags(mine);
-        setGroups(all);
-      } catch (err) {
-        setError(toDisplayError(err));
-      }
-    })();
+  /** P3.5-T13. A role change and a removal both alter this page, so both re-read it. */
+  const load = useCallback(async () => {
+    try {
+      const [one, theirs, mine, all] = await Promise.all([
+        readMember(membershipId),
+        listReports(membershipId),
+        readTags(membershipId),
+        listGroups(),
+      ]);
+      setMember(one);
+      setReports(theirs);
+      setLocalTags(mine);
+      setGroups(all);
+    } catch (err) {
+      setError(toDisplayError(err));
+    }
   }, [membershipId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function submitRoleChange(event: React.FormEvent) {
+    event.preventDefault();
+    if (!member || !toRole || toRole === member.role) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await changeRole(member.membershipId, toRole, roleReason.trim() || undefined);
+      setToRole('');
+      setRoleReason('');
+      await load();
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitRemoval(event: React.FormEvent) {
+    event.preventDefault();
+    if (!member || !isRemovalConfirmed(removeWord)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await removeMember(member.membershipId, {
+        confirmation: removeWord,
+        reason: removeReason.trim() || undefined,
+        // Only when they actually lead people — the server refuses a disposition for
+        // somebody who leads nobody, so sending one anyway would be a 400 the reader
+        // could not act on.
+        //
+        // `reassign` moves them to **this person's own leader**, one level up. The
+        // leader's version of this screen offers "my unit", which is right there because
+        // the caller *is* a leader; here the caller may be an Owner who leads nobody, and
+        // moving a unit under somebody who has never led it would be a reorganisation
+        // dressed up as a removal. `leaderId` is never null on a removable person — the
+        // office root cannot be removed at all.
+        ...(member.directCount > 0
+          ? {
+              subtree:
+                disposition === 'reassign' && member.leaderId
+                  ? ({ action: 'reassign', toMembershipId: member.leaderId } as const)
+                  : ({ action: 'orphan' } as const),
+            }
+          : {}),
+      });
+      setRemoving(false);
+      setRemoveWord('');
+      setRemoveReason('');
+      // Re-read rather than trusting the response: it answers with the *caller's* team,
+      // and this page is about one person who is now on the Removed list.
+      await load();
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (error) {
     return (
@@ -241,6 +317,159 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
           </div>
         )}
       </Card>
+
+      {(member.canChangeRole || member.canRemove) && (
+        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          {member.canChangeRole && (
+            <Card>
+              <h2 className="font-display text-lg font-bold text-navy">Change their role</h2>
+              <form onSubmit={submitRoleChange} className="mt-3 flex flex-col gap-4" noValidate>
+                <Field
+                  label="New role"
+                  htmlFor="to-role"
+                  hint={
+                    member.canPromoteToAb
+                      ? undefined
+                      : 'Only the office can make somebody an Agency Builder, or stop them being one.'
+                  }
+                >
+                  <Select id="to-role" value={toRole} onChange={(e) => setToRole(e.target.value as HierarchyRole | '')}>
+                    <option value="">{ROLE_LABEL[member.role]} — no change</option>
+                    {(['agent', 'aab', 'ab'] as const)
+                      .filter((r) => r !== member.role)
+                      // The two matrix rows, kept apart: Agent⇄AAB is a direct leader's
+                      // call, anything involving AB is the office's.
+                      .filter((r) => (r === 'ab' || member.role === 'ab' ? member.canPromoteToAb : true))
+                      .map((r) => (
+                        <option key={r} value={r}>
+                          {ROLE_LABEL[r]}
+                        </option>
+                      ))}
+                  </Select>
+                </Field>
+
+                {/* The prototype changes a role on a bare `onchange` and says nothing
+                    about what it means. This is its own sentence, verbatim. */}
+                {toRole && toRole !== member.role && (
+                  <p className="rounded-md border border-hairline bg-base p-3 text-md text-navy">
+                    {roleChangeExplanation(
+                      member.preferredName ?? member.fullName,
+                      member.role,
+                      toRole,
+                      // The office may be acting on somebody who reports to a third
+                      // person, so "they keep reporting to you" would be untrue.
+                      'the-office',
+                    )}
+                  </p>
+                )}
+
+                <Field
+                  label="Why?"
+                  htmlFor="role-reason"
+                  hint="Optional, and worth writing: this is what the role change log shows months later."
+                >
+                  <TextInput
+                    id="role-reason"
+                    maxLength={300}
+                    value={roleReason}
+                    onChange={(e) => setRoleReason(e.target.value)}
+                  />
+                </Field>
+
+                <Button type="submit" disabled={busy || !toRole || toRole === member.role}>
+                  {busy ? 'Saving…' : 'Change role'}
+                </Button>
+              </form>
+            </Card>
+          )}
+
+          {member.canRemove && (
+            <Card>
+              <h2 className="font-display text-lg font-bold text-navy">Remove from the office</h2>
+              <p className="mt-1 text-md text-muted">
+                Nothing is deleted. Their record and everything they logged stays with the office,
+                on the Removed list.
+              </p>
+
+              {!removing ? (
+                <Button variant="secondary" className="mt-3" onClick={() => setRemoving(true)}>
+                  Remove {member.preferredName ?? member.fullName}
+                </Button>
+              ) : (
+                <form onSubmit={submitRemoval} className="mt-3 flex flex-col gap-4" noValidate>
+                  {/* AC-3. Removing a leader without saying this would leave their people
+                      reporting to somebody who has left. */}
+                  {member.directCount > 0 && (
+                    <fieldset className="rounded-md border border-hairline p-3">
+                      <legend className="px-1 text-sm font-semibold text-navy">
+                        {member.directCount === 1
+                          ? '1 person reports to them'
+                          : `${member.directCount} people report to them`}
+                      </legend>
+                      <p className="text-sm text-muted">Say where they go.</p>
+                      <label className="mt-2 flex items-center gap-2 text-md text-navy">
+                        <input
+                          type="radio"
+                          name="disposition"
+                          value="reassign"
+                          checked={disposition === 'reassign'}
+                          onChange={() => setDisposition('reassign')}
+                        />
+                        Move them up to {member.leaderName ?? 'their leader\u2019s leader'}
+                      </label>
+                      <label className="mt-1 flex items-center gap-2 text-md text-navy">
+                        <input
+                          type="radio"
+                          name="disposition"
+                          value="orphan"
+                          checked={disposition === 'orphan'}
+                          onChange={() => setDisposition('orphan')}
+                        />
+                        Leave them unassigned, for another leader to pick up
+                      </label>
+                    </fieldset>
+                  )}
+
+                  <Field
+                    label="Why?"
+                    htmlFor="remove-reason"
+                    hint="Kept on their record, and sent to them."
+                  >
+                    <TextInput
+                      id="remove-reason"
+                      maxLength={300}
+                      value={removeReason}
+                      onChange={(e) => setRemoveReason(e.target.value)}
+                    />
+                  </Field>
+
+                  <Field
+                    label={`Type ${REMOVAL_CONFIRMATION} to confirm`}
+                    htmlFor="remove-word"
+                    hint="The server checks this too. A confirmation only the screen enforces is not a confirmation."
+                  >
+                    <TextInput
+                      id="remove-word"
+                      value={removeWord}
+                      onChange={(e) => setRemoveWord(e.target.value)}
+                      invalid={removeWord.length > 0 && !isRemovalConfirmed(removeWord)}
+                    />
+                  </Field>
+
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={busy || !isRemovalConfirmed(removeWord)}>
+                      {busy ? 'Removing…' : 'Remove them'}
+                    </Button>
+                    <Button variant="secondary" disabled={busy} onClick={() => setRemoving(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </Card>
+          )}
+        </div>
+      )}
 
       <h2 className="mb-3 mt-6 font-display text-lg font-bold text-navy">Who reports to them</h2>
       {reports.length === 0 ? (

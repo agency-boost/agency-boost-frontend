@@ -640,6 +640,7 @@ describe('Phase 2 screens have no axe violations', () => {
           initials: 'RW', leaderId: null, leaderName: 'Wilson Tanoto', depth: 1,
           directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0, isLeader: false, isKpmOwner: false,
           isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z', removedAt: null,
+          canChangeRole: true, canPromoteToAb: true, canRemove: true,
         },
       },
     });
@@ -647,6 +648,39 @@ describe('Phase 2 screens have no axe violations', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit tags' }));
     await screen.findByLabelText('Core Leader');
     await expectClean('people/members/[id] (tags)');
+  });
+
+  it('the person page with its role change and removal open (P3.5-T13)', async () => {
+    // Both controls are new states, and the removal one is a `fieldset` of radios that
+    // only appears for a leader with reports — the shape most likely to be got wrong.
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+      },
+      permissions: ['member:read_profile', 'member:change_role', 'member:remove_from_team'],
+    });
+    stubFetch({
+      '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/tags': { body: { groupIds: [], isCoreLeader: false } },
+      '/members/groups': { body: [] },
+      '/members/mem-1': {
+        body: {
+          membershipId: 'mem-1', agentCode: 'KPM0417-001', role: 'aab', status: 'active',
+          fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test',
+          initials: 'RW', leaderId: 'mem-ab', leaderName: 'Wilson Tanoto', depth: 1,
+          directCount: 3, subtreeCount: 5, isLeader: true, isKpmOwner: false,
+          isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z', removedAt: null,
+          canChangeRole: true, canPromoteToAb: true, canRemove: true,
+        },
+      },
+    });
+    renderInLayout(TenantLayout, <MemberPage params={routeParams({ membershipId: 'mem-1' })} />, { me: owner });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove Rina' }));
+    await screen.findByLabelText('Type REMOVE to confirm');
+    await userEvent.selectOptions(screen.getByLabelText('New role'), 'ab');
+    await expectClean('people/members/[id] (role change and removal)');
   });
 
   it('manage KPM admins, populated and with a revoke waiting', async () => {

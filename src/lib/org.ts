@@ -28,6 +28,19 @@ export interface Member {
   joinedAt: string | null;
   /** Set only on a removed row. */
   removedAt: string | null;
+  /**
+   * What **this viewer** may do to this person, decided by the server (P3.5-T13).
+   *
+   * Three flags because the permission matrix has three rows: Agent⇄AAB is a direct
+   * leader's call, anything involving AB is the office's, and removal has refusals of its
+   * own — yourself, the office root, somebody already gone.
+   *
+   * They decide what is *offered*. The API refuses regardless, and a screen carrying its
+   * own copy of these rules is a screen that can drift from them.
+   */
+  canChangeRole: boolean;
+  canPromoteToAb: boolean;
+  canRemove: boolean;
 }
 
 export interface MemberPage {
@@ -228,20 +241,28 @@ export const removeMember = (
   });
 
 /**
- * What a role change means for the person, in their leader's words.
+ * What a role change means for the person.
  *
- * Taken from the prototype verbatim (`Overall.html:9043-9045`) — including the part
- * that matters most, that nobody moves.
+ * Taken from the prototype verbatim (`Overall.html:9043-9045`) — including the part that
+ * matters most, that nobody moves.
+ *
+ * **`viewer` is required, not defaulted**, because two of the prototype's three sentences
+ * say *"they keep reporting to **you**"*. That is true on a leader's own team, which is
+ * the only screen the prototype has. On the person page an Owner acts on people who
+ * report to somebody else, and the same sentence would be a plain falsehood — so the
+ * office reads the general wording, which is true for everyone. A default would be how
+ * the wrong voice arrives on a new screen without anybody choosing it.
  */
 export function roleChangeExplanation(
   name: string,
   from: HierarchyRole,
   to: HierarchyRole,
+  viewer: 'their-leader' | 'the-office',
 ): string {
-  if (from === 'agent' && to === 'aab') {
+  if (viewer === 'their-leader' && from === 'agent' && to === 'aab') {
     return `${name} will change from Agent to Associate Agency Builder. They keep reporting to you, and can now recruit and manage their own direct agents.`;
   }
-  if (from === 'aab' && to === 'agent') {
+  if (viewer === 'their-leader' && from === 'aab' && to === 'agent') {
     return `${name} will change from Associate Agency Builder back to Agent. They keep reporting to you, but will no longer manage their own direct agents.`;
   }
   return `${name} will change from ${ROLE_LABEL[from]} to ${ROLE_LABEL[to]}. Nobody moves — they keep reporting to whoever they report to now.`;

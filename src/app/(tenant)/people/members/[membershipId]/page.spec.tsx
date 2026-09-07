@@ -23,6 +23,10 @@ const member = (over: Record<string, unknown> = {}) => ({
   fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test', initials: 'RW',
   leaderId: 'mem-ab', leaderName: 'Wilson Tanoto', depth: 1, directCount: 0, subtreeCount: 0,
   isLeader: false, isKpmOwner: false, isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z',
+  removedAt: null,
+  // P3.5-T13. The server decides what this viewer may do; the default here is an Owner
+  // looking at an ordinary member, which is the case the screen is built around.
+  canChangeRole: true, canPromoteToAb: true, canRemove: true,
   ...over,
 });
 
@@ -180,6 +184,146 @@ describe('one member', () => {
       expect(screen.getByText(/No groups yet/)).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'All members → Groups' }))
         .toHaveAttribute('href', '/people/members');
+    });
+  });
+
+  describe('changing a role and removing somebody (P3.5-T13)', () => {
+    const stub = (over: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) =>
+      stubFetch({
+        '/members/mem-1/reports': { body: [] },
+        '/members/mem-1/tags': { body: { groupIds: [], isCoreLeader: false } },
+        '/members/groups': { body: [] },
+        '/members/mem-1': { body: member(over) },
+        ...extra,
+      });
+
+    it('AC-1: sends the new rung and the reason, then re-reads the person', async () => {
+      const { calls } = stub();
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+
+      await screen.findByText('Rina Wijaya');
+      await userEvent.selectOptions(screen.getByLabelText('New role'), 'ab');
+      await userEvent.type(screen.getByLabelText('Why?'), 'Ready to build');
+      await userEvent.click(screen.getByRole('button', { name: 'Change role' }));
+
+      const patch = calls.find((c) => c.init.method === 'PATCH');
+      expect(patch?.url).toContain('/members/mem-1/role');
+      expect(JSON.parse(String(patch?.init.body))).toEqual({ toRole: 'ab', reason: 'Ready to build' });
+      // The page shows the person, not the caller's team, so it re-reads rather than
+      // trusting what came back.
+      await vi.waitFor(() =>
+        expect(calls.filter((c) => c.url.endsWith('/members/mem-1')).length).toBeGreaterThan(1),
+      );
+    });
+
+    it('AC-1: says what the change means before it is made', async () => {
+      stub();
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+      await screen.findByText('Rina Wijaya');
+
+      await userEvent.selectOptions(screen.getByLabelText('New role'), 'agent');
+      // The office may be acting on somebody who reports to a third person, so the
+      // leader-voiced sentence would be untrue here.
+      expect(screen.getByText(/Nobody moves/)).toBeInTheDocument();
+      expect(screen.queryByText(/reporting to you/)).not.toBeInTheDocument();
+    });
+
+    it('AC-4: a leader is offered Agent and AAB, and never AB', async () => {
+      stub({ canChangeRole: true, canPromoteToAb: false, role: 'agent' });
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+      await screen.findByText('Rina Wijaya');
+
+      const options = [...screen.getByLabelText('New role').querySelectorAll('option')].map(
+        (o) => o.getAttribute('value'),
+      );
+      expect(options).toEqual(['', 'aab']);
+      expect(screen.getByText(/Only the office can make somebody an Agency Builder/)).toBeInTheDocument();
+    });
+
+    it('AC-4: offers neither control to somebody who may use neither', async () => {
+      stub({ canChangeRole: false, canPromoteToAb: false, canRemove: false });
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+
+      await screen.findByText('Rina Wijaya');
+      expect(screen.queryByLabelText('New role')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument();
+    });
+
+    it('AC-2: will not remove until the word is typed, exactly as the server checks it', async () => {
+      const { calls } = stub();
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+      await screen.findByText('Rina Wijaya');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove Rina' }));
+      const confirm = screen.getByRole('button', { name: 'Remove them' });
+      expect(confirm).toBeDisabled();
+
+      await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), 'remove me');
+      expect(confirm).toBeDisabled();
+
+      await userEvent.clear(screen.getByLabelText('Type REMOVE to confirm'));
+      // Trimmed and case-insensitive, because that is what the server does — the screen
+      // must not be stricter than the gate it stands in front of.
+      await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), ' remove ');
+      expect(confirm).toBeEnabled();
+
+      await userEvent.click(confirm);
+      const del = calls.find((c) => c.init.method === 'DELETE');
+      expect(JSON.parse(String(del?.init.body))).toEqual({ confirmation: ' remove ' });
+    });
+
+    it('AC-3: a leader with reports cannot be removed until the body says where they go', async () => {
+      const { calls } = stub({ directCount: 3, isLeader: true });
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+      await screen.findByText('Rina Wijaya');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove Rina' }));
+      expect(screen.getByText('3 people report to them')).toBeInTheDocument();
+
+      // Moving them up to *this person's* leader, not to the caller's unit: an Owner may
+      // lead nobody, and moving a unit under somebody who never led it would be a
+      // reorganisation dressed up as a removal.
+      await userEvent.click(screen.getByLabelText('Move them up to Wilson Tanoto'));
+      await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), 'REMOVE');
+      await userEvent.click(screen.getByRole('button', { name: 'Remove them' }));
+
+      const del = calls.find((c) => c.init.method === 'DELETE');
+      expect(JSON.parse(String(del?.init.body)).subtree).toEqual({
+        action: 'reassign',
+        toMembershipId: 'mem-ab',
+      });
+    });
+
+    it('AC-3: sends no disposition for somebody who leads nobody', async () => {
+      // The server refuses one, so sending it anyway would be a 400 the reader cannot act
+      // on.
+      const { calls } = stub({ directCount: 0 });
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+      await screen.findByText('Rina Wijaya');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove Rina' }));
+      expect(screen.queryByText(/report to them/)).not.toBeInTheDocument();
+      await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), 'REMOVE');
+      await userEvent.click(screen.getByRole('button', { name: 'Remove them' }));
+
+      expect(JSON.parse(String(calls.find((c) => c.init.method === 'DELETE')?.init.body))).not.toHaveProperty('subtree');
+    });
+
+    it('shows the server refusal rather than pretending it worked', async () => {
+      stub({}, {
+        '/members/mem-1': [
+          { body: member() },
+          { status: 403, body: { error: { code: 'ORG_REMOVAL_NOT_PERMITTED', message: 'Only somebody\u2019s direct leader can remove them.', requestId: 'r-1' } } },
+        ],
+      });
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+      await screen.findByText('Rina Wijaya');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove Rina' }));
+      await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), 'REMOVE');
+      await userEvent.click(screen.getByRole('button', { name: 'Remove them' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('direct leader');
     });
   });
 });

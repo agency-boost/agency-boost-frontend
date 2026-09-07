@@ -537,7 +537,13 @@ export default function AddAgentsPage() {
               Change {proposal.member.fullName}&apos;s role?
             </h3>
             <p className="mt-1 text-md text-navy">
-              {roleChangeExplanation(proposal.member.fullName, proposal.member.role, proposal.toRole)}
+              {roleChangeExplanation(
+                proposal.member.fullName,
+                proposal.member.role,
+                proposal.toRole,
+                // A leader's own team: the prototype's wording is true here.
+                'their-leader',
+              )}
             </p>
 
             <Field
