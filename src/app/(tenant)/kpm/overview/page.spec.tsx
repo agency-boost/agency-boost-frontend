@@ -19,7 +19,9 @@ const OWNER = makeMe({
 
 const KPM = {
   _id: 'kpm-1', companyId: 'co-1', code: '0417', branchName: 'BSD City Branch',
-  address: null, contactPhone: null, ownerUserId: 'u-owner', timezone: 'Asia/Jakarta',
+  address: null, contactPhone: null, ownerUserId: 'u-owner',
+  ownerName: 'Rina Wijaya', ownerEmail: 'rina@kpm0417.test', companyName: 'Prudential',
+  timezone: 'Asia/Jakarta',
   locale: 'id-ID', currency: 'IDR', status: 'active', suspendedAt: null,
   suspendedReason: null, createdAt: '2026-03-01T00:00:00.000Z',
   settings: { activationWindowDays: 90, weeksPerMonth: 4.33 },
@@ -59,10 +61,14 @@ describe('office overview', () => {
     for (const link of links) expect(link).toHaveAttribute('href', '/people/members');
   });
 
-  it('says the day boundary is the office own time zone', async () => {
+  it('says the day boundary is neither the reader clock nor the server one', async () => {
+    // The sentence used to read "in its own time zone", which implied a choice per
+    // office. v1 runs every office on Jakarta time (ADR-0016). The part that matters —
+    // that the boundary is not the reader's clock — is what the assertion keeps.
     stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
     renderInLayout(TenantLayout, <KpmOverviewPage />, { me: OWNER });
-    expect(await screen.findByText(/worked out in its own time zone/)).toBeInTheDocument();
+    expect(await screen.findByText(/worked out in Jakarta time/)).toBeInTheDocument();
+    expect(screen.getByText(/neither is yours to change/)).toBeInTheDocument();
   });
 
   it('shows the error rather than an office that looks empty', async () => {

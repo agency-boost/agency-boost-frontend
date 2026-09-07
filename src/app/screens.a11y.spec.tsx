@@ -59,6 +59,7 @@ const SUPER_ADMIN = makeMe({
 const KPM = {
   _id: 'kpm-1', companyId: 'co-1', code: '0417', branchName: 'BSD City Branch',
   address: 'Jl. Raya Serpong', contactPhone: null, ownerUserId: null,
+  ownerName: null, ownerEmail: null, companyName: 'Prudential',
   timezone: 'Asia/Jakarta', locale: 'id-ID', currency: 'IDR', status: 'active',
   suspendedAt: null, suspendedReason: null, createdAt: '2026-09-01T00:00:00.000Z',
   settings: { activationWindowDays: 90 },

@@ -90,9 +90,18 @@ describe('new tenant', () => {
     expect(push).not.toHaveBeenCalledWith('/admin/tenants/kpm-9');
   });
 
-  it('says what a blank time zone means rather than leaving it a mystery', async () => {
+  it('P3.5-T14 AC-7: shows the time zone and refuses to let anybody type one', async () => {
+    // This asserted "Blank inherits the insurer's" — a hint on a free-text box that
+    // accepted `Asia/Jakata` in both halves and broke every day boundary in that office
+    // for ever, silently. The requirement it protected survives: the value is explained
+    // rather than left a mystery. What changed is that it is no longer a control.
     stubFetch({ '/admin/companies': { body: COMPANIES } });
     renderInLayout(AdminLayout, <NewTenantPage />, { me: SUPER_ADMIN });
-    expect(await screen.findByText(/Blank inherits the insurer/)).toBeInTheDocument();
+
+    expect(await screen.findByText('Asia/Jakarta')).toBeInTheDocument();
+    expect(screen.getByText(/v1 runs every office on Jakarta time/)).toBeInTheDocument();
+    // Not a disabled input either: disabled reads as "not available right now", and this
+    // is a permanent product decision (ADR-0016).
+    expect(screen.queryByLabelText('Time zone')).not.toBeInTheDocument();
   });
 });

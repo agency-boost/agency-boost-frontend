@@ -62,7 +62,17 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
         <Card>
           <h2 className="font-display text-lg font-bold text-navy">Profile</h2>
           <dl className="mt-3 grid grid-cols-[9rem_1fr] gap-y-2 text-md">
-            <Detail term="Tenant id" detail={<code className="text-sm">{kpm._id}</code>} />
+            {/* The one id on this screen that stays, and the only one AC-7 exempts:
+                `04-managing-a-kpm.md` tells the reader support will ask for it. The term
+                was `Tenant id`, which is the vocabulary I-49 retired. `select-all` makes
+                one click take the whole string — `CopyableValue` would be the obvious
+                reach, but it is a boxed card with its own heading and would both repeat
+                this row's label and make a support id the loudest thing on the card. */}
+            <Detail
+              term="KPM id"
+              detail={<code className="select-all text-sm">{kpm._id}</code>}
+            />
+            <Detail term="Company" detail={kpm.companyName} />
             <Detail term="Code" detail={kpm.code} />
             <Detail term="Branch" detail={kpm.branchName} />
             <Detail term="Address" detail={kpm.address ?? '—'} />
@@ -74,9 +84,10 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
 
         <Card>
           <h2 className="font-display text-lg font-bold text-navy">Owner</h2>
-          {kpm.ownerUserId ? (
+          {kpm.ownerName ? (
             <p className="mt-2 text-md text-navy">
-              <code className="text-sm">{kpm.ownerUserId}</code>
+              <span className="font-semibold">{kpm.ownerName}</span>
+              {kpm.ownerEmail && <span className="block text-sm text-muted">{kpm.ownerEmail}</span>}
             </p>
           ) : (
             <p className="mt-2 text-md text-alert">
@@ -84,7 +95,7 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
             </p>
           )}
           <ButtonLink href={`/admin/tenants/${kpm._id}/owner`} variant="secondary" className="mt-3">
-            {kpm.ownerUserId ? 'Transfer owner' : 'Assign owner'}
+            {kpm.ownerName ? 'Transfer owner' : 'Assign owner'}
           </ButtonLink>
         </Card>
 

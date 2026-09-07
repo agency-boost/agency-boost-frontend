@@ -44,7 +44,7 @@ export default function AuditPage() {
       actions={
         <Field label="Scope" htmlFor="scope" className="w-64">
           <Select id="scope" value={scope} onChange={(e) => setScope(e.target.value)}>
-            <option value="">Platform level (no tenant)</option>
+            <option value="">Platform level (no KPM)</option>
             {tenants.map((t) => (
               <option key={t._id} value={t._id}>
                 {t.code} · {t.branchName}

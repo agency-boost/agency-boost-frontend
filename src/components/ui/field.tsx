@@ -33,6 +33,38 @@ export function Field({
   );
 }
 
+/**
+ * A value the form shows but nobody can change.
+ *
+ * Not a disabled `TextInput`: a disabled control says *not available right now*, and
+ * these are permanent v1 product decisions — a KPM's time zone and its currency. It is
+ * not a `Field` either, because a `<label>` with nothing to label is a lie to a screen
+ * reader; this is a `<dl>` row, which is what the office detail screen already uses for
+ * the same two values.
+ *
+ * The reason is not optional. A value shown with no control and no explanation reads as
+ * a field that failed to load.
+ */
+export function ReadOnlyField({
+  label,
+  value,
+  reason,
+  className,
+}: {
+  label: string;
+  value: string;
+  reason: string;
+  className?: string;
+}) {
+  return (
+    <dl className={cn('flex flex-col gap-1 rounded-md border border-hairline bg-base p-3', className)}>
+      <dt className="text-sm font-semibold text-navy">{label}</dt>
+      <dd className="text-md text-navy">{value}</dd>
+      <dd className="text-xs text-muted">{reason}</dd>
+    </dl>
+  );
+}
+
 export function TextInput({
   className,
   invalid,

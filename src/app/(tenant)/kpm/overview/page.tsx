@@ -55,9 +55,15 @@ function Office() {
             <dt className="text-muted">Currency</dt>
             <dd className="text-navy">{kpm.currency}</dd>
           </dl>
+          {/* The sentence used to say "in its own time zone", which implied a choice
+              per office. v1 runs every office on Jakarta time (ADR-0016) — the point
+              that survives is that the boundary is never the reader's clock or the
+              server's. */}
           <p className="mt-3 text-sm text-muted">
             Every &ldquo;today&rdquo;, &ldquo;this week&rdquo; and &ldquo;this month&rdquo; in this
-            office is worked out in its own time zone, not in yours and not in the server&apos;s.
+            office is worked out in Jakarta time, not in yours and not in the server&apos;s. Every
+            office on AgencyBoost runs on the same zone and the same currency; neither is yours to
+            change.
           </p>
         </Card>
       )}

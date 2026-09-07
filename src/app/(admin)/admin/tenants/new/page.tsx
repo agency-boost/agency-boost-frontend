@@ -4,7 +4,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Page } from '@/components/page';
-import { Button, ButtonLink, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import {
+  Button, ButtonLink, Card, ErrorBanner, Field, ReadOnlyField, Select, TextInput,
+} from '@/components/ui/field';
 import { createTenant, listCompanies, type Company } from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
 
@@ -19,7 +21,6 @@ export default function NewTenantPage() {
     branchName: '',
     address: '',
     contactPhone: '',
-    timezone: '',
   });
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -48,7 +49,6 @@ export default function NewTenantPage() {
         branchName: form.branchName,
         ...(form.address ? { address: form.address } : {}),
         ...(form.contactPhone ? { contactPhone: form.contactPhone } : {}),
-        ...(form.timezone ? { timezone: form.timezone } : {}),
       });
       router.push(`/admin/tenants/${kpm._id}`);
     } catch (err) {
@@ -65,7 +65,7 @@ export default function NewTenantPage() {
       <Card className="max-w-2xl">
         {companies.length === 0 ? (
           <div>
-            <p className="text-md text-navy">There is no principal insurer to attach an office to.</p>
+            <p className="text-md text-navy">There is no company to attach an office to.</p>
             <Link href="/admin/companies" className="mt-2 inline-block text-md text-navy underline">
               Create a company first
             </Link>
@@ -87,7 +87,7 @@ export default function NewTenantPage() {
             <Field
               label="Office code"
               htmlFor="code"
-              hint="Unique within the insurer, and the prefix on every agent code it issues. Effectively permanent."
+              hint="Unique within the company, and the prefix on every agent code it issues. Effectively permanent."
               error={badCode ? '2–16 characters: letters, digits and hyphens.' : undefined}
             >
               <TextInput id="code" required value={form.code} onChange={set('code')} invalid={badCode} />
@@ -105,13 +105,15 @@ export default function NewTenantPage() {
               <TextInput id="contactPhone" value={form.contactPhone} onChange={set('contactPhone')} />
             </Field>
 
-            <Field
+            {/* Shown, not asked for. This was a free-text box: `Asia/Jakata` was
+                accepted by both halves, and every day boundary in that office then
+                resolved to an Invalid DateTime for ever, with nothing raised at
+                creation (ADR-0016). */}
+            <ReadOnlyField
               label="Time zone"
-              htmlFor="timezone"
-              hint="Every day boundary in this office is computed in this zone. Blank inherits the insurer's."
-            >
-              <TextInput id="timezone" placeholder="Asia/Jakarta" value={form.timezone} onChange={set('timezone')} />
-            </Field>
+              value="Asia/Jakarta"
+              reason="Every day boundary in this office — what counts as today, which week a figure falls in, when a month closes — is worked out in this zone, not in yours and not in the server's. v1 runs every office on Jakarta time."
+            />
 
             <div className="flex gap-2">
               <Button type="submit" disabled={busy || badCode || !form.code || !form.branchName}>

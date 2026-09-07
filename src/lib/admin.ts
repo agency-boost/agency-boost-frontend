@@ -21,14 +21,29 @@ export interface Company {
   status: 'active' | 'suspended';
 }
 
+/**
+ * A KPM as the console reads it.
+ *
+ * `ownerName`, `ownerEmail` and `companyName` are resolved by the API (P3.5-T14 AC-7).
+ * The screens used to render `ownerUserId` — a 24-character hex string in a column
+ * headed **Owner** — because no screen can turn a user id into a name and nothing was
+ * asking the server to.
+ *
+ * `counters` is deliberately absent: the office's internal agent-code sequence used to
+ * ride along on the wire and is nobody's business but the server's.
+ */
 export interface Kpm {
   _id: string;
   companyId: string;
+  companyName: string;
   code: string;
   branchName: string;
   address: string | null;
   contactPhone: string | null;
   ownerUserId: string | null;
+  /** Null when nobody owns the office. `'Unknown'` when the owner's account has gone. */
+  ownerName: string | null;
+  ownerEmail: string | null;
   timezone: string;
   locale: string;
   currency: string;
@@ -134,7 +149,6 @@ export interface CreateKpmInput {
   branchName: string;
   address?: string;
   contactPhone?: string;
-  timezone?: string;
 }
 
 export const createTenant = (body: CreateKpmInput) =>

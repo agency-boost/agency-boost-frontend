@@ -41,7 +41,7 @@ const SEEDED: readonly DemoGroup[] = [
         role: 'Super Admin',
         email: 'superadmin@agencyboost.test',
         password: 'demo super admin',
-        lands: 'The platform console — tenants, companies, the audit log',
+        lands: 'The platform console — KPMs, companies, the audit log',
       },
       {
         role: 'Super Admin (second)',

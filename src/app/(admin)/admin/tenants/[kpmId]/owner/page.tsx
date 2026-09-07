@@ -52,9 +52,10 @@ export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: s
 
           {transferring && (
             <p className="rounded-md border border-hairline bg-base p-3 text-md text-navy">
-              The current owner is <code className="text-sm">{kpm?.ownerUserId}</code>. A
-              transfer is audited with both the outgoing and incoming person, and takes
-              the office&apos;s administration rights away from the outgoing one.
+              The current owner is <strong>{kpm?.ownerName}</strong>
+              {kpm?.ownerEmail && <> ({kpm.ownerEmail})</>}. A transfer is audited with
+              both the outgoing and incoming person, and takes the office&apos;s
+              administration rights away from the outgoing one.
             </p>
           )}
 

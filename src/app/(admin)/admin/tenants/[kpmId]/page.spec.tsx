@@ -22,6 +22,7 @@ const SUPER_ADMIN = makeMe({
 const KPM = {
   _id: 'kpm-1', companyId: 'co-1', code: '0417', branchName: 'BSD City Branch',
   address: 'Jl. Raya Serpong', contactPhone: null, ownerUserId: 'u-owner',
+  ownerName: 'Rina Wijaya', ownerEmail: 'rina@kpm0417.test', companyName: 'Prudential',
   timezone: 'Asia/Jakarta', locale: 'id-ID', currency: 'IDR', status: 'active',
   suspendedAt: null, suspendedReason: null, createdAt: '2026-09-01T00:00:00.000Z',
   settings: { activationWindowDays: 90 },
@@ -41,6 +42,25 @@ describe('tenant detail', () => {
     expect(screen.getByText('Asia/Jakarta')).toBeInTheDocument();
   });
 
+  it('P3.5-T14 AC-7: names the owner, and keeps the one id support asks for', async () => {
+    stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
+    renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: SUPER_ADMIN });
+
+    // The Owner card's whole body used to be a <code> holding an ObjectId.
+    expect(await screen.findByText('Rina Wijaya')).toBeInTheDocument();
+    expect(screen.getByText('rina@kpm0417.test')).toBeInTheDocument();
+    expect(screen.queryByText('u-owner')).not.toBeInTheDocument();
+
+    // The company is named too, rather than joined client-side or shown as an id.
+    expect(screen.getByText('Prudential')).toBeInTheDocument();
+
+    // The KPM id stays — `04-managing-a-kpm.md` tells the reader support will ask for it
+    // — under the term I-49 settled, not the retired `Tenant id`.
+    expect(screen.getByText('KPM id')).toBeInTheDocument();
+    expect(screen.getByText('kpm-1')).toBeInTheDocument();
+    expect(screen.queryByText('Tenant id')).not.toBeInTheDocument();
+  });
+
   it('offers a transfer when an owner exists and an assignment when none does', async () => {
     stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
     const { unmount } = renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: SUPER_ADMIN });
@@ -48,7 +68,7 @@ describe('tenant detail', () => {
     unmount();
     vi.unstubAllGlobals();
 
-    stubFetch({ '/admin/tenants/kpm-1': { body: { ...KPM, ownerUserId: null } } });
+    stubFetch({ '/admin/tenants/kpm-1': { body: { ...KPM, ownerUserId: null, ownerName: null, ownerEmail: null } } });
     renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: SUPER_ADMIN });
     expect(await screen.findByRole('link', { name: 'Assign owner' })).toBeInTheDocument();
     expect(screen.getByText(/Nobody can administer this office/)).toBeInTheDocument();

@@ -19,34 +19,60 @@ const SUPER_ADMIN = makeMe({
 });
 
 const KPM = {
-  _id: 'kpm-1', companyId: 'co-1', code: '0417', branchName: 'BSD City Branch',
-  address: null, contactPhone: null, ownerUserId: 'u-owner', timezone: 'Asia/Jakarta',
-  locale: 'id-ID', currency: 'IDR', status: 'active', suspendedAt: null,
-  suspendedReason: null, createdAt: '2026-09-01T00:00:00.000Z', settings: {},
+  _id: 'kpm-1', companyId: 'co-1', companyName: 'Prudential', code: '0417',
+  branchName: 'BSD City Branch', address: null, contactPhone: null,
+  ownerUserId: 'u-owner', ownerName: 'Rina Wijaya', ownerEmail: 'rina@kpm0417.test',
+  timezone: 'Asia/Jakarta', locale: 'id-ID', currency: 'IDR', status: 'active',
+  suspendedAt: null, suspendedReason: null, createdAt: '2026-09-01T00:00:00.000Z',
+  settings: {},
 };
 
 describe('tenants list', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('renders a real table with the principal resolved to its name', async () => {
-    stubFetch({
-      '/admin/tenants': { body: [KPM] },
-      '/admin/companies': { body: [{ _id: 'co-1', name: 'Prudential', slug: 'prudential' }] },
-    });
+  it('renders a real table with the company named, from one request', async () => {
+    const { calls } = stubFetch({ '/admin/tenants': { body: [KPM] } });
     renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
 
     const row = within(await screen.findByRole('table')).getByRole('row', { name: /0417/ });
     expect(within(row).getByText('BSD City Branch')).toBeInTheDocument();
     expect(within(row).getByText('Prudential')).toBeInTheDocument();
     expect(within(row).getByText('Active')).toBeInTheDocument();
+
+    // The company name arrives on the payload. It used to be joined from a second
+    // request, so a KPM whose company was missing from that list showed a raw ObjectId.
+    expect(calls.filter((c) => c.url.includes('/admin/companies'))).toHaveLength(0);
+  });
+
+  it('P3.5-T14 AC-7: names the owner, rather than printing their id', async () => {
+    stubFetch({ '/admin/tenants': { body: [KPM] } });
+    renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
+
+    const row = within(await screen.findByRole('table')).getByRole('row', { name: /0417/ });
+    expect(within(row).getByText('Rina Wijaya')).toBeInTheDocument();
+    expect(within(row).getByText('rina@kpm0417.test')).toBeInTheDocument();
+    // The id was a 24-character hex string in a column headed **Owner**.
+    expect(within(row).queryByText('u-owner')).not.toBeInTheDocument();
+  });
+
+  it('P3.5-T14: says an owner is Unknown rather than making the office look unowned', async () => {
+    // An owner whose account has gone is a different problem from no owner at all, and
+    // the two must not collapse into the same red call to act.
+    stubFetch({
+      '/admin/tenants': { body: [{ ...KPM, ownerName: 'Unknown', ownerEmail: null }] },
+    });
+    renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
+
+    const row = within(await screen.findByRole('table')).getByRole('row', { name: /0417/ });
+    expect(within(row).getByText('Unknown')).toBeInTheDocument();
+    expect(within(row).queryByRole('link', { name: 'Assign an owner' })).not.toBeInTheDocument();
   });
 
   it('flags an office with no owner as an action, not a blank cell', async () => {
     // Nobody can administer an office until an owner is assigned, so an empty cell
     // would hide the one thing that still needs doing.
     stubFetch({
-      '/admin/tenants': { body: [{ ...KPM, ownerUserId: null }] },
-      '/admin/companies': { body: [] },
+      '/admin/tenants': { body: [{ ...KPM, ownerUserId: null, ownerName: null, ownerEmail: null }] },
     });
     renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
 

@@ -22,6 +22,7 @@ const SUPER_ADMIN = makeMe({
 
 const KPM = {
   _id: 'kpm-1', code: '0417', branchName: 'BSD City Branch', ownerUserId: null,
+  ownerName: null, ownerEmail: null, companyName: 'Prudential',
   companyId: 'co-1', address: null, contactPhone: null, timezone: 'Asia/Jakarta',
   locale: 'id-ID', currency: 'IDR', status: 'active', suspendedAt: null,
   suspendedReason: null, createdAt: '2026-09-01T00:00:00.000Z', settings: {},
@@ -36,12 +37,19 @@ describe('assign owner', () => {
   });
 
   it('spells out what a transfer costs the outgoing owner', async () => {
-    stubFetch({ '/admin/tenants/kpm-1': { body: { ...KPM, ownerUserId: 'u-old' } } });
+    stubFetch({
+      '/admin/tenants/kpm-1': {
+        body: { ...KPM, ownerUserId: 'u-old', ownerName: 'Budi Santoso', ownerEmail: 'budi@kpm0417.test' },
+      },
+    });
     renderInLayout(AdminLayout, <AssignOwnerPage params={params} />, { me: SUPER_ADMIN });
 
     expect(await screen.findByRole('heading', { name: 'Transfer owner' })).toBeInTheDocument();
     expect(screen.getByText(/audited with both the outgoing and incoming/)).toBeInTheDocument();
-    expect(screen.getByText('u-old')).toBeInTheDocument();
+    // P3.5-T14 AC-7: an English sentence whose subject was a hex string now names them.
+    expect(screen.getByText('Budi Santoso')).toBeInTheDocument();
+    expect(screen.getByText(/budi@kpm0417.test/)).toBeInTheDocument();
+    expect(screen.queryByText('u-old')).not.toBeInTheDocument();
   });
 
   it('assigns by email and returns to the office', async () => {

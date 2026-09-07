@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ButtonLink, ErrorBanner } from '@/components/ui/field';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
-import { listCompanies, listTenants, TENANT_STATUS_LABEL, type Company, type Kpm } from '@/lib/admin';
+import { listTenants, TENANT_STATUS_LABEL, type Kpm } from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
 
 /**
@@ -16,24 +16,22 @@ import { toDisplayError } from '@/lib/api-client';
  * be missing from the other — which is what keeps the placeholder the same width as
  * the thing it stands in for.
  */
-const COLUMNS = ['Code', 'Branch', 'Principal', 'Owner', 'Status'] as const;
+const COLUMNS = ['Code', 'Branch', 'Company', 'Owner', 'Status'] as const;
 
 export default function TenantsPage() {
   const [tenants, setTenants] = useState<Kpm[] | null>(null);
-  const [companies, setCompanies] = useState<Record<string, string>>({});
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
 
+  // One request. The company name used to be joined here from a second call, which meant
+  // a KPM whose company was missing from that list rendered a raw ObjectId in the column
+  // — and cost a round trip to do it. The payload carries the name now.
   useEffect(() => {
-    void (async () => {
-      try {
-        const [kpms, cos] = await Promise.all([listTenants(), listCompanies()]);
-        setTenants(kpms);
-        setCompanies(Object.fromEntries(cos.map((c: Company) => [c._id, c.name])));
-      } catch (err) {
+    void listTenants()
+      .then(setTenants)
+      .catch((err) => {
         setError(toDisplayError(err));
         setTenants([]);
-      }
-    })();
+      });
   }, []);
 
   return (
@@ -76,10 +74,15 @@ export default function TenantsPage() {
                 </Link>
               </Cell>
               <Cell>{t.branchName}</Cell>
-              <Cell>{companies[t.companyId] ?? t.companyId}</Cell>
+              <Cell>{t.companyName}</Cell>
               <Cell>
-                {t.ownerUserId ? (
-                  <span className="text-muted">{t.ownerUserId}</span>
+                {t.ownerName ? (
+                  <>
+                    <span className="block text-navy">{t.ownerName}</span>
+                    {t.ownerEmail && (
+                      <span className="block text-sm text-muted">{t.ownerEmail}</span>
+                    )}
+                  </>
                 ) : (
                   <Link href={`/admin/tenants/${t._id}/owner`} className="text-alert underline">
                     Assign an owner
