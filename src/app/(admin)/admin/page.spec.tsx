@@ -24,7 +24,8 @@ const overview = (over: Record<string, unknown> = {}) => ({
   tiles: { companies: 1, kpms: 8, totalMembers: 1340, agencyBuilders: 61 },
   attention: [],
   companies: [
-    { companyId: 'co-1', name: 'Prudential', initials: 'PR', kpmCount: 8, memberCount: 1340 },
+    { companyId: 'co-1', name: 'Prudential', initials: 'PR', kpmCount: 8, memberCount: 1340,
+      ladder: ['Agent', 'AAB', 'AB'] },
   ],
   ...over,
 });

@@ -40,7 +40,7 @@ const SECTIONS: readonly { label: string | null; divider?: boolean; items: Admin
     label: 'Companies',
     items: [
       { label: 'Manage companies', href: '/admin/companies' },
-      { label: 'Org role ladder', href: '/admin/org-levels', upcoming: true },
+      { label: 'Org role ladder', href: '/admin/org-levels' },
       { label: 'KPM template', href: '/admin/templates', upcoming: true },
       { label: 'Product catalog', href: '/admin/products', upcoming: true },
     ],
@@ -51,7 +51,10 @@ const SECTIONS: readonly { label: string | null; divider?: boolean; items: Admin
     items: [
       { label: 'All KPMs', href: '/admin/tenants' },
       { label: 'Create / assign KPM', href: '/admin/tenants/new' },
-      { label: 'Pending KPM requests', href: '/admin/kpm-requests', upcoming: true },
+      // Not `upcoming`. P3.5-T2 built this screen and its endpoints and left the flag
+      // on, and `upcoming` renders an anchor with **no href** — so a shipped surface was
+      // reachable from nowhere, while `12-kpm-requests.md` told the reader to click it.
+      { label: 'Pending KPM requests', href: '/admin/kpm-requests' },
     ],
     divider: true,
   },

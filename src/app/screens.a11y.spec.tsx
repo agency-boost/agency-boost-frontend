@@ -32,6 +32,7 @@ import AddAgentsPage from './(agent)/user-management/add/page';
 import PendingPage from './(agent)/user-management/pending/page';
 import GroupTreePage from './(agent)/group-tree/page';
 import OrgTreePage from './(tenant)/people/org-tree/page';
+import OrgLevelsPage from './(admin)/admin/org-levels/page';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -104,7 +105,8 @@ const OVERVIEW = {
     href: '/admin/tenants', actionLabel: 'Review',
   }],
   companies: [
-    { companyId: 'co-1', name: 'Prudential', initials: 'PR', kpmCount: 8, memberCount: 1340 },
+    { companyId: 'co-1', name: 'Prudential', initials: 'PR', kpmCount: 8, memberCount: 1340,
+      ladder: ['Agent', 'AAB', 'AB'] },
   ],
 };
 
@@ -708,6 +710,26 @@ describe('Phase 2 screens have no axe violations', () => {
     await screen.findByRole('status');
     await expectClean('members (loading)');
     release();
+  });
+
+  it('org role ladder', async () => {
+    stubFetch({
+      '/admin/org-levels': {
+        body: [
+          { orgLevelId: 'lvl-1', companyId: 'co-1', code: 'AGENT', label: 'Agent', displayOrder: 1, status: 'active', archivedAt: null },
+          { orgLevelId: 'lvl-2', companyId: 'co-1', code: 'AAB', label: 'AAB', displayOrder: 2, status: 'archived', archivedAt: '2026-09-01T00:00:00.000Z' },
+        ],
+      },
+      '/admin/companies': { body: [COMPANY] },
+    });
+    renderInLayout(AdminLayout, <OrgLevelsPage />, {
+      me: makeMe({
+        ...SUPER_ADMIN,
+        permissions: [...SUPER_ADMIN.permissions, 'org_level:read', 'org_level:crud'],
+      }),
+    });
+    await screen.findByRole('table');
+    await expectClean('org-levels');
   });
 
   it('audit log', async () => {

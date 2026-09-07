@@ -81,7 +81,36 @@ export interface CompanyCard {
   initials: string;
   kpmCount: number;
   memberCount: number;
+  /** The company's active rungs, junior first. Empty when nobody has defined a ladder. */
+  ladder: string[];
 }
+
+/** A rung on a company's role ladder (P3.5-T7, ADR-0012). */
+export interface OrgLevel {
+  orgLevelId: string;
+  companyId: string;
+  /** Stable and semantic. Never renamed, never reused — not even after archiving. */
+  code: string;
+  label: string;
+  displayOrder: number;
+  status: 'active' | 'archived';
+  archivedAt: string | null;
+}
+
+export const listOrgLevels = () => api<OrgLevel[]>('/admin/org-levels');
+
+export const createOrgLevel = (body: {
+  companyId: string;
+  code: string;
+  label: string;
+  displayOrder: number;
+}) => api<OrgLevel[]>('/admin/org-levels', { method: 'POST', body });
+
+/** No `code`: it is the identity every membership holds and is never updatable. */
+export const updateOrgLevel = (
+  orgLevelId: string,
+  body: { label?: string; displayOrder?: number; status?: 'active' | 'archived' },
+) => api<OrgLevel[]>(`/admin/org-levels/${orgLevelId}`, { method: 'PATCH', body });
 
 export interface PlatformOverview {
   tiles: { companies: number; kpms: number; totalMembers: number; agencyBuilders: number };

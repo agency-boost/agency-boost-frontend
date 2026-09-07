@@ -130,4 +130,24 @@ describe('the sidebar matches the prototype', () => {
     // The Superadmin prototype says Soon where the KPM Owner one says Upcoming.
     expect(screen.getAllByText('Soon').length).toBeGreaterThan(0);
   });
+
+  it('every built Superadmin destination is a real link', () => {
+    // `upcoming` renders an anchor with no href, so a flag left on after the screen
+    // shipped makes it reachable from nowhere. That is what happened to
+    // /admin/kpm-requests: the screen, its endpoints and its manual chapter all shipped
+    // in P3.5-T2 while the nav item stayed inert. Nothing caught it, because the nav
+    // spec asserted section order and the screen spec asserted screen behaviour.
+    renderWithSession(
+      <AdminShell title="x">body</AdminShell>,
+      { me: makeMe({ user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'] }) },
+    );
+
+    for (const name of [
+      'Overview', 'Notifications', 'Manage companies', 'All KPMs',
+      'Create / assign KPM', 'Pending KPM requests', 'KPM Owners & Admins',
+      'Audit / role change log',
+    ]) {
+      expect(screen.getByRole('link', { name })).toHaveAttribute('href');
+    }
+  });
 });

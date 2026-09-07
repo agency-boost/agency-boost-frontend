@@ -91,10 +91,17 @@ export default function AdminOverviewPage() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block font-display text-md font-bold text-navy">{c.name}</span>
-                  {/* The prototype's meta line also carries the role ladder and a product
-                      count. Both arrive with the phases that build them — P3.5-T7 and
-                      Phase 5 — and inventing either would put a number on screen that no
-                      data stands behind. */}
+                  {/* The prototype's meta line: `Role ladder: Agent → AAB → AB · 9
+                      products in catalog` (`Superadmin.html:311`). The ladder is real as
+                      of P3.5-T7 and comes from `companyOrgLevels`; the product count
+                      arrives with Phase 5, and a literal would be a number no data
+                      stands behind. A company with no ladder says so — an arrow with
+                      nothing on either side would read as a rendering failure. */}
+                  <span className="block text-sm text-muted">
+                    {c.ladder.length > 0
+                      ? `Role ladder: ${c.ladder.join(' → ')}`
+                      : 'No role ladder defined yet'}
+                  </span>
                 </span>
                 <span className="flex gap-6 text-right">
                   <Figure label="KPMs" value={c.kpmCount} />
