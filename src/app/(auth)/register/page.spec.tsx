@@ -19,6 +19,7 @@ async function fill(password = 'a long enough password') {
   await userEvent.type(screen.getByLabelText('Full name'), 'Rina Wijaya');
   await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
   await userEvent.type(screen.getByLabelText('Password'), password);
+  await userEvent.type(screen.getByLabelText('Confirm password'), password);
   // The insurer that issued the code, and the code itself (ADR-0017).
   await screen.findByRole('option', { name: 'Prudential' });
   await userEvent.selectOptions(screen.getByLabelText('Insurer'), 'co-2');
@@ -106,7 +107,33 @@ describe('register', () => {
 
     await userEvent.clear(screen.getByLabelText('Password'));
     await userEvent.type(screen.getByLabelText('Password'), 'a long enough password');
+    // Typed but not yet confirmed: the button stays down, because a create flow needs
+    // the second box (the reset screen has needed one since Phase 2).
+    expect(submit).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'a long enough passwor');
+    expect(screen.getByText('The two passwords do not match.')).toBeInTheDocument();
+    expect(submit).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'd');
+    expect(screen.queryByText('The two passwords do not match.')).toBeNull();
     expect(submit).toBeEnabled();
+  });
+
+  it('offers to show what was typed, on both password boxes', async () => {
+    stubFetch({ '/companies': { body: INSURERS } });
+    renderWithSession(<RegisterPage />, { me: null });
+
+    // A ten-character minimum makes a mistyped passphrase the likeliest failure, and
+    // "the two do not match" does not say which one is wrong.
+    const toggles = screen.getAllByRole('button', { name: 'Show password' });
+    expect(toggles).toHaveLength(2);
+
+    await userEvent.type(screen.getByLabelText('Password'), 'a long enough password');
+    await userEvent.click(toggles[0]);
+    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'text');
+    // And only that one.
+    expect(screen.getByLabelText('Confirm password')).toHaveAttribute('type', 'password');
   });
 
   it('says how long the verification link lasts', async () => {

@@ -112,11 +112,13 @@ describe('profile', () => {
 
     await userEvent.type(screen.getByLabelText('Current password'), 'old password');
     await userEvent.type(screen.getByLabelText('New password'), 'a long enough password');
+    await userEvent.type(screen.getByLabelText('Confirm new password'), 'a long enough password');
     await userEvent.click(screen.getByRole('button', { name: 'Change password' }));
 
     expect(await screen.findByText(/Password changed/)).toBeInTheDocument();
     expect(screen.getByLabelText('Current password')).toHaveValue('');
     expect(screen.getByLabelText('New password')).toHaveValue('');
+    expect(screen.getByLabelText('Confirm new password')).toHaveValue('');
   });
 
   it('says the current password was wrong rather than appearing to succeed', async () => {
@@ -130,6 +132,7 @@ describe('profile', () => {
 
     await userEvent.type(screen.getByLabelText('Current password'), 'wrong password');
     await userEvent.type(screen.getByLabelText('New password'), 'a long enough password');
+    await userEvent.type(screen.getByLabelText('Confirm new password'), 'a long enough password');
     await userEvent.click(screen.getByRole('button', { name: 'Change password' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('not your current password');
@@ -151,6 +154,44 @@ describe('profile', () => {
     expect(submit).toBeDisabled();
 
     await userEvent.type(screen.getByLabelText('New password'), ' but now long enough');
+    // Long enough, but not confirmed: changing a password is an update, and an update
+    // gets the second box for the same reason a create does.
+    expect(submit).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('Confirm new password'), 'short but now long');
+    expect(screen.getByText('The two passwords do not match.')).toBeInTheDocument();
+    expect(submit).toBeDisabled();
+
+    await userEvent.clear(screen.getByLabelText('Confirm new password'));
+    await userEvent.type(screen.getByLabelText('Confirm new password'), 'short but now long enough');
+    expect(screen.queryByText('The two passwords do not match.')).toBeNull();
     expect(submit).toBeEnabled();
+  });
+
+  it('sends the two fields the endpoint takes, and not the confirmation', async () => {
+    // `ChangePasswordDto` has no field for it, and global validation rejects an unknown
+    // one — so a correctly filled form would come back a 400.
+    const { calls } = stubFetch({ '/auth/change-password': { body: { status: 'changed' } } });
+    renderWithSession(<ProfilePage />, { me: ME });
+
+    await userEvent.type(screen.getByLabelText('Current password'), 'old password');
+    await userEvent.type(screen.getByLabelText('New password'), 'a long enough password');
+    await userEvent.type(screen.getByLabelText('Confirm new password'), 'a long enough password');
+    await userEvent.click(screen.getByRole('button', { name: 'Change password' }));
+
+    const change = await vi.waitFor(() => {
+      const c = calls.find((x) => x.url.includes('/auth/change-password'));
+      if (!c) throw new Error('no call yet');
+      return c;
+    });
+    expect(JSON.parse(change.init.body as string)).toEqual({
+      currentPassword: 'old password',
+      newPassword: 'a long enough password',
+    });
+  });
+
+  it('offers to show what was typed, on all three password boxes', async () => {
+    renderWithSession(<ProfilePage />, { me: ME });
+    expect(screen.getAllByRole('button', { name: 'Show password' })).toHaveLength(3);
   });
 });

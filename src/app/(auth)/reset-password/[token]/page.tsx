@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { use, useState } from 'react';
 import { api, toDisplayError } from '@/lib/api-client';
-import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { Button, Card, ErrorBanner, Field } from '@/components/ui/field';
+import { PasswordInput } from '@/components/ui/password-input';
 
 const MIN_LENGTH = 10;
 
@@ -52,9 +53,8 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
             hint={`At least ${MIN_LENGTH} characters. Length beats symbols.`}
             error={tooShort ? `Use at least ${MIN_LENGTH} characters.` : undefined}
           >
-            <TextInput
+            <PasswordInput
               id="password"
-              type="password"
               autoComplete="new-password"
               required
               value={password}
@@ -68,9 +68,8 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
             htmlFor="confirm"
             error={mismatch ? 'The two passwords do not match.' : undefined}
           >
-            <TextInput
+            <PasswordInput
               id="confirm"
-              type="password"
               autoComplete="new-password"
               required
               value={confirm}

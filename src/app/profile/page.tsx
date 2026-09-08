@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { RoleShell } from '@/components/role-shell';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import { PasswordInput } from '@/components/ui/password-input';
 import { api, toDisplayError } from '@/lib/api-client';
 import { useSession, type Me } from '@/lib/session';
 import { useSignOut } from '@/lib/use-sign-out';
@@ -208,9 +209,13 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
 function PasswordForm() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [done, setDone] = useState(false);
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Only once they have started the second box — an empty field has not disagreed yet.
+  const mismatch = confirmNewPassword.length > 0 && confirmNewPassword !== newPassword;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -218,12 +223,14 @@ function PasswordForm() {
     setError(null);
     setDone(false);
     try {
+      // The confirmation is a screen concern. The endpoint takes two fields.
       await api('/auth/change-password', {
         method: 'POST',
         body: { currentPassword, newPassword },
       });
       setCurrentPassword('');
       setNewPassword('');
+      setConfirmNewPassword('');
       setDone(true);
     } catch (err) {
       setError(toDisplayError(err));
@@ -247,9 +254,8 @@ function PasswordForm() {
         )}
 
         <Field label="Current password" htmlFor="currentPassword">
-          <TextInput
+          <PasswordInput
             id="currentPassword"
-            type="password"
             autoComplete="current-password"
             required
             value={currentPassword}
@@ -258,9 +264,8 @@ function PasswordForm() {
         </Field>
 
         <Field label="New password" htmlFor="newPassword" hint="At least 10 characters. Length beats symbols.">
-          <TextInput
+          <PasswordInput
             id="newPassword"
-            type="password"
             autoComplete="new-password"
             required
             minLength={10}
@@ -269,7 +274,28 @@ function PasswordForm() {
           />
         </Field>
 
-        <Button type="submit" disabled={busy || !currentPassword || newPassword.length < 10}>
+        <Field
+          label="Confirm new password"
+          htmlFor="confirmNewPassword"
+          error={mismatch ? 'The two passwords do not match.' : undefined}
+        >
+          <PasswordInput
+            id="confirmNewPassword"
+            autoComplete="new-password"
+            required
+            value={confirmNewPassword}
+            onChange={(e) => setConfirmNewPassword(e.target.value)}
+            invalid={mismatch}
+          />
+        </Field>
+
+        <Button
+          type="submit"
+          disabled={
+            busy || !currentPassword || newPassword.length < 10
+            || mismatch || !confirmNewPassword
+          }
+        >
           {busy ? 'Changing…' : 'Change password'}
         </Button>
       </form>

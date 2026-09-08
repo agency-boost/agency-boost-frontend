@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
 import { listInsurers, type Insurer } from '@/lib/companies';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import { PasswordInput } from '@/components/ui/password-input';
 
 /**
  * Self-signup.
@@ -23,7 +24,7 @@ const MIN_LENGTH = 10;
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
-    fullName: '', email: '', password: '', companyId: '', agentCode: '',
+    fullName: '', email: '', password: '', confirmPassword: '', companyId: '', agentCode: '',
   });
   const [insurers, setInsurers] = useState<Insurer[] | null>(null);
   const [done, setDone] = useState(false);
@@ -44,6 +45,9 @@ export default function RegisterPage() {
   // rather than a round trip. The server check remains the real one.
   const tooShort = form.password.length > 0 && form.password.length < MIN_LENGTH;
   const padded = /^\s|\s$/.test(form.password);
+  // Only once they have started the second box: complaining that an empty field does not
+  // match the one above it is telling somebody off for not having finished typing.
+  const mismatch = form.confirmPassword.length > 0 && form.confirmPassword !== form.password;
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
     setForm({ ...form, [k]: e.target.value });
 
@@ -52,7 +56,11 @@ export default function RegisterPage() {
     setBusy(true);
     setError(null);
     try {
-      await api('/auth/register', { method: 'POST', body: form });
+      // The confirmation never leaves the screen. `RegisterDto` has no field for it, and
+      // global validation rejects an unknown one — so sending the whole form object would
+      // turn a correctly filled form into a 400.
+      const { confirmPassword: _confirm, ...body } = form;
+      await api('/auth/register', { method: 'POST', body });
       setDone(true);
     } catch (err) {
       setError(toDisplayError(err));
@@ -162,10 +170,9 @@ export default function RegisterPage() {
                     : undefined
               }
             >
-              <TextInput
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 autoComplete="new-password"
                 required
                 value={form.password}
@@ -174,10 +181,26 @@ export default function RegisterPage() {
               />
             </Field>
 
+            <Field
+              label="Confirm password"
+              htmlFor="confirmPassword"
+              error={mismatch ? 'The two passwords do not match.' : undefined}
+            >
+              <PasswordInput
+                id="confirmPassword"
+                name="confirmPassword"
+                autoComplete="new-password"
+                required
+                value={form.confirmPassword}
+                onChange={set('confirmPassword')}
+                invalid={mismatch}
+              />
+            </Field>
+
             <Button
               type="submit"
               disabled={
-                busy || tooShort || padded
+                busy || tooShort || padded || mismatch || !form.confirmPassword
                 || !form.fullName.trim() || !form.email.trim()
                 || !form.companyId || !form.agentCode.trim()
               }

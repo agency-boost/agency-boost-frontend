@@ -8,6 +8,7 @@ import { useSession } from '@/lib/session';
 import { type DemoAccount } from '@/lib/demo-accounts';
 import { DemoAccountsPanel } from '@/components/demo-accounts-panel';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { PasswordInput } from '@/components/ui/password-input';
 
 export default function LoginPage() {
   const { signIn } = useSession();
@@ -73,10 +74,9 @@ export default function LoginPage() {
           </Field>
 
           <Field label="Password" htmlFor="password">
-            <TextInput
+            <PasswordInput
               id="password"
               name="password"
-              type="password"
               autoComplete="current-password"
               required
               value={password}
