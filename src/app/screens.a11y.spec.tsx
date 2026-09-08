@@ -306,7 +306,7 @@ describe('Phase 2 screens have no axe violations', () => {
     await expectClean('activity/log');
   });
 
-  it('the invite screen, with an invite to share and a list of them', async () => {
+  it('the invite screen, with a code to share and a team below it', async () => {
     const leader = makeMe({
       membership: {
         membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
@@ -334,18 +334,13 @@ describe('Phase 2 screens have no axe violations', () => {
           email: 'fajar@kpm0417.test', agentCode: 'KPM0417-011', role: 'agent',
         }],
       },
-      '/join/invites': {
-        body: [
-          {
-            inviteId: 'inv-1', code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417',
-            label: 'September', autoApprove: true, maxUses: 5, useCount: 1,
-            expiresAt: '2026-10-01T00:00:00.000Z', revokedAt: null, state: 'active',
-          },
-        ],
-      },
+      '/join/my-code': { body: { code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417' } },
     });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: leader });
-    await screen.findByRole('table');
+    // The code, not a table: the list of issued invites went with the lifecycle
+    // (P3.6-T1), and axe must scan the panel in its loaded state rather than its skeleton.
+    await screen.findByText('JOR417');
+    await screen.findByText('Rina Wijaya');
     await expectClean('user-management/add');
   });
 
@@ -366,7 +361,7 @@ describe('Phase 2 screens have no axe violations', () => {
       ],
     });
     stubFetch({
-      '/join/invites': { body: [] },
+      '/join/my-code': { body: { code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417' } },
       '/join/untagged': { body: [] },
       '/members/my-team': {
         body: [{
@@ -398,7 +393,7 @@ describe('Phase 2 screens have no axe violations', () => {
       ],
     });
     stubFetch({
-      '/join/invites': { body: [] },
+      '/join/my-code': { body: { code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417' } },
       '/join/untagged': { body: [] },
       '/members/my-team': {
         body: [{

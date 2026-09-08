@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -39,11 +39,14 @@ const AGENT = makeMe({
   permissions: [],
 });
 
-const invite = (over: Record<string, unknown> = {}) => ({
-  inviteId: 'inv-1', code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417',
-  label: null, autoApprove: true, maxUses: null, useCount: 0,
-  expiresAt: null, revokedAt: null, state: 'active', ...over,
-});
+/**
+ * A leader's own code. Two fields, because there is no lifecycle left to describe.
+ *
+ * This fixture carried `inviteId`, `label`, `autoApprove`, `maxUses`, `useCount`,
+ * `expiresAt`, `revokedAt` and `state` until 2026-09-09 — every one of them a way to
+ * bound a credential somebody could mint again (P3.6-T1).
+ */
+const MY_CODE = { code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417' };
 
 describe('inviting people (P3-T4)', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -71,7 +74,7 @@ describe('inviting people (P3-T4)', () => {
             },
           ]);
         }
-        if (url.includes('/join/invites') || url.includes('/members/my-team')) return json([]);
+        if (url.includes('/join/my-code') || url.includes('/members/my-team')) return json([]);
         return json({ items: [], unreadCount: 0 });
       }),
     );
@@ -90,28 +93,26 @@ describe('inviting people (P3-T4)', () => {
     await screen.findByText('Budi Santoso');
   });
 
-  it('says plainly that an invite skips approval', async () => {
-    // It is the whole difference from asking a leader, and the reason a limit and an
-    // expiry are offered at all.
+  it('says plainly that a code skips approval', async () => {
+    // It is the whole difference from asking a leader, and the reason the code is worth
+    // guarding at all.
     stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-    expect(await screen.findByText(/Nobody approves it/)).toBeInTheDocument();
+    expect(await screen.findByText(/no approval needed/)).toBeInTheDocument();
   });
 
-  it('AC-1: shows the code and the link as one invite, not two', async () => {
+  it('AC-1: shows the code and the link as one artefact, not two', async () => {
     stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [invite()] }, '/join/untagged': { body: [] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-    // Twice on purpose: once to share and once in the list of what you have issued.
-    expect(await screen.findAllByText('JOR417')).toHaveLength(2);
+    // Once now, not twice: the list of what you have issued went with the lifecycle.
+    expect(await screen.findAllByText('JOR417')).toHaveLength(1);
     expect(screen.getByText('https://agencyboost.app/join?code=JOR417')).toBeInTheDocument();
-    expect(screen.getByText(/Withdrawing the invite stops all three, because they are one invite/))
-      .toBeInTheDocument();
   });
 
   it('AC-1: shows the whole link, and names what each button copies', async () => {
@@ -120,7 +121,7 @@ describe('inviting people (P3-T4)', () => {
     // module, and what is shown must be what is copied either way.
     stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [invite()] }, '/join/untagged': { body: [] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
     const link = await screen.findByText('https://agencyboost.app/join?code=JOR417');
@@ -151,7 +152,7 @@ describe('inviting people (P3-T4)', () => {
     });
     stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: noTeamPowers });
 
     expect(await screen.findByText('Invite someone')).toBeInTheDocument();
@@ -161,7 +162,7 @@ describe('inviting people (P3-T4)', () => {
   it('AC-1/AC-2: refuses the screen to an Agent, tab and URL alike', async () => {
     stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: AGENT });
 
     // The URL is typeable, so hiding the tab is not gating the screen.
@@ -173,7 +174,7 @@ describe('inviting people (P3-T4)', () => {
   it('AC-2: keeps the team card for a leader who can act on it', async () => {
     stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
     expect(await screen.findByText('Your team')).toBeInTheDocument();
@@ -185,7 +186,7 @@ describe('inviting people (P3-T4)', () => {
     // ladder reference. Hiding is a convenience — the API refuses an Agent regardless.
     stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     // A leader with no inbox: they may open this screen, which is what makes the missing
     // Pending tab the thing under test rather than a side effect of being refused.
     const noInbox = makeMe({
@@ -204,7 +205,7 @@ describe('inviting people (P3-T4)', () => {
   it('AC-1: shows it to a leader who has an inbox', async () => {
     stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, {
       me: makeMe({
         membership: LEADER.membership,
@@ -215,98 +216,65 @@ describe('inviting people (P3-T4)', () => {
     expect(await screen.findByRole('link', { name: 'Pending Requests' })).toBeInTheDocument();
   });
 
-  it('sends only the limits that were chosen', async () => {
+  it('shows the same code every time, with no way to make or withdraw one', async () => {
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+    await screen.findByText('Invite someone');
+    // The prototype has neither control, and neither do we (P3.6-T1).
+    expect(screen.queryByRole('button', { name: 'Create an invite' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Withdraw' })).toBeNull();
+    // Nor the form that fed them.
+    expect(screen.queryByLabelText('What is it for')).toBeNull();
+    expect(screen.queryByLabelText('How many people')).toBeNull();
+    expect(screen.queryByLabelText('Stops working')).toBeNull();
+    // Nor the list of what has been out there.
+    expect(screen.queryByText('Your invites')).toBeNull();
+  });
+
+  it('says the code does not change, rather than that it can be withdrawn', async () => {
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+    expect(await screen.findByText(/it came with your membership and it does not change/))
+      .toBeInTheDocument();
+    expect(screen.queryByText(/Withdrawing the invite/)).toBeNull();
+  });
+
+  it('asks for the code once, not once per artefact', async () => {
     const { calls } = stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-    await userEvent.type(await screen.findByLabelText('What is it for'), '  September  ');
-    await userEvent.selectOptions(screen.getByLabelText('How many people'), '5');
-    await userEvent.click(screen.getByRole('button', { name: 'Create an invite' }));
-
-    const post = calls.find((c) => c.init.method === 'POST')!;
-    // No expiry chosen, so none is sent — an omitted field means "no ceiling", and
-    // sending a null would be a different statement.
-    expect(JSON.parse(post.init.body as string)).toEqual({ label: 'September', maxUses: 5 });
+    await screen.findAllByText('JOR417');
+    expect(calls.filter((c) => c.url.includes('/join/my-code'))).toHaveLength(1);
   });
 
-  it('clears the form after issuing, so a second invite is not a copy of the first', async () => {
+  it('waits with a placeholder shaped like the three artefacts', async () => {
     stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': [{ body: [] }, { body: [invite()] }], '/join/untagged': { body: [] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-    await userEvent.type(await screen.findByLabelText('What is it for'), 'September');
-    await userEvent.click(screen.getByRole('button', { name: 'Create an invite' }));
+    // `role="status"` takes no accessible name from its contents, so the label is
+    // asserted as text — which is how `skeleton.spec.tsx` reads one too.
+    // Two things load on this screen, so the query names one: `role="status"` takes no
+    // accessible name from its contents, which is why this reads the text instead.
+    const waiting = screen
+      .getAllByRole('status')
+      .filter((el) => el.textContent?.includes('Loading your leader code…'));
+    expect(waiting).toHaveLength(1);
 
-    await vi.waitFor(() => expect(screen.getByLabelText('What is it for')).toHaveValue(''));
-  });
-
-  it('lists withdrawn and spent invites too, not only the working one', async () => {
-    // What has been out there is worth seeing, not only what still works.
-    stubFetch({
-      '/members/my-team': { body: [] },
-      '/join/untagged': { body: [] },
-      '/join/invites': {
-        body: [
-          invite(),
-          invite({ inviteId: 'inv-2', code: 'OLD222', state: 'revoked', label: 'August' }),
-          invite({ inviteId: 'inv-3', code: 'FULL33', state: 'exhausted', maxUses: 1, useCount: 1 }),
-        ],
-      },
-    });
-    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
-
-    const table = await screen.findByRole('table');
-    expect(within(table).getByRole('row', { name: /OLD222/ })).toHaveTextContent('Withdrawn');
-    expect(within(table).getByRole('row', { name: /FULL33/ })).toHaveTextContent('Fully used');
-    expect(within(table).getByRole('row', { name: /FULL33/ })).toHaveTextContent('1 of 1');
-  });
-
-  it('offers Withdraw only on one that still works', async () => {
-    stubFetch({
-      '/members/my-team': { body: [] },
-      '/join/untagged': { body: [] },
-      '/join/invites': {
-        body: [invite(), invite({ inviteId: 'inv-2', code: 'OLD222', state: 'revoked' })],
-      },
-    });
-    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
-
-    await screen.findByRole('table');
-    expect(screen.getAllByRole('button', { name: 'Withdraw' })).toHaveLength(1);
-  });
-
-  it('withdraws, then reloads rather than guessing the new state', async () => {
-    const { calls } = stubFetch({
-      '/members/my-team': { body: [] },
-      '/join/untagged': { body: [] },
-      '/join/invites/inv-1': { body: invite({ state: 'revoked' }) },
-      '/join/invites': [{ body: [invite()] }, { body: [invite({ state: 'revoked' })] }],
-    });
-    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Withdraw' }));
-
-    expect(calls.some((c) => c.init.method === 'DELETE')).toBe(true);
-    expect(await screen.findByText('Withdrawn')).toBeInTheDocument();
-  });
-
-  it('says how long an unlimited invite lasts, rather than leaving the cell blank', async () => {
-    stubFetch({
-      '/members/my-team': { body: [] },
-      '/join/invites': { body: [invite()] }, '/join/untagged': { body: [] } });
-    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
-    expect(await screen.findByText('When you withdraw it')).toBeInTheDocument();
-  });
-
-  it('tells somebody with no invites what is missing', async () => {
-    stubFetch({
-      '/members/my-team': { body: [] },
-      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
-    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
-    expect(await screen.findByText('You have not made an invite yet.')).toBeInTheDocument();
+    await screen.findAllByText('JOR417');
+    expect(
+      screen.queryAllByRole('status')
+        .filter((el) => el.textContent?.includes('Loading your leader code…')),
+    ).toEqual([]);
   });
 
   describe('changing a role (P3-T6)', () => {
@@ -317,7 +285,7 @@ describe('inviting people (P3-T4)', () => {
 
     function stub(team: Record<string, unknown>[], extra: Record<string, unknown> = {}) {
       return stubFetch({
-        '/join/invites': { body: [] },
+        '/join/my-code': { body: MY_CODE },
         '/join/untagged': { body: [] },
         '/members/my-team': { body: team },
         ...extra,
@@ -435,7 +403,7 @@ describe('inviting people (P3-T4)', () => {
 
     function stub(team: Record<string, unknown>[], extra: Record<string, unknown> = {}) {
       return stubFetch({
-        '/join/invites': { body: [] },
+        '/join/my-code': { body: MY_CODE },
         '/join/untagged': { body: [] },
         '/members/my-team': { body: team },
         ...extra,
@@ -593,7 +561,7 @@ describe('inviting people (P3-T4)', () => {
     it('says plainly that they do not have to approve it', async () => {
       stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] }, '/join/untagged': { body: [untagged()] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [untagged()] } });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
       expect(await screen.findByText(/they do not have to approve it/)).toBeInTheDocument();
@@ -602,7 +570,7 @@ describe('inviting people (P3-T4)', () => {
     it('lists people who report to nobody', async () => {
       stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] }, '/join/untagged': { body: [untagged()] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [untagged()] } });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
       expect(await screen.findByText('Fajar Nugroho')).toBeInTheDocument();
@@ -613,7 +581,7 @@ describe('inviting people (P3-T4)', () => {
       // A modal for one row is heavier than the decision, and the prototype agrees.
       stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] }, '/join/untagged': { body: [untagged()] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [untagged()] } });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
       await userEvent.click(await screen.findByRole('button', { name: 'Add to my unit' }));
@@ -627,7 +595,7 @@ describe('inviting people (P3-T4)', () => {
     it('adds them on confirm, and takes the pool the server returned', async () => {
       const { calls } = stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] },
+      '/join/my-code': { body: MY_CODE },
         '/join/untagged/mem-un': { body: [] },
         '/join/untagged': { body: [untagged()] },
       });
@@ -645,7 +613,7 @@ describe('inviting people (P3-T4)', () => {
     it('searches at the server', async () => {
       const { calls } = stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
       await userEvent.type(await screen.findByLabelText('Search by name'), 'fajar');
@@ -655,7 +623,7 @@ describe('inviting people (P3-T4)', () => {
     it('tells an empty office apart from a search that matched nobody', async () => {
       stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
       expect(
@@ -668,7 +636,7 @@ describe('inviting people (P3-T4)', () => {
     it('surfaces a refusal, such as somebody who already has a leader', async () => {
       stubFetch({
       '/members/my-team': { body: [] },
-      '/join/invites': { body: [] },
+      '/join/my-code': { body: MY_CODE },
         '/join/untagged/mem-un': {
           status: 409,
           body: {
@@ -689,18 +657,19 @@ describe('inviting people (P3-T4)', () => {
     });
   });
 
-  it('surfaces a refusal rather than appearing to issue one', async () => {
+  it('surfaces a refusal rather than showing a panel with nothing in it', async () => {
+    // There is nothing to issue any more, so the failure this screen can still have is
+    // being unable to read the code — and an empty share panel would say nothing at all.
     stubFetch({
       '/members/my-team': { body: [] },
       '/join/untagged': { body: [] },
-      '/join/invites': [
-        { body: [] },
-        { status: 403, body: { error: { code: 'PERM_DENIED', message: 'Nope.', requestId: 'r-1' } } },
-      ],
+      '/join/my-code': {
+        status: 403,
+        body: { error: { code: 'PERM_DENIED', message: 'Nope.', requestId: 'r-1' } },
+      },
     });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Create an invite' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Nope.');
   });
 });

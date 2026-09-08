@@ -67,7 +67,7 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['org.ts', 'GroupSummary', 'GroupSummaryDto'],
   ['join.ts', 'PendingRequest', 'PendingRequestDto'],
   ['join.ts', 'UntaggedMember', 'UntaggedMemberDto'],
-  ['join.ts', 'Invite', 'IssuedInviteDto'],
+  ['join.ts', 'MyLeaderCode', 'MyLeaderCodeDto'],
   ['notifications.ts', 'InboxItem', 'InboxItemDto'],
 ];
 

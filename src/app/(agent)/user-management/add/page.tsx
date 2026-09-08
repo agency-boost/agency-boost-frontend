@@ -5,15 +5,13 @@ import { Page } from '@/components/page';
 import { UserManagementTabs } from '@/components/user-management-tabs';
 import { CopyableValue } from '@/components/ui/copyable-value';
 import { InviteQr } from '@/components/ui/invite-qr';
-import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
-import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useDebounced } from '@/lib/use-debounced';
 import { useSession } from '@/lib/session';
 import { RoleBadge } from '@/components/ui/role-badge';
-import { SkeletonPeople, SkeletonTable } from '@/components/ui/skeleton';
+import { Skeleton, SkeletonBar, SkeletonPeople } from '@/components/ui/skeleton';
 import {
   changeRole,
   readMyTeam,
@@ -28,53 +26,36 @@ import {
   type SubtreeDisposition,
 } from '@/lib/org';
 import {
-  INVITE_STATE_LABEL,
-  issueInvite,
-  listInvites,
-  revokeInvite,
+  myLeaderCode,
   searchUntagged,
   tagUntagged,
-  type Invite,
+  type MyLeaderCode,
   type UntaggedMember,
 } from '@/lib/join';
 
 /**
- * The skeleton and the table read the same array, so the placeholder is the width of the
- * invite list it stands in for.
- */
-const INVITE_COLUMNS = [
-  'Code',
-  'What for',
-  'Used',
-  'Ends',
-  'State',
-  { label: 'Actions', visuallyHidden: true },
-] as const;
-
-/**
- * Add new agents → Invite (`Overall.html:3574-3596`).
+ * Add new agents → Invite (`Overall.html:3574-3596`, `User_Management_Section.html:446-454`).
  *
- * The prototype shows three tiles — link, leader code, QR — as if they were three
- * things. Its own copy says otherwise: *"any of the three registers your KPM and tags
- * you to them in one step"*. So there is one invite, shown two ways, and withdrawing it
- * withdraws both. The QR is the link rendered, which is a picture of a string we already
- * show; it is not drawn until somebody asks for it rather than shipped as the dead
- * button the prototype has.
+ * The prototype shows three tiles — link, leader code, QR — as if they were three things.
+ * Its own copy says otherwise: *"any of the three registers your KPM and tags you to them
+ * in one step"*. One code, three renderings, and all three are **copyable**: the prototype
+ * has no control that creates one and none that withdraws one, and the only `Revoke`
+ * anywhere in `prototype/` is for KPM Admin access.
  *
- * Anyone who uses one joins **with no approval**, which is why issuing offers a limit
- * and an expiry, and why the list keeps withdrawn ones.
+ * We had built both, plus a use limit, an expiry and a list of spent codes — none of it
+ * registered as a divergence, which by this project's own rule made it a defect. P3.6-T1
+ * removed it: the code comes with the membership and lasts as long as it does.
+ *
+ * Anyone who uses it joins **with no approval**. That is what the sentence under the
+ * panel says, and it is the whole reason the code is worth guarding.
  */
-const NEVER = '';
 
 export default function AddAgentsPage() {
   const { me } = useSession();
   const canManageTeam =
     me?.permissions.includes('member:change_role') ||
     me?.permissions.includes('member:remove_from_team');
-  const [invites, setInvites] = useState<Invite[] | null>(null);
-  const [label, setLabel] = useState('');
-  const [maxUses, setMaxUses] = useState(NEVER);
-  const [expiresInDays, setExpiresInDays] = useState(NEVER);
+  const [code, setCode] = useState<MyLeaderCode | null>(null);
   const [untagged, setUntagged] = useState<UntaggedMember[] | null>(null);
   const [pool, setPool] = useState('');
   const poolQuery = useDebounced(pool);
@@ -91,12 +72,12 @@ export default function AddAgentsPage() {
 
   const load = useCallback(async () => {
     try {
-      const [issued, mine] = await Promise.all([listInvites(), readMyTeam()]);
-      setInvites(issued);
+      const [mineCode, mine] = await Promise.all([myLeaderCode(), readMyTeam()]);
+      setCode(mineCode);
       setTeam(mine);
     } catch (err) {
       setError(toDisplayError(err));
-      setInvites([]);
+      setCode(null);
       setTeam([]);
     }
   }, []);
@@ -188,42 +169,6 @@ export default function AddAgentsPage() {
     }
   }
 
-  async function issue(event: React.FormEvent) {
-    event.preventDefault();
-    setBusy('issue');
-    setError(null);
-    try {
-      await issueInvite({
-        ...(label.trim() ? { label: label.trim() } : {}),
-        ...(maxUses ? { maxUses: Number(maxUses) } : {}),
-        ...(expiresInDays ? { expiresInDays: Number(expiresInDays) } : {}),
-      });
-      setLabel('');
-      setMaxUses(NEVER);
-      setExpiresInDays(NEVER);
-      await load();
-    } catch (err) {
-      setError(toDisplayError(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function withdraw(inviteId: string) {
-    setBusy(inviteId);
-    setError(null);
-    try {
-      await revokeInvite(inviteId);
-      await load();
-    } catch (err) {
-      setError(toDisplayError(err));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  const live = invites?.filter((i) => i.state === 'active') ?? [];
-
   return (
     <Page
       title="Add New Agents"
@@ -239,143 +184,45 @@ export default function AddAgentsPage() {
       <Card className="mb-4">
         <h2 className="font-display text-lg font-bold text-navy">Invite someone</h2>
         <p className="mt-1 text-md text-muted">
-          Anyone who uses one of your invites joins this office tagged to you, straight away.
-          Nobody approves it — which is why an invite can be limited, given an end date, and
-          withdrawn.
+          Share your link, code, or QR with someone who is not registered yet. Any of the
+          three pre-fills them into this office and tags them to you automatically — no
+          approval needed. It is the same code every time: it came with your membership and
+          it does not change.
         </p>
-
-        <form onSubmit={issue} className="mt-4 flex flex-wrap items-end gap-3">
-          <Field
-            label="What is it for"
-            htmlFor="label"
-            hint="A note for you. Whoever uses it never sees this."
-            className="min-w-56 flex-1"
-          >
-            <TextInput
-              id="label"
-              placeholder="Hiring push, September"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-            />
-          </Field>
-
-          <Field label="How many people" htmlFor="maxUses" className="w-44">
-            <Select id="maxUses" value={maxUses} onChange={(e) => setMaxUses(e.target.value)}>
-              <option value={NEVER}>No limit</option>
-              <option value="1">Just one</option>
-              <option value="5">Up to 5</option>
-              <option value="25">Up to 25</option>
-            </Select>
-          </Field>
-
-          <Field label="Stops working" htmlFor="expiresInDays" className="w-44">
-            <Select
-              id="expiresInDays"
-              value={expiresInDays}
-              onChange={(e) => setExpiresInDays(e.target.value)}
-            >
-              <option value={NEVER}>Until I withdraw it</option>
-              <option value="1">Tomorrow</option>
-              <option value="7">In a week</option>
-              <option value="30">In a month</option>
-            </Select>
-          </Field>
-
-          <Button type="submit" disabled={busy !== null}>
-            {busy === 'issue' ? 'Creating…' : 'Create an invite'}
-          </Button>
-        </form>
-      </Card>
-
-      {live.length > 0 && (
-        <Card className="mb-4">
-          <h2 className="font-display text-lg font-bold text-navy">Share it</h2>
-          <p className="mt-1 text-md text-muted">
-            Share your link, code, or QR with someone who is not registered yet. Any of the
-            three pre-fills them into this office and tags them to you automatically — no
-            approval needed. Withdrawing the invite stops all three, because they are one
-            invite.
-          </p>
-          {/* `User_Management_Section.html:444-455`: a wrapping row of co-equal artefacts,
-              the link box growing and the code box holding its width — not an even grid.
-              The section file supersedes `Overall.html` for this module, and its version
-              shows the **full** URL rather than a truncated one. */}
+        {/* `User_Management_Section.html:444-455`: a wrapping row of co-equal artefacts,
+            the link box growing and the code box holding its width — not an even grid.
+            The section file supersedes `Overall.html` for this module, and its version
+            shows the **full** URL rather than a truncated one. */}
+        {code ? (
           <div className="mt-3 flex flex-wrap items-stretch gap-3.5">
             <div className="min-w-[260px] flex-1">
               <CopyableValue
                 label="Invite link"
-                value={live[0].url}
+                value={code.url}
                 action="Copy link"
                 border="dashed"
               />
             </div>
             <div className="min-w-[170px]">
-              <CopyableValue label="Leader code" value={live[0].code} mono action="Copy code" />
+              <CopyableValue label="Leader code" value={code.code} mono action="Copy code" />
             </div>
             {/* The third artefact (`:454`). The prototype's is a static tile; ours draws
                 the real code, which is the whole point of offering one. */}
-            <InviteQr url={live[0].url} />
+            <InviteQr url={code.url} />
           </div>
-        </Card>
-      )}
-
-      <h2 className="mb-3 font-display text-lg font-bold text-navy">Your invites</h2>
-
-      {invites === null && (
-        <SkeletonTable caption="Invites you have issued" columns={INVITE_COLUMNS} rows={3} />
-      )}
-
-      {invites?.length === 0 && (
-        <div className="rounded-lg border border-hairline bg-card">
-          <EmptyState title="You have not made an invite yet." />
-        </div>
-      )}
-
-      {invites && invites.length > 0 && (
-        <DataTable
-          caption="Invites you have issued"
-          columns={INVITE_COLUMNS}
-        >
-          {invites.map((invite) => (
-            <Row key={invite.inviteId}>
-              <Cell>
-                <code className="text-sm font-semibold">{invite.code}</code>
-              </Cell>
-              <Cell className="text-muted">{invite.label ?? '—'}</Cell>
-              <Cell className="text-muted">
-                {invite.useCount}
-                {invite.maxUses === null ? '' : ` of ${invite.maxUses}`}
-              </Cell>
-              <Cell className="text-muted">
-                {invite.expiresAt
-                  ? new Date(invite.expiresAt).toLocaleDateString('en-GB')
-                  : 'When you withdraw it'}
-              </Cell>
-              <Cell>
-                <StatusPill
-                  status={invite.state === 'active' ? 'success' : 'neutral'}
-                  label={INVITE_STATE_LABEL[invite.state]}
-                />
-              </Cell>
-              <Cell>
-                {invite.state === 'active' ? (
-                  <Button
-                    variant="secondary"
-                    disabled={busy !== null}
-                    onClick={() => void withdraw(invite.inviteId)}
-                  >
-                    {busy === invite.inviteId ? 'Withdrawing…' : 'Withdraw'}
-                  </Button>
-                ) : (
-                  // Kept rather than removed: what has been out there is worth seeing,
-                  // not only what still works.
-                  <span className="text-sm text-muted">—</span>
-                )}
-              </Cell>
-            </Row>
-          ))}
-        </DataTable>
-      )}
+        ) : (
+          <Skeleton label="Loading your leader code…" className="mt-3">
+            {/* The flex row goes inside: `Skeleton` puts its children in an aria-hidden
+                wrapper, so layout classes on the outer element would arrange that wrapper
+                and the sr-only label rather than the bars. */}
+            <div className="flex flex-wrap items-stretch gap-3.5">
+              <SkeletonBar className="h-20 min-w-[260px] flex-1" />
+              <SkeletonBar className="h-20 min-w-[170px]" />
+              <SkeletonBar className="h-20 w-24" />
+            </div>
+          </Skeleton>
+        )}
+      </Card>
 
       <Card className="mt-6">
         <h2 className="font-display text-lg font-bold text-navy">Find someone already here</h2>

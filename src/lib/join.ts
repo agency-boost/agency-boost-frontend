@@ -49,19 +49,18 @@ export const requestLeader = (leaderMembershipId: string) =>
 export const cancelLeaderRequest = () =>
   api<JoinState>('/join/leader-request', { method: 'DELETE' });
 
-/** One invite, three presentations: the code, the link, and a QR of the link. */
-export interface Invite {
-  inviteId: string;
+/**
+ * Your own code, in the three forms the prototype shows it: the code, the link, and a QR
+ * of the link.
+ *
+ * One per person, generated with your membership and never reissued (P3.6-T1). The
+ * `Invite` type that stood here carried `inviteId`, `label`, `autoApprove`, `maxUses`,
+ * `useCount`, `expiresAt`, `revokedAt` and a derived `state` — every one of them a way to
+ * bound a credential somebody could mint again. Nobody can.
+ */
+export interface MyLeaderCode {
   code: string;
   url: string;
-  label: string | null;
-  autoApprove: boolean;
-  maxUses: number | null;
-  useCount: number;
-  expiresAt: string | null;
-  revokedAt: string | null;
-  /** Derived server-side, because "why can nobody use this" needs one answer. */
-  state: 'active' | 'revoked' | 'expired' | 'exhausted';
 }
 
 export interface InvitePreview {
@@ -70,26 +69,13 @@ export interface InvitePreview {
   leaderName: string;
 }
 
-export const listInvites = () => api<Invite[]>('/join/invites');
-
-export const issueInvite = (body: { label?: string; maxUses?: number; expiresInDays?: number }) =>
-  api<Invite>('/join/invites', { method: 'POST', body });
-
-export const revokeInvite = (inviteId: string) =>
-  api<Invite>(`/join/invites/${inviteId}`, { method: 'DELETE' });
+export const myLeaderCode = () => api<MyLeaderCode>('/join/my-code');
 
 export const previewInvite = (code: string) =>
   api<InvitePreview>(`/join/invite?code=${encodeURIComponent(code)}`);
 
 export const redeemInvite = (code: string) =>
   api<{ kpmId: string; leaderName: string }>('/join/redeem', { method: 'POST', body: { code } });
-
-export const INVITE_STATE_LABEL: Record<Invite['state'], string> = {
-  active: 'Working',
-  revoked: 'Withdrawn',
-  expired: 'Expired',
-  exhausted: 'Fully used',
-};
 
 /** The leader's side: deciding who gets in, and pulling in somebody already here. */
 export interface PendingRequest {
