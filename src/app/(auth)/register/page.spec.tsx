@@ -9,10 +9,20 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/register',
 }));
 
+/** The insurers the selector loads. Public, so no token is involved. */
+const INSURERS = [
+  { _id: 'co-1', name: 'Allianz' },
+  { _id: 'co-2', name: 'Prudential' },
+];
+
 async function fill(password = 'a long enough password') {
   await userEvent.type(screen.getByLabelText('Full name'), 'Rina Wijaya');
   await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
   await userEvent.type(screen.getByLabelText('Password'), password);
+  // The insurer that issued the code, and the code itself (ADR-0017).
+  await screen.findByRole('option', { name: 'Prudential' });
+  await userEvent.selectOptions(screen.getByLabelText('Insurer'), 'co-2');
+  await userEvent.type(screen.getByLabelText('Agent code'), 'PRU-88213');
 }
 
 describe('register', () => {
@@ -25,24 +35,44 @@ describe('register', () => {
     expect(screen.getByText(/office is added separately/)).toBeInTheDocument();
   });
 
-  it('sends the three fields the API asks for', async () => {
-    const { calls } = stubFetch({ '/auth/register': { status: 201, body: { status: 'verification_sent' } } });
+  it('sends the five fields the API asks for', async () => {
+    const { calls } = stubFetch({
+      '/companies': { body: INSURERS },
+      '/auth/register': { status: 201, body: { status: 'verification_sent' } },
+    });
     renderWithSession(<RegisterPage />, { me: null });
 
     await fill();
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
 
-    expect(JSON.parse(calls[0].init.body as string)).toEqual({
+    const register = calls.find((c) => c.url.includes('/auth/register'))!;
+    expect(JSON.parse(register.init.body as string)).toEqual({
       fullName: 'Rina Wijaya',
       email: 'rina@kpm0417.test',
       password: 'a long enough password',
+      companyId: 'co-2',
+      agentCode: 'PRU-88213',
     });
+  });
+
+  it('offers no insurer chosen for you, because the wrong one is not recoverable here', async () => {
+    stubFetch({ '/companies': { body: INSURERS } });
+    renderWithSession(<RegisterPage />, { me: null });
+
+    await screen.findByRole('option', { name: 'Prudential' });
+    expect(screen.getByLabelText<HTMLSelectElement>('Insurer').value).toBe('');
+    // And the form will not go until one is picked: the code is unique inside an
+    // insurer, so submitting against the wrong one is a code that belongs to somebody.
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeDisabled();
   });
 
   it('confirms the same way whether or not the address is already taken', async () => {
     // The API answers identically on purpose — confirming would let anyone test
     // addresses against this form. The screen must not undo that.
-    stubFetch({ '/auth/register': { status: 201, body: { status: 'verification_sent' } } });
+    stubFetch({
+      '/companies': { body: INSURERS },
+      '/auth/register': { status: 201, body: { status: 'verification_sent' } },
+    });
     renderWithSession(<RegisterPage />, { me: null });
 
     await fill();
@@ -54,11 +84,16 @@ describe('register', () => {
   });
 
   it('applies the password rules the server applies, before the round trip', async () => {
+    stubFetch({ '/companies': { body: INSURERS } });
     renderWithSession(<RegisterPage />, { me: null });
     const submit = screen.getByRole('button', { name: 'Create account' });
 
     await userEvent.type(screen.getByLabelText('Full name'), 'Rina');
     await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
+    // Everything else valid, so the password is the only thing holding the button.
+    await screen.findByRole('option', { name: 'Prudential' });
+    await userEvent.selectOptions(screen.getByLabelText('Insurer'), 'co-2');
+    await userEvent.type(screen.getByLabelText('Agent code'), 'PRU-88213');
 
     await userEvent.type(screen.getByLabelText('Password'), 'short');
     expect(screen.getByText('Use at least 10 characters.')).toBeInTheDocument();
@@ -75,7 +110,10 @@ describe('register', () => {
   });
 
   it('says how long the verification link lasts', async () => {
-    stubFetch({ '/auth/register': { status: 201, body: {} } });
+    stubFetch({
+      '/companies': { body: INSURERS },
+      '/auth/register': { status: 201, body: {} },
+    });
     renderWithSession(<RegisterPage />, { me: null });
     await fill();
     await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
@@ -84,6 +122,7 @@ describe('register', () => {
 
   it('shows a server rejection rather than a false confirmation', async () => {
     stubFetch({
+      '/companies': { body: INSURERS },
       '/auth/register': {
         status: 400,
         body: { error: { code: 'VALIDATION_FAILED', message: 'Password must not begin or end with a space.', requestId: 'req-3' } },

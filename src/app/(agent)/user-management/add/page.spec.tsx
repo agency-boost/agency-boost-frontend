@@ -16,20 +16,27 @@ const LEADER = makeMe({
     isKpmOwner: false, isKpmAdmin: false, directCount: 2,
   },
   permissions: [
-    'member:invite', 'member:revoke_invite',
+    'member:invite', 'member:revoke_invite', 'member:search_untagged_pool',
     // A leader manages their team from this screen; the card is gated on being able to
     // act on it, not on the role (`agent-shell` gates the Pending tab the same way).
     'member:change_role', 'member:remove_from_team',
   ],
 });
 
-/** An agent: invites people, but cannot change a role or remove anybody. */
+/**
+ * An agent, holding what the matrix actually grants one: **neither** half of this screen.
+ *
+ * This fixture carried `member:invite` and `member:revoke_invite` until 2026-09-08.
+ * `roles-and-permissions.md:372` denies both to `AGENT` and calls it *"the single largest
+ * leak in the prototype"* — so the fixture was asserting against a role that cannot
+ * exist, and it is why nothing caught the screen being open to them (P3.6-T2 AC-3).
+ */
 const AGENT = makeMe({
   membership: {
     membershipId: 'mem-agent', kpmId: 'kpm-1', hierarchyRole: 'agent', status: 'active',
     isKpmOwner: false, isKpmAdmin: false, directCount: 0,
   },
-  permissions: ['member:invite', 'member:revoke_invite'],
+  permissions: [],
 });
 
 const invite = (over: Record<string, unknown> = {}) => ({
@@ -129,15 +136,38 @@ describe('inviting people (P3-T4)', () => {
   it('AC-2: hides the team card from somebody who cannot act on a team', async () => {
     // The prototype hides this card for an Agent alongside the Pending tab
     // (`User_Management_Section.html:999`). It gives the reason as "an Agent has no
-    // team", which OD-23 makes unreliable — an Agent may have reports. What an Agent
-    // cannot do is change a role or remove anybody, so that is the gate.
+    // team", which OD-23 makes unreliable — an Agent may have reports. What matters is
+    // whether they can change a role or remove anybody, so that is the gate.
+    //
+    // The reader here used to be AGENT. An Agent cannot open this screen at all now
+    // (P3.6-T2), so proving *this* gate needs somebody who can — a leader whose team
+    // permissions have been taken away.
+    const noTeamPowers = makeMe({
+      membership: {
+        membershipId: 'mem-ab2', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: ['member:invite', 'member:revoke_invite', 'member:search_untagged_pool'],
+    });
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: noTeamPowers });
+
+    expect(await screen.findByText('Invite someone')).toBeInTheDocument();
+    expect(screen.queryByText('Your team')).toBeNull();
+  });
+
+  it('AC-1/AC-2: refuses the screen to an Agent, tab and URL alike', async () => {
     stubFetch({
       '/members/my-team': { body: [] },
       '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: AGENT });
 
-    expect(await screen.findByText('Invite someone')).toBeInTheDocument();
-    expect(screen.queryByText('Your team')).toBeNull();
+    // The URL is typeable, so hiding the tab is not gating the screen.
+    expect(screen.getByRole('alert')).toHaveTextContent('member:search_untagged_pool');
+    expect(screen.queryByText('Invite someone')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Add New Agents' })).toBeNull();
   });
 
   it('AC-2: keeps the team card for a leader who can act on it', async () => {
@@ -156,7 +186,16 @@ describe('inviting people (P3-T4)', () => {
     stubFetch({
       '/members/my-team': { body: [] },
       '/join/invites': { body: [] }, '/join/untagged': { body: [] } });
-    renderInLayout(AgentLayout, <AddAgentsPage />, { me: AGENT });
+    // A leader with no inbox: they may open this screen, which is what makes the missing
+    // Pending tab the thing under test rather than a side effect of being refused.
+    const noInbox = makeMe({
+      membership: {
+        membershipId: 'mem-ab3', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 0,
+      },
+      permissions: ['member:invite', 'member:revoke_invite', 'member:search_untagged_pool'],
+    });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: noInbox });
 
     expect(await screen.findByRole('link', { name: 'Add New Agents' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Pending Requests' })).toBeNull();

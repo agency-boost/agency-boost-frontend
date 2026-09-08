@@ -25,7 +25,13 @@ interface SubTab {
 const SUBTABS: readonly SubTab[] = [
   { href: '/user-management/kpm', label: 'Register KPM' },
   { href: '/user-management/leader', label: 'Find Your Leader' },
-  { href: '/user-management/add', label: 'Add New Agents' },
+  // Hidden from an Agent, who holds neither permission this screen's two halves need.
+  // `roles-and-permissions.md:372` calls it "the single largest leak in the prototype" —
+  // an Agent issuing codes that tag joiners to themselves, and pulling untagged members
+  // into a unit they do not have — and the API has always refused both. Only the tab
+  // strip and the screen did not. Gated on the pool rather than the invite because the
+  // invite permission goes away with P3.6-T1, and this one decides the same thing.
+  { href: '/user-management/add', label: 'Add New Agents', needs: 'member:search_untagged_pool' },
   // Hidden from anybody who cannot read an inbox — an Agent. The prototype hides it by
   // role (`User_Management_Section.html:996`); we hide it by the permission that decides
   // the same thing, so it survives P3.5-T8 replacing the role with a ladder reference.

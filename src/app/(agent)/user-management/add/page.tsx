@@ -228,6 +228,10 @@ export default function AddAgentsPage() {
     <Page
       title="Add New Agents"
       subtitle="Invite new people or tag existing agents to your team."
+      // Hiding the tab is not gating the screen: the URL is typeable, and until now an
+      // Agent who typed it got the whole thing, with only the API refusing the calls
+      // behind it. `route-registry.md` has listed this route as AB · AAB since Phase 3.
+      permission="member:search_untagged_pool"
     >
       <UserManagementTabs />
       {error && <ErrorBanner {...error} />}

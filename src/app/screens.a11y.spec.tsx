@@ -313,7 +313,9 @@ describe('Phase 2 screens have no axe violations', () => {
         isKpmOwner: false, isKpmAdmin: false, directCount: 2,
       },
       permissions: [
-        'member:invite', 'member:revoke_invite',
+        // The screen itself is gated on the pool (P3.6-T2); without it the sweep would
+        // scan the denial panel and pass, having looked at nothing.
+        'member:invite', 'member:revoke_invite', 'member:search_untagged_pool',
         // The team card is gated on being able to act on a team, so the axe sweep needs
         // these or it scans a screen with the card missing.
         'member:change_role', 'member:remove_from_team',
@@ -355,9 +357,13 @@ describe('Phase 2 screens have no axe violations', () => {
         membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 1,
       },
-      // The team card is gated on being able to act on a team, so these are needed or
-      // the sweep scans a screen with the card missing.
-      permissions: ['member:invite', 'member:change_role', 'member:remove_from_team'],
+      // The team card is gated on being able to act on a team, and the screen itself on
+      // the pool (P3.6-T2) — without both the sweep scans something other than the
+      // screen and passes anyway.
+      permissions: [
+        'member:invite', 'member:search_untagged_pool',
+        'member:change_role', 'member:remove_from_team',
+      ],
     });
     stubFetch({
       '/join/invites': { body: [] },
@@ -383,9 +389,13 @@ describe('Phase 2 screens have no axe violations', () => {
         membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 1,
       },
-      // The team card is gated on being able to act on a team, so these are needed or
-      // the sweep scans a screen with the card missing.
-      permissions: ['member:invite', 'member:change_role', 'member:remove_from_team'],
+      // The team card is gated on being able to act on a team, and the screen itself on
+      // the pool (P3.6-T2) — without both the sweep scans something other than the
+      // screen and passes anyway.
+      permissions: [
+        'member:invite', 'member:search_untagged_pool',
+        'member:change_role', 'member:remove_from_team',
+      ],
     });
     stubFetch({
       '/join/invites': { body: [] },

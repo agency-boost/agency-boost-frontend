@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
-import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { listInsurers, type Insurer } from '@/lib/companies';
+import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 
 /**
  * Self-signup.
@@ -12,14 +13,32 @@ import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/fie
  * is a commercial relationship, and only a Super Admin creates one (ADR-0005). What this
  * screen produces is a verified person with no membership — the valid "new agent" state
  * — who then joins through one of the four onboarding paths.
+ *
+ * **The insurer and the agent code are asked for here, not later** (ADR-0017). The code
+ * is the one the insurer issued, and it identifies the person the way their email does —
+ * so it belongs to the account, and the account exists before any office admits them.
+ * `GET /companies` is the one company question a visitor may ask without a token.
  */
 const MIN_LENGTH = 10;
 
 export default function RegisterPage() {
-  const [form, setForm] = useState({ fullName: '', email: '', password: '' });
+  const [form, setForm] = useState({
+    fullName: '', email: '', password: '', companyId: '', agentCode: '',
+  });
+  const [insurers, setInsurers] = useState<Insurer[] | null>(null);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    // No preselection. Choosing the wrong insurer is not recoverable from this screen —
+    // the code is unique inside one of them — so the list opens on nothing chosen.
+    listInsurers()
+      .then((rows) => { if (live) setInsurers(rows); })
+      .catch((err) => { if (live) { setInsurers([]); setError(toDisplayError(err)); } });
+    return () => { live = false; };
+  }, []);
 
   // The same three rules the server applies, checked here so the failure is immediate
   // rather than a round trip. The server check remains the real one.
@@ -80,6 +99,45 @@ export default function RegisterPage() {
               />
             </Field>
 
+            <Field
+              label="Insurer"
+              htmlFor="companyId"
+              hint="Whoever issued your agent code."
+            >
+              <Select
+                id="companyId"
+                name="companyId"
+                required
+                value={form.companyId}
+                onChange={set('companyId')}
+                disabled={insurers === null}
+              >
+                <option value="">
+                  {insurers === null ? 'Loading…' : 'Choose your insurer'}
+                </option>
+                {(insurers ?? []).map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field
+              label="Agent code"
+              htmlFor="agentCode"
+              hint="The producer id on your contract. It identifies you, like your email."
+            >
+              <TextInput
+                id="agentCode"
+                name="agentCode"
+                required
+                autoComplete="off"
+                value={form.agentCode}
+                onChange={set('agentCode')}
+              />
+            </Field>
+
             <Field label="Email" htmlFor="email" hint="Your verification link goes here.">
               <TextInput
                 id="email"
@@ -118,7 +176,11 @@ export default function RegisterPage() {
 
             <Button
               type="submit"
-              disabled={busy || tooShort || padded || !form.fullName.trim() || !form.email.trim()}
+              disabled={
+                busy || tooShort || padded
+                || !form.fullName.trim() || !form.email.trim()
+                || !form.companyId || !form.agentCode.trim()
+              }
             >
               {busy ? 'Creating…' : 'Create account'}
             </Button>
