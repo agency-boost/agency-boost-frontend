@@ -25,6 +25,10 @@ export function RequireSession({
 
   useEffect(() => {
     if (!loading && !me) router.replace('/login');
+    // Every route but three answers 403 while this is set, so rendering the screen would
+    // put a shell around a page of failed requests (P3.6-T4). One redirect here covers
+    // every screen, rather than each one inferring it from a 403 of its own.
+    else if (!loading && me?.mustChangePassword) router.replace('/choose-a-password');
   }, [loading, me, router]);
 
   if (loading) {
@@ -33,7 +37,7 @@ export function RequireSession({
     );
   }
 
-  if (!me) return null;
+  if (!me || me.mustChangePassword) return null;
 
   if (permission && !me.permissions.includes(permission)) {
     return (

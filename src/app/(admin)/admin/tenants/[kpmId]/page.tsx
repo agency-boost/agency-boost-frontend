@@ -99,6 +99,22 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
           </ButtonLink>
         </Card>
 
+        <Card>
+          <h2 className="font-display text-lg font-bold text-navy">People</h2>
+          <p className="mt-1 text-md text-muted">
+            Fill a new office from a spreadsheet rather than one person at a time. Each account
+            is created with a password to pass on, and is asked to choose its own on first
+            sign-in.
+          </p>
+          <ButtonLink
+            href={`/admin/tenants/${kpm._id}/roster`}
+            variant="secondary"
+            className="mt-3"
+          >
+            Import a roster
+          </ButtonLink>
+        </Card>
+
         <StatusCard kpm={kpm} onChanged={load} />
 
         <Card>

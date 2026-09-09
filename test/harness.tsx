@@ -28,6 +28,7 @@ export function makeMe(overrides: Partial<Me> = {}): Me {
     },
     isImpersonating: false,
     impersonatedBy: null,
+    mustChangePassword: false,
     permissions: [],
     ...overrides,
   };

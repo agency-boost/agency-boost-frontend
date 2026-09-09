@@ -209,3 +209,49 @@ export const TENANT_STATUS_LABEL: Record<TenantStatus, string> = {
   suspended: 'Suspended',
   archived: 'Archived',
 };
+
+/** Filling a new office from a spreadsheet (P3.6-T4). */
+export interface RosterIssue {
+  /** The line a spreadsheet shows, header counted — so it can be read straight across. */
+  line: number;
+  column: string;
+  message: string;
+}
+
+export interface RosterPreviewRow {
+  line: number;
+  fullName: string;
+  email: string;
+  agentCode: string;
+  role: string;
+}
+
+export interface RosterPreview {
+  issues: RosterIssue[];
+  /** Zero the moment anything is wrong: the commit is all or nothing. */
+  willCreate: number;
+  rows: RosterPreviewRow[];
+}
+
+export interface ImportedPerson {
+  fullName: string;
+  email: string;
+  agentCode: string;
+  /**
+   * **The only place this exists.** Not stored in plaintext and not recoverable — if it
+   * is lost before it reaches the person, they use Forgot your password instead.
+   */
+  temporaryPassword: string;
+}
+
+export const rosterTemplate = () =>
+  api<{ header: string; columns: string[] }>('/admin/tenants/roster-template');
+
+export const previewRoster = (kpmId: string, csv: string) =>
+  api<RosterPreview>(`/admin/tenants/${kpmId}/roster/preview`, { method: 'POST', body: { csv } });
+
+export const importRoster = (kpmId: string, csv: string) =>
+  api<{ created: ImportedPerson[] }>(`/admin/tenants/${kpmId}/roster`, {
+    method: 'POST',
+    body: { csv },
+  });

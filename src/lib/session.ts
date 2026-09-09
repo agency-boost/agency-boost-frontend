@@ -26,6 +26,14 @@ export interface Me {
   } | null;
   isImpersonating: boolean;
   impersonatedBy: string | null;
+  /**
+   * They are on a password somebody else generated (P3.6-T4).
+   *
+   * `RequireSession` sends them to `/choose-a-password`, because every other route on the
+   * API answers `403` until it is replaced — a screen that rendered anyway would be a
+   * shell around a page of failed requests.
+   */
+  mustChangePassword: boolean;
   /** What this person may do *right now* — resolved server-side on every request. */
   permissions: string[];
 }
