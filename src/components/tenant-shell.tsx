@@ -70,6 +70,9 @@ const SECTIONS: readonly {
     label: 'People',
     items: [
       { label: 'All members', href: '/people/members' },
+      // Owner and Admin both hold `kpm:import_roster` (P3.6-T4); a leader does not,
+      // and there is no tenant shell for one anyway.
+      { label: 'Import people', href: '/people/import' },
       { label: 'Org tree', href: '/people/org-tree' },
       { label: 'Manage KPM admins', href: '/people/admins', ownerOnly: true },
     ],

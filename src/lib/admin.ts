@@ -245,7 +245,12 @@ export interface ImportedPerson {
 }
 
 export const rosterTemplate = () =>
-  api<{ header: string; columns: string[] }>('/admin/tenants/roster-template');
+  api<{
+    header: string;
+    columns: string[];
+    /** The whole file, with worked examples commented out so they never import. */
+    template: string;
+  }>('/admin/tenants/roster-template');
 
 export const previewRoster = (kpmId: string, csv: string) =>
   api<RosterPreview>(`/admin/tenants/${kpmId}/roster/preview`, { method: 'POST', body: { csv } });

@@ -1,8 +1,8 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, routeParams, stubFetch } from '@test/harness';
-import RosterImportPage from './page';
+import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { RosterImport } from './roster-import';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -19,11 +19,14 @@ const SUPER_ADMIN = makeMe({
 });
 
 const HEADER = 'fullName,email,agentCode,role,leaderAgentCode';
-const TEMPLATE = { '/admin/tenants/roster-template': { body: { header: HEADER, columns: [] } } };
+const FILE = `# Examples below are commented out.\n${HEADER}\n# Agus Prasetyo,agus@example.test,PRU-88001,ab,\n`;
+const TEMPLATE = {
+  '/admin/tenants/roster-template': { body: { header: HEADER, columns: [], template: FILE } },
+};
 
 function render(extra: Record<string, unknown> = {}) {
   const stub = stubFetch({ ...TEMPLATE, ...extra });
-  renderWithSession(<RosterImportPage params={routeParams({ kpmId: 'kpm-1' })} />, {
+  renderWithSession(<RosterImport kpmId="kpm-1" backHref="/admin/tenants/kpm-1" />, {
     me: SUPER_ADMIN,
   });
   return stub;
@@ -38,13 +41,20 @@ async function upload(text: string) {
 describe('importing a roster (P3.6-T4)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('takes the template header from the API rather than writing it twice', async () => {
-    // A template the screen composed itself would drift from the one the parser demands,
-    // and the failure would read as "download the template" on a file downloaded here.
+  it('offers the file the API composed, examples and all', async () => {
+    // A template the screen built itself would drift from the one the parser demands, and
+    // the worked examples are the part most worth not paraphrasing.
     render();
     const link = await screen.findByRole('link', { name: 'Download the template' });
     expect(link).toHaveAttribute('download', 'roster-template.csv');
-    expect(decodeURIComponent(link.getAttribute('href') ?? '')).toContain(HEADER);
+    const downloaded = decodeURIComponent(link.getAttribute('href') ?? '');
+    expect(downloaded).toContain(HEADER);
+    expect(downloaded).toContain('# Agus Prasetyo');
+  });
+
+  it('says the examples are commented, so nobody deletes them out of fear', async () => {
+    render();
+    expect(await screen.findByText(/commented out/)).toBeInTheDocument();
   });
 
   it('checks the file without creating anybody', async () => {
@@ -147,10 +157,5 @@ describe('importing a roster (P3.6-T4)', () => {
     expect(screen.getByText('Already registered.')).toBeInTheDocument();
   });
 
-  it('is refused to anybody without the permission', () => {
-    renderWithSession(<RosterImportPage params={routeParams({ kpmId: 'kpm-1' })} />, {
-      me: makeMe({ permissions: [] }),
-    });
-    expect(screen.getByRole('alert')).toHaveTextContent('kpm:import_roster');
-  });
+
 });
