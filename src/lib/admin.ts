@@ -252,11 +252,12 @@ export const rosterTemplate = () =>
     template: string;
   }>('/admin/tenants/roster-template');
 
-export const previewRoster = (kpmId: string, csv: string) =>
-  api<RosterPreview>(`/admin/tenants/${kpmId}/roster/preview`, { method: 'POST', body: { csv } });
+/** `rows`, not `csv`: it is also the tab-separated text a spreadsheet paste produces. */
+export const previewRoster = (kpmId: string, rows: string) =>
+  api<RosterPreview>(`/admin/tenants/${kpmId}/roster/preview`, { method: 'POST', body: { rows } });
 
-export const importRoster = (kpmId: string, csv: string) =>
+export const importRoster = (kpmId: string, rows: string) =>
   api<{ created: ImportedPerson[] }>(`/admin/tenants/${kpmId}/roster`, {
     method: 'POST',
-    body: { csv },
+    body: { rows },
   });

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
-import { Button, Card, ErrorBanner, Field } from '@/components/ui/field';
+import { Button, Card, ErrorBanner, Field, Textarea } from '@/components/ui/field';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   importRoster,
@@ -34,7 +34,8 @@ import {
  * says so plainly, and offers them as text to copy in one go rather than one at a time.
  */
 export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: string }) {
-  const [csv, setCsv] = useState('');
+  const [rows, setRows] = useState('');
+  const [how, setHow] = useState<'paste' | 'file'>('paste');
   const [fileName, setFileName] = useState<string | null>(null);
   const [preview, setPreview] = useState<RosterPreview | null>(null);
   const [created, setCreated] = useState<ImportedPerson[] | null>(null);
@@ -71,7 +72,7 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
     setFileName(file.name);
 
     const reader = new FileReader();
-    reader.onload = () => setCsv(String(reader.result ?? ''));
+    reader.onload = () => setRows(String(reader.result ?? ''));
     reader.onerror = () => setError({
       code: 'FILE_UNREADABLE',
       message: `Could not read ${file.name}. Try saving it again as CSV.`,
@@ -84,7 +85,7 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
     setBusy('preview');
     setError(null);
     try {
-      setPreview(await previewRoster(kpmId, csv));
+      setPreview(await previewRoster(kpmId, rows));
     } catch (err) {
       setError(toDisplayError(err));
     } finally {
@@ -96,10 +97,10 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
     setBusy('commit');
     setError(null);
     try {
-      const result = await importRoster(kpmId, csv);
+      const result = await importRoster(kpmId, rows);
       setCreated(result.created);
       setPreview(null);
-      setCsv('');
+      setRows('');
       setFileName(null);
     } catch (err) {
       setError(toDisplayError(err));
@@ -170,35 +171,90 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
             the import creates leaders first either way.
           </p>
           <p className="mt-2 text-md text-muted">
-            The template carries three worked examples. They are <strong>commented out</strong> —
-            every line starting with <code>#</code> is ignored — so you can copy one, edit it, or
-            leave it where it is, and none of them will be imported.
+            You can paste the rows straight out of a spreadsheet, or download a template, fill it
+            in and upload it. Pasting works from Excel, Google Sheets, LibreOffice and Numbers —
+            select the rows, copy, and paste. The downloaded template carries three worked
+            examples, <strong>commented out</strong> with a <code>#</code> so they are never
+            imported.
           </p>
 
-          {templateHref ? (
-            <a
-              href={templateHref}
-              download="roster-template.csv"
-              className="mt-3 inline-block text-md font-semibold text-navy underline"
+          {/* Two ways in, and the one that needs no file goes first. Copying cells out of
+              a spreadsheet puts tab-separated text on the clipboard, so somebody can do
+              this without meeting a file format at all. */}
+          <fieldset className="mt-4">
+            <legend className="text-md font-semibold text-navy">How are you adding them?</legend>
+            <div className="mt-2 flex flex-wrap gap-4">
+              {([
+                ['paste', 'Paste from a spreadsheet'],
+                ['file', 'Upload a CSV file'],
+              ] as const).map(([value, label]) => (
+                <label key={value} className="flex items-center gap-2 text-md text-navy">
+                  <input
+                    type="radio"
+                    name="how"
+                    value={value}
+                    checked={how === value}
+                    onChange={() => {
+                      setHow(value);
+                      // Switching wipes what was there. Checking a paste and then
+                      // importing a file that was chosen earlier is not a thing anybody
+                      // means to do.
+                      setRows('');
+                      setFileName(null);
+                      setPreview(null);
+                      setError(null);
+                    }}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {how === 'paste' ? (
+            <Field
+              label="Rows from your spreadsheet"
+              htmlFor="rows"
+              hint="Select the rows in Excel, Google Sheets or Numbers, copy them, and paste here. The header row is optional."
+              className="mt-4"
             >
-              Download the template
-            </a>
+              <Textarea
+                id="rows"
+                rows={8}
+                value={rows}
+                onChange={(e) => setRows(e.target.value)}
+                placeholder={'Agus Prasetyo\tagus@example.test\tPRU-88001\tab\t'}
+                className="font-mono text-sm"
+              />
+            </Field>
           ) : (
-            <p className="mt-3 text-sm text-muted">Loading the template…</p>
+            <>
+              {templateHref ? (
+                <a
+                  href={templateHref}
+                  download="roster-template.csv"
+                  className="mt-4 inline-block text-md font-semibold text-navy underline"
+                >
+                  Download the template
+                </a>
+              ) : (
+                <p className="mt-4 text-sm text-muted">Loading the template…</p>
+              )}
+
+              <Field label="Roster file" htmlFor="roster" className="mt-4">
+                <input
+                  id="roster"
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={choose}
+                  className="text-md text-navy"
+                />
+              </Field>
+            </>
           )}
 
-          <Field label="Roster file" htmlFor="roster" className="mt-4">
-            <input
-              id="roster"
-              type="file"
-              accept=".csv,text/csv"
-              onChange={choose}
-              className="text-md text-navy"
-            />
-          </Field>
-
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button onClick={() => void check()} disabled={!csv || busy !== null}>
+            <Button onClick={() => void check()} disabled={!rows.trim() || busy !== null}>
               {busy === 'preview' ? 'Checking…' : 'Check the file'}
             </Button>
             <Button

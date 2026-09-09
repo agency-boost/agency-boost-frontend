@@ -34,8 +34,14 @@ function render(extra: Record<string, unknown> = {}) {
 
 /** Choosing a file, the way the browser hands one over. */
 async function upload(text: string) {
+  await userEvent.click(screen.getByLabelText('Upload a CSV file'));
   const file = new File([text], 'roster.csv', { type: 'text/csv' });
   await userEvent.upload(screen.getByLabelText('Roster file'), file);
+}
+
+/** The other way: rows copied out of a spreadsheet, which arrive tab-separated. */
+async function paste(text: string) {
+  await userEvent.type(screen.getByLabelText('Rows from your spreadsheet'), text);
 }
 
 describe('importing a roster (P3.6-T4)', () => {
@@ -45,6 +51,7 @@ describe('importing a roster (P3.6-T4)', () => {
     // A template the screen built itself would drift from the one the parser demands, and
     // the worked examples are the part most worth not paraphrasing.
     render();
+    await userEvent.click(screen.getByLabelText('Upload a CSV file'));
     const link = await screen.findByRole('link', { name: 'Download the template' });
     expect(link).toHaveAttribute('download', 'roster-template.csv');
     const downloaded = decodeURIComponent(link.getAttribute('href') ?? '');
@@ -55,6 +62,45 @@ describe('importing a roster (P3.6-T4)', () => {
   it('says the examples are commented, so nobody deletes them out of fear', async () => {
     render();
     expect(await screen.findByText(/commented out/)).toBeInTheDocument();
+  });
+
+  it('offers pasting first, because it needs no file at all', () => {
+    // The complaint was that not everybody knows CSV. Copying cells out of a spreadsheet
+    // puts tab-separated text on the clipboard, so this path never meets a file format.
+    render();
+    expect(screen.getByLabelText<HTMLInputElement>('Paste from a spreadsheet').checked).toBe(true);
+    expect(screen.getByLabelText('Rows from your spreadsheet')).toBeInTheDocument();
+    // And the file controls are not in the way until they are asked for.
+    expect(screen.queryByLabelText('Roster file')).toBeNull();
+  });
+
+  it('sends pasted rows exactly as they were pasted', async () => {
+    const { calls } = render({
+      '/admin/tenants/kpm-1/roster/preview': { body: { issues: [], willCreate: 1, rows: [] } },
+    });
+
+    await paste('Rina Wijaya\trina@k.test\tPRU-1\tagent\t');
+    await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
+
+    const call = await screen.findByText(/1 person ready to import/).then(
+      () => calls.find((c) => c.url.includes('/roster/preview'))!,
+    );
+    // Untouched: the server decides the delimiter, and a screen that reformatted the text
+    // would be a second parser disagreeing with the first.
+    expect(JSON.parse(call.init.body as string)).toEqual({
+      rows: 'Rina Wijaya\trina@k.test\tPRU-1\tagent\t',
+    });
+  });
+
+  it('clears what was there when the two ways are swapped', async () => {
+    // Checking a paste and then importing a file chosen earlier is not a thing anybody
+    // means to do.
+    render();
+    await paste('Rina\trina@k.test\tPRU-1\tagent\t');
+    expect(screen.getByRole('button', { name: 'Check the file' })).toBeEnabled();
+
+    await userEvent.click(screen.getByLabelText('Upload a CSV file'));
+    expect(screen.getByRole('button', { name: 'Check the file' })).toBeDisabled();
   });
 
   it('checks the file without creating anybody', async () => {
