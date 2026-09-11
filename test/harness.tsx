@@ -27,6 +27,7 @@ export function makeMe(overrides: Partial<Me> = {}): Me {
       isKpmAdmin: false, status: 'active', directCount: 0,
     },
     isImpersonating: false,
+    impersonationReadOnly: false,
     impersonatedBy: null,
     mustChangePassword: false,
     permissions: [],

@@ -195,7 +195,13 @@ export const readAudit = (kpmId?: string) =>
   api<AuditEntry[]>(kpmId ? `/admin/audit?kpmId=${encodeURIComponent(kpmId)}` : '/admin/audit');
 
 export const startImpersonation = (userId: string, reason: string, durationMinutes?: number) =>
-  api<{ accessToken: string; expiresAt: string }>(`/admin/impersonate/${userId}`, {
+  api<{
+    accessToken: string;
+    expiresAt: string;
+    sessionId: string;
+    /** True until a second Super Admin approves writing (§3.13). */
+    readOnly: boolean;
+  }>(`/admin/impersonate/${userId}`, {
     method: 'POST',
     body: { reason, ...(durationMinutes ? { durationMinutes } : {}) },
   });
@@ -319,3 +325,31 @@ export const publishTemplate = (companyId: string, kind: TemplateKind) =>
   api<PlatformTemplate>(`/admin/companies/${companyId}/template/${kind}/publish`, {
     method: 'POST',
   });
+
+
+/** One support session, as an office's Owner reads it (P4-T10, §3.13). */
+export interface ImpersonationLogEntry {
+  sessionId: string;
+  operatorName: string;
+  subjectName: string;
+  reason: string;
+  readOnly: boolean;
+  elevatedByName: string | null;
+  elevationReason: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  expiresAt: string;
+}
+
+/** An Owner reads their own office's. Another office is a 404. */
+export const readImpersonationLog = (kpmId: string) =>
+  api<ImpersonationLogEntry[]>(`/admin/tenants/${kpmId}/impersonation-sessions`);
+
+/**
+ * Approve a session to write — **a different Super Admin from the one running it**.
+ *
+ * The API refuses the session's own starter. That is the control, not a formality: an
+ * admin session can rewrite the configuration every member of an office depends on.
+ */
+export const elevateImpersonation = (sessionId: string, reason: string) =>
+  api<void>(`/admin/impersonation/${sessionId}/elevate`, { method: 'POST', body: { reason } });

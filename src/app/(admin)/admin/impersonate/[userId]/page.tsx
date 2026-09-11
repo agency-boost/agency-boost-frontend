@@ -34,11 +34,13 @@ export default function ImpersonatePage({ params }: { params: Promise<{ userId: 
     setBusy(true);
     setError(null);
     try {
-      const { accessToken } = await startImpersonation(userId, reason.trim(), duration);
+      const { accessToken, sessionId } = await startImpersonation(userId, reason.trim(), duration);
       setAccessToken(accessToken);
       setImpersonating(true);
       await reload();
-      router.push('/profile');
+      // The id travels so a colleague can be sent straight to the approval — a support
+      // case that needs writing usually knows so before the session starts.
+      router.push(`/profile?session=${sessionId}`);
     } catch (err) {
       setError(toDisplayError(err));
       setBusy(false);
@@ -59,6 +61,15 @@ export default function ImpersonatePage({ params }: { params: Promise<{ userId: 
             a cookie.
           </li>
           <li>Another Super Admin cannot be impersonated.</li>
+          <li>
+            <strong>You will be able to look and not change anything.</strong> A second
+            Super Admin has to approve writing, and the office&apos;s Owner is told either
+            way.
+          </li>
+          <li>
+            The person you act as <strong>and</strong> their Owner are notified the moment
+            it starts.
+          </li>
         </ul>
 
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>

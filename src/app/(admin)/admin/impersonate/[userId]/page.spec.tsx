@@ -60,7 +60,7 @@ describe('start impersonation', () => {
     // The refresh cookie is still the Super Admin's, so leaving the retry armed would
     // let an expired impersonation token quietly promote the request back to them.
     const { calls } = stubFetch({
-      '/admin/impersonate/u-owner': { body: { accessToken: 'imp-token', expiresAt: '2026-09-04T03:00:00Z' } },
+      '/admin/impersonate/u-owner': { body: { accessToken: 'imp-token', expiresAt: '2026-09-04T03:00:00Z', sessionId: 'sess-1', readOnly: true } },
     });
     renderInLayout(AdminLayout, <ImpersonatePage params={params} />, { me: SUPER_ADMIN });
 
@@ -76,7 +76,8 @@ describe('start impersonation', () => {
       reason: 'support ticket 42',
       durationMinutes: 60,
     });
-    expect(push).toHaveBeenCalledWith('/profile');
+    // The session id travels so a colleague can be sent straight to the approval.
+    expect(push).toHaveBeenCalledWith('/profile?session=sess-1');
   });
 
   it('leaves the Super Admin as themselves when the API refuses', async () => {

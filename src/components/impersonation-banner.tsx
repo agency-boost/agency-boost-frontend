@@ -40,8 +40,17 @@ export function ImpersonationBanner() {
       className="flex flex-wrap items-center justify-between gap-2 bg-alert px-4 py-2 text-md font-semibold text-card"
     >
       <span>
-        You are acting as {me.user.preferredName ?? me.user.fullName}. Everything you do is
-        recorded against you as well.
+        You are acting as {me.user.preferredName ?? me.user.fullName}.{' '}
+        {/*
+          * The half that matters most to the operator (P4-T10, §3.13). Discovering the
+          * session is read-only from a 403 halfway through a fix is the worst moment to
+          * find out — and a session that *can* write is the one worth saying so about
+          * loudly, because a second person approved it and somebody is accountable.
+          */}
+        {me.impersonationReadOnly
+          ? 'You can look but not change anything — a second Super Admin has to approve that.'
+          : 'This session can make changes. It was approved by a second Super Admin.'}{' '}
+        Everything you do is recorded against you as well.
       </span>
       <button
         type="button"

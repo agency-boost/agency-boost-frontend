@@ -25,6 +25,8 @@ export interface Me {
     directCount: number;
   } | null;
   isImpersonating: boolean;
+  /** A support session that may look and not touch (§3.13). */
+  impersonationReadOnly: boolean;
   impersonatedBy: string | null;
   /**
    * They are on a password somebody else generated (P3.6-T4).

@@ -63,6 +63,8 @@ const SECTIONS: readonly {
       { label: 'Campaigns', href: '/kpm/settings/campaigns', upcoming: true },
       { label: 'Products', href: '/kpm/settings/products', upcoming: true },
       { label: 'Branch info', href: '/kpm/settings/branch-info', ownerOnly: true },
+      // §3.13: an Owner reads the support sessions run in their own office.
+      { label: 'Support sessions', href: '/kpm/support-sessions', ownerOnly: true },
     ],
     divider: true,
   },
