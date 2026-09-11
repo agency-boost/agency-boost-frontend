@@ -55,14 +55,14 @@ const SECTIONS: readonly {
     // the prototype has it as a sub-tab of Activity types (`KPM_Owner.html:1330`), not
     // as a sidebar destination.
     items: [
-      { label: 'Activity types', href: '/kpm/settings/activity-types', upcoming: true },
-      { label: 'Lead statuses', href: '/kpm/settings/lead-statuses', upcoming: true },
+      { label: 'Activity types', href: '/kpm/settings/activity-types' },
+      { label: 'Lead statuses', href: '/kpm/settings/lead-statuses' },
       { label: 'Activation checklist', href: '/kpm/settings/activation-checklist', upcoming: true },
       { label: 'Training', href: '/kpm/settings/training', upcoming: true },
       { label: 'Events', href: '/kpm/settings/events', upcoming: true },
       { label: 'Campaigns', href: '/kpm/settings/campaigns', upcoming: true },
       { label: 'Products', href: '/kpm/settings/products', upcoming: true },
-      { label: 'Branch info', href: '/kpm/settings/branch-info', upcoming: true, ownerOnly: true },
+      { label: 'Branch info', href: '/kpm/settings/branch-info', ownerOnly: true },
     ],
     divider: true,
   },

@@ -144,9 +144,8 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
           <p className="mt-1 text-md text-muted">
             Send each person their password — <strong>AgencyBoost does not email it for you</strong>.
             This is the only time it is shown: it is not stored anywhere and cannot be looked up.
-            <strong> If you lose one, that person is locked out</strong> — <em>Forgot your
-            password</em> cannot reach them until email delivery ships, and the only remedy is
-            importing them again under a different address.
+            If you lose one, that person can use <em>Forgot your password</em> on the sign-in
+            page instead.
           </p>
           <p className="mt-2 text-md text-muted">
             Everybody here is asked to choose their own password the first time they sign in, and
