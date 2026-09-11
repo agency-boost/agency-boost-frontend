@@ -85,7 +85,7 @@ describe('redeeming an invite (P3-T4)', () => {
     renderWithSession(<JoinPage />, {
       me: makeMe({
         membership: {
-          membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'agent', status: 'active',
+          membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent', status: 'active',
           isKpmOwner: false, isKpmAdmin: false, directCount: 0,
         },
       }),
@@ -152,7 +152,7 @@ describe('redeeming an invite (P3-T4)', () => {
     renderWithSession(<JoinPage />, {
       me: makeMe({
         membership: {
-          membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'agent', status: 'active',
+          membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent', status: 'active',
           isKpmOwner: false, isKpmAdmin: false, directCount: 0,
         },
         permissions: ['join_via_code_link_qr'],

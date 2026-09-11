@@ -12,7 +12,7 @@ vi.mock('next/navigation', () => ({
 
 const LEADER = makeMe({
   membership: {
-    membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+    membershipId: 'mem-ab', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
     isKpmOwner: false, isKpmAdmin: false, directCount: 2,
   },
   permissions: [
@@ -33,7 +33,7 @@ const LEADER = makeMe({
  */
 const AGENT = makeMe({
   membership: {
-    membershipId: 'mem-agent', kpmId: 'kpm-1', hierarchyRole: 'agent', status: 'active',
+    membershipId: 'mem-agent', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent', status: 'active',
     isKpmOwner: false, isKpmAdmin: false, directCount: 0,
   },
   permissions: [],
@@ -145,7 +145,7 @@ describe('inviting people (P3-T4)', () => {
     // permissions have been taken away.
     const noTeamPowers = makeMe({
       membership: {
-        membershipId: 'mem-ab2', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        membershipId: 'mem-ab2', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 2,
       },
       permissions: ['member:invite', 'member:revoke_invite', 'member:search_untagged_pool'],
@@ -191,7 +191,7 @@ describe('inviting people (P3-T4)', () => {
     // Pending tab the thing under test rather than a side effect of being refused.
     const noInbox = makeMe({
       membership: {
-        membershipId: 'mem-ab3', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        membershipId: 'mem-ab3', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 0,
       },
       permissions: ['member:invite', 'member:revoke_invite', 'member:search_untagged_pool'],

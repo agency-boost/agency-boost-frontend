@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { AppShell, type NavSection } from '@/components/app-shell';
 import { RequireSession } from '@/components/require-session';
-import { ROLE_SHORT } from '@/components/ui/role-badge';
+import { useLadder } from '@/components/ui/role-badge';
 import { useSession } from '@/lib/session';
 import { useUnreadCount } from '@/lib/use-unread-count';
 import { useSignOut } from '@/lib/use-sign-out';
@@ -147,13 +147,25 @@ function Chrome({
   ];
 
   const membership = me?.membership;
+  /*
+   * The rung's short form, from the company's ladder (P4-T9).
+   *
+   * `ROLE_SHORT` was a three-key map here; a company publishing a fourth rung would have
+   * shown a member of it nothing at all in the one place the sidebar says who they are.
+   */
+  const ladder = useLadder();
+  const rung = ladder.find((l) => l.code === membership?.orgLevelCode?.toUpperCase());
+  const shortRung = rung
+    ? (rung.code.length <= 4 ? rung.code : rung.label)
+    : (membership?.hierarchyRole ?? '').toUpperCase();
+
 
   return (
     <AppShell
       sections={sections}
       user={{
         name: me?.user.preferredName ?? me?.user.fullName ?? 'Signed in',
-        role: membership ? ROLE_SHORT[membership.hierarchyRole] : 'No office yet',
+        role: membership ? shortRung : 'No office yet',
         initials: me?.user.initials ?? '??',
         email: me?.user.email,
       }}

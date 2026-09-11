@@ -21,7 +21,7 @@ const SUPER_ADMIN = makeMe({
 const member = (over: Record<string, unknown>) =>
   makeMe({
     membership: {
-      membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+      membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
       isKpmOwner: false, isKpmAdmin: false, directCount: 0, ...over,
     },
     permissions: ['member:read_profile'],

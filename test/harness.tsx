@@ -22,6 +22,7 @@ export function makeMe(overrides: Partial<Me> = {}): Me {
     membership: {
       membershipId: 'mem-1',
       kpmId: 'kpm-1',
+      orgLevelCode: 'AGENT',
       hierarchyRole: 'agent',
       isKpmOwner: false,
       isKpmAdmin: false, status: 'active', directCount: 0,

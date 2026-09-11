@@ -1,7 +1,7 @@
 'use client';
 
 import { api } from './api-client';
-import { ROLE_LABEL } from '@/components/ui/role-badge';
+import { rungLabel } from '@/components/ui/role-badge';
 
 /** The office roster. Mirrors `DirectoryMember` in the backend's directory service. */
 export type HierarchyRole = 'ab' | 'aab' | 'agent';
@@ -265,5 +265,5 @@ export function roleChangeExplanation(
   if (viewer === 'their-leader' && from === 'aab' && to === 'agent') {
     return `${name} will change from Associate Agency Builder back to Agent. They keep reporting to you, but will no longer manage their own direct agents.`;
   }
-  return `${name} will change from ${ROLE_LABEL[from]} to ${ROLE_LABEL[to]}. Nobody moves — they keep reporting to whoever they report to now.`;
+  return `${name} will change from ${rungLabel(from)} to ${rungLabel(to)}. Nobody moves — they keep reporting to whoever they report to now.`;
 }

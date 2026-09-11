@@ -54,7 +54,7 @@ describe('landing', () => {
     renderWithSession(<Home />, {
       me: makeMe({
         membership: {
-          membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+          membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
           isKpmOwner: true, isKpmAdmin: false, directCount: 2,
         },
       }),

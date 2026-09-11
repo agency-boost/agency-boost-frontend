@@ -24,7 +24,7 @@ function navLabels() {
 
 const AGENT = makeMe({
   membership: {
-    membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+    membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
     isKpmOwner: false, isKpmAdmin: false, directCount: 2,
   },
   permissions: [],
@@ -32,7 +32,7 @@ const AGENT = makeMe({
 
 const OWNER = makeMe({
   membership: {
-    membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+    membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
     isKpmOwner: true, isKpmAdmin: false, directCount: 0,
   },
   permissions: ['member:read_profile'],

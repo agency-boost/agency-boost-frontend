@@ -4,6 +4,16 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { api } from './api-client';
 import type { ActivityCategoryRow, LeadPipelineRow, RatioRow } from './tenant-config';
 
+/** One rung of the company's ladder, as the office reads it (P4-T9, ADR-0012). */
+export interface OrgLevel {
+  orgLevelId: string;
+  companyId: string;
+  code: string;
+  label: string;
+  displayOrder: number;
+  status: 'active' | 'archived';
+}
+
 export interface TenantConfig {
   activity: ActivityCategoryRow[];
   ratios: RatioRow[];
@@ -13,6 +23,8 @@ export interface TenantConfig {
 
 interface Cached {
   config: TenantConfig | null;
+  /** The company's ladder, junior first. Empty outside an office. */
+  ladder: OrgLevel[];
   /** True until the first read settles, so a screen can show a skeleton rather than empty. */
   loading: boolean;
   error: unknown;
@@ -39,12 +51,23 @@ const TenantConfigContext = createContext<Cached | null>(null);
  */
 export function TenantConfigProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<TenantConfig | null>(null);
+  const [ladder, setLadder] = useState<OrgLevel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
 
   const refresh = useCallback(async () => {
     try {
-      setConfig(await api<TenantConfig>('/kpm/config'));
+      /*
+       * Both in one place, for one reason (P4-T9): the ladder is what every role badge on
+       * every screen is drawn from, so fetching it per screen would be the thing this
+       * provider exists to prevent. It changes about once a year.
+       */
+      const [next, rungs] = await Promise.all([
+        api<TenantConfig>('/kpm/config'),
+        api<OrgLevel[]>('/kpm/org-levels'),
+      ]);
+      setConfig(next);
+      setLadder(rungs);
       setError(null);
     } catch (err) {
       setError(err);
@@ -56,8 +79,8 @@ export function TenantConfigProvider({ children }: { children: React.ReactNode }
   useEffect(() => { void refresh(); }, [refresh]);
 
   const value = useMemo(
-    () => ({ config, loading, error, refresh }),
-    [config, loading, error, refresh],
+    () => ({ config, ladder, loading, error, refresh }),
+    [config, ladder, loading, error, refresh],
   );
 
   return (
@@ -75,6 +98,7 @@ export function TenantConfigProvider({ children }: { children: React.ReactNode }
 export function useTenantConfig(): Cached {
   return useContext(TenantConfigContext) ?? {
     config: null,
+    ladder: [],
     loading: false,
     error: null,
     refresh: async () => {},

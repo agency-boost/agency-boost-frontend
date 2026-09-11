@@ -12,7 +12,7 @@ vi.mock('next/navigation', () => ({
 
 const OWNER = makeMe({
   membership: {
-    membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+    membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
     isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 2,
   },
   permissions: ['member:read_profile', 'kpm_admin:grant', 'kpm_admin:revoke', 'kpm_admin:list'],
@@ -152,7 +152,7 @@ describe('manage KPM admins (P3-T10)', () => {
     renderInLayout(TenantLayout, <AdminsPage />, {
       me: makeMe({
         membership: {
-          membershipId: 'mem-admin', kpmId: 'kpm-1', hierarchyRole: 'ab',
+          membershipId: 'mem-admin', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
           isKpmOwner: false, isKpmAdmin: true, status: 'active', directCount: 0,
         },
         permissions: ['member:read_profile', 'kpm_admin:list'],

@@ -11,7 +11,7 @@ vi.mock('next/navigation', () => ({
 
 const OWNER = makeMe({
   membership: {
-    membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+    membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
     isKpmOwner: true, isKpmAdmin: false, directCount: 2,
   },
   permissions: ['member:read_profile', 'kpm:read_profile'],

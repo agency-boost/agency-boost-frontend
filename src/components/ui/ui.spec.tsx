@@ -5,7 +5,7 @@ import { StatusPill, statusFor, STATUS_LABEL } from './status-pill';
 import { Stepper } from './stepper';
 import { ProgressBar } from './progress-bar';
 import { EmptyState } from './empty-state';
-import { RoleBadge, ROLE_LABEL } from './role-badge';
+import { RoleBadge, SEEDED_LADDER } from './role-badge';
 
 describe('StatusPill', () => {
   it('renders three distinct states, each with its own words', () => {
@@ -126,12 +126,33 @@ describe('EmptyState', () => {
 });
 
 describe('RoleBadge', () => {
-  it('uses one vocabulary for the three roles', () => {
-    expect(ROLE_LABEL).toEqual({
-      ab: 'Agency Builder',
-      aab: 'Associate Agency Builder',
-      agent: 'Agent',
-    });
+  it('draws its words from the ladder, not from a map here (P4-T9)', () => {
+    /*
+     * Five hard-coded maps keyed on a three-value enum were a second definition of a
+     * company's own vocabulary, in a product where the ladder is company configuration
+     * (ADR-0012). A second insurer publishing a fourth rung would have had members whose
+     * badge said nothing at all.
+     *
+     * Outside a provider the badge falls back to the seeded ladder — which is what v1
+     * ships, and what keeps every existing screen looking exactly as it did.
+     */
+    expect(SEEDED_LADDER.map((l) => [l.code, l.label])).toEqual([
+      ['AGENT', 'Agent'],
+      ['AAB', 'Associate Agency Builder'],
+      ['AB', 'Agency Builder'],
+    ]);
+  });
+
+  it('takes a ladder code or the v1 enum, because seven services still pass the enum', () => {
+    render(<RoleBadge role="AAB" />);
+    expect(screen.getByText('AAB')).toBeInTheDocument();
+  });
+
+  it('shortens an acronym and spells out a longer code', () => {
+    // `AGENT` shouted would be a change nobody asked for; the label is used instead.
+    render(<><RoleBadge role="ab" /><RoleBadge role="agent" /></>);
+    expect(screen.getByText('AB')).toBeInTheDocument();
+    expect(screen.getByText('Agent')).toBeInTheDocument();
   });
 
   it('always carries a text label, with the full name available on hover', () => {

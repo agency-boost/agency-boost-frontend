@@ -10,7 +10,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 const membership = {
-  membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'ab' as const,
+  membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab' as const,
   status: 'active' as const, isKpmOwner: true, isKpmAdmin: false, directCount: 0,
 };
 const OWNER = makeMe({ membership, permissions: ['tenant_config:read', 'tenant_config:write'] });

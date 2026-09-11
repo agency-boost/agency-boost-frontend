@@ -2,7 +2,10 @@
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { ROLE_AVATAR_CLASS, ROLE_LABEL, RoleBadge } from '@/components/ui/role-badge';
+import {
+  avatarClassFor, rungLabel, useLadder, RoleBadge, SEEDED_LADDER,
+} from '@/components/ui/role-badge';
+import type { OrgLevel } from '@/lib/tenant-config-cache';
 import type { OrgTree as OrgTreeData } from '@/lib/org';
 import { defaultCollapsed, layoutTree, NODE_HEIGHT, NODE_WIDTH } from './layout';
 
@@ -24,11 +27,31 @@ import { defaultCollapsed, layoutTree, NODE_HEIGHT, NODE_WIDTH } from './layout'
  * A bare total cannot say this. "leads 5" is true of an AB with five agents and of one
  * with five AABs, and those are different offices.
  */
-export function unitBreakdown(counts: { ab: number; aab: number; agent: number }): string {
+export function unitBreakdown(
+  counts: Record<string, number>,
+  ladder: OrgLevel[] = SEEDED_LADDER,
+): string {
+  /*
+   * Junior first, because that is the prototype's own order and it is also the useful
+   * one: a leader's agents are the bulk of their unit and their AABs are the exception.
+   *
+   * Keyed by ladder code since P4-T9. Three fixed keys silently said nothing about a
+   * rung a second insurer publishes — a leader with four reports on a new rung read as
+   * leading nobody here while the total beside it said four.
+   */
+  const junior = [...ladder].sort((a, b) => a.displayOrder - b.displayOrder);
   const parts: string[] = [];
-  if (counts.agent) parts.push(`${counts.agent} direct agent${counts.agent > 1 ? 's' : ''}`);
-  if (counts.aab) parts.push(`${counts.aab} AAB`);
-  if (counts.ab) parts.push(`${counts.ab} AB`);
+  for (const rung of junior) {
+    const n = counts[rung.code] ?? 0;
+    if (!n) continue;
+    const short = rung.code.length <= 4 ? rung.code : rung.label.toLowerCase();
+    parts.push(
+      rung.code === 'AGENT'
+        // The prototype's exact words for the commonest case.
+        ? `${n} direct agent${n > 1 ? 's' : ''}`
+        : `${n} ${short}`,
+    );
+  }
   return parts.join(', ');
 }
 
@@ -40,6 +63,8 @@ export function OrgTree({
   /** Where a card goes when clicked. Omitted where the reader cannot open a person. */
   personHref?: (membershipId: string) => string;
 }) {
+  // The company's ladder: labels and colours come from it, not from a map here (P4-T9).
+  const ladder = useLadder();
   const [collapsed, setCollapsed] = useState(() => defaultCollapsed(tree));
   const layout = useMemo(() => layoutTree(tree, collapsed), [tree, collapsed]);
 
@@ -66,10 +91,10 @@ export function OrgTree({
             <li key={role} className="flex items-center gap-1.5 text-sm text-muted">
               <span
                 aria-hidden="true"
-                className={`h-2.5 w-2.5 rounded-sm ${ROLE_AVATAR_CLASS[role].split(' ')[0]}`}
+                className={`h-2.5 w-2.5 rounded-sm ${avatarClassFor(role, ladder).split(' ')[0]}`}
               />
               {/* The prototype's legend abbreviates the middle one: "Associate AB". */}
-              {role === 'aab' ? 'Associate AB' : ROLE_LABEL[role]}
+              {role === 'aab' ? 'Associate AB' : rungLabel(role, ladder)}
             </li>
           ))}
         </ul>
@@ -83,7 +108,7 @@ export function OrgTree({
           <p className="text-sm font-semibold uppercase tracking-wide text-muted">Your leader</p>
           <div className="mt-1 inline-flex items-center gap-3 rounded-md border border-dashed border-hairline bg-card p-3">
             <span
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-md font-bold ${ROLE_AVATAR_CLASS[tree.leader.role]}`}
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-md font-bold ${avatarClassFor(tree.leader.role, ladder)}`}
             >
               {tree.leader.initials}
             </span>
@@ -140,7 +165,7 @@ export function OrgTree({
                     style={{ left: x, top: y, width: NODE_WIDTH, height: NODE_HEIGHT }}
                   >
                     <span
-                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-2xs font-bold ${ROLE_AVATAR_CLASS[node.role]}`}
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-2xs font-bold ${avatarClassFor(node.role, ladder)}`}
                     >
                       {node.initials}
                     </span>

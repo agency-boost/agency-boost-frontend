@@ -8,7 +8,7 @@ function member(over: Partial<NonNullable<Me['membership']>> = {}): Me['membersh
   return {
     membershipId: 'mem-1',
     kpmId: 'kpm-1',
-    hierarchyRole: 'agent',
+    orgLevelCode: 'AGENT', hierarchyRole: 'agent',
     status: 'active',
     isKpmOwner: false,
     isKpmAdmin: false,
@@ -69,19 +69,19 @@ describe('where signing in takes you', () => {
   it('prefers running the office over leading a unit, when both are true', () => {
     // An Owner is an AB at the root with a downline. Both branches match; the order
     // decides, and the office is the wider job.
-    const both = member({ isKpmOwner: true, hierarchyRole: 'ab', directCount: 5 });
+    const both = member({ isKpmOwner: true, orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 5 });
     expect(landingFor(makeMe({ membership: both }))).toBe('/kpm/overview');
   });
 
   it('sends somebody who leads people to their unit', () => {
-    expect(landingFor(makeMe({ membership: member({ hierarchyRole: 'aab', directCount: 2 }) }))).toBe(
+    expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 2 }) }))).toBe(
       '/unit/dashboard',
     );
   });
 
   it('sends an AAB who leads nobody to their own day, not to an empty unit (OD-23)', () => {
     // Leading is the graph, not the role. A childless AAB has no unit to look at.
-    expect(landingFor(makeMe({ membership: member({ hierarchyRole: 'aab', directCount: 0 }) }))).toBe(
+    expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 0 }) }))).toBe(
       '/activity/log',
     );
   });
@@ -93,7 +93,7 @@ describe('where signing in takes you', () => {
   it('lets a pending membership win over any role it carries', () => {
     // The order runs most specific first: several of these are true at once, and being
     // unapproved outranks being an AB.
-    const pendingAb = member({ status: 'pending', hierarchyRole: 'ab', directCount: 4 });
+    const pendingAb = member({ status: 'pending', orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 4 });
     expect(landingFor(makeMe({ membership: pendingAb }))).toBe('/user-management/leader');
   });
 });

@@ -36,7 +36,7 @@ describe('profile', () => {
     renderWithSession(<ProfilePage />, {
       me: makeMe({
         membership: {
-          membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'ab',
+          membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
           isKpmOwner: false, isKpmAdmin: true, status: 'active', directCount: 0,
         },
         permissions: ['profile:read_self'],

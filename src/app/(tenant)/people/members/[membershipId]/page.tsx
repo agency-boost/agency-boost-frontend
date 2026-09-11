@@ -6,7 +6,7 @@ import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
-import { RoleBadge, ROLE_LABEL } from '@/components/ui/role-badge';
+import { RoleBadge, rungLabel, useLadder } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -35,6 +35,8 @@ import {
  * is a thing an Owner says to an Admin, and a modal cannot be linked to.
  */
 export default function MemberPage({ params }: { params: Promise<{ membershipId: string }> }) {
+  // The company's ladder, so a rung's label comes from it rather than a map (P4-T9).
+  const ladder = useLadder();
   const { membershipId } = use(params);
   const [member, setMember] = useState<Member | null>(null);
   const [reports, setReports] = useState<Member[]>([]);
@@ -193,8 +195,8 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
             </dl>
           ) : (
             <p className="mt-2 text-md text-muted">
-              {ROLE_LABEL[member.role]}, and leads nobody. Leadership follows the tree rather
-              than the role — an {ROLE_LABEL[member.role]} with no direct reports has no unit,
+              {rungLabel(member.role, ladder)}, and leads nobody. Leadership follows the tree rather
+              than the role — an {rungLabel(member.role, ladder)} with no direct reports has no unit,
               and the surfaces that need one stay closed until they do.
             </p>
           )}
@@ -334,7 +336,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                   }
                 >
                   <Select id="to-role" value={toRole} onChange={(e) => setToRole(e.target.value as HierarchyRole | '')}>
-                    <option value="">{ROLE_LABEL[member.role]} — no change</option>
+                    <option value="">{rungLabel(member.role, ladder)} — no change</option>
                     {(['agent', 'aab', 'ab'] as const)
                       .filter((r) => r !== member.role)
                       // The two matrix rows, kept apart: Agent⇄AAB is a direct leader's
@@ -342,7 +344,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                       .filter((r) => (r === 'ab' || member.role === 'ab' ? member.canPromoteToAb : true))
                       .map((r) => (
                         <option key={r} value={r}>
-                          {ROLE_LABEL[r]}
+                          {rungLabel(r, ladder)}
                         </option>
                       ))}
                   </Select>

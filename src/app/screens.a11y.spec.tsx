@@ -208,7 +208,7 @@ describe('screens have no axe violations', () => {
   it('the office roster, populated', async () => {
     const owner = makeMe({
       membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
         isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
       },
       permissions: ['member:read_profile'],
@@ -257,7 +257,7 @@ describe('screens have no axe violations', () => {
   it('find your leader, with a request already sent', async () => {
     const joiner = makeMe({
       membership: {
-        membershipId: 'mem-me', kpmId: 'kpm-1', hierarchyRole: 'agent',
+        membershipId: 'mem-me', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent',
         isKpmOwner: false, isKpmAdmin: false, status: 'active', directCount: 0,
       },
       permissions: ['leader:search_directory', 'leader_request:create'],
@@ -285,7 +285,7 @@ describe('screens have no axe violations', () => {
   it('the office overview, real half and placeholder half together', async () => {
     const owner = makeMe({
       membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: true, isKpmAdmin: false, directCount: 2,
       },
       permissions: ['member:read_profile'],
@@ -299,7 +299,7 @@ describe('screens have no axe violations', () => {
   it('the placeholder landings a leader and an agent reach', async () => {
     const leader = makeMe({
       membership: {
-        membershipId: 'mem-aab', kpmId: 'kpm-1', hierarchyRole: 'aab', status: 'active',
+        membershipId: 'mem-aab', kpmId: 'kpm-1', orgLevelCode: 'AAB', hierarchyRole: 'aab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 2,
       },
     });
@@ -316,7 +316,7 @@ describe('screens have no axe violations', () => {
   it('the invite screen, with a code to share and a team below it', async () => {
     const leader = makeMe({
       membership: {
-        membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        membershipId: 'mem-ab', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 2,
       },
       permissions: [
@@ -356,7 +356,7 @@ describe('screens have no axe violations', () => {
     // the rest of the list, which is where a focus or labelling mistake would land.
     const leader = makeMe({
       membership: {
-        membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        membershipId: 'mem-ab', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 1,
       },
       // The team card is gated on being able to act on a team, and the screen itself on
@@ -388,7 +388,7 @@ describe('screens have no axe violations', () => {
     // radios sharing a name, and a reason field, all inside a panel that appeared.
     const leader = makeMe({
       membership: {
-        membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        membershipId: 'mem-ab', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 1,
       },
       // The team card is gated on being able to act on a team, and the screen itself on
@@ -418,7 +418,7 @@ describe('screens have no axe violations', () => {
   it('the removed list, populated', async () => {
     const owner = makeMe({
       membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
         isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
       },
       permissions: ['member:read_profile'],
@@ -447,7 +447,7 @@ describe('screens have no axe violations', () => {
   it('the Pending queue, populated', async () => {
     const owner = makeMe({
       membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
         isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
       },
       permissions: ['member:read_profile'],
@@ -483,7 +483,7 @@ describe('screens have no axe violations', () => {
   it('the role change log, populated', async () => {
     const owner = makeMe({
       membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
         isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
       },
       permissions: ['member:read_profile'],
@@ -507,7 +507,7 @@ describe('screens have no axe violations', () => {
   it('the approval inbox, with a request and somewhere to route it', async () => {
     const ab = makeMe({
       membership: {
-        membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        membershipId: 'mem-ab', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 2,
       },
       permissions: ['leader_request:read_inbox', 'leader_request:approve'],
@@ -534,7 +534,7 @@ describe('screens have no axe violations', () => {
     // get wrong; the open one is just more cards.
     const leader = makeMe({
       membership: {
-        membershipId: 'mem-ab', kpmId: 'kpm-1', hierarchyRole: 'ab', status: 'active',
+        membershipId: 'mem-ab', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: false, isKpmAdmin: false, directCount: 1,
       },
       permissions: ['member:read_profile', 'org_tree:read'],
@@ -565,7 +565,7 @@ describe('screens have no axe violations', () => {
   it('the org tree, populated, with a second root', async () => {
     const owner = makeMe({
       membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
         isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 1,
       },
       permissions: ['member:read_profile', 'org_tree:read'],
@@ -596,7 +596,7 @@ describe('screens have no axe violations', () => {
   it('the Groups tab with a create form open', async () => {
     const owner = makeMe({
       membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
         isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
       },
       permissions: ['member:read_profile'],
@@ -629,7 +629,7 @@ describe('screens have no axe violations', () => {
   it('the person page with the tag panel open', async () => {
     const owner = makeMe({
       membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
         isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
       },
       permissions: ['member:read_profile'],
@@ -667,7 +667,7 @@ describe('screens have no axe violations', () => {
     // only appears for a leader with reports — the shape most likely to be got wrong.
     const owner = makeMe({
       membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
         isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
       },
       permissions: ['member:read_profile', 'member:change_role', 'member:remove_from_team'],
@@ -698,7 +698,7 @@ describe('screens have no axe violations', () => {
   it('manage KPM admins, populated and with a revoke waiting', async () => {
     const owner = makeMe({
       membership: {
-        membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
         isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 1,
       },
       permissions: ['member:read_profile', 'kpm_admin:grant', 'kpm_admin:revoke', 'kpm_admin:list'],
@@ -746,7 +746,7 @@ describe('screens have no axe violations', () => {
     renderInLayout(TenantLayout, <MembersPage />, {
       me: makeMe({
         membership: {
-          membershipId: 'mem-owner', kpmId: 'kpm-1', hierarchyRole: 'ab',
+          membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
           isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
         },
         permissions: ['member:read_profile'],

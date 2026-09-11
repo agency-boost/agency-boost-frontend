@@ -17,6 +17,9 @@ export interface Me {
   membership: {
     membershipId: string;
     kpmId: string;
+    /** The rung of the company's ladder this person stands on (P4-T9). */
+    orgLevelCode: string;
+    /** The v1 enum. Still read where a screen sorts or groups; not what a badge is drawn from. */
     hierarchyRole: HierarchyRole;
     status: 'active' | 'pending' | 'removed';
     isKpmOwner: boolean;

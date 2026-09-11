@@ -1,53 +1,96 @@
 import { cn } from '@/lib/cn';
+import { useTenantConfig, type OrgLevel } from '@/lib/tenant-config-cache';
 
 /**
- * One canonical role enum, one label map.
+ * What a rung of the company's ladder looks like (P4-T9, ADR-0012).
  *
- * The prototypes carry four competing vocabularies and two enum casings for these three
- * roles (see docs/01-flows/group-tree.md §5). This is the single source.
+ * **The labels come from the ladder, the colours from its order.** Until P4-T9 this file
+ * held five maps keyed on a three-value enum — a second definition of a company's own
+ * vocabulary, in a product where the ladder is company configuration. A second insurer
+ * publishing a fourth rung would have had members whose badge said nothing.
+ *
+ * Colour is assigned by **seniority**, senior first, from a fixed palette. v1's three
+ * rungs land on exactly the colours they had, so nothing moves; a fourth rung gets the
+ * next entry rather than no colour at all.
  *
  * The badge always renders its text label — roughly 8% of men have a colour vision
  * deficiency, and this product's users are majority-male sales teams.
  */
 export type HierarchyRole = 'ab' | 'aab' | 'agent';
 
-export const ROLE_LABEL: Record<HierarchyRole, string> = {
-  ab: 'Agency Builder',
-  aab: 'Associate Agency Builder',
-  agent: 'Agent',
-};
+/**
+ * The seeded ladder, for a screen that has no office to ask.
+ *
+ * The platform console renders members of many companies and belongs to none, and a test
+ * that never mounts the provider still has to draw a badge. Honest rather than silent: v1
+ * ships one ladder, and this is it.
+ */
+export const SEEDED_LADDER: OrgLevel[] = [
+  { orgLevelId: 'seed-agent', companyId: '', code: 'AGENT', label: 'Agent', displayOrder: 1, status: 'active' },
+  { orgLevelId: 'seed-aab', companyId: '', code: 'AAB', label: 'Associate Agency Builder', displayOrder: 2, status: 'active' },
+  { orgLevelId: 'seed-ab', companyId: '', code: 'AB', label: 'Agency Builder', displayOrder: 3, status: 'active' },
+];
 
-export const ROLE_SHORT: Record<HierarchyRole, string> = {
-  ab: 'AB',
-  aab: 'AAB',
-  agent: 'Agent',
-};
+/** Senior first. The first rung gets the strongest colour. */
+const PALETTE = [
+  { badge: 'bg-role-ab/15 text-amber-dark', muted: 'bg-navy/10 text-navy', avatar: 'bg-role-ab text-navy' },
+  { badge: 'bg-role-aab/15 text-navy-soft', muted: 'bg-navy-soft/[0.12] text-navy-soft', avatar: 'bg-role-aab text-card' },
+  { badge: 'bg-navy/10 text-navy', muted: 'bg-muted/10 text-muted', avatar: 'bg-role-agent text-card' },
+  // A fourth rung, and anything beyond it, is quiet rather than absent.
+  { badge: 'bg-hairline text-navy', muted: 'bg-hairline text-muted', avatar: 'bg-muted text-card' },
+];
 
-const ROLE_CLASS: Record<HierarchyRole, string> = {
-  ab: 'bg-role-ab/15 text-amber-dark',
-  aab: 'bg-role-aab/15 text-navy-soft',
-  agent: 'bg-navy/10 text-navy',
-};
+function paletteFor(ladder: OrgLevel[], code: string) {
+  const senior = [...ladder].sort((a, b) => b.displayOrder - a.displayOrder);
+  const at = senior.findIndex((l) => l.code === code.toUpperCase());
+  return PALETTE[Math.min(at < 0 ? PALETTE.length - 1 : at, PALETTE.length - 1)];
+}
 
 /**
- * The muted treatment, for places where something else already carries the role colour.
+ * The short form.
  *
- * In the org tree the **avatar** is the coloured thing (`Group_Overview.html:85-87`) and
- * the badge beside it is deliberately quiet (`:95-97`) — two amber elements on one card
- * would compete rather than inform.
+ * A code that reads as an acronym is already the short form — `AB`, `AAB`. A longer one
+ * would be shouted, so the label is used instead: `AGENT` renders `Agent`, which is
+ * exactly what v1 shipped.
  */
-const ROLE_CLASS_MUTED: Record<HierarchyRole, string> = {
-  ab: 'bg-navy/10 text-navy',
-  aab: 'bg-navy-soft/[0.12] text-navy-soft',
-  agent: 'bg-muted/10 text-muted',
-};
+function shortFor(level: OrgLevel | undefined, code: string): string {
+  if (!level) return code.toUpperCase();
+  return level.code.length <= 4 ? level.code : level.label;
+}
 
-/** The role colours, for an avatar or a legend swatch. */
-export const ROLE_AVATAR_CLASS: Record<HierarchyRole, string> = {
-  ab: 'bg-role-ab text-navy',
-  aab: 'bg-role-aab text-card',
-  agent: 'bg-role-agent text-card',
-};
+/**
+ * A rung's label, without a hook.
+ *
+ * For the pure modules that compose a sentence and have no React context to read — the
+ * ladder is passed in, defaulting to the seeded one. That default is the honest fallback
+ * for v1 rather than a second definition: `SEEDED_LADDER` is one constant, not five maps,
+ * and a caller with a real ladder passes it.
+ */
+export function rungLabel(code: string, ladder: OrgLevel[] = SEEDED_LADDER): string {
+  return ladder.find((l) => l.code === code.toUpperCase())?.label ?? code.toUpperCase();
+}
+
+/** The ladder an office stands on, falling back to the seeded one outside an office. */
+export function useLadder(): OrgLevel[] {
+  const { ladder } = useTenantConfig();
+  return ladder.length > 0 ? ladder : SEEDED_LADDER;
+}
+
+/** A rung's full label — `Agency Builder`. */
+export function useRoleLabel(code: string): string {
+  const ladder = useLadder();
+  return ladder.find((l) => l.code === code.toUpperCase())?.label ?? code.toUpperCase();
+}
+
+/** The avatar or legend-swatch colour for a rung, without a hook. */
+export function avatarClassFor(code: string, ladder: OrgLevel[] = SEEDED_LADDER): string {
+  return paletteFor(ladder, code).avatar;
+}
+
+/** The avatar or legend-swatch colour for a rung. */
+export function useRoleAvatarClass(code: string): string {
+  return paletteFor(useLadder(), code).avatar;
+}
 
 export function RoleBadge({
   role,
@@ -55,22 +98,35 @@ export function RoleBadge({
   tone = 'default',
   className,
 }: {
-  role: HierarchyRole;
+  /**
+   * The rung, by **ladder code** or by the v1 enum.
+   *
+   * Both are accepted because the seeded codes are the upper-cased enum values, and seven
+   * services still hand the enum around. Comparison is case-insensitive, so a caller
+   * passing `'ab'` and one passing `'AB'` draw the same badge.
+   */
+  role: HierarchyRole | string;
   short?: boolean;
   /** `muted` where a coloured avatar already says the role — the org tree. */
   tone?: 'default' | 'muted';
   className?: string;
 }) {
+  const ladder = useLadder();
+  const code = String(role).toUpperCase();
+  const level = ladder.find((l) => l.code === code);
+  const palette = paletteFor(ladder, code);
+  const label = level?.label ?? code;
+
   return (
     <span
       className={cn(
         'inline-flex items-center rounded-pill px-2 py-0.5 text-2xs font-bold uppercase tracking-wide',
-        tone === 'muted' ? ROLE_CLASS_MUTED[role] : ROLE_CLASS[role],
+        tone === 'muted' ? palette.muted : palette.badge,
         className,
       )}
-      title={ROLE_LABEL[role]}
+      title={label}
     >
-      {short ? ROLE_SHORT[role] : ROLE_LABEL[role]}
+      {short ? shortFor(level, code) : label}
     </span>
   );
 }

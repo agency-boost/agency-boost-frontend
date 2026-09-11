@@ -6,6 +6,10 @@ import {
   TenantConfigProvider, useActivityType, useTenantConfig,
 } from './tenant-config-cache';
 
+const LADDER = [
+  { orgLevelId: 'l1', companyId: 'c1', code: 'AGENT', label: 'Agent', displayOrder: 1, status: 'active' },
+];
+
 const CONFIG = {
   activity: [{
     id: 'c1', code: 'SELLING', label: 'Selling', displayOrder: 1, version: 1, status: 'active',
@@ -40,7 +44,11 @@ describe('the shared tenant configuration (P4-T7)', () => {
      * pipelines. Each fetching its own copy is three requests to render one screen, on a
      * connection budgeted for a mid-range Android over 4G.
      */
-    const { calls } = stubFetch({ '/kpm/config': { body: CONFIG } });
+    const { calls } = stubFetch({
+      '/kpm/config': { body: CONFIG },
+      // Fetched alongside since P4-T9: every role badge is drawn from it.
+      '/kpm/org-levels': { body: LADDER },
+    });
     render(
       <TenantConfigProvider>
         <Reader />
@@ -54,13 +62,17 @@ describe('the shared tenant configuration (P4-T7)', () => {
   });
 
   it('resolves a stored code to its label, which is what a screen holding one needs', async () => {
-    stubFetch({ '/kpm/config': { body: CONFIG } });
+    stubFetch({ '/kpm/config': { body: CONFIG }, '/kpm/org-levels': { body: LADDER } });
     render(<TenantConfigProvider><Reader /></TenantConfigProvider>);
     expect(await screen.findByText('Submission polis')).toBeInTheDocument();
   });
 
   it('asks again when a settings screen says something changed', async () => {
-    const { calls } = stubFetch({ '/kpm/config': { body: CONFIG } });
+    const { calls } = stubFetch({
+      '/kpm/config': { body: CONFIG },
+      // Fetched alongside since P4-T9: every role badge is drawn from it.
+      '/kpm/org-levels': { body: LADDER },
+    });
     render(<TenantConfigProvider><Reader /></TenantConfigProvider>);
     await screen.findByText('v1');
 
@@ -70,7 +82,7 @@ describe('the shared tenant configuration (P4-T7)', () => {
   });
 
   it('says it is loading before the first read settles', () => {
-    stubFetch({ '/kpm/config': { body: CONFIG } });
+    stubFetch({ '/kpm/config': { body: CONFIG }, '/kpm/org-levels': { body: LADDER } });
     render(<TenantConfigProvider><Reader /></TenantConfigProvider>);
     expect(screen.getByText('loading')).toBeInTheDocument();
   });
