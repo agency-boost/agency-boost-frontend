@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { RoleShell } from '@/components/role-shell';
+import { SessionList } from '@/components/session-list';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { PasswordInput } from '@/components/ui/password-input';
@@ -51,6 +52,7 @@ function Profile() {
         <WhoAmI />
         <ProfileForm onSaved={reload} />
         <PasswordForm />
+        <SessionList />
       </div>
     </RoleShell>
   );

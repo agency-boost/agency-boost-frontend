@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderWithSession } from '@test/harness';
+import { renderWithSession, stubFetch } from '@test/harness';
 import { ApiConfigError } from '@/lib/api';
 import { ApiRequestError } from '@/lib/api-client';
 import LoginPage from './page';
@@ -142,4 +142,54 @@ describe('login', () => {
       expect(screen.getByLabelText('Email')).toHaveValue('owner@kpm0417.test');
     });
   });
+  it('offers to send the verification email again, when that is the refusal (P4-T13)', async () => {
+    /*
+     * Login refuses an unverified account, and until `resend-verification` existed the
+     * only advice was "check your inbox" — for an email that, before `P4-T14`, had never
+     * been sent. Both halves are real now, so the screen offers the action.
+     */
+    const signIn = vi.fn(async () => {
+      throw new ApiRequestError(403, {
+        code: 'AUTH_EMAIL_NOT_VERIFIED',
+        message: 'Verify your email address before signing in. Check your inbox.',
+        requestId: 'req-11',
+      });
+    });
+    const { calls } = stubFetch({
+      '/auth/resend-verification': { status: 202, body: { status: 'accepted' } },
+    });
+    renderWithSession(<LoginPage />, { signIn });
+
+    await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
+    await userEvent.type(screen.getByLabelText('Password'), 'a-password');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: 'Send the verification email again' }),
+    );
+
+    expect(calls.some((c) => c.url.includes('/auth/resend-verification'))).toBe(true);
+    expect(await screen.findByText(/On its way, if that address has an account waiting/))
+      .toBeInTheDocument();
+  });
+
+  it('offers it only for that refusal, not for a wrong password', async () => {
+    const signIn = vi.fn(async () => {
+      throw new ApiRequestError(401, {
+        code: 'AUTH_INVALID_CREDENTIALS',
+        message: 'Email or password is incorrect.',
+        requestId: 'req-12',
+      });
+    });
+    renderWithSession(<LoginPage />, { signIn });
+
+    await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
+    await userEvent.type(screen.getByLabelText('Password'), 'wrong');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    await screen.findByRole('alert');
+    expect(screen.queryByRole('button', { name: 'Send the verification email again' }))
+      .toBeNull();
+  });
+
 });

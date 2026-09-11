@@ -8,6 +8,7 @@ import { useSession } from '@/lib/session';
 import { type DemoAccount } from '@/lib/demo-accounts';
 import { DemoAccountsPanel } from '@/components/demo-accounts-panel';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { resendVerification } from '@/lib/sessions';
 import { PasswordInput } from '@/components/ui/password-input';
 
 export default function LoginPage() {
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
+  const [resent, setResent] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const attempt = useCallback(
@@ -50,6 +52,14 @@ export default function LoginPage() {
   }
 
   const credentialsRejected = error?.code === 'AUTH_INVALID_CREDENTIALS';
+  /*
+   * The one refusal a person can act on from here (P4-T13).
+   *
+   * Login refuses an unverified account, and until `resend-verification` existed the only
+   * advice was "check your inbox" — for an email that, before `P4-T14`, had never been
+   * sent. Both halves are real now, so the screen offers the action instead of the advice.
+   */
+  const notVerified = error?.code === 'AUTH_EMAIL_NOT_VERIFIED';
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
@@ -59,6 +69,29 @@ export default function LoginPage() {
       <Card>
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
           {error && <ErrorBanner {...error} />}
+          {notVerified && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="secondary"
+                disabled={resent || busy}
+                onClick={async () => {
+                  try {
+                    await resendVerification(email);
+                    setResent(true);
+                  } catch (err) {
+                    setError(toDisplayError(err));
+                  }
+                }}
+              >
+                Send the verification email again
+              </Button>
+              {resent && (
+                <p role="status" className="text-md text-muted">
+                  On its way, if that address has an account waiting.
+                </p>
+              )}
+            </div>
+          )}
 
           <Field label="Email" htmlFor="email">
             <TextInput

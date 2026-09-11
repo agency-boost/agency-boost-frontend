@@ -66,7 +66,7 @@ describe('profile', () => {
   });
 
   it('saves the details and confirms it', async () => {
-    const { calls } = stubFetch({ '/auth/me': { body: {} } });
+    const { calls } = stubFetch({ '/auth/me': { body: {} }, '/auth/sessions': { body: [] } });
     renderWithSession(<ProfilePage />, { me: ME });
 
     await userEvent.clear(screen.getByLabelText('Preferred name'));
@@ -90,6 +90,9 @@ describe('profile', () => {
 
   it('surfaces a rejected profile save instead of a silent no-op', async () => {
     stubFetch({
+      // The profile carries the session list (P4-T13); without this its own read fails
+      // and its error banner becomes a second `role="alert"` on the page.
+      '/auth/sessions': { body: [] },
       '/auth/me': {
         status: 400,
         body: { error: { code: 'VALIDATION_FAILED', message: 'Name is required.', requestId: 'req-12' } },
@@ -123,6 +126,9 @@ describe('profile', () => {
 
   it('says the current password was wrong rather than appearing to succeed', async () => {
     stubFetch({
+      // The profile carries the session list (P4-T13); without this its own read fails
+      // and its error banner becomes a second `role="alert"` on the page.
+      '/auth/sessions': { body: [] },
       '/auth/change-password': {
         status: 401,
         body: { error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'That is not your current password.', requestId: 'req-13' } },
