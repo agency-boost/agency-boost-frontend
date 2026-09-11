@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
@@ -22,7 +23,12 @@ const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
  * be missing from the other — which is what keeps the placeholder the same width as
  * the thing it stands in for.
  */
-const COLUMNS = ['Name', 'Slug', 'Currency', 'Time zone'] as const;
+const COLUMNS = [
+  'Name', 'Slug', 'Currency', 'Time zone',
+  // The template belongs to the company (ADR-0018), so it is reached through the company
+  // rather than from a nav item that would have nothing to point at.
+  { label: 'KPM template', visuallyHidden: true },
+] as const;
 
 export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[] | null>(null);
@@ -93,6 +99,14 @@ export default function CompaniesPage() {
                   </Cell>
                   <Cell>{c.defaultCurrency}</Cell>
                   <Cell>{c.defaultTimezone}</Cell>
+                  <Cell>
+                    <Link
+                      href={`/admin/companies/${c._id}/template`}
+                      className="text-md font-semibold text-navy underline"
+                    >
+                      KPM template
+                    </Link>
+                  </Cell>
                 </Row>
               ))}
             </DataTable>

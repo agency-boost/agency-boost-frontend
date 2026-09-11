@@ -41,7 +41,6 @@ const SECTIONS: readonly { label: string | null; divider?: boolean; items: Admin
     items: [
       { label: 'Manage companies', href: '/admin/companies' },
       { label: 'Org role ladder', href: '/admin/org-levels' },
-      { label: 'KPM template', href: '/admin/templates', upcoming: true },
       { label: 'Product catalog', href: '/admin/products', upcoming: true },
     ],
     divider: true,

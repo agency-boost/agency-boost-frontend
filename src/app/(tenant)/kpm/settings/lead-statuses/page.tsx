@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
+import { PublishBar } from '@/components/publish-bar';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -40,6 +41,9 @@ export default function LeadStatusesPage() {
   const [pipelines, setPipelines] = useState<LeadPipelineRow[] | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  // Bumped after any write, so the publish bar re-reads rather than going stale behind
+  // an edit the Owner just made.
+  const [published, setPublished] = useState(0);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState<LeadPipeline | null>(null);
   const [draft, setDraft] = useState({ code: '', label: '' });
@@ -62,6 +66,7 @@ export default function LeadStatusesPage() {
     try {
       await action();
       await load();
+      setPublished((n) => n + 1);
     } catch (err) {
       setError(toDisplayError(err));
     } finally {
@@ -76,6 +81,7 @@ export default function LeadStatusesPage() {
       permission="tenant_config:read"
     >
       {error && <ErrorBanner {...error} />}
+      <PublishBar refreshKey={published} />
 
       <label className="mb-4 flex items-center gap-2 text-md text-navy">
         <input

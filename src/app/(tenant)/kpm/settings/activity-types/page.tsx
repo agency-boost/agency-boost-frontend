@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
+import { PublishBar } from '@/components/publish-bar';
 import { ACTIVITY_SETTINGS_TABS, SettingsTabs } from '@/components/settings-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
@@ -37,6 +38,9 @@ export default function ActivityTypesPage() {
   const [categories, setCategories] = useState<ActivityCategoryRow[] | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  // Bumped after any write, so the publish bar re-reads rather than going stale behind
+  // an edit the Owner just made.
+  const [published, setPublished] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
   const [draft, setDraft] = useState({ code: '', label: '', description: '' });
@@ -59,6 +63,7 @@ export default function ActivityTypesPage() {
     try {
       await action();
       await load();
+      setPublished((n) => n + 1);
     } catch (err) {
       setError(toDisplayError(err));
     } finally {
@@ -92,6 +97,7 @@ export default function ActivityTypesPage() {
     >
       <SettingsTabs tabs={ACTIVITY_SETTINGS_TABS} />
       {error && <ErrorBanner {...error} />}
+      <PublishBar refreshKey={published} />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-md text-navy">

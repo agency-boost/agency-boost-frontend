@@ -16,18 +16,38 @@ import { usePathname } from 'next/navigation';
  * The same shape is what ADR-0018 says the Super Admin template screen uses: an Owner item
  * that is split across routes becomes subtabs there too.
  */
-export function SettingsTabs({ tabs }: { tabs: { label: string; href: string }[] }) {
+export function SettingsTabs({
+  tabs,
+  onSelect,
+  activeHref,
+}: {
+  tabs: { label: string; href: string }[];
+  /**
+   * When the tabs switch a panel rather than a route.
+   *
+   * The Owner's two are separate routes, because they were separate routes before this
+   * component existed and a reader can link to either. The Super Admin's seven are one
+   * screen with one `companyId`, and seven routes for seven panels of the same document
+   * would be seven places to get the id wrong.
+   */
+  onSelect?: (href: string) => void;
+  activeHref?: string;
+}) {
   const pathname = usePathname();
 
   return (
     <nav className="mb-4 flex flex-wrap gap-1 border-b border-hairline" aria-label="Activity settings">
       {tabs.map((tab) => {
-        const active = pathname === tab.href;
+        const active = (activeHref ?? pathname) === tab.href;
         return (
           <Link
             key={tab.href}
             href={tab.href}
             aria-current={active ? 'page' : undefined}
+            onClick={onSelect && ((event) => {
+              event.preventDefault();
+              onSelect(tab.href);
+            })}
             className={
               active
                 ? 'border-b-2 border-amber px-3 py-2 text-md font-semibold text-navy'

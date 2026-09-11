@@ -269,3 +269,53 @@ export const importRoster = (kpmId: string, rows: string) =>
     method: 'POST',
     body: { rows },
   });
+
+export type TemplateKind =
+  | 'activity_taxonomy'
+  | 'lead_pipeline'
+  | 'ratio_set'
+  | 'activation_checklist'
+  | 'training_taxonomy'
+  | 'capability_ladder';
+
+export interface PlatformTemplate {
+  id: string;
+  companyId: string;
+  kind: TemplateKind;
+  /** The version this is, or will be once published. */
+  version: number;
+  status: 'draft' | 'published' | 'archived';
+  payload: Record<string, unknown>;
+  publishedAt: string | null;
+  /** What new offices are seeded from today. Null when nothing is published. */
+  publishedVersion: number | null;
+  /** Offices of this company built from something older — including from before anything was. */
+  officesBehind: number;
+}
+
+/**
+ * A company's KPM template (P4-T8, ADR-0018).
+ *
+ * The draft if there is one, else the newest published, else a starting point built from
+ * the platform defaults.
+ */
+export const readTemplate = (companyId: string, kind: TemplateKind) =>
+  api<PlatformTemplate>(`/admin/companies/${companyId}/template/${kind}`);
+
+export const readTemplateHistory = (companyId: string, kind: TemplateKind) =>
+  api<PlatformTemplate[]>(`/admin/companies/${companyId}/template/${kind}/history`);
+
+/** The whole payload, not a patch — see the DTO for why. */
+export const saveTemplateDraft = (
+  companyId: string,
+  kind: TemplateKind,
+  payload: Record<string, unknown>,
+) => api<PlatformTemplate>(`/admin/companies/${companyId}/template/${kind}`, {
+  method: 'PUT', body: { payload },
+});
+
+/** Becomes what the **next** office is seeded from. Reaches nothing that already exists. */
+export const publishTemplate = (companyId: string, kind: TemplateKind) =>
+  api<PlatformTemplate>(`/admin/companies/${companyId}/template/${kind}/publish`, {
+    method: 'POST',
+  });

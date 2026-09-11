@@ -188,3 +188,17 @@ export const updateBranchInfo = (body: Partial<{
   contactPhone: string;
   fiscalYearStartMonth: number;
 }>) => api<BranchInfo>('/kpm/settings/branch-info', { method: 'PATCH', body });
+
+export interface PublishState {
+  /** What agents are on. 0 when nothing is published. */
+  publishedVersion: number;
+  workingVersion: number;
+  hasUnpublishedChanges: boolean;
+  publishedAt: string | null;
+}
+
+export const readPublishState = () => api<PublishState>('/kpm/settings/publish-state');
+
+/** Renders the live rows into the copy agents read. Until then they stay on the last one. */
+export const publishConfig = () =>
+  api<PublishState>('/kpm/settings/publish', { method: 'POST' });

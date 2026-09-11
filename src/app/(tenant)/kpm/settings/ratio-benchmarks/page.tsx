@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
+import { PublishBar } from '@/components/publish-bar';
 import { ACTIVITY_SETTINGS_TABS, SettingsTabs } from '@/components/settings-tabs';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
@@ -33,6 +34,9 @@ export default function RatioBenchmarksPage() {
   const [ratios, setRatios] = useState<RatioRow[] | null>(null);
   const [taxonomy, setTaxonomy] = useState<ActivityCategoryRow[]>([]);
   const [error, setError] = useState<ApiError | null>(null);
+  // Bumped after any write, so the publish bar re-reads rather than going stale behind
+  // an edit the Owner just made.
+  const [published, setPublished] = useState(0);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
@@ -55,6 +59,7 @@ export default function RatioBenchmarksPage() {
     try {
       await action();
       await load();
+      setPublished((n) => n + 1);
     } catch (err) {
       setError(toDisplayError(err));
     } finally {
@@ -81,6 +86,7 @@ export default function RatioBenchmarksPage() {
     >
       <SettingsTabs tabs={ACTIVITY_SETTINGS_TABS} />
       {error && <ErrorBanner {...error} />}
+      <PublishBar refreshKey={published} />
 
       {ratios === null ? (
         <SkeletonCards count={5} />
