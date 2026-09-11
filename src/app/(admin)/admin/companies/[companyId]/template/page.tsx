@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState, use } from 'react';
+import { useCallback, useEffect, useRef, useState, use } from 'react';
 import { ComingInPhase } from '@/components/coming-in-phase';
 import { Page } from '@/components/page';
 import { SettingsTabs } from '@/components/settings-tabs';
@@ -49,21 +49,51 @@ export default function CompanyTemplatePage({
 }) {
   const { companyId } = use(params);
   const [tab, setTab] = useState(TABS[0]);
-  const [template, setTemplate] = useState<PlatformTemplate | null>(null);
-  const [payload, setPayload] = useState<Record<string, unknown> | null>(null);
+  /**
+   * The loaded template and **which kind it is**, in one piece of state.
+   *
+   * They were two, cleared by the effect that reloads on a tab change — and an effect runs
+   * *after* the render that changed the tab. So switching from Activity types to Lead
+   * statuses produced one render holding the new kind and the old payload, and
+   * `PipelineEditor` read `payload.statuses` off a taxonomy: *Cannot read properties of
+   * undefined (reading 'filter')*.
+   *
+   * Holding them together makes that state unrepresentable rather than unlikely, and it
+   * closes a second hole with it: two loads in flight had no ordering guard, so a slow
+   * answer for a tab you had left could overwrite the one you were on.
+   */
+  const [loaded, setLoaded] = useState<{
+    kind: TemplateKind;
+    template: PlatformTemplate;
+    payload: Record<string, unknown>;
+  } | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
 
+  /**
+   * The kind most recently asked for.
+   *
+   * A ref rather than state: it is read at the moment a response lands, and it must be the
+   * value at *that* moment, not the one captured when the request went out. `fetch` has no
+   * cancellation here, so dropping the answer is the cancellation.
+   */
+  const wanted = useRef<TemplateKind | null>(null);
+
   const load = useCallback(async (kind: TemplateKind) => {
-    setTemplate(null);
-    setPayload(null);
+    wanted.current = kind;
+    setLoaded(null);
     try {
       const row = await readTemplate(companyId, kind);
-      setTemplate(row);
-      setPayload(row.payload);
+      // **Dropped if the reader has moved on.** Tagging the state with its kind stops a
+      // late answer being *drawn* under the wrong tab; this stops it clobbering the right
+      // one, which would blank the screen back to a skeleton for no reason a reader could
+      // see. On a slow connection that is the ordinary case, not the rare one.
+      if (wanted.current !== kind) return;
+      setLoaded({ kind, template: row, payload: row.payload });
       setDirty(false);
     } catch (err) {
+      if (wanted.current !== kind) return;
       setError(toDisplayError(err));
     }
   }, [companyId]);
@@ -77,8 +107,7 @@ export default function CompanyTemplatePage({
     setError(null);
     try {
       const row = await action();
-      setTemplate(row);
-      setPayload(row.payload);
+      setLoaded({ kind: row.kind, template: row, payload: row.payload });
       setDirty(false);
     } catch (err) {
       setError(toDisplayError(err));
@@ -88,9 +117,12 @@ export default function CompanyTemplatePage({
   }
 
   const change = (next: Record<string, unknown>) => {
-    setPayload(next);
+    setLoaded((current) => (current ? { ...current, payload: next } : current));
     setDirty(true);
   };
+
+  /** Only ever the template for the tab being looked at. */
+  const current = loaded?.kind === tab.kind ? loaded : null;
 
   return (
     <Page
@@ -128,30 +160,30 @@ export default function CompanyTemplatePage({
             },
           ]}
         />
-      ) : template === null || payload === null ? (
+      ) : current === null ? (
         <SkeletonCards count={3} />
       ) : (
         <>
           <Card className="mb-4">
             <p className="text-md text-navy">
-              {template.publishedVersion === null ? (
+              {current.template.publishedVersion === null ? (
                 <>
                   Nothing is published yet. New offices of this company start from the
                   AgencyBoost defaults — which is what you are looking at, ready to edit.
                 </>
               ) : (
                 <>
-                  New offices start from <strong>version {template.publishedVersion}</strong>.
-                  {template.status === 'draft' && (
-                    <> You have unpublished changes, which will become version {template.version}.</>
+                  New offices start from <strong>version {current.template.publishedVersion}</strong>.
+                  {current.template.status === 'draft' && (
+                    <> You have unpublished changes, which will become version {current.template.version}.</>
                   )}
                 </>
               )}
             </p>
-            {template.officesBehind > 0 && (
+            {current.template.officesBehind > 0 && (
               <p className="mt-2 text-md text-muted">
-                {template.officesBehind}{' '}
-                {template.officesBehind === 1 ? 'office is' : 'offices are'} running something
+                {current.template.officesBehind}{' '}
+                {current.template.officesBehind === 1 ? 'office is' : 'offices are'} running something
                 older. Publishing does not change them — an office owns its own copy from the
                 day it is created.
               </p>
@@ -160,30 +192,33 @@ export default function CompanyTemplatePage({
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <Button
                 disabled={busy || !dirty}
-                onClick={() => void run(() => saveTemplateDraft(companyId, tab.kind!, payload))}
+                onClick={() => void run(() => saveTemplateDraft(companyId, tab.kind!, current.payload))}
               >
                 {busy ? 'Saving…' : 'Save draft'}
               </Button>
               <Button
                 variant="secondary"
-                disabled={busy || dirty || template.status !== 'draft'}
+                disabled={busy || dirty || current.template.status !== 'draft'}
                 title={dirty ? 'Save the draft first.' : undefined}
                 onClick={() => void run(() => publishTemplate(companyId, tab.kind!))}
               >
-                Publish version {template.version}
+                Publish version {current.template.version}
               </Button>
             </div>
           </Card>
 
-          {tab.kind === 'activity_taxonomy' ? (
+          {/* Switched on the **loaded** kind, not the selected tab. They cannot differ —
+              `current` is null unless they match — and keying off the payload's own kind
+              means a later edit to that guard cannot reintroduce the mismatch. */}
+          {current.kind === 'activity_taxonomy' ? (
             <TaxonomyEditor
-              payload={payload as unknown as TaxonomyPayload}
+              payload={current.payload as unknown as TaxonomyPayload}
               disabled={busy}
               onChange={(next) => change(next as unknown as Record<string, unknown>)}
             />
           ) : (
             <PipelineEditor
-              payload={payload as unknown as PipelinePayload}
+              payload={current.payload as unknown as PipelinePayload}
               disabled={busy}
               onChange={(next) => change(next as unknown as Record<string, unknown>)}
             />

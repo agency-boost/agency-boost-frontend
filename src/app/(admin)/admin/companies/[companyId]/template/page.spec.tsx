@@ -30,6 +30,18 @@ const TAXONOMY = {
   },
 };
 
+const PIPELINE = {
+  id: 'tpl-2', companyId: 'c1', kind: 'lead_pipeline', version: 1, status: 'draft',
+  publishedAt: null, publishedVersion: null, officesBehind: 0,
+  payload: {
+    statuses: [
+      { pipeline: 'sales', code: 'NOT_YET_APPROACHED', label: 'Not yet approached', rank: 1, isTerminal: false },
+      { pipeline: 'sales', code: 'PAID_AND_ISSUED', label: 'Paid and issued', rank: 2, isTerminal: true },
+      { pipeline: 'recruitment', code: 'NOT_APPROACHED', label: 'Not approached', rank: 1, isTerminal: true },
+    ],
+  },
+};
+
 function render(body: unknown = TAXONOMY) {
   const stub = stubFetch({ '/admin/companies/c1/template': { body } });
   renderWithSession(
@@ -113,4 +125,71 @@ describe('a company’s KPM template (P4-T8)', () => {
     expect(await screen.findByText(/Arrives in phase 5/)).toBeInTheDocument();
     expect(calls.length).toBe(before);
   });
+  it('switches to another kind without rendering it against the previous payload', async () => {
+    /*
+     * The crash this fixes: *Cannot read properties of undefined (reading 'filter')*.
+     *
+     * The loaded template and the selected tab were two pieces of state, cleared by the
+     * effect that reloads — and an effect runs **after** the render that changed the tab.
+     * So moving from Activity types to Lead statuses produced one render holding the new
+     * kind and the old payload, and the pipeline editor read `payload.statuses` off a
+     * taxonomy.
+     *
+     * They are one piece of state now, tagged with the kind they are, and nothing renders
+     * unless the two agree.
+     */
+    stubFetch({
+      '/admin/companies/c1/template/activity_taxonomy': { body: TAXONOMY },
+      '/admin/companies/c1/template/lead_pipeline': { body: PIPELINE },
+    });
+    renderWithSession(
+      <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
+      { me: SUPER_ADMIN },
+    );
+
+    await screen.findByLabelText('SELL_SUBMISSION');
+    await userEvent.click(screen.getByRole('link', { name: 'Lead statuses' }));
+
+    // It gets there, and it gets there with its own payload.
+    expect(await screen.findByLabelText('PAID_AND_ISSUED')).toBeInTheDocument();
+    expect(screen.queryByLabelText('SELL_SUBMISSION')).toBeNull();
+  });
+
+  it('ignores a late answer for a tab the reader has left', async () => {
+    /*
+     * Two loads in flight had no ordering guard, so a slow answer for the tab you left
+     * could land last and be rendered under the tab you are on — the same mismatch by a
+     * different route, and the one that only shows up on a bad connection.
+     *
+     * The stub answers in the harness's own shape; what it adds is a held promise on the
+     * taxonomy, released after the reader has moved on.
+     */
+    let releaseSlow!: () => void;
+    const slow = new Promise<void>((resolve) => { releaseSlow = resolve; });
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const pipeline = String(url).includes('lead_pipeline');
+      if (!pipeline) await slow;
+      return {
+        ok: true,
+        status: 200,
+        json: async () => (pipeline ? PIPELINE : TAXONOMY),
+      } as Response;
+    }));
+
+    renderWithSession(
+      <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
+      { me: SUPER_ADMIN },
+    );
+
+    // Leave for Lead statuses before the taxonomy answers, then let it answer.
+    await userEvent.click(await screen.findByRole('link', { name: 'Lead statuses' }));
+    expect(await screen.findByLabelText('PAID_AND_ISSUED')).toBeInTheDocument();
+    releaseSlow();
+
+    // Still the pipeline. The late taxonomy is dropped rather than drawn.
+    expect(await screen.findByLabelText('PAID_AND_ISSUED')).toBeInTheDocument();
+    expect(screen.queryByLabelText('SELL_SUBMISSION')).toBeNull();
+  });
+
 });
