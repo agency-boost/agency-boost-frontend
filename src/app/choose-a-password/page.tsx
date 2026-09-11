@@ -62,8 +62,8 @@ export default function ChooseAPasswordPage() {
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
       <h1 className="font-display text-3xl font-bold text-navy">Choose your own password</h1>
       <p className="mb-6 mt-1 text-md text-muted">
-        The password you signed in with was generated for you and sent by email, so somebody
-        else has seen it. Nothing else in AgencyBoost opens until you replace it.
+        The password you signed in with was generated for you and passed on by your office, so
+        somebody else has seen it. Nothing else in AgencyBoost opens until you replace it.
       </p>
 
       <Card>
@@ -79,7 +79,7 @@ export default function ChooseAPasswordPage() {
           <Field
             label="The password you were sent"
             htmlFor="currentPassword"
-            hint="From the email your office sent you."
+            hint="The one your office sent you."
           >
             <PasswordInput
               id="currentPassword"

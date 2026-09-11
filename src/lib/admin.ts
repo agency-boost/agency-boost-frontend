@@ -250,6 +250,14 @@ export const rosterTemplate = () =>
     columns: string[];
     /** The whole file, with worked examples commented out so they never import. */
     template: string;
+    /**
+     * The same three example rows, as cells — what the paste box shows, joined with tabs.
+     *
+     * Cells rather than the CSV lines above, so this screen never splits a quoted field.
+     * That would be a second parser, and it would disagree with the server's over exactly
+     * the row that is there to demonstrate quoting.
+     */
+    examples: string[][];
   }>('/admin/tenants/roster-template');
 
 /** `rows`, not `csv`: it is also the tab-separated text a spreadsheet paste produces. */

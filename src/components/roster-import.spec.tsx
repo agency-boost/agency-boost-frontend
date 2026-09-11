@@ -20,8 +20,16 @@ const SUPER_ADMIN = makeMe({
 
 const HEADER = 'fullName,email,agentCode,role,leaderAgentCode';
 const FILE = `# Examples below are commented out.\n${HEADER}\n# Agus Prasetyo,agus@example.test,PRU-88001,ab,\n`;
+/** The same three rows the template carries, as cells — what the paste box shows. */
+const EXAMPLES = [
+  ['Agus Prasetyo', 'agus@example.test', 'PRU-88001', 'ab', ''],
+  ['Puspita, Sari', 'sari@example.test', 'PRU-88002', 'aab', 'PRU-88001'],
+  ['Rina Wijaya', 'rina@example.test', 'PRU-88003', 'agent', 'PRU-88002'],
+];
 const TEMPLATE = {
-  '/admin/tenants/roster-template': { body: { header: HEADER, columns: [], template: FILE } },
+  '/admin/tenants/roster-template': {
+    body: { header: HEADER, columns: [], template: FILE, examples: EXAMPLES },
+  },
 };
 
 function render(extra: Record<string, unknown> = {}) {
@@ -72,6 +80,26 @@ describe('importing a roster (P3.6-T4)', () => {
     expect(screen.getByLabelText('Rows from your spreadsheet')).toBeInTheDocument();
     // And the file controls are not in the way until they are asked for.
     expect(screen.queryByLabelText('Roster file')).toBeNull();
+  });
+
+  it('shows the worked examples in the box, tab-separated and three deep', async () => {
+    /*
+     * The placeholder is the only instruction most people will read, and one row can only
+     * ever demonstrate an *empty* leader column — the case nobody gets wrong. Three rows
+     * show a code in it, and show it blank only at the top of the office.
+     *
+     * They come from the API rather than being written here, for the same reason the
+     * template does: an example that drifted from the parser would teach a shape the
+     * server refuses.
+     */
+    render();
+    const box = await screen.findByLabelText('Rows from your spreadsheet');
+    expect(box).toHaveAttribute(
+      'placeholder',
+      'Agus Prasetyo\tagus@example.test\tPRU-88001\tab\t\n'
+      + 'Puspita, Sari\tsari@example.test\tPRU-88002\taab\tPRU-88001\n'
+      + 'Rina Wijaya\trina@example.test\tPRU-88003\tagent\tPRU-88002',
+    );
   });
 
   it('sends pasted rows exactly as they were pasted', async () => {

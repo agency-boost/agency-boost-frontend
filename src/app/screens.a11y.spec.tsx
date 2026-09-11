@@ -33,6 +33,8 @@ import PendingPage from './(agent)/user-management/pending/page';
 import GroupTreePage from './(agent)/group-tree/page';
 import OrgTreePage from './(tenant)/people/org-tree/page';
 import OrgLevelsPage from './(admin)/admin/org-levels/page';
+import TenantRosterImportPage from './(admin)/admin/tenants/[kpmId]/roster/page';
+import ChooseAPasswordPage from './choose-a-password/page';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -40,9 +42,14 @@ vi.mock('next/navigation', () => ({
 }));
 
 /**
- * Every Phase 2 screen through axe, in the state a user actually meets it — populated,
- * not empty. An empty table has no header/cell relationships to get wrong, so testing
- * only the loading state would pass while the real screen failed.
+ * Screens through axe, in the state a user actually meets it — populated, not empty. An
+ * empty table has no header/cell relationships to get wrong, so testing only the loading
+ * state would pass while the real screen failed.
+ *
+ * **Not yet every screen.** Five are still absent: `/`, `/join`,
+ * `/admin/tenants/[kpmId]`, `/admin/tenants/[kpmId]/owner` and
+ * `/admin/impersonate/[userId]`. `/people/import` renders the same `RosterImport` as
+ * `/admin/tenants/[kpmId]/roster`, which is here, so it is covered in substance.
  */
 const SUPER_ADMIN = makeMe({
   user: {
@@ -110,7 +117,7 @@ const OVERVIEW = {
   ],
 };
 
-describe('Phase 2 screens have no axe violations', () => {
+describe('screens have no axe violations', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
@@ -811,6 +818,41 @@ describe('Phase 2 screens have no axe violations', () => {
     renderInLayout(AdminLayout, <TenantAdminsPage />, { me: SUPER_ADMIN });
     await screen.findByRole('table');
     await expectClean('admin/tenant-admins');
+  });
+
+  it('the roster import, with the paste box and its worked examples', async () => {
+    // The placeholder is three lines of tab-separated text in a `font-mono` box — worth
+    // running axe over precisely because it is doing more than a placeholder usually does.
+    stubFetch({
+      '/admin/tenants/roster-template': {
+        body: {
+          header: 'fullName,email,agentCode,role,leaderAgentCode',
+          columns: [],
+          template: '# example\nfullName,email,agentCode,role,leaderAgentCode\n',
+          examples: [
+            ['Agus Prasetyo', 'agus@example.test', 'PRU-88001', 'ab', ''],
+            ['Puspita, Sari', 'sari@example.test', 'PRU-88002', 'aab', 'PRU-88001'],
+            ['Rina Wijaya', 'rina@example.test', 'PRU-88003', 'agent', 'PRU-88002'],
+          ],
+        },
+      },
+    });
+    renderInLayout(
+      AdminLayout,
+      <TenantRosterImportPage params={routeParams({ kpmId: 'kpm-1' })} />,
+      { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'kpm:import_roster'] }) },
+    );
+    await screen.findByLabelText('Rows from your spreadsheet');
+    await expectClean('admin/tenants/[kpmId]/roster');
+  });
+
+  it('choosing your own password, which wears no chrome at all', async () => {
+    // Reached by an Agent, an AB and an Owner alike, and deliberately outside every shell:
+    // a sidebar here would offer links the API answers 403 for. So nothing else on the
+    // page supplies the landmarks, and this is the one screen where that is on purpose.
+    renderWithSession(<ChooseAPasswordPage />, { me: makeMe({ mustChangePassword: true }) });
+    await screen.findByLabelText('Your new password');
+    await expectClean('choose-a-password');
   });
 
   it('the notifications inbox, with one unread', async () => {

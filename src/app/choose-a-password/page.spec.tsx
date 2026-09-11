@@ -28,7 +28,10 @@ describe('choosing your own password (P3.6-T4)', () => {
     // It is not a nag. Every other route on the API answers 403 until this is done, so a
     // softer word would be describing a choice they do not have.
     renderWithSession(<ChooseAPasswordPage />, { me: OWED });
-    expect(screen.getByText(/generated for you and sent by email/)).toBeInTheDocument();
+    // Who sent it, not how. Nothing in AgencyBoost emails anything yet (OD-45), and an
+    // office may well have passed it on by WhatsApp.
+    expect(screen.getByText(/generated for you and passed on by your office/))
+      .toBeInTheDocument();
     expect(screen.getByText(/Nothing else in AgencyBoost opens until you replace it/))
       .toBeInTheDocument();
   });

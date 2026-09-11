@@ -41,7 +41,7 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
   const [created, setCreated] = useState<ImportedPerson[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<'preview' | 'commit' | null>(null);
-  const [template, setTemplate] = useState<string | null>(null);
+  const [template, setTemplate] = useState<{ file: string; examples: string[][] } | null>(null);
 
   // The whole file comes from the API rather than being composed here. A template the
   // screen built itself would drift from the one the parser demands, and the failure
@@ -50,7 +50,7 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
   useEffect(() => {
     let live = true;
     rosterTemplate()
-      .then((t) => { if (live) setTemplate(t.template); })
+      .then((t) => { if (live) setTemplate({ file: t.template, examples: t.examples }); })
       .catch(() => { if (live) setTemplate(null); });
     return () => { live = false; };
   }, []);
@@ -117,8 +117,20 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
   }
 
   const templateHref = template
-    ? `data:text/csv;charset=utf-8,${encodeURIComponent(template)}`
+    ? `data:text/csv;charset=utf-8,${encodeURIComponent(template.file)}`
     : null;
+
+  /*
+   * The paste box shows the same three people the template does, tab-separated — because
+   * that is what a clipboard carries, and a placeholder in the wrong shape teaches the
+   * wrong shape.
+   *
+   * Three rather than one, and this is the whole point: a single row can only demonstrate
+   * an *empty* leader column, which is the case nobody gets wrong. Agus leads Sari leads
+   * Rina, so the column is visibly a code rather than a name, and visibly blank only at
+   * the top of the office.
+   */
+  const placeholder = template?.examples.map((cells) => cells.join('\t')).join('\n');
 
   return (
     <>
@@ -130,8 +142,8 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
             {`${created.length} ${created.length === 1 ? 'person' : 'people'} created`}
           </h2>
           <p className="mt-1 text-md text-muted">
-            Send each person their password. <strong>This is the only time it is shown</strong> —
-            it is not stored anywhere and cannot be looked up. If you lose one, that person can
+            Send each person their password — <strong>AgencyBoost does not email it for you</strong>.
+            This is the only time it is shown: it is not stored anywhere and cannot be looked up. If you lose one, that person can
             use <em>Forgot your password</em> on the sign-in page instead.
           </p>
           <p className="mt-2 text-md text-muted">
@@ -223,7 +235,7 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
                 rows={8}
                 value={rows}
                 onChange={(e) => setRows(e.target.value)}
-                placeholder={'Agus Prasetyo\tagus@example.test\tPRU-88001\tab\t'}
+                placeholder={placeholder}
                 className="font-mono text-sm"
               />
             </Field>
