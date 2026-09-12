@@ -4,12 +4,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { PublishBar } from '@/components/publish-bar';
 import { ACTIVITY_SETTINGS_TABS, SettingsTabs } from '@/components/settings-tabs';
-import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
+import { useTenantConfig } from '@/lib/tenant-config-cache';
 import {
   archiveRatio,
+  createRatio,
   listActivityTypes,
   listRatios,
   restoreRatio,
@@ -26,8 +28,15 @@ import {
  * somebody reorders the taxonomy. Here each side is rendered as the labels of the codes it
  * names, with the code underneath, so an Owner can see what a ratio actually counts.
  *
- * **The benchmark is the office's own.** It starts from the platform default and is
- * editable; nothing else on this screen changes what is counted, only what counts as good.
+ * **Two kinds of row** (P4-T15, ADR-0021). The five the office was provisioned with are the
+ * platform's: their formula is fixed, because that is what lets two offices' figures mean
+ * the same thing. Everything the office added is its own and free in every respect. The
+ * difference is stated on the card rather than expressed as a disabled control — a field
+ * that will not accept input and does not say why is the worst of both.
+ *
+ * **Who a ratio is for** (ADR-0020). A ratio applies to ladder rungs, and a member whose
+ * rung is absent does not see it at all. An agent with no recruiting mandate reading a
+ * permanent alert on the balance ratio is the defect this closes.
  */
 export default function RatioBenchmarksPage() {
   const canWrite = useCan('tenant_config:write');
@@ -40,6 +49,17 @@ export default function RatioBenchmarksPage() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  // The company's ladder, for the applicability control. It is the company's to define
+  // (ADR-0012), so this reads it and never offers to change it.
+  const { ladder } = useTenantConfig();
+  const [scoping, setScoping] = useState<string | null>(null);
+  const [rungs, setRungs] = useState<string[]>([]);
+  const [adding, setAdding] = useState(false);
+  const blank = {
+    code: '', label: '', numerator: [] as string[], denominator: [] as string[],
+    benchmark: '', comparison: 'gte' as const,
+  };
+  const [form, setForm] = useState(blank);
 
   const load = useCallback(async () => {
     try {
@@ -78,6 +98,19 @@ export default function RatioBenchmarksPage() {
   const labelFor = (code: string) =>
     taxonomy.flatMap((c) => c.types).find((t) => t.code === code)?.label ?? null;
 
+  /**
+   * Who the ratio is a question about, in words.
+   *
+   * Empty is the common case and reads as *Everyone*, not as an empty list — a card
+   * showing nothing beside "Applies to" would look like a setting that failed to load.
+   */
+  const appliesTo = (codes: string[]) =>
+    (codes.length === 0
+      ? 'Everyone'
+      : codes
+        .map((c) => ladder.find((l) => l.code === c)?.label ?? c)
+        .join(' · '));
+
   return (
     <Page
       title="Ratio benchmarks"
@@ -87,6 +120,124 @@ export default function RatioBenchmarksPage() {
       <SettingsTabs tabs={ACTIVITY_SETTINGS_TABS} />
       {error && <ErrorBanner {...error} />}
       <PublishBar refreshKey={published} />
+
+      {canWrite && ratios !== null && (
+        <Card className="mb-4">
+          {adding ? (
+            <form
+              className="flex flex-col gap-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void run(async () => {
+                  await createRatio({
+                    code: form.code,
+                    label: form.label,
+                    numerator: form.numerator,
+                    denominator: form.denominator,
+                    benchmark: Number(form.benchmark),
+                    comparison: form.comparison,
+                  });
+                  setForm(blank);
+                  setAdding(false);
+                });
+              }}
+            >
+              <h2 className="font-display text-lg font-bold text-navy">Add a ratio</h2>
+              <p className="text-sm text-muted">
+                Yours entirely — count whatever this office needs to watch. It will not
+                appear in any comparison with other offices, because nothing outside this
+                office knows what it measures.
+              </p>
+
+              <div className="flex flex-wrap gap-3">
+                <Field label="Code" htmlFor="new-ratio-code" hint="Never changes once saved.">
+                  <TextInput
+                    id="new-ratio-code"
+                    value={form.code}
+                    onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
+                  />
+                </Field>
+                <Field label="Name" htmlFor="new-ratio-label">
+                  <TextInput
+                    id="new-ratio-label"
+                    value={form.label}
+                    onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+                  />
+                </Field>
+              </div>
+
+              {/* Two pickers over the office's own taxonomy, because a formula is a pair of
+                  code lists and never a typed expression — the prototype's `6 / (4+5)`
+                  rebinds itself the moment somebody reorders the activity types. */}
+              {([['Counts', 'numerator'], ['Out of', 'denominator']] as const).map(([heading, side]) => (
+                <fieldset key={side}>
+                  <legend className="text-sm font-semibold text-navy">{heading}</legend>
+                  <ul className="mt-1 flex flex-wrap gap-3">
+                    {taxonomy.flatMap((c) => c.types).filter((t) => t.status === 'active').map((type) => (
+                      <li key={type.code}>
+                        <label className="flex items-center gap-1.5 text-md text-navy">
+                          <input
+                            type="checkbox"
+                            checked={form[side].includes(type.code)}
+                            onChange={(e) => setForm((f) => ({
+                              ...f,
+                              [side]: e.target.checked
+                                ? [...f[side], type.code]
+                                : f[side].filter((c) => c !== type.code),
+                            }))}
+                          />
+                          {type.label}
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </fieldset>
+              ))}
+
+              <div className="flex flex-wrap items-end gap-3">
+                <Field label="On track at or above" htmlFor="new-ratio-benchmark" className="min-w-40">
+                  <TextInput
+                    id="new-ratio-benchmark"
+                    type="number"
+                    step="0.01"
+                    value={form.benchmark}
+                    onChange={(e) => setForm((f) => ({ ...f, benchmark: e.target.value }))}
+                  />
+                </Field>
+                <Field label="Rule" htmlFor="new-ratio-comparison" className="min-w-40">
+                  <Select
+                    id="new-ratio-comparison"
+                    value={form.comparison}
+                    onChange={(e) => setForm((f) => ({
+                      ...f, comparison: e.target.value as typeof f.comparison,
+                    }))}
+                  >
+                    <option value="gte">At or above the benchmark</option>
+                    <option value="band">Within the benchmark either side of an even split</option>
+                  </Select>
+                </Field>
+                <Button
+                  type="submit"
+                  disabled={busy
+                    || form.code.trim() === ''
+                    || form.label.trim() === ''
+                    || form.numerator.length === 0
+                    || form.denominator.length === 0
+                    || Number.isNaN(Number(form.benchmark))
+                    || form.benchmark.trim() === ''}
+                >
+                  Add the ratio
+                </Button>
+                <Button variant="secondary" onClick={() => { setAdding(false); setForm(blank); }}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <Button variant="secondary" onClick={() => setAdding(true)}>Add a ratio</Button>
+          )}
+        </Card>
+      )}
 
       {ratios === null ? (
         <SkeletonCards count={5} />
@@ -103,6 +254,13 @@ export default function RatioBenchmarksPage() {
                 </h2>
                 <code className="text-sm text-muted">{ratio.code}</code>
               </div>
+
+              <p className="mt-1 text-sm text-muted">
+                {ratio.origin === 'platform'
+                  ? 'Measured the same way in every office, so its formula is fixed. The '
+                    + 'benchmark, the name and who it applies to are yours.'
+                  : 'Your office’s own. Everything about it is yours to change.'}
+              </p>
 
               <dl className="mt-3 grid gap-3 sm:grid-cols-2">
                 {([['Counts', ratio.numerator], ['Out of', ratio.denominator]] as const)
@@ -122,6 +280,67 @@ export default function RatioBenchmarksPage() {
                     </div>
                   ))}
               </dl>
+
+              <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-hairline pt-3">
+                {scoping === ratio.id ? (
+                  <>
+                    <fieldset className="min-w-0">
+                      <legend className="text-sm font-semibold text-navy">Applies to</legend>
+                      {/* Checkboxes, not a multi-select: every rung is visible at once, and
+                          the empty state — nothing ticked — is the one that means everyone,
+                          which a collapsed control would hide. */}
+                      <ul className="mt-1 flex flex-wrap gap-3">
+                        {ladder.map((rung) => (
+                          <li key={rung.code}>
+                            <label className="flex items-center gap-1.5 text-md text-navy">
+                              <input
+                                type="checkbox"
+                                checked={rungs.includes(rung.code)}
+                                onChange={(e) => setRungs((current) => (e.target.checked
+                                  ? [...current, rung.code]
+                                  : current.filter((c) => c !== rung.code)))}
+                              />
+                              {rung.label}
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="mt-1 text-sm text-muted">
+                        Tick none to ask everyone. Anybody on a rung you leave unticked will
+                        not see this ratio at all.
+                      </p>
+                    </fieldset>
+                    <Button
+                      disabled={busy}
+                      onClick={() => void run(async () => {
+                        await updateRatio(ratio.id, { appliesToOrgLevelCodes: rungs });
+                        setScoping(null);
+                      })}
+                    >
+                      Save
+                    </Button>
+                    <Button variant="secondary" onClick={() => setScoping(null)}>Cancel</Button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-md text-navy">
+                      <span className="text-muted">Applies to </span>
+                      <strong>{appliesTo(ratio.appliesToOrgLevelCodes)}</strong>
+                    </p>
+                    {canWrite && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setScoping(ratio.id);
+                          setRungs(ratio.appliesToOrgLevelCodes);
+                        }}
+                      >
+                        Change who it applies to
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
 
               <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-hairline pt-3">
                 {editing === ratio.id ? (

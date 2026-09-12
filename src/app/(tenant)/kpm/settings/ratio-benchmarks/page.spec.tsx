@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { TenantConfigProvider } from '@/lib/tenant-config-cache';
 import RatioBenchmarksPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -24,12 +25,29 @@ const RATIOS = [
     id: 'r1', code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate',
     numerator: ['SELL_SUBMISSION'], denominator: ['SELL_PRESENTATION', 'SELL_FOLLOWUP'],
     benchmark: 0.15, comparison: 'gte', displayOrder: 1, version: 1, status: 'active',
+    // Provisioned, so its formula is fixed and its benchmark is not (ADR-0021).
+    origin: 'platform', appliesToOrgLevelCodes: [],
   },
   {
     id: 'r2', code: 'SELLING_VS_RECRUITMENT', label: 'Selling vs Recruitment',
     numerator: ['SELL_SUBMISSION'], denominator: ['RECRUIT_AGENT_CODE'],
     benchmark: 30, comparison: 'band', displayOrder: 2, version: 1, status: 'active',
+    // The one an agent with no recruiting mandate must not be measured on (ADR-0020).
+    origin: 'platform', appliesToOrgLevelCodes: ['AB', 'AAB'],
   },
+  {
+    id: 'r3', code: 'REFERRAL_RATE', label: 'Referral rate',
+    numerator: ['SELL_SUBMISSION'], denominator: ['SELL_PRESENTATION'],
+    benchmark: 0.5, comparison: 'gte', displayOrder: 3, version: 1, status: 'active',
+    origin: 'office', appliesToOrgLevelCodes: [],
+  },
+];
+
+/** The company's ladder, junior first — what the applicability control offers. */
+const LADDER = [
+  { orgLevelId: 'l1', companyId: 'co-1', code: 'AGENT', label: 'Agent', displayOrder: 1, status: 'active', archivedAt: null },
+  { orgLevelId: 'l2', companyId: 'co-1', code: 'AAB', label: 'AAB', displayOrder: 2, status: 'active', archivedAt: null },
+  { orgLevelId: 'l3', companyId: 'co-1', code: 'AB', label: 'AB', displayOrder: 3, status: 'active', archivedAt: null },
 ];
 
 const TAXONOMY = [{
@@ -44,8 +62,15 @@ function render(me = OWNER) {
   const stub = stubFetch({
     '/kpm/settings/ratio-benchmarks': { body: RATIOS },
     '/kpm/settings/activity-types': { body: TAXONOMY },
+    // The provider's two reads. The ladder is the company's (ADR-0012) and this screen
+    // reads it rather than owning a copy — so the test supplies it the same way.
+    '/kpm/config': { body: { activity: TAXONOMY, ratios: RATIOS, leadPipelines: [], version: 1 } },
+    '/kpm/org-levels': { body: LADDER },
   });
-  renderWithSession(<RatioBenchmarksPage />, { me });
+  renderWithSession(
+    <TenantConfigProvider><RatioBenchmarksPage /></TenantConfigProvider>,
+    { me },
+  );
   return stub;
 }
 
@@ -78,7 +103,10 @@ describe('the office ratio benchmarks (P4-T2)', () => {
 
   it('reads a gte benchmark and a band benchmark differently', async () => {
     render();
-    expect(await screen.findByText(/On track at or above/)).toBeInTheDocument();
+    // Scoped to the card since P4-T15 added a third ratio to the fixture — two `gte` rows
+    // now read the same sentence, which is correct and made the bare query ambiguous.
+    await screen.findByRole('heading', { name: 'Selling success rate' });
+    expect(screen.getAllByText(/On track at or above/).length).toBeGreaterThan(0);
     expect(screen.getByText(/On track within/)).toBeInTheDocument();
     expect(screen.getByText('points')).toBeInTheDocument();
   });
@@ -101,5 +129,100 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     expect(await screen.findByText('Selling success rate')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Change the benchmark' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
+  });
+
+  describe('two kinds of ratio, and who each is for (P4-T15)', () => {
+    it('AC-6: says a platform ratio’s formula is fixed, and why', async () => {
+      /*
+       * Stated on the card, not expressed as a disabled control. A field that will not
+       * accept input and does not say why is the worst of both — the Owner learns only
+       * that something is broken.
+       */
+      render();
+      const card = (await screen.findByRole('heading', { name: 'Selling success rate' }))
+        .closest('div')!.parentElement!;
+      expect(within(card).getByText(/Measured the same way in every office/))
+        .toBeInTheDocument();
+    });
+
+    it('AC-6: says an office’s own ratio is entirely theirs', async () => {
+      render();
+      const card = (await screen.findByRole('heading', { name: 'Referral rate' }))
+        .closest('div')!.parentElement!;
+      expect(within(card).getByText(/Your office’s own/)).toBeInTheDocument();
+    });
+
+    it('AC-6: reads an empty applicability as Everyone, never as a blank', async () => {
+      // A card showing nothing beside "Applies to" reads as a setting that failed to load.
+      render();
+      const card = (await screen.findByRole('heading', { name: 'Selling success rate' }))
+        .closest('div')!.parentElement!;
+      expect(within(card).getByText('Everyone')).toBeInTheDocument();
+    });
+
+    it('AC-6: names the rungs by their company labels, not by their codes', async () => {
+      render();
+      const card = (await screen.findByRole('heading', { name: 'Selling vs Recruitment' }))
+        .closest('div')!.parentElement!;
+      expect(within(card).getByText('AB · AAB')).toBeInTheDocument();
+    });
+
+    it('AC-6: sends only the rungs when the applicability changes', async () => {
+      const { calls } = render();
+      const card = (await screen.findByRole('heading', { name: 'Selling success rate' }))
+        .closest('div')!.parentElement!;
+      await userEvent.click(within(card).getByRole('button', { name: 'Change who it applies to' }));
+      await userEvent.click(within(card).getByLabelText('AB'));
+      await userEvent.click(within(card).getByRole('button', { name: 'Save' }));
+
+      const patch = calls.find((c) => c.init.method === 'PATCH')!;
+      expect(JSON.parse(patch.init.body as string)).toEqual({ appliesToOrgLevelCodes: ['AB'] });
+    });
+
+    it('AC-6: offers every rung the company publishes, and nothing else', async () => {
+      render();
+      const card = (await screen.findByRole('heading', { name: 'Selling success rate' }))
+        .closest('div')!.parentElement!;
+      await userEvent.click(within(card).getByRole('button', { name: 'Change who it applies to' }));
+      for (const rung of ['Agent', 'AAB', 'AB']) {
+        expect(within(card).getByLabelText(rung)).toBeInTheDocument();
+      }
+    });
+
+    it('AC-6: adds a ratio of the office’s own', async () => {
+      /*
+       * `POST /kpm/settings/ratio-benchmarks` had no screen at all between P4-T2 and here
+       * — the defect `backend-then-frontend.md` names, invisible because the gate matches
+       * by path and `GET` shares it.
+       */
+      const { calls } = render();
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a ratio' }));
+      await userEvent.type(screen.getByLabelText('Code'), 'REFERRALS');
+      await userEvent.type(screen.getByLabelText('Name'), 'Referrals');
+
+      const counts = screen.getByRole('group', { name: 'Counts' });
+      await userEvent.click(within(counts).getByLabelText('Submission polis'));
+      const outOf = screen.getByRole('group', { name: 'Out of' });
+      await userEvent.click(within(outOf).getByLabelText('Presentasi penjualan'));
+
+      await userEvent.type(screen.getByLabelText('On track at or above'), '0.3');
+      await userEvent.click(screen.getByRole('button', { name: 'Add the ratio' }));
+
+      const post = calls.find((c) => c.init.method === 'POST')!;
+      expect(JSON.parse(post.init.body as string)).toMatchObject({
+        code: 'REFERRALS', label: 'Referrals',
+        numerator: ['SELL_SUBMISSION'], denominator: ['SELL_PRESENTATION'],
+        benchmark: 0.3, comparison: 'gte',
+      });
+    });
+
+    it('AC-7: shows a reader without write permission none of the controls', async () => {
+      // Convenience, not control — `ratio.tenancy.spec.ts` proves the API refuses too.
+      render(AGENT);
+      await screen.findByRole('heading', { name: 'Selling success rate' });
+      expect(screen.queryByRole('button', { name: 'Add a ratio' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Change who it applies to' }))
+        .not.toBeInTheDocument();
+    });
   });
 });

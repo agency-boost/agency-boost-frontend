@@ -116,6 +116,7 @@ export const restoreLeadStatus = (id: string) =>
   api<LeadStatusRow>(`/kpm/settings/lead-statuses/${id}/restore`, { method: 'POST' });
 
 export type RatioComparison = 'gte' | 'band';
+export type RatioOrigin = 'platform' | 'office';
 
 export interface RatioRow {
   id: string;
@@ -129,6 +130,13 @@ export interface RatioRow {
   displayOrder: number;
   version: number;
   status: 'active' | 'archived';
+  /**
+   * Whose formula it is (ADR-0021). A `platform` row's numerator and denominator are
+   * fixed — that is what lets two offices' figures mean the same thing.
+   */
+  origin: RatioOrigin;
+  /** Ladder rung codes. **Empty means every rung** (ADR-0020). */
+  appliesToOrgLevelCodes: string[];
 }
 
 export const listRatios = (includeArchived = false) =>
@@ -143,6 +151,7 @@ export const createRatio = (body: {
   denominator: string[];
   benchmark: number;
   comparison: RatioComparison;
+  appliesToOrgLevelCodes?: string[];
 }) => api<RatioRow>('/kpm/settings/ratio-benchmarks', { method: 'POST', body });
 
 /** No `code`: everything computed from this ratio holds it. */
@@ -154,6 +163,7 @@ export const updateRatio = (
     denominator: string[];
     benchmark: number;
     comparison: RatioComparison;
+    appliesToOrgLevelCodes: string[];
   }>,
 ) => api<RatioRow>(`/kpm/settings/ratio-benchmarks/${id}`, { method: 'PATCH', body });
 
