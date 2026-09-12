@@ -38,6 +38,23 @@ import {
  * rung is absent does not see it at all. An agent with no recruiting mandate reading a
  * permanent alert on the balance ratio is the defect this closes.
  */
+/**
+ * One activity type in a formula (`metric-chip`).
+ *
+ * The label with the code beneath it, not the code alone: the prototype's chips are
+ * `<select>`s over the numbered item list, and the number is the thing invariant §4 says
+ * must never be the identity. Showing both means an Owner reads what is counted and can
+ * still see the part that does not move when the numbers do.
+ */
+function Chip({ code, label }: { code: string; label: string | null }) {
+  return (
+    <span className="inline-flex flex-col rounded-xl border border-hairline bg-canvas px-2.5 py-1">
+      {label && <span className="text-md leading-tight text-navy">{label}</span>}
+      <code className="text-sm leading-tight text-muted">{code}</code>
+    </span>
+  );
+}
+
 export default function RatioBenchmarksPage() {
   const canWrite = useCan('tenant_config:write');
   const [ratios, setRatios] = useState<RatioRow[] | null>(null);
@@ -120,6 +137,12 @@ export default function RatioBenchmarksPage() {
       <SettingsTabs tabs={ACTIVITY_SETTINGS_TABS} />
       {error && <ErrorBanner {...error} />}
       <PublishBar refreshKey={published} />
+
+      {/* The prototype's own hint, and the window is the one thing the cards cannot say:
+          every ratio here is computed over the last 30 days, fixed (ADR-0022). */}
+      <p className="mb-4 text-sm text-muted">
+        Calculated on the last 30 days of activity.
+      </p>
 
       {canWrite && ratios !== null && (
         <Card className="mb-4">
@@ -262,24 +285,46 @@ export default function RatioBenchmarksPage() {
                   : 'Your office’s own. Everything about it is yours to change.'}
               </p>
 
-              <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-                {([['Counts', ratio.numerator], ['Out of', ratio.denominator]] as const)
-                  .map(([heading, codes]) => (
-                    <div key={heading}>
-                      <dt className="text-sm font-semibold text-navy">{heading}</dt>
-                      <dd>
-                        <ul className="mt-1 flex flex-col gap-1">
-                          {codes.map((code) => (
-                            <li key={code} className="text-md text-navy">
-                              {labelFor(code) && <>{labelFor(code)} </>}
-                              <code className="text-sm text-muted">{code}</code>
-                            </li>
-                          ))}
-                        </ul>
-                      </dd>
-                    </div>
-                  ))}
-              </dl>
+              {/*
+                * A real fraction — numerator, a rule, denominator underneath
+                * (`ratio-fraction`). Two side-by-side lists headed *Counts* and *Out of*
+                * said the same thing and read as two unrelated sets; "this over that" is
+                * what a ratio *is*, and the prototype is right about it.
+                *
+                * The balance ratio is not a fraction — it is a difference over a sum — so
+                * it renders as two labelled sides with the sentence explaining which way
+                * the result leans, exactly as the prototype does and for the reason its
+                * own comment gives.
+                */}
+              {ratio.comparison === 'band' ? (
+                <div className="mt-3 flex flex-col gap-2">
+                  {([['Selling side', ratio.numerator], ['Recruitment side', ratio.denominator]] as const)
+                    .map(([side, codes]) => (
+                      <div key={side} className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-semibold text-navy">{side}</span>
+                        {codes.map((code) => <Chip key={code} code={code} label={labelFor(code)} />)}
+                      </div>
+                    ))}
+                  <p className="text-sm text-muted">
+                    Result leans Recruitment when its total is higher, Selling when the reverse
+                    is true — shown as a −100% to +100% balance.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-3 inline-flex flex-col items-start">
+                  <div className="flex flex-wrap items-center gap-1.5 py-0.5">
+                    {ratio.numerator.map((code) => (
+                      <Chip key={code} code={code} label={labelFor(code)} />
+                    ))}
+                  </div>
+                  <div className="my-0.5 h-0.5 w-full min-w-32 bg-navy" aria-hidden />
+                  <div className="flex flex-wrap items-center gap-1.5 py-0.5">
+                    {ratio.denominator.map((code) => (
+                      <Chip key={code} code={code} label={labelFor(code)} />
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-hairline pt-3">
                 {scoping === ratio.id ? (

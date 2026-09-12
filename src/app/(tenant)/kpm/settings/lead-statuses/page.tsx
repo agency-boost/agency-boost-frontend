@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { PublishBar } from '@/components/publish-bar';
+import { SettingsTabs } from '@/components/settings-tabs';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -40,6 +41,9 @@ export default function LeadStatusesPage() {
   const canWrite = useCan('tenant_config:write');
   const [pipelines, setPipelines] = useState<LeadPipelineRow[] | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  // One pipeline at a time, as the prototype's subtabs do. Both stacked made the sales
+  // ladder and the recruitment ladder read as one eleven-stage list on a narrow screen.
+  const [tab, setTab] = useState<LeadPipeline>('sales');
   const [error, setError] = useState<ApiError | null>(null);
   // Bumped after any write, so the publish bar re-reads rather than going stale behind
   // an edit the Owner just made.
@@ -83,20 +87,40 @@ export default function LeadStatusesPage() {
       {error && <ErrorBanner {...error} />}
       <PublishBar refreshKey={published} />
 
-      <label className="mb-4 flex items-center gap-2 text-md text-navy">
-        <input
-          type="checkbox"
-          checked={showArchived}
-          onChange={(e) => setShowArchived(e.target.checked)}
-        />
-        Show archived
-      </label>
+      <SettingsTabs
+        tabs={[
+          { label: 'Sales', href: 'sales' },
+          { label: 'Recruitment', href: 'recruitment' },
+        ]}
+        activeHref={tab}
+        onSelect={(href) => setTab(href as LeadPipeline)}
+      />
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        {/* The prototype's own sentence, per tab — it says what the order is *for*, which
+            is the one thing a drag handle cannot. */}
+        <p className="text-sm text-muted">
+          {pipelines === null
+            ? '\u00a0'
+            : `${pipelines.find((p) => p.pipeline === tab)?.statuses
+              .filter((st) => st.status === 'active').length ?? 0} statuses — `
+              + 'order determines the pipeline stage sequence'}
+        </p>
+        <label className="flex items-center gap-2 text-md text-navy">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => setShowArchived(e.target.checked)}
+          />
+          Show archived
+        </label>
+      </div>
 
       {pipelines === null ? (
-        <SkeletonCards count={2} />
+        <SkeletonCards count={1} />
       ) : (
         <div className="flex flex-col gap-4">
-          {pipelines.map((pipeline) => (
+          {pipelines.filter((p) => p.pipeline === tab).map((pipeline) => (
             <Card key={pipeline.pipeline}>
               <h2 className="font-display text-lg font-bold text-navy">
                 {TITLE[pipeline.pipeline]}
@@ -135,11 +159,18 @@ export default function LeadStatusesPage() {
                         </div>
                       ) : (
                         <>
-                          <p className="text-md text-navy">
+                          <p className="flex flex-wrap items-center gap-2 text-md text-navy">
                             {stage.label}
-                            {stage.isTerminal && (
-                              <span className="ml-2 rounded-full bg-amber px-2 py-0.5 text-sm font-semibold text-navy">
+                            {/* `cfg-badge`, both states. The prototype badges every row —
+                                an unbadged one reads as a row whose state failed to load,
+                                and *Open* is the thing most stages actually are. */}
+                            {stage.isTerminal ? (
+                              <span className="rounded-full bg-amber px-2 py-0.5 text-sm font-semibold uppercase tracking-wide text-navy">
                                 Closes the pipeline
+                              </span>
+                            ) : (
+                              <span className="rounded-full border border-hairline bg-canvas px-2 py-0.5 text-sm font-semibold uppercase tracking-wide text-muted">
+                                Open
                               </span>
                             )}
                           </p>

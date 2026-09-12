@@ -99,7 +99,15 @@ export default function ActivityTypesPage() {
       {error && <ErrorBanner {...error} />}
       <PublishBar refreshKey={published} />
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        {/* `config-toolbar`'s hint: the prototype leads every settings screen with a count
+            sentence, and it is the fastest way to see that a taxonomy is complete. */}
+        <p className="text-sm text-muted">
+          {categories === null
+            ? '\u00a0'
+            : `${categories.flatMap((c) => c.types).filter((t) => t.status === 'active').length} `
+              + `activity types across ${categories.length} categories`}
+        </p>
         <label className="flex items-center gap-2 text-md text-navy">
           <input
             type="checkbox"
@@ -115,15 +123,18 @@ export default function ActivityTypesPage() {
       ) : categories.length === 0 ? (
         <EmptyState title="No activity types yet" />
       ) : (
-        <div className="flex flex-col gap-4">
+        // `acttype-grid`: two columns, one per category, collapsing at the prototype's
+        // own 760px. Five cards stacked made the screen a scroll where it is a glance.
+        <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
           {categories.map((category) => (
             <Card key={category.id}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="font-display text-lg font-bold text-navy">{category.label}</h2>
-                <span className="text-sm text-muted">
-                  <code>{category.code}</code>
-                  {' · '}
-                  {category.types.length} {category.types.length === 1 ? 'item' : 'items'}
+                <span className="flex items-center gap-2">
+                  <code className="text-sm text-muted">{category.code}</code>
+                  <span className="whitespace-nowrap rounded-full border border-hairline bg-canvas px-2 py-0.5 text-sm font-semibold text-muted">
+                    {category.types.length} {category.types.length === 1 ? 'item' : 'items'}
+                  </span>
                 </span>
               </div>
 
@@ -131,7 +142,7 @@ export default function ActivityTypesPage() {
                 {category.types.map((type) => (
                   <li key={type.id} className="flex flex-wrap items-start gap-3 py-3">
                     <span
-                      className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-canvas text-sm font-semibold text-navy"
+                      className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-navy text-sm font-bold text-navy"
                       aria-hidden
                     >
                       {type.displayOrder}

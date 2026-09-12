@@ -45,11 +45,34 @@ function render(me = OWNER, body: unknown = PIPELINES) {
 describe('the office lead pipelines (P4-T3)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('shows both ladders', async () => {
+  it('shows one ladder at a time, and both are reachable', async () => {
+    /*
+     * Subtabs since the prototype alignment pass (`KPM_Owner.html:1492-1495`). Stacked,
+     * the two ladders read as one eleven-stage list on a narrow screen — and the
+     * prototype's own hint, *order determines the pipeline stage sequence*, is then a
+     * sentence about an order that does not exist.
+     */
     render();
-    expect(await screen.findByRole('heading', { name: 'Sales' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Recruitment' })).toBeInTheDocument();
-    expect(screen.getByText('Paid and issued')).toBeInTheDocument();
+    expect(await screen.findByText('Paid and issued')).toBeInTheDocument();
+    expect(screen.queryByText('Not approached')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('link', { name: 'Recruitment' }));
+    expect(await screen.findByText('Not approached')).toBeInTheDocument();
+    expect(screen.queryByText('Paid and issued')).not.toBeInTheDocument();
+  });
+
+  it('counts the stages of the tab it is on, the way the prototype does', async () => {
+    render();
+    expect(await screen.findByText(/statuses — order determines the pipeline stage sequence/))
+      .toBeInTheDocument();
+  });
+
+  it('badges every stage, not only the one that closes', async () => {
+    // An unbadged row reads as one whose state failed to load, and Open is what most
+    // stages actually are.
+    render();
+    await screen.findByText('Paid and issued');
+    expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
   });
 
   it('marks the stage that closes a pipeline, rather than leaving it implied', async () => {
@@ -59,7 +82,9 @@ describe('the office lead pipelines (P4-T3)', () => {
      * one stage, and moving it is a deliberate act.
      */
     render();
-    expect(await screen.findAllByText('Closes the pipeline')).toHaveLength(2);
+    // One per pipeline, and only the tab in view renders — so one here, one after the
+    // tab switch above.
+    expect(await screen.findAllByText('Closes the pipeline')).toHaveLength(1);
   });
 
   it('shows the code beside every stage, because a lead holds the code', async () => {
@@ -97,6 +122,9 @@ describe('the office lead pipelines (P4-T3)', () => {
 
   it('adds a stage to the pipeline it was added under', async () => {
     const { calls } = render();
+    // Only the tab in view renders its Add button, so the pipeline a new stage lands in
+    // is the one on screen — which is the point of the assertion below.
+    await userEvent.click(await screen.findByRole('link', { name: 'Recruitment' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Add a recruitment stage' }));
     await userEvent.type(screen.getByLabelText('Code'), 'aaji_pending');
     await userEvent.type(screen.getByLabelText('Label'), 'AAJI pending');
