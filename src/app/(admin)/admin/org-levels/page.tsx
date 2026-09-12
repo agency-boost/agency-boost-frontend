@@ -107,7 +107,7 @@ export default function OrgLevelsPage() {
     <Page
       title="Org role ladder"
       subtitle="The rungs a company promotes people along. An office cannot invent one — this is the company's to define, and only the platform writes it."
-      permission="org_level:read"
+      permission="org_level:crud"
     >
       {error && !takenCode && <ErrorBanner {...error} />}
 

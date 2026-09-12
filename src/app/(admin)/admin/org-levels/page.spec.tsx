@@ -148,7 +148,14 @@ describe('org role ladder (P3.5-T7)', () => {
       me: makeMe({ ...SUPER_ADMIN, permissions: ['kpm:list_all'] }),
     });
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent('org_level:read');
+    /*
+     * `org_level:crud`, not `org_level:read` — and the change is the point. P4-T9 widened
+     * the read to every member so badges could be drawn from the company's own ladder, and
+     * this screen shared the permission name while showing *every* company's ladder. The
+     * Phase 4 exit review read fifty-seven rungs across nineteen companies with a KPM
+     * Owner's token. Members read their own company's ladder from `/kpm/org-levels`.
+     */
+    expect(screen.getByRole('alert')).toHaveTextContent('org_level:crud');
   });
 
   it('tells a company with no ladder what to do first', async () => {
