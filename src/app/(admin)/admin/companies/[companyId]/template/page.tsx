@@ -6,7 +6,8 @@ import { ComingInPhase } from '@/components/coming-in-phase';
 import { Page } from '@/components/page';
 import { SettingsTabs } from '@/components/settings-tabs';
 import {
-  PipelineEditor, TaxonomyEditor, type PipelinePayload, type TaxonomyPayload,
+  PipelineEditor, RatioSetEditor, TaxonomyEditor,
+  type PipelinePayload, type RatioSetPayload, type TaxonomyPayload,
 } from '@/components/template-editor';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
@@ -17,8 +18,16 @@ import {
 } from '@/lib/admin';
 
 /** Each item of the Owner's Settings group, as ADR-0018 lays them out. */
-const TABS: { key: string; label: string; kind: TemplateKind | null; phase: number }[] = [
-  { key: 'activity', label: 'Activity types', kind: 'activity_taxonomy', phase: 4 },
+const TABS: {
+  key: string; label: string; kind: TemplateKind | null; phase: number; under?: string;
+}[] = [
+  /*
+   * `Activity types` and `Ratio benchmarks` are **subtabs of one item**, not two tabs.
+   * ADR-0018's own table says so, and it mirrors the Owner's Settings group, where the
+   * benchmarks live inside the Activity types screen (`KPM_Owner.html:1329-1330`).
+   */
+  { key: 'activity', label: 'Activity types', kind: 'activity_taxonomy', phase: 4, under: 'activity' },
+  { key: 'ratios', label: 'Ratio benchmarks', kind: 'ratio_set', phase: 4, under: 'activity' },
   { key: 'leads', label: 'Lead statuses', kind: 'lead_pipeline', phase: 4 },
   { key: 'activation', label: 'Activation checklist', kind: null, phase: 5 },
   { key: 'training', label: 'Training', kind: null, phase: 5 },
@@ -207,22 +216,54 @@ export default function CompanyTemplatePage({
             </div>
           </Card>
 
-          {/* Switched on the **loaded** kind, not the selected tab. They cannot differ —
-              `current` is null unless they match — and keying off the payload's own kind
-              means a later edit to that guard cannot reintroduce the mismatch. */}
-          {current.kind === 'activity_taxonomy' ? (
-            <TaxonomyEditor
-              payload={current.payload as unknown as TaxonomyPayload}
-              disabled={busy}
-              onChange={(next) => change(next as unknown as Record<string, unknown>)}
-            />
-          ) : (
-            <PipelineEditor
-              payload={current.payload as unknown as PipelinePayload}
-              disabled={busy}
-              onChange={(next) => change(next as unknown as Record<string, unknown>)}
-            />
-          )}
+          {/*
+            * Switched on the **loaded** kind, not the selected tab. They cannot differ —
+            * `current` is null unless they match — and keying off the payload's own kind
+            * means a later edit to that guard cannot reintroduce the mismatch.
+            *
+            * A `switch` with an explicit default, not a ternary. It was
+            * `activity_taxonomy ? Taxonomy : Pipeline`, so adding any third kind rendered
+            * a payload of the wrong shape through `PipelineEditor` and crashed on
+            * `payload.statuses.filter` — a kind added without touching this line would
+            * have taken the screen down rather than saying it had no editor.
+            */}
+          {(() => {
+            switch (current.kind) {
+              case 'activity_taxonomy':
+                return (
+                  <TaxonomyEditor
+                    payload={current.payload as unknown as TaxonomyPayload}
+                    disabled={busy}
+                    onChange={(next) => change(next as unknown as Record<string, unknown>)}
+                  />
+                );
+              case 'lead_pipeline':
+                return (
+                  <PipelineEditor
+                    payload={current.payload as unknown as PipelinePayload}
+                    disabled={busy}
+                    onChange={(next) => change(next as unknown as Record<string, unknown>)}
+                  />
+                );
+              case 'ratio_set':
+                return (
+                  <RatioSetEditor
+                    payload={current.payload as unknown as RatioSetPayload}
+                    disabled={busy}
+                    onChange={(next) => change(next as unknown as Record<string, unknown>)}
+                  />
+                );
+              default:
+                return (
+                  <Card>
+                    <p className="text-md text-navy">
+                      This preset has no editor yet. It is stored and copied into new
+                      offices exactly as it is.
+                    </p>
+                  </Card>
+                );
+            }
+          })()}
         </>
       )}
     </Page>

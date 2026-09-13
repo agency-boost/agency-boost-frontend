@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { PublishBar } from '@/components/publish-bar';
+import { StagedChangesBar } from '@/components/staged-changes-bar';
 import { ACTIVITY_SETTINGS_TABS, SettingsTabs } from '@/components/settings-tabs';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -12,6 +13,7 @@ import { useCan } from '@/lib/session';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import {
   applyConfigChanges,
+  stageChange,
   archiveRatio,
   createRatio,
   listActivityTypes,
@@ -126,16 +128,7 @@ export default function RatioBenchmarksPage() {
    * tweaks to the same benchmark sends one change, not three — and the `expectedVersion`
    * the first edit read still guards it, because the row has not moved in between.
    */
-  function stage(change: ConfigChange) {
-    setStaged((now) => {
-      const same = (c: ConfigChange) => c.op === change.op && c.id === change.id;
-      const kept = change.id ? now.filter((c) => !same(c)) : now;
-      const merged = change.id
-        ? { ...now.find(same), ...change, body: { ...now.find(same)?.body, ...change.body } }
-        : change;
-      return [...kept, merged];
-    });
-  }
+  const stage = (change: ConfigChange) => setStaged((now) => stageChange(now, change));
 
   async function save() {
     await run(async () => {
@@ -205,27 +198,12 @@ export default function RatioBenchmarksPage() {
         </div>
       </div>
 
-      {staged.length > 0 && (
-        <Card className="mb-4 border-amber">
-          <p className="text-md text-navy">
-            <strong>
-              {staged.length} {staged.length === 1 ? 'change' : 'changes'} not saved yet.
-            </strong>{' '}
-            <span className="text-muted">
-              Nothing has reached your office — and publishing to agents is a separate step
-              after that.
-            </span>
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button disabled={busy} onClick={() => void save()}>
-              {busy ? 'Saving…' : 'Save changes'}
-            </Button>
-            <Button variant="secondary" disabled={busy} onClick={() => setStaged([])}>
-              Discard them
-            </Button>
-          </div>
-        </Card>
-      )}
+      <StagedChangesBar
+        count={staged.length}
+        busy={busy}
+        onSave={() => void save()}
+        onDiscard={() => setStaged([])}
+      />
 
       <div className="mb-4">
         <Button variant="secondary" onClick={() => setShowPublished((v) => !v)}>

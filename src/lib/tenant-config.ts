@@ -267,3 +267,28 @@ export const applyConfigChanges = (ops: ConfigChange[]) =>
     version: number;
   }>('/kpm/settings/changes', { method: 'POST', body: { ops } });
 
+/**
+ * Fold one staged change into the list a screen is holding.
+ *
+ * **Two ops on one row collapse into the later one**, so three tweaks to a benchmark send
+ * one change rather than three — and the `expectedVersion` the first read still guards it,
+ * because the row has not moved in between. A create has no id, so it never collapses:
+ * adding two types is two changes, which is what the reader did.
+ *
+ * A pure reducer rather than a hook, because two screens need exactly this rule and a
+ * second copy of it would be a second answer to what Save sends.
+ */
+export function stageChange(now: ConfigChange[], change: ConfigChange): ConfigChange[] {
+  if (!change.id) return [...now, change];
+
+  const same = (c: ConfigChange) => c.op === change.op && c.id === change.id;
+  const previous = now.find(same);
+  const body = { ...previous?.body, ...change.body };
+
+  return [
+    ...now.filter((c) => !same(c)),
+    // An empty body is absent, not `{}` — an archive says everything in its `op`.
+    { ...previous, ...change, ...(Object.keys(body).length ? { body } : {}) },
+  ];
+}
+

@@ -63,6 +63,13 @@ function render(me = OWNER, body: unknown = TAXONOMY) {
   return stub;
 }
 
+/** Press Save and read the batch that went out (P4-T19). */
+async function saved(calls: { url: string; init: RequestInit }[]) {
+  await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
+  return JSON.parse(post.init.body as string).ops as Record<string, unknown>[];
+}
+
 describe('the office activity taxonomy (P4-T1)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -105,8 +112,9 @@ describe('the office activity taxonomy (P4-T1)', () => {
   it('archives rather than deletes, and says so on the control', async () => {
     const { calls } = render();
     await userEvent.click((await screen.findAllByRole('button', { name: 'Archive' }))[0]);
-    const call = calls.find((c) => c.init.method === 'DELETE')!;
-    expect(call.url).toContain('/kpm/settings/activity-types/t0');
+    expect(await saved(calls)).toEqual([
+      { op: 'type.archive', id: 't0', expectedVersion: 1 },
+    ]);
     expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
   });
 
@@ -157,10 +165,10 @@ describe('the office activity taxonomy (P4-T1)', () => {
     await userEvent.type(screen.getByLabelText('Label'), 'Referral masuk');
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
-    const call = calls.find((c) => c.init.method === 'POST')!;
-    expect(JSON.parse(call.init.body as string)).toMatchObject({
+    expect((await saved(calls))[0]).toMatchObject({
+      op: 'type.create',
       // Upper-cased as it is typed, so what is sent is what the person saw.
-      code: 'SELL_REFERRAL', categoryCode: 'SELLING', label: 'Referral masuk',
+      body: { code: 'SELL_REFERRAL', categoryCode: 'SELLING', label: 'Referral masuk' },
     });
   });
 
@@ -187,12 +195,13 @@ describe('the office activity taxonomy (P4-T1)', () => {
     void calls;
     stubFetch({
       '/kpm/settings/activity-types': { body: TAXONOMY },
-      '/kpm/settings/activity-types/t0': {
+      '/kpm/settings/changes': {
         status: 400,
         body: { error: { code: 'VALIDATION_FAILED', message: 'Nothing to change.', requestId: 'r-1' } },
       },
     });
     await userEvent.click((await screen.findAllByRole('button', { name: 'Archive' }))[0]);
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Nothing to change.');
   });
 
@@ -214,8 +223,10 @@ describe('the office activity taxonomy (P4-T1)', () => {
       await userEvent.click(screen.getByLabelText('AB'));
       await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-      const patch = calls.find((c) => c.init.method === 'PATCH')!;
-      expect(JSON.parse(patch.init.body as string)).toEqual({ appliesToOrgLevelCodes: ['AB'] });
+      expect((await saved(calls))[0]).toMatchObject({
+        op: 'category.update', id: 'c1', expectedVersion: 1,
+        body: { appliesToOrgLevelCodes: ['AB'] },
+      });
     });
 
     it('adds a section, wiring a client function that had no caller since P4-T1', async () => {
@@ -225,9 +236,8 @@ describe('the office activity taxonomy (P4-T1)', () => {
       await userEvent.type(screen.getByLabelText('Name'), 'Referrals');
       await userEvent.click(screen.getByRole('button', { name: 'Add the section' }));
 
-      const post = calls.find((c) => c.url.includes('activity-categories') && c.init.method === 'POST')!;
-      expect(JSON.parse(post.init.body as string)).toMatchObject({
-        code: 'REFERRALS', label: 'Referrals',
+      expect((await saved(calls))[0]).toMatchObject({
+        op: 'category.create', body: { code: 'REFERRALS', label: 'Referrals' },
       });
     });
 
@@ -258,9 +268,8 @@ describe('the office activity taxonomy (P4-T1)', () => {
       await userEvent.type(screen.getByLabelText('Description'), 'dari nasabah lama');
       await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
-      const post = calls.find((c) => c.url.includes('activity-types') && c.init.method === 'POST')!;
-      expect(JSON.parse(post.init.body as string)).toMatchObject({
-        description: 'dari nasabah lama',
+      expect((await saved(calls))[0]).toMatchObject({
+        op: 'type.create', body: { description: 'dari nasabah lama' },
       });
     });
 
@@ -284,9 +293,9 @@ describe('the office activity taxonomy (P4-T1)', () => {
       await userEvent.type(screen.getByLabelText('Description'), 'telepon, WhatsApp');
       await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-      const patch = calls.find((c) => c.init.method === 'PATCH')!;
-      expect(JSON.parse(patch.init.body as string)).toMatchObject({
-        description: 'telepon, WhatsApp',
+      expect((await saved(calls))[0]).toMatchObject({
+        op: 'type.update', id: 't0', expectedVersion: 1,
+        body: { description: 'telepon, WhatsApp' },
       });
     });
   });
@@ -321,6 +330,47 @@ describe('the office activity taxonomy (P4-T1)', () => {
       render(AGENT);
       await screen.findByText('Submission polis');
       expect(screen.queryByText('⠿')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('staged edits (P4-T19)', () => {
+    it('holds everything until Save changes, and says how much is held', async () => {
+      const { calls } = render();
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Archive' }))[0]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a section' }));
+      await userEvent.type(screen.getByLabelText('Code'), 'REFERRALS');
+      await userEvent.type(screen.getByLabelText('Name'), 'Referrals');
+      await userEvent.click(screen.getByRole('button', { name: 'Add the section' }));
+
+      expect(screen.getByText(/2 changes not saved yet/)).toBeInTheDocument();
+      expect(calls.some((c) => c.url.includes('/kpm/settings/changes'))).toBe(false);
+
+      expect(await saved(calls)).toHaveLength(2);
+    });
+
+    it('says saving is not publishing, because they are different places', async () => {
+      render();
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Archive' }))[0]);
+      expect(screen.getByText(/publishing to agents is a separate step/)).toBeInTheDocument();
+    });
+
+    it('discards without sending', async () => {
+      const { calls } = render();
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Archive' }))[0]);
+      await userEvent.click(screen.getByRole('button', { name: 'Discard them' }));
+
+      expect(screen.queryByText(/not saved yet/)).not.toBeInTheDocument();
+      expect(calls.some((c) => c.url.includes('/kpm/settings/changes'))).toBe(false);
+    });
+
+    it('reorders immediately, because a drag that did nothing visible would be worse', async () => {
+      // It bumps no version and reaches nobody until publish, so holding it behind Save
+      // would mean pressing ↑ and watching the row stay put.
+      const { calls } = render();
+      await userEvent.click(await screen.findByRole('button', { name: 'Move Submission polis up' }));
+
+      expect(calls.some((c) => c.url.includes('activity-types/reorder'))).toBe(true);
+      expect(screen.queryByText(/not saved yet/)).not.toBeInTheDocument();
     });
   });
 });

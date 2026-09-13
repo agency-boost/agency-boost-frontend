@@ -6,7 +6,7 @@ import { Stepper } from './stepper';
 import { ProgressBar } from './progress-bar';
 import { EmptyState } from './empty-state';
 import { RoleBadge, SEEDED_LADDER } from './role-badge';
-import { Button } from './field';
+import { Button, Field, TextInput } from './field';
 
 describe('StatusPill', () => {
   it('renders three distinct states, each with its own words', () => {
@@ -205,5 +205,36 @@ describe('Button', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(clicked).toHaveBeenCalledOnce();
     expect(submitted).not.toHaveBeenCalled();
+  });
+});
+
+describe('Field', () => {
+  it('links its hint to the control, rather than printing it beside one', () => {
+    /*
+     * It rendered as a loose `<p>`, so a screen reader announced the label and stopped —
+     * every "Permanent once saved" was invisible to the readers most likely to need it.
+     */
+    render(
+      <Field label="Code" htmlFor="c" hint="Permanent once saved.">
+        <TextInput id="c" />
+      </Field>,
+    );
+    expect(screen.getByRole('textbox', { name: 'Code', description: 'Permanent once saved.' }))
+      .toBeInTheDocument();
+  });
+
+  it('links an error the same way, alongside the hint', () => {
+    render(
+      <Field label="Code" htmlFor="c" hint="Permanent." error="Already taken.">
+        <TextInput id="c" />
+      </Field>,
+    );
+    expect(screen.getByRole('textbox', { description: 'Permanent. Already taken.' }))
+      .toBeInTheDocument();
+  });
+
+  it('leaves a field with neither undescribed rather than pointing at nothing', () => {
+    render(<Field label="Code" htmlFor="c"><TextInput id="c" /></Field>);
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-describedby');
   });
 });

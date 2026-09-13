@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, routeParams, stubFetch } from '@test/harness';
@@ -51,6 +51,15 @@ function render(body: unknown = TAXONOMY) {
   return stub;
 }
 
+/**
+ * The field for one row, found by the code shown beside it.
+ *
+ * The code used to *be* the field's label, so a screen reader announced
+ * *"SELL_SUBMISSION, edit text"* and the human name was the value. It is a hint now, which
+ * is what these queries follow.
+ */
+const fieldFor = (code: string) => screen.getByRole('textbox', { description: code });
+
 describe('a company’s Company template (P4-T8)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -67,7 +76,7 @@ describe('a company’s Company template (P4-T8)', () => {
 
   it('has no Branch info tab, because it is a fact about one office', async () => {
     render();
-    await screen.findByLabelText('SELL_SUBMISSION');
+    await screen.findByText('SELL_SUBMISSION');
     expect(screen.queryByRole('link', { name: 'Branch info' })).toBeNull();
   });
 
@@ -93,7 +102,8 @@ describe('a company’s Company template (P4-T8)', () => {
     // The server publishes the *draft*, so publishing with unsaved changes would ship the
     // previous draft and look like the edit was lost.
     render();
-    const label = await screen.findByLabelText('SELL_SUBMISSION');
+    await screen.findByText('SELL_SUBMISSION');
+    const label = fieldFor('SELL_SUBMISSION');
     await userEvent.type(label, ' baru');
 
     expect(screen.getByRole('button', { name: /^Publish version/ })).toBeDisabled();
@@ -102,7 +112,8 @@ describe('a company’s Company template (P4-T8)', () => {
 
   it('sends the whole payload, not a patch', async () => {
     const { calls } = render();
-    const label = await screen.findByLabelText('SELL_SUBMISSION');
+    await screen.findByText('SELL_SUBMISSION');
+    const label = fieldFor('SELL_SUBMISSION');
     await userEvent.clear(label);
     await userEvent.type(label, 'Closing');
     await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
@@ -117,7 +128,7 @@ describe('a company’s Company template (P4-T8)', () => {
 
   it('shows a Phase 5 tab as a signpost, with no data and no request', async () => {
     const { calls } = render();
-    await screen.findByLabelText('SELL_SUBMISSION');
+    await screen.findByText('SELL_SUBMISSION');
     const before = calls.length;
 
     await userEvent.click(screen.getByRole('link', { name: 'Training' }));
@@ -147,12 +158,12 @@ describe('a company’s Company template (P4-T8)', () => {
       { me: SUPER_ADMIN },
     );
 
-    await screen.findByLabelText('SELL_SUBMISSION');
+    await screen.findByText('SELL_SUBMISSION');
     await userEvent.click(screen.getByRole('link', { name: 'Lead statuses' }));
 
     // It gets there, and it gets there with its own payload.
-    expect(await screen.findByLabelText('PAID_AND_ISSUED')).toBeInTheDocument();
-    expect(screen.queryByLabelText('SELL_SUBMISSION')).toBeNull();
+    expect(await screen.findByText('PAID_AND_ISSUED')).toBeInTheDocument();
+    expect(screen.queryByText('SELL_SUBMISSION')).toBeNull();
   });
 
   it('ignores a late answer for a tab the reader has left', async () => {
@@ -184,12 +195,85 @@ describe('a company’s Company template (P4-T8)', () => {
 
     // Leave for Lead statuses before the taxonomy answers, then let it answer.
     await userEvent.click(await screen.findByRole('link', { name: 'Lead statuses' }));
-    expect(await screen.findByLabelText('PAID_AND_ISSUED')).toBeInTheDocument();
+    expect(await screen.findByText('PAID_AND_ISSUED')).toBeInTheDocument();
     releaseSlow();
 
     // Still the pipeline. The late taxonomy is dropped rather than drawn.
-    expect(await screen.findByLabelText('PAID_AND_ISSUED')).toBeInTheDocument();
-    expect(screen.queryByLabelText('SELL_SUBMISSION')).toBeNull();
+    expect(await screen.findByText('PAID_AND_ISSUED')).toBeInTheDocument();
+    expect(screen.queryByText('SELL_SUBMISSION')).toBeNull();
   });
 
+
+  describe('ratio benchmarks, as a subtab of Activity types (P4-T20)', () => {
+    it('offers it beside Activity types, as ADR-0018’s own table says', async () => {
+      render();
+      expect(await screen.findByRole('link', { name: 'Ratio benchmarks' })).toBeInTheDocument();
+      // And not as a seventh top-level tab.
+      expect(screen.getByRole('link', { name: 'Activity types' })).toBeInTheDocument();
+    });
+
+    it('renders the ratio payload through its own editor, not the pipeline one', async () => {
+      /*
+       * The dispatch was `activity_taxonomy ? Taxonomy : Pipeline`, so a ratio payload
+       * went to `PipelineEditor` and crashed on `payload.statuses.filter`. It is an
+       * exhaustive switch now, with a default that says a kind has no editor rather than
+       * taking the screen down.
+       */
+      stubFetch({
+        '/admin/companies/c1/template/ratio_set': {
+          body: {
+            id: 'tpl-r', companyId: 'c1', kind: 'ratio_set', version: 1, status: 'draft',
+            payload: {
+              ratios: [{
+                code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate',
+                numerator: ['SELL_SUBMISSION'], denominator: ['SELL_PRESENTATION'],
+                benchmark: 0.15, comparison: 'gte', displayOrder: 1,
+              }],
+            },
+            publishedAt: null, publishedVersion: 0, officesBehind: 0,
+          },
+        },
+        '/admin/companies/c1/template': { body: TAXONOMY },
+      });
+      renderWithSession(
+        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
+        { me: SUPER_ADMIN },
+      );
+
+      await userEvent.click(await screen.findByRole('link', { name: 'Ratio benchmarks' }));
+      expect(await screen.findByRole('textbox', { description: 'SELLING_SUCCESS_RATE' }))
+        .toBeInTheDocument();
+      // The formula is stated, not offered as a control.
+      expect(screen.getByText(/The formula is fixed/)).toBeInTheDocument();
+    });
+  });
+
+  describe('adding to a template (P4-T20)', () => {
+    it('offers an Add control the screen never had', async () => {
+      render();
+      await screen.findByText('SELL_SUBMISSION');
+      expect(screen.getAllByRole('button', { name: /^Add an activity type$/ }).length)
+        .toBeGreaterThan(0);
+      expect(screen.getByRole('button', { name: 'Add a section' })).toBeInTheDocument();
+    });
+
+    it('appends a type to the section it was added under', async () => {
+      const { calls } = render();
+      await screen.findByText('SELL_SUBMISSION');
+      await userEvent.click(screen.getAllByRole('button', { name: /^Add an activity type$/ })[0]);
+      // Scoped to the add form — every existing row carries a Name field too, and only
+      // the add form has a Code one.
+      const form = screen.getByLabelText('Code').closest('div')!.parentElement!;
+      await userEvent.type(within(form).getByLabelText('Code'), 'sell_referral');
+      await userEvent.type(within(form).getByLabelText('Name'), 'Referral masuk');
+      await userEvent.click(within(form).getByRole('button', { name: 'Add' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+      const put = calls.find((c) => c.init.method === 'PUT')!;
+      const { payload } = JSON.parse(put.init.body as string);
+      expect(payload.types.at(-1)).toMatchObject({
+        code: 'SELL_REFERRAL', categoryCode: 'SELLING', label: 'Referral masuk',
+      });
+    });
+  });
 });

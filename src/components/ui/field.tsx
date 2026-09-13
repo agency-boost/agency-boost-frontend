@@ -1,3 +1,4 @@
+import React from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/cn';
 
@@ -16,16 +17,34 @@ export function Field({
   children: React.ReactNode;
   className?: string;
 }) {
+  const hintId = hint ? `${htmlFor}-hint` : undefined;
+  const errorId = error ? `${htmlFor}-error` : undefined;
+  const describedBy = [hintId, errorId].filter(Boolean).join(' ') || undefined;
+
+  /*
+   * The hint is **linked**, not merely printed beside the field.
+   *
+   * It rendered as a loose `<p>`, so a screen reader announced the label and stopped —
+   * every *"Permanent once saved"*, every *"The server checks this too"* was invisible to
+   * the readers most likely to need it. Cloning the control is the only way to attach it
+   * without making every caller remember an id.
+   */
+  const described = React.isValidElement(children) && describedBy
+    ? React.cloneElement(children as React.ReactElement<{ 'aria-describedby'?: string }>, {
+      'aria-describedby': describedBy,
+    })
+    : children;
+
   return (
     <div className={cn('flex flex-col gap-1', className)}>
       <label htmlFor={htmlFor} className="text-sm font-semibold text-navy">
         {label}
       </label>
-      {hint && <p className="text-xs text-muted">{hint}</p>}
-      {children}
+      {hint && <p id={hintId} className="text-xs text-muted">{hint}</p>}
+      {described}
       {/* Announced to assistive technology, not just coloured red. */}
       {error && (
-        <p role="alert" className="text-xs font-semibold text-alert">
+        <p id={errorId} role="alert" className="text-xs font-semibold text-alert">
           {error}
         </p>
       )}

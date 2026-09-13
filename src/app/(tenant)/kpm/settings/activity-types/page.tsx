@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { PublishBar } from '@/components/publish-bar';
+import { StagedChangesBar } from '@/components/staged-changes-bar';
 import { ACTIVITY_SETTINGS_TABS, SettingsTabs } from '@/components/settings-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
@@ -13,18 +14,13 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import {
-  archiveActivityCategory,
-  archiveActivityType,
-  createActivityCategory,
+  applyConfigChanges,
+  stageChange,
   reorderActivityCategories,
-  restoreActivityCategory,
-  updateActivityCategory,
-  createActivityType,
   listActivityTypes,
   reorderActivityTypes,
-  restoreActivityType,
-  updateActivityType,
   type ActivityCategoryRow,
+  type ConfigChange,
   type ActivityTypeRow,
 } from '@/lib/tenant-config';
 
@@ -66,6 +62,12 @@ export default function ActivityTypesPage() {
   // lists, and `check-bundle-size.mjs` gates what a dependency would cost.
   const [dragging, setDragging] = useState<{ kind: 'type' | 'section'; id: string } | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  /*
+   * Staged edits (P4-T19), the same model the ratio screen uses. Reordering is the one
+   * thing that still writes immediately: it bumps no version and reaches nobody until
+   * publish, so holding it behind Save would mean a drag that visibly did nothing.
+   */
+  const [staged, setStaged] = useState<ConfigChange[]>([]);
 
   /*
    * **Always read the archived rows, and filter for display.**
@@ -130,6 +132,16 @@ export default function ActivityTypesPage() {
   // Every type in the office, archived included: this is the list a reorder must name.
   const flat = (categories ?? []).flatMap((c) => c.types);
 
+  /** Hold an edit instead of sending it. Two ops on one row collapse into the later one. */
+  const stage = (change: ConfigChange) => setStaged((now) => stageChange(now, change));
+
+  async function saveStaged() {
+    await run('save', async () => {
+      await applyConfigChanges(staged);
+      setStaged([]);
+    });
+  }
+
   /**
    * Drop `dragging` where `targetId` sits, and send the whole list.
    *
@@ -193,6 +205,13 @@ export default function ActivityTypesPage() {
       {error && <ErrorBanner {...error} />}
       <PublishBar refreshKey={published} />
 
+      <StagedChangesBar
+        count={staged.length}
+        busy={busy !== null}
+        onSave={() => void saveStaged()}
+        onDiscard={() => setStaged([])}
+      />
+
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         {/* `config-toolbar`'s hint: the prototype leads every settings screen with a count
             sentence, and it is the fastest way to see that a taxonomy is complete. */}
@@ -253,15 +272,18 @@ export default function ActivityTypesPage() {
               <div className="flex flex-wrap gap-2">
                 <Button
                   disabled={busy !== null || !section.code.trim() || !section.label.trim()}
-                  onClick={() => void run('add-section', async () => {
-                    await createActivityCategory({
-                      code: section.code,
-                      label: section.label,
-                      description: section.description || undefined,
+                  onClick={() => {
+                    stage({
+                      op: 'category.create',
+                      body: {
+                        code: section.code,
+                        label: section.label,
+                        description: section.description || undefined,
+                      },
                     });
                     setSection({ code: '', label: '', description: '' });
                     setAddingSection(false);
-                  })}
+                  }}
                 >
                   Add the section
                 </Button>
@@ -355,12 +377,15 @@ export default function ActivityTypesPage() {
                     </fieldset>
                     <Button
                       disabled={busy !== null}
-                      onClick={() => void run(`scope:${category.id}`, async () => {
-                        await updateActivityCategory(category.id, {
-                          appliesToOrgLevelCodes: rungs,
+                      onClick={() => {
+                        stage({
+                          op: 'category.update',
+                          id: category.id,
+                          expectedVersion: category.version,
+                          body: { appliesToOrgLevelCodes: rungs },
                         });
                         setScoping(null);
-                      })}
+                      }}
                     >
                       Save
                     </Button>
@@ -388,10 +413,11 @@ export default function ActivityTypesPage() {
                             variant="secondary"
                             disabled={busy !== null}
                             title="Archives the section and everything in it."
-                            onClick={() => void run(
-                              `archive-cat:${category.id}`,
-                              () => archiveActivityCategory(category.id),
-                            )}
+                            onClick={() => stage({
+                              op: 'category.archive',
+                              id: category.id,
+                              expectedVersion: category.version,
+                            })}
                           >
                             Archive the section
                           </Button>
@@ -399,10 +425,11 @@ export default function ActivityTypesPage() {
                           <Button
                             variant="secondary"
                             disabled={busy !== null}
-                            onClick={() => void run(
-                              `restore-cat:${category.id}`,
-                              () => restoreActivityCategory(category.id),
-                            )}
+                            onClick={() => stage({
+                              op: 'category.restore',
+                              id: category.id,
+                              expectedVersion: category.version,
+                            })}
                           >
                             Restore the section
                           </Button>
@@ -484,13 +511,15 @@ export default function ActivityTypesPage() {
                           <div className="flex flex-wrap gap-2">
                             <Button
                               disabled={!editLabel.trim() || busy !== null}
-                              onClick={() => void run(`edit:${type.id}`, async () => {
-                                await updateActivityType(type.id, {
-                                  label: editLabel,
-                                  description: editDescription,
+                              onClick={() => {
+                                stage({
+                                  op: 'type.update',
+                                  id: type.id,
+                                  expectedVersion: type.version,
+                                  body: { label: editLabel, description: editDescription },
                                 });
                                 setEditing(null);
-                              })}
+                              }}
                             >
                               Save
                             </Button>
@@ -544,7 +573,9 @@ export default function ActivityTypesPage() {
                           <Button
                             variant="danger"
                             disabled={busy !== null}
-                            onClick={() => void run(`archive:${type.id}`, () => archiveActivityType(type.id))}
+                            onClick={() => stage({
+                              op: 'type.archive', id: type.id, expectedVersion: type.version,
+                            })}
                           >
                             Archive
                           </Button>
@@ -552,7 +583,9 @@ export default function ActivityTypesPage() {
                           <Button
                             variant="secondary"
                             disabled={busy !== null}
-                            onClick={() => void run(`restore:${type.id}`, () => restoreActivityType(type.id))}
+                            onClick={() => stage({
+                              op: 'type.restore', id: type.id, expectedVersion: type.version,
+                            })}
                           >
                             Restore
                           </Button>
@@ -602,16 +635,19 @@ export default function ActivityTypesPage() {
                   </Field>
                   <Button
                     disabled={!draft.code.trim() || !draft.label.trim() || busy !== null}
-                    onClick={() => void run(`add:${category.code}`, async () => {
-                      await createActivityType({
-                        code: draft.code,
-                        categoryCode: category.code,
-                        label: draft.label,
-                        description: draft.description || undefined,
+                    onClick={() => {
+                      stage({
+                        op: 'type.create',
+                        body: {
+                          code: draft.code,
+                          categoryCode: category.code,
+                          label: draft.label,
+                          description: draft.description || undefined,
+                        },
                       });
                       setAdding(null);
                       setDraft({ code: '', label: '', description: '' });
-                    })}
+                    }}
                   >
                     Add
                   </Button>
