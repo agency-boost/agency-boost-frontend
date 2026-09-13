@@ -15,7 +15,7 @@ const SUPER_ADMIN = makeMe({
     pronoun: 'they', initials: 'R', platformRole: 'super_admin',
   },
   membership: null,
-  permissions: ['platform_template:read', 'platform_template:write'],
+  permissions: ['company_template:read', 'company_template:write'],
 });
 
 const TAXONOMY = {
@@ -51,7 +51,7 @@ function render(body: unknown = TAXONOMY) {
   return stub;
 }
 
-describe('a company’s KPM template (P4-T8)', () => {
+describe('a company’s Company template (P4-T8)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('lays the Owner’s Settings group out as tabs', async () => {

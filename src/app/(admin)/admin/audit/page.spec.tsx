@@ -82,4 +82,28 @@ describe('audit log', () => {
     await userEvent.selectOptions(screen.getByLabelText('Scope'), 'kpm-1');
     expect(await screen.findByText('Nothing recorded for this office yet.')).toBeInTheDocument();
   });
+
+  it('shows pre-rename rows under the name the product now uses (ADR-0023)', async () => {
+    /*
+     * The database still says `platform_template.published`, and will for ever — an
+     * append-only evidence log is not rewritten so a rename looks tidy. The reader sees
+     * one vocabulary all the same.
+     */
+    stubFetch({
+      '/admin/audit': {
+        body: [{
+          ...ENTRY,
+          _id: 'a-old',
+          action: 'platform_template.published',
+          targetCollection: 'platformTemplates',
+        }],
+      },
+      '/admin/tenants': { body: [] },
+    });
+    renderInLayout(AdminLayout, <AuditPage />, { me: SUPER_ADMIN });
+
+    expect(await screen.findByText('company_template.published')).toBeInTheDocument();
+    expect(screen.getByText('companyTemplates')).toBeInTheDocument();
+    expect(screen.queryByText('platform_template.published')).not.toBeInTheDocument();
+  });
 });

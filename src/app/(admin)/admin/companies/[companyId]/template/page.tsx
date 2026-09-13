@@ -13,7 +13,7 @@ import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   publishTemplate, readTemplate, saveTemplateDraft,
-  type PlatformTemplate, type TemplateKind,
+  type CompanyTemplate, type TemplateKind,
 } from '@/lib/admin';
 
 /** Each item of the Owner's Settings group, as ADR-0018 lays them out. */
@@ -28,10 +28,10 @@ const TABS: { key: string; label: string; kind: TemplateKind | null; phase: numb
 ];
 
 /**
- * A company's KPM template (P4-T8, ADR-0018).
+ * A company's Company template (P4-T8, ADR-0018).
  *
  * **One screen per company, with each item of the Owner's Settings group as a tab** — the
- * prototype puts *KPM template* inside the Companies nav group beside the role ladder and
+ * prototype puts *Company template* inside the Companies nav group beside the role ladder and
  * the product catalog, and says *"each company has its own"*.
  *
  * **Branch info is not a tab**, matching the client's own range. It is a fact about one
@@ -64,7 +64,7 @@ export default function CompanyTemplatePage({
    */
   const [loaded, setLoaded] = useState<{
     kind: TemplateKind;
-    template: PlatformTemplate;
+    template: CompanyTemplate;
     payload: Record<string, unknown>;
   } | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -102,7 +102,7 @@ export default function CompanyTemplatePage({
     if (tab.kind) void load(tab.kind);
   }, [tab, load]);
 
-  async function run(action: () => Promise<PlatformTemplate>) {
+  async function run(action: () => Promise<CompanyTemplate>) {
     setBusy(true);
     setError(null);
     try {
@@ -126,9 +126,9 @@ export default function CompanyTemplatePage({
 
   return (
     <Page
-      title="KPM template"
+      title="Company template"
       subtitle="What every new office of this company starts life with."
-      permission="platform_template:read"
+      permission="company_template:read"
       actions={(
         <Link href="/admin/companies" className="text-md font-semibold text-navy underline">
           Back to companies

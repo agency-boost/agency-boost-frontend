@@ -81,7 +81,7 @@ export default function AdminOverviewPage() {
 
           <h2 className="mt-6 font-display text-lg font-bold text-navy">Companies</h2>
           <p className="mb-3 mt-1 text-md text-muted">
-            Each company has its own role ladder, product catalog, and KPM template
+            Each company has its own role ladder, product catalog, and Company template
           </p>
           <div className="flex flex-col gap-3">
             {overview.companies.map((c) => (

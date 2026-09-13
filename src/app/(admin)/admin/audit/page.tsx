@@ -17,6 +17,22 @@ import { toDisplayError } from '@/lib/api-client';
 const COLUMNS = ['When', 'Action', 'Target', 'Actor'] as const;
 
 /** The append-only record. Read-only by construction — there is no edit or delete. */
+/**
+ * Rows written before the Company template rename (ADR-0023), shown under the new name.
+ *
+ * **Renamed here and not in the database.** `auditLog` is append-only evidence — the
+ * schema's own first line calls it that, and PDP (UU 27/2022) is the reason. A record
+ * whose contents are rewritten later so a rename looks tidy has stopped being a record.
+ * So the rows keep the words they were written with, and one list reads consistently.
+ */
+const RENAMED = new Map([
+  ['platform_template.draft_saved', 'company_template.draft_saved'],
+  ['platform_template.published', 'company_template.published'],
+  ['platformTemplates', 'companyTemplates'],
+]);
+
+const renamed = (value: string) => RENAMED.get(value) ?? value;
+
 export default function AuditPage() {
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
   const [tenants, setTenants] = useState<Kpm[]>([]);
@@ -81,9 +97,9 @@ export default function AuditPage() {
               <Cell className="whitespace-nowrap text-muted">
                 <time dateTime={e.createdAt}>{new Date(e.createdAt).toLocaleString('en-GB')}</time>
               </Cell>
-              <Cell className="font-semibold">{e.action}</Cell>
+              <Cell className="font-semibold">{renamed(e.action)}</Cell>
               <Cell>
-                {e.targetCollection}
+                {renamed(e.targetCollection)}
                 {e.targetId ? <code className="ml-1 text-sm text-muted">{e.targetId}</code> : null}
               </Cell>
               <Cell>

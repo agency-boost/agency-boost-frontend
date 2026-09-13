@@ -130,8 +130,22 @@ const BUTTON_VARIANT = {
   danger: 'border-[1.5px] border-alert bg-transparent text-alert hover:bg-alert/5',
 } as const;
 
+/**
+ * `type="button"` by default, which is **not** what a bare `<button>` does.
+ *
+ * HTML defaults a button inside a form to `submit`, so every Cancel on this project's
+ * inline panels was submitting the form it was cancelling. The worst of them was the
+ * Cancel on the member-removal form: somebody who typed the confirmation word, thought
+ * better of it and pressed **Cancel** removed the person. The add-a-ratio Cancel created
+ * the ratio, and login's *resend verification* fired a second sign-in attempt.
+ *
+ * A component library's default should be the harmless one. Every button here that
+ * genuinely submits already says `type="submit"` — all nineteen of them — so nothing
+ * loses behaviour, and a caller can still override it.
+ */
 export function Button({
   variant = 'primary',
+  type = 'button',
   className,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -139,6 +153,7 @@ export function Button({
 }) {
   return (
     <button
+      type={type}
       {...props}
       className={cn(
         BUTTON_BASE,
@@ -175,9 +190,15 @@ export function ButtonLink({
   );
 }
 
-export function Card({ children, className }: { children: React.ReactNode; className?: string }) {
+export function Card({
+  children,
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('rounded-lg border border-hairline bg-card p-6', className)}>{children}</div>
+    <div {...props} className={cn('rounded-lg border border-hairline bg-card p-6', className)}>
+      {children}
+    </div>
   );
 }
 

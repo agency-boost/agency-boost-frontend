@@ -54,13 +54,41 @@ export default function LeadStatusesPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
 
+  /*
+   * Always read the archived rows, and filter for display — the same rule the activity
+   * types screen follows, for the same reason. `LeadStatusService.reorder` counts every
+   * status in the pipeline, archived included, so sending only the visible ones returned
+   * `400 Send every sales status, once each` on any office that had archived one.
+   */
+  /**
+   * Move one stage, and send the whole pipeline.
+   *
+   * The order sent is every status the pipeline has, archived included, because that is
+   * what the endpoint counts. The *step* skips anything hidden: swapping with a row the
+   * reader cannot see reads as a button that did nothing.
+   */
+  async function moveStage(pipeline: LeadPipeline, id: string, by: -1 | 1) {
+    const all = pipelines?.find((p) => p.pipeline === pipeline)?.statuses ?? [];
+    const order = all.map((st) => st.id);
+    const at = order.indexOf(id);
+    const visible = new Set(
+      all.filter((st) => showArchived || st.status === 'active').map((st) => st.id),
+    );
+    let to = at + by;
+    while (to >= 0 && to < order.length && !visible.has(order[to])) to += by;
+    if (at < 0 || to < 0 || to >= order.length) return;
+
+    [order[at], order[to]] = [order[to], order[at]];
+    await run(() => reorderLeadStatuses(pipeline, order));
+  }
+
   const load = useCallback(async () => {
     try {
-      setPipelines(await listLeadStatuses(showArchived));
+      setPipelines(await listLeadStatuses(true));
     } catch (err) {
       setError(toDisplayError(err));
     }
-  }, [showArchived]);
+  }, []);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -120,7 +148,14 @@ export default function LeadStatusesPage() {
         <SkeletonCards count={1} />
       ) : (
         <div className="flex flex-col gap-4">
-          {pipelines.filter((p) => p.pipeline === tab).map((pipeline) => (
+          {pipelines
+            .filter((p) => p.pipeline === tab)
+            .map((p) => ({
+              ...p,
+              // What the reader sees. `moveStage` reads the unfiltered list separately.
+              statuses: showArchived ? p.statuses : p.statuses.filter((st) => st.status === 'active'),
+            }))
+            .map((pipeline) => (
             <Card key={pipeline.pipeline}>
               <h2 className="font-display text-lg font-bold text-navy">
                 {TITLE[pipeline.pipeline]}
@@ -188,11 +223,7 @@ export default function LeadStatusesPage() {
                           variant="secondary"
                           aria-label={`Move ${stage.label} up`}
                           disabled={busy || index === 0}
-                          onClick={() => {
-                            const ids = pipeline.statuses.map((s) => s.id);
-                            [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]];
-                            void run(() => reorderLeadStatuses(pipeline.pipeline, ids));
-                          }}
+                          onClick={() => void moveStage(pipeline.pipeline, stage.id, -1)}
                         >
                           ↑
                         </Button>
@@ -200,11 +231,7 @@ export default function LeadStatusesPage() {
                           variant="secondary"
                           aria-label={`Move ${stage.label} down`}
                           disabled={busy || index === pipeline.statuses.length - 1}
-                          onClick={() => {
-                            const ids = pipeline.statuses.map((s) => s.id);
-                            [ids[index], ids[index + 1]] = [ids[index + 1], ids[index]];
-                            void run(() => reorderLeadStatuses(pipeline.pipeline, ids));
-                          }}
+                          onClick={() => void moveStage(pipeline.pipeline, stage.id, 1)}
                         >
                           ↓
                         </Button>

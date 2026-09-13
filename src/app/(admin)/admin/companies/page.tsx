@@ -27,7 +27,7 @@ const COLUMNS = [
   'Name', 'Slug', 'Currency', 'Time zone',
   // The template belongs to the company (ADR-0018), so it is reached through the company
   // rather than from a nav item that would have nothing to point at.
-  { label: 'KPM template', visuallyHidden: true },
+  { label: 'Company template', visuallyHidden: true },
 ] as const;
 
 export default function CompaniesPage() {
@@ -77,7 +77,7 @@ export default function CompaniesPage() {
   return (
     <Page
       title="Companies"
-      subtitle="Each company has its own role ladder, product catalog, and KPM template. A KPM belongs to exactly one, and inherits its currency, locale and time zone."
+      subtitle="Each company has its own role ladder, product catalog, and Company template. A KPM belongs to exactly one, and inherits its currency, locale and time zone."
     >
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <div>
@@ -104,7 +104,7 @@ export default function CompaniesPage() {
                       href={`/admin/companies/${c._id}/template`}
                       className="text-md font-semibold text-navy underline"
                     >
-                      KPM template
+                      Company template
                     </Link>
                   </Cell>
                 </Row>

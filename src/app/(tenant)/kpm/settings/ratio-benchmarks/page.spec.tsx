@@ -80,15 +80,17 @@ describe('the office ratio benchmarks (P4-T2)', () => {
   it('renders a formula as the activity types it counts, not as numbers', async () => {
     /*
      * The prototype writes these as `6 / (4+5)` — item numbers, which are unreadable and
-     * break the moment somebody reorders the taxonomy. Labels, with the code underneath.
+     * break the moment somebody reorders the taxonomy. Labels by default; the code is
+     * behind *Show codes* since P4-T19, because an Owner reads this screen daily and the
+     * identity is not what they are reading it for.
      */
     render();
-    const card = (await screen.findByRole('heading', { name: 'Selling success rate' }))
-      .closest('div')!.parentElement!;
-    expect(within(card).getByText('Submission polis')).toBeInTheDocument();
-    expect(within(card).getByText('Presentasi penjualan')).toBeInTheDocument();
-    expect(within(card).getByText('SELL_SUBMISSION')).toBeInTheDocument();
-    expect(card.textContent).not.toMatch(/\b6 \/ \(4\+5\)/);
+    // Several formulas count it, so the label appears more than once — which is the point.
+    expect((await screen.findAllByText('Submission polis')).length).toBeGreaterThan(0);
+    expect(screen.queryByText('SELL_SUBMISSION')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText('Show codes'));
+    expect(screen.getAllByText('SELL_SUBMISSION').length).toBeGreaterThan(0);
   });
 
   it('shows a code with no label exactly once, not twice', async () => {
@@ -111,8 +113,11 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     expect(screen.getByText('points')).toBeInTheDocument();
   });
 
-  it('sends only the benchmark when the benchmark changes', async () => {
-    // Nothing on this screen changes what is counted — only what counts as good.
+  it('stages a benchmark change and sends nothing until Save changes', async () => {
+    /*
+     * P4-T19. An Owner restructuring used to write on every Save, so their own screen
+     * walked through states the publish gate only ever hid from *agents*.
+     */
     const { calls } = render();
     await userEvent.click((await screen.findAllByRole('button', { name: 'Change the benchmark' }))[0]);
     const input = screen.getByLabelText('Benchmark');
@@ -120,8 +125,46 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     await userEvent.type(input, '0.25');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
-    const call = calls.find((c) => c.init.method === 'PATCH')!;
-    expect(JSON.parse(call.init.body as string)).toEqual({ benchmark: 0.25 });
+    // Nothing has left the browser yet — and the screen says so.
+    expect(calls.some((c) => c.init.method === 'POST' && c.url.includes('changes'))).toBe(false);
+    expect(screen.getByText(/1 change not saved yet/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
+    expect(JSON.parse(post.init.body as string).ops).toEqual([{
+      op: 'ratio.update', id: 'r1', expectedVersion: 1, body: { benchmark: 0.25 },
+    }]);
+  });
+
+  it('collapses repeated edits to one row into a single change', async () => {
+    const { calls } = render();
+    for (const value of ['0.2', '0.3']) {
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Change the benchmark' }))[0]);
+      const input = screen.getByLabelText('Benchmark');
+      await userEvent.clear(input);
+      await userEvent.type(input, value);
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    }
+    expect(screen.getByText(/1 change not saved yet/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
+    const { ops } = JSON.parse(post.init.body as string);
+    expect(ops).toHaveLength(1);
+    expect(ops[0].body.benchmark).toBe(0.3);
+  });
+
+  it('discards staged edits without sending them', async () => {
+    const { calls } = render();
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Change the benchmark' }))[0]);
+    await userEvent.clear(screen.getByLabelText('Benchmark'));
+    await userEvent.type(screen.getByLabelText('Benchmark'), '0.25');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Discard them' }));
+
+    expect(screen.queryByText(/not saved yet/)).not.toBeInTheDocument();
+    expect(calls.some((c) => c.url.includes('/kpm/settings/changes'))).toBe(false);
   });
 
   it('shows an agent the ratios and none of the controls', async () => {
@@ -175,8 +218,11 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       await userEvent.click(within(card).getByLabelText('AB'));
       await userEvent.click(within(card).getByRole('button', { name: 'Save' }));
 
-      const patch = calls.find((c) => c.init.method === 'PATCH')!;
-      expect(JSON.parse(patch.init.body as string)).toEqual({ appliesToOrgLevelCodes: ['AB'] });
+      await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+      const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
+      expect(JSON.parse(post.init.body as string).ops[0]).toMatchObject({
+        op: 'ratio.update', body: { appliesToOrgLevelCodes: ['AB'] },
+      });
     });
 
     it('AC-6: offers every rung the company publishes, and nothing else', async () => {

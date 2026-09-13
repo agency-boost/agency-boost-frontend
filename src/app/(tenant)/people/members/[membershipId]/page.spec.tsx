@@ -272,6 +272,29 @@ describe('one member', () => {
       expect(JSON.parse(String(del?.init.body))).toEqual({ confirmation: ' remove ' });
     });
 
+    it('Cancel cancels — it does not remove the person', async () => {
+      /*
+       * It did, until the `Button` primitive learned to default to `type="button"`.
+       * HTML defaults a button inside a form to `submit`, so Cancel submitted the form it
+       * was cancelling — and the only thing standing between that and a removal was
+       * whether the confirmation word happened to be typed. Somebody who types it and
+       * then thinks better of it is exactly the person this panel exists to protect.
+       */
+      const { calls } = stub();
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+      await screen.findByText('Rina Wijaya');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove Rina' }));
+      await userEvent.type(screen.getByLabelText('Type REMOVE to confirm'), 'REMOVE');
+      expect(screen.getByRole('button', { name: 'Remove them' })).toBeEnabled();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(calls.find((c) => c.init.method === 'DELETE')).toBeUndefined();
+      // And it closed the panel, which is what it was asked to do.
+      expect(screen.queryByLabelText('Type REMOVE to confirm')).not.toBeInTheDocument();
+    });
+
     it('AC-3: a leader with reports cannot be removed until the body says where they go', async () => {
       const { calls } = stub({ directCount: 3, isLeader: true });
       renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });

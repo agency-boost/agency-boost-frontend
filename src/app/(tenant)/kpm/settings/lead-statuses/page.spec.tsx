@@ -61,6 +61,36 @@ describe('the office lead pipelines (P4-T3)', () => {
     expect(screen.queryByText('Paid and issued')).not.toBeInTheDocument();
   });
 
+  it('sends every stage to a reorder, including the archived ones', async () => {
+    /*
+     * `LeadStatusService.reorder` counts every status in the pipeline, archived included.
+     * The screen used to read only the visible ones, so one archived stage returned
+     * `400 Send every sales status, once each` for ever. The step also skips hidden rows:
+     * swapping with a row the reader cannot see is a button that appears to do nothing.
+     */
+    const { calls } = render(OWNER, [
+      {
+        pipeline: 'sales',
+        statuses: [
+          stage({ id: 's0', code: 'NOT_YET_APPROACHED', label: 'Not yet approached', rank: 1 }),
+          stage({ id: 'sx', code: 'OLD', label: 'Retired', rank: 2, status: 'archived' }),
+          stage({ id: 's2', code: 'PAID_AND_ISSUED', label: 'Paid and issued', rank: 3, isTerminal: true }),
+        ],
+      },
+      { pipeline: 'recruitment', statuses: [stage({ id: 'r0', pipeline: 'recruitment' })] },
+    ]);
+
+    await screen.findByText('Not yet approached');
+    expect(screen.queryByText('Retired')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Move Paid and issued up' }));
+
+    const patch = calls.find((c) => c.init.method === 'PATCH')!;
+    const { ids } = JSON.parse(patch.init.body as string);
+    // All three, archived included — and the visible pair swapped around it.
+    expect(ids).toEqual(['s2', 'sx', 's0']);
+  });
+
   it('counts the stages of the tab it is on, the way the prototype does', async () => {
     render();
     expect(await screen.findByText(/statuses — order determines the pipeline stage sequence/))

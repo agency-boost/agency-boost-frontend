@@ -6,6 +6,7 @@ import { Stepper } from './stepper';
 import { ProgressBar } from './progress-bar';
 import { EmptyState } from './empty-state';
 import { RoleBadge, SEEDED_LADDER } from './role-badge';
+import { Button } from './field';
 
 describe('StatusPill', () => {
   it('renders three distinct states, each with its own words', () => {
@@ -165,5 +166,44 @@ describe('RoleBadge', () => {
   it('can render the long form', () => {
     render(<RoleBadge role="ab" short={false} />);
     expect(screen.getByText('Agency Builder')).toBeInTheDocument();
+  });
+});
+
+describe('Button', () => {
+  /*
+   * HTML defaults a button inside a form to `submit`, so every Cancel on this project's
+   * inline panels was submitting the form it was cancelling. The member-removal Cancel
+   * removed the person; the add-a-ratio Cancel created the ratio.
+   */
+  it('does not submit the form it sits in', async () => {
+    const submitted = vi.fn();
+    render(
+      <form onSubmit={submitted}>
+        <Button variant="secondary">Cancel</Button>
+      </form>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(submitted).not.toHaveBeenCalled();
+  });
+
+  it('still submits when a caller asks it to', () => {
+    // The default is the harmless one; it is not a prohibition.
+    render(<Button type="submit">Save</Button>);
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveAttribute('type', 'submit');
+  });
+
+  it('runs its own onClick either way', async () => {
+    const clicked = vi.fn();
+    const submitted = vi.fn();
+    render(
+      <form onSubmit={submitted}>
+        <Button onClick={clicked}>Cancel</Button>
+      </form>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(clicked).toHaveBeenCalledOnce();
+    expect(submitted).not.toHaveBeenCalled();
   });
 });

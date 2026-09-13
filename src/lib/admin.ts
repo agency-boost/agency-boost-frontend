@@ -284,7 +284,7 @@ export type TemplateKind =
   | 'training_taxonomy'
   | 'capability_ladder';
 
-export interface PlatformTemplate {
+export interface CompanyTemplate {
   id: string;
   companyId: string;
   kind: TemplateKind;
@@ -300,29 +300,29 @@ export interface PlatformTemplate {
 }
 
 /**
- * A company's KPM template (P4-T8, ADR-0018).
+ * A company's Company template (P4-T8, ADR-0018).
  *
  * The draft if there is one, else the newest published, else a starting point built from
  * the platform defaults.
  */
 export const readTemplate = (companyId: string, kind: TemplateKind) =>
-  api<PlatformTemplate>(`/admin/companies/${companyId}/template/${kind}`);
+  api<CompanyTemplate>(`/admin/companies/${companyId}/template/${kind}`);
 
 export const readTemplateHistory = (companyId: string, kind: TemplateKind) =>
-  api<PlatformTemplate[]>(`/admin/companies/${companyId}/template/${kind}/history`);
+  api<CompanyTemplate[]>(`/admin/companies/${companyId}/template/${kind}/history`);
 
 /** The whole payload, not a patch — see the DTO for why. */
 export const saveTemplateDraft = (
   companyId: string,
   kind: TemplateKind,
   payload: Record<string, unknown>,
-) => api<PlatformTemplate>(`/admin/companies/${companyId}/template/${kind}`, {
+) => api<CompanyTemplate>(`/admin/companies/${companyId}/template/${kind}`, {
   method: 'PUT', body: { payload },
 });
 
 /** Becomes what the **next** office is seeded from. Reaches nothing that already exists. */
 export const publishTemplate = (companyId: string, kind: TemplateKind) =>
-  api<PlatformTemplate>(`/admin/companies/${companyId}/template/${kind}/publish`, {
+  api<CompanyTemplate>(`/admin/companies/${companyId}/template/${kind}/publish`, {
     method: 'POST',
   });
 

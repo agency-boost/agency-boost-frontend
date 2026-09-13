@@ -6,6 +6,8 @@ export interface ActivityTypeRow {
   categoryCode: string;
   label: string;
   description: string | null;
+  /** Inherited from the category and never stored here. Empty means every rung. */
+  appliesToOrgLevelCodes: string[];
   displayOrder: number;
   version: number;
   status: 'active' | 'archived';
@@ -15,6 +17,9 @@ export interface ActivityCategoryRow {
   id: string;
   code: string;
   label: string;
+  description: string | null;
+  /** The rungs this section is for. **Empty means every rung**; it cascades to its types. */
+  appliesToOrgLevelCodes: string[];
   displayOrder: number;
   version: number;
   status: 'active' | 'archived';
@@ -33,12 +38,32 @@ export const listActivityTypes = (includeArchived = false) =>
     `/kpm/settings/activity-types${includeArchived ? '?includeArchived=true' : ''}`,
   );
 
-export const createActivityCategory = (body: { code: string; label: string }) =>
-  api<ActivityCategoryRow>('/kpm/settings/activity-categories', { method: 'POST', body });
+export const createActivityCategory = (body: {
+  code: string;
+  label: string;
+  description?: string;
+  appliesToOrgLevelCodes?: string[];
+}) => api<ActivityCategoryRow>('/kpm/settings/activity-categories', { method: 'POST', body });
 
-export const renameActivityCategory = (id: string, label: string) =>
-  api<ActivityCategoryRow>(`/kpm/settings/activity-categories/${id}`, {
-    method: 'PATCH', body: { label },
+/** No `code`: every type under it holds that (ADR-0006). */
+export const updateActivityCategory = (
+  id: string,
+  body: Partial<{ label: string; description: string; appliesToOrgLevelCodes: string[] }>,
+) => api<ActivityCategoryRow>(`/kpm/settings/activity-categories/${id}`, {
+  method: 'PATCH', body,
+});
+
+/** Archives the section **and every active type in it** — see the service for why. */
+export const archiveActivityCategory = (id: string) =>
+  api<ActivityCategoryRow>(`/kpm/settings/activity-categories/${id}`, { method: 'DELETE' });
+
+export const restoreActivityCategory = (id: string) =>
+  api<ActivityCategoryRow>(`/kpm/settings/activity-categories/${id}/restore`, { method: 'POST' });
+
+/** Every section, once each, in the order wanted. Bumps no version. */
+export const reorderActivityCategories = (ids: string[]) =>
+  api<ActivityCategoryRow[]>('/kpm/settings/activity-categories/reorder', {
+    method: 'PATCH', body: { ids },
   });
 
 export const createActivityType = (body: {
@@ -212,3 +237,33 @@ export const readPublishState = () => api<PublishState>('/kpm/settings/publish-s
 /** Renders the live rows into the copy agents read. Until then they stay on the last one. */
 export const publishConfig = () =>
   api<PublishState>('/kpm/settings/publish', { method: 'POST' });
+
+export type ConfigChangeOp =
+  | 'category.create' | 'category.update' | 'category.archive' | 'category.restore'
+  | 'type.create' | 'type.update' | 'type.archive' | 'type.restore'
+  | 'ratio.create' | 'ratio.update' | 'ratio.archive' | 'ratio.restore';
+
+export interface ConfigChange {
+  op: ConfigChangeOp;
+  id?: string;
+  /** The `version` the screen read. Required on anything that changes an existing row. */
+  expectedVersion?: number;
+  body?: Record<string, unknown>;
+}
+
+/**
+ * Send every staged edit at once (P4-T19).
+ *
+ * Validated entirely before anything is written, so a refusal leaves the office exactly as
+ * it was — which is what lets the screen hold edits until the reader presses Save changes
+ * rather than writing on each one. A row somebody else moved returns `409`, naming what
+ * changed, instead of quietly overwriting their work.
+ */
+export const applyConfigChanges = (ops: ConfigChange[]) =>
+  api<{
+    activity: ActivityCategoryRow[];
+    ratios: RatioRow[];
+    leadPipelines: LeadPipelineRow[];
+    version: number;
+  }>('/kpm/settings/changes', { method: 'POST', body: { ops } });
+
