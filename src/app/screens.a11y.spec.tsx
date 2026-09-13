@@ -15,6 +15,11 @@ import ForgotPasswordPage from './(auth)/forgot-password/page';
 import ResetPasswordPage from './(auth)/reset-password/[token]/page';
 import VerifyEmailPage from './(auth)/verify-email/[token]/page';
 import ProfilePage from './profile/page';
+import ActivityTypesPage from './(tenant)/kpm/settings/activity-types/page';
+import RatioBenchmarksPage from './(tenant)/kpm/settings/ratio-benchmarks/page';
+import LeadStatusesPage from './(tenant)/kpm/settings/lead-statuses/page';
+import BranchInfoPage from './(tenant)/kpm/settings/branch-info/page';
+import CompanyTemplatePage from './(admin)/admin/companies/[companyId]/template/page';
 import AdminOverviewPage from './(admin)/admin/page';
 import TenantsPage from './(admin)/admin/tenants/page';
 import NewTenantPage from './(admin)/admin/tenants/new/page';
@@ -873,5 +878,132 @@ describe('screens have no axe violations', () => {
     renderWithSession(<NotificationsPage />, { me: SUPER_ADMIN });
     await screen.findByRole('button', { name: 'Mark read' });
     await expectClean('notifications');
+  });
+
+  /*
+   * The five Phase 4 settings screens (P4-T21).
+   *
+   * None of them was here, against `frontend/CLAUDE.md`'s "every screen through axe, in
+   * its populated state" — and the two accessibility defects P4-T20 found by reading are
+   * exactly what this suite exists to find without reading: a hint rendered beside a
+   * field rather than linked to it, and a raw code used as a field's label.
+   */
+  describe('the settings screens', () => {
+    const settingsOwner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+      },
+      // `member:read_profile` is the shell's own gate — being inside the office at all is
+      // checked once above every settings route, not in each page. Branch info gates on
+      // `kpm:read_profile` instead, because it is the office's identity rather than its
+      // configuration.
+      permissions: [
+        'member:read_profile', 'tenant_config:read', 'tenant_config:write', 'kpm:read_profile',
+      ],
+    });
+
+    const TYPE = {
+      id: 't1', code: 'SELL_SUBMISSION', categoryCode: 'SELLING', label: 'Submission polis',
+      description: 'telepon, WhatsApp, dll', appliesToOrgLevelCodes: [], displayOrder: 1,
+      version: 1, status: 'active',
+    };
+    const TAXONOMY = [{
+      id: 'c1', code: 'SELLING', label: 'Selling', description: null,
+      appliesToOrgLevelCodes: [], displayOrder: 1, version: 1, status: 'active',
+      types: [TYPE],
+    }];
+    const RATIOS = [{
+      id: 'r1', code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate',
+      numerator: ['SELL_SUBMISSION'], denominator: ['SELL_SUBMISSION'],
+      benchmark: 0.15, comparison: 'gte', displayOrder: 1, version: 1, status: 'active',
+      origin: 'platform', appliesToOrgLevelCodes: [],
+    }];
+    const LADDER = [
+      { orgLevelId: 'l1', companyId: 'co-1', code: 'AGENT', label: 'Agent', displayOrder: 1, status: 'active', archivedAt: null },
+      { orgLevelId: 'l2', companyId: 'co-1', code: 'AB', label: 'AB', displayOrder: 2, status: 'active', archivedAt: null },
+    ];
+
+    /** The provider both screens read the ladder from, with the config it caches. */
+    const configStubs = {
+      '/kpm/config': { body: { activity: TAXONOMY, ratios: RATIOS, leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: LADDER },
+      '/kpm/settings/publish-state': {
+        body: { publishedVersion: 1, workingVersion: 2, hasUnpublishedChanges: true, publishedAt: null },
+      },
+    };
+
+    it('activity types, populated and with the publish bar showing', async () => {
+      stubFetch({ ...configStubs, '/kpm/settings/activity-types': { body: TAXONOMY } });
+      renderInLayout(
+        TenantLayout,
+        <ActivityTypesPage />,
+        { me: settingsOwner },
+      );
+      await screen.findByText('Submission polis');
+      await expectClean('kpm/settings/activity-types');
+    });
+
+    it('ratio benchmarks, populated', async () => {
+      stubFetch({
+        ...configStubs,
+        '/kpm/settings/ratio-benchmarks': { body: RATIOS },
+        '/kpm/settings/activity-types': { body: TAXONOMY },
+      });
+      renderInLayout(
+        TenantLayout,
+        <RatioBenchmarksPage />,
+        { me: settingsOwner },
+      );
+      await screen.findByRole('heading', { name: 'Selling success rate' });
+      await expectClean('kpm/settings/ratio-benchmarks');
+    });
+
+    it('lead statuses, both ladders reachable', async () => {
+      stubFetch({
+        ...configStubs,
+        '/kpm/settings/lead-statuses': {
+          body: [
+            {
+              pipeline: 'sales',
+              statuses: [{
+                id: 's1', pipeline: 'sales', code: 'PAID_AND_ISSUED', label: 'Paid and issued',
+                rank: 1, isTerminal: true, version: 1, status: 'active',
+              }],
+            },
+            { pipeline: 'recruitment', statuses: [] },
+          ],
+        },
+      });
+      renderInLayout(TenantLayout, <LeadStatusesPage />, { me: settingsOwner });
+      await screen.findByText('Paid and issued');
+      await expectClean('kpm/settings/lead-statuses');
+    });
+
+    it('branch info, with its read-only fields', async () => {
+      stubFetch({ ...configStubs, '/kpm/settings/branch-info': { body: KPM } });
+      renderInLayout(TenantLayout, <BranchInfoPage />, { me: settingsOwner });
+      await screen.findByDisplayValue('BSD City Branch');
+      await expectClean('kpm/settings/branch-info');
+    });
+
+    it('the company template, with an editor open', async () => {
+      stubFetch({
+        '/admin/companies/c1/template': {
+          body: {
+            id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1,
+            status: 'draft', payload: { categories: [TAXONOMY[0]], types: [TYPE] },
+            publishedAt: null, publishedVersion: 0, officesBehind: 0,
+          },
+        },
+      });
+      renderInLayout(
+        AdminLayout,
+        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
+        { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
+      );
+      await screen.findByText('SELL_SUBMISSION');
+      await expectClean('admin/companies/[companyId]/template');
+    });
   });
 });

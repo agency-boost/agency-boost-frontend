@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
@@ -42,6 +42,10 @@ function render(me = OWNER, body: unknown = PIPELINES) {
   return stub;
 }
 
+/** The handle does both jobs now — the ↑↓ buttons it replaced were the old keyboard path. */
+const handleFor = (label: string) =>
+  screen.getByRole('button', { name: new RegExp(`^Reorder ${label}`) });
+
 describe('the office lead pipelines (P4-T3)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -83,7 +87,7 @@ describe('the office lead pipelines (P4-T3)', () => {
     await screen.findByText('Not yet approached');
     expect(screen.queryByText('Retired')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: 'Move Paid and issued up' }));
+    fireEvent.keyDown(handleFor('Paid and issued'), { key: 'ArrowUp' });
 
     const patch = calls.find((c) => c.init.method === 'PATCH')!;
     const { ids } = JSON.parse(patch.init.body as string);
@@ -117,9 +121,31 @@ describe('the office lead pipelines (P4-T3)', () => {
     expect(await screen.findAllByText('Closes the pipeline')).toHaveLength(1);
   });
 
-  it('shows the code beside every stage, because a lead holds the code', async () => {
-    render();
-    expect(await screen.findByText('PAID_AND_ISSUED')).toBeInTheDocument();
+  describe('where the code is shown (P4-T24, parity I-64)', () => {
+    it('keeps codes out of the ladder by default', async () => {
+      render();
+      await screen.findByText('Paid and issued');
+
+      expect(screen.queryByText('PAID_AND_ISSUED')).not.toBeInTheDocument();
+    });
+
+    it('brings them back under Show codes', async () => {
+      render();
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'Show codes' }));
+
+      expect(screen.getByText('PAID_AND_ISSUED')).toBeInTheDocument();
+    });
+
+    it('shows the code, not editable, inside the edit panel', async () => {
+      // A lead holds the code, so it is the thing a reader needs while renaming a stage —
+      // and the thing they must not be able to change.
+      render();
+      await screen.findByText('Paid and issued');
+      await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+
+      expect(screen.getByText('Code')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Code')).not.toBeInTheDocument();
+    });
   });
 
   it('will not archive the stage that closes a pipeline', async () => {
@@ -142,7 +168,8 @@ describe('the office lead pipelines (P4-T3)', () => {
 
   it('sends the whole pipeline when a stage moves, and only that pipeline', async () => {
     const { calls } = render();
-    await userEvent.click(await screen.findByRole('button', { name: 'Move Follow-up up' }));
+    await screen.findByText('Follow-up');
+    fireEvent.keyDown(handleFor('Follow-up'), { key: 'ArrowUp' });
 
     const call = calls.find((c) => c.url.includes('/reorder'))!;
     expect(JSON.parse(call.init.body as string)).toEqual({

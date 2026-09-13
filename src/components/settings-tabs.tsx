@@ -20,6 +20,8 @@ export function SettingsTabs({
   tabs,
   onSelect,
   activeHref,
+  label = 'Activity settings',
+  variant = 'tabs',
 }: {
   tabs: { label: string; href: string }[];
   /**
@@ -32,11 +34,37 @@ export function SettingsTabs({
    */
   onSelect?: (href: string) => void;
   activeHref?: string;
+  /**
+   * The row's accessible name.
+   *
+   * Two rows of tabs on one screen — an item and its halves — are two `<nav>`s, and two
+   * landmarks with the same name is a landmark a screen-reader user cannot tell apart.
+   */
+  label?: string;
+  /**
+   * Whether this row is the item or the half.
+   *
+   * Two underlined rows stacked on one screen read as two peers, and on the Super Admin's
+   * template screen they also read as a bug: the Owner's nav item is *Activity types* and
+   * so is the first of its two halves, so the same word sat twice, both underlined amber,
+   * with nothing saying one contained the other. Faithful to the prototype and still
+   * wrong on screen.
+   *
+   * Subtabs are pills instead — subordinate at a glance, and the shape the client asked
+   * for when they said the subtab belongs under the tab.
+   */
+  variant?: 'tabs' | 'subtabs';
 }) {
   const pathname = usePathname();
+  const subtabs = variant === 'subtabs';
 
   return (
-    <nav className="mb-4 flex flex-wrap gap-1 border-b border-hairline" aria-label="Activity settings">
+    <nav
+      className={subtabs
+        ? 'mb-4 flex flex-wrap gap-1'
+        : 'mb-4 flex flex-wrap gap-1 border-b border-hairline'}
+      aria-label={label}
+    >
       {tabs.map((tab) => {
         const active = (activeHref ?? pathname) === tab.href;
         return (
@@ -48,11 +76,13 @@ export function SettingsTabs({
               event.preventDefault();
               onSelect(tab.href);
             })}
-            className={
-              active
-                ? 'border-b-2 border-amber px-3 py-2 text-md font-semibold text-navy'
-                : 'border-b-2 border-transparent px-3 py-2 text-md text-muted hover:text-navy'
-            }
+            className={[
+              subtabs ? 'rounded-full px-3 py-1 text-sm' : 'border-b-2 px-3 py-2 text-md',
+              active && subtabs ? 'bg-amber font-semibold text-navy' : '',
+              active && !subtabs ? 'border-amber font-semibold text-navy' : '',
+              !active && subtabs ? 'text-muted hover:bg-base hover:text-navy' : '',
+              !active && !subtabs ? 'border-transparent text-muted hover:text-navy' : '',
+            ].filter(Boolean).join(' ')}
           >
             {tab.label}
           </Link>

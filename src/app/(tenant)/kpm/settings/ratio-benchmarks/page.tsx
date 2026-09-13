@@ -1,15 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Page } from '@/components/page';
-import { PublishBar } from '@/components/publish-bar';
-import { StagedChangesBar } from '@/components/staged-changes-bar';
-import { ACTIVITY_SETTINGS_TABS, SettingsTabs } from '@/components/settings-tabs';
-import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import { SettingsScreen, TenantConfigBars } from '@/components/settings-screen';
+import { ACTIVITY_SETTINGS_TABS } from '@/components/settings-tabs';
+import { Button, Card, Field, Select, TextInput } from '@/components/ui/field';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
+import { projectStaged, unstageRow, STAGED_LABEL } from '@/lib/staged-projection';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import {
   applyConfigChanges,
@@ -74,6 +73,7 @@ export default function RatioBenchmarksPage() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  const [draftLabel, setDraftLabel] = useState('');
   // The company's ladder, for the applicability control. It is the company's to define
   // (ADR-0012), so this reads it and never offers to change it.
   const { ladder, config } = useTenantConfig();
@@ -89,6 +89,10 @@ export default function RatioBenchmarksPage() {
   const [showCodes, setShowCodes] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [showPublished, setShowPublished] = useState(false);
+  /** The two sides of the formula, while a row is open for editing. */
+  const [sides, setSides] = useState<{ numerator: string[]; denominator: string[] }>({
+    numerator: [], denominator: [],
+  });
   const blank = {
     code: '', label: '', numerator: [] as string[], denominator: [] as string[],
     benchmark: '', comparison: 'gte' as RatioComparison,
@@ -140,6 +144,21 @@ export default function RatioBenchmarksPage() {
   /** What the published copy says, for the panel that shows it beside the working one. */
   const publishedRatios = config?.ratios ?? [];
 
+  /*
+   * The rows as they will be, not as the office still has them.
+   *
+   * Only edits are held here — a new ratio and an archive are written immediately — and an
+   * edit was the one that showed nowhere: the panel staged a benchmark and closed, and the
+   * card below went on rendering the row `load()` had fetched. Reported three times as
+   * *"edit Ratio di owner masih belum bisa"*, when what was broken was the evidence.
+   */
+  const projected = projectStaged(ratios ?? [], staged, { entity: 'ratio' });
+  // A row held for archive stays on screen even when archived rows are hidden: it has
+  // not happened yet, and hiding it takes the Undo away with it.
+  const visible = projected.filter(
+    ({ row, staged: mark }) => showArchived || row.status === 'active' || mark,
+  );
+
   /**
    * A code's label, or `null` when the office has none for it.
    *
@@ -165,45 +184,56 @@ export default function RatioBenchmarksPage() {
         .join(' · '));
 
   return (
-    <Page
+    <SettingsScreen
       title="Ratio benchmarks"
       subtitle="What each ratio counts, and what counts as on track."
       permission="tenant_config:read"
+      tabs={ACTIVITY_SETTINGS_TABS}
+      error={error}
+      /*
+       * The two bars are adjacent now. They were separated by this screen's hint and its
+       * two checkboxes, which put the staged-changes count off-screen for every row below
+       * the first — so an Owner edited a benchmark, pressed Save, saw the old number and
+       * the only evidence of the edit scrolled out of view, and reported three times that
+       * editing ratios did not work.
+       */
+      bars={(
+        <TenantConfigBars
+          publishRefreshKey={published}
+          staged={{
+            count: staged.length,
+            busy,
+            onSave: () => void save(),
+            onDiscard: () => setStaged([]),
+          }}
+        />
+      )}
+      toolbar={{
+        /* The prototype's own hint, and the window is the one thing the cards cannot say:
+           every ratio here is computed over the last 30 days, fixed (ADR-0022). */
+        hint: 'Calculated on the last 30 days of activity.',
+        actions: (
+          <>
+            <label className="flex items-center gap-2 text-md text-navy">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+              Show archived
+            </label>
+            <label className="flex items-center gap-2 text-md text-navy">
+              <input
+                type="checkbox"
+                checked={showCodes}
+                onChange={(e) => setShowCodes(e.target.checked)}
+              />
+              Show codes
+            </label>
+          </>
+        ),
+      }}
     >
-      <SettingsTabs tabs={ACTIVITY_SETTINGS_TABS} />
-      {error && <ErrorBanner {...error} />}
-      <PublishBar refreshKey={published} />
-
-      {/* The prototype's own hint, and the window is the one thing the cards cannot say:
-          every ratio here is computed over the last 30 days, fixed (ADR-0022). */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted">Calculated on the last 30 days of activity.</p>
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 text-md text-navy">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />
-            Show archived
-          </label>
-          <label className="flex items-center gap-2 text-md text-navy">
-            <input
-              type="checkbox"
-              checked={showCodes}
-              onChange={(e) => setShowCodes(e.target.checked)}
-            />
-            Show codes
-          </label>
-        </div>
-      </div>
-
-      <StagedChangesBar
-        count={staged.length}
-        busy={busy}
-        onSave={() => void save()}
-        onDiscard={() => setStaged([])}
-      />
 
       <div className="mb-4">
         <Button variant="secondary" onClick={() => setShowPublished((v) => !v)}>
@@ -365,7 +395,7 @@ export default function RatioBenchmarksPage() {
         <SkeletonCards count={5} />
       ) : (
         <div className="flex flex-col gap-4">
-          {ratios.filter((r) => showArchived || r.status === 'active').length === 0 && (
+          {visible.length === 0 && (
             <EmptyState
               title={showArchived ? 'No ratios yet' : 'Every ratio is archived'}
               variant={showArchived ? 'empty' : 'filtered'}
@@ -376,8 +406,8 @@ export default function RatioBenchmarksPage() {
               ) : undefined}
             />
           )}
-          {ratios.filter((r) => showArchived || r.status === 'active').map((ratio) => (
-            <Card key={ratio.id}>
+          {visible.map(({ row: ratio, staged: mark }) => (
+            <Card key={ratio.id} className={mark ? 'border-amber' : undefined}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="font-display text-lg font-bold text-navy">
                   {ratio.label}
@@ -385,14 +415,36 @@ export default function RatioBenchmarksPage() {
                     <span className="ml-2 text-sm font-normal text-muted">archived</span>
                   )}
                 </h2>
-                {showCodes && <code className="text-sm text-muted">{ratio.code}</code>}
+                {/* One cell, so the heading stays hard left however many of these show. */}
+                <span className="flex items-center gap-3">
+                  {mark && (
+                    <>
+                      <span className="rounded-full bg-amber/20 px-2 py-0.5 text-sm text-navy">
+                        {STAGED_LABEL[mark]}
+                      </span>
+                      {/* Undo belongs on the row, not only in the bar: the bar discards
+                          every staged change at once, which is not what a reader who
+                          mistyped one benchmark is asking for. */}
+                      <button
+                        type="button"
+                        className="text-sm font-semibold text-navy underline"
+                        onClick={() => setStaged((now) => unstageRow(now, 'ratio', ratio.id))}
+                      >
+                        Undo
+                      </button>
+                    </>
+                  )}
+                  {showCodes && <code className="text-sm text-muted">{ratio.code}</code>}
+                </span>
               </div>
 
               <p className="mt-1 text-sm text-muted">
                 {ratio.origin === 'platform'
                   ? 'Measured the same way in every office, so its formula is fixed. The '
                     + 'benchmark, the name and who it applies to are yours.'
-                  : 'Your office’s own. Everything about it is yours to change.'}
+                  : 'Your office’s own — the name, what it counts, the benchmark and who '
+                    + 'it applies to are all yours. It is compared with nobody outside this '
+                    + 'office, which is what makes that safe.'}
               </p>
 
               {/*
@@ -505,6 +557,63 @@ export default function RatioBenchmarksPage() {
               <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-hairline pt-3">
                 {editing === ratio.id ? (
                   <>
+                    {ratio.origin === 'office' ? (
+                      <div className="flex w-full flex-wrap gap-4">
+                        {([['Counts', 'numerator'], ['Out of', 'denominator']] as const)
+                          .map(([heading, side]) => (
+                            <fieldset key={side} className="min-w-0 flex-1">
+                              <legend className="text-sm font-semibold text-navy">{heading}</legend>
+                              <ul className="mt-1 flex flex-wrap gap-3">
+                                {taxonomy
+                                  .flatMap((c) => c.types)
+                                  .filter((t) => t.status === 'active')
+                                  .map((type) => (
+                                    <li key={type.code}>
+                                      <label className="flex items-center gap-1.5 text-md text-navy">
+                                        <input
+                                          type="checkbox"
+                                          checked={sides[side].includes(type.code)}
+                                          onChange={(e) => setSides((now) => ({
+                                            ...now,
+                                            [side]: e.target.checked
+                                              ? [...now[side], type.code]
+                                              : now[side].filter((c) => c !== type.code),
+                                          }))}
+                                        />
+                                        {type.label}
+                                      </label>
+                                    </li>
+                                  ))}
+                              </ul>
+                            </fieldset>
+                          ))}
+                      </div>
+                    ) : (
+                      /*
+                       * Said, not silently absent. The control used to be a separate button
+                       * that appeared only on an office's own ratio — so on a freshly
+                       * provisioned office, where all five are the platform's, the feature
+                       * was invisible and looked missing rather than withheld.
+                       */
+                      <p className="w-full text-sm text-muted">
+                        <strong>What this counts is fixed.</strong> It is one of the ratios
+                        every office of your company measures the same way, which is what
+                        lets your figures sit beside theirs. To count something else, add a
+                        ratio of your own.
+                      </p>
+                    )}
+                    {/* The name too. It was read-only on every card, which made the
+                        office-ratio copy — *"the name… is yours"* — false for the one
+                        field a reader would try first. An office may rename a platform
+                        ratio as well: the code is the identity, the label is what their
+                        people call it (invariant §4). */}
+                    <Field label="Name" htmlFor={`label-${ratio.id}`} className="min-w-60 flex-1">
+                      <TextInput
+                        id={`label-${ratio.id}`}
+                        value={draftLabel}
+                        onChange={(e) => setDraftLabel(e.target.value)}
+                      />
+                    </Field>
                     <Field
                       label="Benchmark"
                       htmlFor={`benchmark-${ratio.id}`}
@@ -522,13 +631,27 @@ export default function RatioBenchmarksPage() {
                       />
                     </Field>
                     <Button
-                      disabled={busy || draft.trim() === '' || Number.isNaN(Number(draft))}
+                      disabled={busy
+                        || draft.trim() === ''
+                        || Number.isNaN(Number(draft))
+                        || draftLabel.trim() === ''
+                        || (ratio.origin === 'office'
+                          && (sides.numerator.length === 0 || sides.denominator.length === 0))}
                       onClick={() => {
                         stage({
                           op: 'ratio.update',
                           id: ratio.id,
                           expectedVersion: ratio.version,
-                          body: { benchmark: Number(draft) },
+                          body: {
+                            label: draftLabel.trim(),
+                            benchmark: Number(draft),
+                            // Only where it is theirs to send. A platform ratio carrying a
+                            // formula in its patch is refused outright (ADR-0021), which
+                            // would lose the name and benchmark with it.
+                            ...(ratio.origin === 'office'
+                              ? { numerator: sides.numerator, denominator: sides.denominator }
+                              : {}),
+                          },
                         });
                         setEditing(null);
                       }}
@@ -553,13 +676,18 @@ export default function RatioBenchmarksPage() {
                           onClick={() => {
                             setEditing(ratio.id);
                             setDraft(String(ratio.benchmark));
+                            setDraftLabel(ratio.label);
+                            setSides({
+                              numerator: ratio.numerator,
+                              denominator: ratio.denominator,
+                            });
                           }}
                         >
-                          Change the benchmark
+                          Edit
                         </Button>
                         {ratio.status === 'active' ? (
                           <Button
-                            variant="danger"
+                            variant="secondary"
                             disabled={busy}
                             onClick={() => void run(() => archiveRatio(ratio.id))}
                           >
@@ -583,6 +711,6 @@ export default function RatioBenchmarksPage() {
           ))}
         </div>
       )}
-    </Page>
+    </SettingsScreen>
   );
 }

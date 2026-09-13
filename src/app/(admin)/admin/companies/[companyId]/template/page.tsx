@@ -3,13 +3,12 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, use } from 'react';
 import { ComingInPhase } from '@/components/coming-in-phase';
-import { Page } from '@/components/page';
-import { SettingsTabs } from '@/components/settings-tabs';
+import { SettingsScreen } from '@/components/settings-screen';
 import {
   PipelineEditor, RatioSetEditor, TaxonomyEditor,
   type PipelinePayload, type RatioSetPayload, type TaxonomyPayload,
 } from '@/components/template-editor';
-import { Button, Card, ErrorBanner } from '@/components/ui/field';
+import { Button, Card } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
@@ -58,6 +57,13 @@ export default function CompanyTemplatePage({
 }) {
   const { companyId } = use(params);
   const [tab, setTab] = useState(TABS[0]);
+  /** A tab the reader asked for while holding unsaved edits. `null` the rest of the time. */
+  const [pendingTab, setPendingTab] = useState<typeof TABS[number] | null>(null);
+
+  /** One entry per Owner Settings **item** — the top row. */
+  const GROUPS = TABS.filter((t) => (t.under ?? t.key) === t.key);
+  /** The halves of the item in view. More than one means a second row of tabs. */
+  const siblings = TABS.filter((t) => (t.under ?? t.key) === (tab.under ?? tab.key));
   /**
    * The loaded template and **which kind it is**, in one piece of state.
    *
@@ -79,6 +85,17 @@ export default function CompanyTemplatePage({
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  /*
+   * The activity codes a ratio may be built from, read from this company's own taxonomy
+   * template — the draft if there is one, because that is what the Super Admin is looking
+   * at on the tab next door and what they will publish alongside it.
+   *
+   * Publishing checks the **published** taxonomy, so a ratio built here against an
+   * unpublished type is refused until the taxonomy goes out with it. Offering only
+   * published codes would be the other mistake: it would make the two tabs impossible to
+   * fill in one sitting.
+   */
+  const [available, setAvailable] = useState<{ code: string; label: string }[]>([]);
 
   /**
    * The kind most recently asked for.
@@ -111,6 +128,18 @@ export default function CompanyTemplatePage({
     if (tab.kind) void load(tab.kind);
   }, [tab, load]);
 
+  useEffect(() => {
+    if (tab.kind !== 'ratio_set') return;
+    void readTemplate(companyId, 'activity_taxonomy')
+      .then((row) => {
+        const { types } = row.payload as { types?: { code: string; label: string }[] };
+        setAvailable(types ?? []);
+      })
+      // A ratio editor with no code list is still usable — it just cannot offer names.
+      // Failing the whole tab over it would be worse than showing codes alone.
+      .catch(() => setAvailable([]));
+  }, [companyId, tab.kind]);
+
   async function run(action: () => Promise<CompanyTemplate>) {
     setBusy(true);
     setError(null);
@@ -134,7 +163,7 @@ export default function CompanyTemplatePage({
   const current = loaded?.kind === tab.kind ? loaded : null;
 
   return (
-    <Page
+    <SettingsScreen
       title="Company template"
       subtitle="What every new office of this company starts life with."
       permission="company_template:read"
@@ -143,14 +172,66 @@ export default function CompanyTemplatePage({
           Back to companies
         </Link>
       )}
+      /*
+       * Two rows, because an Owner Settings **item** split across routes is one item with
+       * subtabs — ADR-0018's own table, and the Owner's own screen. The shell fixes where
+       * they sit; `variant="subtabs"` fixes what they look like, which mattered here more
+       * than anywhere: the group is *Activity types* and so is the first of its halves, so
+       * the same word sat in two identically-underlined rows.
+       */
+      tabsLabel="Template sections"
+      tabs={GROUPS.map((g) => ({ label: g.label, href: `#${g.key}` }))}
+      activeHref={`#${tab.under ?? tab.key}`}
+      /*
+       * Unsaved edits are named before they are lost.
+       *
+       * Switching tabs reloads, and `load` resets `dirty` — so a draft somebody had typed
+       * vanished with nothing said. `dirty` was already tracked and already gated both
+       * buttons; the one place it was not consulted was the one place a change could
+       * disappear.
+       */
+      onSelectTab={(href) => {
+        // The first tab of the group, so opening `Activity types` lands on its own half.
+        const next = TABS.find((t) => `#${t.under ?? t.key}` === href) ?? TABS[0];
+        if (next.key === tab.key) return;
+        if (dirty) { setPendingTab(next); return; }
+        setTab(next);
+      }}
+      subtabs={siblings.length > 1
+        ? siblings.map((t) => ({ label: t.label, href: `#${t.key}` }))
+        : undefined}
+      subtabsLabel={`${tab.under
+        ? GROUPS.find((g) => g.key === tab.under)?.label
+        : tab.label} sections`}
+      activeSubtab={`#${tab.key}`}
+      onSelectSubtab={(href) => {
+        const next = TABS.find((t) => `#${t.key}` === href) ?? tab;
+        if (next.key === tab.key) return;
+        if (dirty) { setPendingTab(next); return; }
+        setTab(next);
+      }}
+      error={error}
     >
-      {error && <ErrorBanner {...error} />}
+      {pendingTab && (
+        <div role="alert" className="mb-4 rounded-md border border-amber bg-card p-4">
+          <p className="text-md text-navy">
+            <strong>You have edits here that are not saved.</strong>{' '}
+            <span className="text-muted">
+              Opening {pendingTab.label} discards them — a draft lives on one tab at a time.
+            </span>
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => { const next = pendingTab; setPendingTab(null); setTab(next); }}
+            >
+              Discard and open {pendingTab.label}
+            </Button>
+            <Button onClick={() => setPendingTab(null)}>Stay here</Button>
+          </div>
+        </div>
+      )}
 
-      <SettingsTabs
-        tabs={TABS.map((t) => ({ label: t.label, href: `#${t.key}` }))}
-        onSelect={(href) => setTab(TABS.find((t) => `#${t.key}` === href) ?? TABS[0])}
-        activeHref={`#${tab.key}`}
-      />
 
       {tab.kind === null ? (
         <ComingInPhase
@@ -249,6 +330,7 @@ export default function CompanyTemplatePage({
                 return (
                   <RatioSetEditor
                     payload={current.payload as unknown as RatioSetPayload}
+                    available={available}
                     disabled={busy}
                     onChange={(next) => change(next as unknown as Record<string, unknown>)}
                   />
@@ -266,6 +348,6 @@ export default function CompanyTemplatePage({
           })()}
         </>
       )}
-    </Page>
+    </SettingsScreen>
   );
 }

@@ -119,7 +119,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
      * walked through states the publish gate only ever hid from *agents*.
      */
     const { calls } = render();
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Change the benchmark' }))[0]);
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
     const input = screen.getByLabelText('Benchmark');
     await userEvent.clear(input);
     await userEvent.type(input, '0.25');
@@ -133,14 +133,62 @@ describe('the office ratio benchmarks (P4-T2)', () => {
 
     const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
     expect(JSON.parse(post.init.body as string).ops).toEqual([{
-      op: 'ratio.update', id: 'r1', expectedVersion: 1, body: { benchmark: 0.25 },
+      op: 'ratio.update',
+      id: 'r1',
+      expectedVersion: 1,
+      // The name rides along: one panel, one change. It was read-only until P4-T23, which
+      // made the office-ratio card's "the name is yours" false for the first field a
+      // reader would try.
+      body: { label: 'Selling success rate', benchmark: 0.25 },
     }]);
+  });
+
+  it('shows the staged benchmark on the card, not the one the office still has', async () => {
+    /*
+     * The defect the client reported three times as *"edit Ratio di owner masih belum
+     * bisa"*. Editing was never blocked: the panel opened, Save was enabled, and the
+     * change was staged correctly — the test above proves all of it by reading the request
+     * body. What no test read was the card, which went on rendering the row `load()` had
+     * fetched, so the reader typed 0.25, pressed Save, and 0.15 was still on screen.
+     *
+     * Asserted on the row rather than on the staged count: the count was already right.
+     */
+    render();
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
+    const input = screen.getByLabelText('Benchmark');
+    await userEvent.clear(input);
+    await userEvent.type(input, '0.25');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const card = screen.getByRole('heading', { name: /Selling success rate/ }).closest('div')!
+      .parentElement!;
+    expect(within(card).getByText('0.25')).toBeInTheDocument();
+    expect(within(card).queryByText('0.15')).not.toBeInTheDocument();
+    expect(within(card).getByText('Edited — not saved yet')).toBeInTheDocument();
+  });
+
+  it('takes one row’s edit back without discarding the others', async () => {
+    // *Discard them* drops every staged change, which is not what a reader who mistyped
+    // one benchmark is asking for.
+    render();
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
+    const input = screen.getByLabelText('Benchmark');
+    await userEvent.clear(input);
+    await userEvent.type(input, '0.25');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+
+    expect(screen.queryByText(/not saved yet/)).not.toBeInTheDocument();
+    const card = screen.getByRole('heading', { name: /Selling success rate/ }).closest('div')!
+      .parentElement!;
+    expect(within(card).getByText('0.15')).toBeInTheDocument();
   });
 
   it('collapses repeated edits to one row into a single change', async () => {
     const { calls } = render();
     for (const value of ['0.2', '0.3']) {
-      await userEvent.click((await screen.findAllByRole('button', { name: 'Change the benchmark' }))[0]);
+      await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
       const input = screen.getByLabelText('Benchmark');
       await userEvent.clear(input);
       await userEvent.type(input, value);
@@ -157,7 +205,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
 
   it('discards staged edits without sending them', async () => {
     const { calls } = render();
-    await userEvent.click((await screen.findAllByRole('button', { name: 'Change the benchmark' }))[0]);
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
     await userEvent.clear(screen.getByLabelText('Benchmark'));
     await userEvent.type(screen.getByLabelText('Benchmark'), '0.25');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -170,7 +218,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
   it('shows an agent the ratios and none of the controls', async () => {
     render(AGENT);
     expect(await screen.findByText('Selling success rate')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Change the benchmark' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull();
   });
 
@@ -269,6 +317,59 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       expect(screen.queryByRole('button', { name: 'Add a ratio' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Change who it applies to' }))
         .not.toBeInTheDocument();
+    });
+  });
+
+  describe('editing what a ratio counts (P4-T22)', () => {
+    it('opens inside Edit on an office ratio, and says why it is absent on a platform one', async () => {
+      /*
+       * It was a second button that appeared only on an office's own ratio — so on a
+       * freshly provisioned office, where all five are the platform's, the feature was
+       * invisible and read as missing rather than withheld. One Edit, and the five say
+       * what is fixed about them.
+       */
+      render();
+      const own = (await screen.findByRole('heading', { name: 'Referral rate' }))
+        .closest('div')!.parentElement!;
+      await userEvent.click(within(own).getByRole('button', { name: 'Edit' }));
+      expect(within(own).getByRole('group', { name: 'Counts' })).toBeInTheDocument();
+
+      const platform = screen.getByRole('heading', { name: 'Selling success rate' })
+        .closest('div')!.parentElement!;
+      await userEvent.click(within(platform).getByRole('button', { name: 'Edit' }));
+      expect(within(platform).queryByRole('group', { name: 'Counts' })).not.toBeInTheDocument();
+      expect(within(platform).getByText(/What this counts is fixed/)).toBeInTheDocument();
+    });
+
+    it('stages both sides together, because a ratio is one division', async () => {
+      const { calls } = render();
+      const own = (await screen.findByRole('heading', { name: 'Referral rate' }))
+        .closest('div')!.parentElement!;
+      await userEvent.click(within(own).getByRole('button', { name: 'Edit' }));
+
+      const counts = within(own).getByRole('group', { name: 'Counts' });
+      await userEvent.click(within(counts).getByLabelText('Presentasi penjualan'));
+      await userEvent.click(within(own).getByRole('button', { name: 'Save' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
+      const [op] = JSON.parse(post.init.body as string).ops;
+      expect(op).toMatchObject({ op: 'ratio.update', id: 'r3' });
+      expect(op.body.numerator).toContain('SELL_PRESENTATION');
+      expect(op.body.denominator).toEqual(['SELL_PRESENTATION']);
+    });
+
+    it('refuses to save a side with nothing in it', async () => {
+      // An empty denominator is a division by zero, and it renders as ∞ on every agent's
+      // screen. The server refuses it too — this is the convenience, not the gate.
+      render();
+      const own = (await screen.findByRole('heading', { name: 'Referral rate' }))
+        .closest('div')!.parentElement!;
+      await userEvent.click(within(own).getByRole('button', { name: 'Edit' }));
+
+      const outOf = within(own).getByRole('group', { name: 'Out of' });
+      await userEvent.click(within(outOf).getByLabelText('Presentasi penjualan'));
+      expect(within(own).getByRole('button', { name: 'Save' })).toBeDisabled();
     });
   });
 });

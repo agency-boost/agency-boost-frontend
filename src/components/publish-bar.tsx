@@ -22,18 +22,49 @@ import { publishConfig, readPublishState, type PublishState } from '@/lib/tenant
 export function PublishBar({ refreshKey }: { refreshKey?: number }) {
   const canPublish = useCan('tenant_config:write');
   const [state, setState] = useState<PublishState | null>(null);
+  /*
+   * Two failures, two states. They are not the same thing: one means *I cannot tell you
+   * what your agents are seeing*, the other means *your change did not go out* — and they
+   * recover differently. Sharing one field is what let the first hide behind the early
+   * return below.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setState(await readPublishState());
+      setLoadError(null);
     } catch (err) {
-      setError(toDisplayError(err));
+      setLoadError(toDisplayError(err));
     }
   }, []);
 
   useEffect(() => { void load(); }, [load, refreshKey]);
+
+  /*
+   * The error is rendered **before** the early return.
+   *
+   * `!state?.hasUnpublishedChanges` is true both when there is nothing to publish and
+   * when the read failed — `state` stays null on a failure — so the component returned
+   * `null` and the error it had just set was never shown. An Owner whose publish state
+   * could not be read saw a screen that looked entirely normal and had no way to learn
+   * the gate existed.
+   */
+  if (loadError) {
+    return (
+      <div role="alert" className="mb-4 rounded-md border border-alert bg-card p-3">
+        <p className="text-md text-navy">
+          <strong>Could not check what your agents are seeing.</strong>{' '}
+          <span className="text-muted">{loadError.message}</span>
+        </p>
+        <Button variant="secondary" className="mt-2" onClick={() => { setLoadError(null); void load(); }}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
 
   if (!state?.hasUnpublishedChanges) return null;
 

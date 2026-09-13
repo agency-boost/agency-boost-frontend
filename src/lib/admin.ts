@@ -308,8 +308,6 @@ export interface CompanyTemplate {
 export const readTemplate = (companyId: string, kind: TemplateKind) =>
   api<CompanyTemplate>(`/admin/companies/${companyId}/template/${kind}`);
 
-export const readTemplateHistory = (companyId: string, kind: TemplateKind) =>
-  api<CompanyTemplate[]>(`/admin/companies/${companyId}/template/${kind}/history`);
 
 /** The whole payload, not a patch — see the DTO for why. */
 export const saveTemplateDraft = (

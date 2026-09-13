@@ -72,4 +72,24 @@ describe('the publish bar (P4-T6)', () => {
     expect(await screen.findByText(/not seeing these changes yet/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Publish to agents' })).toBeNull();
   });
+
+  it('says so when it cannot read the publish state, instead of vanishing', async () => {
+    /*
+     * `!state?.hasUnpublishedChanges` is true both when there is nothing to publish and
+     * when the read failed — `state` stays null on a failure — so the component returned
+     * `null` and the error it had just set was never rendered. An Owner whose publish
+     * state could not be read saw a screen that looked entirely normal.
+     */
+    stubFetch({
+      '/kpm/settings/publish-state': {
+        status: 500,
+        body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-9' } },
+      },
+    });
+    renderWithSession(<PublishBar />, { me: OWNER });
+
+    expect(await screen.findByRole('alert'))
+      .toHaveTextContent('Could not check what your agents are seeing');
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+  });
 });

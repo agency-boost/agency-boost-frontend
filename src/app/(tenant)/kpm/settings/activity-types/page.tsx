@@ -1,17 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Page } from '@/components/page';
-import { PublishBar } from '@/components/publish-bar';
-import { StagedChangesBar } from '@/components/staged-changes-bar';
-import { ACTIVITY_SETTINGS_TABS, SettingsTabs } from '@/components/settings-tabs';
+import { SettingsScreen, TenantConfigBars } from '@/components/settings-screen';
+import { DragHandle } from '@/components/ui/drag-handle';
+import { ACTIVITY_SETTINGS_TABS } from '@/components/settings-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
-  Button, Card, ErrorBanner, Field, ReadOnlyField, TextInput,
+  Button, Card, Field, ReadOnlyField, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
+import { projectStaged, unstageRow, STAGED_LABEL } from '@/lib/staged-projection';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import {
   applyConfigChanges,
@@ -55,6 +55,23 @@ export default function ActivityTypesPage() {
   const { ladder } = useTenantConfig();
   const [scoping, setScoping] = useState<string | null>(null);
   const [rungs, setRungs] = useState<string[]>([]);
+  /*
+   * Renaming a section (P4-T24). The op and the batch both accepted `label` and
+   * `description` from the day the endpoint landed; the screen offered no control, so a
+   * section could be created with a typo and never corrected. The code is untouched by
+   * this — that is the identity, and invariant §4 is why.
+   */
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [sectionDraft, setSectionDraft] = useState({ label: '', description: '' });
+  /*
+   * Codes off the list by default (P4-T24).
+   *
+   * `SELL_SUBMISSION` under every one of twelve rows is noise to the Owner who reads this
+   * screen weekly, and the identity is still reachable: the edit panel always shows it,
+   * and this toggle brings it back for template work and for support tickets. The same
+   * control, defaulted the same way, as the ratio screen.
+   */
+  const [showCodes, setShowCodes] = useState(false);
   const [addingSection, setAddingSection] = useState(false);
   const [section, setSection] = useState({ code: '', label: '', description: '' });
   // Native HTML5 drag, the way the frozen prototype does it
@@ -132,6 +149,19 @@ export default function ActivityTypesPage() {
   // Every type in the office, archived included: this is the list a reorder must name.
   const flat = (categories ?? []).flatMap((c) => c.types);
 
+  /** Move a section by one, skipping any the reader cannot see. The handle's ↑↓ path. */
+  function moveSection(id: string, by: -1 | 1) {
+    const all = categories ?? [];
+    const order = all.map((c) => c.id);
+    const at = order.indexOf(id);
+    const visible = new Set(all.filter((c) => showArchived || c.status === 'active').map((c) => c.id));
+    let to = at + by;
+    while (to >= 0 && to < order.length && !visible.has(order[to])) to += by;
+    if (at < 0 || to < 0 || to >= order.length) return;
+    [order[at], order[to]] = [order[to], order[at]];
+    void run(`move-section:${id}`, () => reorderActivityCategories(order));
+  }
+
   /** Hold an edit instead of sending it. Two ops on one row collapse into the later one. */
   const stage = (change: ConfigChange) => setStaged((now) => stageChange(now, change));
 
@@ -186,50 +216,107 @@ export default function ActivityTypesPage() {
       ? 'Everyone'
       : codes.map((c) => ladder.find((l) => l.code === c)?.label ?? c).join(' · '));
 
-  /** The rows in view, in order — what the ↑↓ edges are about. */
-  const visibleFlat = flat.filter((t) => showArchived || t.status === 'active');
-
-  /** What the reader sees, which is a subset of what a reorder sends. */
-  const shown = (categories ?? []).map((c) => ({
-    ...c,
-    types: showArchived ? c.types : c.types.filter((t) => t.status === 'active'),
+  /*
+   * What the reader sees: a subset of what a reorder sends, and — since P4-T19 — the rows
+   * as they *will* be rather than as the office still has them.
+   *
+   * Every one of this screen's eight operations was staged and none of them showed:
+   * archiving five types changed nothing on screen, and adding one drew no row at all. The
+   * only evidence was a count in a bar. See `lib/staged-projection.ts`.
+   */
+  const shown = projectStaged(categories ?? [], staged, {
+    entity: 'category',
+    create: (body, id) => ({
+      id,
+      code: String(body.code ?? ''),
+      label: String(body.label ?? ''),
+      description: body.description ? String(body.description) : null,
+      appliesToOrgLevelCodes: [],
+      displayOrder: (categories?.length ?? 0) + 1,
+      version: 0,
+      status: 'active' as const,
+      types: [],
+    }),
+  }).map(({ row: category, staged: mark }) => ({
+    ...category,
+    staged: mark,
+    types: projectStaged(
+      category.types,
+      // A new type belongs to the one section it named. Without this filter every section
+      // would sprout its own copy of it.
+      staged.filter((c) => c.op !== 'type.create' || c.body?.categoryCode === category.code),
+      {
+        entity: 'type',
+        create: (body, id) => ({
+          id,
+          code: String(body.code ?? ''),
+          categoryCode: category.code,
+          label: String(body.label ?? ''),
+          description: body.description ? String(body.description) : null,
+          appliesToOrgLevelCodes: [],
+          displayOrder: category.types.length + 1,
+          version: 0,
+          status: 'active' as const,
+        }),
+      },
+    // A row held for archive stays on screen even when archived rows are hidden: it has
+    // not happened yet, and hiding it takes the Undo away with it.
+    ).filter(({ row, staged: mark }) => showArchived || row.status === 'active' || mark),
   }));
 
   return (
-    <Page
+    <SettingsScreen
       title="Activity types"
       subtitle="What this office counts. Agents see these on Log Activity, in this order."
       permission="tenant_config:read"
+      tabs={ACTIVITY_SETTINGS_TABS}
+      error={error}
+      bars={(
+        <TenantConfigBars
+          publishRefreshKey={published}
+          staged={{
+            count: staged.length,
+            busy: busy !== null,
+            onSave: () => void saveStaged(),
+            onDiscard: () => setStaged([]),
+          }}
+        />
+      )}
+      toolbar={{
+        /* `config-toolbar`'s hint: the prototype leads every settings screen with a count
+           sentence, and it is the fastest way to see that a taxonomy is complete. */
+        /* Counted off the projection, so the sentence agrees with the cards under it.
+           Read from `categories` it described the office's saved taxonomy while the
+           screen showed the staged one. */
+        hint: categories === null
+          ? '\u00a0'
+          : `${shown.flatMap((c) => c.types).filter(({ row }) => row.status === 'active').length} `
+            + `activity types across ${shown.length} categories`,
+        /* Archiving is reversible by design (invariant §3) and Restore is one click away,
+           so the controls are not red and there is no confirmation: a confirm on a
+           reversible act teaches people to dismiss confirms. */
+        actions: (
+          <>
+            <label className="flex items-center gap-2 text-md text-navy">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+              Show archived
+            </label>
+            <label className="flex items-center gap-2 text-md text-navy">
+              <input
+                type="checkbox"
+                checked={showCodes}
+                onChange={(e) => setShowCodes(e.target.checked)}
+              />
+              Show codes
+            </label>
+          </>
+        ),
+      }}
     >
-      <SettingsTabs tabs={ACTIVITY_SETTINGS_TABS} />
-      {error && <ErrorBanner {...error} />}
-      <PublishBar refreshKey={published} />
-
-      <StagedChangesBar
-        count={staged.length}
-        busy={busy !== null}
-        onSave={() => void saveStaged()}
-        onDiscard={() => setStaged([])}
-      />
-
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        {/* `config-toolbar`'s hint: the prototype leads every settings screen with a count
-            sentence, and it is the fastest way to see that a taxonomy is complete. */}
-        <p className="text-sm text-muted">
-          {categories === null
-            ? '\u00a0'
-            : `${categories.flatMap((c) => c.types).filter((t) => t.status === 'active').length} `
-              + `activity types across ${categories.length} categories`}
-        </p>
-        <label className="flex items-center gap-2 text-md text-navy">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
-          />
-          Show archived
-        </label>
-      </div>
 
       {canWrite && categories !== null && (
         <Card className="mb-4">
@@ -324,21 +411,44 @@ export default function ActivityTypesPage() {
               onDragLeave={() => setOver((now) => (now === category.id ? null : now))}
               onDrop={(e) => { e.preventDefault(); drop(category.id); }}
             >
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
+              {/*
+                * `ml-auto` on the trailing group, not `justify-between` on the row.
+                *
+                * The prototype's `.acttype-card-head` has two children — heading left,
+                * count pill right. This had three, because the drag handle was put in the
+                * head, so `justify-between` spread them and the heading floated to the
+                * middle of the card. Worse, the handle is behind `canWrite`, so **where
+                * the heading sat depended on who was reading**. Pushing only the meta
+                * group right states the intent and is indifferent to how many controls
+                * precede it.
+                */}
+              <div className="flex flex-wrap items-baseline gap-2">
                 {canWrite && (
-                  <span
-                    draggable
-                    onDragStart={() => setDragging({ kind: 'section', id: category.id })}
-                    onDragEnd={() => { setDragging(null); setOver(null); }}
-                    aria-hidden
-                    className="cursor-grab select-none text-md text-muted"
-                  >
-                    ⠿
-                  </span>
+                  <DragHandle
+                    label={category.label}
+                    disabled={busy !== null}
+                    onPick={() => setDragging({ kind: 'section', id: category.id })}
+                    onDrop={() => { setDragging(null); setOver(null); }}
+                    onMove={(by) => moveSection(category.id, by)}
+                  />
                 )}
                 <h2 className="font-display text-lg font-bold text-navy">{category.label}</h2>
-                <span className="flex items-center gap-2">
-                  <code className="text-sm text-muted">{category.code}</code>
+                <span className="ml-auto flex items-center gap-2">
+                  {category.staged && (
+                    <>
+                      <span className="whitespace-nowrap rounded-full bg-amber/20 px-2 py-0.5 text-sm text-navy">
+                        {STAGED_LABEL[category.staged]}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-sm font-semibold text-navy underline"
+                        onClick={() => setStaged((now) => unstageRow(now, 'category', category.id))}
+                      >
+                        Undo
+                      </button>
+                    </>
+                  )}
+                  {showCodes && <code className="text-sm text-muted">{category.code}</code>}
                   <span className="whitespace-nowrap rounded-full border border-hairline bg-canvas px-2 py-0.5 text-sm font-semibold text-muted">
                     {category.types.length} {category.types.length === 1 ? 'item' : 'items'}
                   </span>
@@ -391,6 +501,54 @@ export default function ActivityTypesPage() {
                     </Button>
                     <Button variant="secondary" onClick={() => setScoping(null)}>Cancel</Button>
                   </>
+                ) : renaming === category.id ? (
+                  <>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
+                      <Field
+                        label="Name"
+                        htmlFor={`rename-${category.id}`}
+                        className="min-w-60 flex-1"
+                      >
+                        <TextInput
+                          id={`rename-${category.id}`}
+                          value={sectionDraft.label}
+                          onChange={(e) => setSectionDraft((d) => ({ ...d, label: e.target.value }))}
+                        />
+                      </Field>
+                      <Field
+                        label="Description"
+                        htmlFor={`redescribe-${category.id}`}
+                        hint="Optional."
+                        className="min-w-60 flex-1"
+                      >
+                        <TextInput
+                          id={`redescribe-${category.id}`}
+                          value={sectionDraft.description}
+                          onChange={(e) => setSectionDraft((d) => ({
+                            ...d, description: e.target.value,
+                          }))}
+                        />
+                      </Field>
+                    </div>
+                    <Button
+                      disabled={busy !== null || !sectionDraft.label.trim()}
+                      onClick={() => {
+                        stage({
+                          op: 'category.update',
+                          id: category.id,
+                          expectedVersion: category.version,
+                          body: {
+                            label: sectionDraft.label,
+                            description: sectionDraft.description || undefined,
+                          },
+                        });
+                        setRenaming(null);
+                      }}
+                    >
+                      Save
+                    </Button>
+                    <Button variant="secondary" onClick={() => setRenaming(null)}>Cancel</Button>
+                  </>
                 ) : (
                   <>
                     <p className="flex-1 text-md text-navy">
@@ -399,6 +557,18 @@ export default function ActivityTypesPage() {
                     </p>
                     {canWrite && (
                       <>
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            setRenaming(category.id);
+                            setSectionDraft({
+                              label: category.label,
+                              description: category.description ?? '',
+                            });
+                          }}
+                        >
+                          Rename
+                        </Button>
                         <Button
                           variant="secondary"
                           onClick={() => {
@@ -441,7 +611,7 @@ export default function ActivityTypesPage() {
               </div>
 
               <ul className="mt-3 flex flex-col divide-y divide-hairline">
-                {category.types.map((type) => (
+                {category.types.map(({ row: type, staged: typeMark }) => (
                   <li
                     key={type.id}
                     className={`flex flex-wrap items-start gap-3 py-3 ${
@@ -456,17 +626,14 @@ export default function ActivityTypesPage() {
                     onDrop={(e) => { e.preventDefault(); drop(type.id); }}
                   >
                     {canWrite && (
-                      <span
-                        draggable
-                        onDragStart={() => setDragging({ kind: 'type', id: type.id })}
-                        onDragEnd={() => { setDragging(null); setOver(null); }}
-                        // Aria-hidden because the ↑↓ buttons below are the accessible path
-                        // and announcing a third, unusable control would be noise.
-                        aria-hidden
-                        className="mt-1 cursor-grab select-none text-md text-muted"
-                      >
-                        ⠿
-                      </span>
+                      <DragHandle
+                        label={type.label}
+                        disabled={busy !== null}
+                        className="mt-1 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                        onPick={() => setDragging({ kind: 'type', id: type.id })}
+                        onDrop={() => { setDragging(null); setOver(null); }}
+                        onMove={(by) => move(flat, type.id, by)}
+                      />
                     )}
                     <span
                       className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-navy text-sm font-bold text-navy"
@@ -532,33 +699,33 @@ export default function ActivityTypesPage() {
                           {type.description && (
                             <p className="text-sm text-muted">{type.description}</p>
                           )}
-                          <p className="mt-0.5 text-sm text-muted">
-                            {/* The part that does not move when the numbers do. */}
-                            <code>{type.code}</code>
-                            {type.status === 'archived' && ' · archived'}
-                          </p>
+                          {(showCodes || type.status === 'archived') && (
+                            <p className="mt-0.5 text-sm text-muted">
+                              {/* The part that does not move when the numbers do. */}
+                              {showCodes && <code>{type.code}</code>}
+                              {type.status === 'archived' && (showCodes ? ' · archived' : 'archived')}
+                            </p>
+                          )}
+                          {typeMark && (
+                            <p className="mt-1 text-sm">
+                              <span className="rounded-full bg-amber/20 px-2 py-0.5 text-navy">
+                                {STAGED_LABEL[typeMark]}
+                              </span>
+                              <button
+                                type="button"
+                                className="ml-2 font-semibold text-navy underline"
+                                onClick={() => setStaged((now) => unstageRow(now, 'type', type.id))}
+                              >
+                                Undo
+                              </button>
+                            </p>
+                          )}
                         </>
                       )}
                     </div>
 
                     {canWrite && editing !== type.id && (
                       <div className="flex shrink-0 flex-wrap items-center gap-2">
-                        <Button
-                          variant="secondary"
-                          aria-label={`Move ${type.label} up`}
-                          disabled={busy !== null || visibleFlat[0]?.id === type.id}
-                          onClick={() => move(flat, type.id, -1)}
-                        >
-                          ↑
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          aria-label={`Move ${type.label} down`}
-                          disabled={busy !== null || visibleFlat.at(-1)?.id === type.id}
-                          onClick={() => move(flat, type.id, 1)}
-                        >
-                          ↓
-                        </Button>
                         <Button
                           variant="secondary"
                           onClick={() => {
@@ -571,7 +738,7 @@ export default function ActivityTypesPage() {
                         </Button>
                         {type.status === 'active' ? (
                           <Button
-                            variant="danger"
+                            variant="secondary"
                             disabled={busy !== null}
                             onClick={() => stage({
                               op: 'type.archive', id: type.id, expectedVersion: type.version,
@@ -666,6 +833,6 @@ export default function ActivityTypesPage() {
           ))}
         </div>
       )}
-    </Page>
+    </SettingsScreen>
   );
 }

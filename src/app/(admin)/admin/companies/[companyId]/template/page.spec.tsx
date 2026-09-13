@@ -52,26 +52,39 @@ function render(body: unknown = TAXONOMY) {
 }
 
 /**
- * The field for one row, found by the code shown beside it.
+ * Open one row for editing and hand back its Name field.
  *
- * The code used to *be* the field's label, so a screen reader announced
- * *"SELL_SUBMISSION, edit text"* and the human name was the value. It is a hint now, which
- * is what these queries follow.
+ * A row reads as text until **Edit** is pressed (P4-T24) — a template seeds every future
+ * office of a company, and a live field meant a stray keystroke on a focused input changed
+ * one, with the draft saving it before anybody noticed the field had been touched.
  */
-const fieldFor = (code: string) => screen.getByRole('textbox', { description: code });
+async function openRow(code: string) {
+  // `li` or the ratio card — not the nearest `div`, which is EditableRow's own wrapper
+  // for the read view and does not contain the Edit button beside it.
+  const row = screen.getByText(code).closest('li, [data-row]')!;
+  await userEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Edit' }));
+  return screen.getByRole('textbox', { description: code });
+}
+
+/** The two rows of tabs: the Owner Settings items, and the halves of the one in view. */
+const sections = () => within(screen.getByRole('navigation', { name: 'Template sections' }));
 
 describe('a company’s Company template (P4-T8)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('lays the Owner’s Settings group out as tabs', async () => {
-    // ADR-0018: each item of the Owner's Settings group is a tab here.
+    // ADR-0018: each **item** of the Owner's Settings group is a tab here — and an item
+    // split across routes contributes one tab, not two. `Activity types` also appears in
+    // the row below it, which is what the Owner's own screen does.
     render();
+    await screen.findByText('SELL_SUBMISSION');
     for (const label of [
       'Activity types', 'Lead statuses', 'Activation checklist',
       'Training', 'Events', 'Campaigns', 'Products',
     ]) {
-      expect(await screen.findByRole('link', { name: label })).toBeInTheDocument();
+      expect(sections().getByRole('link', { name: label })).toBeInTheDocument();
     }
+    expect(sections().queryByRole('link', { name: 'Ratio benchmarks' })).not.toBeInTheDocument();
   });
 
   it('has no Branch info tab, because it is a fact about one office', async () => {
@@ -103,8 +116,9 @@ describe('a company’s Company template (P4-T8)', () => {
     // previous draft and look like the edit was lost.
     render();
     await screen.findByText('SELL_SUBMISSION');
-    const label = fieldFor('SELL_SUBMISSION');
+    const label = await openRow('SELL_SUBMISSION');
     await userEvent.type(label, ' baru');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(screen.getByRole('button', { name: /^Publish version/ })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled();
@@ -113,9 +127,11 @@ describe('a company’s Company template (P4-T8)', () => {
   it('sends the whole payload, not a patch', async () => {
     const { calls } = render();
     await screen.findByText('SELL_SUBMISSION');
-    const label = fieldFor('SELL_SUBMISSION');
+    const label = await openRow('SELL_SUBMISSION');
     await userEvent.clear(label);
     await userEvent.type(label, 'Closing');
+    // The row's own Save closes the panel; Save draft is the request.
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
 
     const call = calls.find((c) => c.init.method === 'PUT')!;
@@ -207,9 +223,19 @@ describe('a company’s Company template (P4-T8)', () => {
   describe('ratio benchmarks, as a subtab of Activity types (P4-T20)', () => {
     it('offers it beside Activity types, as ADR-0018’s own table says', async () => {
       render();
-      expect(await screen.findByRole('link', { name: 'Ratio benchmarks' })).toBeInTheDocument();
-      // And not as a seventh top-level tab.
-      expect(screen.getByRole('link', { name: 'Activity types' })).toBeInTheDocument();
+      /*
+       * A **subtab**, not a seventh item. `under` carried this grouping from the day the
+       * ratio tab landed and nothing read it, so both halves rendered side by side in the
+       * top row — and the first version of this test only checked that both links existed,
+       * which is exactly why it passed over the gap.
+       */
+      await screen.findByText('SELL_SUBMISSION');
+      expect(sections().queryByRole('link', { name: 'Ratio benchmarks' })).not.toBeInTheDocument();
+      expect(sections().getByRole('link', { name: 'Activity types' })).toBeInTheDocument();
+
+      const row = screen.getByRole('navigation', { name: 'Activity types sections' });
+      expect(within(row).getByRole('link', { name: 'Ratio benchmarks' })).toBeInTheDocument();
+      expect(within(row).getByRole('link', { name: 'Activity types' })).toBeInTheDocument();
     });
 
     it('renders the ratio payload through its own editor, not the pipeline one', async () => {
@@ -241,10 +267,65 @@ describe('a company’s Company template (P4-T8)', () => {
       );
 
       await userEvent.click(await screen.findByRole('link', { name: 'Ratio benchmarks' }));
-      expect(await screen.findByRole('textbox', { description: 'SELLING_SUCCESS_RATE' }))
-        .toBeInTheDocument();
-      // The formula is stated, not offered as a control.
-      expect(screen.getByText(/The formula is fixed/)).toBeInTheDocument();
+      await screen.findByText('SELLING_SUCCESS_RATE');
+      expect(await openRow('SELLING_SUCCESS_RATE')).toBeInTheDocument();
+      /*
+       * The formula IS a control here, and that is the correction. It was read-only on
+       * the reasoning that an office may not change a platform ratio's formula — which
+       * had the dependency backwards: an office's copy is immutable *because the company
+       * defines it upstream*, and if this screen cannot define it, nothing can.
+       */
+      expect(screen.getByRole('group', { name: 'Counts' })).toBeInTheDocument();
+      expect(screen.getByRole('group', { name: 'Out of' })).toBeInTheDocument();
+      expect(screen.getByText(/cannot change it/)).toBeInTheDocument();
+    });
+  });
+
+  describe('the ratio editor edits and adds (P4-T22)', () => {
+    function ratioTab() {
+      stubFetch({
+        '/admin/companies/c1/template/ratio_set': {
+          body: {
+            id: 'tpl-r', companyId: 'c1', kind: 'ratio_set', version: 1, status: 'draft',
+            payload: {
+              ratios: [{
+                code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate',
+                numerator: ['SELL_SUBMISSION'], denominator: ['SELL_SUBMISSION'],
+                benchmark: 0.15, comparison: 'gte', displayOrder: 1,
+              }],
+            },
+            publishedAt: null, publishedVersion: 0, officesBehind: 0,
+          },
+        },
+        '/admin/companies/c1/template': { body: TAXONOMY },
+      });
+      renderWithSession(
+        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
+        { me: SUPER_ADMIN },
+      );
+    }
+
+    it('offers the company’s own activity types as the formula, by name', async () => {
+      ratioTab();
+      await userEvent.click(await screen.findByRole('link', { name: 'Ratio benchmarks' }));
+      const counts = await screen.findByRole('group', { name: 'Counts' });
+      // Checkboxes over the taxonomy, not free text: a typed code is one that can be
+      // typed wrong, and publishing would refuse it at the wrong moment.
+      expect(within(counts).getByLabelText('Submission polis')).toBeInTheDocument();
+    });
+
+    it('adds a ratio, which the tab could not do at all', async () => {
+      ratioTab();
+      await userEvent.click(await screen.findByRole('link', { name: 'Ratio benchmarks' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a ratio' }));
+
+      const form = screen.getByLabelText('Code').closest('div')!.parentElement!;
+      await userEvent.type(within(form).getByLabelText('Code'), 'referral_rate');
+      await userEvent.type(within(form).getByLabelText('Name'), 'Referral rate');
+      await userEvent.click(within(form).getByRole('button', { name: 'Add' }));
+
+      // It reads as text until Edit — so the new row shows its name, not a field.
+      expect(await screen.findByText('Referral rate')).toBeInTheDocument();
     });
   });
 
@@ -274,6 +355,45 @@ describe('a company’s Company template (P4-T8)', () => {
       expect(payload.types.at(-1)).toMatchObject({
         code: 'SELL_REFERRAL', categoryCode: 'SELLING', label: 'Referral masuk',
       });
+    });
+  });
+
+  describe('unsaved edits are named before they are lost (P4-T21)', () => {
+    it('asks before a tab switch discards a draft', async () => {
+      /*
+       * Switching tabs reloads and `load` resets `dirty`, so a draft somebody had typed
+       * vanished with nothing said. `dirty` was tracked and already gated both buttons;
+       * the one place it was not consulted was the one place a change could disappear.
+       */
+      render();
+      await screen.findByText('SELL_SUBMISSION');
+      await userEvent.type(await openRow('SELL_SUBMISSION'), 'x');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      await userEvent.click(screen.getByRole('link', { name: 'Lead statuses' }));
+
+      expect(await screen.findByText(/edits here that are not saved/)).toBeInTheDocument();
+      // And it stayed put.
+      expect(screen.getByText('SELL_SUBMISSION')).toBeInTheDocument();
+    });
+
+    it('stays when asked to stay', async () => {
+      render();
+      await screen.findByText('SELL_SUBMISSION');
+      await userEvent.type(await openRow('SELL_SUBMISSION'), 'x');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await userEvent.click(screen.getByRole('link', { name: 'Lead statuses' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Stay here' }));
+
+      expect(screen.queryByText(/edits here that are not saved/)).not.toBeInTheDocument();
+      expect(screen.getByText('SELL_SUBMISSION')).toBeInTheDocument();
+    });
+
+    it('switches freely when nothing is held', async () => {
+      render();
+      await screen.findByText('SELL_SUBMISSION');
+      await userEvent.click(screen.getByRole('link', { name: 'Lead statuses' }));
+      expect(screen.queryByText(/edits here that are not saved/)).not.toBeInTheDocument();
     });
   });
 });

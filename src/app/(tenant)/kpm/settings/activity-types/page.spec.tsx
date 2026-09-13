@@ -73,6 +73,87 @@ async function saved(calls: { url: string; init: RequestInit }[]) {
 describe('the office activity taxonomy (P4-T1)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  describe('what is staged is what is shown (P4-T19)', () => {
+    /*
+     * All eight of this screen's operations staged correctly and none of them appeared.
+     * Archiving showed nothing; adding a type drew no row; the only evidence was a count
+     * in a bar. The suite passed throughout, because every test read the request body.
+     */
+    it('shows an archived type as archived before anything is saved', async () => {
+      render();
+      const row = (await screen.findByText('Submission polis')).closest('li')!;
+      await userEvent.click(within(row).getByRole('button', { name: 'Archive' }));
+
+      expect(within(row).getByText('Archived — not saved yet')).toBeInTheDocument();
+      expect(within(row).getByText(/archived/)).toBeInTheDocument();
+    });
+
+    it('draws a type that does not exist yet, so Add is not a button that does nothing', async () => {
+      render();
+      await userEvent.click(await screen.findByRole('button', { name: 'Add to Selling' }));
+      await userEvent.type(screen.getByLabelText('Code'), 'SELL_REFERRAL');
+      await userEvent.type(screen.getByLabelText('Label'), 'Referral masuk');
+      await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+      const row = screen.getByText('Referral masuk').closest('li')!;
+      expect(within(row).getByText('Added — not saved yet')).toBeInTheDocument();
+    });
+
+    it('puts a new type in the section it was added to, and in no other', async () => {
+      render(OWNER, [...TAXONOMY, {
+        id: 'c2', code: 'RECRUITING', label: 'Recruiting', description: null,
+        appliesToOrgLevelCodes: [], displayOrder: 2, version: 1, status: 'active', types: [],
+      }]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Add to Selling' }));
+      await userEvent.type(screen.getByLabelText('Code'), 'SELL_REFERRAL');
+      await userEvent.type(screen.getByLabelText('Label'), 'Referral masuk');
+      await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+      expect(screen.getAllByText('Referral masuk')).toHaveLength(1);
+      const other = screen.getByRole('heading', { name: 'Recruiting' })
+        .closest('div')!.parentElement!;
+      expect(within(other).getByText(/0 items/)).toBeInTheDocument();
+    });
+
+    it('counts the toolbar sentence off what is on screen', async () => {
+      render();
+      expect(await screen.findByText(/2 activity types across 1 categories/)).toBeInTheDocument();
+
+      const row = screen.getByText('Submission polis').closest('li')!;
+      await userEvent.click(within(row).getByRole('button', { name: 'Archive' }));
+
+      // Described the saved taxonomy while the cards showed the staged one.
+      expect(screen.getByText(/1 activity types across 1 categories/)).toBeInTheDocument();
+    });
+
+    it('takes one row back without discarding every other staged change', async () => {
+      render();
+      const row = (await screen.findByText('Submission polis')).closest('li')!;
+      await userEvent.click(within(row).getByRole('button', { name: 'Archive' }));
+      await userEvent.click(within(row).getByRole('button', { name: 'Undo' }));
+
+      expect(screen.queryByText(/not saved yet/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/change not saved/)).not.toBeInTheDocument();
+    });
+  });
+
+  it('puts the section heading hard left whoever is reading', async () => {
+    /*
+     * The head had three children under `justify-between`, so the heading floated to the
+     * middle — and the first child is behind `canWrite`, so **the heading moved depending
+     * on the reader's permission**. The prototype's `.acttype-card-head` has two children.
+     */
+    render();
+    const owner = (await screen.findByRole('heading', { name: 'Selling' })).parentElement!;
+    expect(owner.className).not.toContain('justify-between');
+    expect(owner.lastElementChild?.className).toContain('ml-auto');
+
+    vi.unstubAllGlobals();
+    render(AGENT);
+    const agent = (await screen.findByRole('heading', { name: 'Selling' })).parentElement!;
+    expect(agent.className).not.toContain('justify-between');
+  });
+
   it('groups the types into the cards the prototype draws', async () => {
     render();
     const heading = await screen.findByRole('heading', { name: 'Selling' });
@@ -81,32 +162,86 @@ describe('the office activity taxonomy (P4-T1)', () => {
     expect(await screen.findByText('Submission polis')).toBeInTheDocument();
   });
 
-  it('shows the code beside every row, because it is the part that does not move', async () => {
+  describe('where the code is shown (P4-T24, parity I-64)', () => {
     /*
-     * The prototype numbers its items 1–12 and binds its ratio formulas to those numbers.
-     * Here the number is position and the code is identity — so the code is on screen,
-     * next to the number that is about to change when somebody reorders.
+     * This reverses what I-64 registered. The code was under every row on the reasoning
+     * that the prototype's numbers 1–12 are position and the code is identity, which is
+     * still true — the number is still on screen and still about to change. What that
+     * argument did not weigh is that the identity matters at the two moments a reader acts
+     * on it, and is noise under all twelve rows the rest of the time.
+     *
+     * So: absent from the list, a field while creating, and read-only while editing. The
+     * toggle keeps it one click away for template work and support tickets.
      */
-    render();
-    expect(await screen.findByText('SELL_SUBMISSION')).toBeInTheDocument();
-    expect(screen.getByText('SELLING')).toBeInTheDocument();
+    it('keeps codes out of the list by default', async () => {
+      render();
+      await screen.findByText('Submission polis');
+
+      expect(screen.queryByText('SELL_SUBMISSION')).not.toBeInTheDocument();
+      expect(screen.queryByText('SELLING')).not.toBeInTheDocument();
+    });
+
+    it('brings every code back under Show codes', async () => {
+      render();
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'Show codes' }));
+
+      expect(screen.getByText('SELL_SUBMISSION')).toBeInTheDocument();
+      expect(screen.getByText('SELLING')).toBeInTheDocument();
+    });
+
+    it('still says a row is archived when codes are hidden', async () => {
+      // The code and the archived note shared one line, so hiding the first hid the second.
+      render(OWNER, [{
+        ...TAXONOMY[0],
+        types: [type({ status: 'archived' })],
+      }]);
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
+
+      expect(screen.getByText('archived')).toBeInTheDocument();
+    });
+
+    it('shows the code, not editable, inside the edit panel', async () => {
+      render();
+      const row = (await screen.findByText('Submission polis')).closest('li')!;
+      await userEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+
+      // A `<dl>` row, not a disabled input: disabled reads as "not right now", and this is
+      // never — every activity logged and every ratio points at it.
+      expect(within(row).getByText('SELL_SUBMISSION')).toBeInTheDocument();
+      expect(within(row).queryByLabelText('Code')).not.toBeInTheDocument();
+    });
+
+    it('asks for the code while creating, because that is the one moment it is set', async () => {
+      render();
+      await userEvent.click(await screen.findByRole('button', { name: 'Add to Selling' }));
+
+      expect(screen.getByLabelText('Code')).toBeEnabled();
+    });
   });
+
+  /** The handle is the keyboard path now — the ↑↓ buttons it replaced were the old one. */
+  const handleFor = (label: string) =>
+    screen.getByRole('button', { name: new RegExp(`^Reorder ${label}`) });
 
   it('sends every id in the new order when one row moves', async () => {
     // Not a single move: two people dragging at once would otherwise interleave into an
     // order neither asked for.
     const { calls } = render();
-    await userEvent.click(await screen.findByRole('button', { name: 'Move Submission polis up' }));
+    await screen.findByText('Submission polis');
+    fireEvent.keyDown(handleFor('Submission polis'), { key: 'ArrowUp' });
 
     const call = calls.find((c) => c.url.includes('/reorder'))!;
     expect(JSON.parse(call.init.body as string)).toEqual({ ids: ['t1', 't0'] });
   });
 
-  it('cannot move the first row up or the last row down', async () => {
-    render();
+  it('does nothing at the ends of the list', async () => {
+    const { calls } = render();
     await screen.findByText('Submission polis');
-    expect(screen.getByRole('button', { name: 'Move Presentasi penjualan up' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Move Submission polis down' })).toBeDisabled();
+    // The handle replaced two disabled buttons with one that is a no-op at the edges —
+    // fewer controls to read, and the same outcome.
+    fireEvent.keyDown(handleFor('Presentasi penjualan'), { key: 'ArrowUp' });
+    fireEvent.keyDown(handleFor('Submission polis'), { key: 'ArrowDown' });
+    expect(calls.some((c) => c.url.includes('reorder'))).toBe(false);
   });
 
   it('archives rather than deletes, and says so on the control', async () => {
@@ -195,6 +330,10 @@ describe('the office activity taxonomy (P4-T1)', () => {
     void calls;
     stubFetch({
       '/kpm/settings/activity-types': { body: TAXONOMY },
+      // Kept, so the publish bar stays quiet and the alert under test is the screen's.
+      '/kpm/settings/publish-state': {
+        body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+      },
       '/kpm/settings/changes': {
         status: 400,
         body: { error: { code: 'VALIDATION_FAILED', message: 'Nothing to change.', requestId: 'r-1' } },
@@ -202,7 +341,10 @@ describe('the office activity taxonomy (P4-T1)', () => {
     });
     await userEvent.click((await screen.findAllByRole('button', { name: 'Archive' }))[0]);
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Nothing to change.');
+    // The screen's banner, not the publish bar's — two alerts can be on screen, and they
+    // are about different failures.
+    const alerts = await screen.findAllByRole('alert');
+    expect(alerts.some((a) => a.textContent?.includes('Nothing to change.'))).toBe(true);
   });
 
   describe('sections, and who they are for (P4-T18)', () => {
@@ -302,16 +444,19 @@ describe('the office activity taxonomy (P4-T1)', () => {
 
   describe('drag to reorder (P4-T18)', () => {
     /** `userEvent` has no drag API, so the HTML5 events go in by hand. */
-    const dataTransfer = () => ({ effectAllowed: '', setData: vi.fn(), getData: vi.fn() });
+    // `setDragImage` too: the handle points it at the whole row, which is what stopped the
+    // drag preview being six floating dots over a list that only dimmed.
+    const dataTransfer = () => ({
+      effectAllowed: '', setData: vi.fn(), getData: vi.fn(), setDragImage: vi.fn(),
+    });
 
     it('sends the whole list, spliced, when a row is dropped on another', async () => {
       const { calls } = render();
       await screen.findByText('Submission polis');
 
-      const handles = screen.getAllByText('⠿');
       const rows = screen.getAllByRole('listitem');
-      // Drag the second type onto the first.
-      fireEvent.dragStart(handles[handles.length - 1], { dataTransfer: dataTransfer() });
+      // Drag the second type onto the first, from its handle.
+      fireEvent.dragStart(handleFor('Submission polis'), { dataTransfer: dataTransfer() });
       fireEvent.dragOver(rows[0], { dataTransfer: dataTransfer() });
       fireEvent.drop(rows[0], { dataTransfer: dataTransfer() });
 
@@ -319,11 +464,21 @@ describe('the office activity taxonomy (P4-T1)', () => {
       expect(JSON.parse(patch.init.body as string)).toEqual({ ids: ['t1', 't0'] });
     });
 
-    it('keeps the ↑↓ buttons, because native drag reaches neither keyboard nor touch', async () => {
-      render();
+    it('the handle is the keyboard path, because drag reaches neither keyboard nor touch', async () => {
+      /*
+       * The two ↑↓ buttons on every row are gone — the handle does both jobs, so a row
+       * carries one control instead of three. What could not go is the keyboard path
+       * itself: HTML5 drag fires for a pointer only, and half of this product is used on
+       * a phone.
+       */
+      const { calls } = render();
       await screen.findByText('Submission polis');
-      expect(screen.getByRole('button', { name: 'Move Submission polis up' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Move Presentasi penjualan down' })).toBeInTheDocument();
+      const handle = handleFor('Submission polis');
+      expect(handle).toHaveAccessibleName(/Press the up or down arrow/);
+
+      fireEvent.keyDown(handle, { key: 'ArrowUp' });
+      const patch = calls.find((c) => c.url.includes('activity-types/reorder'))!;
+      expect(JSON.parse(patch.init.body as string)).toEqual({ ids: ['t1', 't0'] });
     });
 
     it('offers no handle to a reader who cannot write', async () => {
@@ -367,7 +522,8 @@ describe('the office activity taxonomy (P4-T1)', () => {
       // It bumps no version and reaches nobody until publish, so holding it behind Save
       // would mean pressing ↑ and watching the row stay put.
       const { calls } = render();
-      await userEvent.click(await screen.findByRole('button', { name: 'Move Submission polis up' }));
+      await screen.findByText('Submission polis');
+    fireEvent.keyDown(handleFor('Submission polis'), { key: 'ArrowUp' });
 
       expect(calls.some((c) => c.url.includes('activity-types/reorder'))).toBe(true);
       expect(screen.queryByText(/not saved yet/)).not.toBeInTheDocument();

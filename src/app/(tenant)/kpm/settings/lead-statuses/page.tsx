@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Page } from '@/components/page';
 import { PublishBar } from '@/components/publish-bar';
-import { SettingsTabs } from '@/components/settings-tabs';
-import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { SettingsScreen } from '@/components/settings-screen';
+import { DragHandle } from '@/components/ui/drag-handle';
+import { Button, Card, Field, ReadOnlyField, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
@@ -41,9 +41,14 @@ export default function LeadStatusesPage() {
   const canWrite = useCan('tenant_config:write');
   const [pipelines, setPipelines] = useState<LeadPipelineRow[] | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  /* Off the list, on in the edit panel, one click away here — the same rule and the same
+     control as the other two settings screens (P4-T24, parity I-64). */
+  const [showCodes, setShowCodes] = useState(false);
   // One pipeline at a time, as the prototype's subtabs do. Both stacked made the sales
   // ladder and the recruitment ladder read as one eleven-stage list on a narrow screen.
   const [tab, setTab] = useState<LeadPipeline>('sales');
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   // Bumped after any write, so the publish bar re-reads rather than going stale behind
   // an edit the Owner just made.
@@ -67,6 +72,21 @@ export default function LeadStatusesPage() {
    * what the endpoint counts. The *step* skips anything hidden: swapping with a row the
    * reader cannot see reads as a button that did nothing.
    */
+  /** Drop `dragging` where `targetId` sits, and send the whole pipeline. */
+  function dropStage(pipeline: LeadPipeline, targetId: string) {
+    const held = dragging;
+    setDragging(null);
+    setOver(null);
+    if (!held || held === targetId) return;
+
+    const order = (pipelines?.find((p) => p.pipeline === pipeline)?.statuses ?? []).map((s) => s.id);
+    const from = order.indexOf(held);
+    const to = order.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    order.splice(to, 0, ...order.splice(from, 1));
+    void run(() => reorderLeadStatuses(pipeline, order));
+  }
+
   async function moveStage(pipeline: LeadPipeline, id: string, by: -1 | 1) {
     const all = pipelines?.find((p) => p.pipeline === pipeline)?.statuses ?? [];
     const order = all.map((st) => st.id);
@@ -107,42 +127,58 @@ export default function LeadStatusesPage() {
   }
 
   return (
-    <Page
+    <SettingsScreen
       title="Lead statuses"
       subtitle="The stages a lead moves through. One ladder for sales, one for recruitment."
       permission="tenant_config:read"
+      /*
+       * One row, not two: Lead statuses is its own sidebar entry, so the ladder tabs are
+       * this screen's only tabs. What was wrong was where they sat — below the publish
+       * bar, which read as though Sales and Recruitment belonged to publishing.
+       *
+       * `#sales` rather than `sales`: these switch a panel on one route, and a bare
+       * relative href sent a middle-click to `/kpm/settings/lead-statuses/sales`, which
+       * does not exist. The template screen already uses fragments for the same reason.
+       */
+      tabs={[
+        { label: 'Sales', href: '#sales' },
+        { label: 'Recruitment', href: '#recruitment' },
+      ]}
+      tabsLabel="Lead pipeline"
+      activeHref={`#${tab}`}
+      onSelectTab={(href) => setTab(href.slice(1) as LeadPipeline)}
+      error={error}
+      bars={<PublishBar refreshKey={published} />}
+      toolbar={{
+        /* The prototype's own sentence, per tab — it says what the order is *for*, which
+           is the one thing a drag handle cannot. */
+        hint: pipelines === null
+          ? '\u00a0'
+          : `${pipelines.find((p) => p.pipeline === tab)?.statuses
+            .filter((st) => st.status === 'active').length ?? 0} statuses — `
+            + 'order determines the pipeline stage sequence',
+        actions: (
+          <>
+            <label className="flex items-center gap-2 text-md text-navy">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+              Show archived
+            </label>
+            <label className="flex items-center gap-2 text-md text-navy">
+              <input
+                type="checkbox"
+                checked={showCodes}
+                onChange={(e) => setShowCodes(e.target.checked)}
+              />
+              Show codes
+            </label>
+          </>
+        ),
+      }}
     >
-      {error && <ErrorBanner {...error} />}
-      <PublishBar refreshKey={published} />
-
-      <SettingsTabs
-        tabs={[
-          { label: 'Sales', href: 'sales' },
-          { label: 'Recruitment', href: 'recruitment' },
-        ]}
-        activeHref={tab}
-        onSelect={(href) => setTab(href as LeadPipeline)}
-      />
-
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        {/* The prototype's own sentence, per tab — it says what the order is *for*, which
-            is the one thing a drag handle cannot. */}
-        <p className="text-sm text-muted">
-          {pipelines === null
-            ? '\u00a0'
-            : `${pipelines.find((p) => p.pipeline === tab)?.statuses
-              .filter((st) => st.status === 'active').length ?? 0} statuses — `
-              + 'order determines the pipeline stage sequence'}
-        </p>
-        <label className="flex items-center gap-2 text-md text-navy">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
-          />
-          Show archived
-        </label>
-      </div>
 
       {pipelines === null ? (
         <SkeletonCards count={1} />
@@ -162,8 +198,30 @@ export default function LeadStatusesPage() {
               </h2>
 
               <ol className="mt-3 flex flex-col divide-y divide-hairline">
-                {pipeline.statuses.map((stage, index) => (
-                  <li key={stage.id} className="flex flex-wrap items-start gap-3 py-3">
+                {pipeline.statuses.map((stage) => (
+                  <li
+                    key={stage.id}
+                    className={`flex flex-wrap items-start gap-3 py-3 ${
+                      over === stage.id ? 'bg-canvas' : ''
+                    } ${dragging === stage.id ? 'opacity-40' : ''}`}
+                    onDragOver={(e) => {
+                      if (!dragging) return;
+                      e.preventDefault();
+                      setOver(stage.id);
+                    }}
+                    onDragLeave={() => setOver((now) => (now === stage.id ? null : now))}
+                    onDrop={(e) => { e.preventDefault(); dropStage(pipeline.pipeline, stage.id); }}
+                  >
+                    {canWrite && (
+                      <DragHandle
+                        label={stage.label}
+                        disabled={busy}
+                        className="mt-1 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                        onPick={() => setDragging(stage.id)}
+                        onDrop={() => { setDragging(null); setOver(null); }}
+                        onMove={(by) => void moveStage(pipeline.pipeline, stage.id, by)}
+                      />
+                    )}
                     <span
                       className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-canvas text-sm font-semibold text-navy"
                       aria-hidden
@@ -173,7 +231,17 @@ export default function LeadStatusesPage() {
 
                     <div className="min-w-0 flex-1">
                       {editing === stage.id ? (
-                        <div className="flex flex-wrap items-end gap-2">
+                        <div className="flex flex-col gap-2">
+                          {/* The identity, shown at the one moment a reader is changing
+                              this row and never editable. A `<dl>` rather than a disabled
+                              input: disabled reads as "not right now", and this is never —
+                              every lead in the pipeline holds this code. */}
+                          <ReadOnlyField
+                            label="Code"
+                            value={stage.code}
+                            reason="Every lead that reached this stage points at it."
+                          />
+                          <div className="flex flex-wrap items-end gap-2">
                           <Field label="Label" htmlFor={`label-${stage.id}`} className="min-w-60 flex-1">
                             <TextInput
                               id={`label-${stage.id}`}
@@ -191,6 +259,7 @@ export default function LeadStatusesPage() {
                             Save
                           </Button>
                           <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                          </div>
                         </div>
                       ) : (
                         <>
@@ -209,32 +278,18 @@ export default function LeadStatusesPage() {
                               </span>
                             )}
                           </p>
-                          <p className="mt-0.5 text-sm text-muted">
-                            <code>{stage.code}</code>
-                            {stage.status === 'archived' && ' · archived'}
-                          </p>
+                          {(showCodes || stage.status === 'archived') && (
+                            <p className="mt-0.5 text-sm text-muted">
+                              {showCodes && <code>{stage.code}</code>}
+                              {stage.status === 'archived' && (showCodes ? ' · archived' : 'archived')}
+                            </p>
+                          )}
                         </>
                       )}
                     </div>
 
                     {canWrite && editing !== stage.id && (
                       <div className="flex shrink-0 flex-wrap items-center gap-2">
-                        <Button
-                          variant="secondary"
-                          aria-label={`Move ${stage.label} up`}
-                          disabled={busy || index === 0}
-                          onClick={() => void moveStage(pipeline.pipeline, stage.id, -1)}
-                        >
-                          ↑
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          aria-label={`Move ${stage.label} down`}
-                          disabled={busy || index === pipeline.statuses.length - 1}
-                          onClick={() => void moveStage(pipeline.pipeline, stage.id, 1)}
-                        >
-                          ↓
-                        </Button>
                         <Button
                           variant="secondary"
                           onClick={() => { setEditing(stage.id); setEditLabel(stage.label); }}
@@ -252,7 +307,7 @@ export default function LeadStatusesPage() {
                         )}
                         {stage.status === 'active' ? (
                           <Button
-                            variant="danger"
+                            variant="secondary"
                             disabled={busy || stage.isTerminal}
                             title={stage.isTerminal
                               ? 'Make another stage close the pipeline first.'
@@ -328,6 +383,6 @@ export default function LeadStatusesPage() {
           ))}
         </div>
       )}
-    </Page>
+    </SettingsScreen>
   );
 }

@@ -45,20 +45,6 @@ export const createActivityCategory = (body: {
   appliesToOrgLevelCodes?: string[];
 }) => api<ActivityCategoryRow>('/kpm/settings/activity-categories', { method: 'POST', body });
 
-/** No `code`: every type under it holds that (ADR-0006). */
-export const updateActivityCategory = (
-  id: string,
-  body: Partial<{ label: string; description: string; appliesToOrgLevelCodes: string[] }>,
-) => api<ActivityCategoryRow>(`/kpm/settings/activity-categories/${id}`, {
-  method: 'PATCH', body,
-});
-
-/** Archives the section **and every active type in it** — see the service for why. */
-export const archiveActivityCategory = (id: string) =>
-  api<ActivityCategoryRow>(`/kpm/settings/activity-categories/${id}`, { method: 'DELETE' });
-
-export const restoreActivityCategory = (id: string) =>
-  api<ActivityCategoryRow>(`/kpm/settings/activity-categories/${id}/restore`, { method: 'POST' });
 
 /** Every section, once each, in the order wanted. Bumps no version. */
 export const reorderActivityCategories = (ids: string[]) =>
@@ -73,11 +59,6 @@ export const createActivityType = (body: {
   description?: string;
 }) => api<ActivityTypeRow>('/kpm/settings/activity-types', { method: 'POST', body });
 
-/** No `code`: it is the identity every activity log, ratio and goal target holds. */
-export const updateActivityType = (
-  id: string,
-  body: { label?: string; description?: string; categoryCode?: string },
-) => api<ActivityTypeRow>(`/kpm/settings/activity-types/${id}`, { method: 'PATCH', body });
 
 /** Every id, once each, in the order wanted — see the DTO for why it is not a single move. */
 export const reorderActivityTypes = (ids: string[]) =>
@@ -179,18 +160,6 @@ export const createRatio = (body: {
   appliesToOrgLevelCodes?: string[];
 }) => api<RatioRow>('/kpm/settings/ratio-benchmarks', { method: 'POST', body });
 
-/** No `code`: everything computed from this ratio holds it. */
-export const updateRatio = (
-  id: string,
-  body: Partial<{
-    label: string;
-    numerator: string[];
-    denominator: string[];
-    benchmark: number;
-    comparison: RatioComparison;
-    appliesToOrgLevelCodes: string[];
-  }>,
-) => api<RatioRow>(`/kpm/settings/ratio-benchmarks/${id}`, { method: 'PATCH', body });
 
 export const archiveRatio = (id: string) =>
   api<RatioRow>(`/kpm/settings/ratio-benchmarks/${id}`, { method: 'DELETE' });

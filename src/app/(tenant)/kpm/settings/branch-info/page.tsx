@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Page } from '@/components/page';
+import { SettingsScreen } from '@/components/settings-screen';
 import {
-  Button, Card, ErrorBanner, Field, ReadOnlyField, Select, TextInput, Textarea,
+  Button, Card, Field, ReadOnlyField, Select, TextInput, Textarea,
 } from '@/components/ui/field';
 import { SkeletonText } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -79,12 +79,12 @@ export default function BranchInfoPage() {
   }
 
   return (
-    <Page
+    <SettingsScreen
       title="Branch info"
       subtitle="What this office is called, and where it is."
       permission="kpm:read_profile"
+      error={error}
     >
-      {error && <ErrorBanner {...error} />}
 
       <Card>
         {office === null ? (
@@ -175,6 +175,6 @@ export default function BranchInfoPage() {
           </form>
         )}
       </Card>
-    </Page>
+    </SettingsScreen>
   );
 }
