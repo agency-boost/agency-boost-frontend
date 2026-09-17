@@ -61,12 +61,14 @@ describe('manage KPM admins (P3-T10)', () => {
     expect(within(row).getByTitle('Agency Builder')).toBeInTheDocument();
   });
 
-  it('AC-4: names the four things an Admin does not get', async () => {
+  it('AC-4: names the two things an Admin does not get', async () => {
     open();
-    const blurb = (await screen.findByText(/granting admin access, editing Branch info/))
+    const blurb = (await screen.findByText(/except two things: granting admin access/))
       .closest('p')!;
-    expect(blurb).toHaveTextContent('changing which products are active');
     expect(blurb).toHaveTextContent('running the Leader Forum');
+    // Both were on this list until ADR-0027 gave them to the Admin.
+    expect(blurb).not.toHaveTextContent('Branch info');
+    expect(blurb).not.toHaveTextContent('products');
     // And the thing most likely to be misread — the <strong> splits the text node.
     expect(blurb).toHaveTextContent('Admin access is not a hierarchy role');
   });

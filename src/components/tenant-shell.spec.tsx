@@ -29,14 +29,16 @@ describe('the tenant shell (P3-T10 AC-4)', () => {
     expect(screen.getByText('KPM Owner')).toBeInTheDocument();
   });
 
-  it('hides the owner-reserved items from an Admin entirely', () => {
+  it('hides the owner-reserved item from an Admin entirely', () => {
     // roles-and-permissions.md §1.6: hidden, not shown-and-refused. The API still
     // decides — hiding a nav item is a courtesy, not a control.
     renderWithSession(<TenantShell title="All members">body</TenantShell>, {
       me: tenantAdmin(false),
     });
     expect(screen.queryByRole('link', { name: 'Manage KPM admins' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Branch info')).not.toBeInTheDocument();
+
+    // Branch info was hidden too, until ADR-0027 gave the Admin its write.
+    expect(screen.getByRole('link', { name: 'Branch info' })).toBeInTheDocument();
 
     // Everything else they do have is still there.
     expect(screen.getByRole('link', { name: 'All members' })).toBeInTheDocument();

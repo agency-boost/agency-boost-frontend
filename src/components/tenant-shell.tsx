@@ -62,7 +62,8 @@ const SECTIONS: readonly {
       { label: 'Events', href: '/kpm/settings/events', upcoming: true },
       { label: 'Campaigns', href: '/kpm/settings/campaigns', upcoming: true },
       { label: 'Products', href: '/kpm/settings/products', upcoming: true },
-      { label: 'Branch info', href: '/kpm/settings/branch-info', ownerOnly: true },
+      // The Admin's as well as the Owner's since ADR-0027, like every page under Settings.
+      { label: 'Branch info', href: '/kpm/settings/branch-info' },
     ],
     divider: true,
   },
@@ -123,9 +124,9 @@ function TenantChrome({
   const { signOut, busy } = useSignOut();
   const pathname = usePathname();
 
-  // The four Owner-reserved powers are hidden from an Admin entirely, rather than shown
-  // and then refused (`roles-and-permissions.md` §1.6). The API still decides: hiding a
-  // nav item is a courtesy, not a control.
+  // An Owner-reserved screen is hidden from an Admin entirely, rather than shown and then
+  // refused (`roles-and-permissions.md` §1.6) — since ADR-0027 that is Manage KPM admins
+  // alone. The API still decides: hiding a nav item is a courtesy, not a control.
   const isOwner = Boolean(me?.membership?.isKpmOwner);
   const sections: readonly NavSection[] = SECTIONS.map((section) => ({
     label: section.label,

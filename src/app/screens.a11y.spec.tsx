@@ -895,9 +895,10 @@ describe('screens have no axe violations', () => {
         isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
       },
       // `member:read_profile` is the shell's own gate — being inside the office at all is
-      // checked once above every settings route, not in each page. Branch info gates on
+      // checked once above every settings route, not in each page. Branch info reads under
       // `kpm:read_profile` instead, because it is the office's identity rather than its
-      // configuration.
+      // configuration — and writes under `tenant_config:write` like the rest (ADR-0027), so
+      // its form is checked here with Save on screen.
       permissions: [
         'member:read_profile', 'tenant_config:read', 'tenant_config:write', 'kpm:read_profile',
       ],

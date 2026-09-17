@@ -26,12 +26,13 @@ const MONTHS = [
  * **Locale, timezone and currency are not here at all.** ADR-0016 fixes all three for v1
  * and no screen offers them; the office overview shows them read-only.
  *
- * **The Owner's screen, not the Admin's.** Alone among the Settings group — it is the row
- * that says what the office *is*, and delegated administration does not extend to renaming
- * the branch. The API refuses an Admin too.
+ * **The Owner's and the Admin's, like every page under Settings** (ADR-0027), and under the
+ * same permission. It was the Owner's alone until the product owner gave the Admin the write.
+ * Somebody without it — a read-only support session — sees the same form with every field
+ * disabled and no Save, and the API refuses them regardless.
  */
 export default function BranchInfoPage() {
-  const canWrite = useCan('kpm:update_identity');
+  const canWrite = useCan('tenant_config:write');
   const [office, setOffice] = useState<BranchInfo | null>(null);
   const [form, setForm] = useState({
     branchName: '', address: '', contactPhone: '', fiscalYearStartMonth: 1,

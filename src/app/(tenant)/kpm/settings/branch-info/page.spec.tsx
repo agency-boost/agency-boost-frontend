@@ -15,10 +15,16 @@ const membership = {
 };
 const OWNER = makeMe({
   membership,
-  permissions: ['kpm:read_profile', 'kpm:update_identity'],
+  permissions: ['kpm:read_profile', 'tenant_config:write'],
 });
+// The same permissions as the Owner: every page under Settings is both of theirs (ADR-0027).
 const ADMIN = makeMe({
   membership: { ...membership, isKpmOwner: false, isKpmAdmin: true },
+  permissions: ['kpm:read_profile', 'tenant_config:write'],
+});
+// A read-only support session holds the read and none of the writes.
+const READ_ONLY = makeMe({
+  membership,
   permissions: ['kpm:read_profile'],
 });
 
@@ -82,10 +88,23 @@ describe('branch info (P4-T5)', () => {
     expect(body).not.toHaveProperty('timezone');
   });
 
-  it('shows an Admin the office and no way to change it', async () => {
-    // Alone among the Settings screens, this one is the Owner's. The API refuses an Admin
-    // too — this is convenience, not control.
-    render(ADMIN);
+  it('lets an Admin change it, exactly as the Owner can (ADR-0027)', async () => {
+    // It rendered read-only for an Admin until 2026-09-17.
+    const { calls } = render(ADMIN);
+    const name = await screen.findByLabelText('Branch name');
+    expect(name).toBeEnabled();
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Serpong Branch');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const call = calls.find((c) => c.init.method === 'PATCH')!;
+    expect(JSON.parse(call.init.body as string)).toMatchObject({ branchName: 'Serpong Branch' });
+  });
+
+  it('shows somebody without the write the office and no way to change it', async () => {
+    // A read-only support session. The API refuses them too — this is convenience, not
+    // control.
+    render(READ_ONLY);
     expect(await screen.findByDisplayValue('BSD City Branch')).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
   });

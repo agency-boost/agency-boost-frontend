@@ -94,8 +94,8 @@ export default function AdminsPage() {
 
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <p className="max-w-2xl text-md text-muted">
-          An Admin gets your whole operational surface except four things: granting admin access,
-          editing Branch info, changing which products are active, and running the Leader Forum.
+          An Admin gets your whole operational surface except two things: granting admin access,
+          and running the Leader Forum.
           Admin access is <strong>not</strong> a hierarchy role — an Agency Builder with a unit can
           hold it, and holding it changes nothing about who reports to them.
         </p>
