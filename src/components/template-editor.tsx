@@ -7,7 +7,9 @@ import {
   type RatioDisplayUnit,
 } from '@/lib/ratio-format';
 import { SettingsTabs } from '@/components/settings-tabs';
+import { ConfigBadge } from '@/components/ui/config-badge';
 import { DragHandle } from '@/components/ui/drag-handle';
+import { suggestCode } from '@/lib/config-code';
 
 export interface TaxonomyPayload {
   categories: { code: string; label: string; displayOrder: number }[];
@@ -472,16 +474,33 @@ function AddRow({
   onAdd,
   disabled,
   bare,
+  suggest,
+  taken,
+  nameLabel = 'Name',
 }: {
   what: string;
   onAdd: (code: string, label: string) => void;
   disabled?: boolean;
   /** Drops the divider and top margin, for a row that already sits in a toolbar. */
   bare?: boolean;
+  /**
+   * Fill the code in from the name until somebody types in it (P5-T1), and put the name first
+   * so there is something to fill it from. Training's rows are named in sentences, and a code
+   * typed from scratch for each is how they end up `MODULE_1`.
+   */
+  suggest?: boolean;
+  /**
+   * Whether this payload already uses a code at this level. Publishing refuses a code used
+   * twice; saying so beside the field is the same answer, sooner.
+   */
+  taken?: (code: string) => boolean;
+  nameLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
+  const [touched, setTouched] = useState(false);
   const [label, setLabel] = useState('');
+  const clash = code.trim() !== '' && (taken?.(code.trim().toUpperCase()) ?? false);
   /*
    * `what` is prose — *"activity type"* — and it was going straight into a DOM id, so the
    * field's id was `add-code-activity type`. A space is a separator in `aria-describedby`
@@ -502,32 +521,53 @@ function AddRow({
     );
   }
 
+  const name = (
+    <Field label={nameLabel} htmlFor={`add-label-${slug}`} className="min-w-60 flex-1">
+      <TextInput
+        id={`add-label-${slug}`}
+        value={label}
+        disabled={disabled}
+        onChange={(e) => {
+          setLabel(e.target.value);
+          if (suggest && !touched) setCode(suggestCode(e.target.value));
+        }}
+      />
+    </Field>
+  );
+
   return (
     <div className={bare
       ? 'flex flex-wrap items-end gap-3'
       : 'mt-3 flex flex-wrap items-end gap-3 border-t border-hairline pt-3'}
     >
-      <Field label="Code" htmlFor={`add-code-${slug}`} hint="Permanent once published." className="min-w-48">
+      {suggest && name}
+      <Field
+        label="Code"
+        htmlFor={`add-code-${slug}`}
+        hint={suggest ? 'Filled in from the name. Permanent once published.' : 'Permanent once published.'}
+        error={clash ? `This template already has a ${what} with this code.` : undefined}
+        className="min-w-48"
+      >
         <TextInput
           id={`add-code-${slug}`}
           value={code}
           disabled={disabled}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          invalid={clash}
+          onChange={(e) => {
+            const value = e.target.value.toUpperCase();
+            setCode(value);
+            // Emptying the field hands it back to the name.
+            setTouched(value !== '');
+          }}
         />
       </Field>
-      <Field label="Name" htmlFor={`add-label-${slug}`} className="min-w-60 flex-1">
-        <TextInput
-          id={`add-label-${slug}`}
-          value={label}
-          disabled={disabled}
-          onChange={(e) => setLabel(e.target.value)}
-        />
-      </Field>
+      {!suggest && name}
       <Button
-        disabled={disabled || !code.trim() || !label.trim()}
+        disabled={disabled || !code.trim() || !label.trim() || clash}
         onClick={() => {
           onAdd(code.trim(), label.trim());
           setCode('');
+          setTouched(false);
           setLabel('');
           setOpen(false);
         }}
@@ -954,6 +994,372 @@ export function RatioSetEditor({
           ),
         })}
       />
+    </div>
+  );
+}
+
+export interface TrainingTaxonomyPayload {
+  categories: { code: string; label: string; description?: string | null }[];
+  skills: { code: string; categoryCode: string; label: string }[];
+  modules: {
+    code: string; skillCode: string; title: string;
+    /** Absent reads as a draft, which is what an office would make of it. */
+    publishState?: 'draft' | 'published';
+  }[];
+}
+
+type TrainingTab = 'categories' | 'skills' | 'modules';
+
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The training taxonomy of a company template (P5-T1, ADR-0029).
+ *
+ * **It mirrors the Owner's Settings › Training**, as every tab here mirrors its screen: the same
+ * three subtabs, the same filters, the same badges — a Super Admin filling a template is looking
+ * at what an Owner will be handed.
+ *
+ * **What differs is what removing means.** An office archives, because its agents' progress
+ * points at its rows. A template payload is a document nothing points at until an office is made
+ * from it, so a row here is removed outright. A category or skill with rows under it is not: the
+ * payload would then name a parent it does not define, which publishing refuses anyway.
+ *
+ * **No order to set.** The prototype draws no handle on any of the three lists, and an office
+ * cannot reorder its copy either (ADR-0029), so a row's place is the order it was added in.
+ */
+export function TrainingEditor({
+  payload,
+  onChange,
+  disabled,
+}: {
+  payload: TrainingTaxonomyPayload;
+  onChange: (next: TrainingTaxonomyPayload) => void;
+  disabled?: boolean;
+}) {
+  const [tab, setTab] = useState<TrainingTab>('categories');
+  const [skillsCategory, setSkillsCategory] = useState('');
+  const [modulesCategory, setModulesCategory] = useState('');
+  const [modulesSkill, setModulesSkill] = useState('all');
+
+  /*
+   * A template that nobody has authored yet arrives as `payload: {}`, and the template screen's
+   * cast cannot check the arrays are there. Empty is a real state here as in every editor.
+   */
+  const categories = payload.categories ?? [];
+  const skills = payload.skills ?? [];
+  const modules = payload.modules ?? [];
+  const put = (next: Partial<TrainingTaxonomyPayload>) => onChange({ categories, skills, modules, ...next });
+
+  const categoryLabel = (code: string) => categories.find((c) => c.code === code)?.label ?? code;
+  const skillLabel = (code: string) => skills.find((s) => s.code === code)?.label ?? code;
+
+  const skillsTabCategory = categories.find((c) => c.code === skillsCategory) ?? categories[0];
+  const modulesTabCategory = categories.find((c) => c.code === modulesCategory) ?? categories[0];
+  const modulesTabSkills = skills.filter((s) => s.categoryCode === modulesTabCategory?.code);
+  const modulesTabSkill = modulesTabSkills.some((s) => s.code === modulesSkill) ? modulesSkill : 'all';
+
+  const filter = 'flex flex-wrap items-center gap-x-4 gap-y-2';
+  // A label held to its select, so a narrow screen wraps the pair rather than the label alone.
+  const pair = 'flex items-center gap-2';
+  const filterLabel = 'text-sm font-semibold text-muted';
+  const empty = (text: string) => <p className="px-5 py-10 text-center text-md text-muted">{text}</p>;
+
+  function categoriesPanel() {
+    return (
+      <>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted">{count(categories.length, 'category', 'categories')}</p>
+          <AddRow
+            bare
+            suggest
+            disabled={disabled}
+            what="category"
+            taken={(code) => categories.some((c) => c.code === code)}
+            onAdd={(code, label) => put({ categories: [...categories, { code, label, description: null }] })}
+          />
+        </div>
+        <Card className="p-0">
+          {categories.length === 0 ? empty('No training categories yet.') : (
+            <ul className="flex flex-col divide-y divide-hairline">
+              {categories.map((category) => {
+                const mine = skills.filter((s) => s.categoryCode === category.code);
+                const codes = new Set(mine.map((s) => s.code));
+                const offered = modules.filter((m) =>
+                  codes.has(m.skillCode) && m.publishState === 'published').length;
+                return (
+                  <li key={category.code} className="px-4 py-3 sm:px-5">
+                    <EditableRow
+                      rowKey={category.code}
+                      disabled={disabled}
+                      fields={[
+                        { key: 'label', label: 'Name', hint: category.code },
+                        {
+                          key: 'description',
+                          label: 'Description',
+                          hint: "Optional. Shown under the name on the agent's training screen.",
+                        },
+                      ]}
+                      values={{ label: category.label, description: category.description ?? '' }}
+                      onSave={(next) => put({
+                        categories: categories.map((c) => (c.code === category.code
+                          ? { ...c, label: next.label.trim(), description: next.description.trim() || null }
+                          : c)),
+                      })}
+                      actions={(
+                        <Button
+                          variant="secondary"
+                          disabled={disabled || mine.length > 0}
+                          title={mine.length > 0 ? 'Remove its skills first.' : undefined}
+                          onClick={() => put({ categories: categories.filter((c) => c.code !== category.code) })}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    >
+                      <p className="text-md font-semibold text-navy">{category.label}</p>
+                      {category.description && <p className="text-sm text-muted">{category.description}</p>}
+                      <p className="mt-1 flex flex-wrap items-center gap-2">
+                        <code className="text-sm text-muted">{category.code}</code>
+                        {mine.length === 0
+                          ? <ConfigBadge tone="open">Empty</ConfigBadge>
+                          : (
+                            <ConfigBadge tone={offered > 0 ? 'won' : 'open'}>
+                              {count(mine.length, 'skill', 'skills')} · {count(offered, 'module', 'modules')} published
+                            </ConfigBadge>
+                          )}
+                      </p>
+                    </EditableRow>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      </>
+    );
+  }
+
+  function skillsPanel() {
+    const mine = skills.filter((s) => s.categoryCode === skillsTabCategory?.code);
+    return (
+      <>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className={filter}>
+            <label htmlFor="template-training-skills-category" className={filterLabel}>Category</label>
+            <Select
+              id="template-training-skills-category"
+              value={skillsTabCategory?.code ?? ''}
+              onChange={(e) => setSkillsCategory(e.target.value)}
+            >
+              {categories.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
+            </Select>
+          </div>
+          {skillsTabCategory && (
+            <AddRow
+              bare
+              suggest
+              disabled={disabled}
+              what="skill"
+              taken={(code) => skills.some((s) => s.code === code)}
+              onAdd={(code, label) => put({
+                skills: [...skills, { code, categoryCode: skillsTabCategory.code, label }],
+              })}
+            />
+          )}
+        </div>
+        <Card className="p-0">
+          {!skillsTabCategory ? empty('Add a category first — a skill always sits in one.')
+            : mine.length === 0 ? empty('No skills for this category yet.') : (
+              <ul className="flex flex-col divide-y divide-hairline">
+                {mine.map((skill) => {
+                  const teaching = modules.filter((m) => m.skillCode === skill.code);
+                  return (
+                    <li key={skill.code} className="px-4 py-3 sm:px-5">
+                      <EditableRow
+                        rowKey={skill.code}
+                        disabled={disabled}
+                        fields={[
+                          { key: 'label', label: 'Name', hint: skill.code },
+                          {
+                            key: 'categoryCode',
+                            label: 'Category',
+                            hint: 'Its modules move with it.',
+                            options: categories.map((c) => ({ value: c.code, label: c.label })),
+                          },
+                        ]}
+                        values={{ label: skill.label, categoryCode: skill.categoryCode }}
+                        onSave={(next) => put({
+                          skills: skills.map((s) => (s.code === skill.code
+                            ? { ...s, label: next.label.trim(), categoryCode: next.categoryCode }
+                            : s)),
+                        })}
+                        actions={(
+                          <Button
+                            variant="secondary"
+                            disabled={disabled || teaching.length > 0}
+                            title={teaching.length > 0 ? 'Remove its modules first.' : undefined}
+                            onClick={() => put({ skills: skills.filter((s) => s.code !== skill.code) })}
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      >
+                        <p className="text-md font-semibold text-navy">{skill.label}</p>
+                        <p className="mt-1 flex flex-wrap items-center gap-2">
+                          <code className="text-sm text-muted">{skill.code}</code>
+                          <ConfigBadge tone={teaching.length > 0 ? 'won' : 'open'}>
+                            {count(teaching.length, 'module', 'modules')}
+                          </ConfigBadge>
+                        </p>
+                      </EditableRow>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+        </Card>
+      </>
+    );
+  }
+
+  function modulesPanel() {
+    const rows = modulesTabSkills
+      .filter((s) => modulesTabSkill === 'all' || s.code === modulesTabSkill)
+      .flatMap((s) => modules.filter((m) => m.skillCode === s.code));
+    return (
+      <>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className={filter}>
+            <span className={pair}>
+              <label htmlFor="template-training-modules-category" className={filterLabel}>Category</label>
+              <Select
+                id="template-training-modules-category"
+                value={modulesTabCategory?.code ?? ''}
+                onChange={(e) => { setModulesCategory(e.target.value); setModulesSkill('all'); }}
+              >
+                {categories.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
+              </Select>
+            </span>
+            <span className={pair}>
+              <label htmlFor="template-training-modules-skill" className={filterLabel}>Skill</label>
+              <Select
+                id="template-training-modules-skill"
+                value={modulesTabSkill}
+                onChange={(e) => setModulesSkill(e.target.value)}
+              >
+                <option value="all">All skills</option>
+                {modulesTabSkills.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
+              </Select>
+            </span>
+          </div>
+          {/* A module teaches one skill, so it is added to the one chosen — "All skills" names none. */}
+          {modulesTabSkill === 'all' ? (
+            <p className="text-sm text-muted">Choose a skill to add a module to it.</p>
+          ) : (
+            <AddRow
+              bare
+              suggest
+              disabled={disabled}
+              what="module"
+              nameLabel="Title"
+              taken={(code) => modules.some((m) => m.code === code)}
+              onAdd={(code, title) => put({
+                // A draft, as an office's new module is: publishing is a decision about content,
+                // and the template has none yet.
+                modules: [...modules, { code, skillCode: modulesTabSkill, title, publishState: 'draft' }],
+              })}
+            />
+          )}
+        </div>
+        <Card className="p-0">
+          {rows.length === 0 ? empty('No modules for this category/skill yet.') : (
+            <ul className="flex flex-col divide-y divide-hairline">
+              {rows.map((module) => {
+                const isPublished = module.publishState === 'published';
+                return (
+                  <li key={module.code} className="px-4 py-3 sm:px-5">
+                    <EditableRow
+                      rowKey={module.code}
+                      disabled={disabled}
+                      fields={[
+                        { key: 'title', label: 'Title', hint: module.code },
+                        {
+                          key: 'skillCode',
+                          label: 'Skill',
+                          options: skills.map((s) => ({
+                            value: s.code, label: `${categoryLabel(s.categoryCode)} › ${s.label}`,
+                          })),
+                        },
+                        {
+                          key: 'publishState',
+                          label: 'Publish state',
+                          hint: 'Whether an office made from this template offers it to agents.',
+                          options: [
+                            { value: 'draft', label: 'Draft' },
+                            { value: 'published', label: 'Published' },
+                          ],
+                        },
+                      ]}
+                      values={{
+                        title: module.title,
+                        skillCode: module.skillCode,
+                        publishState: isPublished ? 'published' : 'draft',
+                      }}
+                      onSave={(next) => put({
+                        modules: modules.map((m) => (m.code === module.code
+                          ? {
+                            ...m,
+                            title: next.title.trim(),
+                            skillCode: next.skillCode,
+                            publishState: next.publishState as 'draft' | 'published',
+                          }
+                          : m)),
+                      })}
+                      actions={(
+                        <Button
+                          variant="secondary"
+                          disabled={disabled}
+                          onClick={() => put({ modules: modules.filter((m) => m.code !== module.code) })}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    >
+                      <p className="text-md font-semibold text-navy">{module.title}</p>
+                      <p className="text-sm text-muted">{skillLabel(module.skillCode)}</p>
+                      <p className="mt-1 flex flex-wrap items-center gap-2">
+                        <code className="text-sm text-muted">{module.code}</code>
+                        <ConfigBadge tone={isPublished ? 'won' : 'open'}>
+                          {isPublished ? 'Published' : 'Draft'}
+                        </ConfigBadge>
+                      </p>
+                    </EditableRow>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
+      </>
+    );
+  }
+
+  return (
+    <div>
+      <SettingsTabs
+        variant="subtabs"
+        label="Training template sections"
+        tabs={[
+          { label: 'Categories', href: '#categories' },
+          { label: 'Skills', href: '#skills' },
+          { label: 'Modules', href: '#modules' },
+        ]}
+        activeHref={`#${tab}`}
+        onSelect={(href) => setTab(href.slice(1) as TrainingTab)}
+      />
+      {tab === 'categories' && categoriesPanel()}
+      {tab === 'skills' && skillsPanel()}
+      {tab === 'modules' && modulesPanel()}
     </div>
   );
 }

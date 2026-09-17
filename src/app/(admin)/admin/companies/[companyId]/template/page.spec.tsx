@@ -168,11 +168,36 @@ describe('a company’s Company template (P4-T8)', () => {
     await screen.findByText('SELL_SUBMISSION');
     const before = calls.length;
 
-    await userEvent.click(screen.getByRole('link', { name: 'Training' }));
+    // Events: Training has had its editor since P5-T1.
+    await userEvent.click(screen.getByRole('link', { name: 'Events' }));
 
     expect(await screen.findByText(/Arrives in phase 5/)).toBeInTheDocument();
     expect(calls.length).toBe(before);
   });
+  it('P5-T1: edits the training taxonomy on its own tab, through its own editor', async () => {
+    const TRAINING = {
+      id: 'tpl-3', companyId: 'c1', kind: 'training_taxonomy', version: 1, status: 'draft',
+      publishedAt: null, publishedVersion: null, officesBehind: 0, officesUnrecorded: 0,
+      payload: {
+        categories: [{ code: 'SALES', label: 'Sales', description: null }],
+        skills: [{ code: 'PROSPECTING', categoryCode: 'SALES', label: 'Prospecting' }],
+        modules: [{ code: 'PROSPECT_LIST', skillCode: 'PROSPECTING', title: 'Building Your Prospect List', publishState: 'published' }],
+      },
+    };
+    const { calls } = stubFetch({
+      '/admin/companies/c1/template/activity_taxonomy': { body: TAXONOMY },
+      '/admin/companies/c1/template/training_taxonomy': { body: TRAINING },
+    });
+    renderWithSession(<CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />, { me: SUPER_ADMIN });
+    await screen.findByText('SELL_SUBMISSION');
+
+    await userEvent.click(sections().getByRole('link', { name: 'Training' }));
+
+    expect(await screen.findByText('1 skill · 1 module published')).toBeInTheDocument();
+    expect(screen.queryByText(/Arrives in phase 5/)).not.toBeInTheDocument();
+    expect(calls.some((c) => c.url.includes('/template/training_taxonomy'))).toBe(true);
+  });
+
   it('switches to another kind without rendering it against the previous payload', async () => {
     /*
      * The crash this fixes: *Cannot read properties of undefined (reading 'filter')*.

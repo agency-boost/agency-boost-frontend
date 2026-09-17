@@ -45,4 +45,12 @@ describe('the tenant shell (P3-T10 AC-4)', () => {
     expect(screen.getByRole('link', { name: 'Org tree' })).toBeInTheDocument();
     expect(screen.getByText('KPM Admin')).toBeInTheDocument();
   });
+
+  it('reaches Settings › Training, which is no longer Upcoming (P5-T1)', () => {
+    // An `upcoming` item renders an anchor with no href — no link role, and reachable from
+    // nowhere — so a flag left on after the screen shipped would fail this.
+    renderWithSession(<TenantShell title="Training">body</TenantShell>, { me: tenantAdmin(false) });
+
+    expect(screen.getByRole('link', { name: 'Training' })).toHaveAttribute('href', '/kpm/settings/training');
+  });
 });

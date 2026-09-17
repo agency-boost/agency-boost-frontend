@@ -5,8 +5,8 @@ import { useCallback, useEffect, useRef, useState, use } from 'react';
 import { ComingInPhase } from '@/components/coming-in-phase';
 import { SettingsScreen } from '@/components/settings-screen';
 import {
-  PipelineEditor, RatioSetEditor, TaxonomyEditor,
-  type PipelinePayload, type RatioSetPayload, type TaxonomyPayload,
+  PipelineEditor, RatioSetEditor, TaxonomyEditor, TrainingEditor,
+  type PipelinePayload, type RatioSetPayload, type TaxonomyPayload, type TrainingTaxonomyPayload,
 } from '@/components/template-editor';
 import { Button, Card } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
@@ -29,7 +29,7 @@ const TABS: {
   { key: 'ratios', label: 'Ratio benchmarks', kind: 'ratio_set', phase: 4, under: 'activity' },
   { key: 'leads', label: 'Lead statuses', kind: 'lead_pipeline', phase: 4 },
   { key: 'activation', label: 'Activation checklist', kind: null, phase: 5 },
-  { key: 'training', label: 'Training', kind: null, phase: 5 },
+  { key: 'training', label: 'Training', kind: 'training_taxonomy', phase: 5 },
   { key: 'events', label: 'Events', kind: null, phase: 5 },
   { key: 'campaigns', label: 'Campaigns', kind: null, phase: 5 },
   { key: 'products', label: 'Products', kind: null, phase: 5 },
@@ -344,6 +344,14 @@ export default function CompanyTemplatePage({
                 return (
                   <PipelineEditor
                     payload={current.payload as unknown as PipelinePayload}
+                    disabled={busy}
+                    onChange={(next) => change(next as unknown as Record<string, unknown>)}
+                  />
+                );
+              case 'training_taxonomy':
+                return (
+                  <TrainingEditor
+                    payload={current.payload as unknown as TrainingTaxonomyPayload}
                     disabled={busy}
                     onChange={(next) => change(next as unknown as Record<string, unknown>)}
                   />

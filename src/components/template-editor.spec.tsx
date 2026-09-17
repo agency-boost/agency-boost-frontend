@@ -1,9 +1,10 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  PipelineEditor, RatioSetEditor, TaxonomyEditor, withOrdinals,
-  type PipelinePayload, type RatioSetPayload, type TaxonomyPayload,
+  PipelineEditor, RatioSetEditor, TaxonomyEditor, TrainingEditor, withOrdinals,
+  type PipelinePayload, type RatioSetPayload, type TaxonomyPayload, type TrainingTaxonomyPayload,
 } from '@/components/template-editor';
 
 const TAXONOMY: TaxonomyPayload = {
@@ -138,6 +139,16 @@ describe('TaxonomyEditor', () => {
     expect(head.lastElementChild?.className).toContain('ml-auto');
   });
 
+  it('leaves the code to be typed — only training suggests one', async () => {
+    render(<TaxonomyEditor payload={TAXONOMY} onChange={vi.fn()} />);
+
+    const card = screen.getByRole('heading', { name: 'Selling' }).closest('.rounded-lg') as HTMLElement;
+    await userEvent.click(within(card).getByRole('button', { name: 'Add an activity type' }));
+    await userEvent.type(within(card).getByLabelText('Name'), 'Referral masuk');
+
+    expect(within(card).getByLabelText('Code')).toHaveValue('');
+  });
+
   it('builds field ids from a slug, so a hint points at an id that exists', async () => {
     render(<TaxonomyEditor payload={TAXONOMY} onChange={vi.fn()} />);
 
@@ -209,5 +220,147 @@ describe('RatioSetEditor writes benchmarks in their unit (P4-T25)', () => {
     await userEvent.type(screen.getByLabelText('Name'), 'Referral rate');
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
     expect(onChange.mock.calls.at(-1)![0].ratios[0]).toMatchObject({ displayUnit: 'decimal' });
+  });
+});
+
+describe('TrainingEditor (P5-T1)', () => {
+  const TRAINING: TrainingTaxonomyPayload = {
+    categories: [
+      { code: 'SALES', label: 'Sales', description: 'Structured modules.' },
+      { code: 'PRODUCT', label: 'Product', description: null },
+    ],
+    skills: [
+      { code: 'PROSPECTING', categoryCode: 'SALES', label: 'Prospecting' },
+      { code: 'CLOSING', categoryCode: 'SALES', label: 'Closing' },
+    ],
+    modules: [
+      { code: 'PROSPECT_LIST', skillCode: 'PROSPECTING', title: 'Building Your Prospect List', publishState: 'published' },
+      { code: 'COLD_CALLS', skillCode: 'PROSPECTING', title: 'Cold calls', publishState: 'draft' },
+    ],
+  };
+
+  /** The editor is controlled; this holds the payload the way the template screen does. */
+  function Editor({ initial = TRAINING, onChange = vi.fn() }: {
+    initial?: TrainingTaxonomyPayload; onChange?: (next: TrainingTaxonomyPayload) => void;
+  }) {
+    const [payload, setPayload] = useState(initial);
+    return <TrainingEditor payload={payload} onChange={(next) => { setPayload(next); onChange(next); }} />;
+  }
+
+  const rowOf = (text: string) => screen.getByText(text).closest('li') as HTMLElement;
+  const subtab = (name: string) => userEvent.click(
+    within(screen.getByRole('navigation', { name: 'Training template sections' })).getByRole('link', { name }),
+  );
+
+  it('renders an unauthored preset as empty instead of crashing', () => {
+    render(<TrainingEditor payload={{} as TrainingTaxonomyPayload} onChange={vi.fn()} />);
+
+    expect(screen.getByText('0 categories')).toBeInTheDocument();
+    expect(screen.getByText('No training categories yet.')).toBeInTheDocument();
+  });
+
+  it('mirrors the Owner’s screen: three subtabs, and the same badges', () => {
+    render(<Editor />);
+
+    expect(within(screen.getByRole('navigation', { name: 'Training template sections' }))
+      .getAllByRole('link').map((l) => l.textContent)).toEqual(['Categories', 'Skills', 'Modules']);
+    expect(within(rowOf('Sales')).getByText('2 skills · 1 module published')).toBeInTheDocument();
+    expect(within(rowOf('Product')).getByText('Empty')).toBeInTheDocument();
+  });
+
+  it('removes an empty category, and not one that still holds skills', async () => {
+    const onChange = vi.fn();
+    render(<Editor onChange={onChange} />);
+
+    expect(within(rowOf('Sales')).getByRole('button', { name: 'Remove' })).toBeDisabled();
+    await userEvent.click(within(rowOf('Product')).getByRole('button', { name: 'Remove' }));
+
+    expect(onChange.mock.calls.at(-1)![0].categories.map((c: { code: string }) => c.code)).toEqual(['SALES']);
+  });
+
+  it('suggests a category’s code from its name, and refuses one the template already uses', async () => {
+    const onChange = vi.fn();
+    render(<Editor onChange={onChange} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Add a category' }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Sales');
+
+    expect(screen.getByLabelText('Code')).toHaveValue('SALES');
+    expect(screen.getByRole('alert')).toHaveTextContent('This template already has a category with this code.');
+    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+
+    await userEvent.clear(screen.getByLabelText('Name'));
+    await userEvent.type(screen.getByLabelText('Name'), 'Soft Skills');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(onChange.mock.calls.at(-1)![0].categories.at(-1)).toEqual({
+      code: 'SOFT_SKILLS', label: 'Soft Skills', description: null,
+    });
+  });
+
+  it('adds a skill to the category chosen, and keeps one with modules from being removed', async () => {
+    const onChange = vi.fn();
+    render(<Editor onChange={onChange} />);
+    await subtab('Skills');
+
+    expect(within(rowOf('Prospecting')).getByText('2 modules')).toBeInTheDocument();
+    expect(within(rowOf('Prospecting')).getByRole('button', { name: 'Remove' })).toBeDisabled();
+    expect(within(rowOf('Closing')).getByRole('button', { name: 'Remove' })).toBeEnabled();
+
+    await userEvent.selectOptions(screen.getByLabelText('Category'), 'PRODUCT');
+    expect(screen.getByText('No skills for this category yet.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add a skill' }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Feature walkthroughs');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(onChange.mock.calls.at(-1)![0].skills.at(-1)).toEqual({
+      code: 'FEATURE_WALKTHROUGHS', categoryCode: 'PRODUCT', label: 'Feature walkthroughs',
+    });
+  });
+
+  it('moves a skill to another category', async () => {
+    const onChange = vi.fn();
+    render(<Editor onChange={onChange} />);
+    await subtab('Skills');
+    await userEvent.click(within(rowOf('Closing')).getByRole('button', { name: 'Edit' }));
+    await userEvent.selectOptions(screen.getByRole('combobox', { description: 'Its modules move with it.' }), 'PRODUCT');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onChange.mock.calls.at(-1)![0].skills.find((s: { code: string }) => s.code === 'CLOSING'))
+      .toMatchObject({ categoryCode: 'PRODUCT' });
+  });
+
+  it('offers the chosen category’s skills, and adds a module only to a skill that is chosen', async () => {
+    const onChange = vi.fn();
+    render(<Editor onChange={onChange} />);
+    await subtab('Modules');
+
+    expect(within(screen.getByLabelText('Skill')).getAllByRole('option').map((o) => o.textContent))
+      .toEqual(['All skills', 'Prospecting', 'Closing']);
+    expect(screen.getByText('Choose a skill to add a module to it.')).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText('Skill'), 'CLOSING');
+    expect(screen.getByText('No modules for this category/skill yet.')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add a module' }));
+    await userEvent.type(screen.getByLabelText('Title'), 'Trial closes');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    // A draft, as an office's own new module is.
+    expect(onChange.mock.calls.at(-1)![0].modules.at(-1)).toEqual({
+      code: 'TRIAL_CLOSES', skillCode: 'CLOSING', title: 'Trial closes', publishState: 'draft',
+    });
+    expect(within(rowOf('Trial closes')).getByText('Draft')).toBeInTheDocument();
+  });
+
+  it('publishes a module in the template through its edit panel', async () => {
+    const onChange = vi.fn();
+    render(<Editor onChange={onChange} />);
+    await subtab('Modules');
+    await userEvent.click(within(rowOf('Cold calls')).getByRole('button', { name: 'Edit' }));
+    await userEvent.selectOptions(screen.getByLabelText('Publish state'), 'published');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onChange.mock.calls.at(-1)![0].modules.find((m: { code: string }) => m.code === 'COLD_CALLS'))
+      .toMatchObject({ publishState: 'published' });
+    expect(within(rowOf('Cold calls')).getByText('Published')).toBeInTheDocument();
   });
 });

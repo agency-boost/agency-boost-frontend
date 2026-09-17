@@ -19,6 +19,8 @@ import ActivityTypesPage from './(tenant)/kpm/settings/activity-types/page';
 import RatioBenchmarksPage from './(tenant)/kpm/settings/ratio-benchmarks/page';
 import LeadStatusesPage from './(tenant)/kpm/settings/lead-statuses/page';
 import BranchInfoPage from './(tenant)/kpm/settings/branch-info/page';
+import TrainingSettingsPage from './(tenant)/kpm/settings/training/page';
+import TrainingModulePage from './(tenant)/kpm/settings/training/[moduleId]/page';
 import CompanyTemplatePage from './(admin)/admin/companies/[companyId]/template/page';
 import AdminOverviewPage from './(admin)/admin/page';
 import TenantsPage from './(admin)/admin/tenants/page';
@@ -986,6 +988,82 @@ describe('screens have no axe violations', () => {
       renderInLayout(TenantLayout, <BranchInfoPage />, { me: settingsOwner });
       await screen.findByDisplayValue('BSD City Branch');
       await expectClean('kpm/settings/branch-info');
+    });
+
+    const TRAINING = [{
+      id: 'tc1', code: 'SALES', label: 'Sales', description: 'Structured modules.', displayOrder: 1,
+      version: 1, status: 'active',
+      skills: [{
+        id: 'ts1', code: 'PROSPECTING', categoryCode: 'SALES', label: 'Prospecting', displayOrder: 1,
+        version: 1, status: 'active',
+        modules: [
+          {
+            id: 'tm1', code: 'PROSPECT_LIST', skillCode: 'PROSPECTING', title: 'Building Your Prospect List',
+            publishState: 'published', displayOrder: 1, version: 1, status: 'active',
+          },
+          {
+            id: 'tm2', code: 'COLD_CALLS', skillCode: 'PROSPECTING', title: 'Cold calls',
+            publishState: 'draft', displayOrder: 2, version: 1, status: 'active',
+          },
+        ],
+      }],
+    }];
+
+    /*
+     * P5-T1. Modules is the subtab with the most on it — two filters, a badge and three controls a
+     * row — and the add panel opened over it, where a suggested code sits beside its label.
+     */
+    it('training, on Modules with the add panel open', async () => {
+      window.history.replaceState(null, '', '/kpm/settings/training#modules');
+      stubFetch({ ...configStubs, '/kpm/settings/training': { body: TRAINING } });
+      renderInLayout(TenantLayout, <TrainingSettingsPage />, { me: settingsOwner });
+      await screen.findByText('Building Your Prospect List');
+      await userEvent.click(screen.getByRole('button', { name: '+ Add module' }));
+      await expectClean('kpm/settings/training');
+      window.history.replaceState(null, '', '/');
+    });
+
+    it('a training module, with its switch and the files still to come', async () => {
+      stubFetch({ ...configStubs, '/kpm/settings/training': { body: TRAINING } });
+      renderInLayout(
+        TenantLayout,
+        <TrainingModulePage params={routeParams({ moduleId: 'tm1' })} />,
+        { me: settingsOwner },
+      );
+      await screen.findByRole('switch', { name: 'Published' });
+      await expectClean('kpm/settings/training/[moduleId]');
+    });
+
+    it('the company template’s Training tab', async () => {
+      stubFetch({
+        '/admin/companies/c1/template': {
+          body: {
+            id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1,
+            status: 'draft', payload: { categories: [TAXONOMY[0]], types: [TYPE] },
+            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
+          },
+        },
+        '/admin/companies/c1/template/training_taxonomy': {
+          body: {
+            id: 'tpl-3', companyId: 'c1', kind: 'training_taxonomy', version: 1, status: 'draft',
+            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
+            payload: {
+              categories: [{ code: 'SALES', label: 'Sales', description: null }],
+              skills: [{ code: 'PROSPECTING', categoryCode: 'SALES', label: 'Prospecting' }],
+              modules: [{ code: 'PROSPECT_LIST', skillCode: 'PROSPECTING', title: 'Building Your Prospect List', publishState: 'published' }],
+            },
+          },
+        },
+      });
+      renderInLayout(
+        AdminLayout,
+        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
+        { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
+      );
+      await screen.findByText('SELL_SUBMISSION');
+      await userEvent.click(screen.getByRole('link', { name: 'Training' }));
+      await screen.findByText('1 skill · 1 module published');
+      await expectClean('admin/companies/[companyId]/template#training');
     });
 
     it('the company template, with an editor open', async () => {

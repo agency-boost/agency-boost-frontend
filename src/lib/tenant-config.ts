@@ -224,7 +224,61 @@ export const publishConfig = () =>
 export type ConfigChangeOp =
   | 'category.create' | 'category.update' | 'category.archive' | 'category.restore'
   | 'type.create' | 'type.update' | 'type.archive' | 'type.restore'
-  | 'ratio.create' | 'ratio.update' | 'ratio.archive' | 'ratio.restore';
+  | 'ratio.create' | 'ratio.update' | 'ratio.archive' | 'ratio.restore'
+  | 'trainingCategory.create' | 'trainingCategory.update'
+  | 'trainingCategory.archive' | 'trainingCategory.restore'
+  | 'trainingSkill.create' | 'trainingSkill.update'
+  | 'trainingSkill.archive' | 'trainingSkill.restore'
+  | 'trainingModule.create' | 'trainingModule.update'
+  | 'trainingModule.archive' | 'trainingModule.restore';
+
+/** Whether agents are offered a module **at all** — not when; that is the office's publish. */
+export type TrainingPublishState = 'draft' | 'published';
+
+export interface TrainingModuleRow {
+  id: string;
+  code: string;
+  /** Its category is this skill's, and is not stored on the module (ADR-0029). */
+  skillCode: string;
+  title: string;
+  publishState: TrainingPublishState;
+  displayOrder: number;
+  version: number;
+  status: 'active' | 'archived';
+}
+
+export interface TrainingSkillRow {
+  id: string;
+  code: string;
+  categoryCode: string;
+  label: string;
+  displayOrder: number;
+  version: number;
+  status: 'active' | 'archived';
+  modules: TrainingModuleRow[];
+}
+
+export interface TrainingCategoryRow {
+  id: string;
+  code: string;
+  label: string;
+  /** The subtitle an agent's category page shows. */
+  description: string | null;
+  displayOrder: number;
+  version: number;
+  status: 'active' | 'archived';
+  skills: TrainingSkillRow[];
+}
+
+/**
+ * The office's training taxonomy (P5-T1), nested and in display order. **Drafts included** —
+ * this is the office's configuration, not what agents are offered. `includeArchived` is the
+ * settings screen's. Every write goes through {@link applyConfigChanges}.
+ */
+export const listTraining = (includeArchived = false) =>
+  api<TrainingCategoryRow[]>(
+    `/kpm/settings/training${includeArchived ? '?includeArchived=true' : ''}`,
+  );
 
 export interface ConfigChange {
   op: ConfigChangeOp;
@@ -247,8 +301,39 @@ export const applyConfigChanges = (ops: ConfigChange[]) =>
     activity: ActivityCategoryRow[];
     ratios: RatioRow[];
     leadPipelines: LeadPipelineRow[];
+    /**
+     * What agents would be offered — published, active modules only. **Not** the settings
+     * list: a screen showing drafts and archived rows reads {@link listTraining} again.
+     */
+    training: TrainingCategoryRow[];
     version: number;
-  }>('/kpm/settings/changes', { method: 'POST', body: { ops } });
+  }>('/kpm/settings/changes', { method: 'POST', body: { ops: sequenceVersions(ops) } });
+
+/**
+ * The version each op will find its row at, rather than the version the screen read (P5-T1).
+ *
+ * **The batch moves a row's version on after every op against it** — that is how two ops on
+ * one row both hold (`changes.service.ts`, pinned by *lets two ops touch one row*). So the
+ * second op on a row must name the version the first one left, and every screen sent the one
+ * it had read. Editing a type and then archiving it, in one Save, answered
+ * `409 VERSION_CONFLICT` about a row nobody else had touched; the training screen made that
+ * the ordinary case, because publishing a module and archiving another's skill are both
+ * edits somebody makes in one sitting.
+ *
+ * Done here, at the moment of sending, rather than in {@link stageChange}: what is staged
+ * stays what the reader did, and Undo can drop any op without renumbering the rest.
+ */
+export function sequenceVersions(ops: ConfigChange[]): ConfigChange[] {
+  const earlier = new Map<string, number>();
+  return ops.map((change) => {
+    if (!change.id || change.expectedVersion === undefined) return change;
+    // By entity as well as id: the batch keeps each kind of row in a map of its own.
+    const key = `${change.op.split('.')[0]}:${change.id}`;
+    const before = earlier.get(key) ?? 0;
+    earlier.set(key, before + 1);
+    return before === 0 ? change : { ...change, expectedVersion: change.expectedVersion + before };
+  });
+}
 
 /**
  * Fold one staged change into the list a screen is holding.

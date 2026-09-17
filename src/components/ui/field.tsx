@@ -195,15 +195,22 @@ export function ButtonLink({
   href,
   variant = 'primary',
   className,
+  onClick,
   children,
 }: {
   href: string;
   variant?: 'primary' | 'secondary';
   className?: string;
+  /**
+   * For a link that may have to ask first — the training list holds unsaved edits that leaving
+   * would discard, so opening a module checks before it goes. It is still a link: without a
+   * reason to stop, it navigates, and it opens in a new tab like any other.
+   */
+  onClick?: React.MouseEventHandler<HTMLAnchorElement>;
   children: React.ReactNode;
 }) {
   return (
-    <Link href={href} className={cn(BUTTON_BASE, BUTTON_VARIANT[variant], className)}>
+    <Link href={href} onClick={onClick} className={cn(BUTTON_BASE, BUTTON_VARIANT[variant], className)}>
       {children}
     </Link>
   );

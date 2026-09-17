@@ -2,7 +2,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api } from './api-client';
-import type { ActivityCategoryRow, LeadPipelineRow, RatioRow } from './tenant-config';
+import type {
+  ActivityCategoryRow, LeadPipelineRow, RatioRow, TrainingCategoryRow,
+} from './tenant-config';
 
 /** One rung of the company's ladder, as the office reads it (P4-T9, ADR-0012). */
 export interface OrgLevel {
@@ -18,6 +20,8 @@ export interface TenantConfig {
   activity: ActivityCategoryRow[];
   ratios: RatioRow[];
   leadPipelines: LeadPipelineRow[];
+  /** What agents are offered: published modules only (P5-T1). No agent screen reads it before Phase 12. */
+  training: TrainingCategoryRow[];
   version: number;
 }
 
