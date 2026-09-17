@@ -36,11 +36,13 @@ import {
  * somebody reorders the taxonomy. Here each side is rendered as the labels of the codes it
  * names, with the code underneath, so an Owner can see what a ratio actually counts.
  *
- * **Two kinds of row** (P4-T15, ADR-0021). The five the office was provisioned with are the
- * platform's: their formula is fixed, because that is what lets two offices' figures mean
- * the same thing. Everything the office added is its own and free in every respect. The
- * difference is stated on the card rather than expressed as a disabled control — a field
- * that will not accept input and does not say why is the worst of both.
+ * **Two kinds of row** (P4-T15, ADR-0021, revised by ADR-0024). The five the office was
+ * provisioned with came from its company; everything else it made itself. What that no
+ * longer means is *immutable*: since ADR-0024 every field but the `code` is the office's to
+ * change, the formula included, because the comparison the old lock protected computes the
+ * **seeded** formula — recorded on the row — rather than reading this one. A row that has
+ * moved away from what it was seeded with says so on its card, naming the formula it
+ * started from, because one office can now hold two numbers under one name.
  *
  * **Who a ratio is for** (ADR-0020). A ratio applies to ladder rungs, and a member whose
  * rung is absent does not see it at all. An agent with no recruiting mandate reading a
