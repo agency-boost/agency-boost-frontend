@@ -916,8 +916,8 @@ describe('screens have no axe violations', () => {
     const RATIOS = [{
       id: 'r1', code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate',
       numerator: ['SELL_SUBMISSION'], denominator: ['SELL_SUBMISSION'],
-      benchmark: 0.15, comparison: 'gte', displayOrder: 1, version: 1, status: 'active',
-      origin: 'platform', appliesToOrgLevelCodes: [],
+      benchmark: 0.15, comparison: 'gte', displayUnit: 'percent', displayOrder: 1, version: 1,
+      status: 'active', origin: 'platform', appliesToOrgLevelCodes: [],
     }];
     const LADDER = [
       { orgLevelId: 'l1', companyId: 'co-1', code: 'AGENT', label: 'Agent', displayOrder: 1, status: 'active', archivedAt: null },

@@ -253,7 +253,7 @@ describe('a company’s Company template (P4-T8)', () => {
               ratios: [{
                 code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate',
                 numerator: ['SELL_SUBMISSION'], denominator: ['SELL_PRESENTATION'],
-                benchmark: 0.15, comparison: 'gte', displayOrder: 1,
+                benchmark: 0.15, comparison: 'gte', displayUnit: 'percent', displayOrder: 1,
               }],
             },
             publishedAt: null, publishedVersion: 0, officesBehind: 0,
@@ -277,7 +277,8 @@ describe('a company’s Company template (P4-T8)', () => {
        */
       expect(screen.getByRole('group', { name: 'Counts' })).toBeInTheDocument();
       expect(screen.getByRole('group', { name: 'Out of' })).toBeInTheDocument();
-      expect(screen.getByText(/cannot change it/)).toBeInTheDocument();
+      expect(screen.getByText(/what a comparison across offices is computed with/))
+        .toBeInTheDocument();
     });
   });
 
@@ -291,7 +292,7 @@ describe('a company’s Company template (P4-T8)', () => {
               ratios: [{
                 code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate',
                 numerator: ['SELL_SUBMISSION'], denominator: ['SELL_SUBMISSION'],
-                benchmark: 0.15, comparison: 'gte', displayOrder: 1,
+                benchmark: 0.15, comparison: 'gte', displayUnit: 'percent', displayOrder: 1,
               }],
             },
             publishedAt: null, publishedVersion: 0, officesBehind: 0,

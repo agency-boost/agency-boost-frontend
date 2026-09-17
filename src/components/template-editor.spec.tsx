@@ -151,3 +151,63 @@ describe('TaxonomyEditor', () => {
     expect(document.getElementById(code.getAttribute('aria-describedby')!)).toBeTruthy();
   });
 });
+
+describe('RatioSetEditor writes benchmarks in their unit (P4-T25)', () => {
+  const ratio = (over: Partial<RatioSetPayload['ratios'][number]>) => ({
+    code: 'LEADS_PER_ACTIVITY', label: 'Leads per activity',
+    numerator: ['A'], denominator: ['B'], benchmark: 0.3, comparison: 'gte' as const,
+    displayUnit: 'decimal' as const, displayOrder: 1, ...over,
+  });
+
+  it('shows a percentage, a number and a band the way the registry writes them', () => {
+    render(<RatioSetEditor
+      available={[]}
+      onChange={vi.fn()}
+      payload={{ ratios: [
+        ratio({ code: 'SELLING_SUCCESS_RATE', label: 'Selling', benchmark: 0.15, displayUnit: 'percent' }),
+        ratio({}),
+        ratio({ code: 'SELLING_VS_RECRUITMENT', label: 'Balance', benchmark: 30, comparison: 'band', displayUnit: 'points' }),
+      ] }}
+    />);
+
+    expect(screen.getByText('15.0%')).toBeInTheDocument();
+    expect(screen.getByText('0.30')).toBeInTheDocument();
+    expect(screen.getByText('±30 points')).toBeInTheDocument();
+  });
+
+  it('re-expresses the typed benchmark when the unit changes, and saves the proportion', async () => {
+    // The field takes 30 for 30.0%, so switching units must change the text — saving the
+    // same "0.3" as a percentage would publish a benchmark a hundred times too small.
+    const onChange = vi.fn();
+    render(<RatioSetEditor available={[]} onChange={onChange} payload={{ ratios: [ratio({})] }} />);
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    await userEvent.selectOptions(screen.getByLabelText('Shown as'), 'percent');
+    expect(screen.getByLabelText('On track at or above')).toHaveValue('30');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onChange.mock.calls.at(-1)![0].ratios[0]).toMatchObject({
+      benchmark: 0.3, displayUnit: 'percent',
+    });
+  });
+
+  it('offers no unit on a band ratio', async () => {
+    render(<RatioSetEditor
+      available={[]}
+      onChange={vi.fn()}
+      payload={{ ratios: [ratio({ comparison: 'band', benchmark: 30, displayUnit: 'points' })] }}
+    />);
+    await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
+    expect(screen.queryByLabelText('Shown as')).not.toBeInTheDocument();
+  });
+
+  it('starts a new ratio as a plain number', async () => {
+    const onChange = vi.fn();
+    render(<RatioSetEditor available={[]} onChange={onChange} payload={{ ratios: [] }} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Add a ratio' }));
+    await userEvent.type(screen.getByLabelText('Code'), 'REFERRAL_RATE');
+    await userEvent.type(screen.getByLabelText('Name'), 'Referral rate');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    expect(onChange.mock.calls.at(-1)![0].ratios[0]).toMatchObject({ displayUnit: 'decimal' });
+  });
+});

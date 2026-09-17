@@ -24,22 +24,34 @@ const RATIOS = [
   {
     id: 'r1', code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate',
     numerator: ['SELL_SUBMISSION'], denominator: ['SELL_PRESENTATION', 'SELL_FOLLOWUP'],
-    benchmark: 0.15, comparison: 'gte', displayOrder: 1, version: 1, status: 'active',
-    // Provisioned, so its formula is fixed and its benchmark is not (ADR-0021).
+    benchmark: 0.15, comparison: 'gte', displayUnit: 'percent', displayOrder: 1, version: 1,
+    status: 'active',
+    // Provisioned. Since ADR-0024 the formula is the office's to change, and the row
+    // records what it was seeded with so a divergence can be named.
     origin: 'platform', appliesToOrgLevelCodes: [],
+    standardNumerator: ['SELL_SUBMISSION'],
+    standardDenominator: ['SELL_PRESENTATION', 'SELL_FOLLOWUP'],
+    divergesFromStandard: false,
   },
   {
     id: 'r2', code: 'SELLING_VS_RECRUITMENT', label: 'Selling vs Recruitment',
     numerator: ['SELL_SUBMISSION'], denominator: ['RECRUIT_AGENT_CODE'],
-    benchmark: 30, comparison: 'band', displayOrder: 2, version: 1, status: 'active',
+    benchmark: 30, comparison: 'band', displayUnit: 'points', displayOrder: 2, version: 1,
+    status: 'active',
     // The one an agent with no recruiting mandate must not be measured on (ADR-0020).
     origin: 'platform', appliesToOrgLevelCodes: ['AB', 'AAB'],
+    standardNumerator: ['SELL_SUBMISSION'],
+    standardDenominator: ['RECRUIT_AGENT_CODE'],
+    divergesFromStandard: false,
   },
   {
     id: 'r3', code: 'REFERRAL_RATE', label: 'Referral rate',
     numerator: ['SELL_SUBMISSION'], denominator: ['SELL_PRESENTATION'],
-    benchmark: 0.5, comparison: 'gte', displayOrder: 3, version: 1, status: 'active',
+    benchmark: 0.5, comparison: 'gte', displayUnit: 'decimal', displayOrder: 3, version: 1,
+    status: 'active',
+    // Its own, so there is no standard it could have moved away from.
     origin: 'office', appliesToOrgLevelCodes: [],
+    standardNumerator: null, standardDenominator: null, divergesFromStandard: false,
   },
 ];
 
@@ -58,13 +70,13 @@ const TAXONOMY = [{
   ],
 }];
 
-function render(me = OWNER) {
+function render(me = OWNER, ratios = RATIOS) {
   const stub = stubFetch({
-    '/kpm/settings/ratio-benchmarks': { body: RATIOS },
+    '/kpm/settings/ratio-benchmarks': { body: ratios },
     '/kpm/settings/activity-types': { body: TAXONOMY },
     // The provider's two reads. The ladder is the company's (ADR-0012) and this screen
     // reads it rather than owning a copy — so the test supplies it the same way.
-    '/kpm/config': { body: { activity: TAXONOMY, ratios: RATIOS, leadPipelines: [], version: 1 } },
+    '/kpm/config': { body: { activity: TAXONOMY, ratios, leadPipelines: [], version: 1 } },
     '/kpm/org-levels': { body: LADDER },
   });
   renderWithSession(
@@ -110,7 +122,63 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     await screen.findByRole('heading', { name: 'Selling success rate' });
     expect(screen.getAllByText(/On track at or above/).length).toBeGreaterThan(0);
     expect(screen.getByText(/On track within/)).toBeInTheDocument();
-    expect(screen.getByText('points')).toBeInTheDocument();
+  });
+
+  it('writes each benchmark in its own unit, not as the stored number (P4-T25)', async () => {
+    /*
+     * Every card printed the stored value, so a success rate read `0.15` where the registry
+     * and the prototype both say `15.0%`. The unit comes from the API because it cannot be
+     * worked out: `0.50` is a plain number on the office's own ratio.
+     */
+    render();
+    await screen.findByRole('heading', { name: 'Selling success rate' });
+    expect(screen.getByText('15.0%')).toBeInTheDocument();
+    expect(screen.getByText('±30 points')).toBeInTheDocument();
+    expect(screen.getByText('0.50')).toBeInTheDocument();
+    expect(screen.queryByText('0.15')).not.toBeInTheDocument();
+  });
+
+  it('asks for a percentage the way it is shown: 15 for 15.0%', async () => {
+    render();
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
+    expect(screen.getByLabelText('Benchmark')).toHaveValue(15);
+  });
+
+  it('re-expresses what was typed when the unit changes, rather than reinterpreting it', async () => {
+    // Switching 0.5 from a number to a percentage must read 50 — the same benchmark —
+    // and not quietly become 0.5%.
+    const { calls } = render();
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[2]);
+    await userEvent.selectOptions(screen.getByLabelText('Shown as'), 'percent');
+    expect(screen.getByLabelText('Benchmark')).toHaveValue(50);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const card = screen.getByRole('heading', { name: /Referral rate/ }).closest('div')!.parentElement!;
+    expect(within(card).getByText('50.0%')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
+    expect(JSON.parse(post.init.body as string).ops[0].body)
+      .toMatchObject({ benchmark: 0.5, displayUnit: 'percent' });
+  });
+
+  it('offers no unit on a band ratio, which is judged in points and nothing else', async () => {
+    render();
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[1]);
+    expect(screen.queryByLabelText('Shown as')).not.toBeInTheDocument();
+  });
+
+  it('sends no unit when only the number moved', async () => {
+    // The row keeps a unit nobody touched; a unit riding along on every edit would make
+    // the audit log say somebody chose one.
+    const { calls } = render();
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
+    await userEvent.clear(screen.getByLabelText('Benchmark'));
+    await userEvent.type(screen.getByLabelText('Benchmark'), '20');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
+    expect(JSON.parse(post.init.body as string).ops[0].body).not.toHaveProperty('displayUnit');
   });
 
   it('stages a benchmark change and sends nothing until Save changes', async () => {
@@ -122,7 +190,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
     const input = screen.getByLabelText('Benchmark');
     await userEvent.clear(input);
-    await userEvent.type(input, '0.25');
+    await userEvent.type(input, '25');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     // Nothing has left the browser yet — and the screen says so.
@@ -136,10 +204,14 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       op: 'ratio.update',
       id: 'r1',
       expectedVersion: 1,
-      // The name rides along: one panel, one change. It was read-only until P4-T23, which
-      // made the office-ratio card's "the name is yours" false for the first field a
-      // reader would try.
-      body: { label: 'Selling success rate', benchmark: 0.25 },
+      // One panel, one change: the name rides along, and since ADR-0024 so does the
+      // formula — on a provisioned ratio too, where sending it used to be refused.
+      body: {
+        label: 'Selling success rate',
+        benchmark: 0.25,
+        numerator: ['SELL_SUBMISSION'],
+        denominator: ['SELL_PRESENTATION', 'SELL_FOLLOWUP'],
+      },
     }]);
   });
 
@@ -157,13 +229,13 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
     const input = screen.getByLabelText('Benchmark');
     await userEvent.clear(input);
-    await userEvent.type(input, '0.25');
+    await userEvent.type(input, '25');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     const card = screen.getByRole('heading', { name: /Selling success rate/ }).closest('div')!
       .parentElement!;
-    expect(within(card).getByText('0.25')).toBeInTheDocument();
-    expect(within(card).queryByText('0.15')).not.toBeInTheDocument();
+    expect(within(card).getByText('25.0%')).toBeInTheDocument();
+    expect(within(card).queryByText('15.0%')).not.toBeInTheDocument();
     expect(within(card).getByText('Edited — not saved yet')).toBeInTheDocument();
   });
 
@@ -174,7 +246,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
     const input = screen.getByLabelText('Benchmark');
     await userEvent.clear(input);
-    await userEvent.type(input, '0.25');
+    await userEvent.type(input, '25');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
@@ -182,12 +254,12 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     expect(screen.queryByText(/not saved yet/)).not.toBeInTheDocument();
     const card = screen.getByRole('heading', { name: /Selling success rate/ }).closest('div')!
       .parentElement!;
-    expect(within(card).getByText('0.15')).toBeInTheDocument();
+    expect(within(card).getByText('15.0%')).toBeInTheDocument();
   });
 
   it('collapses repeated edits to one row into a single change', async () => {
     const { calls } = render();
-    for (const value of ['0.2', '0.3']) {
+    for (const value of ['20', '30']) {
       await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
       const input = screen.getByLabelText('Benchmark');
       await userEvent.clear(input);
@@ -207,7 +279,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     const { calls } = render();
     await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
     await userEvent.clear(screen.getByLabelText('Benchmark'));
-    await userEvent.type(screen.getByLabelText('Benchmark'), '0.25');
+    await userEvent.type(screen.getByLabelText('Benchmark'), '25');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await userEvent.click(screen.getByRole('button', { name: 'Discard them' }));
 
@@ -223,16 +295,13 @@ describe('the office ratio benchmarks (P4-T2)', () => {
   });
 
   describe('two kinds of ratio, and who each is for (P4-T15)', () => {
-    it('AC-6: says a platform ratio’s formula is fixed, and why', async () => {
-      /*
-       * Stated on the card, not expressed as a disabled control. A field that will not
-       * accept input and does not say why is the worst of both — the Owner learns only
-       * that something is broken.
-       */
+    it('AC-6: says where a provisioned ratio came from, and that it is theirs to change', async () => {
+      // It read *"its formula is fixed"* until ADR-0024. Everything on it is the office's
+      // now; what the card owes the reader is where it came from.
       render();
       const card = (await screen.findByRole('heading', { name: 'Selling success rate' }))
         .closest('div')!.parentElement!;
-      expect(within(card).getByText(/Measured the same way in every office/))
+      expect(within(card).getByText(/Provisioned with your company’s standard/))
         .toBeInTheDocument();
     });
 
@@ -299,14 +368,16 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       const outOf = screen.getByRole('group', { name: 'Out of' });
       await userEvent.click(within(outOf).getByLabelText('Presentasi penjualan'));
 
-      await userEvent.type(screen.getByLabelText('On track at or above'), '0.3');
+      await userEvent.selectOptions(screen.getByLabelText('Shown as'), 'percent');
+      await userEvent.type(screen.getByLabelText('On track at or above'), '30');
       await userEvent.click(screen.getByRole('button', { name: 'Add the ratio' }));
 
       const post = calls.find((c) => c.init.method === 'POST')!;
       expect(JSON.parse(post.init.body as string)).toMatchObject({
         code: 'REFERRALS', label: 'Referrals',
         numerator: ['SELL_SUBMISSION'], denominator: ['SELL_PRESENTATION'],
-        benchmark: 0.3, comparison: 'gte',
+        // Typed as 30 because it is shown as a percentage; stored as the proportion.
+        benchmark: 0.3, comparison: 'gte', displayUnit: 'percent',
       });
     });
 
@@ -321,24 +392,61 @@ describe('the office ratio benchmarks (P4-T2)', () => {
   });
 
   describe('editing what a ratio counts (P4-T22)', () => {
-    it('opens inside Edit on an office ratio, and says why it is absent on a platform one', async () => {
+    it('opens the formula inside Edit on every ratio, provisioned ones included', async () => {
       /*
-       * It was a second button that appeared only on an office's own ratio — so on a
-       * freshly provisioned office, where all five are the platform's, the feature was
-       * invisible and read as missing rather than withheld. One Edit, and the five say
-       * what is fixed about them.
+       * The formula was editable only on an office's own ratio, and a provisioned one said
+       * *"What this counts is fixed"*. ADR-0024 opened all five: the comparison that
+       * argument protected reads the seeded formula, which the row records, not this one.
        */
+      render();
+      for (const name of ['Referral rate', 'Selling success rate']) {
+        const card = (await screen.findByRole('heading', { name })).closest('div')!.parentElement!;
+        await userEvent.click(within(card).getByRole('button', { name: 'Edit' }));
+        expect(within(card).getByRole('group', { name: 'Counts' })).toBeInTheDocument();
+        await userEvent.click(within(card).getByRole('button', { name: 'Cancel' }));
+      }
+      expect(screen.queryByText(/What this counts is fixed/)).not.toBeInTheDocument();
+    });
+
+    it('sends a formula change on a provisioned ratio, which used to be refused', async () => {
+      const { calls } = render();
+      const card = (await screen.findByRole('heading', { name: 'Selling success rate' }))
+        .closest('div')!.parentElement!;
+      await userEvent.click(within(card).getByRole('button', { name: 'Edit' }));
+      const counts = within(card).getByRole('group', { name: 'Counts' });
+      await userEvent.click(within(counts).getByLabelText('Presentasi penjualan'));
+      await userEvent.click(within(card).getByRole('button', { name: 'Save' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
+      expect(JSON.parse(post.init.body as string).ops[0].body.numerator)
+        .toEqual(['SELL_SUBMISSION', 'SELL_PRESENTATION']);
+    });
+
+    it('names a divergence on the card, and what the office was set up with', async () => {
+      /*
+       * The cost ADR-0024 accepts: one office can hold two numbers under one name — its own,
+       * and the platform's. A reader must be told which they are looking at rather than
+       * discovering it from a dashboard that disagrees.
+       */
+      render(OWNER, [{
+        ...RATIOS[0],
+        numerator: ['SELL_PRESENTATION'],
+        divergesFromStandard: true,
+      }, ...RATIOS.slice(1)]);
+
+      const card = (await screen.findByRole('heading', { name: 'Selling success rate' }))
+        .closest('div')!.parentElement!;
+      expect(within(card).getByText(/not your company’s standard any more/i)).toBeInTheDocument();
+      // Named in labels, the way the formula above it is — never as raw codes.
+      expect(within(card).getByText(/Submission polis ÷ Presentasi penjualan/)).toBeInTheDocument();
+    });
+
+    it('says nothing about a standard on a ratio the office created', async () => {
       render();
       const own = (await screen.findByRole('heading', { name: 'Referral rate' }))
         .closest('div')!.parentElement!;
-      await userEvent.click(within(own).getByRole('button', { name: 'Edit' }));
-      expect(within(own).getByRole('group', { name: 'Counts' })).toBeInTheDocument();
-
-      const platform = screen.getByRole('heading', { name: 'Selling success rate' })
-        .closest('div')!.parentElement!;
-      await userEvent.click(within(platform).getByRole('button', { name: 'Edit' }));
-      expect(within(platform).queryByRole('group', { name: 'Counts' })).not.toBeInTheDocument();
-      expect(within(platform).getByText(/What this counts is fixed/)).toBeInTheDocument();
+      expect(within(own).queryByText(/standard/i)).not.toBeInTheDocument();
     });
 
     it('stages both sides together, because a ratio is one division', async () => {

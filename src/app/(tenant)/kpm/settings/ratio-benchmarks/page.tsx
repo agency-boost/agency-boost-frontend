@@ -8,6 +8,10 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
+import {
+  benchmarkFromInput, benchmarkToInput, DISPLAY_UNIT_LABEL, formatBenchmark, reexpress, unitFor,
+  type RatioDisplayUnit,
+} from '@/lib/ratio-format';
 import { projectStaged, unstageRow, STAGED_LABEL } from '@/lib/staged-projection';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import {
@@ -73,6 +77,12 @@ export default function RatioBenchmarksPage() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  /*
+   * The unit the draft is typed in (P4-T25). The field takes `15` for 15.0%, so the text
+   * alone does not say what it means — changing the unit re-expresses it rather than
+   * reinterpreting it, which is what `reexpress` is for.
+   */
+  const [draftUnit, setDraftUnit] = useState<RatioDisplayUnit>('decimal');
   const [draftLabel, setDraftLabel] = useState('');
   // The company's ladder, for the applicability control. It is the company's to define
   // (ADR-0012), so this reads it and never offers to change it.
@@ -96,6 +106,7 @@ export default function RatioBenchmarksPage() {
   const blank = {
     code: '', label: '', numerator: [] as string[], denominator: [] as string[],
     benchmark: '', comparison: 'gte' as RatioComparison,
+    displayUnit: 'decimal' as RatioDisplayUnit,
   };
   const [form, setForm] = useState(blank);
 
@@ -253,8 +264,10 @@ export default function RatioBenchmarksPage() {
                 {publishedRatios.map((r) => (
                   <li key={r.id} className="text-md text-navy">
                     {r.label}
-                    <span className="text-muted"> — on track at </span>
-                    <strong>{r.benchmark}</strong>
+                    <span className="text-muted">
+                      {r.comparison === 'band' ? ' — on track within ' : ' — on track at or above '}
+                    </span>
+                    <strong>{formatBenchmark(r.benchmark, unitFor(r))}</strong>
                   </li>
                 ))}
               </ul>
@@ -271,13 +284,15 @@ export default function RatioBenchmarksPage() {
               onSubmit={(e) => {
                 e.preventDefault();
                 void run(async () => {
+                  const unit = form.comparison === 'band' ? 'points' : form.displayUnit;
                   await createRatio({
                     code: form.code,
                     label: form.label,
                     numerator: form.numerator,
                     denominator: form.denominator,
-                    benchmark: Number(form.benchmark),
+                    benchmark: benchmarkFromInput(form.benchmark, unit),
                     comparison: form.comparison,
+                    displayUnit: unit,
                   });
                   setForm(blank);
                   setAdding(false);
@@ -345,7 +360,9 @@ export default function RatioBenchmarksPage() {
                   htmlFor="new-ratio-benchmark"
                   hint={form.comparison === 'band'
                     ? 'Percentage points either side of an even split.'
-                    : undefined}
+                    : form.displayUnit === 'percent'
+                      ? 'As a percentage — type 15 for 15.0%.'
+                      : undefined}
                   className="min-w-40"
                 >
                   <TextInput
@@ -356,6 +373,28 @@ export default function RatioBenchmarksPage() {
                     onChange={(e) => setForm((f) => ({ ...f, benchmark: e.target.value }))}
                   />
                 </Field>
+                {/* Only for an at-or-above ratio: a band is judged in points and has no
+                    other way to be written. Switching re-expresses what was typed, so 0.3
+                    becomes 30 as a percentage rather than turning into 0.3%. */}
+                {form.comparison === 'gte' && (
+                  <Field label="Shown as" htmlFor="new-ratio-unit" className="min-w-48">
+                    <Select
+                      id="new-ratio-unit"
+                      value={form.displayUnit}
+                      onChange={(e) => {
+                        const next = e.target.value as RatioDisplayUnit;
+                        setForm((f) => ({
+                          ...f,
+                          displayUnit: next,
+                          benchmark: reexpress(f.benchmark, f.displayUnit, next),
+                        }));
+                      }}
+                    >
+                      <option value="percent">{DISPLAY_UNIT_LABEL.percent}</option>
+                      <option value="decimal">{DISPLAY_UNIT_LABEL.decimal}</option>
+                    </Select>
+                  </Field>
+                )}
                 <Field label="Rule" htmlFor="new-ratio-comparison" className="min-w-40">
                   <Select
                     id="new-ratio-comparison"
@@ -375,8 +414,9 @@ export default function RatioBenchmarksPage() {
                     || form.label.trim() === ''
                     || form.numerator.length === 0
                     || form.denominator.length === 0
-                    || Number.isNaN(Number(form.benchmark))
-                    || form.benchmark.trim() === ''}
+                    || Number.isNaN(benchmarkFromInput(
+                      form.benchmark, form.comparison === 'band' ? 'points' : form.displayUnit,
+                    ))}
                 >
                   Add the ratio
                 </Button>
@@ -440,12 +480,34 @@ export default function RatioBenchmarksPage() {
 
               <p className="mt-1 text-sm text-muted">
                 {ratio.origin === 'platform'
-                  ? 'Measured the same way in every office, so its formula is fixed. The '
-                    + 'benchmark, the name and who it applies to are yours.'
+                  ? 'Provisioned with your company’s standard. Everything on it is yours to '
+                    + 'change, the formula included — and if you change what it counts, this '
+                    + 'card says so.'
                   : 'Your office’s own — the name, what it counts, the benchmark and who '
                     + 'it applies to are all yours. It is compared with nobody outside this '
                     + 'office, which is what makes that safe.'}
               </p>
+
+              {/*
+                * Named on the card, never left to be discovered (ADR-0024). An office may
+                * now measure itself however it likes; a comparison across offices computes
+                * the formula this office was *seeded* with, so the two can differ and a
+                * reader has to be told which one they are looking at.
+                */}
+              {ratio.divergesFromStandard
+                && ratio.standardNumerator && ratio.standardDenominator && (
+                <p className="mt-3 rounded-md border border-amber bg-amber/10 p-3 text-sm text-navy">
+                  <strong>This is not your company’s standard any more.</strong>{' '}
+                  <span className="text-muted">
+                    It was set up as{' '}
+                    {ratio.standardNumerator.map((c) => labelFor(c) ?? c).join(' + ')}
+                    {' ÷ '}
+                    {ratio.standardDenominator.map((c) => labelFor(c) ?? c).join(' + ')}.
+                    Your office is measured by what is below. A comparison with other offices
+                    still uses the standard, so the two figures can differ.
+                  </span>
+                </p>
+              )}
 
               {/*
                 * A real fraction — numerator, a rule, denominator underneath
@@ -557,9 +619,14 @@ export default function RatioBenchmarksPage() {
               <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-hairline pt-3">
                 {editing === ratio.id ? (
                   <>
-                    {ratio.origin === 'office' ? (
-                      <div className="flex w-full flex-wrap gap-4">
-                        {([['Counts', 'numerator'], ['Out of', 'denominator']] as const)
+                    {/* Every ratio, not only the office's own (ADR-0024). */}
+                    <div className="flex w-full flex-wrap gap-4">
+                        {/* The balance ratio is not a division — it is a difference over a
+                            sum — so its two sides are named the way the card above names
+                            them, rather than as a numerator and a denominator. */}
+                        {(ratio.comparison === 'band'
+                          ? ([['Selling side', 'numerator'], ['Recruitment side', 'denominator']] as const)
+                          : ([['Counts', 'numerator'], ['Out of', 'denominator']] as const))
                           .map(([heading, side]) => (
                             <fieldset key={side} className="min-w-0 flex-1">
                               <legend className="text-sm font-semibold text-navy">{heading}</legend>
@@ -587,21 +654,7 @@ export default function RatioBenchmarksPage() {
                               </ul>
                             </fieldset>
                           ))}
-                      </div>
-                    ) : (
-                      /*
-                       * Said, not silently absent. The control used to be a separate button
-                       * that appeared only on an office's own ratio — so on a freshly
-                       * provisioned office, where all five are the platform's, the feature
-                       * was invisible and looked missing rather than withheld.
-                       */
-                      <p className="w-full text-sm text-muted">
-                        <strong>What this counts is fixed.</strong> It is one of the ratios
-                        every office of your company measures the same way, which is what
-                        lets your figures sit beside theirs. To count something else, add a
-                        ratio of your own.
-                      </p>
-                    )}
+                    </div>
                     {/* The name too. It was read-only on every card, which made the
                         office-ratio copy — *"the name… is yours"* — false for the one
                         field a reader would try first. An office may rename a platform
@@ -619,7 +672,9 @@ export default function RatioBenchmarksPage() {
                       htmlFor={`benchmark-${ratio.id}`}
                       hint={ratio.comparison === 'band'
                         ? 'Percentage points either side of an even split.'
-                        : 'On track at or above this.'}
+                        : draftUnit === 'percent'
+                          ? 'On track at or above this, as a percentage — 15 means 15.0%.'
+                          : 'On track at or above this.'}
                       className="min-w-40"
                     >
                       <TextInput
@@ -630,13 +685,30 @@ export default function RatioBenchmarksPage() {
                         onChange={(e) => setDraft(e.target.value)}
                       />
                     </Field>
+                    {/* On a platform ratio too: how a number is written is presentation,
+                        not formula, so ADR-0021 has nothing to say about it. */}
+                    {ratio.comparison === 'gte' && (
+                      <Field label="Shown as" htmlFor={`unit-${ratio.id}`} className="min-w-48">
+                        <Select
+                          id={`unit-${ratio.id}`}
+                          value={draftUnit}
+                          onChange={(e) => {
+                            const next = e.target.value as RatioDisplayUnit;
+                            setDraft((d) => reexpress(d, draftUnit, next));
+                            setDraftUnit(next);
+                          }}
+                        >
+                          <option value="percent">{DISPLAY_UNIT_LABEL.percent}</option>
+                          <option value="decimal">{DISPLAY_UNIT_LABEL.decimal}</option>
+                        </Select>
+                      </Field>
+                    )}
                     <Button
                       disabled={busy
-                        || draft.trim() === ''
-                        || Number.isNaN(Number(draft))
+                        || Number.isNaN(benchmarkFromInput(draft, draftUnit))
                         || draftLabel.trim() === ''
-                        || (ratio.origin === 'office'
-                          && (sides.numerator.length === 0 || sides.denominator.length === 0))}
+                        || sides.numerator.length === 0
+                        || sides.denominator.length === 0}
                       onClick={() => {
                         stage({
                           op: 'ratio.update',
@@ -644,13 +716,12 @@ export default function RatioBenchmarksPage() {
                           expectedVersion: ratio.version,
                           body: {
                             label: draftLabel.trim(),
-                            benchmark: Number(draft),
-                            // Only where it is theirs to send. A platform ratio carrying a
-                            // formula in its patch is refused outright (ADR-0021), which
-                            // would lose the name and benchmark with it.
-                            ...(ratio.origin === 'office'
-                              ? { numerator: sides.numerator, denominator: sides.denominator }
-                              : {}),
+                            benchmark: benchmarkFromInput(draft, draftUnit),
+                            // Only when it moved, so an edit to the number alone sends only
+                            // the number — and the row keeps a unit nobody touched.
+                            ...(draftUnit !== unitFor(ratio) ? { displayUnit: draftUnit } : {}),
+                            numerator: sides.numerator,
+                            denominator: sides.denominator,
                           },
                         });
                         setEditing(null);
@@ -666,8 +737,7 @@ export default function RatioBenchmarksPage() {
                       <span className="text-muted">
                         {ratio.comparison === 'band' ? 'On track within ' : 'On track at or above '}
                       </span>
-                      <strong>{ratio.benchmark}</strong>
-                      {ratio.comparison === 'band' && <span className="text-muted"> points</span>}
+                      <strong>{formatBenchmark(ratio.benchmark, unitFor(ratio))}</strong>
                     </p>
                     {canWrite && (
                       <>
@@ -675,7 +745,8 @@ export default function RatioBenchmarksPage() {
                           variant="secondary"
                           onClick={() => {
                             setEditing(ratio.id);
-                            setDraft(String(ratio.benchmark));
+                            setDraft(benchmarkToInput(ratio.benchmark, unitFor(ratio)));
+                            setDraftUnit(unitFor(ratio));
                             setDraftLabel(ratio.label);
                             setSides({
                               numerator: ratio.numerator,

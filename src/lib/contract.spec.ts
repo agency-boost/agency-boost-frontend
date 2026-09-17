@@ -54,6 +54,9 @@ function declaredFields(file: string, name: string): string[] {
  */
 const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['admin.ts', 'Kpm', 'KpmViewDto'],
+  // P4-T25: `displayUnit` is read by every benchmark on screen, and a missing one renders
+  // a success rate as `0.15` rather than as a blank.
+  ['tenant-config.ts', 'RatioRow', 'RatioDefinitionDto'],
   ['admin.ts', 'Company', 'CompanyResponseDto'],
   ['admin.ts', 'CompanyCard', 'CompanyCardDto'],
   ['admin.ts', 'OrgLevel', 'OrgLevelRowDto'],

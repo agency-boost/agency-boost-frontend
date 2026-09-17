@@ -1,7 +1,11 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Button, Card, Field, TextInput } from '@/components/ui/field';
+import { Button, Card, Field, TextInput, Select } from '@/components/ui/field';
+import {
+  benchmarkFromInput, benchmarkToInput, DISPLAY_UNIT_LABEL, formatBenchmark, reexpress, unitFor,
+  type RatioDisplayUnit,
+} from '@/lib/ratio-format';
 import { SettingsTabs } from '@/components/settings-tabs';
 import { DragHandle } from '@/components/ui/drag-handle';
 
@@ -160,6 +164,7 @@ function EditableRow({
   fields,
   values,
   onSave,
+  reshape,
   disabled,
   children,
   actions,
@@ -173,9 +178,20 @@ function EditableRow({
    * defect `Field` had just been fixed for, reintroduced one layer up.
    */
   rowKey: string;
-  fields: { key: string; label: string; hint?: string }[];
+  /** A field with `options` is a select; everything else is a text input. */
+  fields: { key: string; label: string; hint?: string; options?: { value: string; label: string }[] }[];
   values: Record<string, string>;
   onSave: (next: Record<string, string>) => void;
+  /**
+   * Adjust the rest of the draft when one field changes.
+   *
+   * For a ratio's unit (P4-T25): the benchmark is typed the way it is shown, so switching
+   * from a number to a percentage must turn `0.3` into `30` — reinterpreting the same text
+   * would save a benchmark a hundred times smaller than the one on screen.
+   */
+  reshape?: (
+    next: Record<string, string>, changed: string, previous: Record<string, string>,
+  ) => Record<string, string>;
   disabled?: boolean;
   /** What the row reads as when it is not being edited. */
   children: React.ReactNode;
@@ -207,16 +223,35 @@ function EditableRow({
 
   return (
     <div className="flex flex-col gap-2">
-      {fields.map((field) => (
-        <Field key={field.key} label={field.label} htmlFor={id(field.key)} hint={field.hint}>
-          <TextInput
-            id={id(field.key)}
-            value={draft[field.key] ?? ''}
-            disabled={disabled}
-            onChange={(e) => setDraft({ ...draft, [field.key]: e.target.value })}
-          />
-        </Field>
-      ))}
+      {fields.map((field) => {
+        const change = (value: string) => {
+          const next = { ...draft, [field.key]: value };
+          setDraft(reshape ? reshape(next, field.key, draft) : next);
+        };
+        return (
+          <Field key={field.key} label={field.label} htmlFor={id(field.key)} hint={field.hint}>
+            {field.options ? (
+              <Select
+                id={id(field.key)}
+                value={draft[field.key] ?? ''}
+                disabled={disabled}
+                onChange={(e) => change(e.target.value)}
+              >
+                {field.options.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </Select>
+            ) : (
+              <TextInput
+                id={id(field.key)}
+                value={draft[field.key] ?? ''}
+                disabled={disabled}
+                onChange={(e) => change(e.target.value)}
+              />
+            )}
+          </Field>
+        );
+      })}
       <span className="flex flex-wrap gap-2">
         <Button
           disabled={disabled || !(draft[fields[0].key] ?? '').trim()}
@@ -669,6 +704,8 @@ export interface RatioSetPayload {
   ratios: {
     code: string; label: string; numerator: string[]; denominator: string[];
     benchmark: number; comparison: 'gte' | 'band'; displayOrder: number;
+    /** How the benchmark is written (P4-T25). Absent on a payload saved before units existed. */
+    displayUnit?: RatioDisplayUnit;
     appliesToOrgLevelCodes?: string[];
   }[];
 }
@@ -798,14 +835,44 @@ export function RatioSetEditor({
                 label: ratio.comparison === 'band' ? 'Within, either side' : 'On track at or above',
                 hint: ratio.comparison === 'band'
                   ? 'Percentage points either side of an even split.'
-                  : undefined,
+                  : 'Typed the way it is shown — 15 for 15.0% as a percentage, 0.30 as a number.',
               },
+              // A band is points and has no other way to be written, so it gets no choice.
+              ...(ratio.comparison === 'band' ? [] : [{
+                key: 'displayUnit',
+                label: 'Shown as',
+                options: [
+                  { value: 'percent', label: DISPLAY_UNIT_LABEL.percent },
+                  { value: 'decimal', label: DISPLAY_UNIT_LABEL.decimal },
+                ],
+              }]),
             ]}
-            values={{ label: ratio.label, benchmark: String(ratio.benchmark) }}
-            onSave={(next) => patch(ratio.code, {
-              label: next.label.trim(),
-              benchmark: Number(next.benchmark) || 0,
-            })}
+            values={{
+              label: ratio.label,
+              benchmark: benchmarkToInput(ratio.benchmark, unitFor(ratio)),
+              displayUnit: unitFor(ratio),
+            }}
+            reshape={(next, changed, previous) => (changed === 'displayUnit'
+              ? {
+                ...next,
+                benchmark: reexpress(
+                  previous.benchmark,
+                  previous.displayUnit as RatioDisplayUnit,
+                  next.displayUnit as RatioDisplayUnit,
+                ),
+              }
+              : next)}
+            onSave={(next) => {
+              const unit: RatioDisplayUnit = ratio.comparison === 'band'
+                ? 'points'
+                : next.displayUnit as RatioDisplayUnit;
+              const benchmark = benchmarkFromInput(next.benchmark, unit);
+              patch(ratio.code, {
+                label: next.label.trim(),
+                benchmark: Number.isNaN(benchmark) ? 0 : benchmark,
+                displayUnit: unit,
+              });
+            }}
             actions={(
               <Button
                 variant="secondary"
@@ -826,7 +893,7 @@ export function RatioSetEditor({
               <code>{ratio.code}</code>
               {' · '}
               {ratio.comparison === 'band' ? 'On track within ' : 'On track at or above '}
-              <strong>{ratio.benchmark}</strong>
+              <strong>{formatBenchmark(ratio.benchmark, unitFor(ratio))}</strong>
             </p>
           </EditableRow>
 
@@ -847,10 +914,11 @@ export function RatioSetEditor({
             />
           </div>
           <p className="mt-2 text-sm text-muted">
-            Every office of this company is measured this way, and cannot change it — which
-            is what lets their figures sit in one column. Changing it here changes what the
-            <strong> next </strong>office starts from; offices already created keep the copy
-            they were built with.
+            This is what every new office of this company starts from, and what a comparison
+            across offices is computed with. An office may change its own copy afterwards
+            (ADR-0024) — its screen says so when it has, and the comparison still uses this.
+            Changing it here changes what the <strong>next</strong> office starts from;
+            offices already created keep the copy they were built with.
           </p>
 
           <Button
@@ -880,7 +948,7 @@ export function RatioSetEditor({
               // A floor of zero and an empty formula: publishing refuses both, which is
               // the right moment for it — the Super Admin has said what they are adding
               // and not yet what it counts.
-              benchmark: 0, comparison: 'gte', displayOrder: 0,
+              benchmark: 0, comparison: 'gte', displayUnit: 'decimal', displayOrder: 0,
             }],
             'displayOrder',
           ),

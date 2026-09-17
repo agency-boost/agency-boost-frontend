@@ -1,4 +1,5 @@
 import { api } from './api-client';
+import type { RatioDisplayUnit } from './ratio-format';
 
 export interface ActivityTypeRow {
   id: string;
@@ -133,14 +134,26 @@ export interface RatioRow {
   denominator: string[];
   benchmark: number;
   comparison: RatioComparison;
+  /**
+   * How `benchmark` is written (P4-T25). Always sent by the settings API; absent on a
+   * published snapshot rendered before units existed, so read it through `unitFor`.
+   */
+  displayUnit?: RatioDisplayUnit;
   displayOrder: number;
   version: number;
   status: 'active' | 'archived';
   /**
-   * Whose formula it is (ADR-0021). A `platform` row's numerator and denominator are
-   * fixed — that is what lets two offices' figures mean the same thing.
+   * Where the row came from (ADR-0021, revised by ADR-0024). `platform` means provisioned;
+   * its formula is the office's to change, like everything else on it.
    */
   origin: RatioOrigin;
+  /**
+   * The formula this office was provisioned with, and whether the row still matches it
+   * (ADR-0024). Optional because a snapshot published before the column has neither.
+   */
+  standardNumerator?: string[] | null;
+  standardDenominator?: string[] | null;
+  divergesFromStandard?: boolean;
   /** Ladder rung codes. **Empty means every rung** (ADR-0020). */
   appliesToOrgLevelCodes: string[];
 }
@@ -157,6 +170,7 @@ export const createRatio = (body: {
   denominator: string[];
   benchmark: number;
   comparison: RatioComparison;
+  displayUnit?: RatioDisplayUnit;
   appliesToOrgLevelCodes?: string[];
 }) => api<RatioRow>('/kpm/settings/ratio-benchmarks', { method: 'POST', body });
 
