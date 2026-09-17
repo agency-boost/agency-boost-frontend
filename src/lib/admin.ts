@@ -333,24 +333,6 @@ export const publishTemplate = (companyId: string, kind: TemplateKind) =>
   });
 
 
-/** One support session, as an office's Owner reads it (P4-T10, §3.13). */
-export interface ImpersonationLogEntry {
-  sessionId: string;
-  operatorName: string;
-  subjectName: string;
-  reason: string;
-  readOnly: boolean;
-  elevatedByName: string | null;
-  elevationReason: string | null;
-  startedAt: string;
-  endedAt: string | null;
-  expiresAt: string;
-}
-
-/** An Owner reads their own office's. Another office is a 404. */
-export const readImpersonationLog = (kpmId: string) =>
-  api<ImpersonationLogEntry[]>(`/admin/tenants/${kpmId}/impersonation-sessions`);
-
 /**
  * Approve a session to write — **a different Super Admin from the one running it**.
  *
