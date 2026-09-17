@@ -295,8 +295,16 @@ export interface CompanyTemplate {
   publishedAt: string | null;
   /** What new offices are seeded from today. Null when nothing is published. */
   publishedVersion: number | null;
-  /** Offices of this company built from something older — including from before anything was. */
+  /**
+   * Offices of this company built from an older version of **this kind**, or from the platform
+   * defaults because nothing of it was published (P5-T12).
+   */
   officesBehind: number;
+  /**
+   * Offices created before the version of this kind they started from was recorded. Whether
+   * they are current is not known, so they are never counted as behind.
+   */
+  officesUnrecorded: number;
 }
 
 /**

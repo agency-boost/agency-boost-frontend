@@ -58,6 +58,8 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   // a success rate as `0.15` rather than as a blank.
   ['tenant-config.ts', 'RatioRow', 'RatioDefinitionDto'],
   ['admin.ts', 'Company', 'CompanyResponseDto'],
+  // P5-T12: the template screen reads `officesUnrecorded` straight off this response.
+  ['admin.ts', 'CompanyTemplate', 'CompanyTemplateDto'],
   ['admin.ts', 'CompanyCard', 'CompanyCardDto'],
   ['admin.ts', 'OrgLevel', 'OrgLevelRowDto'],
   ['admin.ts', 'KpmRequestRow', 'KpmRequestRowDto'],

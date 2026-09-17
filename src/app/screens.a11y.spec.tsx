@@ -993,7 +993,7 @@ describe('screens have no axe violations', () => {
           body: {
             id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1,
             status: 'draft', payload: { categories: [TAXONOMY[0]], types: [TYPE] },
-            publishedAt: null, publishedVersion: 0, officesBehind: 0,
+            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
           },
         },
       });

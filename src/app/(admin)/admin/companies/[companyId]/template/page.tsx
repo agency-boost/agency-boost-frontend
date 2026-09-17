@@ -270,12 +270,34 @@ export default function CompanyTemplatePage({
                 </>
               )}
             </p>
-            {current.template.officesBehind > 0 && (
+            {/*
+              * Two sentences, because they are two different facts (P5-T12). "Running
+              * something older" is only true of an office whose record says so. An office
+              * created before its record for this kind existed may be entirely current, and
+              * counting it as behind would have told a Super Admin that every existing office
+              * was behind on the Lead statuses and Ratio benchmarks tabs.
+              */}
+            {(current.template.officesBehind > 0 || current.template.officesUnrecorded > 0) && (
               <p className="mt-2 text-md text-muted">
-                {current.template.officesBehind}{' '}
-                {current.template.officesBehind === 1 ? 'office is' : 'offices are'} running something
-                older. Publishing does not change them — an office owns its own copy from the
-                day it is created.
+                {current.template.officesBehind > 0 && (
+                  <>
+                    {current.template.officesBehind}{' '}
+                    {current.template.officesBehind === 1 ? 'office is' : 'offices are'} running
+                    something older.{' '}
+                  </>
+                )}
+                {current.template.officesUnrecorded > 0 && (
+                  <>
+                    {current.template.officesUnrecorded}{' '}
+                    {current.template.officesUnrecorded === 1
+                      ? 'office was created before the version of this template it started from '
+                        + 'was recorded, so whether it is current is not known.'
+                      : 'offices were created before the version of this template they started '
+                        + 'from was recorded, so whether they are current is not known.'}{' '}
+                  </>
+                )}
+                Publishing does not change them — an office owns its own copy from the day it is
+                created.
               </p>
             )}
 

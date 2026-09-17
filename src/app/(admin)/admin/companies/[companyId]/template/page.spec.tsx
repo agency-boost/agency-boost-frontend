@@ -20,7 +20,7 @@ const SUPER_ADMIN = makeMe({
 
 const TAXONOMY = {
   id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1, status: 'draft',
-  publishedAt: null, publishedVersion: null, officesBehind: 0,
+  publishedAt: null, publishedVersion: null, officesBehind: 0, officesUnrecorded: 0,
   payload: {
     categories: [{ code: 'SELLING', label: 'Selling', displayOrder: 1 }],
     types: [{
@@ -32,7 +32,7 @@ const TAXONOMY = {
 
 const PIPELINE = {
   id: 'tpl-2', companyId: 'c1', kind: 'lead_pipeline', version: 1, status: 'draft',
-  publishedAt: null, publishedVersion: null, officesBehind: 0,
+  publishedAt: null, publishedVersion: null, officesBehind: 0, officesUnrecorded: 0,
   payload: {
     statuses: [
       { pipeline: 'sales', code: 'NOT_YET_APPROACHED', label: 'Not yet approached', rank: 1, isTerminal: false },
@@ -109,6 +109,27 @@ describe('a company’s Company template (P4-T8)', () => {
     render({ ...TAXONOMY, status: 'published', publishedVersion: 1, officesBehind: 6 });
     expect(await screen.findByText(/6 offices are/)).toBeInTheDocument();
     expect(screen.getByText(/Publishing does not change them/)).toBeInTheDocument();
+  });
+
+  it('P5-T12: never calls an unrecorded office behind', async () => {
+    /*
+     * An office created before its record for this kind existed may be current. Folding it
+     * into "running something older" would have told a Super Admin that every existing office
+     * was behind on the Lead statuses and Ratio benchmarks tabs.
+     */
+    render({ ...TAXONOMY, status: 'published', publishedVersion: 2, officesBehind: 0, officesUnrecorded: 4 });
+
+    expect(await screen.findByText(/4 offices were created before the version of this template/))
+      .toBeInTheDocument();
+    expect(screen.queryByText(/running something older/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Publishing does not change them/)).toBeInTheDocument();
+  });
+
+  it('P5-T12: states both, when some offices are behind and others unrecorded', async () => {
+    render({ ...TAXONOMY, status: 'published', publishedVersion: 2, officesBehind: 1, officesUnrecorded: 1 });
+
+    expect(await screen.findByText(/1 office is running something older/)).toBeInTheDocument();
+    expect(screen.getByText(/1 office was created before/)).toBeInTheDocument();
   });
 
   it('will not publish over unsaved edits', async () => {
@@ -256,7 +277,7 @@ describe('a company’s Company template (P4-T8)', () => {
                 benchmark: 0.15, comparison: 'gte', displayUnit: 'percent', displayOrder: 1,
               }],
             },
-            publishedAt: null, publishedVersion: 0, officesBehind: 0,
+            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
           },
         },
         '/admin/companies/c1/template': { body: TAXONOMY },
@@ -295,7 +316,7 @@ describe('a company’s Company template (P4-T8)', () => {
                 benchmark: 0.15, comparison: 'gte', displayUnit: 'percent', displayOrder: 1,
               }],
             },
-            publishedAt: null, publishedVersion: 0, officesBehind: 0,
+            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
           },
         },
         '/admin/companies/c1/template': { body: TAXONOMY },
