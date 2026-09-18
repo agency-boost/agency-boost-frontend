@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Button, Card, Field, TextInput, Select } from '@/components/ui/field';
+import { Button, Card, ColorInput, Field, TextInput, Select } from '@/components/ui/field';
 import {
   benchmarkFromInput, benchmarkToInput, DISPLAY_UNIT_LABEL, formatBenchmark, reexpress, unitFor,
   type RatioDisplayUnit,
@@ -180,8 +180,17 @@ function EditableRow({
    * defect `Field` had just been fixed for, reintroduced one layer up.
    */
   rowKey: string;
-  /** A field with `options` is a select; everything else is a text input. */
-  fields: { key: string; label: string; hint?: string; options?: { value: string; label: string }[] }[];
+  /**
+   * A field with `options` is a select, one with `kind: 'color'` is a picker, and everything
+   * else is a text input.
+   *
+   * A colour field must not be **first**: the Save button reads `fields[0]` to decide whether
+   * there is anything to save.
+   */
+  fields: {
+    key: string; label: string; hint?: string; kind?: 'color';
+    options?: { value: string; label: string }[];
+  }[];
   values: Record<string, string>;
   onSave: (next: Record<string, string>) => void;
   /**
@@ -207,9 +216,9 @@ function EditableRow({
     return (
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">{children}</div>
-        <span className="flex flex-wrap gap-2">
+        <span className="flex flex-wrap items-center gap-4">
           <Button
-            variant="secondary"
+            variant="inline"
             disabled={disabled}
             onClick={() => { setDraft(values); setEditing(true); }}
           >
@@ -243,6 +252,13 @@ function EditableRow({
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </Select>
+            ) : field.kind === 'color' ? (
+              <ColorInput
+                id={id(field.key)}
+                value={draft[field.key] ?? ''}
+                disabled={disabled}
+                onChange={change}
+              />
             ) : (
               <TextInput
                 id={id(field.key)}
@@ -360,7 +376,6 @@ export function TaxonomyEditor({
               />
               <h2 className="font-display text-lg font-bold text-navy">{category.label}</h2>
               <span className="ml-auto flex items-center gap-2">
-                <code className="text-sm text-muted">{category.code}</code>
                 <span className="whitespace-nowrap rounded-full border border-hairline bg-canvas px-2 py-0.5 text-sm font-semibold text-muted">
                   {mine.length} {mine.length === 1 ? 'item' : 'items'}
                 </span>
@@ -407,7 +422,7 @@ export function TaxonomyEditor({
                       })}
                       actions={(
                         <Button
-                          variant="secondary"
+                          variant="inlineDanger"
                           disabled={disabled}
                           onClick={() => onChange({
                             ...payload,
@@ -425,7 +440,6 @@ export function TaxonomyEditor({
                       {type.description && (
                         <p className="text-sm text-muted">{type.description}</p>
                       )}
-                      <code className="text-sm text-muted">{type.code}</code>
                     </EditableRow>
                   </div>
                 </li>
@@ -672,7 +686,6 @@ export function PipelineEditor({
                   })}
                 >
                   <p className="text-md text-navy">{stage.label}</p>
-                  <code className="text-sm text-muted">{stage.code}</code>
                 </EditableRow>
               </div>
               <span className="mt-1 flex flex-wrap items-center gap-2">
@@ -687,7 +700,7 @@ export function PipelineEditor({
                 )}
                 {!stage.isTerminal && (
                   <Button
-                    variant="secondary"
+                    variant="inline"
                     disabled={disabled}
                     onClick={() => onChange({
                       // Exactly one per pipeline: publishing refuses anything else, so the
@@ -701,7 +714,7 @@ export function PipelineEditor({
                   </Button>
                 )}
                 <Button
-                  variant="secondary"
+                  variant="inlineDanger"
                   disabled={disabled || stage.isTerminal}
                   title={stage.isTerminal ? 'Make another stage close the pipeline first.' : undefined}
                   onClick={() => onChange({
@@ -917,7 +930,7 @@ export function RatioSetEditor({
             }}
             actions={(
               <Button
-                variant="secondary"
+                variant="inlineDanger"
                 disabled={disabled}
                 onClick={() => onChange({
                   ratios: withOrdinals(
@@ -932,8 +945,6 @@ export function RatioSetEditor({
           >
             <p className="text-md font-semibold text-navy">{ratio.label}</p>
             <p className="text-sm text-muted">
-              <code>{ratio.code}</code>
-              {' · '}
               {ratio.comparison === 'band' ? 'On track within ' : 'On track at or above '}
               <strong>{formatBenchmark(ratio.benchmark, unitFor(ratio))}</strong>
             </p>
@@ -1109,7 +1120,7 @@ export function TrainingEditor({
                       })}
                       actions={(
                         <Button
-                          variant="secondary"
+                          variant="inlineDanger"
                           disabled={disabled || mine.length > 0}
                           title={mine.length > 0 ? 'Remove its skills first.' : undefined}
                           onClick={() => put({ categories: categories.filter((c) => c.code !== category.code) })}
@@ -1121,7 +1132,6 @@ export function TrainingEditor({
                       <p className="text-md font-semibold text-navy">{category.label}</p>
                       {category.description && <p className="text-sm text-muted">{category.description}</p>}
                       <p className="mt-1 flex flex-wrap items-center gap-2">
-                        <code className="text-sm text-muted">{category.code}</code>
                         {mine.length === 0
                           ? <ConfigBadge tone="open">Empty</ConfigBadge>
                           : (
@@ -1197,7 +1207,7 @@ export function TrainingEditor({
                         })}
                         actions={(
                           <Button
-                            variant="secondary"
+                            variant="inlineDanger"
                             disabled={disabled || teaching.length > 0}
                             title={teaching.length > 0 ? 'Remove its modules first.' : undefined}
                             onClick={() => put({ skills: skills.filter((s) => s.code !== skill.code) })}
@@ -1208,7 +1218,6 @@ export function TrainingEditor({
                       >
                         <p className="text-md font-semibold text-navy">{skill.label}</p>
                         <p className="mt-1 flex flex-wrap items-center gap-2">
-                          <code className="text-sm text-muted">{skill.code}</code>
                           <ConfigBadge tone={teaching.length > 0 ? 'won' : 'open'}>
                             {count(teaching.length, 'module', 'modules')}
                           </ConfigBadge>
@@ -1319,7 +1328,7 @@ export function TrainingEditor({
                       })}
                       actions={(
                         <Button
-                          variant="secondary"
+                          variant="inlineDanger"
                           disabled={disabled}
                           onClick={() => put({ modules: modules.filter((m) => m.code !== module.code) })}
                         >
@@ -1330,7 +1339,6 @@ export function TrainingEditor({
                       <p className="text-md font-semibold text-navy">{module.title}</p>
                       <p className="text-sm text-muted">{skillLabel(module.skillCode)}</p>
                       <p className="mt-1 flex flex-wrap items-center gap-2">
-                        <code className="text-sm text-muted">{module.code}</code>
                         <ConfigBadge tone={isPublished ? 'won' : 'open'}>
                           {isPublished ? 'Published' : 'Draft'}
                         </ConfigBadge>
@@ -1442,7 +1450,6 @@ export function ActivationChecklistEditor({
         <Card key={aspect.code} className="p-0">
           <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
             <h3 className="font-display text-lg font-bold text-navy">{aspect.label}</h3>
-            <code className="text-sm text-muted">{aspect.code}</code>
             <span className="ml-auto flex flex-wrap items-center gap-2">
               <ConfigBadge tone={aspect.items.length > 0 ? 'won' : 'open'}>
                 {count(aspect.items.length, 'item', 'items')}
@@ -1450,7 +1457,7 @@ export function ActivationChecklistEditor({
 {/* With its items, as the Owner's own screen removes one: an aspect holding none is a
                   state neither an office nor a template may publish. */}
               <Button
-                variant="secondary"
+                variant="inlineDanger"
                 disabled={disabled}
                 title={`Removes ${aspect.label} and its ${aspect.items.length} `
                   + `${aspect.items.length === 1 ? 'item' : 'items'}.`}
@@ -1484,7 +1491,7 @@ export function ActivationChecklistEditor({
                   })}
                   actions={(
                     <Button
-                      variant="secondary"
+                      variant="inlineDanger"
                       disabled={disabled}
                       onClick={() => patchAspect(aspect.code, {
                         items: aspect.items.filter((i) => i.code !== item.code),
@@ -1496,7 +1503,6 @@ export function ActivationChecklistEditor({
                 >
                   <p className="text-md text-navy">{item.label}</p>
                   <p className="mt-1 flex flex-wrap items-center gap-2">
-                    <code className="text-sm text-muted">{item.code}</code>
                     {item.autoLink
                       ? <ConfigBadge tone="won">Auto · {linkLabel(item.autoLink)}</ConfigBadge>
                       : <ConfigBadge tone="open">Ticked by the leader</ConfigBadge>}
@@ -1617,8 +1623,9 @@ export function EventTypesEditor({
                     { key: 'emoji', label: 'Emoji', hint: 'Optional. One character, for the list.' },
                     {
                       key: 'color',
-                      label: 'Colour',
-                      hint: 'Optional. A hash and six hex digits. Publishing refuses anything else.',
+                      label: 'Color',
+                      kind: 'color',
+                      hint: 'Optional. Pick one, or paste a colour your company already uses.',
                     },
                   ]}
                   values={{
@@ -1636,7 +1643,7 @@ export function EventTypesEditor({
                   } : t)))}
                   actions={(
                     <Button
-                      variant="secondary"
+                      variant="inlineDanger"
                       disabled={disabled}
                       onClick={() => put(types.filter((t) => t.code !== type.code))}
                     >
@@ -1647,20 +1654,25 @@ export function EventTypesEditor({
                   <p className="flex flex-wrap items-center gap-2 text-md text-navy">
                     {type.emoji && <span aria-hidden="true">{type.emoji}</span>}
                     {type.label}
-                    {/* The colour is never the only cue: the hex is written out beside it. */}
+                    {/*
+                      * The swatch alone. The hex is on the edit panel, where it is set.
+                      *
+                      * This does not weaken *"colour is never the only cue"* — that rule is about
+                      * colour carrying **status**, and the row's name is right here carrying it.
+                      * The swatch is `aria-hidden`, so a screen reader used to announce
+                      * *"Training 📚 #2D9CDB"* and the hex was noise to it. `title` keeps the
+                      * value a hover away for a sighted reader.
+                      */}
                     {type.color && (
-                      <span className="flex items-center gap-1">
-                        <span
-                          aria-hidden="true"
-                          className="inline-block h-3 w-3 rounded-sm border border-hairline"
-                          style={{ backgroundColor: type.color }}
-                        />
-                        <code className="text-sm text-muted">{type.color}</code>
-                      </span>
+                      <span
+                        aria-hidden="true"
+                        title={type.color}
+                        className="inline-block h-3 w-3 rounded-sm border border-hairline"
+                        style={{ backgroundColor: type.color }}
+                      />
                     )}
                   </p>
                   <p className="mt-1 flex flex-wrap items-center gap-2">
-                    <code className="text-sm text-muted">{type.code}</code>
                     {type.description && <span className="text-sm text-muted">{type.description}</span>}
                   </p>
                 </EditableRow>
@@ -1792,7 +1804,7 @@ export function CampaignKindsEditor({
                     })}
                     actions={(
                       <Button
-                        variant="secondary"
+                        variant="inlineDanger"
                         disabled={disabled}
                         title="Removing it here retires it on publish. Standings that qualified under it stay readable."
                         onClick={() => put(rules.filter(
@@ -1805,7 +1817,6 @@ export function CampaignKindsEditor({
                   >
                     <p className="text-md text-navy">{rule.name}</p>
                     <p className="mt-1 flex flex-wrap items-center gap-2">
-                      <code className="text-sm text-muted">{rule.code}</code>
                       <ConfigBadge tone="open">Rank {rule.rank}</ConfigBadge>
                       {rule.reward && <span className="text-sm text-muted">{rule.reward}</span>}
                     </p>
@@ -1977,7 +1988,7 @@ export function CapabilityLadderEditor({
                 })}
                 actions={(
                   <Button
-                    variant="secondary"
+                    variant="inlineDanger"
                     disabled={disabled}
                     title="A stage that requires it will be refused at publish until you change that too."
                     onClick={() => put({
@@ -1989,7 +2000,6 @@ export function CapabilityLadderEditor({
                 )}
               >
                 <p className="text-md text-navy">{milestone.label}</p>
-                <code className="text-sm text-muted">{milestone.code}</code>
               </EditableRow>
             </li>
           ))}
@@ -2044,7 +2054,7 @@ export function CapabilityLadderEditor({
                 })}
                 actions={(
                   <Button
-                    variant="secondary"
+                    variant="inlineDanger"
                     disabled={disabled}
                     onClick={() => put({ stages: stages.filter((s) => s.code !== stage.code) })}
                   >
@@ -2054,7 +2064,6 @@ export function CapabilityLadderEditor({
               >
                 <p className="text-md text-navy">{stage.label}</p>
                 <p className="mt-1 flex flex-wrap items-center gap-2">
-                  <code className="text-sm text-muted">{stage.code}</code>
                   <ConfigBadge tone="open">Rank {stage.stageOrder}</ConfigBadge>
                 </p>
               </EditableRow>
@@ -2096,7 +2105,6 @@ export function CapabilityLadderEditor({
         <Card key={grid.code} className="p-0">
           <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
             <h2 className="font-display text-lg font-bold text-navy">{grid.label}</h2>
-            <code className="text-sm text-muted">{grid.code}</code>
             {grid.requiresDownline && (
               <ConfigBadge tone="open">Only for somebody with a downline</ConfigBadge>
             )}
@@ -2105,7 +2113,7 @@ export function CapabilityLadderEditor({
                 {count(grid.items.length, 'item', 'items')}
               </ConfigBadge>
               <Button
-                variant="secondary"
+                variant="inlineDanger"
                 disabled={disabled}
                 onClick={() => put({ grids: grids.filter((g) => g.code !== grid.code) })}
               >
@@ -2130,7 +2138,7 @@ export function CapabilityLadderEditor({
                   })}
                   actions={(
                     <Button
-                      variant="secondary"
+                      variant="inlineDanger"
                       disabled={disabled}
                       onClick={() => put({
                         grids: grids.map((g) => (g.code === grid.code
@@ -2142,7 +2150,6 @@ export function CapabilityLadderEditor({
                   )}
                 >
                   <p className="text-md text-navy">{item.label}</p>
-                  <code className="text-sm text-muted">{item.code}</code>
                 </EditableRow>
               </li>
             ))}

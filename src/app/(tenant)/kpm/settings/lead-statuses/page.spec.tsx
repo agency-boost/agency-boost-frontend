@@ -129,12 +129,6 @@ describe('the office lead pipelines (P4-T3)', () => {
       expect(screen.queryByText('PAID_AND_ISSUED')).not.toBeInTheDocument();
     });
 
-    it('brings them back under Show codes', async () => {
-      render();
-      await userEvent.click(await screen.findByRole('checkbox', { name: 'Show codes' }));
-
-      expect(screen.getByText('PAID_AND_ISSUED')).toBeInTheDocument();
-    });
 
     it('shows the code, not editable, inside the edit panel', async () => {
       // A lead holds the code, so it is the thing a reader needs while renaming a stage —

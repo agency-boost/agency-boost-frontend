@@ -236,9 +236,9 @@ export function ModuleContentEditor({
                 />
               </Field>
               <p className="text-sm text-muted">{sizeOf(item.bytes)}</p>
-              <Button variant="secondary" onClick={() => void open(item.storageKey)}>Open</Button>
+              <Button variant="inline" onClick={() => void open(item.storageKey)}>Open</Button>
               {canWrite && (
-                <Button variant="secondary" disabled={busy} onClick={() => remove(section, index)}>
+                <Button variant="inlineDanger" disabled={busy} onClick={() => remove(section, index)}>
                   Remove
                 </Button>
               )}
@@ -355,7 +355,7 @@ export function ModuleContentEditor({
                   Open
                 </a>
                 {canWrite && (
-                  <Button variant="secondary" disabled={busy} onClick={() => remove('links', index)}>
+                  <Button variant="inlineDanger" disabled={busy} onClick={() => remove('links', index)}>
                     Remove
                   </Button>
                 )}

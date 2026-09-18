@@ -245,7 +245,6 @@ export function ProductsTab({ companyId }: { companyId: string }) {
                       <p className="mt-0.5 text-sm text-muted">{product.tagline}</p>
                     )}
                     <p className="mt-1 flex flex-wrap items-center gap-2">
-                      <code className="text-sm text-muted">{product.code}</code>
                       <ConfigBadge tone="open">{label(CHANNELS, product.channel)}</ConfigBadge>
                       <ConfigBadge tone="open">{label(CATEGORIES, product.category)}</ConfigBadge>
                       <ConfigBadge tone={product.lifecycle === 'active' ? 'won' : 'open'}>
@@ -259,7 +258,7 @@ export function ProductsTab({ companyId }: { companyId: string }) {
 
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
-                      variant="secondary"
+                      variant="inline"
                       disabled={busy}
                       onClick={() => setEditing(editing === product.id ? null : product.id)}
                     >
@@ -634,7 +633,7 @@ function ProductEditor({
         <div className="mt-3 flex flex-wrap gap-2">
           {product.lifecycle === 'active' && (
             <Button
-              variant="secondary"
+              variant="inline"
               disabled={disabled}
               title="Existing policies keep running; nobody sells it to somebody new."
               onClick={() => void onLifecycle('closed_to_new_business', successor || undefined)}
@@ -644,7 +643,7 @@ function ProductEditor({
           )}
           {product.lifecycle !== 'withdrawn' && (
             <Button
-              variant="secondary"
+              variant="inlineDanger"
               disabled={disabled}
               title="Every office of this company stops selling it on their next read."
               onClick={() => void onLifecycle('withdrawn', successor || undefined)}
@@ -654,7 +653,7 @@ function ProductEditor({
           )}
           {product.lifecycle !== 'active' && (
             <Button
-              variant="secondary"
+              variant="inline"
               disabled={disabled}
               title="Back on sale. Offices keep whatever they had decided."
               onClick={() => void onLifecycle('active')}

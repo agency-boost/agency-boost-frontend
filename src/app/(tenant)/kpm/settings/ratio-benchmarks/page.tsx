@@ -56,14 +56,15 @@ import {
  * must never be the identity. Showing both means an Owner reads what is counted and can
  * still see the part that does not move when the numbers do.
  */
-function Chip({ code, label, showCode }: { code: string; label: string | null; showCode: boolean }) {
+function Chip({ code, label }: { code: string; label: string | null }) {
   return (
     <span className="inline-flex flex-col rounded-xl border border-hairline bg-canvas px-2.5 py-1">
-      {/* The label alone when there is one — a reader who wants the identity turns on
-          *Show codes*. Invariant §4's reason for the code being visible has not gone
-          away; it has stopped being the default on a screen an Owner reads daily. */}
+      {/* The label, and the code **only** when there is no label — a formula input naming an
+          activity type this office no longer defines has to render as something, and its code
+          is the only thing left to render. Invariant §4's reason for the code mattering has not
+          gone away; it stopped being something to paint on a screen an Owner reads daily. */}
       {label && <span className="text-md leading-tight text-navy">{label}</span>}
-      {(showCode || !label) && <code className="text-sm leading-tight text-muted">{code}</code>}
+      {!label && <code className="text-sm leading-tight text-muted">{code}</code>}
     </span>
   );
 }
@@ -98,7 +99,6 @@ export default function RatioBenchmarksPage() {
    * second admin opening it mid-restructure saw a half-finished taxonomy.
    */
   const [staged, setStaged] = useState<ConfigChange[]>([]);
-  const [showCodes, setShowCodes] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [showPublished, setShowPublished] = useState(false);
   /** The two sides of the formula, while a row is open for editing. */
@@ -234,14 +234,6 @@ export default function RatioBenchmarksPage() {
                 onChange={(e) => setShowArchived(e.target.checked)}
               />
               Show archived
-            </label>
-            <label className="flex items-center gap-2 text-md text-navy">
-              <input
-                type="checkbox"
-                checked={showCodes}
-                onChange={(e) => setShowCodes(e.target.checked)}
-              />
-              Show codes
             </label>
           </>
         ),
@@ -476,7 +468,6 @@ export default function RatioBenchmarksPage() {
                       </button>
                     </>
                   )}
-                  {showCodes && <code className="text-sm text-muted">{ratio.code}</code>}
                 </span>
               </div>
 
@@ -528,7 +519,7 @@ export default function RatioBenchmarksPage() {
                     .map(([side, codes]) => (
                       <div key={side} className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-semibold text-navy">{side}</span>
-                        {codes.map((code) => <Chip key={code} code={code} label={labelFor(code)} showCode={showCodes} />)}
+                        {codes.map((code) => <Chip key={code} code={code} label={labelFor(code)} />)}
                       </div>
                     ))}
                   <p className="text-sm text-muted">
@@ -540,13 +531,13 @@ export default function RatioBenchmarksPage() {
                 <div className="mt-3 inline-flex flex-col items-start">
                   <div className="flex flex-wrap items-center gap-1.5 py-0.5">
                     {ratio.numerator.map((code) => (
-                      <Chip key={code} code={code} label={labelFor(code)} showCode={showCodes} />
+                      <Chip key={code} code={code} label={labelFor(code)} />
                     ))}
                   </div>
                   <div className="my-0.5 h-0.5 w-full min-w-32 bg-navy" aria-hidden />
                   <div className="flex flex-wrap items-center gap-1.5 py-0.5">
                     {ratio.denominator.map((code) => (
-                      <Chip key={code} code={code} label={labelFor(code)} showCode={showCodes} />
+                      <Chip key={code} code={code} label={labelFor(code)} />
                     ))}
                   </div>
                 </div>
@@ -605,7 +596,7 @@ export default function RatioBenchmarksPage() {
                     </p>
                     {canWrite && (
                       <Button
-                        variant="secondary"
+                        variant="inline"
                         onClick={() => {
                           setScoping(ratio.id);
                           setRungs(ratio.appliesToOrgLevelCodes);
@@ -744,7 +735,7 @@ export default function RatioBenchmarksPage() {
                     {canWrite && (
                       <>
                         <Button
-                          variant="secondary"
+                          variant="inline"
                           onClick={() => {
                             setEditing(ratio.id);
                             setDraft(benchmarkToInput(ratio.benchmark, unitFor(ratio)));
@@ -760,7 +751,7 @@ export default function RatioBenchmarksPage() {
                         </Button>
                         {ratio.status === 'active' ? (
                           <Button
-                            variant="secondary"
+                            variant="inlineDanger"
                             disabled={busy}
                             onClick={() => void run(() => archiveRatio(ratio.id))}
                           >
@@ -768,7 +759,7 @@ export default function RatioBenchmarksPage() {
                           </Button>
                         ) : (
                           <Button
-                            variant="secondary"
+                            variant="inline"
                             disabled={busy}
                             onClick={() => void run(() => restoreRatio(ratio.id))}
                           >

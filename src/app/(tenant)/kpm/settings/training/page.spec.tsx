@@ -403,13 +403,15 @@ describe('Settings › Training (P5-T1)', () => {
     expect(within(rowOf('Sales')).getByText('Archived — not saved yet')).toBeInTheDocument();
   });
 
-  it('shows codes only when asked', async () => {
+  it('keeps codes off the lists, with nothing that puts them back', async () => {
+    // A module title is a sentence; a code beside it is the same thing again in shouting case.
+    // It is on the module's own page, where it is the value being set.
     render();
     await screen.findByText('Sales');
-    expect(screen.queryByText('SALES')).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByLabelText('Show codes'));
-    expect(screen.getByText('SALES')).toBeInTheDocument();
+    expect(screen.queryByText('SALES')).not.toBeInTheDocument();
+    expect(screen.queryByText('PROSPECT_LIST')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Show codes')).not.toBeInTheDocument();
   });
 
   it('gives a reader without write permission the lists and none of the controls', async () => {

@@ -80,7 +80,7 @@ describe('the Products tab', () => {
 
     expect(await screen.findByText('PRUMapan')).toBeInTheDocument();
     const row = (await screen.findByText('PRUMapan')).closest('li')!;
-    expect(within(row).getByText('PRUMAPAN')).toBeInTheDocument();
+    expect(within(row).getByText('PRUMapan')).toBeInTheDocument();
     expect(within(row).getByText('Conventional')).toBeInTheDocument();
     expect(within(row).getByText('Life')).toBeInTheDocument();
     expect(within(row).getByText('Active')).toBeInTheDocument();

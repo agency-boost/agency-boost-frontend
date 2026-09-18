@@ -24,7 +24,7 @@ const CODE = /^[A-Za-z][A-Za-z0-9_]{1,31}$/;
  * The skeleton and the table read the same array, so the placeholder is the width of the
  * ladder it stands in for.
  */
-const COLUMNS = ['Order', 'Code', 'Label', 'Status', { label: 'Actions', visuallyHidden: true }] as const;
+const COLUMNS = ['Order', 'Rung', 'Status', { label: 'Actions', visuallyHidden: true }] as const;
 
 /**
  * Org role ladder (P3.5-T7, ADR-0012).
@@ -143,9 +143,6 @@ export default function OrgLevelsPage() {
                 {forCompany.map((l) => (
                   <Row key={l.orgLevelId}>
                     <Cell className="text-muted">{l.displayOrder}</Cell>
-                    <Cell>
-                      <code className="text-sm font-semibold">{l.code}</code>
-                    </Cell>
                     <Cell className="font-semibold">{l.label}</Cell>
                     <Cell>
                       <StatusPill
@@ -155,7 +152,7 @@ export default function OrgLevelsPage() {
                     </Cell>
                     <Cell>
                       <Button
-                        variant="secondary"
+                        variant="inlineDanger"
                         disabled={busy !== null}
                         onClick={() => void setStatus(l, l.status === 'active' ? 'archived' : 'active')}
                       >

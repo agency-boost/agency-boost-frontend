@@ -545,7 +545,7 @@ describe('EventTypesEditor (P5-T9)', () => {
     const onChange = vi.fn();
     render(<EventTypesEditor payload={EVENT_TYPES} onChange={onChange} />);
 
-    const row = screen.getByText('TRAINING').closest('li')!;
+    const row = screen.getByText('Training').closest('li')!;
     await userEvent.click(within(row).getByRole('button', { name: 'Edit' }));
     const name = screen.getByRole('textbox', { description: 'TRAINING' });
     await userEvent.clear(name);
@@ -562,7 +562,7 @@ describe('EventTypesEditor (P5-T9)', () => {
     const onChange = vi.fn();
     render(<EventTypesEditor payload={EVENT_TYPES} onChange={onChange} />);
 
-    const row = screen.getByText('TRAINING').closest('li')!;
+    const row = screen.getByText('Training').closest('li')!;
     within(row).getByRole('button', { name: /^Reorder Training\./ }).focus();
     await userEvent.keyboard('{ArrowDown}');
 
@@ -656,7 +656,7 @@ describe('CapabilityLadderEditor (P5-T9)', () => {
     const onChange = vi.fn();
     render(<CapabilityLadderEditor payload={CAPABILITY} onChange={onChange} />);
 
-    const stage = screen.getByText('NEW').closest('li')!;
+    const stage = screen.getByText('New agent').closest('li')!;
     await userEvent.click(within(stage).getByRole('checkbox', { name: 'Sells independently' }));
 
     const [next] = onChange.mock.calls[0];
@@ -680,7 +680,8 @@ describe('CapabilityLadderEditor (P5-T9)', () => {
   it('says a milestone a stage still needs will be refused, rather than removing it quietly', async () => {
     render(<CapabilityLadderEditor payload={CAPABILITY} onChange={vi.fn()} />);
 
-    const row = screen.getByText('SELLS').closest('li')!;
+    const card = screen.getByRole('heading', { name: 'Milestones' }).closest('.rounded-lg')!;
+    const row = within(card as HTMLElement).getByText('Sells independently').closest('li')!;
     expect(within(row).getByRole('button', { name: 'Remove' }))
       .toHaveAttribute('title', expect.stringContaining('refused at publish'));
   });

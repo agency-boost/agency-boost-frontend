@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -6,7 +7,7 @@ import { Stepper } from './stepper';
 import { ProgressBar } from './progress-bar';
 import { EmptyState } from './empty-state';
 import { RoleBadge, SEEDED_LADDER } from './role-badge';
-import { Button, Field, TextInput } from './field';
+import { Button, ColorInput, Field, TextInput } from './field';
 
 describe('StatusPill', () => {
   it('renders three distinct states, each with its own words', () => {
@@ -208,6 +209,38 @@ describe('Button', () => {
   });
 });
 
+describe('Button', () => {
+  it('paints the primary navy with white text, not amber', () => {
+    /*
+     * `.btn-add` — the primary on every Owner settings screen in the prototype
+     * (`KPM_Owner.html:225`) — is `background:var(--navy);color:#fff`. This was `bg-amber
+     * text-navy`, on a line in `tokens.md` claiming the prototypes did that. They do not: every
+     * amber button in every prototype file sets `color:#fff`, which is 2.2:1 and fails AA.
+     * White on navy is 13:1.
+     */
+    render(<Button>Publish</Button>);
+
+    const className = screen.getByRole('button').className;
+    expect(className).toContain('bg-navy');
+    expect(className).toContain('text-white');
+    expect(className).not.toContain('bg-amber');
+  });
+
+  it('gives a row action text rather than a box', () => {
+    // `.cfg-actions a` (`KPM_Owner.html:289-292`): a bare link, grey, hovering to navy. Still a
+    // real `<button>` — only the paint changes, so the focus ring and the role stay.
+    render(<><Button variant="inline">Edit</Button><Button variant="inlineDanger">Archive</Button></>);
+
+    const [edit, archive] = screen.getAllByRole('button');
+    expect(edit.className).not.toContain('h-10');
+    expect(edit.className).not.toContain('border');
+    expect(edit.className).toContain('hover:text-navy');
+    // Grey at rest, red only on hover: a row of permanently red links reads as a list of warnings.
+    expect(archive.className).toContain('text-muted');
+    expect(archive.className).toContain('hover:text-alert');
+  });
+});
+
 describe('Field', () => {
   it('links its hint to the control, rather than printing it beside one', () => {
     /*
@@ -236,5 +269,70 @@ describe('Field', () => {
   it('leaves a field with neither undescribed rather than pointing at nothing', () => {
     render(<Field label="Code" htmlFor="c"><TextInput id="c" /></Field>);
     expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('puts the hint below the control, so two fields side by side line up', () => {
+    /*
+     * The client's report: a hinted field beside an unhinted one put their inputs on different
+     * lines, because the hint sat between the label and the control and pushed it down. Nothing
+     * held them apart but guidance that reads better after the thing it describes anyway.
+     *
+     * Asserted as **document order**, because that is the whole of the change — the
+     * `aria-describedby` wiring above is id-based and was never affected.
+     */
+    render(
+      <Field label="Code" htmlFor="c" hint="Permanent once saved." error="Already taken.">
+        <TextInput id="c" />
+      </Field>,
+    );
+
+    const label = screen.getByText('Code');
+    const control = screen.getByRole('textbox');
+    const hint = screen.getByText('Permanent once saved.');
+    const error = screen.getByRole('alert');
+
+    const follows = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(label, control)).toBe(true);
+    expect(follows(control, hint)).toBe(true);
+    // Hint before error, matching the order `aria-describedby` announces them in.
+    expect(follows(hint, error)).toBe(true);
+  });
+});
+
+describe('ColorInput', () => {
+  it('offers a picker and a hex box, and keeps them in step', async () => {
+    // The field asked for "a hash and six hex digits", and not everybody thinks in hex. The
+    // text half stays: the picker is an OS dialog a screen reader cannot drive, and pasting a
+    // colour somebody was handed is the other half of the job.
+    function Harness() {
+      const [value, setValue] = useState('#2D9CDB');
+      return (
+        <Field label="Color" htmlFor="c" hint="Optional.">
+          <ColorInput id="c" value={value} onChange={setValue} />
+        </Field>
+      );
+    }
+    render(<Harness />);
+
+    const text = screen.getByLabelText('Color');
+    expect(text).toHaveValue('#2D9CDB');
+    // The description reaches the **text** input, not the wrapper `<div>` around both.
+    expect(text).toHaveAccessibleDescription('Optional.');
+
+    await userEvent.clear(text);
+    await userEvent.type(text, '#27AE60');
+    expect(screen.getByLabelText('Color')).toHaveValue('#27AE60');
+  });
+
+  it('shows a blank surface rather than claiming black when nothing is set', () => {
+    // `<input type="color">` has no empty state — it falls back to black, which would read as
+    // a colour somebody chose.
+    render(
+      <Field label="Color" htmlFor="c">
+        <ColorInput id="c" value="" onChange={() => {}} />
+      </Field>,
+    );
+    expect(screen.getByLabelText('Color')).toHaveValue('');
   });
 });

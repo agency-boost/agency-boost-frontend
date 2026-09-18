@@ -82,7 +82,6 @@ export default function TrainingSettingsPage() {
   const [tab, setTab] = useState<Tab>('categories');
   const [showArchived, setShowArchived] = useState(false);
   // Off the lists and read-only while editing, as on every settings screen (parity I-64).
-  const [showCodes, setShowCodes] = useState(false);
   // The prototype's filters: one category on Skills; a category and a skill on Modules.
   const [skillsCategory, setSkillsCategory] = useState('');
   const [modulesCategory, setModulesCategory] = useState('');
@@ -236,17 +235,14 @@ export default function TrainingSettingsPage() {
   }
 
   /**
-   * The code, and whether the row is archived **itself** — a row an archive above is taking says
-   * so in its own note, and saying *archived* twice reads as two things.
+   * Whether the row is archived **itself** — a row an archive above is taking says so in its own
+   * note, and saying *archived* twice reads as two things.
+   *
+   * The code used to share this line. It is on the edit panel now and nowhere else.
    */
-  function meta(code: string, archived: boolean) {
-    if (!showCodes && !archived) return null;
-    return (
-      <p className="mt-0.5 text-sm text-muted">
-        {showCodes && <code>{code}</code>}
-        {archived && (showCodes ? ' · archived' : 'archived')}
-      </p>
-    );
+  function meta(archived: boolean) {
+    if (!archived) return null;
+    return <p className="mt-0.5 text-sm text-muted">archived</p>;
   }
 
   /** Archive, or Restore — or, where the row above is archived, why it cannot come back yet. */
@@ -261,7 +257,7 @@ export default function TrainingSettingsPage() {
     if (row.row.status === 'active') {
       return (
         <Button
-          variant="secondary"
+          variant="inlineDanger"
           disabled={busy}
           onClick={() => setStaged((now) => stageStatus(now, entity, row.row, 'archive'))}
         >
@@ -274,7 +270,7 @@ export default function TrainingSettingsPage() {
     }
     return (
       <Button
-        variant="secondary"
+        variant="inline"
         disabled={busy}
         onClick={() => setStaged((now) => stageStatus(now, entity, row.row, 'restore'))}
       >
@@ -608,14 +604,14 @@ export default function TrainingSettingsPage() {
                     {category.row.description && (
                       <p className="text-sm text-muted">{category.row.description}</p>
                     )}
-                    {meta(category.row.code, category.row.status === 'archived')}
+                    {meta(category.row.status === 'archived')}
                     {marks('trainingCategory', category, '')}
                   </div>
                   {categoryBadge(category)}
                   {canWrite && !unsaved && (
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
                       <Button
-                        variant="secondary"
+                        variant="inline"
                         onClick={() => {
                           setAdding(false);
                           setEditing(category.row.id);
@@ -711,7 +707,7 @@ export default function TrainingSettingsPage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-md font-semibold text-navy">{skill.row.label}</p>
-                    {meta(skill.row.code, skill.row.status === 'archived')}
+                    {meta(skill.row.status === 'archived')}
                     {marks('trainingSkill', skill, category?.row.label ?? '')}
                   </div>
                   {skill.archived
@@ -724,7 +720,7 @@ export default function TrainingSettingsPage() {
                   {canWrite && !unsaved && (
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
                       <Button
-                        variant="secondary"
+                        variant="inline"
                         onClick={() => {
                           setAdding(false);
                           setEditing(skill.row.id);
@@ -768,7 +764,7 @@ export default function TrainingSettingsPage() {
               <div className="min-w-0 flex-1">
                 <p className="text-md font-semibold text-navy">{module.row.title}</p>
                 <p className="text-sm text-muted">{labelOfSkill(module.row.skillCode)}</p>
-                {meta(module.row.code, module.row.status === 'archived')}
+                {meta(module.row.status === 'archived')}
                 {marks('trainingModule', module, skill?.row.label ?? '')}
               </div>
               {module.archived
@@ -777,7 +773,7 @@ export default function TrainingSettingsPage() {
               {canWrite && !unsaved && (
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                   <ButtonLink
-                    variant="secondary"
+                    variant="inline"
                     href={`/kpm/settings/training/${module.row.id}`}
                     onClick={(e) => openModule(e, module.row.id, module.row.title)}
                   >
@@ -787,7 +783,7 @@ export default function TrainingSettingsPage() {
                     /* Stages an edit like any other: the module is offered to agents when the
                        office next publishes, not when this is pressed. */
                     <Button
-                      variant="secondary"
+                      variant="inline"
                       disabled={busy}
                       onClick={() => stageFields('trainingModule', module.row.id, {
                         publishState: isPublished ? 'draft' : 'published',
@@ -840,10 +836,6 @@ export default function TrainingSettingsPage() {
             <label className="flex items-center gap-2 text-md text-navy">
               <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
               Show archived
-            </label>
-            <label className="flex items-center gap-2 text-md text-navy">
-              <input type="checkbox" checked={showCodes} onChange={(e) => setShowCodes(e.target.checked)} />
-              Show codes
             </label>
             {canWrite && view && !adding && <Button onClick={openAdd}>{addLabel}</Button>}
           </>

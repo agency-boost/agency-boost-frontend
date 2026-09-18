@@ -10,6 +10,7 @@ import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { suggestCode } from '@/lib/config-code';
 import { useCan } from '@/lib/session';
+import { useHashTab } from '@/lib/use-hash-tab';
 import {
   archiveCampaign, createCampaign, listCampaigns, listMetrics, listQualificationRules, restoreCampaign,
   updateCampaign,
@@ -60,7 +61,7 @@ const localDate = (iso: string) => iso.slice(0, 10);
  */
 export default function CampaignsSettingsPage() {
   const canWrite = useCan('tenant_config:write');
-  const [tab, setTab] = useState('#campaigns');
+  const [tab, setTab] = useHashTab(TABS);
   const [campaigns, setCampaigns] = useState<CampaignRow[] | null>(null);
   const [rules, setRules] = useState<QualificationRuleRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -149,7 +150,6 @@ export default function CampaignsSettingsPage() {
                         <p className="mt-0.5 text-sm text-muted">{campaign.description}</p>
                       )}
                       <p className="mt-1 flex flex-wrap items-center gap-2">
-                        <code className="text-sm text-muted">{campaign.code}</code>
                         <ConfigBadge tone={PHASE[campaign.phase].tone}>
                           {PHASE[campaign.phase].text}
                         </ConfigBadge>
@@ -174,14 +174,14 @@ export default function CampaignsSettingsPage() {
                     {canWrite && (
                       <div className="flex flex-wrap gap-2">
                         <Button
-                          variant="secondary"
+                          variant="inline"
                           disabled={busy}
                           onClick={() => { setDraft(draftOf(campaign)); setEditing(campaign.id); }}
                         >
                           Edit
                         </Button>
                         <Button
-                          variant="secondary"
+                          variant="inlineDanger"
                           disabled={busy}
                           onClick={() => void run(() => (campaign.status === 'archived'
                             ? restoreCampaign(campaign.id)
@@ -428,10 +428,10 @@ export default function CampaignsSettingsPage() {
       title="Campaigns"
       subtitle="What your office is running, and what your insurer measures your leaders against."
       permission="tenant_config:read"
-      subtabs={TABS}
-      activeSubtab={tab}
-      onSelectSubtab={setTab}
-      subtabsLabel="Campaign sections"
+      tabs={TABS}
+      tabsLabel="Campaign sections"
+      activeHref={tab}
+      onSelectTab={setTab}
       error={campaigns === null ? error : null}
       bars={<PublishBar />}
     >

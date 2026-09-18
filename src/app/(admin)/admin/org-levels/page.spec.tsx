@@ -39,13 +39,15 @@ const LADDER = [
 describe('org role ladder (P3.5-T7)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('AC-1: reads junior first, and shows the code beside the label', async () => {
+  it('AC-1: reads junior first, by the name of each rung', async () => {
+    // The code used to be a column of its own. It is on the row's edit panel now: a reader
+    // scanning a ladder is looking for *Agent*, and `AGENT` beside it was the same word twice.
     stubFetch({ '/admin/org-levels': { body: LADDER }, '/admin/companies': { body: COMPANIES } });
     renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
 
     const rows = within(await screen.findByRole('table')).getAllByRole('row').slice(1);
     expect(rows.map((r) => r.textContent)).toEqual([
-      expect.stringContaining('AGENT'),
+      expect.stringContaining('Agent'),
       expect.stringContaining('AAB'),
       expect.stringContaining('AB'),
     ]);

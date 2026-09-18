@@ -71,7 +71,6 @@ export default function ActivityTypesPage() {
    * and this toggle brings it back for template work and for support tickets. The same
    * control, defaulted the same way, as the ratio screen.
    */
-  const [showCodes, setShowCodes] = useState(false);
   const [addingSection, setAddingSection] = useState(false);
   const [section, setSection] = useState({ code: '', label: '', description: '' });
   // Native HTML5 drag, the way the frozen prototype does it
@@ -305,14 +304,6 @@ export default function ActivityTypesPage() {
               />
               Show archived
             </label>
-            <label className="flex items-center gap-2 text-md text-navy">
-              <input
-                type="checkbox"
-                checked={showCodes}
-                onChange={(e) => setShowCodes(e.target.checked)}
-              />
-              Show codes
-            </label>
           </>
         ),
       }}
@@ -448,7 +439,6 @@ export default function ActivityTypesPage() {
                       </button>
                     </>
                   )}
-                  {showCodes && <code className="text-sm text-muted">{category.code}</code>}
                   <span className="whitespace-nowrap rounded-full border border-hairline bg-canvas px-2 py-0.5 text-sm font-semibold text-muted">
                     {category.types.length} {category.types.length === 1 ? 'item' : 'items'}
                   </span>
@@ -558,7 +548,7 @@ export default function ActivityTypesPage() {
                     {canWrite && (
                       <>
                         <Button
-                          variant="secondary"
+                          variant="inline"
                           onClick={() => {
                             setRenaming(category.id);
                             setSectionDraft({
@@ -570,7 +560,7 @@ export default function ActivityTypesPage() {
                           Rename
                         </Button>
                         <Button
-                          variant="secondary"
+                          variant="inline"
                           onClick={() => {
                             setScoping(category.id);
                             setRungs(category.appliesToOrgLevelCodes);
@@ -580,7 +570,7 @@ export default function ActivityTypesPage() {
                         </Button>
                         {category.status === 'active' ? (
                           <Button
-                            variant="secondary"
+                            variant="inlineDanger"
                             disabled={busy !== null}
                             title="Archives the section and everything in it."
                             onClick={() => stage({
@@ -593,7 +583,7 @@ export default function ActivityTypesPage() {
                           </Button>
                         ) : (
                           <Button
-                            variant="secondary"
+                            variant="inline"
                             disabled={busy !== null}
                             onClick={() => stage({
                               op: 'category.restore',
@@ -699,12 +689,8 @@ export default function ActivityTypesPage() {
                           {type.description && (
                             <p className="text-sm text-muted">{type.description}</p>
                           )}
-                          {(showCodes || type.status === 'archived') && (
-                            <p className="mt-0.5 text-sm text-muted">
-                              {/* The part that does not move when the numbers do. */}
-                              {showCodes && <code>{type.code}</code>}
-                              {type.status === 'archived' && (showCodes ? ' · archived' : 'archived')}
-                            </p>
+                          {type.status === 'archived' && (
+                            <p className="mt-0.5 text-sm text-muted">archived</p>
                           )}
                           {typeMark && (
                             <p className="mt-1 text-sm">
@@ -727,7 +713,7 @@ export default function ActivityTypesPage() {
                     {canWrite && editing !== type.id && (
                       <div className="flex shrink-0 flex-wrap items-center gap-2">
                         <Button
-                          variant="secondary"
+                          variant="inline"
                           onClick={() => {
                             setEditing(type.id);
                             setEditLabel(type.label);
@@ -738,7 +724,7 @@ export default function ActivityTypesPage() {
                         </Button>
                         {type.status === 'active' ? (
                           <Button
-                            variant="secondary"
+                            variant="inlineDanger"
                             disabled={busy !== null}
                             onClick={() => stage({
                               op: 'type.archive', id: type.id, expectedVersion: type.version,
@@ -748,7 +734,7 @@ export default function ActivityTypesPage() {
                           </Button>
                         ) : (
                           <Button
-                            variant="secondary"
+                            variant="inline"
                             disabled={busy !== null}
                             onClick={() => stage({
                               op: 'type.restore', id: type.id, expectedVersion: type.version,

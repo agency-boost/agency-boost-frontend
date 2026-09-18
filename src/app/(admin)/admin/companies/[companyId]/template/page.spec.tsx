@@ -58,10 +58,23 @@ function render(body: unknown = TAXONOMY) {
  * office of a company, and a live field meant a stray keystroke on a focused input changed
  * one, with the draft saving it before anybody noticed the field had been touched.
  */
-async function openRow(code: string) {
+async function openRow(
+  name: string,
+  code: string,
+  /** For a name the screen uses twice — `Training` is a row here *and* one of the tabs. */
+  scope?: ReturnType<typeof within>,
+) {
+  /*
+   * Found by the row's **name**, opened, and handed back by its **code**.
+   *
+   * The rows stopped painting their codes when the client asked for quieter lists, so a name is
+   * now the only thing on screen to find one by — which is what a person uses anyway. The code
+   * is still how the returned field is identified: `Field` links it as the input's description,
+   * and that is the one place it still shows.
+   */
   // `li` or the ratio card — not the nearest `div`, which is EditableRow's own wrapper
   // for the read view and does not contain the Edit button beside it.
-  const row = screen.getByText(code).closest('li, [data-row]')!;
+  const row = (scope ?? screen).getByText(name).closest('li, [data-row]')!;
   await userEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Edit' }));
   return screen.getByRole('textbox', { description: code });
 }
@@ -77,7 +90,7 @@ describe('a company’s Company template (P4-T8)', () => {
     // split across routes contributes one tab, not two. `Activity types` also appears in
     // the row below it, which is what the Owner's own screen does.
     render();
-    await screen.findByText('SELL_SUBMISSION');
+    await screen.findByText('Submission polis');
     for (const label of [
       'Activity types', 'Lead statuses', 'Activation checklist',
       'Training', 'Events', 'Campaigns', 'Products',
@@ -89,7 +102,7 @@ describe('a company’s Company template (P4-T8)', () => {
 
   it('has no Branch info tab, because it is a fact about one office', async () => {
     render();
-    await screen.findByText('SELL_SUBMISSION');
+    await screen.findByText('Submission polis');
     expect(screen.queryByRole('link', { name: 'Branch info' })).toBeNull();
   });
 
@@ -136,8 +149,8 @@ describe('a company’s Company template (P4-T8)', () => {
     // The server publishes the *draft*, so publishing with unsaved changes would ship the
     // previous draft and look like the edit was lost.
     render();
-    await screen.findByText('SELL_SUBMISSION');
-    const label = await openRow('SELL_SUBMISSION');
+    await screen.findByText('Submission polis');
+    const label = await openRow('Submission polis', 'SELL_SUBMISSION');
     await userEvent.type(label, ' baru');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -147,8 +160,8 @@ describe('a company’s Company template (P4-T8)', () => {
 
   it('sends the whole payload, not a patch', async () => {
     const { calls } = render();
-    await screen.findByText('SELL_SUBMISSION');
-    const label = await openRow('SELL_SUBMISSION');
+    await screen.findByText('Submission polis');
+    const label = await openRow('Submission polis', 'SELL_SUBMISSION');
     await userEvent.clear(label);
     await userEvent.type(label, 'Closing');
     // The row's own Save closes the panel; Save draft is the request.
@@ -234,12 +247,12 @@ describe('a company’s Company template (P4-T8)', () => {
 
     it('edits an event type without touching its code', async () => {
       const stub = await openTab(EVENT_TYPES, 'Events');
-      await screen.findByText('TRAINING');
-
-      const field = await openRow('TRAINING');
+      // `Training` is also one of this screen's tabs, so the row is found in the list itself.
+      const list = within(await screen.findByRole('list'));
+      const row = list.getByText('Training').closest('li')! as HTMLElement;
+      const field = await openRow('Training', 'TRAINING', list);
       await userEvent.clear(field);
       await userEvent.type(field, 'Pelatihan');
-      const row = screen.getByText('TRAINING').closest('li')!;
       await userEvent.click(within(row).getByRole('button', { name: 'Save' }));
       await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
 
@@ -250,12 +263,24 @@ describe('a company’s Company template (P4-T8)', () => {
       expect(body.payload.types[0].code).toBe('TRAINING');
     });
 
-    it('writes a colour out beside its swatch, so colour is never the only cue', async () => {
+    it('shows a colour as a swatch, and its value where it is set', async () => {
+      /*
+       * **This test used to assert the opposite**, and the client's reason for the change is
+       * the better one: `#2D9CDB` beside a row tells a reader nothing the swatch does not.
+       *
+       * It does not weaken *"colour is never the only cue"* — that rule is about colour carrying
+       * status, and the row's name is right there carrying it. The swatch is `aria-hidden`, so
+       * a screen reader used to announce *"Training 📚 #2D9CDB"* with the hex as pure noise.
+       */
       await openTab(EVENT_TYPES, 'Events');
+      await screen.findByRole('list');
 
-      expect(await screen.findByText('#2D9CDB')).toBeInTheDocument();
+      expect(screen.queryByText('#2D9CDB')).not.toBeInTheDocument();
       // A type with no colour simply has no swatch; nothing is invented for it.
       expect(screen.getByText('Recognition')).toBeInTheDocument();
+
+      await openRow('Training', 'TRAINING', within(screen.getByRole('list')));
+      expect(screen.getByLabelText('Color')).toHaveValue('#2D9CDB');
     });
 
     it('names a metric from the registry rather than a list of its own', async () => {
@@ -276,12 +301,17 @@ describe('a company’s Company template (P4-T8)', () => {
         .toBeInTheDocument();
     });
 
-    it('shows a code on every capability row, including the grid items', async () => {
+    it('gives every capability row a code, shown where it is edited', async () => {
+      // The claim was never that a list paints codes — it is that every row *has* one, so a
+      // rename cannot orphan a tick. Two of the prototype's four grids have none at all.
       await openTab(CAPABILITY, 'Capability catalog');
+      await screen.findByText('Approach');
 
-      expect(await screen.findByText('APPROACH')).toBeInTheDocument();
-      expect(screen.getByText('SELLS')).toBeInTheDocument();
-      expect(screen.getByText('COMPETENT')).toBeInTheDocument();
+      expect(screen.queryByText('APPROACH')).not.toBeInTheDocument();
+      expect(screen.queryByText('SELLS')).not.toBeInTheDocument();
+
+      await openRow('Approach', 'APPROACH');
+      expect(screen.getByRole('textbox', { description: 'APPROACH' })).toBeInTheDocument();
     });
 
     it('says a stage’s seniority is its rank, not its position', async () => {
@@ -308,7 +338,7 @@ describe('a company’s Company template (P4-T8)', () => {
       '/admin/companies/c1/template/training_taxonomy': { body: TRAINING },
     });
     renderWithSession(<CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />, { me: SUPER_ADMIN });
-    await screen.findByText('SELL_SUBMISSION');
+    await screen.findByText('Submission polis');
 
     await userEvent.click(sections().getByRole('link', { name: 'Training' }));
 
@@ -344,7 +374,7 @@ describe('a company’s Company template (P4-T8)', () => {
       '/admin/companies/c1/template/training_taxonomy': { body: TRAINING },
     });
     renderWithSession(<CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />, { me: SUPER_ADMIN });
-    await screen.findByText('SELL_SUBMISSION');
+    await screen.findByText('Submission polis');
 
     await userEvent.click(sections().getByRole('link', { name: 'Activation checklist' }));
     await screen.findByText('1 item across 1 aspect');
@@ -378,12 +408,12 @@ describe('a company’s Company template (P4-T8)', () => {
       { me: SUPER_ADMIN },
     );
 
-    await screen.findByText('SELL_SUBMISSION');
+    await screen.findByText('Submission polis');
     await userEvent.click(screen.getByRole('link', { name: 'Lead statuses' }));
 
     // It gets there, and it gets there with its own payload.
-    expect(await screen.findByText('PAID_AND_ISSUED')).toBeInTheDocument();
-    expect(screen.queryByText('SELL_SUBMISSION')).toBeNull();
+    expect(await screen.findByText('Paid and issued')).toBeInTheDocument();
+    expect(screen.queryByText('Submission polis')).toBeNull();
   });
 
   it('ignores a late answer for a tab the reader has left', async () => {
@@ -415,12 +445,12 @@ describe('a company’s Company template (P4-T8)', () => {
 
     // Leave for Lead statuses before the taxonomy answers, then let it answer.
     await userEvent.click(await screen.findByRole('link', { name: 'Lead statuses' }));
-    expect(await screen.findByText('PAID_AND_ISSUED')).toBeInTheDocument();
+    expect(await screen.findByText('Paid and issued')).toBeInTheDocument();
     releaseSlow();
 
     // Still the pipeline. The late taxonomy is dropped rather than drawn.
-    expect(await screen.findByText('PAID_AND_ISSUED')).toBeInTheDocument();
-    expect(screen.queryByText('SELL_SUBMISSION')).toBeNull();
+    expect(await screen.findByText('Paid and issued')).toBeInTheDocument();
+    expect(screen.queryByText('Submission polis')).toBeNull();
   });
 
 
@@ -433,7 +463,7 @@ describe('a company’s Company template (P4-T8)', () => {
        * top row — and the first version of this test only checked that both links existed,
        * which is exactly why it passed over the gap.
        */
-      await screen.findByText('SELL_SUBMISSION');
+      await screen.findByText('Submission polis');
       expect(sections().queryByRole('link', { name: 'Ratio benchmarks' })).not.toBeInTheDocument();
       expect(sections().getByRole('link', { name: 'Activity types' })).toBeInTheDocument();
 
@@ -471,8 +501,8 @@ describe('a company’s Company template (P4-T8)', () => {
       );
 
       await userEvent.click(await screen.findByRole('link', { name: 'Ratio benchmarks' }));
-      await screen.findByText('SELLING_SUCCESS_RATE');
-      expect(await openRow('SELLING_SUCCESS_RATE')).toBeInTheDocument();
+      await screen.findByText('Selling success rate');
+      expect(await openRow('Selling success rate', 'SELLING_SUCCESS_RATE')).toBeInTheDocument();
       /*
        * The formula IS a control here, and that is the correction. It was read-only on
        * the reasoning that an office may not change a platform ratio's formula — which
@@ -537,7 +567,7 @@ describe('a company’s Company template (P4-T8)', () => {
   describe('adding to a template (P4-T20)', () => {
     it('offers an Add control the screen never had', async () => {
       render();
-      await screen.findByText('SELL_SUBMISSION');
+      await screen.findByText('Submission polis');
       expect(screen.getAllByRole('button', { name: /^Add an activity type$/ }).length)
         .toBeGreaterThan(0);
       expect(screen.getByRole('button', { name: 'Add a section' })).toBeInTheDocument();
@@ -545,7 +575,7 @@ describe('a company’s Company template (P4-T8)', () => {
 
     it('appends a type to the section it was added under', async () => {
       const { calls } = render();
-      await screen.findByText('SELL_SUBMISSION');
+      await screen.findByText('Submission polis');
       await userEvent.click(screen.getAllByRole('button', { name: /^Add an activity type$/ })[0]);
       // Scoped to the add form — every existing row carries a Name field too, and only
       // the add form has a Code one.
@@ -571,32 +601,32 @@ describe('a company’s Company template (P4-T8)', () => {
        * the one place it was not consulted was the one place a change could disappear.
        */
       render();
-      await screen.findByText('SELL_SUBMISSION');
-      await userEvent.type(await openRow('SELL_SUBMISSION'), 'x');
+      await screen.findByText('Submission polis');
+      await userEvent.type(await openRow('Submission polis', 'SELL_SUBMISSION'), 'x');
       await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
       await userEvent.click(screen.getByRole('link', { name: 'Lead statuses' }));
 
       expect(await screen.findByText(/edits here that are not saved/)).toBeInTheDocument();
       // And it stayed put.
-      expect(screen.getByText('SELL_SUBMISSION')).toBeInTheDocument();
+      expect(screen.getByText(/Submission polis/)).toBeInTheDocument();
     });
 
     it('stays when asked to stay', async () => {
       render();
-      await screen.findByText('SELL_SUBMISSION');
-      await userEvent.type(await openRow('SELL_SUBMISSION'), 'x');
+      await screen.findByText('Submission polis');
+      await userEvent.type(await openRow('Submission polis', 'SELL_SUBMISSION'), 'x');
       await userEvent.click(screen.getByRole('button', { name: 'Save' }));
       await userEvent.click(screen.getByRole('link', { name: 'Lead statuses' }));
       await userEvent.click(screen.getByRole('button', { name: 'Stay here' }));
 
       expect(screen.queryByText(/edits here that are not saved/)).not.toBeInTheDocument();
-      expect(screen.getByText('SELL_SUBMISSION')).toBeInTheDocument();
+      expect(screen.getByText(/Submission polis/)).toBeInTheDocument();
     });
 
     it('switches freely when nothing is held', async () => {
       render();
-      await screen.findByText('SELL_SUBMISSION');
+      await screen.findByText('Submission polis');
       await userEvent.click(screen.getByRole('link', { name: 'Lead statuses' }));
       expect(screen.queryByText(/edits here that are not saved/)).not.toBeInTheDocument();
     });

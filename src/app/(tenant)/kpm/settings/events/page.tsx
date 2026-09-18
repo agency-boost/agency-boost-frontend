@@ -10,6 +10,7 @@ import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { suggestCode } from '@/lib/config-code';
 import { useCan } from '@/lib/session';
+import { useHashTab } from '@/lib/use-hash-tab';
 import {
   archiveEvent, archiveEventType, createEvent, createEventType, listEventTypes, listEvents,
   restoreEvent, restoreEventType, updateEvent, updateEventType,
@@ -59,7 +60,7 @@ const toInstant = (value: string) => (value ? new Date(value).toISOString() : ''
  */
 export default function EventsSettingsPage() {
   const canWrite = useCan('tenant_config:write');
-  const [tab, setTab] = useState('#events');
+  const [tab, setTab] = useHashTab(TABS);
   const [types, setTypes] = useState<EventTypeRow[] | null>(null);
   const [events, setEvents] = useState<EventRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -148,7 +149,6 @@ export default function EventsSettingsPage() {
                       <h2 className="text-md font-semibold text-navy">{event.title}</h2>
                       {event.blurb && <p className="mt-0.5 text-sm text-muted">{event.blurb}</p>}
                       <p className="mt-1 flex flex-wrap items-center gap-2">
-                        <code className="text-sm text-muted">{event.code}</code>
                         <ConfigBadge tone={PHASE[event.phase].tone}>
                           {PHASE[event.phase].text}
                         </ConfigBadge>
@@ -171,14 +171,14 @@ export default function EventsSettingsPage() {
                     {canWrite && (
                       <div className="flex flex-wrap gap-2">
                         <Button
-                          variant="secondary"
+                          variant="inline"
                           disabled={busy}
                           onClick={() => { setDraft(draftOf(event)); setAdding(event.id); }}
                         >
                           Edit
                         </Button>
                         <Button
-                          variant="secondary"
+                          variant="inlineDanger"
                           disabled={busy}
                           onClick={() => void run(() => (event.status === 'archived'
                             ? restoreEvent(event.id)
@@ -454,7 +454,6 @@ export default function EventsSettingsPage() {
                     <div className="min-w-0 flex-1">
                       <h2 className="text-md font-semibold text-navy">{type.label}</h2>
                       <p className="mt-1 flex flex-wrap items-center gap-2">
-                        <code className="text-sm text-muted">{type.code}</code>
                         <ConfigBadge tone={type.events > 0 ? 'won' : 'open'}>
                           {type.events} {type.events === 1 ? 'event' : 'events'}
                         </ConfigBadge>
@@ -466,7 +465,7 @@ export default function EventsSettingsPage() {
                     {canWrite && (
                       <div className="flex flex-wrap gap-2">
                       <Button
-                        variant="secondary"
+                        variant="inline"
                         disabled={busy}
                         onClick={() => {
                           setTypeDraft({
@@ -479,7 +478,7 @@ export default function EventsSettingsPage() {
                         Edit
                       </Button>
                       <Button
-                        variant="secondary"
+                        variant="inlineDanger"
                         disabled={busy}
                         title={type.status === 'archived'
                           ? undefined
@@ -508,10 +507,10 @@ export default function EventsSettingsPage() {
       title="Events"
       subtitle="What your office is running, and who is invited."
       permission="tenant_config:read"
-      subtabs={TABS}
-      activeSubtab={tab}
-      onSelectSubtab={setTab}
-      subtabsLabel="Events sections"
+      tabs={TABS}
+      tabsLabel="Events sections"
+      activeHref={tab}
+      onSelectTab={setTab}
       error={types === null ? error : null}
       bars={<PublishBar />}
     >

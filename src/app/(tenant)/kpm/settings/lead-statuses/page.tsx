@@ -43,7 +43,6 @@ export default function LeadStatusesPage() {
   const [showArchived, setShowArchived] = useState(false);
   /* Off the list, on in the edit panel, one click away here — the same rule and the same
      control as the other two settings screens (P4-T24, parity I-64). */
-  const [showCodes, setShowCodes] = useState(false);
   // One pipeline at a time, as the prototype's subtabs do. Both stacked made the sales
   // ladder and the recruitment ladder read as one eleven-stage list on a narrow screen.
   const [tab, setTab] = useState<LeadPipeline>('sales');
@@ -167,14 +166,6 @@ export default function LeadStatusesPage() {
               />
               Show archived
             </label>
-            <label className="flex items-center gap-2 text-md text-navy">
-              <input
-                type="checkbox"
-                checked={showCodes}
-                onChange={(e) => setShowCodes(e.target.checked)}
-              />
-              Show codes
-            </label>
           </>
         ),
       }}
@@ -278,11 +269,8 @@ export default function LeadStatusesPage() {
                               </span>
                             )}
                           </p>
-                          {(showCodes || stage.status === 'archived') && (
-                            <p className="mt-0.5 text-sm text-muted">
-                              {showCodes && <code>{stage.code}</code>}
-                              {stage.status === 'archived' && (showCodes ? ' · archived' : 'archived')}
-                            </p>
+                          {stage.status === 'archived' && (
+                            <p className="mt-0.5 text-sm text-muted">archived</p>
                           )}
                         </>
                       )}
@@ -291,14 +279,14 @@ export default function LeadStatusesPage() {
                     {canWrite && editing !== stage.id && (
                       <div className="flex shrink-0 flex-wrap items-center gap-2">
                         <Button
-                          variant="secondary"
+                          variant="inline"
                           onClick={() => { setEditing(stage.id); setEditLabel(stage.label); }}
                         >
                           Edit
                         </Button>
                         {!stage.isTerminal && stage.status === 'active' && (
                           <Button
-                            variant="secondary"
+                            variant="inline"
                             disabled={busy}
                             onClick={() => void run(() => setTerminalLeadStatus(stage.id))}
                           >
@@ -307,7 +295,7 @@ export default function LeadStatusesPage() {
                         )}
                         {stage.status === 'active' ? (
                           <Button
-                            variant="secondary"
+                            variant="inlineDanger"
                             disabled={busy || stage.isTerminal}
                             title={stage.isTerminal
                               ? 'Make another stage close the pipeline first.'
@@ -318,7 +306,7 @@ export default function LeadStatusesPage() {
                           </Button>
                         ) : (
                           <Button
-                            variant="secondary"
+                            variant="inline"
                             disabled={busy}
                             onClick={() => void run(() => restoreLeadStatus(stage.id))}
                           >

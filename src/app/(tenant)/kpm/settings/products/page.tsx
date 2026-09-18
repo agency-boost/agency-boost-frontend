@@ -9,6 +9,7 @@ import { Button, Card, Field, ReadOnlyField, TextInput, Textarea } from '@/compo
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
+import { useHashTab } from '@/lib/use-hash-tab';
 import {
   approveScript, kpmProductDocumentUrl, listKpmProducts, listScriptReviews, readBranchInfo,
   readEffectiveScript, rejectScript, resetKpmProductDocument, resetKpmProductOverride,
@@ -61,7 +62,7 @@ export default function KpmProductsPage() {
    * approve it the day that grant moves.
    */
   const canApprove = useCan('sales_script:approve');
-  const [tab, setTab] = useState('#products');
+  const [tab, setTab] = useHashTab(TABS);
   const [sendingBack, setSendingBack] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [rows, setRows] = useState<KpmProductRow[] | null>(null);
@@ -196,7 +197,6 @@ export default function KpmProductsPage() {
                       </p>
                     )}
                     <p className="mt-1 flex flex-wrap items-center gap-2">
-                      <code className="text-sm text-muted">{product.code}</code>
                       <ConfigBadge tone="open">{product.category}</ConfigBadge>
                       {!product.sellable && (
                         <ConfigBadge tone="open">Withdrawn by {company}</ConfigBadge>
@@ -215,7 +215,7 @@ export default function KpmProductsPage() {
                   <div className="flex flex-wrap items-center gap-2">
                     {canWrite && product.sellable && (
                       <Button
-                        variant="secondary"
+                        variant="inline"
                         disabled={busy}
                         onClick={() => void run(() =>
                           setKpmProductActive(product.productId, !product.active.value))}
@@ -224,7 +224,7 @@ export default function KpmProductsPage() {
                       </Button>
                     )}
                     <Button
-                      variant="secondary"
+                      variant="inline"
                       disabled={busy}
                       onClick={() => {
                         const next = open === product.productId ? null : product.productId;
@@ -232,7 +232,7 @@ export default function KpmProductsPage() {
                         setDraft(next ? draftOf(product) : {});
                       }}
                     >
-                      {open === product.productId ? 'Close' : 'Customise'}
+                      {open === product.productId ? 'Close' : 'Customize'}
                     </Button>
                   </div>
                 </div>
@@ -287,7 +287,6 @@ export default function KpmProductsPage() {
                         {product.displayName.value}
                       </h2>
                       <p className="mt-1 flex flex-wrap items-center gap-2">
-                        <code className="text-sm text-muted">{product.code}</code>
                         <ConfigBadge tone={REVIEW[product.reviewState].tone}>
                           {REVIEW[product.reviewState].text}
                         </ConfigBadge>
@@ -320,7 +319,7 @@ export default function KpmProductsPage() {
                           Approve
                         </Button>
                         <Button
-                          variant="secondary"
+                          variant="inline"
                           disabled={busy}
                           onClick={() => { setSendingBack(product.productId); setReason(''); }}
                         >
@@ -420,7 +419,7 @@ export default function KpmProductsPage() {
             <Button disabled={busy} onClick={() => void save('displayName')}>Save the name</Button>
             {product.displayName.overridden && (
               <Button
-                variant="secondary"
+                variant="inline"
                 disabled={busy}
                 onClick={() => void run(async () => {
                   const row = await resetKpmProductOverride(product.productId, 'displayName');
@@ -469,7 +468,7 @@ export default function KpmProductsPage() {
                 </Button>
                 {product.script[f.key]?.overridden && (
                   <Button
-                    variant="secondary"
+                    variant="inline"
                     disabled={busy}
                     onClick={() => void run(async () => {
                       const row = await resetKpmProductOverride(product.productId, f.key);
@@ -499,7 +498,7 @@ export default function KpmProductsPage() {
               </div>
               {doc.storageKey && (
                 <Button
-                  variant="secondary"
+                  variant="inline"
                   onClick={() => void (async () => {
                     try {
                       const { url } = await kpmProductDocumentUrl(product.productId, doc.slot);
@@ -514,7 +513,7 @@ export default function KpmProductsPage() {
               )}
               {canWrite && doc.source === 'kpm' && (
                 <Button
-                  variant="secondary"
+                  variant="inline"
                   disabled={busy}
                   onClick={() => void run(() =>
                     resetKpmProductDocument(product.productId, doc.slot))}
@@ -534,10 +533,10 @@ export default function KpmProductsPage() {
       title="Products"
       subtitle={`What your office sells from ${company}’s catalog, and the words you sell it with.`}
       permission="tenant_config:read"
-      subtabs={TABS}
-      activeSubtab={tab}
-      onSelectSubtab={setTab}
-      subtabsLabel="Product sections"
+      tabs={TABS}
+      tabsLabel="Product sections"
+      activeHref={tab}
+      onSelectTab={setTab}
       error={rows === null ? error : null}
       bars={<PublishBar />}
     >

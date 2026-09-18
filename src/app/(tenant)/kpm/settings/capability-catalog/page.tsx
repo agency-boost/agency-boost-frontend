@@ -112,7 +112,15 @@ export default function CapabilityCatalogPage() {
         )}
         <div className="min-w-0 flex-1">
           {open ? (
-            <Field label="Name" htmlFor={`label-${key}`}>
+            <Field
+              label="Name"
+              htmlFor={`label-${key}`}
+              /* The code, where a reader is acting on the row — so it is visible exactly when it
+                 matters, that renaming is not touching the identity a tick binds to. It used to
+                 be under every row of every list, which is the noise the client asked us to
+                 take out. */
+              hint={`Code ${item.code} — a tick names this, and renaming never moves it.`}
+            >
               <TextInput
                 id={`label-${key}`}
                 value={label}
@@ -124,9 +132,6 @@ export default function CapabilityCatalogPage() {
             <p className="text-md text-navy">{item.label}</p>
           )}
           <p className="mt-1 flex flex-wrap items-center gap-2">
-            {/* Shown always: the code is what a tick binds to, and a reader renaming a row
-                should be able to see that the identity is not what they are editing. */}
-            <code className="text-sm text-muted">{item.code}</code>
             {item.status === 'archived' && <ConfigBadge tone="open">Archived</ConfigBadge>}
             {extra}
           </p>
@@ -154,14 +159,14 @@ export default function CapabilityCatalogPage() {
             ) : (
               <>
                 <Button
-                  variant="secondary"
+                  variant="inline"
                   disabled={busy}
                   onClick={() => { setEditing(key); setLabel(item.label); }}
                 >
                   Rename
                 </Button>
                 <Button
-                  variant="secondary"
+                  variant="inlineDanger"
                   disabled={busy}
                   title={item.status === 'archived'
                     ? undefined
@@ -322,7 +327,6 @@ export default function CapabilityCatalogPage() {
           <Card key={grid.code} className="p-0">
             <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
               <h2 className="font-display text-lg font-bold text-navy">{grid.label}</h2>
-              <code className="text-sm text-muted">{grid.code}</code>
               {grid.requiresDownline && (
                 <ConfigBadge tone="open">Only for somebody with a downline</ConfigBadge>
               )}

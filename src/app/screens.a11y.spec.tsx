@@ -1062,7 +1062,7 @@ describe('screens have no axe violations', () => {
         },
       });
       renderInLayout(TenantLayout, <CapabilityCatalogPage />, { me: settingsOwner });
-      await screen.findByText('APPROACH');
+      await screen.findByText('Approach & appointment setting');
       await expectClean('kpm/settings/capability-catalog');
     });
 
@@ -1164,7 +1164,7 @@ describe('screens have no axe violations', () => {
         },
       });
       renderInLayout(TenantLayout, <KpmProductsPage />, { me: settingsOwner });
-      await userEvent.click(await screen.findByRole('button', { name: 'Customise' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Customize' }));
       await expectClean('kpm/settings/products');
     });
 
@@ -1304,7 +1304,7 @@ describe('screens have no axe violations', () => {
         <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
         { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
       );
-      await screen.findByText('SELL_SUBMISSION');
+      await screen.findByText('Submission polis');
       await userEvent.click(screen.getByRole('link', { name: 'Training' }));
       await screen.findByText('1 skill · 1 module published');
       await expectClean('admin/companies/[companyId]/template#training');
@@ -1376,18 +1376,18 @@ describe('screens have no axe violations', () => {
         <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
         { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
       );
-      await screen.findByText('SELL_SUBMISSION');
+      await screen.findByText('Submission polis');
 
       await userEvent.click(screen.getByRole('link', { name: 'Events' }));
-      await screen.findByText('TRAINING');
+      await screen.findByText(/every new office of this company starts with/);
       await expectClean('admin/companies/[companyId]/template#events');
 
       await userEvent.click(screen.getByRole('link', { name: 'Campaigns' }));
-      await screen.findByText('STAR_CLUB');
+      await screen.findByText('Star Club');
       await expectClean('admin/companies/[companyId]/template#campaigns');
 
       await userEvent.click(screen.getByRole('link', { name: 'Capability catalog' }));
-      await screen.findByText('APPROACH');
+      await screen.findByText('Approach');
       await expectClean('admin/companies/[companyId]/template#capability');
     });
 
@@ -1425,7 +1425,7 @@ describe('screens have no axe violations', () => {
         <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
         { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
       );
-      await screen.findByText('SELL_SUBMISSION');
+      await screen.findByText('Submission polis');
       await userEvent.click(screen.getByRole('link', { name: 'Products' }));
       await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
       await expectClean('admin/companies/[companyId]/template#products');
@@ -1446,7 +1446,7 @@ describe('screens have no axe violations', () => {
         <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
         { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
       );
-      await screen.findByText('SELL_SUBMISSION');
+      await screen.findByText('Submission polis');
       await expectClean('admin/companies/[companyId]/template');
     });
   });

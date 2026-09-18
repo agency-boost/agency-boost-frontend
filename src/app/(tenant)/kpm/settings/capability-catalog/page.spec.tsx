@@ -66,18 +66,31 @@ function render(body: unknown = catalog(), me = OWNER) {
 describe('the capability catalog screen', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('shows a code on every row, including the grids the prototype keys by label', async () => {
+  it('gives every row a code, shown where a reader is acting on it', async () => {
+    /*
+     * **The claim is that every row *has* a stable code, not that every row paints one.** Two of
+     * the prototype's four grids have no ids at all, so a tick there binds to the label and
+     * correcting a typo orphans every assessment that used it — that defect is what the codes
+     * fix, and it is fixed whether or not the list shows them.
+     *
+     * The client asked for the lists to stop showing them, so this asserts what is now true:
+     * clean rows, and the code on the panel where renaming happens — which is the one moment a
+     * reader needs to see that the identity is not what they are editing.
+     */
     render();
+    await screen.findByText('Approach & appointment setting');
 
-    expect(await screen.findByText('APPROACH')).toBeInTheDocument();
-    // The grid the prototype stores as `{ label }` and nothing else.
-    expect(screen.getByText('AGENT_VISIBILITY')).toBeInTheDocument();
-    expect(screen.getByText('SELLS_INDEPENDENTLY')).toBeInTheDocument();
+    expect(screen.queryByText('APPROACH')).not.toBeInTheDocument();
+    expect(screen.queryByText('SELLS_INDEPENDENTLY')).not.toBeInTheDocument();
+
+    const row = screen.getByText('Approach & appointment setting').closest('li')!;
+    await userEvent.click(within(row).getByRole('button', { name: 'Rename' }));
+    expect(screen.getByText(/Code APPROACH/)).toBeInTheDocument();
   });
 
   it('renames a row and never sends anything that could move its code', async () => {
     const stub = render();
-    const row = (await screen.findByText('APPROACH')).closest('li')!;
+    const row = (await screen.findByText('Approach & appointment setting')).closest('li')!;
 
     await userEvent.click(within(row).getByRole('button', { name: 'Rename' }));
     await userEvent.clear(screen.getByLabelText('Name'));
@@ -95,7 +108,7 @@ describe('the capability catalog screen', () => {
 
   it('archives rather than deletes, and says what archiving keeps', async () => {
     const stub = render();
-    const row = (await screen.findByText('APPROACH')).closest('li')!;
+    const row = (await screen.findByText('Approach & appointment setting')).closest('li')!;
 
     const archive = within(row).getByRole('button', { name: 'Archive' });
     expect(archive).toHaveAttribute('title', expect.stringContaining('already tick it'));
@@ -158,7 +171,7 @@ describe('the capability catalog screen', () => {
 
   it('shows a reader who cannot write the catalog without a control to change it', async () => {
     render(catalog(), READER);
-    await screen.findByText('APPROACH');
+    await screen.findByText('Approach & appointment setting');
 
     expect(screen.queryByRole('button', { name: 'Rename' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument();

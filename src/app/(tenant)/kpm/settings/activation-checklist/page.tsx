@@ -68,7 +68,6 @@ export default function ActivationChecklistPage() {
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [showCodes, setShowCodes] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
   const [addingTo, setAddingTo] = useState<string | null>(null);
@@ -200,7 +199,6 @@ export default function ActivationChecklistPage() {
             />
           )}
           <h2 className="font-display text-lg font-bold text-navy">{aspect.label}</h2>
-          {showCodes && <code className="text-sm text-muted">{aspect.code}</code>}
           <span className="ml-auto flex flex-wrap items-center gap-2">
             <ConfigBadge tone={aspect.items.length > 0 ? 'won' : 'open'}>
               {aspect.items.length} {aspect.items.length === 1 ? 'item' : 'items'}
@@ -223,7 +221,7 @@ export default function ActivationChecklistPage() {
                   * would be a path that dead-ends, which is what it did when it was tried.
                   */}
                 <Button
-                  variant="secondary"
+                  variant="inlineDanger"
                   disabled={busy || draft!.aspects.length === 1}
                   title={draft!.aspects.length === 1
                     ? 'A checklist needs at least one aspect.'
@@ -305,7 +303,6 @@ export default function ActivationChecklistPage() {
                   ) : (
                     <>
                       <p className="text-md text-navy">{item.label}</p>
-                      {showCodes && <p className="mt-0.5 text-sm text-muted"><code>{item.code}</code></p>}
                       {link && (
                         <p className="mt-0.5 text-sm text-muted">
                           Completes from <strong className="text-navy">{link.label}</strong>
@@ -347,13 +344,13 @@ export default function ActivationChecklistPage() {
                       </Select>
                     </Field>
                     <Button
-                      variant="secondary"
+                      variant="inline"
                       onClick={() => { setEditing(item.code); setEditLabel(item.label); }}
                     >
                       Edit
                     </Button>
                     <Button
-                      variant="secondary"
+                      variant="inlineDanger"
                       disabled={busy || aspect.items.length === 1}
                       title={aspect.items.length === 1
                         ? 'An aspect needs at least one item — remove the aspect instead.'
@@ -428,10 +425,6 @@ export default function ActivationChecklistPage() {
           + 'training module auto-complete when the agent does that action — no manual check-off needed.',
         actions: (
           <>
-            <label className="flex items-center gap-2 text-md text-navy">
-              <input type="checkbox" checked={showCodes} onChange={(e) => setShowCodes(e.target.checked)} />
-              Show codes
-            </label>
             {canWrite && draft && !addingAspect && (
               <Button onClick={() => {
                 setAddingTo(null);

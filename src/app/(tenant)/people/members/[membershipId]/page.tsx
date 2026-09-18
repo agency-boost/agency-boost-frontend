@@ -286,11 +286,12 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
               <input
                 type="checkbox"
                 checked={draft.isCoreLeader}
+                aria-describedby="core-leader-hint"
                 onChange={(e) => setDraft({ ...draft, isCoreLeader: e.target.checked })}
               />
               Core Leader
             </label>
-            <p className="mt-1 text-sm text-muted">
+            <p id="core-leader-hint" className="mt-1 text-sm text-muted">
               Core Leader decides who may co-edit a Strategic Leader Forum minute, and nothing
               else. It is not a role, and it grants no access.
             </p>

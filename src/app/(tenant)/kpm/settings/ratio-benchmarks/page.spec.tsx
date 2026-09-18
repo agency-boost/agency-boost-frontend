@@ -91,18 +91,16 @@ describe('the office ratio benchmarks (P4-T2)', () => {
 
   it('renders a formula as the activity types it counts, not as numbers', async () => {
     /*
-     * The prototype writes these as `6 / (4+5)` — item numbers, which are unreadable and
-     * break the moment somebody reorders the taxonomy. Labels by default; the code is
-     * behind *Show codes* since P4-T19, because an Owner reads this screen daily and the
-     * identity is not what they are reading it for.
+     * The prototype writes these as `6 / (4+5)` — item numbers, which are unreadable and break
+     * the moment somebody reorders the taxonomy. Labels, always: an Owner reads this screen
+     * daily and the identity is not what they are reading it for. The code survives as the
+     * fallback for a type this office no longer defines, which the next test covers.
      */
     render();
     // Several formulas count it, so the label appears more than once — which is the point.
     expect((await screen.findAllByText('Submission polis')).length).toBeGreaterThan(0);
     expect(screen.queryByText('SELL_SUBMISSION')).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByLabelText('Show codes'));
-    expect(screen.getAllByText('SELL_SUBMISSION').length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText('Show codes')).not.toBeInTheDocument();
   });
 
   it('shows a code with no label exactly once, not twice', async () => {

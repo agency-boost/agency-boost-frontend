@@ -170,23 +170,17 @@ describe('the office activity taxonomy (P4-T1)', () => {
      * argument did not weigh is that the identity matters at the two moments a reader acts
      * on it, and is noise under all twelve rows the rest of the time.
      *
-     * So: absent from the list, a field while creating, and read-only while editing. The
-     * toggle keeps it one click away for template work and support tickets.
+     * So: absent from the list, a field while creating, and read-only while editing —
+     * **and no toggle**. The client asked for a minimal screen, and a checkbox that puts
+     * the noise back is still a checkbox on every settings toolbar.
      */
-    it('keeps codes out of the list by default', async () => {
+    it('keeps codes out of the list, with nothing that puts them back', async () => {
       render();
       await screen.findByText('Submission polis');
 
       expect(screen.queryByText('SELL_SUBMISSION')).not.toBeInTheDocument();
       expect(screen.queryByText('SELLING')).not.toBeInTheDocument();
-    });
-
-    it('brings every code back under Show codes', async () => {
-      render();
-      await userEvent.click(await screen.findByRole('checkbox', { name: 'Show codes' }));
-
-      expect(screen.getByText('SELL_SUBMISSION')).toBeInTheDocument();
-      expect(screen.getByText('SELLING')).toBeInTheDocument();
+      expect(screen.queryByRole('checkbox', { name: 'Show codes' })).not.toBeInTheDocument();
     });
 
     it('still says a row is archived when codes are hidden', async () => {

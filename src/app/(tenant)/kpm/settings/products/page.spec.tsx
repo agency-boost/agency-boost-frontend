@@ -86,7 +86,7 @@ function render(rows: unknown[] = [product()], me = OWNER, extra: Record<string,
 }
 
 const open = async () => {
-  await userEvent.click(await screen.findByRole('button', { name: 'Customise' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Customize' }));
 };
 
 /**
@@ -298,6 +298,16 @@ describe('the office’s Products screen', () => {
       ).toBe(true));
       expect(await screen.findByText(/reading Allianz Life’s words until this is approved/))
         .toBeInTheDocument();
+    });
+
+    it('keeps the tab in the address bar, so a queue can be linked to', async () => {
+      // Products, Events and Campaigns held their tab in state alone, so a link somebody pasted
+      // into a message landed on the first tab whatever the hash said. Training already did
+      // this; `useHashTab` is that, once.
+      render();
+      await openApprovals();
+
+      expect(window.location.hash).toBe('#approvals');
     });
 
     it('says nothing is waiting when nothing is', async () => {
