@@ -5,8 +5,9 @@ import { useCallback, useEffect, useRef, useState, use } from 'react';
 import { ComingInPhase } from '@/components/coming-in-phase';
 import { SettingsScreen } from '@/components/settings-screen';
 import {
-  PipelineEditor, RatioSetEditor, TaxonomyEditor, TrainingEditor,
-  type PipelinePayload, type RatioSetPayload, type TaxonomyPayload, type TrainingTaxonomyPayload,
+  ActivationChecklistEditor, PipelineEditor, RatioSetEditor, TaxonomyEditor, TrainingEditor,
+  type ActivationChecklistPayload, type PipelinePayload, type RatioSetPayload,
+  type TaxonomyPayload, type TrainingTaxonomyPayload,
 } from '@/components/template-editor';
 import { Button, Card } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
@@ -28,7 +29,7 @@ const TABS: {
   { key: 'activity', label: 'Activity types', kind: 'activity_taxonomy', phase: 4, under: 'activity' },
   { key: 'ratios', label: 'Ratio benchmarks', kind: 'ratio_set', phase: 4, under: 'activity' },
   { key: 'leads', label: 'Lead statuses', kind: 'lead_pipeline', phase: 4 },
-  { key: 'activation', label: 'Activation checklist', kind: null, phase: 5 },
+  { key: 'activation', label: 'Activation checklist', kind: 'activation_checklist', phase: 5 },
   { key: 'training', label: 'Training', kind: 'training_taxonomy', phase: 5 },
   { key: 'events', label: 'Events', kind: null, phase: 5 },
   { key: 'campaigns', label: 'Campaigns', kind: null, phase: 5 },
@@ -96,6 +97,13 @@ export default function CompanyTemplatePage({
    * fill in one sitting.
    */
   const [available, setAvailable] = useState<{ code: string; label: string }[]>([]);
+  /*
+   * The company's own training modules, for the checklist's link picker — read from the
+   * `training_taxonomy` tab's draft for the same reason the ratio editor reads the taxonomy's:
+   * a Super Admin fills both in one sitting, and offering only published codes would make that
+   * impossible. Provisioning checks the link against what an office is actually given.
+   */
+  const [companyModules, setCompanyModules] = useState<{ code: string; title: string }[]>([]);
 
   /**
    * The kind most recently asked for.
@@ -127,6 +135,17 @@ export default function CompanyTemplatePage({
   useEffect(() => {
     if (tab.kind) void load(tab.kind);
   }, [tab, load]);
+
+  useEffect(() => {
+    if (tab.kind !== 'activation_checklist') return;
+    void readTemplate(companyId, 'training_taxonomy')
+      .then((row) => {
+        const { modules } = row.payload as { modules?: { code: string; title: string }[] };
+        setCompanyModules(modules ?? []);
+      })
+      // A checklist editor with no module list still works: it offers the three feature links.
+      .catch(() => setCompanyModules([]));
+  }, [companyId, tab.kind]);
 
   useEffect(() => {
     if (tab.kind !== 'ratio_set') return;
@@ -344,6 +363,15 @@ export default function CompanyTemplatePage({
                 return (
                   <PipelineEditor
                     payload={current.payload as unknown as PipelinePayload}
+                    disabled={busy}
+                    onChange={(next) => change(next as unknown as Record<string, unknown>)}
+                  />
+                );
+              case 'activation_checklist':
+                return (
+                  <ActivationChecklistEditor
+                    payload={current.payload as unknown as ActivationChecklistPayload}
+                    modules={companyModules}
                     disabled={busy}
                     onChange={(next) => change(next as unknown as Record<string, unknown>)}
                   />

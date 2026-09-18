@@ -360,3 +360,74 @@ export function stageChange(now: ConfigChange[], change: ConfigChange): ConfigCh
   ];
 }
 
+
+// ----------------------------------------------------- the activation checklist (P5-T3)
+
+/** What an item waits for, resolved — the label and route Phase 11's *"Go to {label} →"* uses. */
+export interface ActivationLink {
+  kind: string;
+  label: string;
+  route: string;
+  completesWhen: string;
+  /** Whether an evaluator exists yet. Until it does, a leader ticks the item by hand. */
+  live: boolean;
+  livePhase: number;
+}
+
+export interface ActivationItem {
+  code: string;
+  label: string;
+  displayOrder: number;
+  autoLink: string | null;
+  link: ActivationLink | null;
+}
+
+export interface ActivationAspect {
+  code: string;
+  label: string;
+  displayOrder: number;
+  items: ActivationItem[];
+}
+
+export interface ActivationVersion {
+  id: string;
+  version: number;
+  status: 'draft' | 'published';
+  publishedAt: string | null;
+  aspects: ActivationAspect[];
+}
+
+export interface ActivationChecklist {
+  /** What hires starting now are given. `null` before the first publish. */
+  published: ActivationVersion | null;
+  /** The office's working copy. `null` when nothing has changed since publishing. */
+  draft: ActivationVersion | null;
+  /** `kpms.settings.activationWindowDays`, shown beside the checklist and changed in Branch info. */
+  windowDays: number;
+}
+
+/** What a save sends: the whole document, in the order the lists are in. */
+export interface ActivationDraft {
+  aspects: {
+    code: string;
+    label: string;
+    items: { code: string; label: string; autoLink: string | null }[];
+  }[];
+}
+
+/**
+ * The office's checklist (P5-T3).
+ *
+ * **Not part of the office's snapshot**, unlike every other setting: a hire's activation pins the
+ * version it was created against, so this document publishes on its own (ADR-0031, ADR-0039).
+ */
+export const readActivationChecklist = () =>
+  api<ActivationChecklist>('/kpm/settings/activation-checklist');
+
+/** Save the working draft. The whole checklist, because its order is part of what is saved. */
+export const saveActivationDraft = (draft: ActivationDraft) =>
+  api<ActivationChecklist>('/kpm/settings/activation-checklist', { method: 'PUT', body: draft });
+
+/** Publish the draft as the next version — given to hires who start after it, and to nobody else. */
+export const publishActivationChecklist = () =>
+  api<ActivationChecklist>('/kpm/settings/activation-checklist/publish', { method: 'POST' });

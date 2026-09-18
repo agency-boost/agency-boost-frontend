@@ -507,6 +507,8 @@ function AddRow({
    * and in `for`, which makes the hint point at two ids that do not exist.
    */
   const slug = what.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  /** *an aspect*, *an item*, *a category* — the button said it correctly and the refusal did not. */
+  const article = /^[aeiou]/i.test(what) ? 'an' : 'a';
 
   if (!open) {
     return (
@@ -516,7 +518,7 @@ function AddRow({
         disabled={disabled}
         onClick={() => setOpen(true)}
       >
-        Add {/^[aeiou]/i.test(what) ? 'an' : 'a'} {what}
+        Add {article} {what}
       </Button>
     );
   }
@@ -545,7 +547,7 @@ function AddRow({
         label="Code"
         htmlFor={`add-code-${slug}`}
         hint={suggest ? 'Filled in from the name. Permanent once published.' : 'Permanent once published.'}
-        error={clash ? `This template already has a ${what} with this code.` : undefined}
+        error={clash ? `This template already has ${article} ${what} with this code.` : undefined}
         className="min-w-48"
       >
         <TextInput
@@ -1360,6 +1362,164 @@ export function TrainingEditor({
       {tab === 'categories' && categoriesPanel()}
       {tab === 'skills' && skillsPanel()}
       {tab === 'modules' && modulesPanel()}
+    </div>
+  );
+}
+
+export interface ActivationChecklistPayload {
+  aspects: {
+    code: string;
+    label: string;
+    items: { code: string; label: string; autoLink?: string | null }[];
+  }[];
+}
+
+/** The three feature links, which exist for every company. Training links name a module code. */
+const ACTIVATION_FEATURE_OPTIONS = [
+  { value: '', label: 'No link (manual)' },
+  { value: 'feature:goals', label: 'Goal Settings' },
+  { value: 'feature:leads', label: 'Leads Management' },
+  { value: 'feature:activity', label: 'Activity Management' },
+];
+
+/**
+ * The activation checklist of a company template (P5-T3, ADR-0031).
+ *
+ * **It mirrors the Owner's own screen**: aspects with items under them, and a link per item. What
+ * differs is what a link can be checked against — a template has no office, so a training link is
+ * checked for shape here and resolved against the modules an office is actually given when it is
+ * created. The module names offered come from this company's own `training_taxonomy` draft, the way
+ * the ratio editor offers this company's activity types.
+ */
+export function ActivationChecklistEditor({
+  payload,
+  modules,
+  onChange,
+  disabled,
+}: {
+  payload: ActivationChecklistPayload;
+  /** The company's own training modules, for the link picker. */
+  modules: { code: string; title: string }[];
+  onChange: (next: ActivationChecklistPayload) => void;
+  disabled?: boolean;
+}) {
+  // A template nobody has authored yet arrives as `payload: {}`; empty is a real state.
+  const aspects = payload.aspects ?? [];
+  const put = (next: ActivationChecklistPayload['aspects']) => onChange({ aspects: next });
+
+  const linkOptions = [
+    ...ACTIVATION_FEATURE_OPTIONS,
+    ...modules.map((m) => ({ value: `training:${m.code}`, label: `Training · ${m.title}` })),
+  ];
+  const linkLabel = (link: string | null | undefined) =>
+    linkOptions.find((o) => o.value === (link ?? ''))?.label
+    // A module this company's taxonomy no longer defines still has to render as something.
+    ?? `Training · ${String(link).replace(/^training:/, '')}`;
+
+  const patchAspect = (code: string, fields: Partial<ActivationChecklistPayload['aspects'][number]>) =>
+    put(aspects.map((a) => (a.code === code ? { ...a, ...fields } : a)));
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted">
+          {count(aspects.flatMap((a) => a.items).length, 'item', 'items')} across
+          {' '}{count(aspects.length, 'aspect', 'aspects')}
+        </p>
+        <AddRow
+          bare
+          suggest
+          disabled={disabled}
+          what="aspect"
+          taken={(code) => aspects.some((a) => a.code === code)}
+          onAdd={(code, label) => put([...aspects, { code, label, items: [] }])}
+        />
+      </div>
+
+      {aspects.length === 0 ? (
+        <Card><p className="text-md text-muted">No aspects yet.</p></Card>
+      ) : aspects.map((aspect) => (
+        <Card key={aspect.code} className="p-0">
+          <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
+            <h3 className="font-display text-lg font-bold text-navy">{aspect.label}</h3>
+            <code className="text-sm text-muted">{aspect.code}</code>
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+              <ConfigBadge tone={aspect.items.length > 0 ? 'won' : 'open'}>
+                {count(aspect.items.length, 'item', 'items')}
+              </ConfigBadge>
+{/* With its items, as the Owner's own screen removes one: an aspect holding none is a
+                  state neither an office nor a template may publish. */}
+              <Button
+                variant="secondary"
+                disabled={disabled}
+                title={`Removes ${aspect.label} and its ${aspect.items.length} `
+                  + `${aspect.items.length === 1 ? 'item' : 'items'}.`}
+                onClick={() => put(aspects.filter((a) => a.code !== aspect.code))}
+              >
+                Remove
+              </Button>
+            </span>
+          </div>
+
+          <ul className="flex flex-col divide-y divide-hairline">
+            {aspect.items.map((item) => (
+              <li key={item.code} className="px-4 py-3 sm:px-5">
+                <EditableRow
+                  rowKey={item.code}
+                  disabled={disabled}
+                  fields={[
+                    { key: 'label', label: 'Item', hint: item.code },
+                    {
+                      key: 'autoLink',
+                      label: 'Completes from',
+                      hint: 'A linked item completes on its own once the evaluator for that link ships.',
+                      options: linkOptions,
+                    },
+                  ]}
+                  values={{ label: item.label, autoLink: item.autoLink ?? '' }}
+                  onSave={(next) => patchAspect(aspect.code, {
+                    items: aspect.items.map((i) => (i.code === item.code
+                      ? { ...i, label: next.label.trim(), autoLink: next.autoLink || null }
+                      : i)),
+                  })}
+                  actions={(
+                    <Button
+                      variant="secondary"
+                      disabled={disabled}
+                      onClick={() => patchAspect(aspect.code, {
+                        items: aspect.items.filter((i) => i.code !== item.code),
+                      })}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                >
+                  <p className="text-md text-navy">{item.label}</p>
+                  <p className="mt-1 flex flex-wrap items-center gap-2">
+                    <code className="text-sm text-muted">{item.code}</code>
+                    {item.autoLink
+                      ? <ConfigBadge tone="won">Auto · {linkLabel(item.autoLink)}</ConfigBadge>
+                      : <ConfigBadge tone="open">Ticked by the leader</ConfigBadge>}
+                  </p>
+                </EditableRow>
+              </li>
+            ))}
+          </ul>
+
+          <div className="px-4 pb-3 sm:px-5">
+            <AddRow
+              suggest
+              disabled={disabled}
+              what="item"
+              nameLabel="Item"
+              taken={(code) => aspects.some((a) => a.items.some((i) => i.code === code))}
+              onAdd={(code, label) => patchAspect(aspect.code, {
+                items: [...aspect.items, { code, label, autoLink: null }],
+              })}
+            />
+          </div>
+        </Card>
+      ))}
     </div>
   );
 }

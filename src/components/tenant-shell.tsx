@@ -57,7 +57,7 @@ const SECTIONS: readonly {
     items: [
       { label: 'Activity types', href: '/kpm/settings/activity-types' },
       { label: 'Lead statuses', href: '/kpm/settings/lead-statuses' },
-      { label: 'Activation checklist', href: '/kpm/settings/activation-checklist', upcoming: true },
+      { label: 'Activation checklist', href: '/kpm/settings/activation-checklist' },
       { label: 'Training', href: '/kpm/settings/training' },
       { label: 'Events', href: '/kpm/settings/events', upcoming: true },
       { label: 'Campaigns', href: '/kpm/settings/campaigns', upcoming: true },

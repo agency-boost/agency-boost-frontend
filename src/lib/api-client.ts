@@ -22,21 +22,51 @@ export interface ApiError {
  * The one way a screen turns a thrown value into something to show.
  *
  * Three outcomes, kept apart because they send the reader to three different places:
- * the server said no, the app is misconfigured, or the request never arrived. Collapsing
- * the last two — as every screen did while this was an inline ternary — points whoever
- * hits a missing environment variable at a backend that is running perfectly.
+ * the server said no, the app is misconfigured, the request never arrived, or the screen
+ * itself broke. Collapsing any two of them sends the reader somewhere useless: collapsing
+ * configuration into network — as every screen did while this was an inline ternary — points
+ * whoever hits a missing environment variable at a backend that is running perfectly, and
+ * collapsing **a bug in the screen** into network tells them to check their connection.
+ *
+ * That last one was not hypothetical. The activation checklist dereferenced a version an office
+ * did not have, threw a `TypeError`, and this function reported it as *"Could not reach the
+ * server"* — which is what the office's Owner saw, and what they went looking for.
  */
 export function toDisplayError(err: unknown): ApiError {
   if (err instanceof ApiRequestError) return err.error;
   if (err instanceof ApiConfigError) {
     return { code: 'CONFIG', message: err.message, requestId: 'unknown' };
   }
-  // Written for the person most likely to see it — an agent on a phone with poor
-  // signal, not a developer. A developer hitting a misconfiguration gets the CONFIG
-  // branch above, which names the variable.
+
+  /*
+   * A request that never arrived is a `TypeError` from `fetch` itself, and the browsers word it
+   * differently: *Failed to fetch* (Chrome), *NetworkError when attempting to fetch* (Firefox),
+   * *Load failed* (Safari), *fetch failed* (undici, which is what the tests run on).
+   */
+  const failedToFetch = err instanceof TypeError
+    && /fetch|network|load failed/i.test(err.message);
+
+  // Written for the person most likely to see it — an agent on a phone with poor signal, not a
+  // developer. A developer hitting a misconfiguration gets the CONFIG branch above.
+  if (failedToFetch) {
+    return {
+      code: 'NETWORK',
+      message: 'Could not reach the server. Check your connection and try again.',
+      requestId: 'unknown',
+    };
+  }
+
+  /*
+   * Anything else is this application failing, not the network. The reader is told what to do —
+   * reloading is the only useful move — and the original goes to the console, because the person
+   * who can fix it needs the stack and the reader needs neither.
+   */
+  // eslint-disable-next-line no-console
+  console.error('Unexpected error on this screen:', err);
   return {
-    code: 'NETWORK',
-    message: 'Could not reach the server. Check your connection and try again.',
+    code: 'UNEXPECTED',
+    message: 'Something went wrong on this screen. Reload the page — if it keeps happening, tell '
+      + 'your administrator, and quote this screen’s address.',
     requestId: 'unknown',
   };
 }

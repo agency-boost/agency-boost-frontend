@@ -134,10 +134,29 @@ describe('api client', () => {
       expect(shown.message).not.toMatch(/could not reach/i);
     });
 
-    it('reports anything else as a network failure, and says to check the API', () => {
-      const shown = toDisplayError(new TypeError('Failed to fetch'));
-      expect(shown.code).toBe('NETWORK');
-      expect(shown.message).toMatch(/Check your connection/);
+    it('reports a request that never arrived as a network failure', () => {
+      for (const message of ['Failed to fetch', 'NetworkError when attempting to fetch', 'Load failed', 'fetch failed']) {
+        const shown = toDisplayError(new TypeError(message));
+        expect(shown.code).toBe('NETWORK');
+        expect(shown.message).toMatch(/Check your connection/);
+      }
+    });
+
+    /*
+     * A bug in a screen used to arrive here and be reported as *"Could not reach the server"*,
+     * which sent an office's Owner to check their connection over a null dereference on the page.
+     */
+    it('reports a broken screen as a broken screen, not as a network failure', () => {
+      const broken = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      const shown = toDisplayError(new TypeError("Cannot read properties of null (reading 'aspects')"));
+
+      expect(shown.code).toBe('UNEXPECTED');
+      expect(shown.message).not.toMatch(/connection/i);
+      expect(shown.message).toMatch(/Reload the page/);
+      // The stack goes where somebody can act on it, and not to the reader.
+      expect(broken).toHaveBeenCalled();
+      broken.mockRestore();
     });
   });
 });

@@ -198,6 +198,45 @@ describe('a company’s Company template (P4-T8)', () => {
     expect(calls.some((c) => c.url.includes('/template/training_taxonomy'))).toBe(true);
   });
 
+  it('P5-T3: edits the activation checklist on its own tab, offering this company’s modules', async () => {
+    const CHECKLIST = {
+      id: 'tpl-4', companyId: 'c1', kind: 'activation_checklist', version: 1, status: 'draft',
+      publishedAt: null, publishedVersion: null, officesBehind: 0, officesUnrecorded: 0,
+      payload: {
+        aspects: [{
+          code: 'INTRODUCTION',
+          label: '1. Introduction',
+          items: [{ code: 'INSURANCE_BASICS', label: 'Learn insurance basics', autoLink: null }],
+        }],
+      },
+    };
+    const TRAINING = {
+      id: 'tpl-3', companyId: 'c1', kind: 'training_taxonomy', version: 1, status: 'draft',
+      publishedAt: null, publishedVersion: null, officesBehind: 0, officesUnrecorded: 0,
+      payload: {
+        categories: [{ code: 'SALES', label: 'Sales', description: null }],
+        skills: [{ code: 'PROSPECTING', categoryCode: 'SALES', label: 'Prospecting' }],
+        modules: [{ code: 'PROSPECT_LIST', skillCode: 'PROSPECTING', title: 'Building Your Prospect List', publishState: 'published' }],
+      },
+    };
+    stubFetch({
+      '/admin/companies/c1/template/activity_taxonomy': { body: TAXONOMY },
+      '/admin/companies/c1/template/activation_checklist': { body: CHECKLIST },
+      '/admin/companies/c1/template/training_taxonomy': { body: TRAINING },
+    });
+    renderWithSession(<CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />, { me: SUPER_ADMIN });
+    await screen.findByText('SELL_SUBMISSION');
+
+    await userEvent.click(sections().getByRole('link', { name: 'Activation checklist' }));
+    await screen.findByText('1 item across 1 aspect');
+    expect(screen.queryByText(/Arrives in phase 5/)).not.toBeInTheDocument();
+
+    // The link picker offers the company's own training modules, read from the tab next door.
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(within(screen.getByLabelText('Completes from')).getAllByRole('option').map((o) => o.textContent))
+      .toContain('Training · Building Your Prospect List');
+  });
+
   it('switches to another kind without rendering it against the previous payload', async () => {
     /*
      * The crash this fixes: *Cannot read properties of undefined (reading 'filter')*.

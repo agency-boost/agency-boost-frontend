@@ -21,6 +21,7 @@ import LeadStatusesPage from './(tenant)/kpm/settings/lead-statuses/page';
 import BranchInfoPage from './(tenant)/kpm/settings/branch-info/page';
 import TrainingSettingsPage from './(tenant)/kpm/settings/training/page';
 import TrainingModulePage from './(tenant)/kpm/settings/training/[moduleId]/page';
+import ActivationChecklistPage from './(tenant)/kpm/settings/activation-checklist/page';
 import CompanyTemplatePage from './(admin)/admin/companies/[companyId]/template/page';
 import AdminOverviewPage from './(admin)/admin/page';
 import TenantsPage from './(admin)/admin/tenants/page';
@@ -1032,6 +1033,49 @@ describe('screens have no axe violations', () => {
       );
       await screen.findByRole('switch', { name: 'Published' });
       await expectClean('kpm/settings/training/[moduleId]');
+    });
+
+    /* P5-T3. One aspect open with its link select, its Add item panel, and the draft bar. */
+    it('the activation checklist, with an item’s add panel open', async () => {
+      stubFetch({
+        ...configStubs,
+        '/kpm/settings/training': { body: TRAINING },
+        '/kpm/settings/activation-checklist': {
+          body: {
+            windowDays: 90,
+            draft: null,
+            published: {
+              id: 'v1',
+              version: 1,
+              status: 'published',
+              publishedAt: '2026-09-01T00:00:00.000Z',
+              aspects: [{
+                code: 'INTRODUCTION',
+                label: '1. Introduction',
+                displayOrder: 1,
+                items: [
+                  {
+                    code: 'INSURANCE_BASICS', label: 'Learn insurance basics', displayOrder: 1,
+                    autoLink: null, link: null,
+                  },
+                  {
+                    code: 'GOAL_SETTING', label: 'Goal setting: APE & activity targets', displayOrder: 2,
+                    autoLink: 'feature:goals',
+                    link: {
+                      kind: 'feature:goals', label: 'Goal Settings', route: '/goals',
+                      completesWhen: 'the hire has saved any goal', live: false, livePhase: 11,
+                    },
+                  },
+                ],
+              }],
+            },
+          },
+        },
+      });
+      renderInLayout(TenantLayout, <ActivationChecklistPage />, { me: settingsOwner });
+      await screen.findByText('Learn insurance basics');
+      await userEvent.click(screen.getByRole('button', { name: '+ Add item' }));
+      await expectClean('kpm/settings/activation-checklist');
     });
 
     it('the company template’s Training tab', async () => {

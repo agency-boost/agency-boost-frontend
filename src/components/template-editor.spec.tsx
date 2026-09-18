@@ -3,8 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  PipelineEditor, RatioSetEditor, TaxonomyEditor, TrainingEditor, withOrdinals,
-  type PipelinePayload, type RatioSetPayload, type TaxonomyPayload, type TrainingTaxonomyPayload,
+  ActivationChecklistEditor, PipelineEditor, RatioSetEditor, TaxonomyEditor, TrainingEditor,
+  withOrdinals,
+  type ActivationChecklistPayload, type PipelinePayload, type RatioSetPayload, type TaxonomyPayload,
+  type TrainingTaxonomyPayload,
 } from '@/components/template-editor';
 
 const TAXONOMY: TaxonomyPayload = {
@@ -362,5 +364,114 @@ describe('TrainingEditor (P5-T1)', () => {
     expect(onChange.mock.calls.at(-1)![0].modules.find((m: { code: string }) => m.code === 'COLD_CALLS'))
       .toMatchObject({ publishState: 'published' });
     expect(within(rowOf('Cold calls')).getByText('Published')).toBeInTheDocument();
+  });
+});
+
+describe('ActivationChecklistEditor (P5-T3)', () => {
+  const CHECKLIST: ActivationChecklistPayload = {
+    aspects: [
+      {
+        code: 'INTRODUCTION',
+        label: '1. Introduction',
+        items: [{ code: 'INSURANCE_BASICS', label: 'Learn insurance basics', autoLink: null }],
+      },
+      {
+        code: 'INITIAL_SETUP',
+        label: '2. Initial Setup',
+        items: [{ code: 'GOAL_SETTING', label: 'Goal setting', autoLink: 'feature:goals' }],
+      },
+    ],
+  };
+  const MODULES = [{ code: 'PROSPECT_LIST', title: 'Building Your Prospect List' }];
+
+  function Editor({ onChange = vi.fn() }: { onChange?: (next: ActivationChecklistPayload) => void }) {
+    const [payload, setPayload] = useState(CHECKLIST);
+    return (
+      <ActivationChecklistEditor
+        payload={payload}
+        modules={MODULES}
+        onChange={(next) => { setPayload(next); onChange(next); }}
+      />
+    );
+  }
+
+  const rowOf = (text: string) => screen.getByText(text).closest('li') as HTMLElement;
+
+  it('renders an unauthored preset as empty instead of crashing', () => {
+    render(<ActivationChecklistEditor
+      payload={{} as ActivationChecklistPayload}
+      modules={[]}
+      onChange={vi.fn()}
+    />);
+
+    expect(screen.getByText('0 items across 0 aspects')).toBeInTheDocument();
+    expect(screen.getByText('No aspects yet.')).toBeInTheDocument();
+  });
+
+  it('says of each item whether it completes on its own, or waits for a leader', () => {
+    render(<Editor />);
+
+    expect(within(rowOf('Goal setting')).getByText('Auto · Goal Settings')).toBeInTheDocument();
+    expect(within(rowOf('Learn insurance basics')).getByText('Ticked by the leader')).toBeInTheDocument();
+  });
+
+  it('offers this company’s own training modules as links', async () => {
+    render(<Editor />);
+    await userEvent.click(within(rowOf('Learn insurance basics')).getByRole('button', { name: 'Edit' }));
+
+    const options = within(screen.getByLabelText('Completes from')).getAllByRole('option')
+      .map((o) => o.textContent);
+    expect(options).toEqual([
+      'No link (manual)', 'Goal Settings', 'Leads Management', 'Activity Management',
+      'Training · Building Your Prospect List',
+    ]);
+  });
+
+  it('links an item to a module, and clears a link back to manual', async () => {
+    const onChange = vi.fn();
+    render(<Editor onChange={onChange} />);
+
+    await userEvent.click(within(rowOf('Learn insurance basics')).getByRole('button', { name: 'Edit' }));
+    await userEvent.selectOptions(screen.getByLabelText('Completes from'), 'training:PROSPECT_LIST');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onChange.mock.calls.at(-1)![0].aspects[0].items[0].autoLink).toBe('training:PROSPECT_LIST');
+
+    await userEvent.click(within(rowOf('Goal setting')).getByRole('button', { name: 'Edit' }));
+    await userEvent.selectOptions(screen.getByLabelText('Completes from'), '');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onChange.mock.calls.at(-1)![0].aspects[1].items[0].autoLink).toBeNull();
+  });
+
+  it('adds an item with its code suggested, and refuses a code already used', async () => {
+    const onChange = vi.fn();
+    render(<Editor onChange={onChange} />);
+    const card = screen.getByText('1. Introduction').closest('.rounded-lg') as HTMLElement;
+
+    await userEvent.click(within(card).getByRole('button', { name: 'Add an item' }));
+    await userEvent.type(within(card).getByLabelText('Item'), 'Goal setting');
+    await userEvent.clear(within(card).getByLabelText('Code'));
+    await userEvent.type(within(card).getByLabelText('Code'), 'GOAL_SETTING');
+    expect(within(card).getByRole('alert')).toHaveTextContent('already has an item with this code');
+
+    await userEvent.clear(within(card).getByLabelText('Code'));
+    await userEvent.type(within(card).getByLabelText('Code'), 'SHADOW_SENIOR');
+    await userEvent.click(within(card).getByRole('button', { name: 'Add' }));
+
+    expect(onChange.mock.calls.at(-1)![0].aspects[0].items.at(-1)).toEqual({
+      code: 'SHADOW_SENIOR', label: 'Goal setting', autoLink: null,
+    });
+  });
+
+it('removes an aspect with its items, saying how many are going', async () => {
+    const onChange = vi.fn();
+    render(<Editor onChange={onChange} />);
+    const card = screen.getByText('1. Introduction').closest('.rounded-lg') as HTMLElement;
+
+    const remove = within(card).getAllByRole('button', { name: 'Remove' })[0];
+    expect(remove).toHaveAttribute('title', 'Removes 1. Introduction and its 1 item.');
+
+    await userEvent.click(remove);
+    expect(onChange.mock.calls.at(-1)![0].aspects.map((a: { code: string }) => a.code))
+      .toEqual(['INITIAL_SETUP']);
   });
 });
