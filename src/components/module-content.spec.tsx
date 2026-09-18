@@ -5,7 +5,10 @@ import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { ModuleContentEditor } from './module-content';
 
 const OWNER = makeMe({
-  membership: { kpmId: 'kpm-a', isKpmOwner: true },
+  membership: {
+    membershipId: 'mem-1', kpmId: 'kpm-a', orgLevelCode: 'AB', hierarchyRole: 'ab',
+    status: 'active', isKpmOwner: true, isKpmAdmin: false, directCount: 0,
+  },
   permissions: ['tenant_config:read', 'tenant_config:write'],
 });
 

@@ -508,3 +508,145 @@ export const moduleContentUrl = (code: string, storageKey: string) =>
     `/kpm/settings/training/modules/${encodeURIComponent(code)}/content/url`
     + `?storageKey=${encodeURIComponent(storageKey)}`,
   );
+
+// ------------------------------------------------ what this office sells (P5-T5, ADR-0033)
+
+export interface EffectiveField<T> {
+  value: T;
+  /** True when this office has replaced its company's value for this field. */
+  overridden: boolean;
+}
+
+export interface ProductDocumentSlotView {
+  slot: string;
+  label: string;
+  storageKey: string | null;
+  filename: string | null;
+  /** The prototype's own *"Uploaded by KPM"* against *"From the catalog"*. */
+  source: 'kpm' | 'company' | 'none';
+}
+
+export type ScriptReviewState = 'none' | 'pending' | 'approved' | 'rejected';
+
+export interface KpmProductRow {
+  productId: string;
+  code: string;
+  /** What the company calls it, always — so a screen can say what a rename replaced. */
+  companyName: string;
+  channel: string;
+  category: string;
+  lifecycle: string;
+  /** False once the company withdraws it, whatever this office decided. */
+  sellable: boolean;
+  active: EffectiveField<boolean>;
+  displayName: EffectiveField<string>;
+  script: Record<string, EffectiveField<string | string[]>>;
+  reviewState: ScriptReviewState;
+  rejectionReason: string | null;
+  documents: ProductDocumentSlotView[];
+}
+
+export const listKpmProducts = () => api<KpmProductRow[]>('/kpm/settings/products');
+
+/** `null` gives the decision back to the company's default, which may change later. */
+export const setKpmProductActive = (productId: string, active: boolean | null) =>
+  api<KpmProductRow>(`/kpm/settings/products/${productId}/active`, {
+    method: 'PUT', body: { active },
+  });
+
+export const saveKpmProductOverrides = (
+  productId: string, overrides: Record<string, unknown>,
+) => api<KpmProductRow>(`/kpm/settings/products/${productId}/overrides`, {
+  method: 'PATCH', body: overrides,
+});
+
+/** An unset, not a copy: the field follows the company again from the next read. */
+export const resetKpmProductOverride = (productId: string, field: string) =>
+  api<KpmProductRow>(`/kpm/settings/products/${productId}/overrides/${field}`, {
+    method: 'DELETE',
+  });
+
+export const setKpmProductDocument = (
+  productId: string, slot: string, body: { storageKey: string; label: string },
+) => api<KpmProductRow>(`/kpm/settings/products/${productId}/documents/${slot}`, {
+  method: 'PUT', body,
+});
+
+export const resetKpmProductDocument = (productId: string, slot: string) =>
+  api<KpmProductRow>(`/kpm/settings/products/${productId}/documents/${slot}`, {
+    method: 'DELETE',
+  });
+
+export const kpmProductDocumentUrl = (productId: string, slot: string) =>
+  api<{ url: string }>(`/kpm/settings/products/${productId}/documents/${slot}/url`);
+
+// ------------------------------------------------------ the events an office runs (P5-T6)
+
+export interface EventTypeRow {
+  id: string;
+  code: string;
+  label: string;
+  description: string | null;
+  emoji: string | null;
+  color: string | null;
+  displayOrder: number;
+  status: 'active' | 'archived';
+  /** How many events name it — what archiving would affect. */
+  events: number;
+}
+
+export interface EventAudience {
+  issuer: 'company' | 'kpm' | 'group';
+  scope: 'all_agents' | 'select_agents' | 'leaders' | 'select_leaders';
+  inviteeMembershipIds: string[];
+}
+
+export interface EventRow {
+  id: string;
+  code: string;
+  typeCode: string;
+  title: string;
+  blurb: string;
+  description: string;
+  startsAt: string;
+  endsAt: string;
+  /** The calendar day in the office's timezone, so no browser re-derives it in its own. */
+  startsOn: string;
+  location: string;
+  locationUrl: string | null;
+  audience: EventAudience;
+  /** Derived on every read, never stored. */
+  phase: 'upcoming' | 'running' | 'past';
+  status: 'active' | 'archived';
+  version: number;
+}
+
+export const listEventTypes = (includeArchived = false) =>
+  api<EventTypeRow[]>(`/kpm/settings/events/types${includeArchived ? '?includeArchived=true' : ''}`);
+
+export const createEventType = (body: Record<string, unknown>) =>
+  api<EventTypeRow>('/kpm/settings/events/types', { method: 'POST', body });
+
+export const updateEventType = (id: string, body: Record<string, unknown>) =>
+  api<EventTypeRow>(`/kpm/settings/events/types/${id}`, { method: 'PATCH', body });
+
+export const archiveEventType = (id: string) =>
+  api<EventTypeRow>(`/kpm/settings/events/types/${id}/archive`, { method: 'POST' });
+
+export const restoreEventType = (id: string) =>
+  api<EventTypeRow>(`/kpm/settings/events/types/${id}/restore`, { method: 'POST' });
+
+export const listEvents = (includeArchived = false) =>
+  api<EventRow[]>(`/kpm/settings/events${includeArchived ? '?includeArchived=true' : ''}`);
+
+export const createEvent = (body: Record<string, unknown>) =>
+  api<EventRow>('/kpm/settings/events', { method: 'POST', body });
+
+export const updateEvent = (id: string, body: Record<string, unknown>) =>
+  api<EventRow>(`/kpm/settings/events/${id}`, { method: 'PATCH', body });
+
+export const archiveEvent = (id: string) =>
+  api<EventRow>(`/kpm/settings/events/${id}/archive`, { method: 'POST' });
+
+export const restoreEvent = (id: string) =>
+  api<EventRow>(`/kpm/settings/events/${id}/restore`, { method: 'POST' });

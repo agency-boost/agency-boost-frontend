@@ -21,6 +21,8 @@ import LeadStatusesPage from './(tenant)/kpm/settings/lead-statuses/page';
 import BranchInfoPage from './(tenant)/kpm/settings/branch-info/page';
 import TrainingSettingsPage from './(tenant)/kpm/settings/training/page';
 import TrainingModulePage from './(tenant)/kpm/settings/training/[moduleId]/page';
+import KpmProductsPage from './(tenant)/kpm/settings/products/page';
+import EventsSettingsPage from './(tenant)/kpm/settings/events/page';
 import ActivationChecklistPage from './(tenant)/kpm/settings/activation-checklist/page';
 import CompanyTemplatePage from './(admin)/admin/companies/[companyId]/template/page';
 import AdminOverviewPage from './(admin)/admin/page';
@@ -1022,6 +1024,62 @@ describe('screens have no axe violations', () => {
       await userEvent.click(screen.getByRole('button', { name: '+ Add module' }));
       await expectClean('kpm/settings/training');
       window.history.replaceState(null, '', '/');
+    });
+
+    it('the office’s Events, with the add panel open (P5-T6)', async () => {
+      stubFetch({
+        ...configStubs,
+        '/kpm/settings/events/types': {
+          body: [{
+            id: 't1', code: 'TRAINING', label: 'Training', description: null, emoji: '📚',
+            color: '#2D9CDB', displayOrder: 1, status: 'active', events: 2,
+          }],
+        },
+        '/kpm/settings/events': {
+          body: [{
+            id: 'e1', code: 'KICKOFF', typeCode: 'TRAINING', title: 'Kickoff 2026',
+            blurb: 'The year ahead', description: '',
+            startsAt: '2026-10-01T02:00:00.000Z', endsAt: '2026-10-01T06:00:00.000Z',
+            startsOn: '2026-10-01', location: 'Jakarta', locationUrl: null,
+            audience: { issuer: 'kpm', scope: 'all_agents', inviteeMembershipIds: [] },
+            phase: 'upcoming', status: 'active', version: 1,
+          }],
+        },
+      });
+      renderInLayout(TenantLayout, <EventsSettingsPage />, { me: settingsOwner });
+      await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
+      await expectClean('kpm/settings/events');
+    });
+
+    it('the office’s Products, with one product open (P5-T5)', async () => {
+      const f = <T,>(value: T, overridden = false) => ({ value, overridden });
+      stubFetch({
+        ...configStubs,
+        '/kpm/settings/branch-info': {
+          body: { _id: 'k1', companyId: 'c1', companyName: 'Allianz Life', code: '0417' },
+        },
+        '/kpm/settings/products': {
+          body: [{
+            productId: 'p1', code: 'PRUMAPAN', companyName: 'PRUMapan', channel: 'conventional',
+            category: 'life', lifecycle: 'active', sellable: true,
+            active: f(true), displayName: f('PRUMapan'),
+            script: {
+              goodFit: f('Young families'), opening: f('Halo?'), benefits: f(['Proteksi']),
+              fullScript: f('Halo.'), objectionTheySay: f('Mahal.'),
+              objectionYouSay: f('Bisa disesuaikan.'), nextAction: f('Ilustrasi?'),
+            },
+            reviewState: 'pending', rejectionReason: null,
+            documents: [
+              { slot: 'brochure', label: 'Brochure', storageKey: 'k1', filename: 'ours.pdf', source: 'kpm' },
+              { slot: 'illustration', label: 'Illustration / Simulation', storageKey: null, filename: null, source: 'none' },
+              { slot: 'productDoc', label: 'Product Document', storageKey: null, filename: null, source: 'none' },
+            ],
+          }],
+        },
+      });
+      renderInLayout(TenantLayout, <KpmProductsPage />, { me: settingsOwner });
+      await userEvent.click(await screen.findByRole('button', { name: 'Customise' }));
+      await expectClean('kpm/settings/products');
     });
 
     it('a training module, with its switch and its Files, Videos and Links (P5-T2)', async () => {
