@@ -1,12 +1,16 @@
 #!/usr/bin/env node
 /**
- * The seeded development credentials must never reach a built bundle.
+ * The seeded development credentials must never reach a bundle built for production.
  *
- * They are offered on the sign-in screen to make review easier, which is safe only
- * while it is true in `next dev` and nowhere else. A runtime guard is not enough: an
- * earlier version hid the panel correctly and still shipped the strings, because the
- * constant was bundled whether or not anything rendered it. `DEMO_ACCOUNTS` now folds
- * to `[]` under `NODE_ENV=production`, and this checks that it actually did.
+ * They are offered on the sign-in screen to make review easier, and that is safe only
+ * while the environments carrying them are ones where the seeded tenant is the whole
+ * point: `next dev` and staging (ADR-0041). A runtime guard is not enough — an earlier
+ * version hid the panel correctly and still shipped the strings, because the constant was
+ * bundled whether or not anything rendered it. `DEMO_ACCOUNTS` folds to `[]` unless
+ * `NEXT_PUBLIC_APP_ENV` names a demo environment, and this checks that it actually did.
+ *
+ * Run it against a build for anywhere else — CI builds with `NEXT_PUBLIC_APP_ENV=test`.
+ * Pointed at a staging build it will fail, correctly: those strings are meant to be there.
  *
  * Usage: pnpm build && node scripts/check-no-demo-credentials.mjs
  */
@@ -94,12 +98,15 @@ if (hits.length > 0) {
   console.error(
     '\nTwo build-time gates keep these out, and either one alone is enough — so both\n' +
       'have been removed or defeated:\n' +
-      '  1. DEMO_ACCOUNTS folds to [] under NODE_ENV=production (src/lib/demo-accounts.ts)\n' +
+      '  1. DEMO_ACCOUNTS folds to [] unless NEXT_PUBLIC_APP_ENV names a demo\n' +
+      '     environment — development or staging (src/lib/demo-accounts.ts)\n' +
       '  2. DemoAccountsPanel returns null when showDemoAccounts() is false\n' +
-      'Both rely on `process.env.NODE_ENV` being statically replaceable. Reading it\n' +
-      'through a variable, or behind a dynamic import, defeats the fold.',
+      'Both rely on `process.env.NEXT_PUBLIC_APP_ENV` being statically replaceable.\n' +
+      'Reading it through a variable, or behind a dynamic import, defeats the fold.\n' +
+      'If this build *was* for staging, the strings belong here and this run is not\n' +
+      'the check you want.',
   );
   process.exit(1);
 }
 
-console.log('none present — the panel exists in `next dev` only');
+console.log('none present — the panel is confined to development and staging');

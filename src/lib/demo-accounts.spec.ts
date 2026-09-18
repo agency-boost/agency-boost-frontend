@@ -8,15 +8,19 @@ describe('demo accounts', () => {
     process.env.NEXT_PUBLIC_APP_ENV = ORIGINAL;
   });
 
-  it('shows only when the environment explicitly says development', () => {
-    process.env.NEXT_PUBLIC_APP_ENV = 'development';
-    expect(showDemoAccounts()).toBe(true);
+  it('shows on development and on staging, and on nothing else', () => {
+    // Staging was added deliberately (ADR-0041): it runs against the same seeded tenant
+    // and is tried by people who are not developers, who have no other way in.
+    for (const value of ['development', 'staging']) {
+      process.env.NEXT_PUBLIC_APP_ENV = value;
+      expect(showDemoAccounts()).toBe(true);
+    }
   });
 
   it('fails closed on anything else, including unset', () => {
     // Credentials in a client bundle are safe only while this cannot be true by
     // accident. An unset variable must hide the panel, not reveal it.
-    for (const value of ['production', 'staging', 'preview', '', 'Development']) {
+    for (const value of ['production', 'preview', 'staging-2', 'Staging', '', 'Development']) {
       process.env.NEXT_PUBLIC_APP_ENV = value;
       expect(showDemoAccounts()).toBe(false);
     }
@@ -25,10 +29,11 @@ describe('demo accounts', () => {
   });
 
   it('has nothing to show once the list has compiled away', () => {
-    // The structural gate is NODE_ENV: a built bundle holds an empty list, so the panel
-    // cannot render even if NEXT_PUBLIC_APP_ENV somehow says development. This asserts
-    // the runtime consequence; `scripts/check-no-demo-credentials.mjs` asserts that the
-    // strings are genuinely absent from the build output.
+    // The structural gate is NEXT_PUBLIC_APP_ENV read at module load: a bundle built for
+    // production holds an empty list, so the panel cannot render even if the variable is
+    // somehow flipped afterwards. This asserts the runtime consequence;
+    // `scripts/check-no-demo-credentials.mjs` asserts that the strings are genuinely
+    // absent from the build output.
     process.env.NEXT_PUBLIC_APP_ENV = 'development';
     expect(showDemoAccounts()).toBe(DEMO_ACCOUNTS.length > 0);
   });

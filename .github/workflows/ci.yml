@@ -60,10 +60,11 @@ jobs:
       - name: First Load JS budget
         run: node scripts/check-bundle-size.mjs < build.log
 
-      # The sign-in screen offers the seeded development accounts, which is safe only
-      # while it is true in `next dev` and nowhere else. Two build-time gates keep the
-      # strings out of the output; this proves they worked, because a runtime-only
-      # guard hid the panel and shipped the credentials anyway.
+      # The sign-in screen offers the seeded development accounts, which is safe only in
+      # environments that run against the seeded tenant — `next dev` and staging
+      # (ADR-0041). Two build-time gates keep the strings out of every other build; this
+      # proves they worked, because a runtime-only guard hid the panel and shipped the
+      # credentials anyway.
       #
       # Note the build above sets NEXT_PUBLIC_APP_ENV=test — but this check must hold
       # whatever that value is, so it is asserted against the artifact, not the config.

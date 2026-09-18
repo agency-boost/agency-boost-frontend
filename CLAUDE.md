@@ -59,10 +59,14 @@ two — which every screen did while this was an inline ternary — points whoev
 environment variable at a backend that is running perfectly.
 
 **Hiding is not excluding.** A runtime guard keeps something off the screen; it does not keep it out
-of the bundle. Anything that must not ship needs a `process.env.NODE_ENV === 'production'` fold the
-compiler can eliminate, plus a check on the build output. See `src/lib/demo-accounts.ts` and
+of the bundle. Anything that must not ship needs a literal `process.env.<VAR> === '...'` comparison
+the compiler can fold away, plus a check on the build output. See `src/lib/demo-accounts.ts` and
 `scripts/check-no-demo-credentials.mjs` — the first version of that panel was correctly hidden and
 still shipped its credentials.
+
+Key it on `NEXT_PUBLIC_APP_ENV`, not `NODE_ENV`: `next build` sets `NODE_ENV=production` for *every*
+deployment, so it cannot tell staging from production and gating on it means "not a dev server"
+rather than "not public" (ADR-0041).
 
 ## Layout
 
