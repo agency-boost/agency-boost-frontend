@@ -60,7 +60,7 @@ const SECTIONS: readonly {
       { label: 'Activation checklist', href: '/kpm/settings/activation-checklist' },
       { label: 'Training', href: '/kpm/settings/training' },
       { label: 'Events', href: '/kpm/settings/events' },
-      { label: 'Campaigns', href: '/kpm/settings/campaigns', upcoming: true },
+      { label: 'Campaigns', href: '/kpm/settings/campaigns' },
       { label: 'Products', href: '/kpm/settings/products' },
       // The Admin's as well as the Owner's since ADR-0027, like every page under Settings.
       { label: 'Branch info', href: '/kpm/settings/branch-info' },

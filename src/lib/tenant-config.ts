@@ -650,3 +650,64 @@ export const archiveEvent = (id: string) =>
 
 export const restoreEvent = (id: string) =>
   api<EventRow>(`/kpm/settings/events/${id}/restore`, { method: 'POST' });
+
+// ---------------------------------------- campaigns and the carrier rules (P5-T7, ADR-0026)
+
+export interface RequirementView {
+  metricKey: string;
+  /** The registry's own name, so no screen holds a second copy of the vocabulary. */
+  metricName: string;
+  comparator: string;
+  value: number;
+  /** `idr_minor` means integer sen. */
+  unit: string;
+}
+
+export interface CampaignRow {
+  id: string;
+  code: string;
+  title: string;
+  description: string;
+  startsAt: string;
+  endsAt: string;
+  /** Derived on every read, never stored. */
+  phase: 'upcoming' | 'running' | 'ended';
+  requirements: RequirementView[];
+  reward: string;
+  status: 'active' | 'archived';
+  version: number;
+}
+
+export interface QualificationRuleRow {
+  id: string;
+  kind: 'moc' | 'production_club' | 'promotion_path';
+  code: string;
+  name: string;
+  appliesToOrgLevelCodes: string[];
+  criteriaGroups: { mode: string; criteria: RequirementView[] }[];
+  groupMode: string;
+  reward: string;
+  rank: number;
+  /** Metric keys the product does not compute yet. A rule with any can never pass. */
+  waitingOnMetrics: string[];
+}
+
+export const listCampaigns = (includeArchived = false) =>
+  api<CampaignRow[]>(`/kpm/settings/campaigns${includeArchived ? '?includeArchived=true' : ''}`);
+
+export const listQualificationRules = (kind?: string) =>
+  api<QualificationRuleRow[]>(
+    `/kpm/settings/campaigns/rules${kind ? `?kind=${kind}` : ''}`,
+  );
+
+export const createCampaign = (body: Record<string, unknown>) =>
+  api<CampaignRow>('/kpm/settings/campaigns', { method: 'POST', body });
+
+export const updateCampaign = (id: string, body: Record<string, unknown>) =>
+  api<CampaignRow>(`/kpm/settings/campaigns/${id}`, { method: 'PATCH', body });
+
+export const archiveCampaign = (id: string) =>
+  api<CampaignRow>(`/kpm/settings/campaigns/${id}/archive`, { method: 'POST' });
+
+export const restoreCampaign = (id: string) =>
+  api<CampaignRow>(`/kpm/settings/campaigns/${id}/restore`, { method: 'POST' });

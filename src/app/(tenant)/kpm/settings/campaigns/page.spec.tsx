@@ -1,0 +1,207 @@
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import CampaignsSettingsPage from './page';
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => '/kpm/settings/campaigns',
+}));
+
+const member = {
+  membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab' as const,
+  status: 'active' as const, isKpmOwner: true, isKpmAdmin: false, directCount: 0,
+};
+const OWNER = makeMe({ membership: member, permissions: ['tenant_config:read', 'tenant_config:write'] });
+const READER = makeMe({ membership: member, permissions: ['tenant_config:read'] });
+
+const campaign = (over: Record<string, unknown> = {}) => ({
+  id: 'c1', code: 'YEAR_END_DRIVE', title: 'Year-End Star Club Drive',
+  description: 'Push to Star Club before the year closes.',
+  startsAt: '2026-10-01T00:00:00.000Z', endsAt: '2026-12-31T16:59:59.000Z',
+  phase: 'running',
+  requirements: [{
+    metricKey: 'APE_ACHIEVED', metricName: 'APE achieved', comparator: 'gte',
+    value: 50_000_000_000, unit: 'idr_minor',
+  }],
+  reward: 'Extra unit budget', status: 'active', version: 1, ...over,
+});
+
+const tier = (over: Record<string, unknown> = {}) => ({
+  id: 't1', kind: 'production_club', code: 'STAR_CLUB', name: 'Star Club',
+  appliesToOrgLevelCodes: [],
+  criteriaGroups: [{
+    mode: 'all',
+    criteria: [{
+      metricKey: 'APE_ACHIEVED', metricName: 'APE achieved', comparator: 'gte',
+      value: 120_000_000_000, unit: 'idr_minor',
+    }],
+  }],
+  groupMode: 'all', reward: 'Promotion bonus', rank: 1, waitingOnMetrics: [], ...over,
+});
+
+const moc = () => ({
+  id: 'm1', kind: 'moc', code: 'MOC_AB', name: 'Maintenance of Contract — AB',
+  appliesToOrgLevelCodes: ['AB'],
+  criteriaGroups: [
+    {
+      mode: 'all',
+      criteria: [{
+        metricKey: 'NET_APE', metricName: 'NET_APE', comparator: 'gte',
+        value: 60_000_000_000, unit: 'idr_minor',
+      }],
+    },
+    {
+      mode: 'all',
+      criteria: [{
+        metricKey: 'DIRECT_AB_COUNT', metricName: 'DIRECT_AB_COUNT', comparator: 'gte',
+        value: 5, unit: 'count',
+      }],
+    },
+  ],
+  groupMode: 'any', reward: '', rank: 1,
+  waitingOnMetrics: ['NET_APE', 'DIRECT_AB_COUNT'],
+});
+
+function render(
+  campaigns: unknown[] = [campaign()], rules: unknown[] = [tier(), moc()], me = OWNER,
+) {
+  const stub = stubFetch({
+    '/kpm/settings/campaigns/rules': { body: rules },
+    '/kpm/settings/campaigns': { body: campaigns },
+    '/kpm/settings/publish-state': {
+      body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+    },
+  });
+  renderWithSession(<CampaignsSettingsPage />, { me });
+  return stub;
+}
+
+const openTiers = async () => {
+  await screen.findByRole('checkbox', { name: 'Show archived' });
+  await userEvent.click(screen.getByRole('link', { name: 'Production club tiers' }));
+};
+
+/**
+ * Campaigns, and the carrier rules (P5-T7, ADR-0026).
+ *
+ * The thing this screen exists to make visible: **two rows that look alike behave differently.**
+ * The office's campaign is editable; the insurer's tier is not, and the reason is on the card
+ * rather than left as inert controls beside live ones.
+ */
+describe('the office’s Campaigns screen', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('reads a money requirement as rupiah, from integer sen', async () => {
+    // The prototype stores "Rp 600,000,000" as a display string and one campaign's reward in pesos.
+    render();
+
+    expect(await screen.findByText(/APE achieved at least Rp 500\.000\.000/)).toBeInTheDocument();
+  });
+
+  it('shows the phase worked out from the dates', async () => {
+    render([campaign(), campaign({ id: 'c2', code: 'OLD', title: 'Last year', phase: 'ended' })]);
+
+    expect(await screen.findByText('Running')).toBeInTheDocument();
+    expect(screen.getByText('Ended')).toBeInTheDocument();
+  });
+
+  it('marks the office’s own campaign as the office’s', async () => {
+    render();
+
+    expect(await screen.findByText('Your office’s')).toBeInTheDocument();
+  });
+
+  it('shows the tiers read-only, with the reason rather than inert controls', async () => {
+    render();
+    await openTiers();
+
+    expect(await screen.findByText('Star Club')).toBeInTheDocument();
+    expect(screen.getByText(/These are your insurer’s, not your office’s/)).toBeInTheDocument();
+    // Parity I-76: the prototype gives each tier Edit and a red Delete.
+    expect(screen.queryByRole('button', { name: /edit|delete|archive/i })).not.toBeInTheDocument();
+  });
+
+  it('says a rule cannot be worked out yet, naming what it is waiting on', async () => {
+    // The prototype fabricates the inputs. A rule whose inputs do not exist can never pass, and
+    // showing it as ordinary would tell somebody they failed something nothing measures.
+    render();
+    await openTiers();
+
+    expect(await screen.findByText('Not measured yet')).toBeInTheDocument();
+    expect(screen.getByText(/needs NET_APE, DIRECT_AB_COUNT/)).toBeInTheDocument();
+  });
+
+  it('reads MOC’s two groups as an "or", as the carrier states it', async () => {
+    render();
+    await openTiers();
+
+    // Net APE **or** five direct ABs — the carrier's own "or", which the prototype flattens.
+    expect(await screen.findByText('Maintenance of Contract — AB')).toBeInTheDocument();
+    expect(screen.getByText(/^or\s*$/)).toBeInTheDocument();
+    expect(screen.getByText('AB')).toBeInTheDocument();
+  });
+
+  it('sends a money target as integer sen, never as rupiah', async () => {
+    const stub = render([]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
+
+    await userEvent.type(screen.getByLabelText('Title'), 'Push to Star');
+    await userEvent.type(screen.getByLabelText('Starts'), '2026-10-01');
+    await userEvent.type(screen.getByLabelText('Ends'), '2026-12-31');
+    await userEvent.selectOptions(screen.getByLabelText('What has to be reached'), 'APE_ACHIEVED');
+    await userEvent.type(screen.getByLabelText('At least (Rp)'), '500000000');
+    await userEvent.click(screen.getByRole('button', { name: 'Add the campaign' }));
+
+    await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'POST')).toBe(true));
+    const sent = JSON.parse(String(stub.calls.find((c) => c.init.method === 'POST')!.init.body));
+    expect(sent.requirements).toEqual([
+      { metricKey: 'APE_ACHIEVED', comparator: 'gte', value: 50_000_000_000 },
+    ]);
+  });
+
+  it('offers only metrics this product measures', async () => {
+    // A target nothing computes could never be reached, and the API refuses it anyway — so the
+    // screen does not offer it in the first place.
+    render([]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
+
+    const options = Array.from(
+      screen.getByLabelText('What has to be reached').querySelectorAll('option'),
+    ).map((o) => (o as HTMLOptionElement).value);
+    expect(options).not.toContain('NET_APE');
+    expect(options).toContain('APE_ACHIEVED');
+  });
+
+  it('edits a campaign without ever sending its code', async () => {
+    const stub = render();
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+    expect(screen.getByLabelText('Code')).toBeDisabled();
+    await userEvent.clear(screen.getByLabelText('Title'));
+    await userEvent.type(screen.getByLabelText('Title'), 'Renamed drive');
+    await userEvent.click(screen.getByRole('button', { name: 'Save the campaign' }));
+
+    await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+    expect(JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body)))
+      .not.toHaveProperty('code');
+  });
+
+  it('archives and restores a campaign, and never deletes one', async () => {
+    const stub = render([campaign({ status: 'archived' })]);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+    await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/c1/restore'))).toBe(true));
+    expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
+  });
+
+  it('shows a reader who cannot write without a control to change anything', async () => {
+    render([campaign()], [tier()], READER);
+    await screen.findByText('Year-End Star Club Drive');
+
+    expect(screen.queryByRole('button', { name: 'Add a campaign' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+  });
+});

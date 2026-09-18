@@ -23,6 +23,7 @@ import TrainingSettingsPage from './(tenant)/kpm/settings/training/page';
 import TrainingModulePage from './(tenant)/kpm/settings/training/[moduleId]/page';
 import KpmProductsPage from './(tenant)/kpm/settings/products/page';
 import EventsSettingsPage from './(tenant)/kpm/settings/events/page';
+import CampaignsSettingsPage from './(tenant)/kpm/settings/campaigns/page';
 import ActivationChecklistPage from './(tenant)/kpm/settings/activation-checklist/page';
 import CompanyTemplatePage from './(admin)/admin/companies/[companyId]/template/page';
 import AdminOverviewPage from './(admin)/admin/page';
@@ -1024,6 +1025,52 @@ describe('screens have no axe violations', () => {
       await userEvent.click(screen.getByRole('button', { name: '+ Add module' }));
       await expectClean('kpm/settings/training');
       window.history.replaceState(null, '', '/');
+    });
+
+    it('the office’s Campaigns, on the carrier-rules tab (P5-T7)', async () => {
+      const money = (value: number) => ({
+        metricKey: 'APE_ACHIEVED', metricName: 'APE achieved', comparator: 'gte',
+        value, unit: 'idr_minor',
+      });
+      stubFetch({
+        ...configStubs,
+        '/kpm/settings/campaigns/rules': {
+          body: [
+            {
+              id: 't1', kind: 'production_club', code: 'STAR_CLUB', name: 'Star Club',
+              appliesToOrgLevelCodes: [],
+              criteriaGroups: [{ mode: 'all', criteria: [money(120_000_000_000)] }],
+              groupMode: 'all', reward: 'Promotion bonus', rank: 1, waitingOnMetrics: [],
+            },
+            {
+              id: 'm1', kind: 'moc', code: 'MOC_AB', name: 'Maintenance of Contract — AB',
+              appliesToOrgLevelCodes: ['AB'],
+              criteriaGroups: [{
+                mode: 'all',
+                criteria: [{
+                  metricKey: 'NET_APE', metricName: 'NET_APE', comparator: 'gte',
+                  value: 60_000_000_000, unit: 'idr_minor',
+                }],
+              }],
+              groupMode: 'any', reward: '', rank: 1, waitingOnMetrics: ['NET_APE'],
+            },
+          ],
+        },
+        '/kpm/settings/campaigns': {
+          body: [{
+            id: 'c1', code: 'YEAR_END_DRIVE', title: 'Year-End Star Club Drive',
+            description: 'Push to Star Club.', startsAt: '2026-10-01T00:00:00.000Z',
+            endsAt: '2026-12-31T16:59:59.000Z', phase: 'running',
+            requirements: [money(50_000_000_000)], reward: 'Extra unit budget',
+            status: 'active', version: 1,
+          }],
+        },
+      });
+      renderInLayout(TenantLayout, <CampaignsSettingsPage />, { me: settingsOwner });
+      await screen.findByRole('checkbox', { name: 'Show archived' });
+      await userEvent.click(screen.getByRole('link', { name: 'Production club tiers' }));
+      await screen.findByText('Star Club');
+      await expectClean('kpm/settings/campaigns');
     });
 
     it('the office’s Events, with the add panel open (P5-T6)', async () => {
