@@ -711,3 +711,55 @@ export const archiveCampaign = (id: string) =>
 
 export const restoreCampaign = (id: string) =>
   api<CampaignRow>(`/kpm/settings/campaigns/${id}/restore`, { method: 'POST' });
+
+// ------------------------------------------- the capability catalog (P5-T8, ADR-0025)
+
+export interface CapabilityEntry {
+  /** The identity. A rename never moves it, and it is never reused. */
+  code: string;
+  label: string;
+  displayOrder: number;
+  status: 'active' | 'archived';
+}
+
+export interface CapabilityStage extends CapabilityEntry {
+  requiredMilestoneCodes: string[];
+  /** How senior the stage is — **not** its position on screen. */
+  stageOrder: number;
+}
+
+export interface CapabilityGrid extends CapabilityEntry {
+  requiresDownline: boolean;
+  items: CapabilityEntry[];
+}
+
+export interface CapabilityCatalog {
+  stages: CapabilityStage[];
+  milestones: CapabilityEntry[];
+  grids: CapabilityGrid[];
+  version: number;
+}
+
+export const readCapabilityCatalog = () =>
+  api<CapabilityCatalog>('/kpm/settings/capability-catalog');
+
+export const renameCapability = (
+  body: { part: string; code: string; label: string; gridCode?: string },
+) => api<CapabilityCatalog>('/kpm/settings/capability-catalog/label', {
+  method: 'PATCH', body,
+});
+
+export const setCapabilityStatus = (
+  body: { part: string; code: string; status: 'active' | 'archived'; gridCode?: string },
+) => api<CapabilityCatalog>('/kpm/settings/capability-catalog/status', {
+  method: 'PATCH', body,
+});
+
+export const addCapabilityItem = (
+  body: { part: 'milestone' | 'item'; code: string; label: string; gridCode?: string },
+) => api<CapabilityCatalog>('/kpm/settings/capability-catalog/items', {
+  method: 'POST', body,
+});
+
+export const reorderCapability = (body: { part: string; codes: string[] }) =>
+  api<CapabilityCatalog>('/kpm/settings/capability-catalog/order', { method: 'PATCH', body });

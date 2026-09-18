@@ -24,6 +24,7 @@ import TrainingModulePage from './(tenant)/kpm/settings/training/[moduleId]/page
 import KpmProductsPage from './(tenant)/kpm/settings/products/page';
 import EventsSettingsPage from './(tenant)/kpm/settings/events/page';
 import CampaignsSettingsPage from './(tenant)/kpm/settings/campaigns/page';
+import CapabilityCatalogPage from './(tenant)/kpm/settings/capability-catalog/page';
 import ActivationChecklistPage from './(tenant)/kpm/settings/activation-checklist/page';
 import CompanyTemplatePage from './(admin)/admin/companies/[companyId]/template/page';
 import AdminOverviewPage from './(admin)/admin/page';
@@ -1025,6 +1026,32 @@ describe('screens have no axe violations', () => {
       await userEvent.click(screen.getByRole('button', { name: '+ Add module' }));
       await expectClean('kpm/settings/training');
       window.history.replaceState(null, '', '/');
+    });
+
+    it('the office’s capability catalog (P5-T8)', async () => {
+      const e = (code: string, label: string, order = 1) =>
+        ({ code, label, displayOrder: order, status: 'active' });
+      stubFetch({
+        ...configStubs,
+        '/kpm/settings/capability-catalog': {
+          body: {
+            stages: [{
+              ...e('COMPETENT_PRODUCER', 'Competent Producer'),
+              requiredMilestoneCodes: ['SELLS_INDEPENDENTLY'], stageOrder: 1,
+            }],
+            milestones: [e('SELLS_INDEPENDENTLY', 'Sells policies independently')],
+            grids: [{
+              ...e('PERSONAL_SELLING', 'Personal selling'),
+              requiresDownline: false,
+              items: [e('APPROACH', 'Approach & appointment setting')],
+            }],
+            version: 1,
+          },
+        },
+      });
+      renderInLayout(TenantLayout, <CapabilityCatalogPage />, { me: settingsOwner });
+      await screen.findByText('APPROACH');
+      await expectClean('kpm/settings/capability-catalog');
     });
 
     it('the office’s Campaigns, on the carrier-rules tab (P5-T7)', async () => {

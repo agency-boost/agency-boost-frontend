@@ -62,6 +62,7 @@ const SECTIONS: readonly {
       { label: 'Events', href: '/kpm/settings/events' },
       { label: 'Campaigns', href: '/kpm/settings/campaigns' },
       { label: 'Products', href: '/kpm/settings/products' },
+      { label: 'Capability catalog', href: '/kpm/settings/capability-catalog' },
       // The Admin's as well as the Owner's since ADR-0027, like every page under Settings.
       { label: 'Branch info', href: '/kpm/settings/branch-info' },
     ],
