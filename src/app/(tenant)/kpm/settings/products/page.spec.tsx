@@ -13,7 +13,14 @@ const member = {
   membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab' as const,
   status: 'active' as const, isKpmOwner: true, isKpmAdmin: false, directCount: 0,
 };
-const OWNER = makeMe({ membership: member, permissions: ['tenant_config:read', 'tenant_config:write'] });
+const OWNER = makeMe({
+  membership: member,
+  permissions: ['tenant_config:read', 'tenant_config:write', 'sales_script:approve'],
+});
+/** Someone who may edit a script and not approve one — the grant ADR-0037 kept separate. */
+const WRITER = makeMe({
+  membership: member, permissions: ['tenant_config:read', 'tenant_config:write'],
+});
 const READER = makeMe({ membership: member, permissions: ['tenant_config:read'] });
 
 const BRANCH = { _id: 'k1', companyId: 'c1', companyName: 'Allianz Life', code: '0417' };
@@ -52,9 +59,22 @@ const product = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+/**
+ * The queue is stubbed on its **own** route, not left to the shelf's prefix.
+ *
+ * `stubFetch` matches on `url.includes(key)`, so `/kpm/settings/products` would answer the queue
+ * too — and the screen would look right while calling nothing. The gate
+ * (`check-api-consumers.py`) caught exactly that, so the spec now names the route it expects.
+ */
 function render(rows: unknown[] = [product()], me = OWNER, extra: Record<string, unknown> = {}) {
+  const waiting = (rows as { reviewState?: string }[])
+    .filter((p) => p.reviewState === 'pending' || p.reviewState === 'rejected');
   const stub = stubFetch({
     '/kpm/settings/products': { body: rows },
+    '/kpm/settings/products/script-reviews': { body: waiting },
+    '/kpm/settings/products/p1/script/effective': {
+      body: { source: 'company', script: script() },
+    },
     '/kpm/settings/branch-info': { body: BRANCH },
     '/kpm/settings/publish-state': {
       body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
@@ -182,6 +202,110 @@ describe('the office’s Products screen', () => {
     expect(await screen.findByText('Sent back')).toBeInTheDocument();
     await open();
     expect(screen.getByText(/Claim about returns is too strong/)).toBeInTheDocument();
+  });
+
+  describe('the script approval gate (P5-T10)', () => {
+    const openApprovals = async () => {
+      await screen.findByText('PRUMapan');
+      await userEvent.click(screen.getByRole('link', { name: 'Script approvals' }));
+    };
+
+    it('says plainly that this is the office’s own check, not somebody else’s review', async () => {
+      // ADR-0037 calls it a gate rather than an independent review, and the manual has to say so
+      // or a tick reads as a compliance sign-off nobody actually gave.
+      render();
+      await openApprovals();
+
+      expect(await screen.findByText(/your office’s own check, not a review by anybody else/))
+        .toBeInTheDocument();
+      // Not "they read the company's words": an office with an earlier approval is serving that,
+      // and saying otherwise would misdescribe what a send-back costs.
+      expect(screen.getByText(/the last version your office approved, or Allianz Life’s own words/))
+        .toBeInTheDocument();
+    });
+
+    it('queues what is waiting, and shows the words being approved', async () => {
+      render([product({
+        reviewState: 'pending',
+        script: script({ opening: field('Halo dari kami!', true) }),
+      })]);
+      await openApprovals();
+
+      expect(await screen.findByText('Waiting for your approval')).toBeInTheDocument();
+      // The overridden line is shown; the ones still following the company are not.
+      expect(screen.getByText(/Halo dari kami!/)).toBeInTheDocument();
+      expect(screen.queryByText(/Terlalu mahal/)).not.toBeInTheDocument();
+    });
+
+    it('approves one', async () => {
+      const stub = render([product({ reviewState: 'pending' })], OWNER, {
+        '/kpm/settings/products/p1/script/approve': { body: product({ reviewState: 'approved' }) },
+      });
+      await openApprovals();
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+
+      await waitFor(() => expect(
+        stub.calls.some((c) => c.url.includes('/script/approve')),
+      ).toBe(true));
+    });
+
+    it('will not send one back without a reason', async () => {
+      render([product({ reviewState: 'pending' })]);
+      await openApprovals();
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Send back' }));
+      expect(screen.getByRole('button', { name: 'Send it back' })).toBeDisabled();
+
+      await userEvent.type(
+        screen.getByLabelText('Why are you sending it back?'),
+        'The return claim is stronger than the illustration supports.',
+      );
+      expect(screen.getByRole('button', { name: 'Send it back' })).toBeEnabled();
+    });
+
+    it('shows why something was sent back, so it can be acted on', async () => {
+      render([product({
+        reviewState: 'rejected', rejectionReason: 'Too strong a claim about returns.',
+      })]);
+      await openApprovals();
+
+      expect(await screen.findByText(/Too strong a claim about returns/)).toBeInTheDocument();
+    });
+
+    it('offers no decision to somebody who may write a script but not approve one', async () => {
+      // The one deliberate exception to ADR-0027, so the two grants really can come apart.
+      render([product({ reviewState: 'pending' })], WRITER);
+      await openApprovals();
+
+      expect(await screen.findByText('Waiting for your approval')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Send back' })).not.toBeInTheDocument();
+    });
+
+    it('asks the server what is waiting, and what agents read while it waits', async () => {
+      // Filtering the shelf would look identical and call nothing — which is what the API-consumer
+      // gate refused. The queue is its own route, and the served script is the same read Phase 12
+      // gives an agent, so the line about what they are reading is theirs and not a reconstruction.
+      const stub = render([product({ reviewState: 'pending' })]);
+      await openApprovals();
+
+      await waitFor(() => expect(
+        stub.calls.some((c) => c.url.includes('/products/script-reviews')),
+      ).toBe(true));
+      await waitFor(() => expect(
+        stub.calls.some((c) => c.url.includes('/p1/script/effective')),
+      ).toBe(true));
+      expect(await screen.findByText(/reading Allianz Life’s words until this is approved/))
+        .toBeInTheDocument();
+    });
+
+    it('says nothing is waiting when nothing is', async () => {
+      render();
+      await openApprovals();
+
+      expect(await screen.findByText(/Nothing is waiting on you/)).toBeInTheDocument();
+    });
   });
 
   it('shows a reader who cannot write the shelf without a control to change it', async () => {

@@ -911,6 +911,18 @@ describe('screens have no axe violations', () => {
       ],
     });
 
+    /** The one grant ADR-0027 keeps separate, so the approval queue has its controls (P5-T10). */
+    const settingsApprover = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+      },
+      permissions: [
+        'member:read_profile', 'tenant_config:read', 'tenant_config:write', 'kpm:read_profile',
+        'sales_script:approve',
+      ],
+    });
+
     const TYPE = {
       id: 't1', code: 'SELL_SUBMISSION', categoryCode: 'SELLING', label: 'Submission polis',
       description: 'telepon, WhatsApp, dll', appliesToOrgLevelCodes: [], displayOrder: 1,
@@ -1154,6 +1166,42 @@ describe('screens have no axe violations', () => {
       renderInLayout(TenantLayout, <KpmProductsPage />, { me: settingsOwner });
       await userEvent.click(await screen.findByRole('button', { name: 'Customise' }));
       await expectClean('kpm/settings/products');
+    });
+
+    it('the Script approvals queue, with one waiting and a send-back open (P5-T10)', async () => {
+      const f = <T,>(value: T, overridden = false) => ({ value, overridden });
+      stubFetch({
+        ...configStubs,
+        '/kpm/settings/branch-info': {
+          body: { _id: 'k1', companyId: 'c1', companyName: 'Allianz Life', code: '0417' },
+        },
+        '/kpm/settings/products/p1/script/effective': {
+          body: { source: 'company', script: {} },
+        },
+        '/kpm/settings/products': {
+          body: [{
+            productId: 'p1', code: 'PRUMAPAN', companyName: 'PRUMapan', channel: 'conventional',
+            category: 'life', lifecycle: 'active', sellable: true,
+            active: f(true), displayName: f('PRUMapan'),
+            script: {
+              goodFit: f('Young families'), opening: f('Halo dari kami!', true),
+              benefits: f(['Proteksi']), fullScript: f('Halo.'), objectionTheySay: f('Mahal.'),
+              objectionYouSay: f('Bisa disesuaikan.'), nextAction: f('Ilustrasi?'),
+            },
+            reviewState: 'pending', rejectionReason: null,
+            documents: [
+              { slot: 'brochure', label: 'Brochure', storageKey: null, filename: null, source: 'none' },
+              { slot: 'illustration', label: 'Illustration / Simulation', storageKey: null, filename: null, source: 'none' },
+              { slot: 'productDoc', label: 'Product Document', storageKey: null, filename: null, source: 'none' },
+            ],
+          }],
+        },
+      });
+      renderInLayout(TenantLayout, <KpmProductsPage />, { me: settingsApprover });
+      await userEvent.click(await screen.findByRole('link', { name: 'Script approvals' }));
+      // Opened: the reason box is the one control that appears only on the way to a decision.
+      await userEvent.click(await screen.findByRole('button', { name: 'Send back' }));
+      await expectClean('kpm/settings/products#approvals');
     });
 
     it('a training module, with its switch and its Files, Videos and Links (P5-T2)', async () => {

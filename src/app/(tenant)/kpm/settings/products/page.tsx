@@ -10,8 +10,9 @@ import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
 import {
-  kpmProductDocumentUrl, listKpmProducts, readBranchInfo, resetKpmProductDocument,
-  resetKpmProductOverride, saveKpmProductOverrides, setKpmProductActive,
+  approveScript, kpmProductDocumentUrl, listKpmProducts, listScriptReviews, readBranchInfo,
+  readEffectiveScript, rejectScript, resetKpmProductDocument, resetKpmProductOverride,
+  saveKpmProductOverrides, setKpmProductActive,
   type KpmProductRow,
 } from '@/lib/tenant-config';
 
@@ -46,8 +47,23 @@ const asText = (value: string | string[]) => (Array.isArray(value) ? value.join(
  * default into the form, which looks identical today and silently freezes today's wording into the
  * office for ever.
  */
+/** The two halves of this screen: the shelf, and what is waiting on somebody (P5-T10). */
+const TABS = [
+  { label: 'Products', href: '#products' },
+  { label: 'Script approvals', href: '#approvals' },
+];
+
 export default function KpmProductsPage() {
   const canWrite = useCan('tenant_config:write');
+  /**
+   * Approving is its **own** permission (ADR-0037), and the one deliberate exception to
+   * ADR-0027's single settings permission — so somebody may be able to edit a script and not to
+   * approve it the day that grant moves.
+   */
+  const canApprove = useCan('sales_script:approve');
+  const [tab, setTab] = useState('#products');
+  const [sendingBack, setSendingBack] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
   const [rows, setRows] = useState<KpmProductRow[] | null>(null);
   /**
    * The office's own insurer, read rather than assumed.
@@ -61,6 +77,16 @@ export default function KpmProductsPage() {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  /**
+   * The queue, read from its own route rather than filtered out of the shelf.
+   *
+   * The shelf is 31 rows and the queue is usually none of them; asking the server which ones are
+   * waiting is both the cheaper read and the one whose answer cannot drift from the gate's own
+   * idea of what is pending.
+   */
+  const [queue, setQueue] = useState<KpmProductRow[] | null>(null);
+  /** What agents are reading **right now**, per product — the comparison a decision needs. */
+  const [served, setServed] = useState<Record<string, { source: 'kpm' | 'company' }>>({});
 
   const load = useCallback(async () => {
     try {
@@ -75,6 +101,25 @@ export default function KpmProductsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const loadQueue = useCallback(async () => {
+    try {
+      const waiting = await listScriptReviews();
+      setQueue(waiting);
+      // What each one's agents are reading today, so an approval is a comparison rather than a
+      // leap: this is the same read Phase 12 serves an agent, so what is shown here is what they
+      // have, not a reconstruction of it.
+      const now = await Promise.all(waiting.map(async (p) => {
+        const { source } = await readEffectiveScript(p.productId);
+        return [p.productId, { source }] as const;
+      }));
+      setServed(Object.fromEntries(now));
+    } catch (err) {
+      setError(toDisplayError(err));
+    }
+  }, []);
+
+  useEffect(() => { if (tab === '#approvals') void loadQueue(); }, [tab, loadQueue]);
+
   const run = async (action: () => Promise<KpmProductRow>) => {
     setBusy(true);
     setError(null);
@@ -88,6 +133,13 @@ export default function KpmProductsPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  /** A decision leaves the queue: it changes both halves, so both are re-read. */
+  const decide = async (action: () => Promise<KpmProductRow>) => {
+    const row = await run(action);
+    if (row) await loadQueue();
+    return row;
   };
 
   function body() {
@@ -190,6 +242,135 @@ export default function KpmProductsPage() {
             </li>
           ))}
         </ul>
+      </div>
+    );
+  }
+
+  /**
+   * What is waiting on somebody here.
+   *
+   * A queue rather than a hunt through 31 products: the point of a gate is that whoever holds it
+   * can see what is behind it.
+   */
+  function approvalsTab() {
+    if (queue === null) return error ? null : <SkeletonCards count={2} />;
+    const waiting = queue.filter((p) => p.reviewState === 'pending');
+    const sentBack = queue.filter((p) => p.reviewState === 'rejected');
+
+    return (
+      <div className="flex flex-col gap-4">
+        <Card>
+          <p className="text-md text-navy">
+            <strong>This is your office’s own check, not a review by anybody else.</strong>{' '}
+            <span className="text-muted">
+              Nobody at {company} and nobody on the platform looks at these. What it gives you is
+              that no half-finished script reaches your agents, and that every script they read
+              carries a name and a time.
+            </span>
+          </p>
+          <p className="mt-2 text-sm text-muted">
+            Until you approve one, your agents keep reading whatever they read today — the last
+            version your office approved, or {company}’s own words. Each row below says which.
+          </p>
+        </Card>
+
+        {waiting.length === 0 && sentBack.length === 0 ? (
+          <EmptyState title="Nothing is waiting on you. A script comes here when somebody in your office rewrites one." />
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {[...waiting, ...sentBack].map((product) => (
+              <li key={product.productId}>
+                <Card>
+                  <div className="flex flex-wrap items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-md font-semibold text-navy">
+                        {product.displayName.value}
+                      </h2>
+                      <p className="mt-1 flex flex-wrap items-center gap-2">
+                        <code className="text-sm text-muted">{product.code}</code>
+                        <ConfigBadge tone={REVIEW[product.reviewState].tone}>
+                          {REVIEW[product.reviewState].text}
+                        </ConfigBadge>
+                      </p>
+                      {product.rejectionReason && (
+                        <p className="mt-1 text-sm text-muted">
+                          Sent back: {product.rejectionReason}
+                        </p>
+                      )}
+                      <p className="mt-1 text-sm text-muted">
+                        {served[product.productId]?.source === 'kpm'
+                          ? 'Your agents are reading an earlier version your office approved.'
+                          : `Your agents are reading ${company}’s words until this is approved.`}
+                      </p>
+                      <ul className="mt-2 flex flex-col gap-1">
+                        {SCRIPT_FIELDS.filter((f) => product.script[f.key]?.overridden).map((f) => (
+                          <li key={f.key} className="text-md text-navy">
+                            <span className="text-sm font-semibold text-muted">{f.label}: </span>
+                            {asText(product.script[f.key].value)}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    {canApprove && product.reviewState === 'pending' && (
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          disabled={busy}
+                          onClick={() => void decide(() => approveScript(product.productId))}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          disabled={busy}
+                          onClick={() => { setSendingBack(product.productId); setReason(''); }}
+                        >
+                          Send back
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {sendingBack === product.productId && (
+                    <div className="mt-3 border-t border-hairline pt-3">
+                      <Field
+                        label="Why are you sending it back?"
+                        htmlFor={`reason-${product.productId}`}
+                        hint="Required — somebody has to act on it, and “no” on its own is not something anybody can act on."
+                      >
+                        <Textarea
+                          id={`reason-${product.productId}`}
+                          rows={2}
+                          value={reason}
+                          disabled={busy}
+                          onChange={(e) => setReason(e.target.value)}
+                        />
+                      </Field>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button
+                          disabled={busy || !reason.trim()}
+                          onClick={() => void decide(async () => {
+                            const next = await rejectScript(product.productId, reason.trim());
+                            setSendingBack(null);
+                            return next;
+                          })}
+                        >
+                          Send it back
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          disabled={busy}
+                          onClick={() => setSendingBack(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     );
   }
@@ -353,10 +534,14 @@ export default function KpmProductsPage() {
       title="Products"
       subtitle={`What your office sells from ${company}’s catalog, and the words you sell it with.`}
       permission="tenant_config:read"
+      subtabs={TABS}
+      activeSubtab={tab}
+      onSelectSubtab={setTab}
+      subtabsLabel="Product sections"
       error={rows === null ? error : null}
       bars={<PublishBar />}
     >
-      {body()}
+      {tab === '#approvals' ? approvalsTab() : body()}
     </SettingsScreen>
   );
 }

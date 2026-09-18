@@ -763,3 +763,34 @@ export const addCapabilityItem = (
 
 export const reorderCapability = (body: { part: string; codes: string[] }) =>
   api<CapabilityCatalog>('/kpm/settings/capability-catalog/order', { method: 'PATCH', body });
+
+// -------------------------------------- the script approval gate (P5-T10, ADR-0037)
+
+export const listScriptReviews = () =>
+  api<KpmProductRow[]>('/kpm/settings/products/script-reviews');
+
+/** The approved words are frozen at this moment; a later edit returns the row to pending. */
+export const approveScript = (productId: string) =>
+  api<KpmProductRow>(`/kpm/settings/products/${productId}/script/approve`, { method: 'POST' });
+
+/** A reason is required: "no" on its own is not something the writer can act on. */
+export const rejectScript = (productId: string, reason: string) =>
+  api<KpmProductRow>(`/kpm/settings/products/${productId}/script/reject`, {
+    method: 'POST', body: { reason },
+  });
+
+/** The words an agent is actually served, and whose they are. */
+export interface EffectiveScript {
+  source: 'kpm' | 'company';
+  script: Record<string, string | string[]>;
+}
+
+/**
+ * What an agent is actually served — the office's words only once approved.
+ *
+ * The return type is **named** rather than written inline: `api<…>` with a nested generic is
+ * invisible to `check-api-consumers.py`, which reported this endpoint orphaned while the screen
+ * was calling it. A contract with a name is the better code either way.
+ */
+export const readEffectiveScript = (productId: string) =>
+  api<EffectiveScript>(`/kpm/settings/products/${productId}/script/effective`);
