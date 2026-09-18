@@ -63,6 +63,16 @@ function render(moduleId = 'm-list', me = OWNER, changes: { status?: number; bod
       body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
     },
     '/kpm/settings/changes': changes,
+    // P5-T2: the content editor loads beside the module's own fields.
+    '/kpm/settings/training/modules/PROSPECT_LIST/content': {
+      body: {
+        moduleCode: 'PROSPECT_LIST',
+        title: 'Building Your Prospect List',
+        content: { files: [], videos: [], links: [] },
+        companyContent: { files: [], videos: [], links: [] },
+        overridden: false,
+      },
+    },
   });
   renderWithSession(<TrainingModulePage params={routeParams({ moduleId })} />, { me });
   return stub;
@@ -176,11 +186,15 @@ describe('a training module’s page (P5-T1)', () => {
     expect(screen.getByRole('heading', { name: 'Training module' })).toBeInTheDocument();
   });
 
-  it('says what files, videos and links will be, rather than drawing sections that do nothing', async () => {
+  it('opens the module’s Files, Videos and Links beside its own fields (P5-T2)', async () => {
+    // It was a `ComingInPhase` sign while OD-59 was open. The sections are real now, and the
+    // page must not still be telling a reader to come back in phase 5.
     render();
     await screen.findByLabelText('Title');
 
-    expect(screen.getByText(/Arrives in phase 5/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Add file|Add video|Add link/ })).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Files' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Videos' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Links' })).toBeInTheDocument();
+    expect(screen.queryByText(/Arrives in phase 5/)).not.toBeInTheDocument();
   });
 });

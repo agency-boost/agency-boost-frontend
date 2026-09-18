@@ -431,3 +431,80 @@ export const saveActivationDraft = (draft: ActivationDraft) =>
 /** Publish the draft as the next version — given to hires who start after it, and to nobody else. */
 export const publishActivationChecklist = () =>
   api<ActivationChecklist>('/kpm/settings/activation-checklist/publish', { method: 'POST' });
+
+// ------------------------------------------------ a training module's content (P5-T2, ADR-0032)
+
+export interface ContentFile {
+  id: string;
+  label: string;
+  /** The key, never a URL: a URL is minted per request, signed, and expires in 300 seconds. */
+  storageKey: string;
+  mimeType: string;
+  bytes: number;
+}
+
+export interface ContentLink {
+  id: string;
+  label: string;
+  url: string;
+}
+
+export interface ModuleContent {
+  files: ContentFile[];
+  videos: ContentFile[];
+  links: ContentLink[];
+}
+
+export interface ModuleContentView {
+  moduleCode: string;
+  title: string;
+  /** What agents in this office are shown. */
+  content: ModuleContent;
+  /** The company's material, always — so the screen can say what "use theirs again" restores. */
+  companyContent: ModuleContent;
+  overridden: boolean;
+}
+
+export interface SignedUpload {
+  uploadUrl: string;
+  storageKey: string;
+  signature: string;
+  expiresAt: string;
+}
+
+export const readModuleContent = (code: string) =>
+  api<ModuleContentView>(`/kpm/settings/training/modules/${encodeURIComponent(code)}/content`);
+
+/** The whole document, not a patch: every edit is held until Save and sent together. */
+export const saveModuleContent = (code: string, content: ModuleContent) =>
+  api<ModuleContentView>(`/kpm/settings/training/modules/${encodeURIComponent(code)}/content`, {
+    method: 'PUT',
+    body: {
+      files: content.files.map(({ id, label, storageKey, mimeType, bytes }) =>
+        ({ id, label, storageKey, mimeType, bytes })),
+      videos: content.videos.map(({ id, label, storageKey, mimeType, bytes }) =>
+        ({ id, label, storageKey, mimeType, bytes })),
+      links: content.links.map(({ id, label, url }) => ({ id, label, url })),
+    },
+  });
+
+/** Removes this office's replacement and falls back to the company's material. */
+export const resetModuleContent = (code: string) =>
+  api<ModuleContentView>(`/kpm/settings/training/modules/${encodeURIComponent(code)}/content`, {
+    method: 'DELETE',
+  });
+
+export const requestTrainingUpload = (body: { filename: string; mimeType: string; bytes: number }) =>
+  api<SignedUpload>('/kpm/settings/training/uploads', { method: 'POST', body });
+
+/** Asks storage what actually landed and records that, not what this browser claimed. */
+export const confirmTrainingUpload = (storageKey: string) =>
+  api<{ storageKey: string; mimeType: string; bytes: number }>(
+    '/kpm/settings/training/uploads/confirm', { method: 'POST', body: { storageKey } },
+  );
+
+export const moduleContentUrl = (code: string, storageKey: string) =>
+  api<{ url: string }>(
+    `/kpm/settings/training/modules/${encodeURIComponent(code)}/content/url`
+    + `?storageKey=${encodeURIComponent(storageKey)}`,
+  );

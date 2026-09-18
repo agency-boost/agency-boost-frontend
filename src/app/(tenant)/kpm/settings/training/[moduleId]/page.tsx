@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { use, useCallback, useEffect, useState } from 'react';
-import { ComingInPhase } from '@/components/coming-in-phase';
+import { ModuleContentEditor } from '@/components/module-content';
 import { PublishBar } from '@/components/publish-bar';
 import { SettingsScreen } from '@/components/settings-screen';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -255,19 +255,14 @@ export default function TrainingModulePage({
         )}
 
         {/*
-          * `Files · Videos · Links` (`KPM_Owner.html:1618-1630`) are P5-T2's, which OD-59 blocks.
-          * Three sections with working *+ Add* buttons and nowhere to put anything would be the
-          * defect `ComingInPhase` exists to prevent.
+          * `Files · Videos · Links` (`KPM_Owner.html:1618-1630`), built in P5-T2.
+          *
+          * Its own Save, beside the module's: the title is a row in the office's staged
+          * configuration and the content is files, which cannot be staged because their bytes go
+          * straight to storage. Two Saves on one screen is worse than one, so each says what it
+          * saves.
           */}
-        <ComingInPhase
-          phase={5}
-          what="The files, videos and links this module teaches with — added and removed here, and opened by agents from their training screen."
-          elsewhere={[{
-            href: BACK,
-            label: 'Training',
-            detail: 'Every module in your office, and whether agents are offered it.',
-          }]}
-        />
+        <ModuleContentEditor moduleCode={current.code} canWrite={canWrite} />
       </div>
     );
   }

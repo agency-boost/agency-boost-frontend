@@ -1024,14 +1024,34 @@ describe('screens have no axe violations', () => {
       window.history.replaceState(null, '', '/');
     });
 
-    it('a training module, with its switch and the files still to come', async () => {
-      stubFetch({ ...configStubs, '/kpm/settings/training': { body: TRAINING } });
+    it('a training module, with its switch and its Files, Videos and Links (P5-T2)', async () => {
+      stubFetch({
+        ...configStubs,
+        '/kpm/settings/training': { body: TRAINING },
+        '/kpm/settings/training/modules/PROSPECT_LIST/content': {
+          body: {
+            moduleCode: 'PROSPECT_LIST',
+            title: 'Building Your Prospect List',
+            content: {
+              files: [{
+                id: 'f1', label: 'Prospecting deck', storageKey: 'dev/kpm-a/training/0001',
+                mimeType: 'application/pdf', bytes: 2097152,
+              }],
+              videos: [],
+              links: [{ id: 'l1', label: 'Webinar', url: 'https://example.com/a' }],
+            },
+            companyContent: { files: [], videos: [], links: [] },
+            overridden: true,
+          },
+        },
+      });
       renderInLayout(
         TenantLayout,
         <TrainingModulePage params={routeParams({ moduleId: 'tm1' })} />,
         { me: settingsOwner },
       );
       await screen.findByRole('switch', { name: 'Published' });
+      await screen.findByRole('heading', { name: 'Files' });
       await expectClean('kpm/settings/training/[moduleId]');
     });
 
