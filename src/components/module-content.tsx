@@ -222,7 +222,7 @@ export function ModuleContentEditor({
       ) : (
         <ul className="flex flex-col divide-y divide-hairline">
           {draft[section].map((item, index) => (
-            <li key={item.storageKey} className="flex flex-wrap items-end gap-3 px-4 py-3 sm:px-5">
+            <li key={item.storageKey} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
               <Field
                 label="Name"
                 htmlFor={`${section}-${item.storageKey}`}
@@ -337,7 +337,7 @@ export function ModuleContentEditor({
         ) : (
           <ul className="flex flex-col divide-y divide-hairline">
             {draft.links.map((item, index) => (
-              <li key={item.url} className="flex flex-wrap items-end gap-3 px-4 py-3 sm:px-5">
+              <li key={item.url} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
                 <Field label="Link name" htmlFor={`link-${index}`} className="min-w-60 flex-1">
                   <TextInput
                     id={`link-${index}`}
@@ -365,7 +365,7 @@ export function ModuleContentEditor({
         )}
 
         {canWrite && (
-          <div className="flex flex-wrap items-end gap-3 px-4 pb-4 pt-3 sm:px-5">
+          <div className="flex flex-wrap items-start gap-3 px-4 pb-4 pt-3 sm:px-5">
             <Field label="Link name" htmlFor="add-link-label" className="min-w-48 flex-1">
               <TextInput
                 id="add-link-label"

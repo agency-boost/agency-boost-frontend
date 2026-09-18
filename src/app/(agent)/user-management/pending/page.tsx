@@ -173,7 +173,7 @@ export default function PendingPage() {
                   </div>
                 </div>
               ) : (
-                <div className="mt-3 flex flex-wrap items-end gap-2">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   {/* Only for an agent, and only when there is somewhere to send them.
                       An AB or AAB who asked for you is tagged to you directly — a leader
                       is not placed in somebody else's unit.

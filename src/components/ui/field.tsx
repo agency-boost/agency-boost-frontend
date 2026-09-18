@@ -2,6 +2,53 @@ import React from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/cn';
 
+/** One place, so `FieldRow.Actions`'s spacer is the same height as a label by construction. */
+const LABEL_CLASS = 'text-sm font-semibold text-navy';
+
+/**
+ * Fields laid out across a row, lining up whether or not they carry a hint.
+ *
+ * **The row is `items-start`, and that is the whole fix.** It was `items-end`, which lined the
+ * inputs up only by accident: the hint used to sit *between* label and input, so every field was
+ * the same height. Moving the hint below the control — which is where it belongs — took the
+ * accident away, and a hinted field started riding up while its neighbour sat low.
+ *
+ * Top-aligning makes it structural instead: every field starts with a label, so labels line up and
+ * inputs line up, and a hint hangs below its own field pushing nothing.
+ */
+export function FieldRow({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <div className={cn('flex flex-wrap items-start gap-3', className)}>{children}</div>;
+}
+
+/**
+ * The buttons that belong to a {@link FieldRow} — Add and Cancel, Save and Cancel.
+ *
+ * **A button has no label, so top-aligning would put it level with the labels rather than with
+ * the inputs.** The spacer is an empty element carrying the label's own classes, so it is exactly
+ * a label tall — by construction, not by a measured offset that a change to the type scale would
+ * silently break.
+ */
+FieldRow.Actions = function FieldRowActions({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex flex-col gap-1', className)}>
+      <span aria-hidden="true" className={LABEL_CLASS}>&nbsp;</span>
+      <div className="flex flex-wrap items-center gap-2">{children}</div>
+    </div>
+  );
+};
+
 export function Field({
   label,
   hint,
@@ -37,7 +84,7 @@ export function Field({
 
   return (
     <div className={cn('flex flex-col gap-1', className)}>
-      <label htmlFor={htmlFor} className="text-sm font-semibold text-navy">
+      <label htmlFor={htmlFor} className={LABEL_CLASS}>
         {label}
       </label>
       {described}
@@ -60,6 +107,37 @@ export function Field({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * The stable code of the row being edited — shown, and not changeable.
+ *
+ * **`readOnly`, not `disabled`, and the difference is the whole point.** A disabled input leaves
+ * the tab order and most screen readers skip it, so the reader who most needs to be told *"this is
+ * the identity and you cannot change it"* would be told nothing at all. `readOnly` looks the same
+ * greyed, announces as read-only, and — the part that matters in practice — can be **selected and
+ * copied**, which is one of the two reasons to put a code on a screen.
+ *
+ * This replaces `ReadOnlyField` for codes. `ReadOnlyField` stays for the platform facts it was
+ * built for — a tenant's time zone, its currency, its owner — which are not form fields at all.
+ */
+export function CodeField({
+  id,
+  value,
+  reason,
+  className,
+}: {
+  id: string;
+  value: string;
+  /** Why it cannot change. Not optional: a greyed field with no explanation reads as broken. */
+  reason: string;
+  className?: string;
+}) {
+  return (
+    <Field label="Code" htmlFor={id} hint={reason} className={className}>
+      <TextInput id={id} value={value} readOnly className="bg-base text-muted" />
+    </Field>
   );
 }
 
@@ -197,6 +275,76 @@ export function ColorInput({
         className="min-w-0 flex-1"
       />
     </div>
+  );
+}
+
+/**
+ * A switch, in the prototype's own shape (`KPM_Owner.html:435-441`).
+ *
+ * **One control, not a badge and a button.** The module list showed a *Published* badge beside an
+ * *Unpublish* button, which is two things answering one question — and whichever a reader trusted,
+ * the other one contradicted it. A switch's state **is** the answer.
+ *
+ * A real `<input type="checkbox" role="switch">` rather than a styled `<button>`: the checkbox
+ * carries checked-ness to assistive technology on its own, and `role="switch"` is what makes it
+ * announce as *on* / *off* rather than *checked*. The visible track is a sibling the input drives
+ * through `peer-checked`, so the control a pointer hits and the control a screen reader reads are
+ * the same element.
+ *
+ * **The label never changes with the state.** *Published* stays *Published* whether it is on or
+ * off; a name that flipped to *Draft* would announce as a different control appearing.
+ */
+export function Switch({
+  id,
+  label,
+  checked,
+  disabled,
+  onChange,
+  describedBy,
+  className,
+}: {
+  id: string;
+  /** Stays the same in both states — it names the control, not the state. */
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+  describedBy?: string;
+  className?: string;
+}) {
+  return (
+    <span className={cn('inline-flex items-center gap-2', className)}>
+      <span className="relative inline-flex h-[22px] w-[38px] shrink-0 items-center">
+        <input
+          id={id}
+          type="checkbox"
+          role="switch"
+          checked={checked}
+          disabled={disabled}
+          aria-describedby={describedBy}
+          onChange={(e) => onChange(e.target.checked)}
+          className="peer absolute inset-0 z-10 m-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+        />
+        <span
+          aria-hidden="true"
+          className={cn(
+            'pointer-events-none absolute inset-0 rounded-pill bg-hairline transition-colors',
+            'peer-checked:bg-success peer-disabled:opacity-40',
+            // The amber ring the project keeps, moved onto the visible track because the input
+            // itself is transparent.
+            'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-amber',
+          )}
+        />
+        <span
+          aria-hidden="true"
+          className={cn(
+            'pointer-events-none absolute left-[3px] h-4 w-4 rounded-full bg-card shadow-sm transition-transform',
+            'peer-checked:translate-x-4 peer-disabled:opacity-40',
+          )}
+        />
+      </span>
+      <label htmlFor={id} className={cn(LABEL_CLASS, disabled && 'opacity-40')}>{label}</label>
+    </span>
   );
 }
 

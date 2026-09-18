@@ -7,7 +7,9 @@ import { Stepper } from './stepper';
 import { ProgressBar } from './progress-bar';
 import { EmptyState } from './empty-state';
 import { RoleBadge, SEEDED_LADDER } from './role-badge';
-import { Button, ColorInput, Field, TextInput } from './field';
+import {
+  Button, CodeField, ColorInput, Field, FieldRow, Switch, TextInput,
+} from './field';
 
 describe('StatusPill', () => {
   it('renders three distinct states, each with its own words', () => {
@@ -297,6 +299,88 @@ describe('Field', () => {
     expect(follows(control, hint)).toBe(true);
     // Hint before error, matching the order `aria-describedby` announces them in.
     expect(follows(hint, error)).toBe(true);
+  });
+});
+
+describe('FieldRow', () => {
+  it('lines the inputs up whether or not a field carries a hint', () => {
+    /*
+     * The row was `items-end`, which lined the inputs up only by accident — the hint used to sit
+     * between label and input, so every field was the same height. Moving the hint below the
+     * control took the accident away and a hinted field started riding up.
+     *
+     * Top-aligned makes it structural: every field starts with a label, so the labels line up
+     * and the inputs line up, whatever hangs underneath.
+     */
+    render(
+      <FieldRow>
+        <Field label="Code" htmlFor="c" hint="Permanent once published."><TextInput id="c" /></Field>
+        <Field label="Name" htmlFor="n"><TextInput id="n" /></Field>
+      </FieldRow>,
+    );
+
+    const row = screen.getByLabelText('Code').closest('.flex')!.parentElement!;
+    expect(row.className).toContain('items-start');
+    expect(row.className).not.toContain('items-end');
+  });
+
+  it('gives its buttons a label-shaped spacer, so they sit on the input row', () => {
+    // A button has no label; top-aligning alone would put it level with the labels. The spacer
+    // carries the label's own classes, so it is a label tall by construction rather than by a
+    // measured offset that a change to the type scale would silently break.
+    render(
+      <FieldRow>
+        <Field label="Name" htmlFor="n"><TextInput id="n" /></Field>
+        <FieldRow.Actions><Button>Add</Button></FieldRow.Actions>
+      </FieldRow>,
+    );
+
+    const actions = screen.getByRole('button', { name: 'Add' }).closest('.flex-col')!;
+    const spacer = actions.firstElementChild!;
+    expect(spacer).toHaveAttribute('aria-hidden', 'true');
+    expect(spacer.className).toBe(screen.getByText('Name').className);
+  });
+});
+
+describe('Switch', () => {
+  it('announces as a switch, and keeps its name in both states', async () => {
+    // A name that flipped to *Draft* when it turned off would announce as a different control
+    // appearing. The state is the state; the name is the control.
+    function Harness() {
+      const [on, setOn] = useState(false);
+      return <Switch id="s" label="Published" checked={on} onChange={setOn} />;
+    }
+    render(<Harness />);
+
+    const control = screen.getByRole('switch', { name: 'Published' });
+    expect(control).not.toBeChecked();
+    await userEvent.click(control);
+    expect(screen.getByRole('switch', { name: 'Published' })).toBeChecked();
+  });
+
+  it('is a real checkbox, so a disabled one still states which way it is set', () => {
+    render(<Switch id="s" label="Published" checked disabled onChange={() => {}} />);
+
+    const control = screen.getByRole('switch', { name: 'Published' });
+    expect(control).toBeChecked();
+    expect(control).toBeDisabled();
+  });
+});
+
+describe('CodeField', () => {
+  it('shows the code read-only rather than disabled, so it can be read and copied', () => {
+    /*
+     * `disabled` leaves the tab order and is skipped by most screen readers — the reader who
+     * most needs to be told *"this is the identity and you cannot change it"* would be told
+     * nothing, and nobody could select it to quote in a support ticket.
+     */
+    render(<CodeField id="c" value="SELL_SUBMISSION" reason="Every activity log points at it." />);
+
+    const code = screen.getByLabelText('Code');
+    expect(code).toHaveValue('SELL_SUBMISSION');
+    expect(code).toHaveAttribute('readonly');
+    expect(code).not.toBeDisabled();
+    expect(code).toHaveAccessibleDescription('Every activity log points at it.');
   });
 });
 

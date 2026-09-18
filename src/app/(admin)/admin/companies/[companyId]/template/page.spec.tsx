@@ -60,23 +60,24 @@ function render(body: unknown = TAXONOMY) {
  */
 async function openRow(
   name: string,
-  code: string,
   /** For a name the screen uses twice — `Training` is a row here *and* one of the tabs. */
   scope?: ReturnType<typeof within>,
+  /** The label of the field to hand back. Most rows call theirs `Name`. */
+  field = 'Name',
 ) {
   /*
-   * Found by the row's **name**, opened, and handed back by its **code**.
+   * Found by the row's **name**, opened, and handed back by the field asked for.
    *
    * The rows stopped painting their codes when the client asked for quieter lists, so a name is
-   * now the only thing on screen to find one by — which is what a person uses anyway. The code
-   * is still how the returned field is identified: `Field` links it as the input's description,
-   * and that is the one place it still shows.
+   * the only thing on screen to find one by — which is what a person uses anyway. The code used
+   * to identify the returned field, as the input's description; it is a read-only field of its
+   * own now, so the label is what names the one being edited.
    */
   // `li` or the ratio card — not the nearest `div`, which is EditableRow's own wrapper
   // for the read view and does not contain the Edit button beside it.
   const row = (scope ?? screen).getByText(name).closest('li, [data-row]')!;
   await userEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Edit' }));
-  return screen.getByRole('textbox', { description: code });
+  return within(row as HTMLElement).getByLabelText(field);
 }
 
 /** The two rows of tabs: the Owner Settings items, and the halves of the one in view. */
@@ -150,7 +151,7 @@ describe('a company’s Company template (P4-T8)', () => {
     // previous draft and look like the edit was lost.
     render();
     await screen.findByText('Submission polis');
-    const label = await openRow('Submission polis', 'SELL_SUBMISSION');
+    const label = await openRow('Submission polis');
     await userEvent.type(label, ' baru');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -161,7 +162,7 @@ describe('a company’s Company template (P4-T8)', () => {
   it('sends the whole payload, not a patch', async () => {
     const { calls } = render();
     await screen.findByText('Submission polis');
-    const label = await openRow('Submission polis', 'SELL_SUBMISSION');
+    const label = await openRow('Submission polis');
     await userEvent.clear(label);
     await userEvent.type(label, 'Closing');
     // The row's own Save closes the panel; Save draft is the request.
@@ -250,7 +251,7 @@ describe('a company’s Company template (P4-T8)', () => {
       // `Training` is also one of this screen's tabs, so the row is found in the list itself.
       const list = within(await screen.findByRole('list'));
       const row = list.getByText('Training').closest('li')! as HTMLElement;
-      const field = await openRow('Training', 'TRAINING', list);
+      const field = await openRow('Training', list);
       await userEvent.clear(field);
       await userEvent.type(field, 'Pelatihan');
       await userEvent.click(within(row).getByRole('button', { name: 'Save' }));
@@ -279,7 +280,7 @@ describe('a company’s Company template (P4-T8)', () => {
       // A type with no colour simply has no swatch; nothing is invented for it.
       expect(screen.getByText('Recognition')).toBeInTheDocument();
 
-      await openRow('Training', 'TRAINING', within(screen.getByRole('list')));
+      await openRow('Training', within(screen.getByRole('list')));
       expect(screen.getByLabelText('Color')).toHaveValue('#2D9CDB');
     });
 
@@ -310,8 +311,9 @@ describe('a company’s Company template (P4-T8)', () => {
       expect(screen.queryByText('APPROACH')).not.toBeInTheDocument();
       expect(screen.queryByText('SELLS')).not.toBeInTheDocument();
 
-      await openRow('Approach', 'APPROACH');
-      expect(screen.getByRole('textbox', { description: 'APPROACH' })).toBeInTheDocument();
+      const row = screen.getByText('Approach').closest('li')!;
+      await userEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+      expect(within(row).getByLabelText('Code')).toHaveValue('APPROACH');
     });
 
     it('says a stage’s seniority is its rank, not its position', async () => {
@@ -381,7 +383,10 @@ describe('a company’s Company template (P4-T8)', () => {
     expect(screen.queryByText(/Arrives in phase 5/)).not.toBeInTheDocument();
 
     // The link picker offers the company's own training modules, read from the tab next door.
-    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    // The aspect head has an Edit of its own since it became renameable, so the item's row is
+    // named rather than taking whichever Edit came first.
+    const itemRow = screen.getByText('Learn insurance basics').closest('li')!;
+    await userEvent.click(within(itemRow).getByRole('button', { name: 'Edit' }));
     expect(within(screen.getByLabelText('Completes from')).getAllByRole('option').map((o) => o.textContent))
       .toContain('Training · Building Your Prospect List');
   });
@@ -502,7 +507,7 @@ describe('a company’s Company template (P4-T8)', () => {
 
       await userEvent.click(await screen.findByRole('link', { name: 'Ratio benchmarks' }));
       await screen.findByText('Selling success rate');
-      expect(await openRow('Selling success rate', 'SELLING_SUCCESS_RATE')).toBeInTheDocument();
+      expect(await openRow('Selling success rate')).toBeInTheDocument();
       /*
        * The formula IS a control here, and that is the correction. It was read-only on
        * the reasoning that an office may not change a platform ratio's formula — which
@@ -602,7 +607,7 @@ describe('a company’s Company template (P4-T8)', () => {
        */
       render();
       await screen.findByText('Submission polis');
-      await userEvent.type(await openRow('Submission polis', 'SELL_SUBMISSION'), 'x');
+      await userEvent.type(await openRow('Submission polis'), 'x');
       await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
       await userEvent.click(screen.getByRole('link', { name: 'Lead statuses' }));
@@ -615,7 +620,7 @@ describe('a company’s Company template (P4-T8)', () => {
     it('stays when asked to stay', async () => {
       render();
       await screen.findByText('Submission polis');
-      await userEvent.type(await openRow('Submission polis', 'SELL_SUBMISSION'), 'x');
+      await userEvent.type(await openRow('Submission polis'), 'x');
       await userEvent.click(screen.getByRole('button', { name: 'Save' }));
       await userEvent.click(screen.getByRole('link', { name: 'Lead statuses' }));
       await userEvent.click(screen.getByRole('button', { name: 'Stay here' }));

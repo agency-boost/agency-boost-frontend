@@ -5,7 +5,9 @@ import { PublishBar } from '@/components/publish-bar';
 import { SettingsScreen } from '@/components/settings-screen';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { DragHandle } from '@/components/ui/drag-handle';
-import { Button, Card, Field, TextInput } from '@/components/ui/field';
+import {
+  Button, Card, Field, FieldRow, TextInput,
+} from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { suggestCode } from '@/lib/config-code';
@@ -189,7 +191,7 @@ export default function CapabilityCatalogPage() {
   };
 
   const addPanel = (part: 'milestone' | 'item', gridCode?: string) => (
-    <div className="flex flex-wrap items-end gap-3 px-4 pb-4 pt-2 sm:px-5">
+    <FieldRow className="px-4 pb-4 pt-2 sm:px-5">
       <Field label="Name" htmlFor={`add-label-${gridCode ?? part}`} className="min-w-48 flex-1">
         <TextInput
           id={`add-label-${gridCode ?? part}`}
@@ -215,21 +217,23 @@ export default function CapabilityCatalogPage() {
           }))}
         />
       </Field>
-      <Button
-        disabled={busy || !entry.label.trim() || !entry.code.trim()}
-        onClick={() => void run(async () => {
-          const next = await addCapabilityItem({
-            part, code: entry.code.trim(), label: entry.label.trim(), gridCode,
-          });
-          setEntry({ label: '', code: '', touched: false });
-          setAddingTo(null);
-          return next;
-        })}
-      >
-        Add
-      </Button>
-      <Button variant="secondary" disabled={busy} onClick={() => setAddingTo(null)}>Cancel</Button>
-    </div>
+      <FieldRow.Actions>
+        <Button
+          disabled={busy || !entry.label.trim() || !entry.code.trim()}
+          onClick={() => void run(async () => {
+            const next = await addCapabilityItem({
+              part, code: entry.code.trim(), label: entry.label.trim(), gridCode,
+            });
+            setEntry({ label: '', code: '', touched: false });
+            setAddingTo(null);
+            return next;
+          })}
+        >
+          Add
+        </Button>
+        <Button variant="secondary" disabled={busy} onClick={() => setAddingTo(null)}>Cancel</Button>
+      </FieldRow.Actions>
+    </FieldRow>
   );
 
   const reorder = (part: 'stage' | 'milestone' | 'grid', codes: string[], at: number, by: -1 | 1) =>
@@ -247,23 +251,6 @@ export default function CapabilityCatalogPage() {
       bars={<PublishBar />}
     >
       <div className="flex flex-col gap-4">
-        <Card>
-          <p className="text-md text-navy">
-            <strong>One catalog for the whole office.</strong>{' '}
-            <span className="text-muted">
-              Your leaders assess against it; they do not change it. That is what makes two
-              leaders&rsquo; assessments comparable — a grid each leader could extend is a grid
-              nobody can add up.
-            </span>
-          </p>
-          <p className="mt-2 text-sm text-muted">
-            Every row has a <strong>code</strong>, and renaming never changes it. A tick your
-            leaders make is stored against the code, so correcting the wording never loses anybody
-            &rsquo;s history. Nothing here is ever deleted — archiving keeps it on the assessments
-            that already use it.
-          </p>
-        </Card>
-
         {error && (
           <div role="alert" className="rounded-md border border-amber bg-card p-4">
             <p className="text-md text-navy">{error.message}</p>

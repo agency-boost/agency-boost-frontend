@@ -6,7 +6,7 @@ import { SettingsScreen, TenantConfigBars } from '@/components/settings-screen';
 import { ConfigBadge as Badge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
-  Button, ButtonLink, Card, Field, ReadOnlyField, Select, TextInput,
+  Button, ButtonLink, Card, CodeField, Field, Select, Switch, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -344,7 +344,7 @@ export default function TrainingSettingsPage() {
       return (
         <Card className="mb-4">
           <h2 className="font-display text-lg font-bold text-navy">{heading}</h2>
-          <div className="mt-3 flex flex-wrap items-start gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             <Field label="Name" htmlFor="training-new-label" className="min-w-60 flex-1">
               <TextInput id="training-new-label" value={draft.label} onChange={(e) => nameChanged(e.target.value)} />
             </Field>
@@ -397,7 +397,7 @@ export default function TrainingSettingsPage() {
               Add a category first, or restore one — a skill always sits in a category.
             </p>
           ) : (
-            <div className="mt-3 flex flex-wrap items-start gap-3">
+            <div className="mt-3 flex flex-wrap items-center gap-3">
               {categorySelect}
               <Field label="Name" htmlFor="training-new-label" className="min-w-60 flex-1">
                 <TextInput id="training-new-label" value={draft.label} onChange={(e) => nameChanged(e.target.value)} />
@@ -442,7 +442,7 @@ export default function TrainingSettingsPage() {
             Add a skill first, or restore one — a module always teaches a skill.
           </p>
         ) : (
-          <div className="mt-3 flex flex-wrap items-start gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             {categorySelect}
             <Field label="Skill" htmlFor="training-new-skill" className="min-w-48">
               <Select
@@ -556,12 +556,12 @@ export default function TrainingSettingsPage() {
             <li key={category.row.id} className="px-4 py-3 sm:px-5">
               {editing === category.row.id ? (
                 <div className="flex flex-col gap-3">
-                  <ReadOnlyField
-                    label="Code"
+                  <CodeField
+                    id={`code-category-row-code-${category.row.code}`}
                     value={category.row.code}
                     reason="Every skill in this category, and every module under them, points at it."
                   />
-                  <div className="flex flex-wrap items-start gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <Field label="Name" htmlFor={`name-${category.row.id}`} className="min-w-60 flex-1">
                       <TextInput
                         id={`name-${category.row.id}`}
@@ -652,12 +652,12 @@ export default function TrainingSettingsPage() {
             <li key={skill.row.id} className="px-4 py-3 sm:px-5">
               {editing === skill.row.id ? (
                 <div className="flex flex-col gap-3">
-                  <ReadOnlyField
-                    label="Code"
+                  <CodeField
+                    id={`code-skill-row-code-${skill.row.code}`}
                     value={skill.row.code}
                     reason="Every module teaching this skill points at it."
                   />
-                  <div className="flex flex-wrap items-start gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <Field label="Name" htmlFor={`name-${skill.row.id}`} className="min-w-60 flex-1">
                       <TextInput
                         id={`name-${skill.row.id}`}
@@ -767,9 +767,29 @@ export default function TrainingSettingsPage() {
                 {meta(module.row.status === 'archived')}
                 {marks('trainingModule', module, skill?.row.label ?? '')}
               </div>
-              {module.archived
-                ? <Badge tone="open">Archived</Badge>
-                : <Badge tone={isPublished ? 'won' : 'open'}>{isPublished ? 'Published' : 'Draft'}</Badge>}
+              {module.archived ? <Badge tone="open">Archived</Badge> : (
+                /*
+                  * One control, not a badge and a button. The row used to show a *Published*
+                  * badge beside an *Unpublish* button — two things answering one question, and
+                  * whichever a reader trusted the other contradicted.
+                  *
+                  * It renders for every reader, disabled where there is nothing to toggle: a
+                  * module staged but not yet saved, and anybody without write permission, still
+                  * need to be told which state it is in.
+                  *
+                  * It stages like any other edit — the module reaches agents when the office
+                  * next publishes, not when this is pressed.
+                  */
+                <Switch
+                  id={`publish-${module.row.id}`}
+                  label="Published"
+                  checked={isPublished}
+                  disabled={busy || !canWrite || unsaved}
+                  onChange={(next) => stageFields('trainingModule', module.row.id, {
+                    publishState: next ? 'published' : 'draft',
+                  })}
+                />
+              )}
               {canWrite && !unsaved && (
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                   <ButtonLink
@@ -779,19 +799,7 @@ export default function TrainingSettingsPage() {
                   >
                     Edit
                   </ButtonLink>
-                  {!module.archived && (
-                    /* Stages an edit like any other: the module is offered to agents when the
-                       office next publishes, not when this is pressed. */
-                    <Button
-                      variant="inline"
-                      disabled={busy}
-                      onClick={() => stageFields('trainingModule', module.row.id, {
-                        publishState: isPublished ? 'draft' : 'published',
-                      })}
-                    >
-                      {isPublished ? 'Unpublish' : 'Publish'}
-                    </Button>
-                  )}
+
                   {statusAction(
                     'trainingModule',
                     module,

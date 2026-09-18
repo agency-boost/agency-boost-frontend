@@ -7,7 +7,7 @@ import { DragHandle } from '@/components/ui/drag-handle';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
-  Button, Card, Field, ReadOnlyField, Select, TextInput,
+  Button, Card, CodeField, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -178,7 +178,14 @@ export default function ActivationChecklistPage() {
     return (
       <Card
         key={aspect.code}
-        className={`p-0 ${over === aspect.code ? 'ring-2 ring-amber' : ''}`}
+        /* As on Activity types: without `data-row` the drag image is the handle button, not the
+           section — `DragHandle` looks for `closest('li, [data-row]')` and finds neither here. */
+        data-row={aspect.code}
+        className={[
+          'p-0',
+          over === aspect.code ? 'ring-2 ring-amber' : '',
+          dragging?.aspect === aspect.code && dragging.item === undefined ? 'opacity-40' : '',
+        ].filter(Boolean).join(' ')}
         onDragOver={(e) => {
           if (!dragging || dragging.item !== undefined) return;
           e.preventDefault();
@@ -198,13 +205,56 @@ export default function ActivationChecklistPage() {
               onMove={(by) => change({ aspects: move(draft!.aspects, at, at + by) })}
             />
           )}
-          <h2 className="font-display text-lg font-bold text-navy">{aspect.label}</h2>
+          {editing === `aspect-${aspect.code}` ? (
+            /* Renameable, which it was not: a typo in an aspect's name could only be fixed by
+               removing the aspect and every item under it. */
+            <FieldRow className="min-w-0 flex-1">
+              <CodeField
+                id={`code-aspect-${aspect.code}`}
+                value={aspect.code}
+                reason="Every hire's progress on this aspect points at it."
+              />
+              <Field label="Name" htmlFor={`aspect-name-${aspect.code}`} className="min-w-60 flex-1">
+                <TextInput
+                  id={`aspect-name-${aspect.code}`}
+                  value={editLabel}
+                  disabled={busy}
+                  onChange={(e) => setEditLabel(e.target.value)}
+                />
+              </Field>
+              <FieldRow.Actions>
+                <Button
+                  disabled={busy || !editLabel.trim()}
+                  onClick={() => {
+                    patchAspect(aspect.code, { label: editLabel.trim() });
+                    setEditing(null);
+                  }}
+                >
+                  Save
+                </Button>
+                <Button variant="secondary" disabled={busy} onClick={() => setEditing(null)}>
+                  Cancel
+                </Button>
+              </FieldRow.Actions>
+            </FieldRow>
+          ) : (
+            <h2 className="font-display text-lg font-bold text-navy">{aspect.label}</h2>
+          )}
           <span className="ml-auto flex flex-wrap items-center gap-2">
             <ConfigBadge tone={aspect.items.length > 0 ? 'won' : 'open'}>
               {aspect.items.length} {aspect.items.length === 1 ? 'item' : 'items'}
             </ConfigBadge>
-            {canWrite && (
+            {canWrite && editing !== `aspect-${aspect.code}` && (
               <>
+                <Button
+                  variant="inline"
+                  onClick={() => {
+                    setEditing(`aspect-${aspect.code}`);
+                    setEditLabel(aspect.label);
+                  }}
+                >
+                  Rename
+                </Button>
                 <Button
                   variant="secondary"
                   onClick={() => {
@@ -275,12 +325,12 @@ export default function ActivationChecklistPage() {
                 <div className="min-w-0 flex-1">
                   {editing === item.code ? (
                     <div className="flex flex-col gap-2">
-                      <ReadOnlyField
-                        label="Code"
+                      <CodeField
+                        id={`code-item-code-${item.code}`}
                         value={item.code}
                         reason="Every hire's progress on this item points at it."
                       />
-                      <div className="flex flex-wrap items-end gap-2">
+                      <FieldRow>
                         <Field label="Item" htmlFor={`label-${item.code}`} className="min-w-60 flex-1">
                           <TextInput
                             id={`label-${item.code}`}
@@ -288,17 +338,19 @@ export default function ActivationChecklistPage() {
                             onChange={(e) => setEditLabel(e.target.value)}
                           />
                         </Field>
-                        <Button
-                          disabled={!editLabel.trim()}
-                          onClick={() => {
-                            patchItem(aspect.code, item.code, { label: editLabel.trim() });
-                            setEditing(null);
-                          }}
-                        >
-                          Save
-                        </Button>
-                        <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
-                      </div>
+                        <FieldRow.Actions>
+                          <Button
+                            disabled={!editLabel.trim()}
+                            onClick={() => {
+                              patchItem(aspect.code, item.code, { label: editLabel.trim() });
+                              setEditing(null);
+                            }}
+                          >
+                            Save
+                          </Button>
+                          <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                        </FieldRow.Actions>
+                      </FieldRow>
                     </div>
                   ) : (
                     <>
@@ -369,7 +421,7 @@ export default function ActivationChecklistPage() {
         </ul>
 
         {canWrite && addingTo === aspect.code && (
-          <div className="flex flex-wrap items-end gap-3 border-t border-hairline px-4 py-3 sm:px-5">
+          <FieldRow className="border-t border-hairline px-4 py-3 sm:px-5">
             <Field label="Item" htmlFor="new-item-label" className="min-w-60 flex-1">
               <TextInput
                 id="new-item-label"
@@ -393,21 +445,23 @@ export default function ActivationChecklistPage() {
                 }))}
               />
             </Field>
-            <Button
-              disabled={!entry.label.trim() || !entry.code.trim()}
-              onClick={() => {
-                patchAspect(aspect.code, {
-                  items: [...aspect.items, {
-                    code: entry.code.trim(), label: entry.label.trim(), autoLink: null,
-                  }],
-                });
-                setAddingTo(null);
-              }}
-            >
-              Add
-            </Button>
-            <Button variant="secondary" onClick={() => setAddingTo(null)}>Cancel</Button>
-          </div>
+            <FieldRow.Actions>
+              <Button
+                disabled={!entry.label.trim() || !entry.code.trim()}
+                onClick={() => {
+                  patchAspect(aspect.code, {
+                    items: [...aspect.items, {
+                      code: entry.code.trim(), label: entry.label.trim(), autoLink: null,
+                    }],
+                  });
+                  setAddingTo(null);
+                }}
+              >
+                Add
+              </Button>
+              <Button variant="secondary" onClick={() => setAddingTo(null)}>Cancel</Button>
+            </FieldRow.Actions>
+          </FieldRow>
         )}
       </Card>
     );
@@ -530,7 +584,7 @@ export default function ActivationChecklistPage() {
                 An aspect is a heading with items under it. It needs its first item now, because an
                 aspect with nothing in it is a heading a hire opens and finds empty.
               </p>
-              <div className="mt-3 flex flex-wrap items-end gap-3">
+              <FieldRow className="mt-3">
                 <Field label="Aspect" htmlFor="new-aspect-label" className="min-w-60 flex-1">
                   <TextInput
                     id="new-aspect-label"
@@ -563,7 +617,7 @@ export default function ActivationChecklistPage() {
                     onChange={(e) => setEntry((d) => ({ ...d, first: e.target.value }))}
                   />
                 </Field>
-              </div>
+              </FieldRow>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   disabled={!entry.label.trim() || !entry.code.trim() || !entry.first.trim()}

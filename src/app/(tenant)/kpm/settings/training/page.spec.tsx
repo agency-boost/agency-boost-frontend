@@ -182,7 +182,7 @@ describe('Settings › Training (P5-T1)', () => {
       await screen.findByText('Sales');
       await userEvent.click(within(rowOf('Sales')).getByRole('button', { name: 'Edit' }));
 
-      expect(screen.getByText('SALES')).toBeInTheDocument();
+      expect(screen.getByLabelText('Code')).toHaveValue('SALES');
       const name = screen.getByLabelText('Name');
       await userEvent.clear(name);
       await userEvent.type(name, 'Selling');
@@ -289,13 +289,21 @@ describe('Settings › Training (P5-T1)', () => {
       expect(screen.getByText('No modules for this category/skill yet.')).toBeInTheDocument();
     });
 
-    it('badges each module Published or Draft, under the skill it teaches', async () => {
+    it('says whether each module is published with one switch, not a badge and a button', async () => {
+      /*
+       * The row used to carry a *Published* badge **and** an *Unpublish* button — two controls
+       * answering one question, and whichever a reader trusted the other contradicted. The
+       * switch's state is the answer, and its name stays *Published* in both states so it does
+       * not announce as a different control appearing.
+       */
       render();
       await screen.findByText('Sales');
       await openTab('Modules');
 
-      expect(within(rowOf('Building Your Prospect List')).getByText('Published')).toBeInTheDocument();
-      expect(within(rowOf('Cold Approach Scripts')).getByText('Draft')).toBeInTheDocument();
+      expect(within(rowOf('Building Your Prospect List')).getByRole('switch', { name: 'Published' }))
+        .toBeChecked();
+      expect(within(rowOf('Cold Approach Scripts')).getByRole('switch', { name: 'Published' }))
+        .not.toBeChecked();
       expect(within(rowOf('Closing Techniques That Work')).getByText('Closing')).toBeInTheDocument();
     });
 
@@ -305,11 +313,11 @@ describe('Settings › Training (P5-T1)', () => {
       await openTab('Modules');
       const row = rowOf('Building Your Prospect List');
 
-      await userEvent.click(within(row).getByRole('button', { name: 'Unpublish' }));
-      expect(within(row).getByText('Draft')).toBeInTheDocument();
+      await userEvent.click(within(row).getByRole('switch', { name: 'Published' }));
+      expect(within(row).getByRole('switch', { name: 'Published' })).not.toBeChecked();
       expect(within(row).getByText('Edited — not saved yet')).toBeInTheDocument();
 
-      await userEvent.click(within(row).getByRole('button', { name: 'Publish' }));
+      await userEvent.click(within(row).getByRole('switch', { name: 'Published' }));
       expect(within(row).queryByText(/not saved yet/)).not.toBeInTheDocument();
     });
 
@@ -322,7 +330,7 @@ describe('Settings › Training (P5-T1)', () => {
       await screen.findByText('Sales');
       await openTab('Modules');
       const row = rowOf('Building Your Prospect List');
-      await userEvent.click(within(row).getByRole('button', { name: 'Unpublish' }));
+      await userEvent.click(within(row).getByRole('switch', { name: 'Published' }));
       await userEvent.click(within(row).getByRole('button', { name: 'Archive' }));
 
       expect(await saved(calls)).toEqual([
@@ -343,7 +351,8 @@ describe('Settings › Training (P5-T1)', () => {
       expect(panel.getByLabelText('Code')).toHaveValue('TRIAL_CLOSES');
       await userEvent.click(panel.getByRole('button', { name: 'Add the module' }));
 
-      expect(within(rowOf('Trial closes')).getByText('Draft')).toBeInTheDocument();
+      expect(within(rowOf('Trial closes')).getByRole('switch', { name: 'Published' }))
+        .not.toBeChecked();
       expect(await saved(calls)).toEqual([
         { op: 'trainingModule.create', body: { code: 'TRIAL_CLOSES', skillCode: 'CLOSING', title: 'Trial closes' } },
       ]);
@@ -362,7 +371,9 @@ describe('Settings › Training (P5-T1)', () => {
       render();
       await screen.findByText('Sales');
       await openTab('Modules');
-      await userEvent.click(within(rowOf('Cold Approach Scripts')).getByRole('button', { name: 'Publish' }));
+      await userEvent.click(
+        within(rowOf('Cold Approach Scripts')).getByRole('switch', { name: 'Published' }),
+      );
       await userEvent.click(within(rowOf('Building Your Prospect List')).getByRole('link', { name: 'Edit' }));
 
       expect(screen.getByRole('alert')).toHaveTextContent('You have changes here that are not saved.');
@@ -425,6 +436,13 @@ describe('Settings › Training (P5-T1)', () => {
     await openTab('Modules');
     expect(screen.getByText('Building Your Prospect List')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Edit' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Unpublish' })).not.toBeInTheDocument();
+    /*
+     * The switch is still there, and disabled. A reader who cannot change the catalogue still
+     * has to be able to see which modules their agents are offered — hiding the state along
+     * with the control would leave them reading a list that says nothing.
+     */
+    const published = screen.getAllByRole('switch', { name: 'Published' });
+    expect(published.length).toBeGreaterThan(0);
+    published.forEach((s) => expect(s).toBeDisabled());
   });
 });

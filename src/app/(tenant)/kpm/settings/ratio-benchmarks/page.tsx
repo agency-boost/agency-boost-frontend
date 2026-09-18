@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { SettingsScreen, TenantConfigBars } from '@/components/settings-screen';
 import { ACTIVITY_SETTINGS_TABS } from '@/components/settings-tabs';
-import { Button, Card, Field, Select, TextInput } from '@/components/ui/field';
+import {
+  Button, Card, Field, FieldRow, Select, TextInput,
+} from '@/components/ui/field';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -345,7 +347,7 @@ export default function RatioBenchmarksPage() {
                 </fieldset>
               ))}
 
-              <div className="flex flex-wrap items-end gap-3">
+              <FieldRow>
                 {/* Follows the rule, as the per-card editor already did. A `band` benchmark
                     is ±percentage points, not a floor, and labelling it as a floor is a
                     data-entry defect rather than a wording one. */}
@@ -401,23 +403,25 @@ export default function RatioBenchmarksPage() {
                     <option value="band">Within the benchmark either side of an even split</option>
                   </Select>
                 </Field>
-                <Button
-                  type="submit"
-                  disabled={busy
-                    || form.code.trim() === ''
-                    || form.label.trim() === ''
-                    || form.numerator.length === 0
-                    || form.denominator.length === 0
-                    || Number.isNaN(benchmarkFromInput(
-                      form.benchmark, form.comparison === 'band' ? 'points' : form.displayUnit,
-                    ))}
-                >
-                  Add the ratio
-                </Button>
-                <Button variant="secondary" onClick={() => { setAdding(false); setForm(blank); }}>
-                  Cancel
-                </Button>
-              </div>
+                <FieldRow.Actions>
+                  <Button
+                    type="submit"
+                    disabled={busy
+                      || form.code.trim() === ''
+                      || form.label.trim() === ''
+                      || form.numerator.length === 0
+                      || form.denominator.length === 0
+                      || Number.isNaN(benchmarkFromInput(
+                        form.benchmark, form.comparison === 'band' ? 'points' : form.displayUnit,
+                      ))}
+                  >
+                    Add the ratio
+                  </Button>
+                  <Button variant="secondary" onClick={() => { setAdding(false); setForm(blank); }}>
+                    Cancel
+                  </Button>
+                </FieldRow.Actions>
+              </FieldRow>
             </form>
           ) : (
             <Button variant="secondary" onClick={() => setAdding(true)}>Add a ratio</Button>
@@ -609,7 +613,7 @@ export default function RatioBenchmarksPage() {
                 )}
               </div>
 
-              <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-hairline pt-3">
+              <div className="mt-3 flex flex-wrap items-start gap-3 border-t border-hairline pt-3">
                 {editing === ratio.id ? (
                   <>
                     {/* Every ratio, not only the office's own (ADR-0024). */}

@@ -110,7 +110,7 @@ describe('the Products tab', () => {
 
     expect(within(row).getByText('Code')).toBeInTheDocument();
     expect(within(row).getByText(/it never changes/i)).toBeInTheDocument();
-    expect(within(row).queryByLabelText('Code')).not.toBeInTheDocument();
+    expect(within(row).getByLabelText('Code')).toHaveAttribute('readonly');
   });
 
   it('opens the seven attack-plan fields the Owner’s own override modal names', async () => {

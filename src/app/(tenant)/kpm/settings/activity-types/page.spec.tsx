@@ -199,10 +199,16 @@ describe('the office activity taxonomy (P4-T1)', () => {
       const row = (await screen.findByText('Submission polis')).closest('li')!;
       await userEvent.click(within(row).getByRole('button', { name: 'Edit' }));
 
-      // A `<dl>` row, not a disabled input: disabled reads as "not right now", and this is
-      // never — every activity logged and every ratio points at it.
-      expect(within(row).getByText('SELL_SUBMISSION')).toBeInTheDocument();
-      expect(within(row).queryByLabelText('Code')).not.toBeInTheDocument();
+      /*
+       * A labelled field, read-only — **not disabled**. The old argument was that disabled
+       * reads as *"not right now"* and this is never, which still holds; `readOnly` answers it
+       * without leaving the tab order or refusing to be copied, and somebody quoting a code in
+       * a support ticket has to be able to select it.
+       */
+      const code = within(row).getByLabelText('Code');
+      expect(code).toHaveValue('SELL_SUBMISSION');
+      expect(code).toHaveAttribute('readonly');
+      expect(code).not.toBeDisabled();
     });
 
     it('asks for the code while creating, because that is the one moment it is set', async () => {
@@ -302,11 +308,12 @@ describe('the office activity taxonomy (P4-T1)', () => {
   });
 
   it('never offers to change a code, only a label', async () => {
-    // A published code is what every activity log, ratio formula and goal target holds.
+    // A published code is what every activity log, ratio formula and goal target holds. It is
+    // on screen while editing — and read-only, so it can be read and copied and not typed into.
     render();
     await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
     expect(screen.getByLabelText('Label')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Code')).toBeNull();
+    expect(screen.getByLabelText('Code')).toHaveAttribute('readonly');
   });
 
   it('shows an agent the taxonomy and none of the controls', async () => {
@@ -410,15 +417,13 @@ describe('the office activity taxonomy (P4-T1)', () => {
     });
 
     it('shows the code while editing, and still offers no way to change it', async () => {
-      /*
-       * `ReadOnlyField` is a `<dl>`, not a labelled control — which is why the assertion
-       * below still holds. A disabled input would read as "not right now"; this is never.
-       */
+      // A labelled field like the others, and read-only. Not `disabled`, which would leave
+      // the tab order and take the code out of reach of a screen reader and a copy.
       render();
       await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
 
-      expect(screen.getByText('SELL_PRESENTATION')).toBeInTheDocument();
-      expect(screen.queryByLabelText('Code')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Code')).toHaveValue('SELL_PRESENTATION');
+      expect(screen.getByLabelText('Code')).toHaveAttribute('readonly');
       expect(screen.getByLabelText('Label')).toBeInTheDocument();
       expect(screen.getByLabelText('Description')).toBeInTheDocument();
     });

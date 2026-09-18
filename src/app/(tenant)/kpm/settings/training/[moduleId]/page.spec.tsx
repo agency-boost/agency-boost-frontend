@@ -96,8 +96,11 @@ describe('a training module’s page (P5-T1)', () => {
     render();
     await screen.findByLabelText('Title');
 
-    expect(screen.getByText('PROSPECT_LIST')).toBeInTheDocument();
-    expect(screen.queryByRole('textbox', { name: 'Code' })).not.toBeInTheDocument();
+    // A labelled, read-only textbox — readable, copyable, and not typed into.
+    const code = screen.getByLabelText('Code');
+    expect(code).toHaveValue('PROSPECT_LIST');
+    expect(code).toHaveAttribute('readonly');
+    expect(code).not.toBeDisabled();
   });
 
   it('holds Save until something has changed', async () => {

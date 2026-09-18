@@ -1,13 +1,15 @@
 'use client';
 
 import Link from 'next/link';
+import type React from 'react';
 import { use, useCallback, useEffect, useState } from 'react';
+import { ConfigBadge } from '@/components/ui/config-badge';
 import { ModuleContentEditor } from '@/components/module-content';
 import { PublishBar } from '@/components/publish-bar';
 import { SettingsScreen } from '@/components/settings-screen';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
-  Button, Card, Field, ReadOnlyField, Select, TextInput,
+  Button, Card, CodeField, Field, Select, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -156,13 +158,22 @@ export default function TrainingModulePage({
               </p>
             )}
             <dl className="grid gap-3 sm:grid-cols-2">
-              {[
+              {([
                 ['Title', current.title],
                 ['Skill', found.skill?.label ?? current.skillCode],
                 ['Category', found.category?.label ?? '—'],
-                ['Publish state', current.publishState === 'published' ? 'Published' : 'Draft'],
+                /*
+                 * A capsule, as `.cfg-badge` has it. Plain text in a `<dl>` read as a caption
+                 * rather than as the state it names — and the same word was a badge one screen
+                 * away, on the list this page is opened from.
+                 */
+                ['Publish state', (
+                  <ConfigBadge key="state" tone={current.publishState === 'published' ? 'won' : 'open'}>
+                    {current.publishState === 'published' ? 'Published' : 'Draft'}
+                  </ConfigBadge>
+                )],
                 ['Code', current.code],
-              ].map(([term, value]) => (
+              ] as [string, React.ReactNode][]).map(([term, value]) => (
                 <div key={term}>
                   <dt className="text-sm font-semibold text-muted">{term}</dt>
                   <dd className="text-md text-navy">{value}</dd>
@@ -218,8 +229,8 @@ export default function TrainingModulePage({
                   </Select>
                 </Field>
               </div>
-              <ReadOnlyField
-                label="Code"
+              <CodeField
+                id={`code-current-code-${current.code}`}
                 value={current.code}
                 reason="Permanent. Whatever refers to this module refers to its code, so the title can change and nothing loses track of it."
               />

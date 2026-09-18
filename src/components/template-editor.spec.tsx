@@ -133,14 +133,39 @@ describe('TaxonomyEditor', () => {
       .toEqual([1, 2]);
   });
 
-  it('puts the section heading hard left, with the meta pushed right', () => {
-    // Three children under `justify-between` floated the heading to the middle of the card;
-    // the prototype's `.acttype-card-head` has two, heading left and count pill right.
+  it('puts the section heading hard left, with its count pushed right', () => {
+    /*
+     * Three children under `justify-between` floated the heading to the middle of the card;
+     * the prototype's `.acttype-card-head` has two, heading left and count pill right.
+     *
+     * The head is an `EditableRow` now — the section can be renamed, which it could not be —
+     * so the heading sits in the text block and the count is the row's badge, which
+     * `EditableRow` places between the text and Edit.
+     */
     render(<TaxonomyEditor payload={TAXONOMY} onChange={vi.fn()} />);
 
-    const head = screen.getByRole('heading', { name: 'Selling' }).parentElement!;
+    const head = screen.getByRole('heading', { name: 'Selling' }).closest('.flex')!;
     expect(head.className).not.toContain('justify-between');
-    expect(head.lastElementChild?.className).toContain('ml-auto');
+    const text = screen.getByRole('heading', { name: 'Selling' }).parentElement!;
+    expect(text.className).toContain('flex-1');
+    expect(within(head as HTMLElement).getByText('2 items')).toBeInTheDocument();
+  });
+
+  it('renames a section, which nothing could do before', async () => {
+    // A typo in a section name was permanent: there was no control, and the only way out was
+    // removing the section and everything under it.
+    const onChange = vi.fn();
+    render(<TaxonomyEditor payload={TAXONOMY} onChange={onChange} />);
+
+    const head = screen.getByRole('heading', { name: 'Selling' }).closest('.flex') as HTMLElement;
+    await userEvent.click(within(head).getByRole('button', { name: 'Edit' }));
+    const name = screen.getByLabelText('Name');
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Penjualan');
+    await userEvent.click(within(head).getByRole('button', { name: 'Save' }));
+
+    expect(onChange.mock.calls[0][0].categories[0])
+      .toMatchObject({ code: 'SELLING', label: 'Penjualan' });
   });
 
   it('leaves the code to be typed — only training suggests one', async () => {
@@ -519,6 +544,40 @@ const CAPABILITY: CapabilityLadderPayload = {
   }],
 };
 
+describe('a create form offers what its edit panel does', () => {
+  it('asks for an activity type’s description while creating it', async () => {
+    // It was on the edit panel and not on Add, so describing a new type meant saving it and
+    // immediately editing it to finish the job.
+    const onChange = vi.fn();
+    render(<TaxonomyEditor payload={TAXONOMY} onChange={onChange} />);
+
+    const card = screen.getByRole('heading', { name: 'Selling' }).closest('.rounded-lg') as HTMLElement;
+    await userEvent.click(within(card).getByRole('button', { name: 'Add an activity type' }));
+    await userEvent.type(within(card).getByLabelText('Code'), 'SELL_REFERRAL');
+    await userEvent.type(within(card).getByLabelText('Name'), 'Referral');
+    await userEvent.type(within(card).getByLabelText('Description'), 'Asking a client for a name');
+    await userEvent.click(within(card).getByRole('button', { name: 'Add' }));
+
+    const added = onChange.mock.calls[0][0].types.find((t: { code: string }) => t.code === 'SELL_REFERRAL');
+    expect(added).toMatchObject({ label: 'Referral', description: 'Asking a client for a name' });
+  });
+
+  it('leaves a description that was never typed as null, not as an empty string', async () => {
+    // `null` is "nobody wrote one"; `''` is "somebody cleared it". The API tells them apart.
+    const onChange = vi.fn();
+    render(<TaxonomyEditor payload={TAXONOMY} onChange={onChange} />);
+
+    const card = screen.getByRole('heading', { name: 'Selling' }).closest('.rounded-lg') as HTMLElement;
+    await userEvent.click(within(card).getByRole('button', { name: 'Add an activity type' }));
+    await userEvent.type(within(card).getByLabelText('Code'), 'SELL_REFERRAL');
+    await userEvent.type(within(card).getByLabelText('Name'), 'Referral');
+    await userEvent.click(within(card).getByRole('button', { name: 'Add' }));
+
+    const added = onChange.mock.calls[0][0].types.find((t: { code: string }) => t.code === 'SELL_REFERRAL');
+    expect(added.description).toBeNull();
+  });
+});
+
 describe('EventTypesEditor (P5-T9)', () => {
   it('renders an unauthored preset as empty instead of crashing', () => {
     render(<EventTypesEditor payload={{} as EventTypesPayload} onChange={vi.fn()} />);
@@ -547,7 +606,11 @@ describe('EventTypesEditor (P5-T9)', () => {
 
     const row = screen.getByText('Training').closest('li')!;
     await userEvent.click(within(row).getByRole('button', { name: 'Edit' }));
-    const name = screen.getByRole('textbox', { description: 'TRAINING' });
+    // The code is its own field now, not the name's description — and it is read-only.
+    expect(within(row).getByLabelText('Code')).toHaveValue('TRAINING');
+    expect(within(row).getByLabelText('Code')).toHaveAttribute('readonly');
+
+    const name = within(row).getByLabelText('Name');
     await userEvent.clear(name);
     await userEvent.type(name, 'Pelatihan');
     await userEvent.click(within(row).getByRole('button', { name: 'Save' }));

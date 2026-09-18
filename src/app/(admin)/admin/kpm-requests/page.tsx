@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { DataTable, Row, Cell } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import {
+  Button, Card, ErrorBanner, Field, FieldRow, TextInput,
+} from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -100,7 +102,7 @@ export default function KpmRequestsPage() {
             <StatusPill status="alert" label="Pending" />
           </div>
 
-          <div className="mt-3 flex flex-wrap items-end gap-3">
+          <FieldRow className="mt-3">
             <Field label="KPM code" htmlFor={`code-${row.requestId}`} className="w-32">
               <TextInput
                 id={`code-${row.requestId}`}
@@ -124,14 +126,16 @@ export default function KpmRequestsPage() {
                 onChange={(e) => setReason({ ...reason, [row.requestId]: e.target.value })}
               />
             </Field>
-            <Button
-              variant="danger"
-              disabled={busy !== null}
-              onClick={() => void decide(row, 'decline')}
-            >
-              Decline
-            </Button>
-          </div>
+            <FieldRow.Actions>
+              <Button
+                variant="danger"
+                disabled={busy !== null}
+                onClick={() => void decide(row, 'decline')}
+              >
+                Decline
+              </Button>
+            </FieldRow.Actions>
+          </FieldRow>
           {/* Approving provisions an office and hands somebody the keys to it, so the
               button says what it will do before it does it. */}
           <p className="mt-2 text-sm text-muted">

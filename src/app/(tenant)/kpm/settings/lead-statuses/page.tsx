@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { PublishBar } from '@/components/publish-bar';
 import { SettingsScreen } from '@/components/settings-screen';
 import { DragHandle } from '@/components/ui/drag-handle';
-import { Button, Card, Field, ReadOnlyField, TextInput } from '@/components/ui/field';
+import {
+  Button, Card, CodeField, Field, FieldRow, TextInput,
+} from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
@@ -192,7 +194,7 @@ export default function LeadStatusesPage() {
                 {pipeline.statuses.map((stage) => (
                   <li
                     key={stage.id}
-                    className={`flex flex-wrap items-start gap-3 py-3 ${
+                    className={`flex flex-wrap items-center gap-3 py-3 ${
                       over === stage.id ? 'bg-canvas' : ''
                     } ${dragging === stage.id ? 'opacity-40' : ''}`}
                     onDragOver={(e) => {
@@ -207,14 +209,14 @@ export default function LeadStatusesPage() {
                       <DragHandle
                         label={stage.label}
                         disabled={busy}
-                        className="mt-1 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                        className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
                         onPick={() => setDragging(stage.id)}
                         onDrop={() => { setDragging(null); setOver(null); }}
                         onMove={(by) => void moveStage(pipeline.pipeline, stage.id, by)}
                       />
                     )}
                     <span
-                      className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-canvas text-sm font-semibold text-navy"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-canvas text-sm font-semibold text-navy"
                       aria-hidden
                     >
                       {stage.rank}
@@ -224,15 +226,16 @@ export default function LeadStatusesPage() {
                       {editing === stage.id ? (
                         <div className="flex flex-col gap-2">
                           {/* The identity, shown at the one moment a reader is changing
-                              this row and never editable. A `<dl>` rather than a disabled
-                              input: disabled reads as "not right now", and this is never —
-                              every lead in the pipeline holds this code. */}
-                          <ReadOnlyField
-                            label="Code"
+                              this row and never editable. `readOnly`, not `disabled`:
+                              disabled reads as "not right now", and this is never — every
+                              lead in the pipeline holds this code, and somebody quoting one
+                              in a support ticket has to be able to copy it. */}
+                          <CodeField
+                            id={`code-stage-code-${stage.code}`}
                             value={stage.code}
                             reason="Every lead that reached this stage points at it."
                           />
-                          <div className="flex flex-wrap items-end gap-2">
+                          <FieldRow>
                           <Field label="Label" htmlFor={`label-${stage.id}`} className="min-w-60 flex-1">
                             <TextInput
                               id={`label-${stage.id}`}
@@ -240,17 +243,19 @@ export default function LeadStatusesPage() {
                               onChange={(e) => setEditLabel(e.target.value)}
                             />
                           </Field>
-                          <Button
-                            disabled={!editLabel.trim() || busy}
-                            onClick={() => void run(async () => {
-                              await renameLeadStatus(stage.id, editLabel);
-                              setEditing(null);
-                            })}
-                          >
-                            Save
-                          </Button>
-                          <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
-                          </div>
+                          <FieldRow.Actions>
+                            <Button
+                              disabled={!editLabel.trim() || busy}
+                              onClick={() => void run(async () => {
+                                await renameLeadStatus(stage.id, editLabel);
+                                setEditing(null);
+                              })}
+                            >
+                              Save
+                            </Button>
+                            <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                          </FieldRow.Actions>
+                          </FieldRow>
                         </div>
                       ) : (
                         <>
@@ -320,7 +325,7 @@ export default function LeadStatusesPage() {
               </ol>
 
               {canWrite && (adding === pipeline.pipeline ? (
-                <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-hairline pt-3">
+                <FieldRow className="mt-3 border-t border-hairline pt-3">
                   <Field
                     label="Code"
                     htmlFor={`code-${pipeline.pipeline}`}
@@ -341,20 +346,22 @@ export default function LeadStatusesPage() {
                       onChange={(e) => setDraft({ ...draft, label: e.target.value })}
                     />
                   </Field>
-                  <Button
-                    disabled={!draft.code.trim() || !draft.label.trim() || busy}
-                    onClick={() => void run(async () => {
-                      await createLeadStatus({
-                        pipeline: pipeline.pipeline, code: draft.code, label: draft.label,
-                      });
-                      setAdding(null);
-                      setDraft({ code: '', label: '' });
-                    })}
-                  >
-                    Add
-                  </Button>
-                  <Button variant="secondary" onClick={() => setAdding(null)}>Cancel</Button>
-                </div>
+                  <FieldRow.Actions>
+                    <Button
+                      disabled={!draft.code.trim() || !draft.label.trim() || busy}
+                      onClick={() => void run(async () => {
+                        await createLeadStatus({
+                          pipeline: pipeline.pipeline, code: draft.code, label: draft.label,
+                        });
+                        setAdding(null);
+                        setDraft({ code: '', label: '' });
+                      })}
+                    >
+                      Add
+                    </Button>
+                    <Button variant="secondary" onClick={() => setAdding(null)}>Cancel</Button>
+                  </FieldRow.Actions>
+                </FieldRow>
               ) : (
                 <Button
                   variant="secondary"

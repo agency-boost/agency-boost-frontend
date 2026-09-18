@@ -5,7 +5,9 @@ import { PublishBar } from '@/components/publish-bar';
 import { SettingsScreen } from '@/components/settings-screen';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, Card, Field, ReadOnlyField, TextInput, Textarea } from '@/components/ui/field';
+import {
+  Button, Card, CodeField, Field, Switch, Textarea, TextInput,
+} from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
@@ -186,7 +188,7 @@ export default function KpmProductsPage() {
           {rows.map((product) => (
             <li key={product.productId}>
               <Card className="p-0">
-                <div className="flex flex-wrap items-start gap-3 px-4 py-3 sm:px-5">
+                <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
                   <div className="min-w-0 flex-1">
                     <h2 className="text-md font-semibold text-navy">
                       {product.displayName.value}
@@ -198,11 +200,17 @@ export default function KpmProductsPage() {
                     )}
                     <p className="mt-1 flex flex-wrap items-center gap-2">
                       <ConfigBadge tone="open">{product.category}</ConfigBadge>
+                      {/*
+                        * Syariah green, conventional grey, exactly as the prototype has them
+                        * (`KPM_Owner.html:1714`, `:1748`). The field arrived from the API from the
+                        * day this screen was built and nothing rendered it, so an office selling
+                        * both could not tell one shelf from the other.
+                        */}
+                      <ConfigBadge tone={product.channel === 'syariah' ? 'won' : 'open'}>
+                        {product.channel === 'syariah' ? 'Syariah' : 'Conventional'}
+                      </ConfigBadge>
                       {!product.sellable && (
                         <ConfigBadge tone="open">Withdrawn by {company}</ConfigBadge>
-                      )}
-                      {product.sellable && product.active.value && (
-                        <ConfigBadge tone="won">Your agents sell it</ConfigBadge>
                       )}
                       {product.reviewState !== 'none' && (
                         <ConfigBadge tone={REVIEW[product.reviewState].tone}>
@@ -213,15 +221,23 @@ export default function KpmProductsPage() {
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
-                    {canWrite && product.sellable && (
-                      <Button
-                        variant="inline"
-                        disabled={busy}
-                        onClick={() => void run(() =>
-                          setKpmProductActive(product.productId, !product.active.value))}
-                      >
-                        {product.active.value ? 'Stop selling' : 'Sell this'}
-                      </Button>
+                    {product.sellable && (
+                      /*
+                        * The prototype's switch (`KPM_Owner.html:1715`), which is also why there
+                        * is no *"Your agents sell it"* badge any more: the switch's state **is**
+                        * that sentence, and two things saying it invites them to disagree.
+                        *
+                        * A reader who cannot write still sees it, disabled — the shelf is worth
+                        * reading even when it is not yours to change.
+                        */
+                      <Switch
+                        id={`sell-${product.productId}`}
+                        label="Agents sell it"
+                        checked={product.active.value}
+                        disabled={busy || !canWrite}
+                        onChange={(next) => void run(() =>
+                          setKpmProductActive(product.productId, next))}
+                      />
                     )}
                     <Button
                       variant="inline"
@@ -281,7 +297,7 @@ export default function KpmProductsPage() {
             {[...waiting, ...sentBack].map((product) => (
               <li key={product.productId}>
                 <Card>
-                  <div className="flex flex-wrap items-start gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <div className="min-w-0 flex-1">
                       <h2 className="text-md font-semibold text-navy">
                         {product.displayName.value}
@@ -392,8 +408,8 @@ export default function KpmProductsPage() {
 
     return (
       <div className="border-t border-hairline px-4 py-4 sm:px-5">
-        <ReadOnlyField
-          label="Code"
+        <CodeField
+          id={`code-product-code-${product.code}`}
           value={product.code}
           reason={`Your company’s. Every office of ${company} uses the same one.`}
           className="max-w-xs"

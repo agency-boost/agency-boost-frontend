@@ -6,7 +6,7 @@ import { DragHandle } from '@/components/ui/drag-handle';
 import { ACTIVITY_SETTINGS_TABS } from '@/components/settings-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
-  Button, Card, Field, ReadOnlyField, TextInput,
+  Button, Card, CodeField, Field, FieldRow, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -318,7 +318,7 @@ export default function ActivityTypesPage() {
                 A heading on the agent&rsquo;s Log Activity screen, with its own activity
                 types under it. You choose who it applies to after it exists.
               </p>
-              <div className="flex flex-wrap items-end gap-3">
+              <FieldRow>
                 <Field label="Code" htmlFor="new-section-code" hint="Permanent once saved." className="min-w-48">
                   <TextInput
                     id="new-section-code"
@@ -346,7 +346,7 @@ export default function ActivityTypesPage() {
                     onChange={(e) => setSection({ ...section, description: e.target.value })}
                   />
                 </Field>
-              </div>
+              </FieldRow>
               <div className="flex flex-wrap gap-2">
                 <Button
                   disabled={busy !== null || !section.code.trim() || !section.label.trim()}
@@ -393,7 +393,13 @@ export default function ActivityTypesPage() {
           {shown.map((category) => (
             <Card
               key={category.id}
-              className={over === category.id ? 'ring-2 ring-amber' : ''}
+              /* `data-row` is what `DragHandle` looks for to set the drag image — without it
+                 the browser lifts the handle button instead of the section. */
+              data-row={category.id}
+              className={[
+                over === category.id ? 'ring-2 ring-amber' : '',
+                dragging?.kind === 'section' && dragging.id === category.id ? 'opacity-40' : '',
+              ].filter(Boolean).join(' ')}
               onDragOver={(e) => {
                 if (!dragging || dragging.kind !== 'section') return;
                 e.preventDefault();
@@ -493,7 +499,7 @@ export default function ActivityTypesPage() {
                   </>
                 ) : renaming === category.id ? (
                   <>
-                    <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
+                    <FieldRow className="min-w-0 flex-1">
                       <Field
                         label="Name"
                         htmlFor={`rename-${category.id}`}
@@ -519,7 +525,7 @@ export default function ActivityTypesPage() {
                           }))}
                         />
                       </Field>
-                    </div>
+                    </FieldRow>
                     <Button
                       disabled={busy !== null || !sectionDraft.label.trim()}
                       onClick={() => {
@@ -604,7 +610,7 @@ export default function ActivityTypesPage() {
                 {category.types.map(({ row: type, staged: typeMark }) => (
                   <li
                     key={type.id}
-                    className={`flex flex-wrap items-start gap-3 py-3 ${
+                    className={`flex flex-wrap items-center gap-3 py-3 ${
                       over === type.id ? 'bg-canvas' : ''
                     } ${dragging?.id === type.id ? 'opacity-40' : ''}`}
                     onDragOver={(e) => {
@@ -619,14 +625,14 @@ export default function ActivityTypesPage() {
                       <DragHandle
                         label={type.label}
                         disabled={busy !== null}
-                        className="mt-1 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                        className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
                         onPick={() => setDragging({ kind: 'type', id: type.id })}
                         onDrop={() => { setDragging(null); setOver(null); }}
                         onMove={(by) => move(flat, type.id, by)}
                       />
                     )}
                     <span
-                      className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-navy text-sm font-bold text-navy"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-navy text-sm font-bold text-navy"
                       aria-hidden
                     >
                       {type.displayOrder}
@@ -635,16 +641,17 @@ export default function ActivityTypesPage() {
                     <div className="min-w-0 flex-1">
                       {editing === type.id ? (
                         <div className="flex flex-col gap-2">
-                          {/* The code, shown and not editable. `ReadOnlyField` is a `<dl>`
-                              rather than a labelled control on purpose: it is not an input
-                              that happens to be disabled — disabled reads as "not right
-                              now", and this is never. */}
-                          <ReadOnlyField
-                            label="Code"
+                          {/* The code, shown and not editable. `readOnly` rather than
+                              `disabled`: the old argument — that disabled reads as "not
+                              right now", and this is never — still holds, and read-only
+                              answers it without leaving the tab order or refusing to be
+                              copied, which is half of why it is on screen. */}
+                          <CodeField
+                            id={`code-type-code-${type.code}`}
                             value={type.code}
                             reason="Every activity logged, every ratio and every goal points at it."
                           />
-                          <div className="flex flex-wrap items-end gap-2">
+                          <FieldRow>
                             <Field label="Label" htmlFor={`label-${type.id}`} className="min-w-60 flex-1">
                               <TextInput
                                 id={`label-${type.id}`}
@@ -664,7 +671,7 @@ export default function ActivityTypesPage() {
                                 onChange={(e) => setEditDescription(e.target.value)}
                               />
                             </Field>
-                          </div>
+                          </FieldRow>
                           <div className="flex flex-wrap gap-2">
                             <Button
                               disabled={!editLabel.trim() || busy !== null}
@@ -750,7 +757,7 @@ export default function ActivityTypesPage() {
               </ul>
 
               {canWrite && (adding === category.code ? (
-                <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-hairline pt-3">
+                <FieldRow className="mt-3 border-t border-hairline pt-3">
                   <Field
                     label="Code"
                     htmlFor={`code-${category.id}`}
@@ -786,26 +793,28 @@ export default function ActivityTypesPage() {
                       placeholder="telepon, WhatsApp, tatap muka, dll"
                     />
                   </Field>
-                  <Button
-                    disabled={!draft.code.trim() || !draft.label.trim() || busy !== null}
-                    onClick={() => {
-                      stage({
-                        op: 'type.create',
-                        body: {
-                          code: draft.code,
-                          categoryCode: category.code,
-                          label: draft.label,
-                          description: draft.description || undefined,
-                        },
-                      });
-                      setAdding(null);
-                      setDraft({ code: '', label: '', description: '' });
-                    }}
-                  >
-                    Add
-                  </Button>
-                  <Button variant="secondary" onClick={() => setAdding(null)}>Cancel</Button>
-                </div>
+                  <FieldRow.Actions>
+                    <Button
+                      disabled={!draft.code.trim() || !draft.label.trim() || busy !== null}
+                      onClick={() => {
+                        stage({
+                          op: 'type.create',
+                          body: {
+                            code: draft.code,
+                            categoryCode: category.code,
+                            label: draft.label,
+                            description: draft.description || undefined,
+                          },
+                        });
+                        setAdding(null);
+                        setDraft({ code: '', label: '', description: '' });
+                      }}
+                    >
+                      Add
+                    </Button>
+                    <Button variant="secondary" onClick={() => setAdding(null)}>Cancel</Button>
+                  </FieldRow.Actions>
+                </FieldRow>
               ) : (
                 <Button
                   variant="secondary"

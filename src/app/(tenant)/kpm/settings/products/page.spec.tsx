@@ -122,6 +122,23 @@ describe('the office’s Products screen', () => {
     expect(screen.getByText(/1 withdrawn by Allianz Life/)).toBeInTheDocument();
   });
 
+  it('says which shelf a product is on, which nothing did', async () => {
+    // `channel` arrived from the API from the day this screen was built and nothing rendered
+    // it, so an office selling both could not tell one shelf from the other. Syariah green and
+    // conventional grey, as the prototype has them (`KPM_Owner.html:1714`, `:1748`).
+    render([
+      product(),
+      product({
+        productId: 'p2', code: 'PRUSYARIAH', companyName: 'PRUSyariah',
+        displayName: field('PRUSyariah'), channel: 'syariah',
+      }),
+    ]);
+    await screen.findByText('PRUSyariah');
+
+    expect(screen.getByText('Conventional')).toBeInTheDocument();
+    expect(screen.getByText('Syariah')).toBeInTheDocument();
+  });
+
   it('says a withdrawn product is the company’s doing, and offers no way to sell it', async () => {
     render([product({ sellable: false, lifecycle: 'withdrawn' })]);
 
@@ -129,9 +146,11 @@ describe('the office’s Products screen', () => {
     expect(screen.queryByRole('button', { name: /Sell this|Stop selling/ })).not.toBeInTheDocument();
   });
 
-  it('starts and stops selling, and sends null nowhere near it', async () => {
+  it('starts and stops selling with a switch, and sends null nowhere near it', async () => {
+    // The prototype's own control (`KPM_Owner.html:1715`). It replaces a *Stop selling* button
+    // and a *"Your agents sell it"* badge, which were two things saying one thing.
     const stub = render();
-    await userEvent.click(await screen.findByRole('button', { name: 'Stop selling' }));
+    await userEvent.click(await screen.findByRole('switch', { name: 'Agents sell it' }));
 
     await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/active'))).toBe(true));
     expect(JSON.parse(String(stub.calls.find((c) => c.url.includes('/active'))!.init.body)))

@@ -5,7 +5,7 @@ import { ConfigBadge } from '@/components/ui/config-badge';
 import { DragHandle } from '@/components/ui/drag-handle';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
-  Button, Card, Field, ReadOnlyField, Select, TextInput, Textarea,
+  Button, Card, CodeField, Field, FieldRow, ReadOnlyField, Select, Textarea, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -221,17 +221,17 @@ export function ProductsTab({ companyId }: { companyId: string }) {
                   }
                 }}
               >
-                <div className="flex flex-wrap items-start gap-3 px-4 py-3 sm:px-5">
+                <div className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
                   <DragHandle
                     label={product.name}
                     disabled={busy}
-                    className="mt-1 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                    className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
                     onPick={() => setDragging(product.id)}
                     onDrop={() => { setDragging(null); setOver(null); }}
                     onMove={(by) => void reorder(index, index + by)}
                   />
                   <span
-                    className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-navy text-sm font-bold text-navy"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-navy text-sm font-bold text-navy"
                     aria-hidden
                   >
                     {index + 1}
@@ -355,8 +355,8 @@ function ProductEditor({
   return (
     <div className="border-t border-hairline px-4 py-4 sm:px-5">
       <div className="flex flex-wrap gap-3">
-        <ReadOnlyField
-          label="Code"
+        <CodeField
+          id={`code-product-${product.code}`}
           value={product.code}
           reason="Typed once. A policy and a lead point at it, so it never changes."
         />
@@ -505,7 +505,7 @@ function ProductEditor({
         />
       </Field>
 
-      <label className="mt-4 flex items-start gap-2 text-md text-navy">
+      <label className="mt-4 flex items-center gap-2 text-md text-navy">
         <input
           type="checkbox"
           className="mt-1"
@@ -688,7 +688,7 @@ function AddProduct({
 
   return (
     <Card>
-      <div className="flex flex-wrap items-end gap-3">
+      <FieldRow>
         <Field label="Name" htmlFor="add-product-name" className="min-w-60 flex-1">
           <TextInput
             id="add-product-name"
@@ -739,19 +739,21 @@ function AddProduct({
             {CATEGORIES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </Select>
         </Field>
-        <Button
-          disabled={disabled || !name.trim() || !code.trim() || clash}
-          onClick={() => void onAdd({
-            code: code.trim(),
-            name: name.trim(),
-            channel: channel as Product['channel'],
-            category: category as Product['category'],
-          })}
-        >
-          Add
-        </Button>
-        <Button variant="secondary" disabled={disabled} onClick={onCancel}>Cancel</Button>
-      </div>
+        <FieldRow.Actions>
+          <Button
+            disabled={disabled || !name.trim() || !code.trim() || clash}
+            onClick={() => void onAdd({
+              code: code.trim(),
+              name: name.trim(),
+              channel: channel as Product['channel'],
+              category: category as Product['category'],
+            })}
+          >
+            Add
+          </Button>
+          <Button variant="secondary" disabled={disabled} onClick={onCancel}>Cancel</Button>
+        </FieldRow.Actions>
+      </FieldRow>
     </Card>
   );
 }

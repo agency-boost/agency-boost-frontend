@@ -5,7 +5,9 @@ import { PublishBar } from '@/components/publish-bar';
 import { SettingsScreen } from '@/components/settings-screen';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, Card, Field, Select, TextInput } from '@/components/ui/field';
+import {
+  Button, Card, Field, FieldRow, Select, TextInput,
+} from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { suggestCode } from '@/lib/config-code';
@@ -144,7 +146,7 @@ export default function EventsSettingsPage() {
             {shown.map((event) => (
               <li key={event.id}>
                 <Card>
-                  <div className="flex flex-wrap items-start gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <div className="min-w-0 flex-1">
                       <h2 className="text-md font-semibold text-navy">{event.title}</h2>
                       {event.blurb && <p className="mt-0.5 text-sm text-muted">{event.blurb}</p>}
@@ -386,7 +388,7 @@ export default function EventsSettingsPage() {
 
         {addingType && (
           <Card>
-            <div className="flex flex-wrap items-end gap-3">
+            <FieldRow>
               <Field label="Name" htmlFor="et-label" className="min-w-48 flex-1">
                 <TextInput
                   id="et-label"
@@ -417,28 +419,30 @@ export default function EventsSettingsPage() {
                   onChange={(e) => setTypeDraft((n) => ({ ...n, emoji: e.target.value }))}
                 />
               </Field>
-              <Button
-                disabled={busy || !typeDraft.label.trim() || !typeDraft.code.trim()}
-                onClick={() => void run(async () => {
-                  const body = {
-                    label: typeDraft.label.trim(),
-                    emoji: typeDraft.emoji.trim() || null,
-                  };
-                  if (addingType === 'new') {
-                    await createEventType({ ...body, code: typeDraft.code.trim() });
-                  } else {
-                    await updateEventType(addingType!, body);
-                  }
-                  setTypeDraft({ label: '', code: '', touched: false, emoji: '' });
-                  setAddingType(null);
-                })}
-              >
-                {addingType === 'new' ? 'Add' : 'Save'}
-              </Button>
-              <Button variant="secondary" disabled={busy} onClick={() => setAddingType(null)}>
-                Cancel
-              </Button>
-            </div>
+              <FieldRow.Actions>
+                <Button
+                  disabled={busy || !typeDraft.label.trim() || !typeDraft.code.trim()}
+                  onClick={() => void run(async () => {
+                    const body = {
+                      label: typeDraft.label.trim(),
+                      emoji: typeDraft.emoji.trim() || null,
+                    };
+                    if (addingType === 'new') {
+                      await createEventType({ ...body, code: typeDraft.code.trim() });
+                    } else {
+                      await updateEventType(addingType!, body);
+                    }
+                    setTypeDraft({ label: '', code: '', touched: false, emoji: '' });
+                    setAddingType(null);
+                  })}
+                >
+                  {addingType === 'new' ? 'Add' : 'Save'}
+                </Button>
+                <Button variant="secondary" disabled={busy} onClick={() => setAddingType(null)}>
+                  Cancel
+                </Button>
+              </FieldRow.Actions>
+            </FieldRow>
           </Card>
         )}
 

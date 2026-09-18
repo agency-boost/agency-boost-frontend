@@ -92,7 +92,7 @@ export default function AdminsPage() {
     >
       {error && <ErrorBanner {...error} />}
 
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-md text-muted">
           An Admin can do everything you can except one thing: grant or revoke admin access.
           Admin access is <strong>not</strong> a hierarchy role — an Agency Builder with a unit can

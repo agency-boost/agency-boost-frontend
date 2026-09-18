@@ -165,7 +165,7 @@ describe('Settings › Activation checklist (P5-T3)', () => {
     await screen.findByText('1. Introduction');
     await userEvent.click(within(rowOf('Learn insurance basics')).getByRole('button', { name: 'Edit' }));
 
-    expect(screen.getByText('INSURANCE_BASICS')).toBeInTheDocument();
+    expect(screen.getByLabelText('Code')).toHaveValue('INSURANCE_BASICS');
     const field = screen.getByLabelText('Item');
     await userEvent.clear(field);
     await userEvent.type(field, 'Learn the basics');
@@ -175,6 +175,24 @@ describe('Settings › Activation checklist (P5-T3)', () => {
     expect(sent(calls, 'PUT').aspects[0].items[0]).toEqual({
       code: 'INSURANCE_BASICS', label: 'Learn the basics', autoLink: null,
     });
+  });
+
+  it('renames an aspect, which nothing could do before', async () => {
+    // A typo in a section name was permanent: the only way out was removing the aspect and
+    // every item under it.
+    const { calls } = render();
+    await screen.findByText('1. Introduction');
+    const head = screen.getByRole('heading', { name: '1. Introduction' }).closest('.flex') as HTMLElement;
+
+    await userEvent.click(within(head).getByRole('button', { name: 'Rename' }));
+    const name = screen.getByLabelText('Name');
+    await userEvent.clear(name);
+    await userEvent.type(name, '1. Pengenalan');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+    const body = sent(calls, 'PUT');
+    expect(body.aspects[0]).toMatchObject({ code: 'INTRODUCTION', label: '1. Pengenalan' });
   });
 
   it('adds an item with its code filled in from what was typed', async () => {

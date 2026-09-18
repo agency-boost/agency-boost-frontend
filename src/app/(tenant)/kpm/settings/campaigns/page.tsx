@@ -143,7 +143,7 @@ export default function CampaignsSettingsPage() {
             {shown.map((campaign) => (
               <li key={campaign.id}>
                 <Card>
-                  <div className="flex flex-wrap items-start gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <div className="min-w-0 flex-1">
                       <h2 className="text-md font-semibold text-navy">{campaign.title}</h2>
                       {campaign.description && (

@@ -138,7 +138,7 @@ describe('the office lead pipelines (P4-T3)', () => {
       await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
 
       expect(screen.getByText('Code')).toBeInTheDocument();
-      expect(screen.queryByLabelText('Code')).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Code')).toHaveAttribute('readonly');
     });
   });
 
@@ -191,7 +191,7 @@ describe('the office lead pipelines (P4-T3)', () => {
     render();
     await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
     expect(screen.getByLabelText('Label')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Code')).toBeNull();
+    expect(screen.getByLabelText('Code')).toHaveAttribute('readonly');
   });
 
   it('shows an agent the ladders and none of the controls', async () => {

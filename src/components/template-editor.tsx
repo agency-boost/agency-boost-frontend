@@ -1,7 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Button, Card, ColorInput, Field, TextInput, Select } from '@/components/ui/field';
+import {
+  Button, Card, CodeField, ColorInput, Field, FieldRow, Select, TextInput,
+} from '@/components/ui/field';
 import {
   benchmarkFromInput, benchmarkToInput, DISPLAY_UNIT_LABEL, formatBenchmark, reexpress, unitFor,
   type RatioDisplayUnit,
@@ -168,7 +170,9 @@ function EditableRow({
   onSave,
   reshape,
   disabled,
+  code,
   children,
+  badge,
   actions,
 }: {
   /**
@@ -206,6 +210,21 @@ function EditableRow({
   disabled?: boolean;
   /** What the row reads as when it is not being edited. */
   children: React.ReactNode;
+  /**
+   * The row's stable code, shown read-only while editing.
+   *
+   * It used to arrive as the *hint* of the first field, which put the identity in the small print
+   * under the name — a caption on the wrong thing. It is a field of its own now.
+   */
+  code?: string;
+  /**
+   * What the row *is*, shown between the text and the controls.
+   *
+   * A slot rather than something the caller renders inside `children`: `EditableRow` owns the Edit
+   * button, so without this a badge could only land before the text or after Edit — and the
+   * prototype puts it between them.
+   */
+  badge?: React.ReactNode;
   /** Row controls that stay available either way. */
   actions?: React.ReactNode;
 }) {
@@ -214,8 +233,15 @@ function EditableRow({
 
   if (!editing) {
     return (
-      <div className="flex flex-wrap items-start gap-3">
+      /*
+       * **Centred, not top-aligned.** A row whose text runs to two lines put its badge and its
+       * buttons level with the first line and left them stranded above the second. The prototype
+       * centres its config rows (`KPM_Owner.html:276`) for the same reason.
+       */
+      <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1">{children}</div>
+        {/* Before Edit, as `.config-row` has it: drag → label → badge → actions (`:1501`). */}
+        {badge}
         <span className="flex flex-wrap items-center gap-4">
           <Button
             variant="inline"
@@ -234,6 +260,13 @@ function EditableRow({
 
   return (
     <div className="flex flex-col gap-2">
+      {code && (
+        <CodeField
+          id={id('code')}
+          value={code}
+          reason="Permanent. Everything that refers to this row refers to its code."
+        />
+      )}
       {fields.map((field) => {
         const change = (value: string) => {
           const next = { ...draft, [field.key]: value };
@@ -310,6 +343,13 @@ export function TaxonomyEditor({
     types: types.map((t) => (t.code === code ? { ...t, ...fields } : t)),
   });
 
+  /** A section's name, which nothing could change until now — a typo was permanent. */
+  const patchCategory = (code: string, fields: Partial<TaxonomyPayload['categories'][number]>) =>
+    onChange({
+      ...payload,
+      categories: categories.map((c) => (c.code === code ? { ...c, ...fields } : c)),
+    });
+
   const drag = useRowDrag(
     types,
     (t) => t.code,
@@ -374,12 +414,23 @@ export function TaxonomyEditor({
                 disabled={disabled}
                 {...sectionDrag.handleProps(category.code)}
               />
-              <h2 className="font-display text-lg font-bold text-navy">{category.label}</h2>
-              <span className="ml-auto flex items-center gap-2">
-                <span className="whitespace-nowrap rounded-full border border-hairline bg-canvas px-2 py-0.5 text-sm font-semibold text-muted">
-                  {mine.length} {mine.length === 1 ? 'item' : 'items'}
-                </span>
-              </span>
+              <div className="min-w-0 flex-1">
+                <EditableRow
+                  rowKey={`section-${category.code}`}
+                  disabled={disabled}
+                  code={category.code}
+                  fields={[{ key: 'label', label: 'Name' }]}
+                  values={{ label: category.label }}
+                  onSave={(next) => patchCategory(category.code, { label: next.label.trim() })}
+                  badge={(
+                    <ConfigBadge tone={mine.length > 0 ? 'won' : 'open'}>
+                      {mine.length} {mine.length === 1 ? 'item' : 'items'}
+                    </ConfigBadge>
+                  )}
+                >
+                  <h2 className="font-display text-lg font-bold text-navy">{category.label}</h2>
+                </EditableRow>
+              </div>
             </div>
 
             <ul className="mt-3 flex flex-col divide-y divide-hairline">
@@ -389,16 +440,16 @@ export function TaxonomyEditor({
                 <li
                   key={type.code}
                   {...rowProps}
-                  className={`flex flex-wrap items-start gap-3 py-3 ${className}`}
+                  className={`flex flex-wrap items-center gap-3 py-3 ${className}`}
                 >
                   <DragHandle
                     label={type.label}
                     disabled={disabled}
-                    className="mt-1 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                    className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
                     {...drag.handleProps(type.code)}
                   />
                   <span
-                    className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-navy text-sm font-bold text-navy"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-navy text-sm font-bold text-navy"
                     aria-hidden
                   >
                     {index + 1}
@@ -407,8 +458,9 @@ export function TaxonomyEditor({
                     <EditableRow
                       rowKey={type.code}
                       disabled={disabled}
+                      code={type.code}
                       fields={[
-                        { key: 'label', label: 'Name', hint: type.code },
+                        { key: 'label', label: 'Name' },
                         {
                           key: 'description',
                           label: 'Description',
@@ -450,13 +502,22 @@ export function TaxonomyEditor({
             <AddRow
               disabled={disabled}
               what="activity type"
-              onAdd={(code, label) => onChange({
+              fields={[{
+                key: 'description',
+                label: 'Description',
+                hint: "Optional. Shown under the name on the agent's screen.",
+                wide: true,
+              }]}
+              onAdd={(code, label, extra) => onChange({
                 ...payload,
                 // Renumbered rather than counted: `types.length + 1` counts across
                 // every section and collides with an existing number after any removal.
                 types: withOrdinals(
                   [...types, {
-                    code, categoryCode: category.code, label, description: null,
+                    code,
+                    categoryCode: category.code,
+                    label,
+                    description: extra.description?.trim() || null,
                     displayOrder: 0,
                   }],
                   'displayOrder',
@@ -491,9 +552,10 @@ function AddRow({
   suggest,
   taken,
   nameLabel = 'Name',
+  fields = [],
 }: {
   what: string;
-  onAdd: (code: string, label: string) => void;
+  onAdd: (code: string, label: string, extra: Record<string, string>) => void;
   disabled?: boolean;
   /** Drops the divider and top margin, for a row that already sits in a toolbar. */
   bare?: boolean;
@@ -509,11 +571,23 @@ function AddRow({
    */
   taken?: (code: string) => boolean;
   nameLabel?: string;
+  /**
+   * Anything beyond the code and the name.
+   *
+   * A create form offering less than its own edit panel makes somebody save a row and immediately
+   * edit it to finish the job — which is what an activity type's Description made them do.
+   * `wide` gives a field the room a sentence needs.
+   */
+  fields?: {
+    key: string; label: string; hint?: string; wide?: true;
+    options?: { value: string; label: string }[];
+  }[];
 }) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
   const [touched, setTouched] = useState(false);
   const [label, setLabel] = useState('');
+  const [extra, setExtra] = useState<Record<string, string>>({});
   const clash = code.trim() !== '' && (taken?.(code.trim().toUpperCase()) ?? false);
   /*
    * `what` is prose — *"activity type"* — and it was going straight into a DOM id, so the
@@ -552,10 +626,7 @@ function AddRow({
   );
 
   return (
-    <div className={bare
-      ? 'flex flex-wrap items-end gap-3'
-      : 'mt-3 flex flex-wrap items-end gap-3 border-t border-hairline pt-3'}
-    >
+    <FieldRow className={bare ? undefined : 'mt-3 border-t border-hairline pt-3'}>
       {suggest && name}
       <Field
         label="Code"
@@ -578,20 +649,52 @@ function AddRow({
         />
       </Field>
       {!suggest && name}
-      <Button
-        disabled={disabled || !code.trim() || !label.trim() || clash}
-        onClick={() => {
-          onAdd(code.trim(), label.trim());
-          setCode('');
-          setTouched(false);
-          setLabel('');
-          setOpen(false);
-        }}
-      >
-        Add
-      </Button>
-      <Button variant="secondary" disabled={disabled} onClick={() => setOpen(false)}>Cancel</Button>
-    </div>
+      {fields.map((field) => (
+        <Field
+          key={field.key}
+          label={field.label}
+          htmlFor={`add-${field.key}-${slug}`}
+          hint={field.hint}
+          className={field.wide ? 'min-w-60 flex-1' : 'min-w-40'}
+        >
+          {field.options ? (
+            <Select
+              id={`add-${field.key}-${slug}`}
+              value={extra[field.key] ?? ''}
+              disabled={disabled}
+              onChange={(e) => setExtra((now) => ({ ...now, [field.key]: e.target.value }))}
+            >
+              {field.options.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </Select>
+          ) : (
+            <TextInput
+              id={`add-${field.key}-${slug}`}
+              value={extra[field.key] ?? ''}
+              disabled={disabled}
+              onChange={(e) => setExtra((now) => ({ ...now, [field.key]: e.target.value }))}
+            />
+          )}
+        </Field>
+      ))}
+      <FieldRow.Actions>
+        <Button
+          disabled={disabled || !code.trim() || !label.trim() || clash}
+          onClick={() => {
+            onAdd(code.trim(), label.trim(), extra);
+            setCode('');
+            setTouched(false);
+            setLabel('');
+            setExtra({});
+            setOpen(false);
+          }}
+        >
+          Add
+        </Button>
+        <Button variant="secondary" disabled={disabled} onClick={() => setOpen(false)}>Cancel</Button>
+      </FieldRow.Actions>
+    </FieldRow>
   );
 }
 
@@ -659,16 +762,16 @@ export function PipelineEditor({
             <li
               key={stage.code}
               {...rowProps}
-              className={`flex flex-wrap items-start gap-3 py-3 ${className}`}
+              className={`flex flex-wrap items-center gap-3 py-3 ${className}`}
             >
               <DragHandle
                 label={stage.label}
                 disabled={disabled}
-                className="mt-1 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
                 {...drag.handleProps(stage.code)}
               />
               <span
-                className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-navy text-sm font-bold text-navy"
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-navy text-sm font-bold text-navy"
                 aria-hidden
               >
                 {index + 1}
@@ -677,7 +780,13 @@ export function PipelineEditor({
                 <EditableRow
                   rowKey={stage.code}
                   disabled={disabled}
-                  fields={[{ key: 'label', label: 'Name', hint: stage.code }]}
+                  code={stage.code}
+                  fields={[{ key: 'label', label: 'Name' }]}
+                  badge={stage.isTerminal ? (
+                    <ConfigBadge tone="won">Closes the pipeline</ConfigBadge>
+                  ) : (
+                    <ConfigBadge tone="open">Open</ConfigBadge>
+                  )}
                   values={{ label: stage.label }}
                   onSave={(next) => onChange({
                     statuses: allStatuses.map((s) => (s.code === stage.code
@@ -688,16 +797,7 @@ export function PipelineEditor({
                   <p className="text-md text-navy">{stage.label}</p>
                 </EditableRow>
               </div>
-              <span className="mt-1 flex flex-wrap items-center gap-2">
-                {stage.isTerminal ? (
-                  <span className="rounded-full bg-amber px-2 py-0.5 text-sm font-semibold uppercase tracking-wide text-navy">
-                    Closes the pipeline
-                  </span>
-                ) : (
-                  <span className="rounded-full border border-hairline bg-canvas px-2 py-0.5 text-sm font-semibold uppercase tracking-wide text-muted">
-                    Open
-                  </span>
-                )}
+              <span className="flex flex-wrap items-center gap-2">
                 {!stage.isTerminal && (
                   <Button
                     variant="inline"
@@ -883,8 +983,9 @@ export function RatioSetEditor({
           <EditableRow
             rowKey={ratio.code}
             disabled={disabled}
+            code={ratio.code}
             fields={[
-              { key: 'label', label: 'Name', hint: ratio.code },
+              { key: 'label', label: 'Name' },
               {
                 key: 'benchmark',
                 label: ratio.comparison === 'band' ? 'Within, either side' : 'On track at or above',
@@ -1087,8 +1188,19 @@ export function TrainingEditor({
             suggest
             disabled={disabled}
             what="category"
+            fields={[{
+              key: 'description',
+              label: 'Description',
+              hint: 'Optional. Agents read it under the category.',
+              wide: true,
+            }]}
             taken={(code) => categories.some((c) => c.code === code)}
-            onAdd={(code, label) => put({ categories: [...categories, { code, label, description: null }] })}
+            onAdd={(code, label, extra) => put({
+              categories: [
+                ...categories,
+                { code, label, description: extra.description?.trim() || null },
+              ],
+            })}
           />
         </div>
         <Card className="p-0">
@@ -1104,8 +1216,9 @@ export function TrainingEditor({
                     <EditableRow
                       rowKey={category.code}
                       disabled={disabled}
+                      code={category.code}
                       fields={[
-                        { key: 'label', label: 'Name', hint: category.code },
+                        { key: 'label', label: 'Name' },
                         {
                           key: 'description',
                           label: 'Description',
@@ -1128,18 +1241,16 @@ export function TrainingEditor({
                           Remove
                         </Button>
                       )}
+                      badge={mine.length === 0
+                        ? <ConfigBadge tone="open">Empty</ConfigBadge>
+                        : (
+                          <ConfigBadge tone={offered > 0 ? 'won' : 'open'}>
+                            {count(mine.length, 'skill', 'skills')} · {count(offered, 'module', 'modules')} published
+                          </ConfigBadge>
+                        )}
                     >
                       <p className="text-md font-semibold text-navy">{category.label}</p>
                       {category.description && <p className="text-sm text-muted">{category.description}</p>}
-                      <p className="mt-1 flex flex-wrap items-center gap-2">
-                        {mine.length === 0
-                          ? <ConfigBadge tone="open">Empty</ConfigBadge>
-                          : (
-                            <ConfigBadge tone={offered > 0 ? 'won' : 'open'}>
-                              {count(mine.length, 'skill', 'skills')} · {count(offered, 'module', 'modules')} published
-                            </ConfigBadge>
-                          )}
-                      </p>
                     </EditableRow>
                   </li>
                 );
@@ -1190,8 +1301,9 @@ export function TrainingEditor({
                       <EditableRow
                         rowKey={skill.code}
                         disabled={disabled}
+                        code={skill.code}
                         fields={[
-                          { key: 'label', label: 'Name', hint: skill.code },
+                          { key: 'label', label: 'Name' },
                           {
                             key: 'categoryCode',
                             label: 'Category',
@@ -1215,13 +1327,13 @@ export function TrainingEditor({
                             Remove
                           </Button>
                         )}
-                      >
-                        <p className="text-md font-semibold text-navy">{skill.label}</p>
-                        <p className="mt-1 flex flex-wrap items-center gap-2">
+                        badge={(
                           <ConfigBadge tone={teaching.length > 0 ? 'won' : 'open'}>
                             {count(teaching.length, 'module', 'modules')}
                           </ConfigBadge>
-                        </p>
+                        )}
+                      >
+                        <p className="text-md font-semibold text-navy">{skill.label}</p>
                       </EditableRow>
                     </li>
                   );
@@ -1292,8 +1404,9 @@ export function TrainingEditor({
                     <EditableRow
                       rowKey={module.code}
                       disabled={disabled}
+                      code={module.code}
                       fields={[
-                        { key: 'title', label: 'Title', hint: module.code },
+                        { key: 'title', label: 'Title' },
                         {
                           key: 'skillCode',
                           label: 'Skill',
@@ -1326,6 +1439,11 @@ export function TrainingEditor({
                           }
                           : m)),
                       })}
+                      badge={(
+                        <ConfigBadge tone={isPublished ? 'won' : 'open'}>
+                          {isPublished ? 'Published' : 'Draft'}
+                        </ConfigBadge>
+                      )}
                       actions={(
                         <Button
                           variant="inlineDanger"
@@ -1338,11 +1456,6 @@ export function TrainingEditor({
                     >
                       <p className="text-md font-semibold text-navy">{module.title}</p>
                       <p className="text-sm text-muted">{skillLabel(module.skillCode)}</p>
-                      <p className="mt-1 flex flex-wrap items-center gap-2">
-                        <ConfigBadge tone={isPublished ? 'won' : 'open'}>
-                          {isPublished ? 'Published' : 'Draft'}
-                        </ConfigBadge>
-                      </p>
                     </EditableRow>
                   </li>
                 );
@@ -1449,11 +1562,26 @@ export function ActivationChecklistEditor({
       ) : aspects.map((aspect) => (
         <Card key={aspect.code} className="p-0">
           <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
-            <h3 className="font-display text-lg font-bold text-navy">{aspect.label}</h3>
-            <span className="ml-auto flex flex-wrap items-center gap-2">
-              <ConfigBadge tone={aspect.items.length > 0 ? 'won' : 'open'}>
-                {count(aspect.items.length, 'item', 'items')}
-              </ConfigBadge>
+            <div className="min-w-0 flex-1">
+              {/* Renameable, which it was not: a typo in an aspect's name could only be fixed by
+                  removing the aspect and every item under it. */}
+              <EditableRow
+                rowKey={`aspect-${aspect.code}`}
+                disabled={disabled}
+                code={aspect.code}
+                fields={[{ key: 'label', label: 'Name' }]}
+                values={{ label: aspect.label }}
+                onSave={(next) => patchAspect(aspect.code, { label: next.label.trim() })}
+                badge={(
+                  <ConfigBadge tone={aspect.items.length > 0 ? 'won' : 'open'}>
+                    {count(aspect.items.length, 'item', 'items')}
+                  </ConfigBadge>
+                )}
+              >
+                <h3 className="font-display text-lg font-bold text-navy">{aspect.label}</h3>
+              </EditableRow>
+            </div>
+            <span className="flex flex-wrap items-center gap-2">
 {/* With its items, as the Owner's own screen removes one: an aspect holding none is a
                   state neither an office nor a template may publish. */}
               <Button
@@ -1474,8 +1602,9 @@ export function ActivationChecklistEditor({
                 <EditableRow
                   rowKey={item.code}
                   disabled={disabled}
+                  code={item.code}
                   fields={[
-                    { key: 'label', label: 'Item', hint: item.code },
+                    { key: 'label', label: 'Item' },
                     {
                       key: 'autoLink',
                       label: 'Completes from',
@@ -1518,9 +1647,16 @@ export function ActivationChecklistEditor({
               disabled={disabled}
               what="item"
               nameLabel="Item"
+              fields={[{
+                key: 'autoLink',
+                label: 'Completes from',
+                hint: 'A linked item completes on its own once the evaluator for that link ships.',
+                options: linkOptions,
+                wide: true,
+              }]}
               taken={(code) => aspects.some((a) => a.items.some((i) => i.code === code))}
-              onAdd={(code, label) => patchAspect(aspect.code, {
-                items: [...aspect.items, { code, label, autoLink: null }],
+              onAdd={(code, label, extra) => patchAspect(aspect.code, {
+                items: [...aspect.items, { code, label, autoLink: extra.autoLink || null }],
               })}
             />
           </div>
@@ -1581,9 +1717,21 @@ export function EventTypesEditor({
           suggest
           disabled={disabled}
           what="event type"
+          fields={[
+            { key: 'description', label: 'Description', hint: 'Optional.', wide: true },
+            { key: 'emoji', label: 'Emoji', hint: 'Optional. One character.' },
+          ]}
           taken={(code) => types.some((t) => t.code === code)}
-          onAdd={(code, label) => put([
-            ...types, { code, label, description: null, emoji: null, color: null },
+          onAdd={(code, label, extra) => put([
+            ...types, {
+              code,
+              label,
+              description: extra.description?.trim() || null,
+              emoji: extra.emoji?.trim() || null,
+              // The colour picker is a two-part control; it belongs on the edit panel where
+              // there is room for it, not squeezed into a create row four fields wide.
+              color: null,
+            },
           ])}
         />
       </div>
@@ -1602,19 +1750,20 @@ export function EventTypesEditor({
               const { className, ...rowProps } = drag.rowProps(type.code);
               return (
               <li key={type.code} {...rowProps} className={`px-4 py-3 sm:px-5 ${className}`}>
-                <div className="flex items-start gap-3">
+                <div className="flex items-center gap-3">
                   <DragHandle
                     label={type.label}
                     disabled={disabled}
-                    className="mt-1 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                    className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
                     {...drag.handleProps(type.code)}
                   />
                   <div className="min-w-0 flex-1">
                 <EditableRow
                   rowKey={type.code}
                   disabled={disabled}
+                  code={type.code}
                   fields={[
-                    { key: 'label', label: 'Name', hint: type.code },
+                    { key: 'label', label: 'Name' },
                     {
                       key: 'description',
                       label: 'Description',
@@ -1785,8 +1934,9 @@ export function CampaignKindsEditor({
                   <EditableRow
                     rowKey={`${rule.kind}-${rule.code}`}
                     disabled={disabled}
+                    code={rule.code}
                     fields={[
-                      { key: 'name', label: 'Name', hint: rule.code },
+                      { key: 'name', label: 'Name' },
                       {
                         key: 'rank',
                         label: 'Rank',
@@ -1886,8 +2036,12 @@ export function CampaignKindsEditor({
                 suggest
                 disabled={disabled}
                 what={`${kind.label.toLowerCase()} rule`}
+                fields={[
+                  { key: 'rank', label: 'Rank', hint: 'The order the tiers are climbed in.' },
+                  { key: 'reward', label: 'Reward', hint: 'Optional.', wide: true },
+                ]}
                 taken={(code) => rules.some((r) => r.kind === kind.code && r.code === code)}
-                onAdd={(code, label) => put([...rules, {
+                onAdd={(code, label, extra) => put([...rules, {
                   kind: kind.code,
                   code,
                   name: label,
@@ -1901,8 +2055,8 @@ export function CampaignKindsEditor({
                     }],
                   }],
                   groupMode: 'all',
-                  reward: '',
-                  rank: rules.filter((r) => r.kind === kind.code).length + 1,
+                  reward: extra.reward?.trim() ?? '',
+                  rank: Number(extra.rank) || rules.filter((r) => r.kind === kind.code).length + 1,
                 }])}
               />
             </div>
@@ -1980,7 +2134,8 @@ export function CapabilityLadderEditor({
               <EditableRow
                 rowKey={milestone.code}
                 disabled={disabled}
-                fields={[{ key: 'label', label: 'Name', hint: milestone.code }]}
+                code={milestone.code}
+                fields={[{ key: 'label', label: 'Name' }]}
                 values={{ label: milestone.label }}
                 onSave={(next) => put({
                   milestones: milestones.map((m) => (m.code === milestone.code
@@ -2021,10 +2176,18 @@ export function CapabilityLadderEditor({
               suggest
               disabled={disabled}
               what="stage"
+              fields={[{
+                key: 'stageOrder',
+                label: 'Rank',
+                hint: 'How senior the stage is. Two stages at one rank is refused.',
+              }]}
               taken={(code) => stages.some((s) => s.code === code)}
-              onAdd={(code, label) => put({
+              onAdd={(code, label, extra) => put({
                 stages: [...stages, {
-                  code, label, requiredMilestoneCodes: [], stageOrder: stages.length + 1,
+                  code,
+                  label,
+                  requiredMilestoneCodes: [],
+                  stageOrder: Number(extra.stageOrder) || stages.length + 1,
                 }],
               })}
             />
@@ -2036,8 +2199,9 @@ export function CapabilityLadderEditor({
               <EditableRow
                 rowKey={stage.code}
                 disabled={disabled}
+                code={stage.code}
                 fields={[
-                  { key: 'label', label: 'Name', hint: stage.code },
+                  { key: 'label', label: 'Name' },
                   {
                     key: 'stageOrder',
                     label: 'Rank',
@@ -2127,7 +2291,8 @@ export function CapabilityLadderEditor({
                 <EditableRow
                   rowKey={`${grid.code}-${item.code}`}
                   disabled={disabled}
-                  fields={[{ key: 'label', label: 'Item', hint: item.code }]}
+                  code={item.code}
+                  fields={[{ key: 'label', label: 'Item' }]}
                   values={{ label: item.label }}
                   onSave={(next) => put({
                     grids: grids.map((g) => (g.code === grid.code ? {
@@ -2175,9 +2340,20 @@ export function CapabilityLadderEditor({
         suggest
         disabled={disabled}
         what="grid"
+        fields={[{
+          key: 'requiresDownline',
+          label: 'Who it applies to',
+          options: [
+            { value: '', label: 'Everybody' },
+            { value: 'downline', label: 'Only somebody with a downline' },
+          ],
+          wide: true,
+        }]}
         taken={(code) => grids.some((g) => g.code === code)}
-        onAdd={(code, label) => put({
-          grids: [...grids, { code, label, requiresDownline: false, items: [] }],
+        onAdd={(code, label, extra) => put({
+          grids: [...grids, {
+            code, label, requiresDownline: extra.requiresDownline === 'downline', items: [],
+          }],
         })}
       />
     </div>

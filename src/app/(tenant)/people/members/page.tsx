@@ -5,7 +5,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import {
+  Button, ErrorBanner, Field, FieldRow, Select, TextInput,
+} from '@/components/ui/field';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
@@ -312,7 +314,7 @@ export default function MembersPage() {
       </div>
 
       {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && (
-      <div className="mb-4 flex flex-wrap items-end gap-3">
+      <FieldRow className="mb-4">
         <Field label="Search" htmlFor="q" className="min-w-56 flex-1">
           <TextInput
             id="q"
@@ -329,7 +331,7 @@ export default function MembersPage() {
             <option value="agent">Agent</option>
           </Select>
         </Field>
-      </div>
+      </FieldRow>
       )}
 
       {error && <ErrorBanner {...error} />}
@@ -484,7 +486,7 @@ export default function MembersPage() {
               <h2 className="font-display text-md font-bold text-navy">
                 {editing.groupId === null ? 'Create group' : 'Edit group'}
               </h2>
-              <div className="mt-3 flex flex-wrap items-end gap-3">
+              <FieldRow className="mt-3">
                 <Field label="Group name" htmlFor="group-name" className="min-w-56 flex-1">
                   <TextInput
                     id="group-name"
@@ -512,7 +514,7 @@ export default function MembersPage() {
                     ))}
                   </Select>
                 </Field>
-              </div>
+              </FieldRow>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   disabled={busy || editing.name.trim() === '' || editing.owner === ''}
