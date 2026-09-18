@@ -3,9 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  ActivationChecklistEditor, PipelineEditor, RatioSetEditor, TaxonomyEditor, TrainingEditor,
+  ActivationChecklistEditor, CampaignKindsEditor, CapabilityLadderEditor, EventTypesEditor,
+  PipelineEditor, RatioSetEditor, TaxonomyEditor, TrainingEditor,
   withOrdinals,
-  type ActivationChecklistPayload, type PipelinePayload, type RatioSetPayload, type TaxonomyPayload,
+  type ActivationChecklistPayload, type CampaignKindsPayload, type CapabilityLadderPayload,
+  type EventTypesPayload, type PipelinePayload, type RatioSetPayload, type TaxonomyPayload,
   type TrainingTaxonomyPayload,
 } from '@/components/template-editor';
 
@@ -473,5 +475,213 @@ it('removes an aspect with its items, saying how many are going', async () => {
     await userEvent.click(remove);
     expect(onChange.mock.calls.at(-1)![0].aspects.map((a: { code: string }) => a.code))
       .toEqual(['INITIAL_SETUP']);
+  });
+});
+
+/**
+ * The three editors P5-T9 added (AC-4).
+ *
+ * Two of their tabs were `ComingInPhase` signs until the template kinds ADR-0034 named existed;
+ * the third had validation and a provisioning reader since P5-T8 and no way to edit one.
+ */
+const EVENT_TYPES: EventTypesPayload = {
+  types: [
+    { code: 'TRAINING', label: 'Training', description: null, emoji: '📚', color: '#2D9CDB', displayOrder: 1 },
+    { code: 'RECOGNITION', label: 'Recognition', description: null, emoji: '🏆', color: null, displayOrder: 2 },
+  ],
+};
+
+const CAMPAIGN_KINDS: CampaignKindsPayload = {
+  rules: [{
+    kind: 'production_club', code: 'STAR_CLUB', name: 'Star Club', rank: 1,
+    reward: 'Promotion bonus', groupMode: 'all',
+    criteriaGroups: [{
+      mode: 'all',
+      criteria: [{ metricKey: 'APE_ACHIEVED', comparator: 'gte', value: 120000000000 }],
+    }],
+  }],
+};
+
+const METRICS = [
+  { key: 'APE_ACHIEVED', label: 'APE achieved', unit: 'idr_minor' },
+  { key: 'NET_APE', label: 'Net APE', unit: 'idr_minor' },
+];
+
+const CAPABILITY: CapabilityLadderPayload = {
+  stages: [
+    { code: 'COMPETENT', label: 'Competent', requiredMilestoneCodes: ['SELLS'], stageOrder: 2 },
+    { code: 'NEW', label: 'New agent', requiredMilestoneCodes: [], stageOrder: 1 },
+  ],
+  milestones: [{ code: 'SELLS', label: 'Sells independently' }],
+  grids: [{
+    code: 'PERSONAL', label: 'Personal selling', requiresDownline: false,
+    items: [{ code: 'APPROACH', label: 'Approach' }],
+  }],
+};
+
+describe('EventTypesEditor (P5-T9)', () => {
+  it('renders an unauthored preset as empty instead of crashing', () => {
+    render(<EventTypesEditor payload={{} as EventTypesPayload} onChange={vi.fn()} />);
+
+    expect(screen.getByText(/An office with none has nothing to file an event under/))
+      .toBeInTheDocument();
+  });
+
+  it('adds a type with a code, and numbers it off the list', async () => {
+    const onChange = vi.fn();
+    render(<EventTypesEditor payload={EVENT_TYPES} onChange={onChange} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Add an event type/ }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Town hall');
+    // Suggested from the name, so a list of sentences does not end up TYPE_1, TYPE_2.
+    expect(screen.getByLabelText('Code')).toHaveValue('TOWN_HALL');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(onChange.mock.calls[0][0].types.map((t: { code: string }) => t.code))
+      .toEqual(['TRAINING', 'RECOGNITION', 'TOWN_HALL']);
+  });
+
+  it('removes one, and edits a name without touching the code', async () => {
+    const onChange = vi.fn();
+    render(<EventTypesEditor payload={EVENT_TYPES} onChange={onChange} />);
+
+    const row = screen.getByText('TRAINING').closest('li')!;
+    await userEvent.click(within(row).getByRole('button', { name: 'Edit' }));
+    const name = screen.getByRole('textbox', { description: 'TRAINING' });
+    await userEvent.clear(name);
+    await userEvent.type(name, 'Pelatihan');
+    await userEvent.click(within(row).getByRole('button', { name: 'Save' }));
+
+    const [next] = onChange.mock.calls[0];
+    expect(next.types[0]).toMatchObject({ code: 'TRAINING', label: 'Pelatihan' });
+  });
+
+  it('reorders with the keyboard, and rewrites the ordinal', async () => {
+    // The order reaches an office through `displayOrder`, so a drag that moves the row and
+    // leaves the number behind shows one order and seeds another (P4-T24's defect).
+    const onChange = vi.fn();
+    render(<EventTypesEditor payload={EVENT_TYPES} onChange={onChange} />);
+
+    const row = screen.getByText('TRAINING').closest('li')!;
+    within(row).getByRole('button', { name: /^Reorder Training\./ }).focus();
+    await userEvent.keyboard('{ArrowDown}');
+
+    const [next] = onChange.mock.calls[0];
+    expect(next.types.map((t: { code: string; displayOrder: number }) => [t.code, t.displayOrder]))
+      .toEqual([['RECOGNITION', 1], ['TRAINING', 2]]);
+  });
+});
+
+describe('CampaignKindsEditor (P5-T9)', () => {
+  it('renders an unauthored preset as empty instead of crashing', () => {
+    render(<CampaignKindsEditor
+      payload={{} as CampaignKindsPayload}
+      metrics={METRICS}
+      onChange={vi.fn()}
+    />);
+
+    expect(screen.getByRole('heading', { name: 'Production clubs' })).toBeInTheDocument();
+  });
+
+  it('adds a rule that already asks for something', async () => {
+    // A rule asking for nothing is one everybody qualifies for on the day it publishes — and
+    // publishing refuses it, so the Add cannot be the thing that creates one.
+    const onChange = vi.fn();
+    render(<CampaignKindsEditor payload={CAMPAIGN_KINDS} metrics={METRICS} onChange={onChange} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Add a production clubs rule/ }));
+    await userEvent.type(screen.getByLabelText('Name'), 'Elite Club');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    const [next] = onChange.mock.calls[0];
+    const added = next.rules.find((r: { code: string }) => r.code === 'ELITE_CLUB');
+    expect(added.criteriaGroups[0].criteria).toHaveLength(1);
+    expect(added.rank).toBe(2);
+  });
+
+  it('edits a threshold, and says money is in sen', async () => {
+    const onChange = vi.fn();
+    render(<CampaignKindsEditor payload={CAMPAIGN_KINDS} metrics={METRICS} onChange={onChange} />);
+
+    const criterion = screen.getByText(/APE achieved/).closest('li')!;
+    await userEvent.click(within(criterion).getByRole('button', { name: 'Edit' }));
+    const value = screen.getByLabelText('Value');
+    expect(screen.getByText(/Money is in sen/)).toBeInTheDocument();
+    await userEvent.clear(value);
+    await userEvent.type(value, '200000000000');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(onChange.mock.calls[0][0].rules[0].criteriaGroups[0].criteria[0].value)
+      .toBe(200000000000);
+  });
+
+  it('names a metric the registry does not define rather than hiding it', async () => {
+    // ADR-0035: a rule records what it is waiting on. Dropping the row would show a rule that
+    // silently never passes.
+    render(<CampaignKindsEditor
+      payload={{
+        rules: [{
+          ...CAMPAIGN_KINDS.rules[0],
+          criteriaGroups: [{
+            mode: 'all',
+            criteria: [{ metricKey: 'MADE_UP_METRIC', comparator: 'gte', value: 1 }],
+          }],
+        }],
+      }}
+      metrics={METRICS}
+      onChange={vi.fn()}
+    />);
+
+    expect(screen.getByText(/MADE_UP_METRIC — not in the registry yet/)).toBeInTheDocument();
+  });
+});
+
+describe('CapabilityLadderEditor (P5-T9)', () => {
+  it('renders an unauthored preset as empty instead of crashing', () => {
+    render(<CapabilityLadderEditor payload={{} as CapabilityLadderPayload} onChange={vi.fn()} />);
+
+    expect(screen.getByRole('heading', { name: 'Milestones' })).toBeInTheDocument();
+  });
+
+  it('lists stages by rank, not by the order they sit in the payload', async () => {
+    // The prototype computes somebody's stage from the array index, so tidying the ladder for
+    // readability moves everybody. Rank is the only seniority here.
+    render(<CapabilityLadderEditor payload={CAPABILITY} onChange={vi.fn()} />);
+
+    const labels = screen.getAllByText(/New agent|Competent/).map((el) => el.textContent);
+    expect(labels).toEqual(['New agent', 'Competent']);
+  });
+
+  it('ticks a milestone onto a stage', async () => {
+    const onChange = vi.fn();
+    render(<CapabilityLadderEditor payload={CAPABILITY} onChange={onChange} />);
+
+    const stage = screen.getByText('NEW').closest('li')!;
+    await userEvent.click(within(stage).getByRole('checkbox', { name: 'Sells independently' }));
+
+    const [next] = onChange.mock.calls[0];
+    expect(next.stages.find((s: { code: string }) => s.code === 'NEW').requiredMilestoneCodes)
+      .toEqual(['SELLS']);
+  });
+
+  it('refuses to let a grid item be added without a code, and suggests one', async () => {
+    const onChange = vi.fn();
+    render(<CapabilityLadderEditor payload={CAPABILITY} onChange={onChange} />);
+
+    await userEvent.click(screen.getByRole('button', { name: /Add an item/ }));
+    await userEvent.type(screen.getByLabelText('Item'), 'Asking for referrals');
+
+    expect(screen.getByLabelText('Code')).toHaveValue('ASKING_FOR_REFERRALS');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    expect(onChange.mock.calls[0][0].grids[0].items.map((i: { code: string }) => i.code))
+      .toEqual(['APPROACH', 'ASKING_FOR_REFERRALS']);
+  });
+
+  it('says a milestone a stage still needs will be refused, rather than removing it quietly', async () => {
+    render(<CapabilityLadderEditor payload={CAPABILITY} onChange={vi.fn()} />);
+
+    const row = screen.getByText('SELLS').closest('li')!;
+    expect(within(row).getByRole('button', { name: 'Remove' }))
+      .toHaveAttribute('title', expect.stringContaining('refused at publish'));
   });
 });

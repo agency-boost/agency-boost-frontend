@@ -1523,3 +1523,656 @@ export function ActivationChecklistEditor({
     </div>
   );
 }
+
+// ------------------------------------------------ the two kinds ADR-0034 named (P5-T9 AC-4)
+
+export interface EventTypesPayload {
+  types: {
+    code: string; label: string; description?: string | null;
+    emoji?: string | null; color?: string | null;
+    /**
+     * The order an office's screen lists them in.
+     *
+     * Written here rather than derived from array position, so a payload that arrives out of
+     * order still seeds the order it states — and so `useRowDrag` has the ordinal it rewrites.
+     */
+    displayOrder?: number;
+  }[];
+}
+
+/**
+ * The event types of a company template (P5-T6, ADR-0034, P5-T9 AC-4).
+ *
+ * **Types, never occurrences.** An event is a live record an office or a company runs; what is
+ * copied into a new office is the list of things an event may *be* — which is why this tab was a
+ * sign until the kind existed, and why there will never be a kind for an event itself.
+ *
+ * An insurer that runs *Product launch* and not *Community* should not hand every one of its
+ * offices a type it never uses, and every office deleting the same row by hand is not a default.
+ */
+export function EventTypesEditor({
+  payload,
+  onChange,
+  disabled,
+}: {
+  payload: EventTypesPayload;
+  onChange: (next: EventTypesPayload) => void;
+  disabled?: boolean;
+}) {
+  // A template nobody has authored yet arrives as `payload: {}`; empty is a real state.
+  const types = payload.types ?? [];
+  const put = (next: EventTypesPayload['types']) => onChange({ types: next });
+  const drag = useRowDrag(types, (t) => t.code, put, { field: 'displayOrder' });
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted">
+          {count(types.length, 'type', 'types')} every new office of this company starts with
+        </p>
+        <AddRow
+          bare
+          suggest
+          disabled={disabled}
+          what="event type"
+          taken={(code) => types.some((t) => t.code === code)}
+          onAdd={(code, label) => put([
+            ...types, { code, label, description: null, emoji: null, color: null },
+          ])}
+        />
+      </div>
+
+      {types.length === 0 ? (
+        <Card>
+          <p className="text-md text-muted">
+            No types yet. An office with none has nothing to file an event under, so publishing
+            an empty list is refused.
+          </p>
+        </Card>
+      ) : (
+        <Card className="p-0">
+          <ul className="flex flex-col divide-y divide-hairline">
+            {types.map((type) => {
+              const { className, ...rowProps } = drag.rowProps(type.code);
+              return (
+              <li key={type.code} {...rowProps} className={`px-4 py-3 sm:px-5 ${className}`}>
+                <div className="flex items-start gap-3">
+                  <DragHandle
+                    label={type.label}
+                    disabled={disabled}
+                    className="mt-1 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                    {...drag.handleProps(type.code)}
+                  />
+                  <div className="min-w-0 flex-1">
+                <EditableRow
+                  rowKey={type.code}
+                  disabled={disabled}
+                  fields={[
+                    { key: 'label', label: 'Name', hint: type.code },
+                    {
+                      key: 'description',
+                      label: 'Description',
+                      hint: 'Optional. Shown under the name on the office’s own settings screen.',
+                    },
+                    { key: 'emoji', label: 'Emoji', hint: 'Optional. One character, for the list.' },
+                    {
+                      key: 'color',
+                      label: 'Colour',
+                      hint: 'Optional. A hash and six hex digits. Publishing refuses anything else.',
+                    },
+                  ]}
+                  values={{
+                    label: type.label,
+                    description: type.description ?? '',
+                    emoji: type.emoji ?? '',
+                    color: type.color ?? '',
+                  }}
+                  onSave={(next) => put(types.map((t) => (t.code === type.code ? {
+                    ...t,
+                    label: next.label.trim(),
+                    description: next.description.trim() || null,
+                    emoji: next.emoji.trim() || null,
+                    color: next.color.trim() || null,
+                  } : t)))}
+                  actions={(
+                    <Button
+                      variant="secondary"
+                      disabled={disabled}
+                      onClick={() => put(types.filter((t) => t.code !== type.code))}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                >
+                  <p className="flex flex-wrap items-center gap-2 text-md text-navy">
+                    {type.emoji && <span aria-hidden="true">{type.emoji}</span>}
+                    {type.label}
+                    {/* The colour is never the only cue: the hex is written out beside it. */}
+                    {type.color && (
+                      <span className="flex items-center gap-1">
+                        <span
+                          aria-hidden="true"
+                          className="inline-block h-3 w-3 rounded-sm border border-hairline"
+                          style={{ backgroundColor: type.color }}
+                        />
+                        <code className="text-sm text-muted">{type.color}</code>
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-1 flex flex-wrap items-center gap-2">
+                    <code className="text-sm text-muted">{type.code}</code>
+                    {type.description && <span className="text-sm text-muted">{type.description}</span>}
+                  </p>
+                </EditableRow>
+                  </div>
+                </div>
+              </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+export interface CampaignKindsPayload {
+  rules: {
+    kind: string;
+    code: string;
+    name: string;
+    appliesToOrgLevelCodes?: string[];
+    criteriaGroups: { mode: string; criteria: { metricKey: string; comparator: string; value: number }[] }[];
+    groupMode?: string;
+    reward?: string;
+    rank: number;
+  }[];
+}
+
+/** The three kinds a carrier rule can be, in the order a Super Admin thinks about them. */
+const RULE_KINDS = [
+  { code: 'production_club', label: 'Production clubs', blurb: 'Annual recognition tiers.' },
+  { code: 'moc', label: 'Maintenance of Contract', blurb: 'What a contract has to keep meeting.' },
+  { code: 'promotion_path', label: 'Promotion paths', blurb: 'What a promotion asks for.' },
+];
+
+const COMPARATORS = [
+  { value: 'gte', label: 'at least (≥)' },
+  { value: 'gt', label: 'more than (>)' },
+  { value: 'lte', label: 'at most (≤)' },
+  { value: 'lt', label: 'less than (<)' },
+  { value: 'eq', label: 'exactly (=)' },
+];
+
+/**
+ * A company's carrier rules (ADR-0026, ADR-0034, P5-T9 AC-4).
+ *
+ * **A metric, a comparator and a number — never a display string.** The prototype writes
+ * *"Net APE ≥ Rp 600 juta"*, which nothing can evaluate and nothing can refuse, so a campaign could
+ * promise a reward against a figure the product never produces.
+ *
+ * **Publishing this applies it**, rather than seeding a future office: carrier rules are the
+ * company's and every office reads them live, so a change reaches the offices that already exist.
+ */
+export function CampaignKindsEditor({
+  payload,
+  metrics,
+  onChange,
+  disabled,
+}: {
+  payload: CampaignKindsPayload;
+  /** The metric registry, so a rule names a metric that exists rather than a typed string. */
+  metrics: { key: string; label: string; unit: string }[];
+  onChange: (next: CampaignKindsPayload) => void;
+  disabled?: boolean;
+}) {
+  const rules = payload.rules ?? [];
+  const put = (next: CampaignKindsPayload['rules']) => onChange({ rules: next });
+  const patch = (code: string, kind: string, fields: Partial<CampaignKindsPayload['rules'][number]>) =>
+    put(rules.map((r) => (r.code === code && r.kind === kind ? { ...r, ...fields } : r)));
+
+  const metricOptions = metrics.map((m) => ({ value: m.key, label: m.label }));
+  const metricLabel = (key: string) =>
+    metrics.find((m) => m.key === key)?.label
+    // A metric the registry does not define is shown as what it is, not hidden: the rule records
+    // what it is waiting on, and a screen that dropped it would show a rule that never passes.
+    ?? `${key} — not in the registry yet`;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card>
+        <p className="text-md text-navy">
+          These are the insurer&rsquo;s own rules, and every office of this company reads them.
+          {' '}
+          <span className="text-muted">
+            An office cannot edit or delete one. Publishing here reaches the offices that already
+            exist, not only the ones created afterwards — so a threshold you change today is the
+            one every standing is measured against tomorrow.
+          </span>
+        </p>
+      </Card>
+
+      {RULE_KINDS.map((kind) => {
+        const mine = rules.filter((r) => r.kind === kind.code)
+          .sort((a, b) => a.rank - b.rank);
+        return (
+          <Card key={kind.code} className="p-0">
+            <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
+              <h2 className="font-display text-lg font-bold text-navy">{kind.label}</h2>
+              <span className="text-sm text-muted">{kind.blurb}</span>
+              <span className="ml-auto">
+                <ConfigBadge tone={mine.length > 0 ? 'won' : 'open'}>
+                  {count(mine.length, 'rule', 'rules')}
+                </ConfigBadge>
+              </span>
+            </div>
+
+            <ul className="flex flex-col divide-y divide-hairline">
+              {mine.map((rule) => (
+                <li key={`${rule.kind}:${rule.code}`} className="px-4 py-3 sm:px-5">
+                  <EditableRow
+                    rowKey={`${rule.kind}-${rule.code}`}
+                    disabled={disabled}
+                    fields={[
+                      { key: 'name', label: 'Name', hint: rule.code },
+                      {
+                        key: 'rank',
+                        label: 'Rank',
+                        hint: 'The order the tiers are climbed in. Two rules at one rank is refused.',
+                      },
+                      { key: 'reward', label: 'Reward', hint: 'Optional. What qualifying earns.' },
+                    ]}
+                    values={{
+                      name: rule.name, rank: String(rule.rank), reward: rule.reward ?? '',
+                    }}
+                    onSave={(next) => patch(rule.code, rule.kind, {
+                      name: next.name.trim(),
+                      rank: Number(next.rank) || rule.rank,
+                      reward: next.reward.trim(),
+                    })}
+                    actions={(
+                      <Button
+                        variant="secondary"
+                        disabled={disabled}
+                        title="Removing it here retires it on publish. Standings that qualified under it stay readable."
+                        onClick={() => put(rules.filter(
+                          (r) => !(r.code === rule.code && r.kind === rule.kind),
+                        ))}
+                      >
+                        Remove
+                      </Button>
+                    )}
+                  >
+                    <p className="text-md text-navy">{rule.name}</p>
+                    <p className="mt-1 flex flex-wrap items-center gap-2">
+                      <code className="text-sm text-muted">{rule.code}</code>
+                      <ConfigBadge tone="open">Rank {rule.rank}</ConfigBadge>
+                      {rule.reward && <span className="text-sm text-muted">{rule.reward}</span>}
+                    </p>
+                  </EditableRow>
+
+                  <div className="mt-2 flex flex-col gap-2">
+                    {(rule.criteriaGroups ?? []).map((group, g) => (
+                      // eslint-disable-next-line react/no-array-index-key
+                      <div key={g} className="rounded-sm border border-hairline p-3">
+                        <p className="text-sm text-muted">
+                          {g > 0 && <strong>{rule.groupMode === 'any' ? 'or ' : 'and '}</strong>}
+                          {group.mode === 'any' ? 'any one of these' : 'all of these'}
+                        </p>
+                        <ul className="mt-2 flex flex-col divide-y divide-hairline">
+                          {group.criteria.map((criterion, c) => (
+                            // eslint-disable-next-line react/no-array-index-key
+                            <li key={c} className="py-2">
+                              <EditableRow
+                                rowKey={`${rule.kind}-${rule.code}-${g}-${c}`}
+                                disabled={disabled}
+                                fields={[
+                                  { key: 'metricKey', label: 'Metric', options: metricOptions },
+                                  { key: 'comparator', label: 'Comparison', options: COMPARATORS },
+                                  {
+                                    key: 'value',
+                                    label: 'Value',
+                                    hint: 'Money is in sen — Rp 1.200.000.000 is 120000000000.',
+                                  },
+                                ]}
+                                values={{
+                                  metricKey: criterion.metricKey,
+                                  comparator: criterion.comparator,
+                                  value: String(criterion.value),
+                                }}
+                                onSave={(next) => patch(rule.code, rule.kind, {
+                                  criteriaGroups: rule.criteriaGroups.map((gr, gi) => (gi === g ? {
+                                    ...gr,
+                                    criteria: gr.criteria.map((cr, ci) => (ci === c ? {
+                                      metricKey: next.metricKey,
+                                      comparator: next.comparator,
+                                      value: Number(next.value) || 0,
+                                    } : cr)),
+                                  } : gr)),
+                                })}
+                              >
+                                <p className="text-md text-navy">
+                                  {metricLabel(criterion.metricKey)}
+                                  {' '}
+                                  {COMPARATORS.find((o) => o.value === criterion.comparator)?.label
+                                    ?? criterion.comparator}
+                                  {' '}
+                                  {criterion.value.toLocaleString('id-ID')}
+                                </p>
+                              </EditableRow>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            <div className="px-4 pb-3 sm:px-5">
+              <AddRow
+                suggest
+                disabled={disabled}
+                what={`${kind.label.toLowerCase()} rule`}
+                taken={(code) => rules.some((r) => r.kind === kind.code && r.code === code)}
+                onAdd={(code, label) => put([...rules, {
+                  kind: kind.code,
+                  code,
+                  name: label,
+                  appliesToOrgLevelCodes: [],
+                  // One group with one criterion, because a rule asking for nothing is one
+                  // everybody qualifies for on the day it publishes — and publishing refuses it.
+                  criteriaGroups: [{
+                    mode: 'all',
+                    criteria: [{
+                      metricKey: metrics[0]?.key ?? 'APE_ACHIEVED', comparator: 'gte', value: 0,
+                    }],
+                  }],
+                  groupMode: 'all',
+                  reward: '',
+                  rank: rules.filter((r) => r.kind === kind.code).length + 1,
+                }])}
+              />
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+export interface CapabilityLadderPayload {
+  stages: { code: string; label: string; requiredMilestoneCodes: string[]; stageOrder: number }[];
+  milestones: { code: string; label: string }[];
+  grids: {
+    code: string; label: string; requiresDownline?: boolean;
+    items: { code: string; label: string }[];
+  }[];
+}
+
+/**
+ * A company's capability ladder (P5-T8, ADR-0025, ADR-0036, P5-T9 AC-4).
+ *
+ * **Every row carries a code, in all three lists.** Two of the prototype's four grids have no ids
+ * at all, so a tick there is bound to the label and correcting a typo orphans every assessment
+ * that used it. There is no way to add a row without one here.
+ *
+ * **A stage's seniority is `stageOrder`, never its position.** The prototype works somebody's stage
+ * out from the stage's index in its own array, so tidying the ladder for readability moves
+ * everybody. Reordering the list on this screen changes where a stage is drawn and nothing else.
+ */
+export function CapabilityLadderEditor({
+  payload,
+  onChange,
+  disabled,
+}: {
+  payload: CapabilityLadderPayload;
+  onChange: (next: CapabilityLadderPayload) => void;
+  disabled?: boolean;
+}) {
+  const stages = payload.stages ?? [];
+  const milestones = payload.milestones ?? [];
+  const grids = payload.grids ?? [];
+  const put = (next: Partial<CapabilityLadderPayload>) =>
+    onChange({ stages, milestones, grids, ...next });
+
+  const milestoneLabel = (code: string) =>
+    milestones.find((m) => m.code === code)?.label
+    // A stage requiring a milestone nobody defines is refused at publish; until then it has to
+    // render as what it is rather than vanish, or the refusal will read as coming from nowhere.
+    ?? `${code} — no milestone defines this`;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card className="p-0">
+        <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
+          <h2 className="font-display text-lg font-bold text-navy">Milestones</h2>
+          <span className="text-sm text-muted">What a stage is reached by.</span>
+          <span className="ml-auto flex items-center gap-2">
+            <ConfigBadge tone={milestones.length > 0 ? 'won' : 'open'}>
+              {count(milestones.length, 'milestone', 'milestones')}
+            </ConfigBadge>
+            <AddRow
+              bare
+              suggest
+              disabled={disabled}
+              what="milestone"
+              taken={(code) => milestones.some((m) => m.code === code)}
+              onAdd={(code, label) => put({ milestones: [...milestones, { code, label }] })}
+            />
+          </span>
+        </div>
+        <ul className="flex flex-col divide-y divide-hairline">
+          {milestones.map((milestone) => (
+            <li key={milestone.code} className="px-4 py-3 sm:px-5">
+              <EditableRow
+                rowKey={milestone.code}
+                disabled={disabled}
+                fields={[{ key: 'label', label: 'Name', hint: milestone.code }]}
+                values={{ label: milestone.label }}
+                onSave={(next) => put({
+                  milestones: milestones.map((m) => (m.code === milestone.code
+                    ? { ...m, label: next.label.trim() } : m)),
+                })}
+                actions={(
+                  <Button
+                    variant="secondary"
+                    disabled={disabled}
+                    title="A stage that requires it will be refused at publish until you change that too."
+                    onClick={() => put({
+                      milestones: milestones.filter((m) => m.code !== milestone.code),
+                    })}
+                  >
+                    Remove
+                  </Button>
+                )}
+              >
+                <p className="text-md text-navy">{milestone.label}</p>
+                <code className="text-sm text-muted">{milestone.code}</code>
+              </EditableRow>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <Card className="p-0">
+        <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
+          <h2 className="font-display text-lg font-bold text-navy">Stages</h2>
+          <span className="text-sm text-muted">
+            Seniority is the rank, not the position on this page.
+          </span>
+          <span className="ml-auto flex items-center gap-2">
+            <ConfigBadge tone={stages.length > 0 ? 'won' : 'open'}>
+              {count(stages.length, 'stage', 'stages')}
+            </ConfigBadge>
+            <AddRow
+              bare
+              suggest
+              disabled={disabled}
+              what="stage"
+              taken={(code) => stages.some((s) => s.code === code)}
+              onAdd={(code, label) => put({
+                stages: [...stages, {
+                  code, label, requiredMilestoneCodes: [], stageOrder: stages.length + 1,
+                }],
+              })}
+            />
+          </span>
+        </div>
+        <ul className="flex flex-col divide-y divide-hairline">
+          {[...stages].sort((a, b) => a.stageOrder - b.stageOrder).map((stage) => (
+            <li key={stage.code} className="px-4 py-3 sm:px-5">
+              <EditableRow
+                rowKey={stage.code}
+                disabled={disabled}
+                fields={[
+                  { key: 'label', label: 'Name', hint: stage.code },
+                  {
+                    key: 'stageOrder',
+                    label: 'Rank',
+                    hint: 'How senior the stage is. Two stages at one rank is refused at publish.',
+                  },
+                ]}
+                values={{ label: stage.label, stageOrder: String(stage.stageOrder) }}
+                onSave={(next) => put({
+                  stages: stages.map((s) => (s.code === stage.code ? {
+                    ...s,
+                    label: next.label.trim(),
+                    stageOrder: Number(next.stageOrder) || s.stageOrder,
+                  } : s)),
+                })}
+                actions={(
+                  <Button
+                    variant="secondary"
+                    disabled={disabled}
+                    onClick={() => put({ stages: stages.filter((s) => s.code !== stage.code) })}
+                  >
+                    Remove
+                  </Button>
+                )}
+              >
+                <p className="text-md text-navy">{stage.label}</p>
+                <p className="mt-1 flex flex-wrap items-center gap-2">
+                  <code className="text-sm text-muted">{stage.code}</code>
+                  <ConfigBadge tone="open">Rank {stage.stageOrder}</ConfigBadge>
+                </p>
+              </EditableRow>
+
+              <fieldset className="mt-2 rounded-sm border border-hairline p-3">
+                <legend className="px-1 text-sm text-muted">Reached by</legend>
+                {milestones.length === 0 ? (
+                  <p className="text-sm text-muted">
+                    Add a milestone first — a stage requiring none is one everybody is already on.
+                  </p>
+                ) : milestones.map((milestone) => (
+                  <label
+                    key={milestone.code}
+                    className="flex items-center gap-2 py-1 text-md text-navy"
+                  >
+                    <input
+                      type="checkbox"
+                      disabled={disabled}
+                      checked={stage.requiredMilestoneCodes.includes(milestone.code)}
+                      onChange={(e) => put({
+                        stages: stages.map((s) => (s.code === stage.code ? {
+                          ...s,
+                          requiredMilestoneCodes: e.target.checked
+                            ? [...s.requiredMilestoneCodes, milestone.code]
+                            : s.requiredMilestoneCodes.filter((c) => c !== milestone.code),
+                        } : s)),
+                      })}
+                    />
+                    {milestoneLabel(milestone.code)}
+                  </label>
+                ))}
+              </fieldset>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      {grids.map((grid) => (
+        <Card key={grid.code} className="p-0">
+          <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
+            <h2 className="font-display text-lg font-bold text-navy">{grid.label}</h2>
+            <code className="text-sm text-muted">{grid.code}</code>
+            {grid.requiresDownline && (
+              <ConfigBadge tone="open">Only for somebody with a downline</ConfigBadge>
+            )}
+            <span className="ml-auto flex items-center gap-2">
+              <ConfigBadge tone={grid.items.length > 0 ? 'won' : 'open'}>
+                {count(grid.items.length, 'item', 'items')}
+              </ConfigBadge>
+              <Button
+                variant="secondary"
+                disabled={disabled}
+                onClick={() => put({ grids: grids.filter((g) => g.code !== grid.code) })}
+              >
+                Remove
+              </Button>
+            </span>
+          </div>
+          <ul className="flex flex-col divide-y divide-hairline">
+            {grid.items.map((item) => (
+              <li key={item.code} className="px-4 py-3 sm:px-5">
+                <EditableRow
+                  rowKey={`${grid.code}-${item.code}`}
+                  disabled={disabled}
+                  fields={[{ key: 'label', label: 'Item', hint: item.code }]}
+                  values={{ label: item.label }}
+                  onSave={(next) => put({
+                    grids: grids.map((g) => (g.code === grid.code ? {
+                      ...g,
+                      items: g.items.map((i) => (i.code === item.code
+                        ? { ...i, label: next.label.trim() } : i)),
+                    } : g)),
+                  })}
+                  actions={(
+                    <Button
+                      variant="secondary"
+                      disabled={disabled}
+                      onClick={() => put({
+                        grids: grids.map((g) => (g.code === grid.code
+                          ? { ...g, items: g.items.filter((i) => i.code !== item.code) } : g)),
+                      })}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                >
+                  <p className="text-md text-navy">{item.label}</p>
+                  <code className="text-sm text-muted">{item.code}</code>
+                </EditableRow>
+              </li>
+            ))}
+          </ul>
+          <div className="px-4 pb-3 sm:px-5">
+            <AddRow
+              suggest
+              disabled={disabled}
+              what="item"
+              nameLabel="Item"
+              // Across the whole catalog: a tick names a code, not a code within a grid.
+              taken={(code) => grids.some((g) => g.items.some((i) => i.code === code))}
+              onAdd={(code, label) => put({
+                grids: grids.map((g) => (g.code === grid.code
+                  ? { ...g, items: [...g.items, { code, label }] } : g)),
+              })}
+            />
+          </div>
+        </Card>
+      ))}
+
+      <AddRow
+        suggest
+        disabled={disabled}
+        what="grid"
+        taken={(code) => grids.some((g) => g.code === code)}
+        onAdd={(code, label) => put({
+          grids: [...grids, { code, label, requiresDownline: false, items: [] }],
+        })}
+      />
+    </div>
+  );
+}

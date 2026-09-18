@@ -163,16 +163,135 @@ describe('a company’s Company template (P4-T8)', () => {
     expect(body.payload.types[0].code).toBe('SELL_SUBMISSION');
   });
 
-  it('shows a Phase 5 tab as a signpost, with no data and no request', async () => {
-    const { calls } = render();
-    await screen.findByText('SELL_SUBMISSION');
-    const before = calls.length;
+  /**
+   * The three tabs P5-T9 finished (AC-4).
+   *
+   * Two of them — Events and Campaigns — were `ComingInPhase` signs until the template kinds
+   * ADR-0034 named existed, which is why they looked unfinished beside the Products tab. The
+   * third, Capability catalog, had validation and a provisioning reader since P5-T8 and no way
+   * for anybody to edit one.
+   */
+  describe('the Phase 5 tabs (P5-T9)', () => {
+    const EVENT_TYPES = {
+      id: 'tpl-4', companyId: 'c1', kind: 'event_types', version: 1, status: 'draft',
+      publishedAt: null, publishedVersion: null, officesBehind: 0, officesUnrecorded: 0,
+      payload: {
+        types: [
+          { code: 'TRAINING', label: 'Training', description: null, emoji: '📚', color: '#2D9CDB' },
+          { code: 'RECOGNITION', label: 'Recognition', description: null, emoji: '🏆', color: null },
+        ],
+      },
+    };
 
-    // Events: Training has had its editor since P5-T1.
-    await userEvent.click(screen.getByRole('link', { name: 'Events' }));
+    const CAMPAIGN_KINDS = {
+      id: 'tpl-5', companyId: 'c1', kind: 'campaign_kinds', version: 1, status: 'draft',
+      publishedAt: null, publishedVersion: null, officesBehind: 0, officesUnrecorded: 0,
+      payload: {
+        rules: [{
+          kind: 'production_club', code: 'STAR_CLUB', name: 'Star Club', rank: 1,
+          reward: 'Promotion bonus', groupMode: 'all',
+          criteriaGroups: [{
+            mode: 'all',
+            criteria: [{ metricKey: 'APE_ACHIEVED', comparator: 'gte', value: 120000000000 }],
+          }],
+        }],
+      },
+    };
 
-    expect(await screen.findByText(/Arrives in phase 5/)).toBeInTheDocument();
-    expect(calls.length).toBe(before);
+    const CAPABILITY = {
+      id: 'tpl-6', companyId: 'c1', kind: 'capability_ladder', version: 1, status: 'draft',
+      publishedAt: null, publishedVersion: null, officesBehind: 0, officesUnrecorded: 0,
+      payload: {
+        stages: [{
+          code: 'COMPETENT', label: 'Competent producer',
+          requiredMilestoneCodes: ['SELLS'], stageOrder: 1,
+        }],
+        milestones: [{ code: 'SELLS', label: 'Sells independently' }],
+        grids: [{
+          code: 'PERSONAL', label: 'Personal selling', requiresDownline: false,
+          items: [{ code: 'APPROACH', label: 'Approach' }],
+        }],
+      },
+    };
+
+    const openTab = async (body: unknown, label: string) => {
+      const stub = stubFetch({
+        '/admin/companies/c1/template': { body },
+        '/metrics': {
+          body: [
+            { key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true },
+            { key: 'NET_APE', name: 'Net APE', unit: 'idr_minor', phase: 9, computed: true },
+          ],
+        },
+      });
+      renderWithSession(
+        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
+        { me: SUPER_ADMIN },
+      );
+      await userEvent.click(await screen.findByRole('link', { name: label }));
+      return stub;
+    };
+
+    it('edits an event type without touching its code', async () => {
+      const stub = await openTab(EVENT_TYPES, 'Events');
+      await screen.findByText('TRAINING');
+
+      const field = await openRow('TRAINING');
+      await userEvent.clear(field);
+      await userEvent.type(field, 'Pelatihan');
+      const row = screen.getByText('TRAINING').closest('li')!;
+      await userEvent.click(within(row).getByRole('button', { name: 'Save' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+      const sent = stub.calls.find((c) => c.init.method === 'PUT')!;
+      const body = JSON.parse(String(sent.init.body));
+      expect(body.payload.types[0].label).toBe('Pelatihan');
+      // The code is untouched, which is the whole contract of a template.
+      expect(body.payload.types[0].code).toBe('TRAINING');
+    });
+
+    it('writes a colour out beside its swatch, so colour is never the only cue', async () => {
+      await openTab(EVENT_TYPES, 'Events');
+
+      expect(await screen.findByText('#2D9CDB')).toBeInTheDocument();
+      // A type with no colour simply has no swatch; nothing is invented for it.
+      expect(screen.getByText('Recognition')).toBeInTheDocument();
+    });
+
+    it('names a metric from the registry rather than a list of its own', async () => {
+      // The campaigns screen carried five metrics hard-coded in a `<select>` — a second
+      // definition of the product's vocabulary, and unable to name the other thirty.
+      const stub = await openTab(CAMPAIGN_KINDS, 'Campaigns');
+
+      expect(await screen.findByText(/APE achieved/)).toBeInTheDocument();
+      expect(stub.calls.some((c) => c.url.includes('/metrics'))).toBe(true);
+    });
+
+    it('says publishing carrier rules reaches the offices that already exist', async () => {
+      // Unlike every other kind: the rules are the company's and are read live, so this is not
+      // a preset a future office is seeded from.
+      await openTab(CAMPAIGN_KINDS, 'Campaigns');
+
+      expect(await screen.findByText(/reaches the offices that already exist/))
+        .toBeInTheDocument();
+    });
+
+    it('shows a code on every capability row, including the grid items', async () => {
+      await openTab(CAPABILITY, 'Capability catalog');
+
+      expect(await screen.findByText('APPROACH')).toBeInTheDocument();
+      expect(screen.getByText('SELLS')).toBeInTheDocument();
+      expect(screen.getByText('COMPETENT')).toBeInTheDocument();
+    });
+
+    it('says a stage’s seniority is its rank, not its position', async () => {
+      // The prototype computes it from the array index, so tidying the ladder moves everybody.
+      await openTab(CAPABILITY, 'Capability catalog');
+
+      expect(await screen.findByText(/Seniority is the rank, not the position/))
+        .toBeInTheDocument();
+      expect(screen.getByText('Rank 1')).toBeInTheDocument();
+    });
   });
   it('P5-T1: edits the training taxonomy on its own tab, through its own editor', async () => {
     const TRAINING = {

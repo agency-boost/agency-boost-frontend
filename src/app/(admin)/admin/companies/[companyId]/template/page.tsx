@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, use } from 'react';
-import { ComingInPhase } from '@/components/coming-in-phase';
 import { ProductsTab } from '@/components/products-tab';
 import { SettingsScreen } from '@/components/settings-screen';
+import { listMetrics, type MetricDefinition } from '@/lib/tenant-config';
 import {
-  ActivationChecklistEditor, PipelineEditor, RatioSetEditor, TaxonomyEditor, TrainingEditor,
-  type ActivationChecklistPayload, type PipelinePayload, type RatioSetPayload,
+  ActivationChecklistEditor, CampaignKindsEditor, CapabilityLadderEditor, EventTypesEditor,
+  PipelineEditor, RatioSetEditor, TaxonomyEditor, TrainingEditor,
+  type ActivationChecklistPayload, type CampaignKindsPayload, type CapabilityLadderPayload,
+  type EventTypesPayload, type PipelinePayload, type RatioSetPayload,
   type TaxonomyPayload, type TrainingTaxonomyPayload,
 } from '@/components/template-editor';
 import { Button, Card } from '@/components/ui/field';
@@ -20,21 +22,22 @@ import {
 
 /** Each item of the Owner's Settings group, as ADR-0018 lays them out. */
 const TABS: {
-  key: string; label: string; kind: TemplateKind | null; phase: number; under?: string;
+  key: string; label: string; kind: TemplateKind | null; under?: string;
 }[] = [
   /*
    * `Activity types` and `Ratio benchmarks` are **subtabs of one item**, not two tabs.
    * ADR-0018's own table says so, and it mirrors the Owner's Settings group, where the
    * benchmarks live inside the Activity types screen (`KPM_Owner.html:1329-1330`).
    */
-  { key: 'activity', label: 'Activity types', kind: 'activity_taxonomy', phase: 4, under: 'activity' },
-  { key: 'ratios', label: 'Ratio benchmarks', kind: 'ratio_set', phase: 4, under: 'activity' },
-  { key: 'leads', label: 'Lead statuses', kind: 'lead_pipeline', phase: 4 },
-  { key: 'activation', label: 'Activation checklist', kind: 'activation_checklist', phase: 5 },
-  { key: 'training', label: 'Training', kind: 'training_taxonomy', phase: 5 },
-  { key: 'events', label: 'Events', kind: null, phase: 5 },
-  { key: 'campaigns', label: 'Campaigns', kind: null, phase: 5 },
-  { key: 'products', label: 'Products', kind: null, phase: 5 },
+  { key: 'activity', label: 'Activity types', kind: 'activity_taxonomy', under: 'activity' },
+  { key: 'ratios', label: 'Ratio benchmarks', kind: 'ratio_set', under: 'activity' },
+  { key: 'leads', label: 'Lead statuses', kind: 'lead_pipeline' },
+  { key: 'activation', label: 'Activation checklist', kind: 'activation_checklist' },
+  { key: 'training', label: 'Training', kind: 'training_taxonomy' },
+  { key: 'events', label: 'Events', kind: 'event_types' },
+  { key: 'campaigns', label: 'Campaigns', kind: 'campaign_kinds' },
+  { key: 'capability', label: 'Capability catalog', kind: 'capability_ladder' },
+  { key: 'products', label: 'Products', kind: null },
 ];
 
 /**
@@ -107,6 +110,14 @@ export default function CompanyTemplatePage({
   const [companyModules, setCompanyModules] = useState<{ code: string; title: string }[]>([]);
 
   /**
+   * The platform's metric vocabulary, for the Campaigns tab (P5-T9).
+   *
+   * Read rather than listed here: a rule names a metric the product actually computes, and a
+   * second copy of the list in this file is the thing invariant 7 exists to prevent.
+   */
+  const [metrics, setMetrics] = useState<MetricDefinition[]>([]);
+
+  /**
    * The kind most recently asked for.
    *
    * A ref rather than state: it is read at the moment a response lands, and it must be the
@@ -147,6 +158,13 @@ export default function CompanyTemplatePage({
       // A checklist editor with no module list still works: it offers the three feature links.
       .catch(() => setCompanyModules([]));
   }, [companyId, tab.kind]);
+
+  useEffect(() => {
+    if (tab.kind !== 'campaign_kinds') return;
+    // A rule editor with no metric list can still edit names and ranks, so a failure here does
+    // not take the tab down with it.
+    void listMetrics().then(setMetrics).catch(() => setMetrics([]));
+  }, [tab.kind]);
 
   useEffect(() => {
     if (tab.kind !== 'ratio_set') return;
@@ -260,23 +278,6 @@ export default function CompanyTemplatePage({
         */}
       {tab.key === 'products' ? (
         <ProductsTab companyId={companyId} />
-      ) : tab.kind === null ? (
-        <ComingInPhase
-          phase={tab.phase}
-          what={`The ${tab.label.toLowerCase()} every new office of this company will start with.`}
-          elsewhere={[
-            {
-              label: 'Activity types',
-              href: `/admin/companies/${companyId}/template`,
-              detail: 'The part of this template that is built, and editable now.',
-            },
-            {
-              label: 'Companies',
-              href: '/admin/companies',
-              detail: 'Every company on the platform.',
-            },
-          ]}
-        />
       ) : current === null ? (
         <SkeletonCards count={3} />
       ) : (
@@ -388,6 +389,31 @@ export default function CompanyTemplatePage({
                 return (
                   <TrainingEditor
                     payload={current.payload as unknown as TrainingTaxonomyPayload}
+                    disabled={busy}
+                    onChange={(next) => change(next as unknown as Record<string, unknown>)}
+                  />
+                );
+              case 'event_types':
+                return (
+                  <EventTypesEditor
+                    payload={current.payload as unknown as EventTypesPayload}
+                    disabled={busy}
+                    onChange={(next) => change(next as unknown as Record<string, unknown>)}
+                  />
+                );
+              case 'campaign_kinds':
+                return (
+                  <CampaignKindsEditor
+                    payload={current.payload as unknown as CampaignKindsPayload}
+                    metrics={metrics.map((m) => ({ key: m.key, label: m.name, unit: m.unit }))}
+                    disabled={busy}
+                    onChange={(next) => change(next as unknown as Record<string, unknown>)}
+                  />
+                );
+              case 'capability_ladder':
+                return (
+                  <CapabilityLadderEditor
+                    payload={current.payload as unknown as CapabilityLadderPayload}
                     disabled={busy}
                     onChange={(next) => change(next as unknown as Record<string, unknown>)}
                   />

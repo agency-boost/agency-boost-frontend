@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
@@ -70,6 +70,18 @@ function render(
   const stub = stubFetch({
     '/kpm/settings/campaigns/rules': { body: rules },
     '/kpm/settings/campaigns': { body: campaigns },
+    // The metric vocabulary is served, not listed in the screen (P5-T9, invariant 7).
+    '/metrics': {
+      body: [
+        { key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true },
+        {
+          key: 'SELLING_SUCCESS_RATE', name: 'Selling success rate', unit: 'percentage',
+          phase: 9, computed: true,
+        },
+        // Not computed by the phase campaigns are evaluated in: it must not be offered.
+        { key: 'COACHING_COVERAGE', name: 'Coaching coverage', unit: 'percentage', phase: 13, computed: false },
+      ],
+    },
     '/kpm/settings/publish-state': {
       body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
     },
@@ -195,6 +207,18 @@ describe('the office’s Campaigns screen', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Restore' }));
     await waitFor(() => expect(stub.calls.some((c) => c.url.includes('/c1/restore'))).toBe(true));
     expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument();
+  });
+
+  it('offers only metrics the product computes, from the registry (P5-T9)', async () => {
+    // Five were listed in the screen by hand — a second definition of the product's vocabulary,
+    // and unable to name the other thirty. A metric no phase computes by the time campaigns are
+    // evaluated is left out: a target nothing computes could never be reached.
+    render();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
+
+    const select = screen.getByLabelText('What has to be reached');
+    expect(within(select).getByRole('option', { name: 'APE achieved' })).toBeInTheDocument();
+    expect(within(select).queryByRole('option', { name: 'Coaching coverage' })).not.toBeInTheDocument();
   });
 
   it('shows a reader who cannot write without a control to change anything', async () => {

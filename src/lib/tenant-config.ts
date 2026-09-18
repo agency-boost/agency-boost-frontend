@@ -794,3 +794,26 @@ export interface EffectiveScript {
  */
 export const readEffectiveScript = (productId: string) =>
   api<EffectiveScript>(`/kpm/settings/products/${productId}/script/effective`);
+
+// -------------------------------------------- the metric registry, served rather than re-declared
+
+/** One entry of the platform's metric vocabulary (P5-T9, invariant 7). */
+export interface MetricDefinition {
+  key: string;
+  /** The registry's own name, so no screen holds a second copy of the vocabulary. */
+  name: string;
+  /** `idr_minor` means integer sen. */
+  unit: string;
+  phase: number;
+  /** Whether anything computes it by the phase campaigns are evaluated in. */
+  computed: boolean;
+}
+
+/**
+ * Every metric this product defines.
+ *
+ * Read rather than listed in a `<select>`: the campaigns screen carried five of the thirty-five
+ * hard-coded, which is a second definition of the product's own vocabulary and could not name
+ * the rest.
+ */
+export const listMetrics = () => api<MetricDefinition[]>('/metrics');

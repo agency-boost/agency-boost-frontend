@@ -16,12 +16,48 @@ export interface OrgLevel {
   status: 'active' | 'archived';
 }
 
+/** An event type as the snapshot carries it: no live count, and active rows only (P5-T9). */
+export interface SnapshotEventType {
+  id: string;
+  code: string;
+  label: string;
+  description: string | null;
+  emoji: string | null;
+  color: string | null;
+  displayOrder: number;
+  version: number;
+}
+
 export interface TenantConfig {
   activity: ActivityCategoryRow[];
   ratios: RatioRow[];
   leadPipelines: LeadPipelineRow[];
   /** What agents are offered: published modules only (P5-T1). No agent screen reads it before Phase 12. */
   training: TrainingCategoryRow[];
+  /**
+   * The 90-day checklist a new hire is given (P5-T3), published version only. `null` before an
+   * office has published one.
+   */
+  activationChecklist: {
+    id: string;
+    version: number;
+    aspects: { code: string; label: string; items: { code: string; label: string }[] }[];
+  } | null;
+  /** What an event may be filed under (P5-T6), active rows only. */
+  eventTypes: SnapshotEventType[];
+  /** The capability catalog a leader assesses against (P5-T8), active rows only. */
+  capability: {
+    version: number;
+    stages: { code: string; label: string }[];
+    milestones: { code: string; label: string }[];
+    grids: { code: string; label: string }[];
+  } | null;
+  /**
+   * What is deliberately **not** here (ADR-0039): products and carrier rules, which are the
+   * company's and read live, and events and campaigns, which are live records whose audience
+   * differs per member. If two members of one office would receive different bytes, it is not
+   * in this document.
+   */
   version: number;
 }
 

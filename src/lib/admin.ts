@@ -282,7 +282,10 @@ export type TemplateKind =
   | 'ratio_set'
   | 'activation_checklist'
   | 'training_taxonomy'
-  | 'capability_ladder';
+  | 'capability_ladder'
+  // ADR-0034: types, never occurrences. There is no kind for an event or a campaign itself.
+  | 'event_types'
+  | 'campaign_kinds';
 
 export interface CompanyTemplate {
   id: string;

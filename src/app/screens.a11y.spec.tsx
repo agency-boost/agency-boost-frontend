@@ -1310,6 +1310,87 @@ describe('screens have no axe violations', () => {
       await expectClean('admin/companies/[companyId]/template#training');
     });
 
+    it('the Company template’s Events, Campaigns and Capability tabs (P5-T9)', async () => {
+      stubFetch({
+        ...configStubs,
+        '/admin/companies/c1/template/event_types': {
+          body: {
+            id: 'tpl-4', companyId: 'c1', kind: 'event_types', version: 1, status: 'draft',
+            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
+            payload: {
+              types: [{
+                code: 'TRAINING', label: 'Training', description: null,
+                emoji: '📚', color: '#2D9CDB', displayOrder: 1,
+              }],
+            },
+          },
+        },
+        '/admin/companies/c1/template/campaign_kinds': {
+          body: {
+            id: 'tpl-5', companyId: 'c1', kind: 'campaign_kinds', version: 1, status: 'draft',
+            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
+            payload: {
+              rules: [{
+                kind: 'production_club', code: 'STAR_CLUB', name: 'Star Club', rank: 1,
+                reward: 'Promotion bonus', groupMode: 'all',
+                criteriaGroups: [{
+                  mode: 'all',
+                  criteria: [{ metricKey: 'APE_ACHIEVED', comparator: 'gte', value: 120000000000 }],
+                }],
+              }],
+            },
+          },
+        },
+        '/admin/companies/c1/template': {
+          body: {
+            id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1,
+            status: 'draft', payload: { categories: [TAXONOMY[0]], types: [TYPE] },
+            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
+          },
+        },
+        '/admin/companies/c1/template/capability_ladder': {
+          body: {
+            id: 'tpl-6', companyId: 'c1', kind: 'capability_ladder', version: 1, status: 'draft',
+            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
+            payload: {
+              stages: [{
+                code: 'COMPETENT', label: 'Competent', requiredMilestoneCodes: ['SELLS'],
+                stageOrder: 1,
+              }],
+              milestones: [{ code: 'SELLS', label: 'Sells independently' }],
+              grids: [{
+                code: 'PERSONAL', label: 'Personal selling', requiresDownline: false,
+                items: [{ code: 'APPROACH', label: 'Approach' }],
+              }],
+            },
+          },
+        },
+        '/metrics': {
+          body: [{
+            key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true,
+          }],
+        },
+      });
+      renderInLayout(
+        AdminLayout,
+        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
+        { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
+      );
+      await screen.findByText('SELL_SUBMISSION');
+
+      await userEvent.click(screen.getByRole('link', { name: 'Events' }));
+      await screen.findByText('TRAINING');
+      await expectClean('admin/companies/[companyId]/template#events');
+
+      await userEvent.click(screen.getByRole('link', { name: 'Campaigns' }));
+      await screen.findByText('STAR_CLUB');
+      await expectClean('admin/companies/[companyId]/template#campaigns');
+
+      await userEvent.click(screen.getByRole('link', { name: 'Capability catalog' }));
+      await screen.findByText('APPROACH');
+      await expectClean('admin/companies/[companyId]/template#capability');
+    });
+
     it('the company template’s Products tab, with a product open', async () => {
       stubFetch({
         '/admin/companies/c1/template': {

@@ -11,9 +11,9 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { suggestCode } from '@/lib/config-code';
 import { useCan } from '@/lib/session';
 import {
-  archiveCampaign, createCampaign, listCampaigns, listQualificationRules, restoreCampaign,
+  archiveCampaign, createCampaign, listCampaigns, listMetrics, listQualificationRules, restoreCampaign,
   updateCampaign,
-  type CampaignRow, type QualificationRuleRow, type RequirementView,
+  type CampaignRow, type MetricDefinition, type QualificationRuleRow, type RequirementView,
 } from '@/lib/tenant-config';
 
 const TABS = [
@@ -68,6 +68,8 @@ export default function CampaignsSettingsPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState(emptyDraft());
+  /** The product's own metric vocabulary, read rather than re-declared here (invariant 7). */
+  const [metrics, setMetrics] = useState<MetricDefinition[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -81,6 +83,15 @@ export default function CampaignsSettingsPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  /*
+   * Read on its own, so a failure here does not take the screen down.
+   *
+   * The registry is needed by one form on one tab. Folding it into `load` would mean an office
+   * could not see its campaigns at all because the vocabulary read failed — a worse answer than
+   * an Add form that offers nothing to measure.
+   */
+  useEffect(() => { void listMetrics().then(setMetrics).catch(() => setMetrics([])); }, []);
 
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -259,16 +270,24 @@ export default function CampaignsSettingsPage() {
               onChange={(e) => setDraft((n) => ({ ...n, metricKey: e.target.value }))}
             >
               <option value="">Nothing — this campaign is not measured</option>
-              <option value="APE_ACHIEVED">APE achieved (Rp)</option>
-              <option value="SELLING_SUCCESS_RATE">Selling success rate</option>
-              <option value="RECRUITMENT_SUCCESS_RATE">Recruitment success rate</option>
-              <option value="LEADS_PER_ACTIVITY">Leads per activity</option>
-              <option value="ACTIVITY_COMPLIANCE_MONTH">Activity compliance, this month</option>
+              {/*
+                * From the registry, not from this file (P5-T9, invariant 7).
+                *
+                * Five metrics were listed here by hand. That is a second definition of the
+                * product's own vocabulary — the one that disagrees is whichever nobody
+                * remembered to update — and it could not offer the other thirty. Only what is
+                * computed by the phase campaigns are evaluated in is offered: a target nothing
+                * computes could never be reached.
+                */}
+              {metrics.filter((m) => m.computed).map((metric) => (
+                <option key={metric.key} value={metric.key}>{metric.name}</option>
+              ))}
             </Select>
           </Field>
           {draft.metricKey && (
             <Field
-              label={draft.metricKey === 'APE_ACHIEVED' ? 'At least (Rp)' : 'At least'}
+              label={metrics.find((m) => m.key === draft.metricKey)?.unit === 'idr_minor'
+                ? 'At least (Rp)' : 'At least'}
               htmlFor="c-value"
               className="min-w-40"
             >
