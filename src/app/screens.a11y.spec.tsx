@@ -1110,6 +1110,46 @@ describe('screens have no axe violations', () => {
       await expectClean('admin/companies/[companyId]/template#training');
     });
 
+    it('the company template’s Products tab, with a product open', async () => {
+      stubFetch({
+        '/admin/companies/c1/template': {
+          body: {
+            id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1,
+            status: 'draft', payload: { categories: [TAXONOMY[0]], types: [TYPE] },
+            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
+          },
+        },
+        '/admin/companies/c1/products': {
+          body: [{
+            id: 'p1', companyId: 'c1', code: 'PRUMAPAN', name: 'PRUMapan',
+            tagline: 'Proteksi jiwa dengan manfaat pensiun', channel: 'conventional',
+            category: 'life', primaryNeeds: ['retirement'], eligibleAgeBands: [1, 2, 3],
+            eligibleBudgetBands: [1, 2, 3], benefits: ['Dana Mapan tiap tahun dari usia 55'],
+            differentiator: 'Pilihan pensiun paling terjangkau.',
+            bestFor: 'Sandwich-generation professionals',
+            defaultAttackPlan: {
+              goodFit: 'Sandwich-generation professionals', opening: 'Halo.',
+              benefits: ['Dana Mapan'], fullScript: 'Halo. Boleh saya siapkan ilustrasinya?',
+              objectionTheySay: 'Pensiun masih lama.',
+              objectionYouSay: 'Pilihan pensiun paling terjangkau.',
+              nextAction: 'Boleh saya siapkan ilustrasinya?',
+            },
+            commissionSchedule: [], lifecycle: 'active', replacedByProductId: null,
+            activeByDefault: true, sortOrder: 1, version: 1,
+          }],
+        },
+      });
+      renderInLayout(
+        AdminLayout,
+        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
+        { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
+      );
+      await screen.findByText('SELL_SUBMISSION');
+      await userEvent.click(screen.getByRole('link', { name: 'Products' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      await expectClean('admin/companies/[companyId]/template#products');
+    });
+
     it('the company template, with an editor open', async () => {
       stubFetch({
         '/admin/companies/c1/template': {

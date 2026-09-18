@@ -341,3 +341,94 @@ export const publishTemplate = (companyId: string, kind: TemplateKind) =>
  */
 export const elevateImpersonation = (sessionId: string, reason: string) =>
   api<void>(`/admin/impersonation/${sessionId}/elevate`, { method: 'POST', body: { reason } });
+
+// ---------------------------------------------------------------- the product catalog (P5-T4)
+
+export interface AttackPlan {
+  goodFit: string;
+  opening: string;
+  benefits: string[];
+  fullScript: string;
+  objectionTheySay: string;
+  objectionYouSay: string;
+  nextAction: string;
+}
+
+export interface CommissionYear {
+  year: number;
+  /** A proportion: `0.4` is 40%. The company states it; nothing here invents one (F-15). */
+  rate: number;
+}
+
+export type ProductLifecycle = 'active' | 'closed_to_new_business' | 'withdrawn';
+
+export interface Product {
+  id: string;
+  companyId: string;
+  /** The identity. Typed once, never changed, never reused (ADR-0006). */
+  code: string;
+  name: string;
+  tagline: string;
+  channel: 'conventional' | 'syariah';
+  category: 'life' | 'health' | 'ci' | 'education' | 'investment';
+  primaryNeeds: string[];
+  eligibleAgeBands: number[];
+  eligibleBudgetBands: number[];
+  benefits: string[];
+  differentiator: string;
+  bestFor: string;
+  defaultAttackPlan: AttackPlan;
+  /** Absent for a reader without `commission_rates:read` — never sent rather than hidden. */
+  commissionSchedule?: CommissionYear[];
+  lifecycle: ProductLifecycle;
+  replacedByProductId: string | null;
+  /** What an office sells before its Owner has an opinion about it (ADR-0033). */
+  activeByDefault: boolean;
+  sortOrder: number;
+  version: number;
+}
+
+/** Everything a write may set. Never the code, never the lifecycle. */
+export type ProductFields = Partial<Omit<
+  Product, 'id' | 'companyId' | 'code' | 'lifecycle' | 'replacedByProductId' | 'sortOrder' | 'version'
+>>;
+
+/**
+ * A company's whole catalog, in order, withdrawn rows included (P5-T4, ADR-0033).
+ *
+ * **Read live, not from a template.** This is why the Products tab has no draft and no version:
+ * what is written here reaches every office of the company on their next read.
+ */
+export const readProducts = (companyId: string) =>
+  api<Product[]>(`/admin/companies/${companyId}/products`);
+
+export const createProduct = (companyId: string, body: ProductFields & { code: string }) =>
+  api<Product>(`/admin/companies/${companyId}/products`, { method: 'POST', body });
+
+export const updateProduct = (companyId: string, productId: string, body: ProductFields) =>
+  api<Product>(`/admin/companies/${companyId}/products/${productId}`, {
+    method: 'PATCH', body,
+  });
+
+/** Closing, withdrawing and reopening are named acts, because each reaches every office. */
+export const closeProductToNewBusiness = (
+  companyId: string, productId: string, replacedByProductId?: string,
+) => api<Product>(
+  `/admin/companies/${companyId}/products/${productId}/close-to-new-business`,
+  { method: 'POST', body: replacedByProductId ? { replacedByProductId } : {} },
+);
+
+export const withdrawProduct = (
+  companyId: string, productId: string, replacedByProductId?: string,
+) => api<Product>(`/admin/companies/${companyId}/products/${productId}/withdraw`, {
+  method: 'POST', body: replacedByProductId ? { replacedByProductId } : {},
+});
+
+export const reopenProduct = (companyId: string, productId: string) =>
+  api<Product>(`/admin/companies/${companyId}/products/${productId}/reopen`, { method: 'POST' });
+
+/** The whole shelf, once each: two people dragging rows cannot interleave into a third order. */
+export const reorderProducts = (companyId: string, productIds: string[]) =>
+  api<Product[]>(`/admin/companies/${companyId}/products/reorder`, {
+    method: 'PATCH', body: { productIds },
+  });

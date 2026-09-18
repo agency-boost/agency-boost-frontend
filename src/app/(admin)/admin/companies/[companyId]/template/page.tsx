@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, use } from 'react';
 import { ComingInPhase } from '@/components/coming-in-phase';
+import { ProductsTab } from '@/components/products-tab';
 import { SettingsScreen } from '@/components/settings-screen';
 import {
   ActivationChecklistEditor, PipelineEditor, RatioSetEditor, TaxonomyEditor, TrainingEditor,
@@ -252,7 +253,14 @@ export default function CompanyTemplatePage({
       )}
 
 
-      {tab.kind === null ? (
+      {/*
+        * **Products is a tab with no template kind**, because a catalog is not a preset copied
+        * into an office — it is read live (ADR-0033). It owns its own reading and writing, and
+        * carries no draft bar, which is the whole point of it being here rather than behind one.
+        */}
+      {tab.key === 'products' ? (
+        <ProductsTab companyId={companyId} />
+      ) : tab.kind === null ? (
         <ComingInPhase
           phase={tab.phase}
           what={`The ${tab.label.toLowerCase()} every new office of this company will start with.`}
