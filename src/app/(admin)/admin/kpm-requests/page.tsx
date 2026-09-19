@@ -112,12 +112,14 @@ export default function KpmRequestsPage() {
                 onChange={(e) => setCode({ ...code, [row.requestId]: e.target.value })}
               />
             </Field>
-            <Button
-              disabled={busy !== null || !(code[row.requestId] ?? '').trim()}
-              onClick={() => void decide(row, 'approve')}
-            >
-              {busy === row.requestId ? 'Approving…' : 'Approve'}
-            </Button>
+            <FieldRow.Actions>
+              <Button
+                disabled={busy !== null || !(code[row.requestId] ?? '').trim()}
+                onClick={() => void decide(row, 'approve')}
+              >
+                {busy === row.requestId ? 'Approving…' : 'Approve'}
+              </Button>
+            </FieldRow.Actions>
             <Field label="Why not?" htmlFor={`why-${row.requestId}`} className="min-w-[16rem] flex-1">
               <TextInput
                 id={`why-${row.requestId}`}

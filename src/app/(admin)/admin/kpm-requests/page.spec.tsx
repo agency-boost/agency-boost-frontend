@@ -93,6 +93,19 @@ describe('KPMs pending approval (P3.5-T2)', () => {
     expect(JSON.parse(String(sent?.init?.body))).toEqual({ reason: 'Already KPM 0417.' });
   });
 
+  it('lines both decision buttons up with the inputs, not the labels', async () => {
+    // Approve was a bare child of the `FieldRow` while Decline was wrapped, so only Approve
+    // rode up to the label row — the row is `items-start`, and a button carries no label to
+    // start with. Both sit in an actions slot now, which supplies the label-shaped spacer.
+    stubFetch({ '/admin/kpm-requests': { body: [req()] } });
+    renderInLayout(AdminLayout, <KpmRequestsPage />, { me: SUPER_ADMIN });
+
+    for (const name of ['Approve', 'Decline']) {
+      const actions = (await screen.findByRole('button', { name })).closest('.flex-col');
+      expect(actions?.firstElementChild).toHaveAttribute('aria-hidden', 'true');
+    }
+  });
+
   it('separates what is decided from what is waiting', async () => {
     stubFetch({
       '/admin/kpm-requests': {
