@@ -182,7 +182,7 @@ describe('a company’s Company template (P4-T8)', () => {
    *
    * Two of them — Events and Campaigns — were `ComingInPhase` signs until the template kinds
    * ADR-0034 named existed, which is why they looked unfinished beside the Products tab. The
-   * third, Capability catalog, had validation and a provisioning reader since P5-T8 and no way
+   * third, Skills & stages, had validation and a provisioning reader since P5-T8 and no way
    * for anybody to edit one.
    */
   describe('the Phase 5 tabs (P5-T9)', () => {
@@ -305,7 +305,7 @@ describe('a company’s Company template (P4-T8)', () => {
     it('gives every capability row a code, shown where it is edited', async () => {
       // The claim was never that a list paints codes — it is that every row *has* one, so a
       // rename cannot orphan a tick. Two of the prototype's four grids have none at all.
-      await openTab(CAPABILITY, 'Capability catalog');
+      await openTab(CAPABILITY, 'Skills & stages');
       await screen.findByText('Approach');
 
       expect(screen.queryByText('APPROACH')).not.toBeInTheDocument();
@@ -318,7 +318,7 @@ describe('a company’s Company template (P4-T8)', () => {
 
     it('says a stage’s seniority is its rank, not its position', async () => {
       // The prototype computes it from the array index, so tidying the ladder moves everybody.
-      await openTab(CAPABILITY, 'Capability catalog');
+      await openTab(CAPABILITY, 'Skills & stages');
 
       expect(await screen.findByText(/Seniority is the rank, not the position/))
         .toBeInTheDocument();

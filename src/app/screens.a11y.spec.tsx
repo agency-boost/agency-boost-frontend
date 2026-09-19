@@ -24,7 +24,7 @@ import TrainingModulePage from './(tenant)/kpm/settings/training/[moduleId]/page
 import KpmProductsPage from './(tenant)/kpm/settings/products/page';
 import EventsSettingsPage from './(tenant)/kpm/settings/events/page';
 import CampaignsSettingsPage from './(tenant)/kpm/settings/campaigns/page';
-import CapabilityCatalogPage from './(tenant)/kpm/settings/capability-catalog/page';
+import SkillsAndStagesPage from './(tenant)/kpm/settings/skills-and-stages/page';
 import ActivationChecklistPage from './(tenant)/kpm/settings/activation-checklist/page';
 import CompanyTemplatePage from './(admin)/admin/companies/[companyId]/template/page';
 import AdminOverviewPage from './(admin)/admin/page';
@@ -1040,12 +1040,12 @@ describe('screens have no axe violations', () => {
       window.history.replaceState(null, '', '/');
     });
 
-    it('the office’s capability catalog (P5-T8)', async () => {
+    it('the office’s Skills & stages (P5-T8)', async () => {
       const e = (code: string, label: string, order = 1) =>
         ({ code, label, displayOrder: order, status: 'active' });
       stubFetch({
         ...configStubs,
-        '/kpm/settings/capability-catalog': {
+        '/kpm/settings/skills-and-stages': {
           body: {
             stages: [{
               ...e('COMPETENT_PRODUCER', 'Competent Producer'),
@@ -1061,9 +1061,9 @@ describe('screens have no axe violations', () => {
           },
         },
       });
-      renderInLayout(TenantLayout, <CapabilityCatalogPage />, { me: settingsOwner });
+      renderInLayout(TenantLayout, <SkillsAndStagesPage />, { me: settingsOwner });
       await screen.findByText('Approach & appointment setting');
-      await expectClean('kpm/settings/capability-catalog');
+      await expectClean('kpm/settings/skills-and-stages');
     });
 
     it('the office’s Campaigns, on the carrier-rules tab (P5-T7)', async () => {
@@ -1386,7 +1386,7 @@ describe('screens have no axe violations', () => {
       await screen.findByText('Star Club');
       await expectClean('admin/companies/[companyId]/template#campaigns');
 
-      await userEvent.click(screen.getByRole('link', { name: 'Capability catalog' }));
+      await userEvent.click(screen.getByRole('link', { name: 'Skills & stages' }));
       await screen.findByText('Approach');
       await expectClean('admin/companies/[companyId]/template#capability');
     });

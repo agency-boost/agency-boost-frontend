@@ -34,9 +34,11 @@ const TABS: {
   { key: 'leads', label: 'Lead statuses', kind: 'lead_pipeline' },
   { key: 'activation', label: 'Activation checklist', kind: 'activation_checklist' },
   { key: 'training', label: 'Training', kind: 'training_taxonomy' },
+  // Same position as the Owner's sidebar. ADR-0018 makes this screen a mirror of that group,
+  // so the order is read from there rather than chosen again here — it had drifted.
+  { key: 'capability', label: 'Skills & stages', kind: 'capability_ladder' },
   { key: 'events', label: 'Events', kind: 'event_types' },
   { key: 'campaigns', label: 'Campaigns', kind: 'campaign_kinds' },
-  { key: 'capability', label: 'Capability catalog', kind: 'capability_ladder' },
   { key: 'products', label: 'Products', kind: null },
 ];
 

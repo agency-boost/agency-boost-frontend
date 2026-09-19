@@ -59,10 +59,18 @@ const SECTIONS: readonly {
       { label: 'Lead statuses', href: '/kpm/settings/lead-statuses' },
       { label: 'Activation checklist', href: '/kpm/settings/activation-checklist' },
       { label: 'Training', href: '/kpm/settings/training' },
+      /*
+       * After Training, with the other two screens about one person's development: the first
+       * ninety days, what they learn, how far they have come. Events, Campaigns and Products
+       * are a different subject — what the office runs and sells.
+       *
+       * The prototype's own order (`KPM_Owner.html:896-903`) is untouched; this only chooses
+       * where the one screen it has no counterpart for goes.
+       */
+      { label: 'Skills & stages', href: '/kpm/settings/skills-and-stages' },
       { label: 'Events', href: '/kpm/settings/events' },
       { label: 'Campaigns', href: '/kpm/settings/campaigns' },
       { label: 'Products', href: '/kpm/settings/products' },
-      { label: 'Capability catalog', href: '/kpm/settings/capability-catalog' },
       // The Admin's as well as the Owner's since ADR-0027, like every page under Settings.
       { label: 'Branch info', href: '/kpm/settings/branch-info' },
     ],

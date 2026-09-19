@@ -39,7 +39,7 @@ const move = <T,>(rows: T[], from: number, to: number): T[] => {
  * **Reordering is presentation.** A stage's seniority is its own number, so tidying the ladder
  * cannot move anybody's stage — which is exactly what the prototype's array index does.
  */
-export default function CapabilityCatalogPage() {
+export default function SkillsAndStagesPage() {
   const canWrite = useCan('tenant_config:write');
   const [catalog, setCatalog] = useState<CapabilityCatalog | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -78,7 +78,7 @@ export default function CapabilityCatalogPage() {
   if (catalog === null) {
     return (
       <SettingsScreen
-        title="Capability catalog"
+        title="Skills & stages"
         permission="tenant_config:read"
         error={error}
         bars={<PublishBar />}
@@ -244,7 +244,7 @@ export default function CapabilityCatalogPage() {
 
   return (
     <SettingsScreen
-      title="Capability catalog"
+      title="Skills & stages"
       subtitle="The ladder and the skill grids your leaders assess people against."
       permission="tenant_config:read"
       error={null}

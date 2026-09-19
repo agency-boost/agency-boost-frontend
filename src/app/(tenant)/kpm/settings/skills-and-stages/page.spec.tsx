@@ -2,11 +2,11 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
-import CapabilityCatalogPage from './page';
+import SkillsAndStagesPage from './page';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  usePathname: () => '/kpm/settings/capability-catalog',
+  usePathname: () => '/kpm/settings/skills-and-stages',
 }));
 
 const member = {
@@ -47,12 +47,12 @@ const catalog = (over: Record<string, unknown> = {}) => ({
 
 function render(body: unknown = catalog(), me = OWNER) {
   const stub = stubFetch({
-    '/kpm/settings/capability-catalog': { body },
+    '/kpm/settings/skills-and-stages': { body },
     '/kpm/settings/publish-state': {
       body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
     },
   });
-  renderWithSession(<CapabilityCatalogPage />, { me });
+  renderWithSession(<SkillsAndStagesPage />, { me });
   return stub;
 }
 
@@ -180,7 +180,7 @@ describe('the capability catalog screen', () => {
 
   it('says what the server refused, and keeps the row open to fix it', async () => {
     stubFetch({
-      '/kpm/settings/capability-catalog/items': {
+      '/kpm/settings/skills-and-stages/items': {
         status: 400,
         body: {
           error: {
@@ -190,12 +190,12 @@ describe('the capability catalog screen', () => {
           },
         },
       },
-      '/kpm/settings/capability-catalog': { body: catalog() },
+      '/kpm/settings/skills-and-stages': { body: catalog() },
       '/kpm/settings/publish-state': {
         body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
       },
     });
-    renderWithSession(<CapabilityCatalogPage />, { me: OWNER });
+    renderWithSession(<SkillsAndStagesPage />, { me: OWNER });
     await screen.findByText('Personal selling');
 
     const card = screen.getByText('Personal selling').closest('div')!.parentElement!;
