@@ -51,7 +51,7 @@ const SECTIONS: readonly {
   },
   {
     label: 'Settings',
-    // Eight items, in the prototype's order. Ratio benchmarks is deliberately absent:
+    // Nine items, in the prototype's order. Ratio benchmarks is deliberately absent:
     // the prototype has it as a sub-tab of Activity types (`KPM_Owner.html:1330`), not
     // as a sidebar destination.
     items: [
