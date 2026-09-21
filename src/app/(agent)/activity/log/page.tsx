@@ -6,6 +6,7 @@ import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/fie
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { useSession } from '@/lib/session';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import {
   correctActivityDay, readActivityCompliance, readActivityDay, readActivitySummary,
@@ -26,6 +27,7 @@ import {
  */
 export default function LogActivityPage() {
   const { config, loading: configLoading } = useTenantConfig();
+  const { me } = useSession();
   const [day, setDay] = useState<ActivityDay | null>(null);
   const [date, setDate] = useState<string>('');
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -118,7 +120,21 @@ export default function LogActivityPage() {
 
   const frozen = day !== null && !day.editable && !isFuture(date, day.localDate);
   const total = Object.values(counts).reduce((sum, n) => sum + (Number(n) || 0), 0);
-  const sections = (config?.activity ?? []).filter((c) => c.status === 'active');
+  /*
+   * **Only the sections this reader's rung is shown** (ADR-0020, P4-T18).
+   *
+   * `tenant-config.md` states the contract: every member receives the same rows and the same
+   * rule, and *"the client hides what does not apply to the reader"*. The snapshot is identical
+   * for everybody in the office, so the hiding has to happen here. An empty list means every
+   * rung — that is the seeded state, so most offices see no difference.
+   *
+   * The Phase 6 exit review found this screen ignoring the rule: an office that had narrowed a
+   * section still showed it to everybody, and the server accepted the counts. The server refuses
+   * them now, which is why this is a hidden row rather than the only defence.
+   */
+  const rung = me?.membership?.orgLevelCode ?? '';
+  const sections = (config?.activity ?? []).filter((c) => c.status === 'active'
+    && (c.appliesToOrgLevelCodes.length === 0 || c.appliesToOrgLevelCodes.includes(rung)));
 
   return (
     <Page title="Log activity" subtitle="Today's work, in about a minute.">

@@ -168,6 +168,51 @@ describe('Log activity (P6-T2)', () => {
     });
   });
 
+  it('hides a section this rung is not shown (ADR-0020, P4-T18)', async () => {
+    /*
+     * `tenant-config.md`: every member receives the same rows and the same rule, and the client
+     * hides what does not apply to the reader. Found missing at the Phase 6 exit review — the
+     * screen showed every active section to everybody, and an office that had narrowed one was
+     * offering rows its agents could not log.
+     */
+    const narrowed = [
+      TAXONOMY[0],
+      { ...TAXONOMY[1], appliesToOrgLevelCodes: ['AB'] },
+    ];
+    stubFetch({
+      ...base,
+      '/kpm/config': { body: { activity: narrowed, ratios: [], leadPipelines: [], version: 1 } },
+      '/activity/log': { body: day() },
+    });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+    expect(await screen.findByRole('heading', { name: 'Leads' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Selling' })).toBeNull();
+    expect(screen.queryByLabelText('Submission polis')).toBeNull();
+  });
+
+  it('shows it to a rung that is named', async () => {
+    const narrowed = [
+      TAXONOMY[0],
+      { ...TAXONOMY[1], appliesToOrgLevelCodes: ['AB'] },
+    ];
+    const leader = makeMe({
+      membership: {
+        membershipId: 'mem-2', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+        status: 'active', isKpmOwner: false, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: ['activity_log:read_raw', 'activity_log:create'],
+    });
+    stubFetch({
+      ...base,
+      '/kpm/config': { body: { activity: narrowed, ratios: [], leadPipelines: [], version: 1 } },
+      '/activity/log': { body: day() },
+    });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: leader });
+
+    expect(await screen.findByRole('heading', { name: 'Selling' })).toBeInTheDocument();
+  });
+
   it('says what to do when the office has no activity types yet', async () => {
     stubFetch({
       ...base,
