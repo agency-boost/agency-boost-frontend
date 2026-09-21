@@ -308,7 +308,7 @@ describe('screens have no axe violations', () => {
     await expectClean('kpm/overview');
   });
 
-  it('the placeholder landings a leader and an agent reach', async () => {
+  it('the placeholder landing a leader reaches', async () => {
     const leader = makeMe({
       membership: {
         membershipId: 'mem-aab', kpmId: 'kpm-1', orgLevelCode: 'AAB', hierarchyRole: 'aab', status: 'active',
@@ -318,10 +318,53 @@ describe('screens have no axe violations', () => {
     renderInLayout(AgentLayout, <UnitDashboardPage />, { me: leader });
     await screen.findByText('Arrives in phase 13');
     await expectClean('unit/dashboard');
+  });
 
-    cleanup();
+  it('Log activity, populated with the office’s own taxonomy (P6-T2)', async () => {
+    // It was a `ComingInPhase` sign until P6-T2. Every count is a labelled number input, and
+    // the sections are the office's categories — so the axe run is over real form controls
+    // rather than over a paragraph.
+    stubFetch({
+      '/kpm/config': {
+        body: {
+          activity: [{
+            id: 'c1', code: 'LEADS', label: 'Leads', description: null,
+            appliesToOrgLevelCodes: [], displayOrder: 1, version: 1, status: 'active',
+            types: [{
+              id: 't1', code: 'LEADS_CONTACTED', label: 'Menghubungi prospek yang sudah ada',
+              categoryCode: 'LEADS', description: null, displayOrder: 1, version: 1,
+              status: 'active',
+            }],
+          }],
+          ratios: [], leadPipelines: [], version: 1,
+        },
+      },
+      '/kpm/org-levels': { body: [] },
+      '/activity/log': {
+        body: {
+          membershipId: 'mem-1',
+          localDate: '2026-03-11',
+          entries: [],
+          totalCount: 0,
+          version: 1,
+          frozenAt: null,
+          editable: true,
+          correctionCount: 0,
+        },
+      },
+      '/activity/compliance': {
+        body: {
+          membershipId: 'mem-1', compliant7d: false, compliantMonth: false,
+          lastLoggedOn: null, windowDays: 7,
+        },
+      },
+      '/activity/summary': {
+        body: { from: '2026-03-05', to: '2026-03-11', totals: [], daysLogged: 0, totalCount: 0 },
+      },
+    });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: makeMe() });
-    await screen.findByText('Arrives in phase 6');
+
+    await screen.findByLabelText('Day');
     await expectClean('activity/log');
   });
 
