@@ -99,15 +99,32 @@ export default function AuditPage() {
               </Cell>
               <Cell className="font-semibold">{renamed(e.action)}</Cell>
               <Cell>
-                {renamed(e.targetCollection)}
-                {e.targetId ? <code className="ml-1 text-sm text-muted">{e.targetId}</code> : null}
+                {/*
+                  * **The name first, the id only when there is no name.** Every row used to
+                  * read `memberships 68f3c1a9…`, so answering *"who suspended Surabaya?"*
+                  * meant three lookups in a database shell — which is the question this
+                  * screen exists to answer.
+                  *
+                  * An unresolved id is still shown rather than blanked: a collection nothing
+                  * names yet is *this is all we know*, not *nothing happened*.
+                  */}
+                <span className="text-muted">{renamed(e.targetCollection)}</span>
+                {e.targetLabel
+                  ? <span className="ml-1 font-semibold text-navy">{e.targetLabel}</span>
+                  : e.targetId
+                    ? <code className="ml-1 text-sm text-muted">{e.targetId}</code>
+                    : null}
               </Cell>
               <Cell>
-                <code className="text-sm">{e.actorUserId}</code>
+                {e.actorName
+                  ? <span className="font-semibold text-navy">{e.actorName}</span>
+                  : <code className="text-sm">{e.actorUserId ?? '—'}</code>}
                 {e.effectiveUserId && (
                   // Under impersonation both are recorded. Showing only one would
                   // attribute the action to the wrong person.
-                  <span className="ml-1 text-sm text-alert">as {e.effectiveUserId}</span>
+                  <span className="ml-1 text-sm text-alert">
+                    as {e.effectiveName ?? e.effectiveUserId}
+                  </span>
                 )}
               </Cell>
             </Row>

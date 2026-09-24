@@ -2,13 +2,12 @@
 
 import React, { useState } from 'react';
 import {
-  Button, Card, CodeField, ColorInput, Field, FieldRow, Select, TextInput,
+  Button, Card, CodeField, ColorInput, Field, FieldRow, Select, Switch, TextInput,
 } from '@/components/ui/field';
 import {
   benchmarkFromInput, benchmarkToInput, DISPLAY_UNIT_LABEL, formatBenchmark, reexpress, unitFor,
   type RatioDisplayUnit,
 } from '@/lib/ratio-format';
-import { SettingsTabs } from '@/components/settings-tabs';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { DragHandle } from '@/components/ui/drag-handle';
 import { suggestCode } from '@/lib/config-code';
@@ -25,6 +24,11 @@ export interface PipelinePayload {
   statuses: {
     pipeline: 'sales' | 'recruitment'; code: string; label: string;
     rank: number; isTerminal: boolean;
+    /**
+     * What the KPM Overview counts as *Expected to close* (ADR-0043). Optional on a payload
+     * authored before the flag existed; provisioning reads a missing one as `false`.
+     */
+    isLateStage?: boolean;
   }[];
 }
 
@@ -91,8 +95,13 @@ function useRowDrag<T>(
   /**
    * The ordinal to rewrite after a move. Required, not optional: every one of the four
    * call sites forgot it, and an optional argument would let a fifth forget too.
+   *
+   * **`'position'` for a list whose order *is* its order** — the activation checklist and the
+   * capability grids carry no ordinal at all, because `activation-input.ts` reads
+   * *"the position in the list the caller sent"* when it provisions an office. Spelled as a
+   * word rather than allowed as `undefined`, so it stays a decision somebody made.
    */
-  ordinal: { field: string; groupOf?: (row: T) => string },
+  ordinal: { field: string; groupOf?: (row: T) => string } | 'position',
   /**
    * Whether one row may land on another. Types live in one flat array across every
    * section, so without this a drag into another section would move the row and leave its
@@ -112,7 +121,9 @@ function useRowDrag<T>(
     const to = next.findIndex((r) => keyOf(r) === toKey);
     if (from < 0 || to < 0 || !canPlace(next[from], next[to])) return;
     next.splice(to, 0, ...next.splice(from, 1));
-    onReorder(withOrdinals(next, ordinal.field, ordinal.groupOf));
+    onReorder(ordinal === 'position'
+      ? next
+      : withOrdinals(next, ordinal.field, ordinal.groupOf));
   };
 
   return {
@@ -705,17 +716,24 @@ function AddRow({
  * arranges them that way, and a Super Admin filling a template should be looking at what
  * an Owner will see. Stacked, the two ladders read as one eleven-stage list on a narrow
  * screen, and the hint about order then describes an order that does not exist.
+ *
+ * **The subtabs are the screen's, not this component's.** They were drawn here, below the
+ * Save card, while the Activity types group drew its two above it through the shell — two
+ * shapes in two places for one idea. The screen now declares every leaf and draws every
+ * row; this takes the chosen one as a prop.
  */
 export function PipelineEditor({
   payload,
+  pipeline,
   onChange,
   disabled,
 }: {
   payload: PipelinePayload;
+  /** Which ladder to draw. The screen's subtab row chooses it. */
+  pipeline: 'sales' | 'recruitment';
   onChange: (next: PipelinePayload) => void;
   disabled?: boolean;
 }) {
-  const [tab, setTab] = useState<'sales' | 'recruitment'>('sales');
   /*
    * A template that nobody has authored yet arrives as `payload: {}`.
    *
@@ -725,7 +743,7 @@ export function PipelineEditor({
    * rendering as the empty thing it is. Empty is a real state for every one of these.
    */
   const allStatuses = payload.statuses ?? [];
-  const mine = allStatuses.filter((s) => s.pipeline === tab);
+  const mine = allStatuses.filter((s) => s.pipeline === pipeline);
 
   const drag = useRowDrag(
     allStatuses,
@@ -740,15 +758,6 @@ export function PipelineEditor({
 
   return (
     <div>
-      <SettingsTabs
-        tabs={[
-          { label: 'Sales', href: 'sales' },
-          { label: 'Recruitment', href: 'recruitment' },
-        ]}
-        activeHref={tab}
-        onSelect={(href) => setTab(href as 'sales' | 'recruitment')}
-      />
-
       <p className="mb-4 text-sm text-muted">
         {mine.length} {mine.length === 1 ? 'status' : 'statuses'} — order determines the
         pipeline stage sequence.
@@ -798,6 +807,25 @@ export function PipelineEditor({
                 </EditableRow>
               </div>
               <span className="flex flex-wrap items-center gap-2">
+                {/*
+                  * What an office starts with, not what it is stuck with (ADR-0043). The
+                  * Owner's own screen carries the same switch; a company that could not set
+                  * it here would hand every new office the platform's answer and no way to
+                  * change what the *next* one starts from.
+                  */}
+                {!stage.isTerminal && (
+                  <Switch
+                    id={`tpl-late-${stage.code}`}
+                    label="Expected to close"
+                    checked={stage.isLateStage ?? false}
+                    disabled={disabled}
+                    onChange={(next) => onChange({
+                      statuses: allStatuses.map((s) => (s.code === stage.code
+                        ? { ...s, isLateStage: next }
+                        : s)),
+                    })}
+                  />
+                )}
                 {!stage.isTerminal && (
                   <Button
                     variant="inline"
@@ -805,7 +833,7 @@ export function PipelineEditor({
                     onClick={() => onChange({
                       // Exactly one per pipeline: publishing refuses anything else, so the
                       // screen never lets a second one be set.
-                      statuses: allStatuses.map((s) => (s.pipeline === tab
+                      statuses: allStatuses.map((s) => (s.pipeline === pipeline
                         ? { ...s, isTerminal: s.code === stage.code }
                         : s)),
                     })}
@@ -835,7 +863,7 @@ export function PipelineEditor({
 
         <AddRow
           disabled={disabled}
-          what={`${tab} stage`}
+          what={`${pipeline} stage`}
           onAdd={(code, label) => onChange({
             // Appended, and never terminal: exactly one stage closes each pipeline, and
             // moving that is a deliberate second act rather than a side effect of adding.
@@ -843,7 +871,7 @@ export function PipelineEditor({
             // still in use as soon as a stage has been removed.
             statuses: withOrdinals(
               [...allStatuses, {
-                pipeline: tab, code, label, rank: 0, isTerminal: false,
+                pipeline, code, label, rank: 0, isTerminal: false, isLateStage: false,
               }],
               'rank',
               (st) => st.pipeline,
@@ -1143,14 +1171,17 @@ const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : 
  */
 export function TrainingEditor({
   payload,
+  section,
   onChange,
   disabled,
 }: {
   payload: TrainingTaxonomyPayload;
+  /** Which of the three lists to draw. The screen's subtab row chooses it. */
+  section: TrainingTab;
   onChange: (next: TrainingTaxonomyPayload) => void;
   disabled?: boolean;
 }) {
-  const [tab, setTab] = useState<TrainingTab>('categories');
+  const tab = section;
   const [skillsCategory, setSkillsCategory] = useState('');
   const [modulesCategory, setModulesCategory] = useState('');
   const [modulesSkill, setModulesSkill] = useState('all');
@@ -1469,17 +1500,6 @@ export function TrainingEditor({
 
   return (
     <div>
-      <SettingsTabs
-        variant="subtabs"
-        label="Training template sections"
-        tabs={[
-          { label: 'Categories', href: '#categories' },
-          { label: 'Skills', href: '#skills' },
-          { label: 'Modules', href: '#modules' },
-        ]}
-        activeHref={`#${tab}`}
-        onSelect={(href) => setTab(href.slice(1) as TrainingTab)}
-      />
       {tab === 'categories' && categoriesPanel()}
       {tab === 'skills' && skillsPanel()}
       {tab === 'modules' && modulesPanel()}
@@ -1540,6 +1560,44 @@ export function ActivationChecklistEditor({
   const patchAspect = (code: string, fields: Partial<ActivationChecklistPayload['aspects'][number]>) =>
     put(aspects.map((a) => (a.code === code ? { ...a, ...fields } : a)));
 
+  /*
+   * **Order is the order here**, not a stored ordinal: `activation-input.ts` provisions an
+   * office by reading *"the position in the list the caller sent"*. So a drag rewrites the
+   * array and nothing else.
+   *
+   * This screen was the last of the template's lists without a handle — the only way to move
+   * an aspect was to remove it, with every item under it, and add it back in the right place.
+   */
+  const aspectDrag = useRowDrag(aspects, (a) => a.code, put, 'position');
+
+  /**
+   * One drag context per aspect, built on demand.
+   *
+   * `useRowDrag` holds state, so calling it inside the `aspects.map` would break the rules of
+   * hooks the moment an aspect is added or removed. One hook over the flattened items would
+   * be worse: an item dragged into another aspect would move in the list and keep the aspect
+   * it came from, which is the defect `canPlace` exists to prevent elsewhere in this file.
+   *
+   * So the items of every aspect share one hook, keyed `aspectCode:itemCode`, and a move is
+   * refused unless both rows belong to the same aspect.
+   */
+  const flatItems = aspects.flatMap((a) => a.items.map((i) => ({ ...i, aspectCode: a.code })));
+  const flatDrag = useRowDrag(
+    flatItems,
+    (i) => `${i.aspectCode}:${i.code}`,
+    (next) => put(aspects.map((a) => ({
+      ...a,
+      items: next.filter((i) => i.aspectCode === a.code)
+        .map(({ aspectCode: _aspectCode, ...item }) => item),
+    }))),
+    'position',
+    (from, to) => from.aspectCode === to.aspectCode,
+  );
+  const itemDrag = (aspectCode: string) => ({
+    rowProps: (code: string) => flatDrag.rowProps(`${aspectCode}:${code}`),
+    handleProps: (code: string) => flatDrag.handleProps(`${aspectCode}:${code}`),
+  });
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1559,9 +1617,17 @@ export function ActivationChecklistEditor({
 
       {aspects.length === 0 ? (
         <Card><p className="text-md text-muted">No aspects yet.</p></Card>
-      ) : aspects.map((aspect) => (
-        <Card key={aspect.code} className="p-0">
+      ) : aspects.map((aspect) => {
+        const { className: aspectCls, ...aspectRow } = aspectDrag.rowProps(aspect.code);
+        return (
+        <Card key={aspect.code} className={`p-0 ${aspectCls}`} {...aspectRow}>
           <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
+            <DragHandle
+              label={aspect.label}
+              disabled={disabled}
+              className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+              {...aspectDrag.handleProps(aspect.code)}
+            />
             <div className="min-w-0 flex-1">
               {/* Renameable, which it was not: a typo in an aspect's name could only be fixed by
                   removing the aspect and every item under it. */}
@@ -1597,8 +1663,18 @@ export function ActivationChecklistEditor({
           </div>
 
           <ul className="flex flex-col divide-y divide-hairline">
-            {aspect.items.map((item) => (
-              <li key={item.code} className="px-4 py-3 sm:px-5">
+            {aspect.items.map((item) => {
+              const { className: itemCls, ...itemRow } = itemDrag(aspect.code).rowProps(item.code);
+              return (
+              <li key={item.code} {...itemRow} className={`px-4 py-3 sm:px-5 ${itemCls}`}>
+                <div className="flex items-start gap-3">
+                <DragHandle
+                  label={item.label}
+                  disabled={disabled}
+                  className="mt-0.5 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                  {...itemDrag(aspect.code).handleProps(item.code)}
+                />
+                <div className="min-w-0 flex-1">
                 <EditableRow
                   rowKey={item.code}
                   disabled={disabled}
@@ -1637,8 +1713,11 @@ export function ActivationChecklistEditor({
                       : <ConfigBadge tone="open">Ticked by the leader</ConfigBadge>}
                   </p>
                 </EditableRow>
+                </div>
+                </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
 
           <div className="px-4 pb-3 sm:px-5">
@@ -1661,7 +1740,8 @@ export function ActivationChecklistEditor({
             />
           </div>
         </Card>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -1878,10 +1958,19 @@ const COMPARATORS = [
 export function CampaignKindsEditor({
   payload,
   metrics,
+  section,
   onChange,
   disabled,
 }: {
   payload: CampaignKindsPayload;
+  /**
+   * Which rule kind to draw — the screen's subtab row chooses it.
+   *
+   * The Owner's own Campaigns screen puts these two under one tab as two headings, and the
+   * Super Admin's equivalent stacked them the same way. Split, because they answer different
+   * questions of the same insurer and a reader comes for one of them.
+   */
+  section: 'production_club' | 'moc' | 'promotion_path';
   /** The metric registry, so a rule names a metric that exists rather than a typed string. */
   metrics: { key: string; label: string; unit: string }[];
   onChange: (next: CampaignKindsPayload) => void;
@@ -1913,7 +2002,7 @@ export function CampaignKindsEditor({
         </p>
       </Card>
 
-      {RULE_KINDS.map((kind) => {
+      {RULE_KINDS.filter((kind) => kind.code === section).map((kind) => {
         const mine = rules.filter((r) => r.kind === kind.code)
           .sort((a, b) => a.rank - b.rank);
         return (
@@ -2089,10 +2178,20 @@ export interface CapabilityLadderPayload {
  */
 export function CapabilityLadderEditor({
   payload,
+  section,
   onChange,
   disabled,
 }: {
   payload: CapabilityLadderPayload;
+  /**
+   * `ladder` draws what a stage **is** — the milestones and the stages that require them.
+   * `skills` draws what somebody is assessed **against** — the four grids.
+   *
+   * Two questions, and the screen used to stack all six cards in one scroll: the four grids
+   * are ~27 items between them, so the stage ladder that governs everything sat above a
+   * column somebody had to scroll past to reach the thing they came for.
+   */
+  section: 'ladder' | 'skills';
   onChange: (next: CapabilityLadderPayload) => void;
   disabled?: boolean;
 }) {
@@ -2108,186 +2207,258 @@ export function CapabilityLadderEditor({
     // render as what it is rather than vanish, or the refusal will read as coming from nowhere.
     ?? `${code} — no milestone defines this`;
 
+  /*
+   * **Three lists, three different answers to "what is the order".**
+   *
+   * A milestone list has no ordinal — its order is the order a reader scans it in, and
+   * provisioning copies the array. A stage's seniority is its `rank`, which is the whole point
+   * of the hint above it, so a drag rewrites the rank rather than the position. A grid's items
+   * are position-ordered like the milestones, and one row may never land in another grid.
+   */
+  const milestoneDrag = useRowDrag(
+    milestones, (m) => m.code, (next) => put({ milestones: next }), 'position',
+  );
+  const stageDrag = useRowDrag(
+    stages, (s) => s.code, (next) => put({ stages: next }), { field: 'stageOrder' },
+  );
+  const flatGridItems = grids.flatMap(
+    (g) => g.items.map((i) => ({ ...i, gridCode: g.code })),
+  );
+  const gridDrag = useRowDrag(
+    flatGridItems,
+    (i) => `${i.gridCode}:${i.code}`,
+    (next) => put({
+      grids: grids.map((g) => ({
+        ...g,
+        items: next.filter((i) => i.gridCode === g.code).map(({ gridCode: _gridCode, ...item }) => item),
+      })),
+    }),
+    'position',
+    (from, to) => from.gridCode === to.gridCode,
+  );
+
   return (
     <div className="flex flex-col gap-4">
-      <Card className="p-0">
-        <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
-          <h2 className="font-display text-lg font-bold text-navy">Milestones</h2>
-          <span className="text-sm text-muted">What a stage is reached by.</span>
-          <span className="ml-auto flex items-center gap-2">
-            <ConfigBadge tone={milestones.length > 0 ? 'won' : 'open'}>
-              {count(milestones.length, 'milestone', 'milestones')}
-            </ConfigBadge>
-            <AddRow
-              bare
-              suggest
-              disabled={disabled}
-              what="milestone"
-              taken={(code) => milestones.some((m) => m.code === code)}
-              onAdd={(code, label) => put({ milestones: [...milestones, { code, label }] })}
-            />
-          </span>
-        </div>
-        <ul className="flex flex-col divide-y divide-hairline">
-          {milestones.map((milestone) => (
-            <li key={milestone.code} className="px-4 py-3 sm:px-5">
-              <EditableRow
-                rowKey={milestone.code}
-                disabled={disabled}
-                code={milestone.code}
-                fields={[{ key: 'label', label: 'Name' }]}
-                values={{ label: milestone.label }}
-                onSave={(next) => put({
-                  milestones: milestones.map((m) => (m.code === milestone.code
-                    ? { ...m, label: next.label.trim() } : m)),
-                })}
-                actions={(
-                  <Button
-                    variant="inlineDanger"
-                    disabled={disabled}
-                    title="A stage that requires it will be refused at publish until you change that too."
-                    onClick={() => put({
-                      milestones: milestones.filter((m) => m.code !== milestone.code),
-                    })}
-                  >
-                    Remove
-                  </Button>
-                )}
-              >
-                <p className="text-md text-navy">{milestone.label}</p>
-              </EditableRow>
-            </li>
-          ))}
-        </ul>
-      </Card>
-
-      <Card className="p-0">
-        <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
-          <h2 className="font-display text-lg font-bold text-navy">Stages</h2>
-          <span className="text-sm text-muted">
-            Seniority is the rank, not the position on this page.
-          </span>
-          <span className="ml-auto flex items-center gap-2">
-            <ConfigBadge tone={stages.length > 0 ? 'won' : 'open'}>
-              {count(stages.length, 'stage', 'stages')}
-            </ConfigBadge>
-            <AddRow
-              bare
-              suggest
-              disabled={disabled}
-              what="stage"
-              fields={[{
-                key: 'stageOrder',
-                label: 'Rank',
-                hint: 'How senior the stage is. Two stages at one rank is refused.',
-              }]}
-              taken={(code) => stages.some((s) => s.code === code)}
-              onAdd={(code, label, extra) => put({
-                stages: [...stages, {
-                  code,
-                  label,
-                  requiredMilestoneCodes: [],
-                  stageOrder: Number(extra.stageOrder) || stages.length + 1,
-                }],
-              })}
-            />
-          </span>
-        </div>
-        <ul className="flex flex-col divide-y divide-hairline">
-          {[...stages].sort((a, b) => a.stageOrder - b.stageOrder).map((stage) => (
-            <li key={stage.code} className="px-4 py-3 sm:px-5">
-              <EditableRow
-                rowKey={stage.code}
-                disabled={disabled}
-                code={stage.code}
-                fields={[
-                  { key: 'label', label: 'Name' },
-                  {
-                    key: 'stageOrder',
-                    label: 'Rank',
-                    hint: 'How senior the stage is. Two stages at one rank is refused at publish.',
-                  },
-                ]}
-                values={{ label: stage.label, stageOrder: String(stage.stageOrder) }}
-                onSave={(next) => put({
-                  stages: stages.map((s) => (s.code === stage.code ? {
-                    ...s,
-                    label: next.label.trim(),
-                    stageOrder: Number(next.stageOrder) || s.stageOrder,
-                  } : s)),
-                })}
-                actions={(
-                  <Button
-                    variant="inlineDanger"
-                    disabled={disabled}
-                    onClick={() => put({ stages: stages.filter((s) => s.code !== stage.code) })}
-                  >
-                    Remove
-                  </Button>
-                )}
-              >
-                <p className="text-md text-navy">{stage.label}</p>
-                <p className="mt-1 flex flex-wrap items-center gap-2">
-                  <ConfigBadge tone="open">Rank {stage.stageOrder}</ConfigBadge>
-                </p>
-              </EditableRow>
-
-              <fieldset className="mt-2 rounded-sm border border-hairline p-3">
-                <legend className="px-1 text-sm text-muted">Reached by</legend>
-                {milestones.length === 0 ? (
-                  <p className="text-sm text-muted">
-                    Add a milestone first — a stage requiring none is one everybody is already on.
-                  </p>
-                ) : milestones.map((milestone) => (
-                  <label
-                    key={milestone.code}
-                    className="flex items-center gap-2 py-1 text-md text-navy"
-                  >
-                    <input
-                      type="checkbox"
-                      disabled={disabled}
-                      checked={stage.requiredMilestoneCodes.includes(milestone.code)}
-                      onChange={(e) => put({
-                        stages: stages.map((s) => (s.code === stage.code ? {
-                          ...s,
-                          requiredMilestoneCodes: e.target.checked
-                            ? [...s.requiredMilestoneCodes, milestone.code]
-                            : s.requiredMilestoneCodes.filter((c) => c !== milestone.code),
-                        } : s)),
-                      })}
-                    />
-                    {milestoneLabel(milestone.code)}
-                  </label>
-                ))}
-              </fieldset>
-            </li>
-          ))}
-        </ul>
-      </Card>
-
-      {grids.map((grid) => (
-        <Card key={grid.code} className="p-0">
+      {section === 'ladder' && (
+        <>
+        <Card className="p-0">
           <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
-            <h2 className="font-display text-lg font-bold text-navy">{grid.label}</h2>
-            {grid.requiresDownline && (
-              <ConfigBadge tone="open">Only for somebody with a downline</ConfigBadge>
-            )}
+            <h2 className="font-display text-lg font-bold text-navy">Milestones</h2>
+            <span className="text-sm text-muted">What a stage is reached by.</span>
             <span className="ml-auto flex items-center gap-2">
-              <ConfigBadge tone={grid.items.length > 0 ? 'won' : 'open'}>
-                {count(grid.items.length, 'item', 'items')}
+              <ConfigBadge tone={milestones.length > 0 ? 'won' : 'open'}>
+                {count(milestones.length, 'milestone', 'milestones')}
               </ConfigBadge>
-              <Button
-                variant="inlineDanger"
+              <AddRow
+                bare
+                suggest
                 disabled={disabled}
-                onClick={() => put({ grids: grids.filter((g) => g.code !== grid.code) })}
-              >
-                Remove
-              </Button>
+                what="milestone"
+                taken={(code) => milestones.some((m) => m.code === code)}
+                onAdd={(code, label) => put({ milestones: [...milestones, { code, label }] })}
+              />
             </span>
           </div>
           <ul className="flex flex-col divide-y divide-hairline">
-            {grid.items.map((item) => (
-              <li key={item.code} className="px-4 py-3 sm:px-5">
+            {milestones.map((milestone) => {
+              const { className: mCls, ...mRow } = milestoneDrag.rowProps(milestone.code);
+              return (
+              <li key={milestone.code} {...mRow} className={`px-4 py-3 sm:px-5 ${mCls}`}>
+                <div className="flex items-start gap-3">
+                <DragHandle
+                  label={milestone.label}
+                  disabled={disabled}
+                  className="mt-0.5 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                  {...milestoneDrag.handleProps(milestone.code)}
+                />
+                <div className="min-w-0 flex-1">
+                <EditableRow
+                  rowKey={milestone.code}
+                  disabled={disabled}
+                  code={milestone.code}
+                  fields={[{ key: 'label', label: 'Name' }]}
+                  values={{ label: milestone.label }}
+                  onSave={(next) => put({
+                    milestones: milestones.map((m) => (m.code === milestone.code
+                      ? { ...m, label: next.label.trim() } : m)),
+                  })}
+                  actions={(
+                    <Button
+                      variant="inlineDanger"
+                      disabled={disabled}
+                      title="A stage that requires it will be refused at publish until you change that too."
+                      onClick={() => put({
+                        milestones: milestones.filter((m) => m.code !== milestone.code),
+                      })}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                >
+                  <p className="text-md text-navy">{milestone.label}</p>
+                </EditableRow>
+                </div>
+                </div>
+              </li>
+              );
+            })}
+          </ul>
+        </Card>
+
+        <Card className="p-0">
+          <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
+            <h2 className="font-display text-lg font-bold text-navy">Stages</h2>
+            <span className="text-sm text-muted">
+              Seniority is the rank, not the position on this page.
+            </span>
+            <span className="ml-auto flex items-center gap-2">
+              <ConfigBadge tone={stages.length > 0 ? 'won' : 'open'}>
+                {count(stages.length, 'stage', 'stages')}
+              </ConfigBadge>
+              <AddRow
+                bare
+                suggest
+                disabled={disabled}
+                what="stage"
+                fields={[{
+                  key: 'stageOrder',
+                  label: 'Rank',
+                  hint: 'How senior the stage is. Two stages at one rank is refused.',
+                }]}
+                taken={(code) => stages.some((s) => s.code === code)}
+                onAdd={(code, label, extra) => put({
+                  stages: [...stages, {
+                    code,
+                    label,
+                    requiredMilestoneCodes: [],
+                    stageOrder: Number(extra.stageOrder) || stages.length + 1,
+                  }],
+                })}
+              />
+            </span>
+          </div>
+          <ul className="flex flex-col divide-y divide-hairline">
+            {[...stages].sort((a, b) => a.stageOrder - b.stageOrder).map((stage) => {
+              const { className: sCls, ...sRow } = stageDrag.rowProps(stage.code);
+              return (
+              <li key={stage.code} {...sRow} className={`px-4 py-3 sm:px-5 ${sCls}`}>
+                <div className="flex items-start gap-3">
+                <DragHandle
+                  label={stage.label}
+                  disabled={disabled}
+                  className="mt-0.5 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                  {...stageDrag.handleProps(stage.code)}
+                />
+                <div className="min-w-0 flex-1">
+                <EditableRow
+                  rowKey={stage.code}
+                  disabled={disabled}
+                  code={stage.code}
+                  fields={[
+                    { key: 'label', label: 'Name' },
+                    {
+                      key: 'stageOrder',
+                      label: 'Rank',
+                      hint: 'How senior the stage is. Two stages at one rank is refused at publish.',
+                    },
+                  ]}
+                  values={{ label: stage.label, stageOrder: String(stage.stageOrder) }}
+                  onSave={(next) => put({
+                    stages: stages.map((s) => (s.code === stage.code ? {
+                      ...s,
+                      label: next.label.trim(),
+                      stageOrder: Number(next.stageOrder) || s.stageOrder,
+                    } : s)),
+                  })}
+                  actions={(
+                    <Button
+                      variant="inlineDanger"
+                      disabled={disabled}
+                      onClick={() => put({ stages: stages.filter((s) => s.code !== stage.code) })}
+                    >
+                      Remove
+                    </Button>
+                  )}
+                >
+                  <p className="text-md text-navy">{stage.label}</p>
+                  <p className="mt-1 flex flex-wrap items-center gap-2">
+                    <ConfigBadge tone="open">Rank {stage.stageOrder}</ConfigBadge>
+                  </p>
+                </EditableRow>
+
+                <fieldset className="mt-2 rounded-sm border border-hairline p-3">
+                  <legend className="px-1 text-sm text-muted">Reached by</legend>
+                  {milestones.length === 0 ? (
+                    <p className="text-sm text-muted">
+                      Add a milestone first — a stage requiring none is one everybody is already on.
+                    </p>
+                  ) : milestones.map((milestone) => (
+                    <label
+                      key={milestone.code}
+                      className="flex items-center gap-2 py-1 text-md text-navy"
+                    >
+                      <input
+                        type="checkbox"
+                        disabled={disabled}
+                        checked={stage.requiredMilestoneCodes.includes(milestone.code)}
+                        onChange={(e) => put({
+                          stages: stages.map((s) => (s.code === stage.code ? {
+                            ...s,
+                            requiredMilestoneCodes: e.target.checked
+                              ? [...s.requiredMilestoneCodes, milestone.code]
+                              : s.requiredMilestoneCodes.filter((c) => c !== milestone.code),
+                          } : s)),
+                        })}
+                      />
+                      {milestoneLabel(milestone.code)}
+                    </label>
+                  ))}
+                </fieldset>
+                </div>
+                </div>
+              </li>
+              );
+            })}
+          </ul>
+        </Card>
+        </>
+      )}
+
+      {section === 'skills' && (
+        <>
+        {grids.map((grid) => (
+          <Card key={grid.code} className="p-0">
+            <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
+              <h2 className="font-display text-lg font-bold text-navy">{grid.label}</h2>
+              {grid.requiresDownline && (
+                <ConfigBadge tone="open">Only for somebody with a downline</ConfigBadge>
+              )}
+              <span className="ml-auto flex items-center gap-2">
+                <ConfigBadge tone={grid.items.length > 0 ? 'won' : 'open'}>
+                  {count(grid.items.length, 'item', 'items')}
+                </ConfigBadge>
+                <Button
+                  variant="inlineDanger"
+                  disabled={disabled}
+                  onClick={() => put({ grids: grids.filter((g) => g.code !== grid.code) })}
+                >
+                  Remove
+                </Button>
+              </span>
+          </div>
+          <ul className="flex flex-col divide-y divide-hairline">
+            {grid.items.map((item) => {
+              const { className: gCls, ...gRow } = gridDrag.rowProps(`${grid.code}:${item.code}`);
+              return (
+              <li key={item.code} {...gRow} className={`px-4 py-3 sm:px-5 ${gCls}`}>
+                <div className="flex items-start gap-3">
+                <DragHandle
+                  label={item.label}
+                  disabled={disabled}
+                  className="mt-0.5 cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                  {...gridDrag.handleProps(`${grid.code}:${item.code}`)}
+                />
+                <div className="min-w-0 flex-1">
                 <EditableRow
                   rowKey={`${grid.code}-${item.code}`}
                   disabled={disabled}
@@ -2316,8 +2487,11 @@ export function CapabilityLadderEditor({
                 >
                   <p className="text-md text-navy">{item.label}</p>
                 </EditableRow>
+                </div>
+                </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
           <div className="px-4 pb-3 sm:px-5">
             <AddRow
@@ -2356,6 +2530,8 @@ export function CapabilityLadderEditor({
           }],
         })}
       />
+        </>
+      )}
     </div>
   );
 }

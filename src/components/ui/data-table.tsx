@@ -59,6 +59,19 @@ export function Row({ children }: { children: React.ReactNode }) {
   return <tr className="border-b border-hairline last:border-b-0">{children}</tr>;
 }
 
-export function Cell({ children, className }: { children?: React.ReactNode; className?: string }) {
-  return <td className={cn('px-4 py-2.5 align-middle text-navy', className)}>{children}</td>;
+export function Cell({
+  children,
+  className,
+  colSpan,
+}: {
+  children?: React.ReactNode;
+  className?: string;
+  /** For a row that becomes one editor rather than a row of values. */
+  colSpan?: number;
+}) {
+  return (
+    <td colSpan={colSpan} className={cn('px-4 py-2.5 align-middle text-navy', className)}>
+      {children}
+    </td>
+  );
 }

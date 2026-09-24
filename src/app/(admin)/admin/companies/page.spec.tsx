@@ -22,6 +22,7 @@ const SUPER_ADMIN = makeMe({
 const PRUDENTIAL = {
   _id: 'co-1', name: 'Prudential', slug: 'prudential',
   defaultCurrency: 'IDR', defaultTimezone: 'Asia/Jakarta', status: 'active',
+  usesPlatformDefaults: true,
 };
 
 describe('companies', () => {
@@ -135,5 +136,101 @@ describe('companies', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('already belongs to Prudential');
     expect(screen.getByLabelText('Slug')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  describe('changing a company that already exists', () => {
+    const render = (body: unknown[] = [PRUDENTIAL]) => {
+      const stub = stubFetch({ '/admin/companies': { body } });
+      renderInLayout(AdminLayout, <CompaniesPage />, { me: SUPER_ADMIN });
+      return stub;
+    };
+
+    it('renames one, and changes its slug, in the row itself', async () => {
+      // Both are labels: every office points at its company by id and nothing stores the
+      // slug, so unlike a config code neither is write-once.
+      const stub = render();
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+      // Scoped by id: the Add form on the right has a Name and a Slug of its own, and the
+      // editor's fields are keyed by the company they belong to.
+      const row = within(document.getElementById('name-co-1')!.closest('tr')!);
+      const name = row.getByLabelText('Name');
+      await userEvent.clear(name);
+      await userEvent.type(name, 'Prudential Indonesia');
+      await userEvent.click(row.getByRole('button', { name: 'Save' }));
+
+      const sent = stub.calls.find((c) => c.init?.method === 'PATCH');
+      expect(String(sent?.url)).toContain('/admin/companies/co-1');
+      expect(JSON.parse(String(sent?.init?.body)))
+        .toEqual({ name: 'Prudential Indonesia', slug: 'prudential' });
+    });
+
+    it('will not save a slug the API would refuse', async () => {
+      render();
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+      const row = within(document.getElementById('slug-co-1')!.closest('tr')!);
+      const slug = row.getByLabelText('Slug');
+      await userEvent.clear(slug);
+      await userEvent.type(slug, '--nope--');
+
+      expect(row.getByRole('button', { name: 'Save' })).toBeDisabled();
+    });
+
+    it('suspends one, and says what that does before it is clicked', async () => {
+      const stub = render();
+
+      const suspend = await screen.findByRole('button', { name: 'Suspend' });
+      expect(suspend).toHaveAttribute('title', expect.stringContaining('No new person'));
+      await userEvent.click(suspend);
+
+      const sent = stub.calls.find((c) => String(c.url).includes('/status'));
+      expect(JSON.parse(String(sent?.init?.body))).toEqual({ status: 'suspended' });
+    });
+
+    it('offers Reactivate, not Suspend, on one that is already suspended', async () => {
+      render([{ ...PRUDENTIAL, status: 'suspended' }]);
+
+      expect(await screen.findByRole('button', { name: 'Reactivate' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Suspend' })).toBeNull();
+      expect(screen.getByText('Suspended')).toBeInTheDocument();
+    });
+
+    it('says on the row when a company took none of the defaults', async () => {
+      // Nine template tabs come up empty for it, and this is the only thing that explains why.
+      render([{ ...PRUDENTIAL, usesPlatformDefaults: false }]);
+
+      expect(await screen.findByText('Started blank')).toBeInTheDocument();
+    });
+  });
+
+  describe('starting a company from nothing', () => {
+    it('asks for the defaults by default', async () => {
+      stubFetch({ '/admin/companies': { body: [] } });
+      renderInLayout(AdminLayout, <CompaniesPage />, { me: SUPER_ADMIN });
+
+      expect(await screen.findByRole('switch', { name: /Start from the AgencyBoost defaults/ }))
+        .toBeChecked();
+    });
+
+    it('sends the choice, so a blank company stays blank on every tab', async () => {
+      /*
+       * The eight template kinds are computed when a tab is opened rather than written at
+       * creation, so declining has to be recorded on the company — otherwise the twelve
+       * activity types turn up on the Activity types tab with no way to say they were not
+       * wanted.
+       */
+      const stub = stubFetch({ '/admin/companies': { body: [] } });
+      renderInLayout(AdminLayout, <CompaniesPage />, { me: SUPER_ADMIN });
+
+      await userEvent.type(await screen.findByLabelText('Name'), 'Blank Co');
+      await userEvent.click(screen.getByRole('switch', { name: /Start from the AgencyBoost defaults/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Add company' }));
+
+      const sent = stub.calls.find((c) => c.init?.method === 'POST');
+      expect(JSON.parse(String(sent?.init?.body))).toMatchObject({
+        name: 'Blank Co', usesPlatformDefaults: false,
+      });
+    });
   });
 });

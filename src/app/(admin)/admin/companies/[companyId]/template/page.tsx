@@ -15,31 +15,89 @@ import {
 import { Button, Card } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { useHashTab } from '@/lib/use-hash-tab';
 import {
   publishTemplate, readTemplate, saveTemplateDraft,
   type CompanyTemplate, type TemplateKind,
 } from '@/lib/admin';
 
-/** Each item of the Owner's Settings group, as ADR-0018 lays them out. */
+/**
+ * Each item of the Owner's Settings group, as ADR-0018 lays them out — one row per **leaf**.
+ *
+ * **Every subtab on this screen is declared here and drawn by the shell.** Three editors used
+ * to draw their own, below the Save card, while `Activity types` drew its two through the
+ * shell above it — so the same control sat on either side of the same button depending on
+ * which tab you were on, in two different shapes. A reader cannot learn a layout that moves.
+ *
+ * Two kinds of leaf share the row and are deliberately indistinguishable to a reader:
+ *
+ * - **A different template kind** — `Activity types` / `Ratio benchmarks`. Switching reloads.
+ * - **A section of one kind** — `Sales` / `Recruitment`. Switching draws a different part of
+ *   the payload already in hand, so an unsaved draft survives it and nothing is refetched.
+ */
 const TABS: {
-  key: string; label: string; kind: TemplateKind | null; under?: string;
+  /** Unique, and what stands in the address bar. */
+  key: string;
+  /** The top row this leaf belongs to. */
+  group: string;
+  /** The top row's label. Written once per group; the first leaf's copy is the one read. */
+  groupLabel: string;
+  /** The subtab's own label. Only drawn when its group has more than one leaf. */
+  label: string;
+  kind: TemplateKind | null;
+  /** Set when several leaves share one `kind` and differ only in what they draw. */
+  section?: string;
 }[] = [
   /*
    * `Activity types` and `Ratio benchmarks` are **subtabs of one item**, not two tabs.
    * ADR-0018's own table says so, and it mirrors the Owner's Settings group, where the
    * benchmarks live inside the Activity types screen (`KPM_Owner.html:1329-1330`).
    */
-  { key: 'activity', label: 'Activity types', kind: 'activity_taxonomy', under: 'activity' },
-  { key: 'ratios', label: 'Ratio benchmarks', kind: 'ratio_set', under: 'activity' },
-  { key: 'leads', label: 'Lead statuses', kind: 'lead_pipeline' },
-  { key: 'activation', label: 'Activation checklist', kind: 'activation_checklist' },
-  { key: 'training', label: 'Training', kind: 'training_taxonomy' },
-  // Same position as the Owner's sidebar. ADR-0018 makes this screen a mirror of that group,
-  // so the order is read from there rather than chosen again here — it had drifted.
-  { key: 'capability', label: 'Skills & stages', kind: 'capability_ladder' },
-  { key: 'events', label: 'Events', kind: 'event_types' },
-  { key: 'campaigns', label: 'Campaigns', kind: 'campaign_kinds' },
-  { key: 'products', label: 'Products', kind: null },
+  { key: 'activity', group: 'activity', groupLabel: 'Activity types', label: 'Activity types', kind: 'activity_taxonomy' },
+  { key: 'ratios', group: 'activity', groupLabel: 'Activity types', label: 'Ratio benchmarks', kind: 'ratio_set' },
+
+  // The Owner's own screen splits the two ladders this way, and a Super Admin filling a
+  // template should be looking at what an Owner will see.
+  { key: 'leads-sales', group: 'leads', groupLabel: 'Lead statuses', label: 'Sales', kind: 'lead_pipeline', section: 'sales' },
+  { key: 'leads-recruitment', group: 'leads', groupLabel: 'Lead statuses', label: 'Recruitment', kind: 'lead_pipeline', section: 'recruitment' },
+
+  { key: 'activation', group: 'activation', groupLabel: 'Activation checklist', label: 'Activation checklist', kind: 'activation_checklist' },
+
+  { key: 'training-categories', group: 'training', groupLabel: 'Training', label: 'Categories', kind: 'training_taxonomy', section: 'categories' },
+  { key: 'training-skills', group: 'training', groupLabel: 'Training', label: 'Skills', kind: 'training_taxonomy', section: 'skills' },
+  { key: 'training-modules', group: 'training', groupLabel: 'Training', label: 'Modules', kind: 'training_taxonomy', section: 'modules' },
+
+  /*
+   * Same position as the Owner's sidebar. ADR-0018 makes this screen a mirror of that group,
+   * so the order is read from there rather than chosen again here — it had drifted.
+   *
+   * **Called *Capability Mapping* here and *Skills & stages* on the Owner's own screen**, and
+   * the split is deliberate rather than drift. *Capability mapping* is the prototype's own
+   * words for this card (`Overall.html:4349`) and the vocabulary a platform operator works in;
+   * the Owner's screen was renamed away from it (parity L-23) because an office read
+   * *Capability catalog* as a second product catalog next to Products. Two audiences, two
+   * names, one `capability_ladder` kind underneath.
+   */
+  { key: 'capability-ladder', group: 'capability', groupLabel: 'Capability Mapping', label: 'Ladder', kind: 'capability_ladder', section: 'ladder' },
+  { key: 'capability-skills', group: 'capability', groupLabel: 'Capability Mapping', label: 'Skills', kind: 'capability_ladder', section: 'skills' },
+
+  { key: 'events', group: 'events', groupLabel: 'Events', label: 'Events', kind: 'event_types' },
+
+  /*
+   * **The Owner's *Campaigns* tab has no counterpart here, and that is not an omission.**
+   * Their screen holds the office's own campaign records beside the carrier's rules; this one
+   * holds only the rules, because a company campaign is a **live record** and not a preset
+   * copied into an office (ADR-0034). The subtabs are therefore the Owner's two *headings*
+   * rather than their two tabs. Authoring a company's own campaigns is Phase 12.
+   */
+  { key: 'campaign-tiers', group: 'campaigns', groupLabel: 'Campaigns', label: 'Production club tiers', kind: 'campaign_kinds', section: 'production_club' },
+  { key: 'campaign-moc', group: 'campaigns', groupLabel: 'Campaigns', label: 'Maintenance of Contract', kind: 'campaign_kinds', section: 'moc' },
+  // `QUALIFICATION_RULE_KINDS` has three members and the Owner's screen surfaces two. A rule
+  // of this kind is storable, publishable and provisioned like the others; leaving it out of
+  // the row would make the only screen that can author it unreachable.
+  { key: 'campaign-promotion', group: 'campaigns', groupLabel: 'Campaigns', label: 'Promotion paths', kind: 'campaign_kinds', section: 'promotion_path' },
+
+  { key: 'products', group: 'products', groupLabel: 'Products', label: 'Products', kind: null },
 ];
 
 /**
@@ -63,14 +121,20 @@ export default function CompanyTemplatePage({
   params: Promise<{ companyId: string }>;
 }) {
   const { companyId } = use(params);
-  const [tab, setTab] = useState(TABS[0]);
+  /*
+   * **The tab stands in the address bar**, so a refresh lands where the reader was and a
+   * pasted link opens the tab it was copied from. It used to be `useState(TABS[0])`, which
+   * meant every reload and every shared link went back to Activity types.
+   */
+  const [tabHref, selectTabHref] = useHashTab(TABS.map((x) => ({ href: `#${x.key}` })));
+  const tab = TABS.find((x) => `#${x.key}` === tabHref) ?? TABS[0];
   /** A tab the reader asked for while holding unsaved edits. `null` the rest of the time. */
   const [pendingTab, setPendingTab] = useState<typeof TABS[number] | null>(null);
 
-  /** One entry per Owner Settings **item** — the top row. */
-  const GROUPS = TABS.filter((t) => (t.under ?? t.key) === t.key);
-  /** The halves of the item in view. More than one means a second row of tabs. */
-  const siblings = TABS.filter((t) => (t.under ?? t.key) === (tab.under ?? tab.key));
+  /** One entry per Owner Settings **item** — the top row, first leaf wins. */
+  const GROUPS = TABS.filter((x, i) => TABS.findIndex((y) => y.group === x.group) === i);
+  /** The leaves of the item in view. More than one means a second row of tabs. */
+  const siblings = TABS.filter((x) => x.group === tab.group);
   /**
    * The loaded template and **which kind it is**, in one piece of state.
    *
@@ -92,6 +156,19 @@ export default function CompanyTemplatePage({
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+
+  /**
+   * Move to a leaf, asking first only when something could actually be lost.
+   *
+   * **A section change cannot lose anything** — it draws a different part of the payload
+   * already in hand, so warning about unsaved edits there would be a false alarm on every
+   * `Sales` ↔ `Recruitment` click. Only a change of `kind` reloads, and only that discards.
+   */
+  const go = (next: typeof TABS[number]) => {
+    if (next.key === tab.key) return;
+    if (dirty && next.kind !== tab.kind) { setPendingTab(next); return; }
+    selectTabHref(`#${next.key}`);
+  };
   /*
    * The activity codes a ratio may be built from, read from this company's own taxonomy
    * template — the draft if there is one, because that is what the Super Admin is looking
@@ -146,9 +223,14 @@ export default function CompanyTemplatePage({
     }
   }, [companyId]);
 
+  /*
+   * Keyed on the **kind**, not on the leaf. Switching `Sales` → `Recruitment` is the same
+   * template drawn differently; refetching it would throw away the draft in hand and blink
+   * the screen back to a skeleton for a change that touched no data.
+   */
   useEffect(() => {
     if (tab.kind) void load(tab.kind);
-  }, [tab, load]);
+  }, [tab.kind, load]);
 
   useEffect(() => {
     if (tab.kind !== 'activation_checklist') return;
@@ -220,8 +302,8 @@ export default function CompanyTemplatePage({
        * the same word sat in two identically-underlined rows.
        */
       tabsLabel="Template sections"
-      tabs={GROUPS.map((g) => ({ label: g.label, href: `#${g.key}` }))}
-      activeHref={`#${tab.under ?? tab.key}`}
+      tabs={GROUPS.map((g) => ({ label: g.groupLabel, href: `#${g.group}` }))}
+      activeHref={`#${tab.group}`}
       /*
        * Unsaved edits are named before they are lost.
        *
@@ -230,26 +312,14 @@ export default function CompanyTemplatePage({
        * buttons; the one place it was not consulted was the one place a change could
        * disappear.
        */
-      onSelectTab={(href) => {
-        // The first tab of the group, so opening `Activity types` lands on its own half.
-        const next = TABS.find((t) => `#${t.under ?? t.key}` === href) ?? TABS[0];
-        if (next.key === tab.key) return;
-        if (dirty) { setPendingTab(next); return; }
-        setTab(next);
-      }}
+      // The group's first leaf, so opening `Lead statuses` lands on `Sales`.
+      onSelectTab={(href) => go(TABS.find((x) => `#${x.group}` === href) ?? TABS[0])}
       subtabs={siblings.length > 1
-        ? siblings.map((t) => ({ label: t.label, href: `#${t.key}` }))
+        ? siblings.map((x) => ({ label: x.label, href: `#${x.key}` }))
         : undefined}
-      subtabsLabel={`${tab.under
-        ? GROUPS.find((g) => g.key === tab.under)?.label
-        : tab.label} sections`}
+      subtabsLabel={`${tab.groupLabel} sections`}
       activeSubtab={`#${tab.key}`}
-      onSelectSubtab={(href) => {
-        const next = TABS.find((t) => `#${t.key}` === href) ?? tab;
-        if (next.key === tab.key) return;
-        if (dirty) { setPendingTab(next); return; }
-        setTab(next);
-      }}
+      onSelectSubtab={(href) => go(TABS.find((x) => `#${x.key}` === href) ?? tab)}
       error={error}
     >
       {pendingTab && (
@@ -263,7 +333,11 @@ export default function CompanyTemplatePage({
           <div className="mt-3 flex flex-wrap gap-2">
             <Button
               variant="secondary"
-              onClick={() => { const next = pendingTab; setPendingTab(null); setTab(next); }}
+              onClick={() => {
+                const next = pendingTab;
+                setPendingTab(null);
+                selectTabHref(`#${next.key}`);
+              }}
             >
               Discard and open {pendingTab.label}
             </Button>
@@ -374,6 +448,7 @@ export default function CompanyTemplatePage({
                 return (
                   <PipelineEditor
                     payload={current.payload as unknown as PipelinePayload}
+                    pipeline={tab.section as 'sales' | 'recruitment'}
                     disabled={busy}
                     onChange={(next) => change(next as unknown as Record<string, unknown>)}
                   />
@@ -391,6 +466,7 @@ export default function CompanyTemplatePage({
                 return (
                   <TrainingEditor
                     payload={current.payload as unknown as TrainingTaxonomyPayload}
+                    section={tab.section as 'categories' | 'skills' | 'modules'}
                     disabled={busy}
                     onChange={(next) => change(next as unknown as Record<string, unknown>)}
                   />
@@ -408,6 +484,7 @@ export default function CompanyTemplatePage({
                   <CampaignKindsEditor
                     payload={current.payload as unknown as CampaignKindsPayload}
                     metrics={metrics.map((m) => ({ key: m.key, label: m.name, unit: m.unit }))}
+                    section={tab.section as 'production_club' | 'moc' | 'promotion_path'}
                     disabled={busy}
                     onChange={(next) => change(next as unknown as Record<string, unknown>)}
                   />
@@ -416,6 +493,7 @@ export default function CompanyTemplatePage({
                 return (
                   <CapabilityLadderEditor
                     payload={current.payload as unknown as CapabilityLadderPayload}
+                    section={tab.section as 'ladder' | 'skills'}
                     disabled={busy}
                     onChange={(next) => change(next as unknown as Record<string, unknown>)}
                   />

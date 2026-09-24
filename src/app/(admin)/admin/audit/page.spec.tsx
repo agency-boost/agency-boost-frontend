@@ -20,9 +20,12 @@ const SUPER_ADMIN = makeMe({
 });
 
 const ENTRY = {
-  _id: 'a-1', kpmId: null, actorUserId: 'u-root', effectiveUserId: null,
+  _id: 'a-1',
+  actorUserId: 'u-root', actorName: 'Root Operator',
+  effectiveUserId: null, effectiveName: null,
   action: 'kpm.created', targetCollection: 'kpms', targetId: 'kpm-1',
-  onBehalfOf: false, createdAt: '2026-09-04T02:00:00.000Z',
+  targetLabel: '0417 · Surabaya Branch',
+  createdAt: '2026-09-04T02:00:00.000Z',
 };
 
 describe('audit log', () => {
@@ -59,14 +62,52 @@ describe('audit log', () => {
 
   it('names both people for an impersonated action', async () => {
     stubFetch({
-      '/admin/audit': { body: [{ ...ENTRY, effectiveUserId: 'u-owner', onBehalfOf: true }] },
+      '/admin/audit': {
+        body: [{
+          ...ENTRY, effectiveUserId: 'u-owner', effectiveName: 'Rangga Wibisono',
+        }],
+      },
       '/admin/tenants': { body: [] },
     });
     renderInLayout(AdminLayout, <AuditPage />, { me: SUPER_ADMIN });
 
     const row = within(await screen.findByRole('table')).getByRole('row', { name: /kpm.created/ });
-    expect(within(row).getByText('u-root')).toBeInTheDocument();
-    expect(within(row).getByText('as u-owner')).toBeInTheDocument();
+    expect(within(row).getByText('Root Operator')).toBeInTheDocument();
+    expect(within(row).getByText('as Rangga Wibisono')).toBeInTheDocument();
+  });
+
+  describe('naming what a row is about', () => {
+    /*
+     * Every row used to read `memberships 68f3c1a9…`, so answering *"who suspended
+     * Surabaya?"* meant three lookups in a database shell — which is the question this
+     * screen exists to answer, and the one moment nobody wants to be writing queries.
+     */
+    const render = (entry: Record<string, unknown>) => {
+      stubFetch({ '/admin/audit': { body: [entry] }, '/admin/tenants': { body: [] } });
+      renderInLayout(AdminLayout, <AuditPage />, { me: SUPER_ADMIN });
+    };
+
+    it('names the target and the actor', async () => {
+      render(ENTRY);
+
+      const row = within(await screen.findByRole('table')).getByRole('row', { name: /kpm.created/ });
+      expect(within(row).getByText('0417 · Surabaya Branch')).toBeInTheDocument();
+      expect(within(row).getByText('Root Operator')).toBeInTheDocument();
+      expect(within(row).queryByText('kpm-1')).toBeNull();
+    });
+
+    it('falls back to the id when nothing names it', async () => {
+      // A collection nobody has taught the resolver about is *this is all we know*, not
+      // *nothing happened* — so the id stays rather than the cell going blank.
+      render({
+        ...ENTRY, targetCollection: 'goals', targetId: 'g-9', targetLabel: null,
+        actorName: null,
+      });
+
+      const row = within(await screen.findByRole('table')).getByRole('row', { name: /kpm.created/ });
+      expect(within(row).getByText('g-9')).toBeInTheDocument();
+      expect(within(row).getByText('u-root')).toBeInTheDocument();
+    });
   });
 
   it('tells an empty tenant scope apart from an empty platform scope', async () => {

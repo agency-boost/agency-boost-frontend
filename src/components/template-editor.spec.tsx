@@ -82,7 +82,7 @@ describe('an unauthored preset', () => {
   });
 
   it('renders the pipeline editor as empty instead of crashing', () => {
-    render(<PipelineEditor payload={{} as PipelinePayload} onChange={vi.fn()} />);
+    render(<PipelineEditor payload={{} as PipelinePayload} pipeline="sales" onChange={vi.fn()} />);
 
     expect(screen.getByRole('button', { name: /Add a sales stage/ })).toBeInTheDocument();
   });
@@ -269,32 +269,48 @@ describe('TrainingEditor (P5-T1)', () => {
   };
 
   /** The editor is controlled; this holds the payload the way the template screen does. */
-  function Editor({ initial = TRAINING, onChange = vi.fn() }: {
-    initial?: TrainingTaxonomyPayload; onChange?: (next: TrainingTaxonomyPayload) => void;
+  function Editor({ initial = TRAINING, section = 'categories', onChange = vi.fn() }: {
+    initial?: TrainingTaxonomyPayload;
+    section?: 'categories' | 'skills' | 'modules';
+    onChange?: (next: TrainingTaxonomyPayload) => void;
   }) {
     const [payload, setPayload] = useState(initial);
-    return <TrainingEditor payload={payload} onChange={(next) => { setPayload(next); onChange(next); }} />;
+    return (
+      <TrainingEditor
+        payload={payload}
+        section={section}
+        onChange={(next) => { setPayload(next); onChange(next); }}
+      />
+    );
   }
 
   const rowOf = (text: string) => screen.getByText(text).closest('li') as HTMLElement;
-  const subtab = (name: string) => userEvent.click(
-    within(screen.getByRole('navigation', { name: 'Training template sections' })).getByRole('link', { name }),
-  );
 
   it('renders an unauthored preset as empty instead of crashing', () => {
-    render(<TrainingEditor payload={{} as TrainingTaxonomyPayload} onChange={vi.fn()} />);
+    render(<TrainingEditor payload={{} as TrainingTaxonomyPayload} section="categories" onChange={vi.fn()} />);
 
     expect(screen.getByText('0 categories')).toBeInTheDocument();
     expect(screen.getByText('No training categories yet.')).toBeInTheDocument();
   });
 
-  it('mirrors the Owner’s screen: three subtabs, and the same badges', () => {
+  it('mirrors the Owner’s screen: the same badges on the same rows', () => {
+    /*
+     * The three subtabs that used to be asserted here are the **screen's** now — every
+     * subtab on the Company template is declared in one place and drawn by the shell, so
+     * that the Save button sits in the same spot on every tab. The row itself is covered
+     * by the template screen's own spec.
+     */
     render(<Editor />);
 
-    expect(within(screen.getByRole('navigation', { name: 'Training template sections' }))
-      .getAllByRole('link').map((l) => l.textContent)).toEqual(['Categories', 'Skills', 'Modules']);
     expect(within(rowOf('Sales')).getByText('2 skills · 1 module published')).toBeInTheDocument();
     expect(within(rowOf('Product')).getByText('Empty')).toBeInTheDocument();
+  });
+
+  it('draws only the section it is given', () => {
+    render(<Editor section="modules" />);
+
+    expect(screen.getByLabelText('Skill')).toBeInTheDocument();
+    expect(screen.queryByText('No training categories yet.')).toBeNull();
   });
 
   it('removes an empty category, and not one that still holds skills', async () => {
@@ -328,8 +344,7 @@ describe('TrainingEditor (P5-T1)', () => {
 
   it('adds a skill to the category chosen, and keeps one with modules from being removed', async () => {
     const onChange = vi.fn();
-    render(<Editor onChange={onChange} />);
-    await subtab('Skills');
+    render(<Editor section="skills" onChange={onChange} />);
 
     expect(within(rowOf('Prospecting')).getByText('2 modules')).toBeInTheDocument();
     expect(within(rowOf('Prospecting')).getByRole('button', { name: 'Remove' })).toBeDisabled();
@@ -348,8 +363,7 @@ describe('TrainingEditor (P5-T1)', () => {
 
   it('moves a skill to another category', async () => {
     const onChange = vi.fn();
-    render(<Editor onChange={onChange} />);
-    await subtab('Skills');
+    render(<Editor section="skills" onChange={onChange} />);
     await userEvent.click(within(rowOf('Closing')).getByRole('button', { name: 'Edit' }));
     await userEvent.selectOptions(screen.getByRole('combobox', { description: 'Its modules move with it.' }), 'PRODUCT');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -360,8 +374,7 @@ describe('TrainingEditor (P5-T1)', () => {
 
   it('offers the chosen category’s skills, and adds a module only to a skill that is chosen', async () => {
     const onChange = vi.fn();
-    render(<Editor onChange={onChange} />);
-    await subtab('Modules');
+    render(<Editor section="modules" onChange={onChange} />);
 
     expect(within(screen.getByLabelText('Skill')).getAllByRole('option').map((o) => o.textContent))
       .toEqual(['All skills', 'Prospecting', 'Closing']);
@@ -382,8 +395,7 @@ describe('TrainingEditor (P5-T1)', () => {
 
   it('publishes a module in the template through its edit panel', async () => {
     const onChange = vi.fn();
-    render(<Editor onChange={onChange} />);
-    await subtab('Modules');
+    render(<Editor section="modules" onChange={onChange} />);
     await userEvent.click(within(rowOf('Cold calls')).getByRole('button', { name: 'Edit' }));
     await userEvent.selectOptions(screen.getByLabelText('Publish state'), 'published');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -410,6 +422,64 @@ describe('ActivationChecklistEditor (P5-T3)', () => {
     ],
   };
   const MODULES = [{ code: 'PROSPECT_LIST', title: 'Building Your Prospect List' }];
+
+  describe('reordering (client feedback, 2026-09-24)', () => {
+    /*
+     * This was the last of the template's lists without a handle. The only way to move an
+     * aspect was to remove it — with every item under it — and add it back in the right
+     * place, and the order here is what a new hire reads on their first day.
+     *
+     * Order **is** the order: `activation-input.ts` provisions an office by reading
+     * *"the position in the list the caller sent"*, so a move rewrites the array and
+     * nothing else. There is no ordinal to renumber.
+     */
+    it('moves an aspect, and every item under it', async () => {
+      const onChange = vi.fn();
+      render(<ActivationChecklistEditor payload={CHECKLIST} modules={MODULES} onChange={onChange} />);
+
+      screen.getByRole('button', { name: /^Reorder 1\. Introduction\./ }).focus();
+      await userEvent.keyboard('{ArrowDown}');
+
+      const [next] = onChange.mock.calls[0];
+      expect(next.aspects.map((a: { code: string }) => a.code))
+        .toEqual(['INITIAL_SETUP', 'INTRODUCTION']);
+      expect(next.aspects[1].items.map((i: { code: string }) => i.code))
+        .toEqual(['INSURANCE_BASICS']);
+    });
+
+    it('will not move an item into another aspect', async () => {
+      // An item that moved in the list and kept the aspect it came from would make the
+      // heading say one thing and the data another — the defect `canPlace` exists for.
+      const onChange = vi.fn();
+      render(<ActivationChecklistEditor payload={CHECKLIST} modules={MODULES} onChange={onChange} />);
+
+      screen.getByRole('button', { name: /^Reorder Learn insurance basics\./ }).focus();
+      await userEvent.keyboard('{ArrowDown}');
+
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('moves an item within its own aspect', async () => {
+      const onChange = vi.fn();
+      const two = {
+        aspects: [{
+          code: 'INTRODUCTION',
+          label: '1. Introduction',
+          items: [
+            { code: 'A', label: 'First thing', autoLink: null },
+            { code: 'B', label: 'Second thing', autoLink: null },
+          ],
+        }],
+      };
+      render(<ActivationChecklistEditor payload={two} modules={MODULES} onChange={onChange} />);
+
+      screen.getByRole('button', { name: /^Reorder First thing\./ }).focus();
+      await userEvent.keyboard('{ArrowDown}');
+
+      expect(onChange.mock.calls[0][0].aspects[0].items.map((i: { code: string }) => i.code))
+        .toEqual(['B', 'A']);
+    });
+  });
 
   function Editor({ onChange = vi.fn() }: { onChange?: (next: ActivationChecklistPayload) => void }) {
     const [payload, setPayload] = useState(CHECKLIST);
@@ -640,6 +710,7 @@ describe('CampaignKindsEditor (P5-T9)', () => {
     render(<CampaignKindsEditor
       payload={{} as CampaignKindsPayload}
       metrics={METRICS}
+      section="production_club"
       onChange={vi.fn()}
     />);
 
@@ -650,7 +721,7 @@ describe('CampaignKindsEditor (P5-T9)', () => {
     // A rule asking for nothing is one everybody qualifies for on the day it publishes — and
     // publishing refuses it, so the Add cannot be the thing that creates one.
     const onChange = vi.fn();
-    render(<CampaignKindsEditor payload={CAMPAIGN_KINDS} metrics={METRICS} onChange={onChange} />);
+    render(<CampaignKindsEditor payload={CAMPAIGN_KINDS} metrics={METRICS} section="production_club" onChange={onChange} />);
 
     await userEvent.click(screen.getByRole('button', { name: /Add a production clubs rule/ }));
     await userEvent.type(screen.getByLabelText('Name'), 'Elite Club');
@@ -664,7 +735,7 @@ describe('CampaignKindsEditor (P5-T9)', () => {
 
   it('edits a threshold, and says money is in sen', async () => {
     const onChange = vi.fn();
-    render(<CampaignKindsEditor payload={CAMPAIGN_KINDS} metrics={METRICS} onChange={onChange} />);
+    render(<CampaignKindsEditor payload={CAMPAIGN_KINDS} metrics={METRICS} section="production_club" onChange={onChange} />);
 
     const criterion = screen.getByText(/APE achieved/).closest('li')!;
     await userEvent.click(within(criterion).getByRole('button', { name: 'Edit' }));
@@ -682,6 +753,7 @@ describe('CampaignKindsEditor (P5-T9)', () => {
     // ADR-0035: a rule records what it is waiting on. Dropping the row would show a rule that
     // silently never passes.
     render(<CampaignKindsEditor
+      section="production_club"
       payload={{
         rules: [{
           ...CAMPAIGN_KINDS.rules[0],
@@ -701,7 +773,7 @@ describe('CampaignKindsEditor (P5-T9)', () => {
 
 describe('CapabilityLadderEditor (P5-T9)', () => {
   it('renders an unauthored preset as empty instead of crashing', () => {
-    render(<CapabilityLadderEditor payload={{} as CapabilityLadderPayload} onChange={vi.fn()} />);
+    render(<CapabilityLadderEditor payload={{} as CapabilityLadderPayload} section="ladder" onChange={vi.fn()} />);
 
     expect(screen.getByRole('heading', { name: 'Milestones' })).toBeInTheDocument();
   });
@@ -709,7 +781,7 @@ describe('CapabilityLadderEditor (P5-T9)', () => {
   it('lists stages by rank, not by the order they sit in the payload', async () => {
     // The prototype computes somebody's stage from the array index, so tidying the ladder for
     // readability moves everybody. Rank is the only seniority here.
-    render(<CapabilityLadderEditor payload={CAPABILITY} onChange={vi.fn()} />);
+    render(<CapabilityLadderEditor payload={CAPABILITY} section="ladder" onChange={vi.fn()} />);
 
     const labels = screen.getAllByText(/New agent|Competent/).map((el) => el.textContent);
     expect(labels).toEqual(['New agent', 'Competent']);
@@ -717,7 +789,7 @@ describe('CapabilityLadderEditor (P5-T9)', () => {
 
   it('ticks a milestone onto a stage', async () => {
     const onChange = vi.fn();
-    render(<CapabilityLadderEditor payload={CAPABILITY} onChange={onChange} />);
+    render(<CapabilityLadderEditor payload={CAPABILITY} section="ladder" onChange={onChange} />);
 
     const stage = screen.getByText('New agent').closest('li')!;
     await userEvent.click(within(stage).getByRole('checkbox', { name: 'Sells independently' }));
@@ -729,7 +801,7 @@ describe('CapabilityLadderEditor (P5-T9)', () => {
 
   it('refuses to let a grid item be added without a code, and suggests one', async () => {
     const onChange = vi.fn();
-    render(<CapabilityLadderEditor payload={CAPABILITY} onChange={onChange} />);
+    render(<CapabilityLadderEditor payload={CAPABILITY} section="skills" onChange={onChange} />);
 
     await userEvent.click(screen.getByRole('button', { name: /Add an item/ }));
     await userEvent.type(screen.getByLabelText('Item'), 'Asking for referrals');
@@ -740,8 +812,66 @@ describe('CapabilityLadderEditor (P5-T9)', () => {
       .toEqual(['APPROACH', 'ASKING_FOR_REFERRALS']);
   });
 
+  describe('reordering (client feedback, 2026-09-24)', () => {
+    it('moves a milestone, whose order is its position', async () => {
+      const onChange = vi.fn();
+      const two = {
+        ...CAPABILITY,
+        milestones: [
+          { code: 'SELLS', label: 'Sells independently' },
+          { code: 'RECRUITS', label: 'Recruits quality agents' },
+        ],
+      };
+      render(<CapabilityLadderEditor payload={two} section="ladder" onChange={onChange} />);
+
+      screen.getByRole('button', { name: /^Reorder Sells independently\./ }).focus();
+      await userEvent.keyboard('{ArrowDown}');
+
+      expect(onChange.mock.calls[0][0].milestones.map((m: { code: string }) => m.code))
+        .toEqual(['RECRUITS', 'SELLS']);
+    });
+
+    it('moves a stage by rewriting its rank, not its position', async () => {
+      // Seniority is the rank — that is what the hint above the list says, and what the
+      // prototype got wrong by computing it from the array index.
+      const onChange = vi.fn();
+      const two = {
+        ...CAPABILITY,
+        stages: [
+          { code: 'NEW', label: 'New agent', requiredMilestoneCodes: [], stageOrder: 1 },
+          { code: 'COMPETENT', label: 'Competent', requiredMilestoneCodes: [], stageOrder: 2 },
+        ],
+      };
+      render(<CapabilityLadderEditor payload={two} section="ladder" onChange={onChange} />);
+
+      screen.getByRole('button', { name: /^Reorder New agent\./ }).focus();
+      await userEvent.keyboard('{ArrowDown}');
+
+      expect(onChange.mock.calls[0][0].stages
+        .map((s: { code: string; stageOrder: number }) => [s.code, s.stageOrder]))
+        .toEqual([['COMPETENT', 1], ['NEW', 2]]);
+    });
+
+    it('will not move a grid item into another grid', async () => {
+      const onChange = vi.fn();
+      const two = {
+        ...CAPABILITY,
+        grids: [
+          { code: 'A', label: 'Personal selling', requiresDownline: false, items: [{ code: 'A1', label: 'Approach' }] },
+          { code: 'B', label: 'Recruitment', requiresDownline: false, items: [{ code: 'B1', label: 'Pitch' }] },
+        ],
+      };
+      render(<CapabilityLadderEditor payload={two} section="skills" onChange={onChange} />);
+
+      screen.getByRole('button', { name: /^Reorder Approach\./ }).focus();
+      await userEvent.keyboard('{ArrowDown}');
+
+      expect(onChange).not.toHaveBeenCalled();
+    });
+  });
+
   it('says a milestone a stage still needs will be refused, rather than removing it quietly', async () => {
-    render(<CapabilityLadderEditor payload={CAPABILITY} onChange={vi.fn()} />);
+    render(<CapabilityLadderEditor payload={CAPABILITY} section="ladder" onChange={vi.fn()} />);
 
     const card = screen.getByRole('heading', { name: 'Milestones' }).closest('.rounded-lg')!;
     const row = within(card as HTMLElement).getByText('Sells independently').closest('li')!;

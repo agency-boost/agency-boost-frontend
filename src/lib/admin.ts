@@ -19,6 +19,11 @@ export interface Company {
   defaultCurrency: string;
   defaultTimezone: string;
   status: 'active' | 'suspended';
+  /**
+   * False means this company was created blank: no product catalog, no carrier rules, and
+   * every Company template tab starts empty rather than from the platform's presets.
+   */
+  usesPlatformDefaults: boolean;
 }
 
 /**
@@ -56,13 +61,21 @@ export interface Kpm {
 
 export interface AuditEntry {
   _id: string;
-  kpmId: string | null;
-  actorUserId: string;
-  effectiveUserId: string | null;
   action: string;
   targetCollection: string;
   targetId: string | null;
-  onBehalfOf: boolean;
+  /**
+   * What the target is called — a person's name, an office's code and branch, a company's
+   * name. **Null when the id resolves to nothing, or to a collection nothing names yet**, and
+   * the screen shows the id instead: a blank cell would read as nothing happened.
+   */
+  targetLabel: string | null;
+  actorUserId: string | null;
+  actorName: string | null;
+  effectiveUserId: string | null;
+  effectiveName: string | null;
+  before?: Record<string, unknown> | null;
+  after?: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -165,8 +178,22 @@ export const declineKpmRequest = (requestId: string, reason?: string) =>
 
 export const listCompanies = () => api<Company[]>('/admin/companies');
 
-export const createCompany = (body: { name: string; slug: string }) =>
-  api<Company>('/admin/companies', { method: 'POST', body });
+export const createCompany = (
+  body: { name: string; slug: string; usesPlatformDefaults?: boolean },
+) => api<Company>('/admin/companies', { method: 'POST', body });
+
+/** Rename, or change the slug. Both are labels; nothing stores either. */
+export const updateCompany = (id: string, body: { name?: string; slug?: string }) =>
+  api<Company>(`/admin/companies/${id}`, { method: 'PATCH', body });
+
+/**
+ * Suspend a company, or bring it back.
+ *
+ * A suspended company disappears from the list somebody registering chooses from. It does
+ * not sign anybody out or suspend its offices — that is each office's own lifecycle.
+ */
+export const setCompanyStatus = (id: string, status: 'active' | 'suspended') =>
+  api<Company>(`/admin/companies/${id}/status`, { method: 'PATCH', body: { status } });
 
 export const listTenants = () => api<Kpm[]>('/admin/tenants');
 

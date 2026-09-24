@@ -1429,9 +1429,15 @@ describe('screens have no axe violations', () => {
       await screen.findByText('Star Club');
       await expectClean('admin/companies/[companyId]/template#campaigns');
 
-      await userEvent.click(screen.getByRole('link', { name: 'Skills & stages' }));
+      // Renamed and split by the 2026-09-24 feedback: the platform's own words for the
+      // card (`Overall.html:4349`), with the grids on their own half.
+      await userEvent.click(screen.getByRole('link', { name: 'Capability Mapping' }));
+      await screen.findByRole('heading', { name: 'Milestones' });
+      await expectClean('admin/companies/[companyId]/template#capability-ladder');
+
+      await userEvent.click(screen.getByRole('link', { name: 'Skills' }));
       await screen.findByText('Approach');
-      await expectClean('admin/companies/[companyId]/template#capability');
+      await expectClean('admin/companies/[companyId]/template#capability-skills');
     });
 
     it('the company template’s Products tab, with a product open', async () => {

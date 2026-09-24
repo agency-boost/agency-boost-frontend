@@ -305,7 +305,9 @@ describe('a company’s Company template (P4-T8)', () => {
     it('gives every capability row a code, shown where it is edited', async () => {
       // The claim was never that a list paints codes — it is that every row *has* one, so a
       // rename cannot orphan a tick. Two of the prototype's four grids have none at all.
-      await openTab(CAPABILITY, 'Skills & stages');
+      await openTab(CAPABILITY, 'Capability Mapping');
+      // The grids are the `Skills` half; `Ladder` holds the milestones and the stages.
+      await userEvent.click(await screen.findByRole('link', { name: 'Skills' }));
       await screen.findByText('Approach');
 
       expect(screen.queryByText('APPROACH')).not.toBeInTheDocument();
@@ -318,7 +320,7 @@ describe('a company’s Company template (P4-T8)', () => {
 
     it('says a stage’s seniority is its rank, not its position', async () => {
       // The prototype computes it from the array index, so tidying the ladder moves everybody.
-      await openTab(CAPABILITY, 'Skills & stages');
+      await openTab(CAPABILITY, 'Capability Mapping');
 
       expect(await screen.findByText(/Seniority is the rank, not the position/))
         .toBeInTheDocument();
@@ -634,6 +636,95 @@ describe('a company’s Company template (P4-T8)', () => {
       await screen.findByText('Submission polis');
       await userEvent.click(screen.getByRole('link', { name: 'Lead statuses' }));
       expect(screen.queryByText(/edits here that are not saved/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('where the tabs are, and where they stay (client feedback, 2026-09-24)', () => {
+    const LADDER = {
+      id: 'tpl-6', companyId: 'c1', kind: 'capability_ladder', version: 1, status: 'draft',
+      publishedAt: null, publishedVersion: null, officesBehind: 0, officesUnrecorded: 0,
+      payload: {
+        stages: [{
+          code: 'COMPETENT', label: 'Competent producer',
+          requiredMilestoneCodes: ['SELLS'], stageOrder: 1,
+        }],
+        milestones: [{ code: 'SELLS', label: 'Sells independently' }],
+        grids: [{
+          code: 'PERSONAL', label: 'Personal selling', requiresDownline: false,
+          items: [{ code: 'APPROACH', label: 'Approach' }],
+        }],
+      },
+    };
+
+    const open = (body: unknown, hash = '') => {
+      window.location.hash = hash;
+      const stub = stubFetch({
+        '/admin/companies/c1/template': { body },
+        '/metrics': { body: [] },
+      });
+      renderWithSession(
+        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
+        { me: SUPER_ADMIN },
+      );
+      return stub;
+    };
+
+    afterEach(() => { window.location.hash = ''; });
+
+    it('lands on the tab the address bar names, not on the first one', async () => {
+      // It was `useState(TABS[0])`, so every reload and every pasted link went back to
+      // Activity types — including the reload that follows a publish.
+      open(PIPELINE, '#leads-recruitment');
+
+      expect(await screen.findByText('Not approached')).toBeInTheDocument();
+      expect(screen.queryByText('Not yet approached')).toBeNull();
+    });
+
+    it('puts the tab in the address bar when it changes, so a refresh stays put', async () => {
+      open(TAXONOMY);
+      await userEvent.click(await screen.findByRole('link', { name: 'Ratio benchmarks' }));
+
+      expect(window.location.hash).toBe('#ratios');
+    });
+
+    it('draws every subtab in the same row, above the Save button', async () => {
+      /*
+       * Three editors used to draw their own subtabs *below* the Save card while the
+       * Activity types group drew its two above it — so the same control sat on either
+       * side of the same button depending on which tab you were on. A reader cannot learn
+       * a layout that moves.
+       */
+      open(PIPELINE, '#leads-sales');
+      const subtabs = await screen.findByRole('navigation', { name: 'Lead statuses sections' });
+
+      expect(within(subtabs).getAllByRole('link').map((l) => l.textContent))
+        .toEqual(['Sales', 'Recruitment']);
+      expect(subtabs.compareDocumentPosition(screen.getByRole('button', { name: 'Save draft' })))
+        // 4 = DOCUMENT_POSITION_FOLLOWING: the Save button comes after the subtab row.
+        .toBe(4);
+    });
+
+    it('switches ladder without refetching, so an unsaved draft survives it', async () => {
+      // A section change draws a different part of the payload already in hand. Reloading
+      // would throw the draft away for a change that touched no data.
+      const stub = open(PIPELINE, '#leads-sales');
+      await screen.findByText('Not yet approached');
+      const before = stub.calls.filter((c) => String(c.url).includes('/template')).length;
+
+      await userEvent.click(screen.getByRole('link', { name: 'Recruitment' }));
+
+      expect(await screen.findByText('Not approached')).toBeInTheDocument();
+      expect(stub.calls.filter((c) => String(c.url).includes('/template'))).toHaveLength(before);
+    });
+
+    it('splits the capability ladder from the grids it is assessed against', async () => {
+      open(LADDER, '#capability-ladder');
+      const subtabs = await screen.findByRole('navigation', { name: 'Capability Mapping sections' });
+
+      expect(within(subtabs).getAllByRole('link').map((l) => l.textContent))
+        .toEqual(['Ladder', 'Skills']);
+      expect(screen.getByRole('heading', { name: 'Milestones' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Stages' })).toBeInTheDocument();
     });
   });
 });
