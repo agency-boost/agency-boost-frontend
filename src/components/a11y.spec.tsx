@@ -21,11 +21,14 @@ const SECTIONS: readonly NavSection[] = [
   {
     label: 'Personal tools',
     items: [
-      { label: 'Activity management', href: '/activity', active: true },
-      { label: 'Leads management', href: '/leads' },
+      { label: 'Activity management', href: '/activity', icon: 'activity', active: true },
+      { label: 'Leads management', href: '/leads', icon: 'funnel' },
     ],
   },
-  { label: 'Reporting', items: [{ label: 'Advanced analytics', href: '#', upcoming: true }] },
+  {
+    label: 'Reporting',
+    items: [{ label: 'Advanced analytics', href: '#', icon: 'chartUp', upcoming: true }],
+  },
 ];
 
 async function expectNoViolations(ui: React.ReactElement) {

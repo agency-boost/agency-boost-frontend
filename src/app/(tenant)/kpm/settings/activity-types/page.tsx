@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import { useCan } from '@/lib/session';
 import { projectStaged, unstageRow, STAGED_LABEL } from '@/lib/staged-projection';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
@@ -262,6 +263,29 @@ export default function ActivityTypesPage() {
     // not happened yet, and hiding it takes the Undo away with it.
     ).filter(({ row, staged: mark }) => showArchived || row.status === 'active' || mark),
   }));
+
+  /**
+   * The badge an agent sees beside a row, counted over the **live** rows only.
+   *
+   * `displayOrder` is the stored ordinal and it keeps counting through archived rows — so an
+   * office that archived item 3 saw `1 2 4 5`, which reads as a row that failed to load rather
+   * than as one that was retired. An archived row gets **no number at all**: it is out of the
+   * sequence, and giving it one would put the gap back the moment archived rows were shown.
+   *
+   * Counted across the whole office rather than per section, because that is what the badge has
+   * always meant — the prototype's 1–12 run through all four sections. Presentation only, and
+   * reorderable, which is why nothing references it (glossary §*Display numbers are not
+   * identifiers*).
+   */
+  const liveNumber = new Map<string, number>();
+  let counted = 0;
+  for (const category of (categories ?? [])) {
+    for (const type of category.types) {
+      if (type.status !== 'active') continue;
+      counted += 1;
+      liveNumber.set(type.id, counted);
+    }
+  }
 
   return (
     <SettingsScreen
@@ -631,11 +655,21 @@ export default function ActivityTypesPage() {
                         onMove={(by) => move(flat, type.id, by)}
                       />
                     )}
+                    {/*
+                      * No number on an archived row. It is out of the sequence the agent sees,
+                      * and numbering it would put back the gap this is here to remove — the
+                      * empty circle keeps the rows aligned with each other.
+                      */}
                     <span
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-navy text-sm font-bold text-navy"
+                      className={cn(
+                        'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold',
+                        liveNumber.has(type.id)
+                          ? 'border-2 border-navy text-navy'
+                          : 'border border-dashed border-hairline text-transparent',
+                      )}
                       aria-hidden
                     >
-                      {type.displayOrder}
+                      {liveNumber.get(type.id) ?? '–'}
                     </span>
 
                     <div className="min-w-0 flex-1">

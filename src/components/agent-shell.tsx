@@ -90,17 +90,17 @@ function Chrome({
         // Notifications is **not** here. It is the bell beside the identity chip at the foot
         // of the sidebar — a glance rather than a place to work (client feedback,
         // 2026-09-24).
-        { label: 'Activity management', href: '/activity/log', active: on('/activity') },
-        { label: 'Leads management', href: '/leads', upcoming: true },
-        { label: 'Goal settings', href: '/goals', upcoming: true },
-        { label: 'Personal summary', href: '/summary', upcoming: true },
+        { label: 'Activity management', href: '/activity/log', active: on('/activity'), icon: 'activity' },
+        { label: 'Leads management', href: '/leads', icon: 'funnel', upcoming: true },
+        { label: 'Goal settings', href: '/goals', icon: 'target', upcoming: true },
+        { label: 'Personal summary', href: '/summary', icon: 'user', upcoming: true },
       ],
     },
     {
       label: 'Unit tools',
       items: [
-        { label: 'Unit dashboard', href: '/unit/dashboard', active: on('/unit') },
-        { label: 'Coaching session', href: '/coaching', upcoming: true },
+        { label: 'Unit dashboard', href: '/unit/dashboard', icon: 'gauge', active: on('/unit') },
+        { label: 'Coaching session', href: '/coaching', icon: 'chat', upcoming: true },
       ],
     },
     {
@@ -108,31 +108,32 @@ function Chrome({
       // (`Overall.html:6638-6642`). Both are Phase 11, so both are upcoming for now.
       label: 'New agent',
       items: [
-        { label: 'Your 90-day activation', href: '/activation', upcoming: true },
-        { label: 'New hires', href: '/new-hires', upcoming: true },
+        { label: 'Your 90-day activation', href: '/activation', icon: 'clipboard', upcoming: true },
+        { label: 'New hires', href: '/new-hires', icon: 'userPlus', upcoming: true },
       ],
     },
-    { label: 'Training', items: [{ label: 'Training modules', href: '/training', upcoming: true }] },
+    { label: 'Training', items: [{ label: 'Training modules', href: '/training', icon: 'graduation', upcoming: true }] },
     {
       label: 'Sales tools',
       items: [
-        { label: 'Sales Attack Plan', href: '/attack-plan', upcoming: true },
-        { label: 'Product Catalog', href: '/product-catalog', upcoming: true },
+        { label: 'Sales Attack Plan', href: '/attack-plan', icon: 'compass', upcoming: true },
+        { label: 'Product Catalog', href: '/product-catalog', icon: 'box', upcoming: true },
       ],
       divider: true,
     },
-    { label: 'KPM', items: [{ label: 'Event list', href: '/events', upcoming: true }] },
+    { label: 'KPM', items: [{ label: 'Event list', href: '/events', icon: 'calendar', upcoming: true }] },
     {
       label: 'Campaign',
-      items: [{ label: 'Campaign list', href: '/campaigns', upcoming: true }],
+      items: [{ label: 'Campaign list', href: '/campaigns', icon: 'trophy', upcoming: true }],
       divider: true,
     },
     {
       label: 'Admin',
       items: [
-        { label: 'Group tree', href: '/group-tree', active: on('/group-tree') },
+        { label: 'Group tree', href: '/group-tree', icon: 'tree', active: on('/group-tree') },
         {
           label: 'User management',
+          icon: 'userPlus',
           href: '/user-management/kpm',
           active: on('/user-management'),
           // No badge. P3.5-T5 AC-3 settled this: no prototype puts a count inside a nav

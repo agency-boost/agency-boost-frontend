@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
 import { makeMe, renderInLayout, stubFetch } from '@test/harness';
@@ -54,9 +55,17 @@ describe('office overview', () => {
     stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
     renderInLayout(TenantLayout, <KpmOverviewPage />, { me: OWNER });
 
-    // Two of them: the sidebar nav and the onward panel. Both point at the same place,
-    // which is the point — the panel repeats it where somebody is actually looking.
-    const links = await screen.findAllByRole('link', { name: 'All members' });
+    /*
+     * The panel's own link first: **that** is what this test is about — a placeholder that
+     * sends somebody onward rather than leaving them on a dead end.
+     */
+    const onward = await screen.findByRole('link', { name: 'All members' });
+    expect(onward).toHaveAttribute('href', '/people/members');
+
+    // And the nav still holds it, once its group is opened — the sidebar is an accordion
+    // since 2026-09-24, and Overview sits in no group, so People starts closed.
+    await userEvent.click(screen.getByRole('button', { name: /^People/ }));
+    const links = screen.getAllByRole('link', { name: 'All members' });
     expect(links).toHaveLength(2);
     for (const link of links) expect(link).toHaveAttribute('href', '/people/members');
   });

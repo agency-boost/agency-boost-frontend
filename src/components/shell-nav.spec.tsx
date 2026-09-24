@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession } from '@test/harness';
 import { AgentShell } from './agent-shell';
@@ -19,7 +20,30 @@ vi.mock('next/navigation', () => ({
  */
 function navLabels() {
   const nav = screen.getByRole('navigation', { name: 'Main' });
-  return Array.from(nav.querySelectorAll('p, a')).map((el) => el.textContent?.trim() ?? '');
+  // Group headings are buttons now, not paragraphs: the sidebar collapses one group at a
+  // time (client feedback, 2026-09-24). The chevron is part of the button's text.
+  return Array.from(nav.querySelectorAll('[aria-controls^="nav-group"], a'))
+    .map((el) => (el.textContent ?? '').replace('\u25b8', '').trim());
+}
+
+/**
+ * Open every group in turn and collect what each holds.
+ *
+ * One group is open at a time, so a test that wants every destination has to walk them.
+ * That is the accordion doing its job; asserting around it would assert a nav nobody has.
+ */
+async function everyItem() {
+  const nav = () => screen.getByRole('navigation', { name: 'Main' });
+  const names = Array.from(nav().querySelectorAll('[aria-controls^="nav-group"]'))
+    .map((b) => (b.textContent ?? '').replace('\u25b8', '').trim());
+
+  const items = Array.from(nav().querySelectorAll('a')).map((a) => a as HTMLAnchorElement);
+  for (const name of names) {
+    await userEvent.click(within(nav()).getByRole('button', { name: new RegExp(`^${name}`) }));
+    items.push(...Array.from(nav().querySelectorAll('a')).map((a) => a as HTMLAnchorElement));
+  }
+  // The unheaded group is always open, so its links arrive more than once.
+  return [...new Map(items.map((a) => [a.textContent + a.getAttribute('href'), a])).values()];
 }
 
 const AGENT = makeMe({
@@ -84,8 +108,11 @@ describe('the sidebar matches the prototype', () => {
     expect(item.textContent).toBe('User management');
   });
 
-  it('agent app: an unbuilt item is disabled and keeps its pill', () => {
+  it('agent app: an unbuilt item is disabled and keeps its pill', async () => {
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+    // The route is `/group-tree`, so `Admin` is the group that opens itself. One group is
+    // open at a time, so reaching another is a click.
+    await userEvent.click(screen.getByRole('button', { name: /^Personal tools/ }));
     const leads = screen.getByText('Leads management').closest('a')!;
     expect(leads).toHaveAttribute('aria-disabled');
     expect(within(leads).getByText('Upcoming')).toBeInTheDocument();
@@ -127,11 +154,22 @@ describe('the sidebar matches the prototype', () => {
       .toEqual(['Companies', 'KPMs', 'Platform admin', 'Reporting']);
     expect(labels.indexOf('Overview')).toBeLessThan(labels.indexOf('Companies'));
     expect(screen.getByText('SUPERADMIN')).toBeInTheDocument();
-    // The Superadmin prototype says Soon where the KPM Owner one says Upcoming.
+  });
+
+  it('Superadmin: says Soon where the KPM Owner app says Upcoming', async () => {
+    // Each prototype writes its own word. The only unbuilt console destination left is
+    // `Cross-platform analytics`, and `Reporting` is not the group that opens first — so
+    // the word is reached by opening it, which is the accordion working.
+    renderWithSession(
+      <AdminShell title="x">body</AdminShell>,
+      { me: makeMe({ user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'] }) },
+    );
+    await userEvent.click(screen.getByRole('button', { name: /^Reporting/ }));
+
     expect(screen.getAllByText('Soon').length).toBeGreaterThan(0);
   });
 
-  it('every built Superadmin destination is a real link', () => {
+  it('every built Superadmin destination is a real link', async () => {
     // `upcoming` renders an anchor with no href, so a flag left on after the screen
     // shipped makes it reachable from nowhere. That is what happened to
     // /admin/kpm-requests: the screen, its endpoints and its manual chapter all shipped
@@ -142,12 +180,50 @@ describe('the sidebar matches the prototype', () => {
       { me: makeMe({ user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'] }) },
     );
 
+    /*
+     * `Create / assign KPM` and `Product catalog` are deliberately **not** here since
+     * 2026-09-24. The first was a third route to a form `/admin/tenants` already offers
+     * twice; the second pointed at `/admin/products`, which ADR-0033 removed from the route
+     * registry when the catalog moved to the Company template's Products tab.
+     */
     for (const name of [
-      'Overview', 'Notifications', 'Manage companies', 'All KPMs',
-      'Create / assign KPM', 'Pending KPM requests', 'KPM Owners & Admins',
+      'Overview', 'Manage companies', 'All KPMs',
+      'Pending KPM requests', 'KPM Owners & Admins',
       'Audit / role change log',
     ]) {
-      expect(screen.getByRole('link', { name })).toHaveAttribute('href');
+      const item = (await everyItem()).find((a) => a.textContent?.trim() === name);
+      expect(item, `${name} is not in the nav`).toBeDefined();
+      expect(item).toHaveAttribute('href');
     }
+  });
+
+  describe('every destination carries a glyph (client feedback, 2026-09-24)', () => {
+    /*
+     * The rail collapses to 56px and the label goes with it, so a nav item without an icon
+     * is a blank square nobody notices until they collapse the sidebar — which is exactly
+     * when they most need to know where they are. Asserted rather than trusted.
+     */
+    const SUPER = makeMe({
+      user: { ...makeMe().user, platformRole: 'super_admin' },
+      membership: null,
+      permissions: ['kpm:list_all'],
+    });
+    // Thunks rather than elements: an array of JSX is an array React wants keys for, and a
+    // key on a fixture says nothing about the thing under test.
+    const shells = [
+      ['the agent app', () => <AgentShell title="x">body</AgentShell>, AGENT],
+      ['the office', () => <TenantShell title="x">body</TenantShell>, OWNER],
+      ['the console', () => <AdminShell title="x">body</AdminShell>, SUPER],
+    ] as const;
+
+    it.each(shells)('%s draws one icon per item, from the registry', async (_name, shell, me) => {
+      renderWithSession(shell(), { me });
+
+      for (const item of await everyItem()) {
+        const icon = item.querySelector('svg');
+        expect(icon, `${item.textContent?.trim()} has no icon`).not.toBeNull();
+        expect(icon!.getAttribute('viewBox')).toBe('0 0 24 24');
+      }
+    });
   });
 });

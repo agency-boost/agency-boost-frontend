@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { AppShell, type NavSection } from '@/components/app-shell';
+import { type NavIconName } from '@/components/ui/nav-icon';
 import { RequireSession } from '@/components/require-session';
 import { useSession } from '@/lib/session';
 import { useUnreadCount } from '@/lib/use-unread-count';
@@ -14,7 +15,9 @@ import { useSignOut } from '@/lib/use-sign-out';
  * the same choice the prototype makes for advanced analytics. Hiding them would let a
  * reviewer conclude the surface is finished when it is not.
  */
-type AdminNavItem = { label: string; href: string; upcoming?: boolean };
+type AdminNavItem = {
+  label: string; href: string; upcoming?: boolean; icon: NavIconName;
+};
 
 /**
  * The Superadmin nav (`Superadmin.html:169-205`), verbatim.
@@ -31,42 +34,51 @@ const SECTIONS: readonly { label: string | null; divider?: boolean; items: Admin
   {
     label: null,
     items: [
-      { label: 'Overview', href: '/admin' },
+      { label: 'Overview', href: '/admin', icon: 'gauge' },
     ],
     divider: true,
   },
   {
     label: 'Companies',
     items: [
-      { label: 'Manage companies', href: '/admin/companies' },
-      { label: 'Org role ladder', href: '/admin/org-levels' },
-      { label: 'Product catalog', href: '/admin/products', upcoming: true },
+      { label: 'Manage companies', href: '/admin/companies', icon: 'building' },
+      { label: 'Org role ladder', href: '/admin/org-levels', icon: 'ladder' },
+      /*
+       * **No `Product catalog` item.** ADR-0033 moved the catalog to the Company template's
+       * Products tab — a product belongs to one insurer, and a flat platform screen has no
+       * company to point at — and took `/admin/products` out of the route registry with it.
+       * The nav item outlived both, pointing at a route that no longer exists.
+       */
     ],
     divider: true,
   },
   {
     label: 'KPMs',
     items: [
-      { label: 'All KPMs', href: '/admin/tenants' },
-      { label: 'Create / assign KPM', href: '/admin/tenants/new' },
+      { label: 'All KPMs', href: '/admin/tenants', icon: 'office' },
+      /*
+       * **No `Create / assign KPM` item.** `/admin/tenants` carries **New office** in its
+       * header and again in its empty state, so the nav was a third way to the same form —
+       * and the only one that took a reader away from the list they would land back on.
+       */
       // Not `upcoming`. P3.5-T2 built this screen and its endpoints and left the flag
       // on, and `upcoming` renders an anchor with **no href** — so a shipped surface was
       // reachable from nowhere, while `12-kpm-requests.md` told the reader to click it.
-      { label: 'Pending KPM requests', href: '/admin/kpm-requests' },
+      { label: 'Pending KPM requests', href: '/admin/kpm-requests', icon: 'inbox' },
     ],
     divider: true,
   },
   {
     label: 'Platform admin',
     items: [
-      { label: 'KPM Owners & Admins', href: '/admin/tenant-admins' },
-      { label: 'Audit / role change log', href: '/admin/audit' },
+      { label: 'KPM Owners & Admins', href: '/admin/tenant-admins', icon: 'shield' },
+      { label: 'Audit / role change log', href: '/admin/audit', icon: 'history' },
     ],
     divider: true,
   },
   {
     label: 'Reporting',
-    items: [{ label: 'Cross-platform analytics', href: '/admin/analytics', upcoming: true }],
+    items: [{ label: 'Cross-platform analytics', href: '/admin/analytics', icon: 'chart', upcoming: true }],
   },
 ];
 

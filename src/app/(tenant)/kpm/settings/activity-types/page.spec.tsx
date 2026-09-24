@@ -528,4 +528,66 @@ describe('the office activity taxonomy (P4-T1)', () => {
       expect(screen.queryByText(/not saved yet/)).not.toBeInTheDocument();
     });
   });
+
+  describe('the number beside a row (client feedback, 2026-09-24)', () => {
+    /*
+     * The badge painted `displayOrder`, which keeps counting through archived rows — so an
+     * office that archived item 3 saw `1 2 4 5`. A number with a hole in it reads as a row
+     * that failed to load rather than as one that was retired.
+     */
+    const numbers = () =>
+      Array.from(document.querySelectorAll('li span[aria-hidden]'))
+        .map((el) => el.textContent?.trim() ?? '')
+        .filter((text) => /^\d+$/.test(text));
+
+    it('counts the live rows and leaves no hole where an archived one was', async () => {
+      render(OWNER, [{
+        ...TAXONOMY[0],
+        types: [
+          type({ id: 't0', code: 'A', label: 'First', displayOrder: 1 }),
+          type({ id: 't1', code: 'B', label: 'Second, retired', displayOrder: 2, status: 'archived' }),
+          type({ id: 't2', code: 'C', label: 'Third', displayOrder: 3 }),
+        ],
+      }]);
+      await screen.findByText('First');
+
+      // Two live rows, numbered 1 and 2 — not 1 and 3.
+      expect(numbers()).toEqual(['1', '2']);
+    });
+
+    it('gives an archived row no number at all, even when it is on screen', async () => {
+      // Numbering it would put the gap back the moment archived rows were shown.
+      render(OWNER, [{
+        ...TAXONOMY[0],
+        types: [
+          type({ id: 't0', code: 'A', label: 'First', displayOrder: 1 }),
+          type({ id: 't1', code: 'B', label: 'Second, retired', displayOrder: 2, status: 'archived' }),
+          type({ id: 't2', code: 'C', label: 'Third', displayOrder: 3 }),
+        ],
+      }]);
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
+
+      expect(screen.getByText('Second, retired')).toBeInTheDocument();
+      expect(numbers()).toEqual(['1', '2']);
+    });
+
+    it('runs the count through every section, as the prototype\u2019s 1\u201312 does', async () => {
+      render(OWNER, [
+        {
+          ...TAXONOMY[0],
+          types: [type({ id: 't0', code: 'A', label: 'First', displayOrder: 1 })],
+        },
+        {
+          id: 'c2', code: 'RECRUITMENT', label: 'Recruitment', description: null,
+          appliesToOrgLevelCodes: [], displayOrder: 2, version: 1, status: 'active',
+          types: [type({ id: 't1', code: 'B', label: 'Second', displayOrder: 1 })],
+        },
+      ]);
+      await screen.findByText('Second');
+
+      // The second section's first row is 2, not 1: the badge is the office's, not the
+      // section's.
+      expect(numbers()).toEqual(['1', '2']);
+    });
+  });
 });
