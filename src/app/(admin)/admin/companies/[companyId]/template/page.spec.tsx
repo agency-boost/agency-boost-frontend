@@ -182,7 +182,7 @@ describe('a company’s Company template (P4-T8)', () => {
    *
    * Two of them — Events and Campaigns — were `ComingInPhase` signs until the template kinds
    * ADR-0034 named existed, which is why they looked unfinished beside the Products tab. The
-   * third, Skills & stages, had validation and a provisioning reader since P5-T8 and no way
+   * third, Capability Mapping, had validation and a provisioning reader since P5-T8 and no way
    * for anybody to edit one.
    */
   describe('the Phase 5 tabs (P5-T9)', () => {

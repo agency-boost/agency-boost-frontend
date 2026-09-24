@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { SidebarUserMenu } from '@/components/sidebar-user-menu';
 import { cn } from '@/lib/cn';
 
@@ -138,12 +139,62 @@ export function PageHeader({
   );
 }
 
+/**
+ * The bell at the foot of the sidebar.
+ *
+ * **The count is in the accessible name, not only in the badge.** A red circle with a number
+ * beside an unlabelled icon tells a screen reader nothing, and *"Notifications"* alone would
+ * hide the one thing the control exists to communicate.
+ *
+ * Capped at `9+`: past that the number stops being a number somebody acts on, and a wide badge
+ * would push the identity chip about as the count changed.
+ */
+function NotificationBell({ href, unread }: { href: string; unread: number }) {
+  const pathname = usePathname();
+  const active = pathname === href;
+
+  return (
+    <Link
+      href={href}
+      aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+      aria-current={active ? 'page' : undefined}
+      className={cn(
+        'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md',
+        active ? 'bg-amber/15 text-white' : 'text-white/[0.78] hover:bg-white/[0.06]',
+      )}
+    >
+      <svg
+        aria-hidden
+        viewBox="0 0 24 24"
+        className="h-[18px] w-[18px]"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+      </svg>
+      {unread > 0 && (
+        <span
+          aria-hidden
+          className="absolute -right-0.5 -top-0.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-pill bg-alert px-1 text-2xs font-bold text-white"
+        >
+          {unread > 9 ? '9+' : unread}
+        </span>
+      )}
+    </Link>
+  );
+}
+
 export function AppShell({
   sections,
   user,
   account,
   brandTag,
   upcomingLabel = 'Upcoming',
+  notifications,
   title,
   subtitle,
   actions,
@@ -168,6 +219,17 @@ export function AppShell({
     onSignOut: () => void;
     signingOut?: boolean;
   };
+  /**
+   * The bell, beside the identity chip at the foot of the sidebar.
+   *
+   * **Not a nav item.** It was one in all three shells, sitting in a list of places to work
+   * with a count beside it — so an office's notifications read as a section of the product
+   * rather than as the thing you glance at on the way past. It is a glance, and it belongs
+   * where the account is: one icon, and a number only when there is one.
+   *
+   * Omitted outside a session, where there is nothing to count.
+   */
+  notifications?: { href: string; unread: number };
   /**
    * The page's own heading, when the shell is rendered by a page.
    *
@@ -218,7 +280,8 @@ export function AppShell({
           ))}
         </nav>
 
-        <div className="ml-auto shrink-0 md:ml-0 md:border-t md:border-white/10 md:pt-3">
+        <div className="ml-auto flex shrink-0 items-center gap-1 md:ml-0 md:border-t md:border-white/10 md:pt-3">
+          {notifications && <NotificationBell {...notifications} />}
           {account ? (
             <SidebarUserMenu
               user={user}

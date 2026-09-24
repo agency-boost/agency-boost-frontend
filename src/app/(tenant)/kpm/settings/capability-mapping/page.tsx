@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { useHashTab } from '@/lib/use-hash-tab';
 import { suggestCode } from '@/lib/config-code';
 import { useCan } from '@/lib/session';
 import {
@@ -38,9 +39,24 @@ const move = <T,>(rows: T[], from: number, to: number): T[] => {
  *
  * **Reordering is presentation.** A stage's seniority is its own number, so tidying the ladder
  * cannot move anybody's stage — which is exactly what the prototype's array index does.
+ *
+ * **Two halves, named as the Company template names them.** *Ladder* is what a stage **is**;
+ * *Skills* is what somebody is assessed **against**. Six cards in one scroll put the ladder that
+ * governs everything above four grids running to about twenty-seven items.
+ *
+ * **The screen is called Capability Mapping, the same as the Super Admin's tab.** It was
+ * *Capability catalog* until an office read it as a second product catalog next to Products, then
+ * *Skills & stages*; it is now the prototype's own words for this card (`Overall.html:4349`), on
+ * both sides, so nobody has to learn that one screen is the other under a different name.
  */
-export default function SkillsAndStagesPage() {
+const TABS = [
+  { label: 'Ladder', href: '#ladder' },
+  { label: 'Skills', href: '#skills' },
+];
+
+export default function CapabilityMappingPage() {
   const canWrite = useCan('tenant_config:write');
+  const [tab, setTab] = useHashTab(TABS);
   const [catalog, setCatalog] = useState<CapabilityCatalog | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -78,7 +94,7 @@ export default function SkillsAndStagesPage() {
   if (catalog === null) {
     return (
       <SettingsScreen
-        title="Skills & stages"
+        title="Capability Mapping"
         permission="tenant_config:read"
         error={error}
         bars={<PublishBar />}
@@ -244,9 +260,13 @@ export default function SkillsAndStagesPage() {
 
   return (
     <SettingsScreen
-      title="Skills & stages"
+      title="Capability Mapping"
       subtitle="The ladder and the skill grids your leaders assess people against."
       permission="tenant_config:read"
+      tabsLabel="Capability Mapping sections"
+      tabs={TABS}
+      activeHref={tab}
+      onSelectTab={setTab}
       error={null}
       bars={<PublishBar />}
     >
@@ -266,6 +286,8 @@ export default function SkillsAndStagesPage() {
           Show archived
         </label>
 
+        {tab === '#ladder' && (
+        <>
         <Card className="p-0">
           <div className="border-b border-hairline px-4 py-3 sm:px-5">
             <h2 className="font-display text-lg font-bold text-navy">The ladder</h2>
@@ -309,8 +331,10 @@ export default function SkillsAndStagesPage() {
           </ul>
           {addingTo === 'milestone' && addPanel('milestone')}
         </Card>
+        </>
+        )}
 
-        {catalog.grids.map((grid) => (
+        {tab === '#skills' && catalog.grids.map((grid) => (
           <Card key={grid.code} className="p-0">
             <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
               <h2 className="font-display text-lg font-bold text-navy">{grid.label}</h2>

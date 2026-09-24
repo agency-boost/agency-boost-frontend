@@ -25,14 +25,13 @@ type AdminNavItem = { label: string; href: string; upcoming?: boolean };
  * own `Soon` pill rather than being hidden, which is what it does too.
  */
 const SECTIONS: readonly { label: string | null; divider?: boolean; items: AdminNavItem[] }[] = [
-  // No prototype has a notifications nav item — none of the fourteen files has a
-  // notifications surface at all. Registered as a Fill. Unheaded and beside Overview,
-  // because it belongs to none of the groups below.
+  // Notifications is **not** in this list. It is the bell beside the identity chip at the foot
+  // of the sidebar — a glance rather than a place to work, and a count in a list of
+  // destinations read as a section of the product (client feedback, 2026-09-24).
   {
     label: null,
     items: [
       { label: 'Overview', href: '/admin' },
-      { label: 'Notifications', href: '/notifications' },
     ],
     divider: true,
   },
@@ -130,7 +129,6 @@ function AdminChrome({
     items: section.items.map((i) => ({
       ...i,
       active: !i.upcoming && isActive(i.href),
-      badge: i.href === '/notifications' ? unread || undefined : undefined,
     })),
   }));
 
@@ -146,6 +144,7 @@ function AdminChrome({
       brandTag="SUPERADMIN"
       upcomingLabel="Soon"
       account={{ href: '/profile', onSignOut: () => void signOut(), signingOut: busy }}
+      notifications={{ href: '/notifications', unread }}
       title={title}
       subtitle={subtitle}
       actions={actions}

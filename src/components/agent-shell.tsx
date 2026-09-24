@@ -87,11 +87,9 @@ function Chrome({
     {
       label: 'Personal tools',
       items: [
-        // No prototype has a notifications nav item — none of the fourteen files has a
-        // notifications surface at all. Registered as a Fill. It sits in Personal tools
-        // because that is what it is, and it carries the unread count on the badge the
-        // shell already supports.
-        { label: 'Notifications', href: '/notifications', badge: unread || undefined },
+        // Notifications is **not** here. It is the bell beside the identity chip at the foot
+        // of the sidebar — a glance rather than a place to work (client feedback,
+        // 2026-09-24).
         { label: 'Activity management', href: '/activity/log', active: on('/activity') },
         { label: 'Leads management', href: '/leads', upcoming: true },
         { label: 'Goal settings', href: '/goals', upcoming: true },
@@ -170,6 +168,7 @@ function Chrome({
         email: me?.user.email,
       }}
       account={{ href: '/profile', onSignOut: () => void signOut(), signingOut: busy }}
+      notifications={{ href: '/notifications', unread }}
       title={title}
       subtitle={subtitle}
       actions={actions}

@@ -753,28 +753,28 @@ export interface CapabilityCatalog {
 }
 
 export const readCapabilityCatalog = () =>
-  api<CapabilityCatalog>('/kpm/settings/skills-and-stages');
+  api<CapabilityCatalog>('/kpm/settings/capability-mapping');
 
 export const renameCapability = (
   body: { part: string; code: string; label: string; gridCode?: string },
-) => api<CapabilityCatalog>('/kpm/settings/skills-and-stages/label', {
+) => api<CapabilityCatalog>('/kpm/settings/capability-mapping/label', {
   method: 'PATCH', body,
 });
 
 export const setCapabilityStatus = (
   body: { part: string; code: string; status: 'active' | 'archived'; gridCode?: string },
-) => api<CapabilityCatalog>('/kpm/settings/skills-and-stages/status', {
+) => api<CapabilityCatalog>('/kpm/settings/capability-mapping/status', {
   method: 'PATCH', body,
 });
 
 export const addCapabilityItem = (
   body: { part: 'milestone' | 'item'; code: string; label: string; gridCode?: string },
-) => api<CapabilityCatalog>('/kpm/settings/skills-and-stages/items', {
+) => api<CapabilityCatalog>('/kpm/settings/capability-mapping/items', {
   method: 'POST', body,
 });
 
 export const reorderCapability = (body: { part: string; codes: string[] }) =>
-  api<CapabilityCatalog>('/kpm/settings/skills-and-stages/order', { method: 'PATCH', body });
+  api<CapabilityCatalog>('/kpm/settings/capability-mapping/order', { method: 'PATCH', body });
 
 // -------------------------------------- the script approval gate (P5-T10, ADR-0037)
 

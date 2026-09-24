@@ -71,12 +71,11 @@ const TABS: {
    * Same position as the Owner's sidebar. ADR-0018 makes this screen a mirror of that group,
    * so the order is read from there rather than chosen again here — it had drifted.
    *
-   * **Called *Capability Mapping* here and *Skills & stages* on the Owner's own screen**, and
-   * the split is deliberate rather than drift. *Capability mapping* is the prototype's own
-   * words for this card (`Overall.html:4349`) and the vocabulary a platform operator works in;
-   * the Owner's screen was renamed away from it (parity L-23) because an office read
-   * *Capability catalog* as a second product catalog next to Products. Two audiences, two
-   * names, one `capability_ladder` kind underneath.
+   * **Called *Capability Mapping* on both sides**, with the same two halves. It was
+   * *Capability catalog* until an office read it as a second product catalog next to Products,
+   * then *Skills & stages*, and is now the prototype's own words for this card
+   * (`Overall.html:4349`) — which is what the Owner's screen says too, so nobody has to learn
+   * that one screen is the other under a different name (parity L-23).
    */
   { key: 'capability-ladder', group: 'capability', groupLabel: 'Capability Mapping', label: 'Ladder', kind: 'capability_ladder', section: 'ladder' },
   { key: 'capability-skills', group: 'capability', groupLabel: 'Capability Mapping', label: 'Skills', kind: 'capability_ladder', section: 'skills' },

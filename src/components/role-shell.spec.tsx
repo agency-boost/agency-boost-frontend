@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { RoleShell } from './role-shell';
@@ -89,5 +89,54 @@ describe('RoleShell', () => {
     expect(landingFor(member({ isKpmOwner: true }))).toBe('/kpm/overview');
     expect(landingFor(member({ isKpmAdmin: true }))).toBe('/kpm/overview');
     expect(landingFor(null)).toBe('/login');
+  });
+
+  describe('the notification bell (client feedback, 2026-09-24)', () => {
+    /*
+     * It was a nav item in all three shells — a count sitting in a list of places to work,
+     * which read as a section of the product rather than as the thing you glance at on the
+     * way past. It is a glance, so it sits where the account does.
+     */
+    const shells = [
+      ['a Super Admin', SUPER_ADMIN],
+      ['a KPM Owner', member({ isKpmOwner: true })],
+      ['an agent', member({})],
+    ] as const;
+
+    it.each(shells)('gives %s a bell and no nav item', async (_who, me) => {
+      stubFetch({ '/notifications': { body: { items: [], unread: 0 } } });
+      renderWithSession(<RoleShell title="Overview">body</RoleShell>, { me });
+
+      expect(await screen.findByRole('link', { name: 'Notifications' })).toBeInTheDocument();
+      // The nav is where places to work live, and this is not one of them.
+      expect(within(screen.getByRole('navigation', { name: 'Main' }))
+        .queryByRole('link', { name: /Notifications/ })).toBeNull();
+    });
+
+    it('puts the count in the name, not only in the badge', async () => {
+      // A red circle beside an unlabelled icon tells a screen reader nothing, and
+      // "Notifications" alone hides the one thing the control exists to communicate.
+      stubFetch({ '/notifications': { body: { items: [], unread: 3 } } });
+      renderWithSession(<RoleShell title="Overview">body</RoleShell>, { me: member({}) });
+
+      const bell = await screen.findByRole('link', { name: 'Notifications, 3 unread' });
+      expect(within(bell).getByText('3')).toBeInTheDocument();
+    });
+
+    it('shows no badge at zero', async () => {
+      stubFetch({ '/notifications': { body: { items: [], unread: 0 } } });
+      renderWithSession(<RoleShell title="Overview">body</RoleShell>, { me: member({}) });
+
+      const bell = await screen.findByRole('link', { name: 'Notifications' });
+      expect(bell.textContent).toBe('');
+    });
+
+    it('caps the badge, so the identity chip does not move as the count grows', async () => {
+      stubFetch({ '/notifications': { body: { items: [], unread: 42 } } });
+      renderWithSession(<RoleShell title="Overview">body</RoleShell>, { me: member({}) });
+
+      const bell = await screen.findByRole('link', { name: 'Notifications, 42 unread' });
+      expect(within(bell).getByText('9+')).toBeInTheDocument();
+    });
   });
 });

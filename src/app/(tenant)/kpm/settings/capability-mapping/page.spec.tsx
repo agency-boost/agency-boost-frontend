@@ -2,11 +2,11 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
-import SkillsAndStagesPage from './page';
+import CapabilityMappingPage from './page';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  usePathname: () => '/kpm/settings/skills-and-stages',
+  usePathname: () => '/kpm/settings/capability-mapping',
 }));
 
 const member = {
@@ -45,14 +45,22 @@ const catalog = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function render(body: unknown = catalog(), me = OWNER) {
+/**
+ * `tab` names which half to open (client feedback, 2026-09-24).
+ *
+ * The screen is two subtabs now, the same two the Company template has: **Ladder** is what a
+ * stage *is*, **Skills** is what somebody is assessed *against*. Most of these tests act on a
+ * grid item, so they open `#skills`.
+ */
+function render(body: unknown = catalog(), me = OWNER, tab: '#ladder' | '#skills' = '#skills') {
+  window.location.hash = tab;
   const stub = stubFetch({
-    '/kpm/settings/skills-and-stages': { body },
+    '/kpm/settings/capability-mapping': { body },
     '/kpm/settings/publish-state': {
       body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
     },
   });
-  renderWithSession(<SkillsAndStagesPage />, { me });
+  renderWithSession(<CapabilityMappingPage />, { me });
   return stub;
 }
 
@@ -64,7 +72,27 @@ function render(body: unknown = catalog(), me = OWNER) {
  * to the label and correcting a typo orphans every assessment that used it.
  */
 describe('the capability catalog screen', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.unstubAllGlobals(); window.location.hash = ''; });
+
+  it('is called Capability Mapping, with the template’s own two halves', async () => {
+    // One name on both sides: an office had to learn that its *Skills & stages* was the Super
+    // Admin's *Capability Mapping*, which is a thing nobody should have to be told.
+    render(catalog(), OWNER, '#ladder');
+
+    expect(await screen.findByRole('heading', { name: 'Capability Mapping', level: 1 }))
+      .toBeInTheDocument();
+    const tabs = screen.getByRole('navigation', { name: 'Capability Mapping sections' });
+    expect(within(tabs).getAllByRole('link').map((l) => l.textContent))
+      .toEqual(['Ladder', 'Skills']);
+  });
+
+  it('keeps the ladder and the grids on their own halves', async () => {
+    render(catalog(), OWNER, '#ladder');
+
+    expect(await screen.findByRole('heading', { name: 'The ladder' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Milestones' })).toBeInTheDocument();
+    expect(screen.queryByText('Approach & appointment setting')).toBeNull();
+  });
 
   it('gives every row a code, shown where a reader is acting on it', async () => {
     /*
@@ -122,14 +150,14 @@ describe('the capability catalog screen', () => {
 
   it('says reordering the ladder moves nobody’s stage', async () => {
     // The prototype computes the stage from the array index, so tidying it moves everybody.
-    render();
+    render(catalog(), OWNER, '#ladder');
 
     expect(await screen.findByText(/reordering these changes where they sit on the page/))
       .toBeInTheDocument();
   });
 
   it('reorders by sending every code once, in the new order', async () => {
-    const stub = render();
+    const stub = render(catalog(), OWNER, '#ladder');
     await screen.findByText('Competent Producer');
 
     const row = screen.getByText('Competent Producer').closest('li')!;
@@ -161,7 +189,7 @@ describe('the capability catalog screen', () => {
   it('hides archived rows until asked', async () => {
     render(catalog({
       milestones: [entry('SELLS_INDEPENDENTLY', 'Sells policies independently', { status: 'archived' })],
-    }));
+    }), OWNER, '#ladder');
     await screen.findByRole('checkbox', { name: 'Show archived' });
 
     expect(screen.queryByText('Sells policies independently')).not.toBeInTheDocument();
@@ -180,7 +208,7 @@ describe('the capability catalog screen', () => {
 
   it('says what the server refused, and keeps the row open to fix it', async () => {
     stubFetch({
-      '/kpm/settings/skills-and-stages/items': {
+      '/kpm/settings/capability-mapping/items': {
         status: 400,
         body: {
           error: {
@@ -190,12 +218,13 @@ describe('the capability catalog screen', () => {
           },
         },
       },
-      '/kpm/settings/skills-and-stages': { body: catalog() },
+      '/kpm/settings/capability-mapping': { body: catalog() },
       '/kpm/settings/publish-state': {
         body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
       },
     });
-    renderWithSession(<SkillsAndStagesPage />, { me: OWNER });
+    window.location.hash = '#skills';
+    renderWithSession(<CapabilityMappingPage />, { me: OWNER });
     await screen.findByText('Personal selling');
 
     const card = screen.getByText('Personal selling').closest('div')!.parentElement!;

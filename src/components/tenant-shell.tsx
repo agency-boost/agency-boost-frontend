@@ -25,13 +25,15 @@ const SECTIONS: readonly {
   // unlabelled at the top, then Reporting, Leader Meetings, Settings, and People last.
   // It used to be an invented `Office` group with People above Settings.
   // No prototype has a notifications nav item — none of the fourteen files has a
-  // notifications surface at all. Registered as a Fill. Unheaded and beside Overview,
-  // because it belongs to none of the groups below.
+  // notifications surface at all.
+  //
+  // Notifications is **not** in this list. It is the bell beside the identity chip at the foot
+  // of the sidebar — a glance rather than a place to work, and a count in a list of
+  // destinations read as a section of the product (client feedback, 2026-09-24).
   {
     label: null,
     items: [
       { label: 'Overview', href: '/kpm/overview' },
-      { label: 'Notifications', href: '/notifications' },
     ],
     divider: true,
   },
@@ -67,7 +69,7 @@ const SECTIONS: readonly {
        * The prototype's own order (`KPM_Owner.html:896-903`) is untouched; this only chooses
        * where the one screen it has no counterpart for goes.
        */
-      { label: 'Skills & stages', href: '/kpm/settings/skills-and-stages' },
+      { label: 'Capability Mapping', href: '/kpm/settings/capability-mapping' },
       { label: 'Events', href: '/kpm/settings/events' },
       { label: 'Campaigns', href: '/kpm/settings/campaigns' },
       { label: 'Products', href: '/kpm/settings/products' },
@@ -144,7 +146,6 @@ function TenantChrome({
       .map((item) => ({
         ...item,
         active: !item.upcoming && pathname.startsWith(item.href),
-        badge: item.href === '/notifications' ? unread || undefined : undefined,
       })),
     divider: section.divider,
   })).filter((section) => section.items.length > 0);
@@ -181,6 +182,7 @@ function TenantChrome({
       }}
       brandTag="KPM OWNER"
       account={{ href: '/profile', onSignOut: () => void signOut(), signingOut: busy }}
+      notifications={{ href: '/notifications', unread }}
       title={title}
       subtitle={subtitle}
       actions={actions}

@@ -24,7 +24,7 @@ import TrainingModulePage from './(tenant)/kpm/settings/training/[moduleId]/page
 import KpmProductsPage from './(tenant)/kpm/settings/products/page';
 import EventsSettingsPage from './(tenant)/kpm/settings/events/page';
 import CampaignsSettingsPage from './(tenant)/kpm/settings/campaigns/page';
-import SkillsAndStagesPage from './(tenant)/kpm/settings/skills-and-stages/page';
+import CapabilityMappingPage from './(tenant)/kpm/settings/capability-mapping/page';
 import ActivationChecklistPage from './(tenant)/kpm/settings/activation-checklist/page';
 import CompanyTemplatePage from './(admin)/admin/companies/[companyId]/template/page';
 import AdminOverviewPage from './(admin)/admin/page';
@@ -1083,12 +1083,12 @@ describe('screens have no axe violations', () => {
       window.history.replaceState(null, '', '/');
     });
 
-    it('the office’s Skills & stages (P5-T8)', async () => {
+    it('the office’s Capability Mapping (P5-T8)', async () => {
       const e = (code: string, label: string, order = 1) =>
         ({ code, label, displayOrder: order, status: 'active' });
       stubFetch({
         ...configStubs,
-        '/kpm/settings/skills-and-stages': {
+        '/kpm/settings/capability-mapping': {
           body: {
             stages: [{
               ...e('COMPETENT_PRODUCER', 'Competent Producer'),
@@ -1104,9 +1104,15 @@ describe('screens have no axe violations', () => {
           },
         },
       });
-      renderInLayout(TenantLayout, <SkillsAndStagesPage />, { me: settingsOwner });
+      renderInLayout(TenantLayout, <CapabilityMappingPage />, { me: settingsOwner });
+
+      // Two halves now, the same two the Company template has. Both are walked.
+      await screen.findByRole('heading', { name: 'The ladder' });
+      await expectClean('kpm/settings/capability-mapping#ladder');
+
+      await userEvent.click(screen.getByRole('link', { name: 'Skills' }));
       await screen.findByText('Approach & appointment setting');
-      await expectClean('kpm/settings/skills-and-stages');
+      await expectClean('kpm/settings/capability-mapping#skills');
     });
 
     it('the office’s Campaigns, on the carrier-rules tab (P5-T7)', async () => {
