@@ -84,6 +84,13 @@ export interface LeadStatusRow {
   rank: number;
   /** The stage that closes this pipeline, and what gates marking a lead successful. */
   isTerminal: boolean;
+  /**
+   * A stage the lead is expected to convert from this period (ADR-0043).
+   *
+   * What the KPM Overview counts as *Expected to close*. Unlike `isTerminal` it is not
+   * exclusive, and it is never true on the stage that closes the pipeline.
+   */
+  isLateStage: boolean;
   version: number;
   status: 'active' | 'archived';
 }
@@ -115,6 +122,11 @@ export const reorderLeadStatuses = (pipeline: LeadPipeline, ids: string[]) =>
 
 export const setTerminalLeadStatus = (id: string) =>
   api<LeadPipelineRow>(`/kpm/settings/lead-statuses/${id}/terminal`, { method: 'POST' });
+
+export const setLateStageLeadStatus = (id: string, isLateStage: boolean) =>
+  api<LeadStatusRow>(`/kpm/settings/lead-statuses/${id}/late-stage`, {
+    method: 'PATCH', body: { isLateStage },
+  });
 
 export const archiveLeadStatus = (id: string) =>
   api<LeadStatusRow>(`/kpm/settings/lead-statuses/${id}`, { method: 'DELETE' });

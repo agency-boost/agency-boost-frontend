@@ -21,7 +21,7 @@ const AGENT = makeMe({
 
 const stage = (over: Record<string, unknown> = {}) => ({
   id: 's1', pipeline: 'sales', code: 'FOLLOW_UP', label: 'Follow-up', rank: 2,
-  isTerminal: false, version: 1, status: 'active', ...over,
+  isTerminal: false, isLateStage: false, version: 1, status: 'active', ...over,
 });
 
 const PIPELINES = [
@@ -119,6 +119,84 @@ describe('the office lead pipelines (P4-T3)', () => {
     // One per pipeline, and only the tab in view renders — so one here, one after the
     // tab switch above.
     expect(await screen.findAllByText('Closes the pipeline')).toHaveLength(1);
+  });
+
+  describe('the stages a lead is expected to close from (ADR-0043)', () => {
+    /*
+     * OD-12's second half, and the only thing that decides what the KPM Overview's
+     * *Expected to close* tile counts. Before this flag the tile had no source at all and
+     * the metric registry recorded it as uncomputable.
+     */
+    const withLate = [
+      {
+        pipeline: 'sales',
+        statuses: [
+          stage({ id: 's0', code: 'NOT_YET_APPROACHED', label: 'Not yet approached', rank: 1 }),
+          stage({ id: 's1', code: 'POLICY_SUBMITTED', label: 'Policy submitted', rank: 2, isLateStage: true }),
+          stage({ id: 's2', code: 'PAID_AND_ISSUED', label: 'Paid and issued', rank: 3, isTerminal: true }),
+        ],
+      },
+      { pipeline: 'recruitment', statuses: [] },
+    ];
+
+    it('shows the flag as a switch, on the stages that can carry it', async () => {
+      render(OWNER, withLate);
+
+      expect(await screen.findByText('Policy submitted')).toBeInTheDocument();
+      const switches = screen.getAllByRole('switch', { name: 'Expected to close' });
+      // Two open stages carry one each; the stage that closes the pipeline carries none.
+      expect(switches).toHaveLength(2);
+      expect(switches[0]).not.toBeChecked();
+      expect(switches[1]).toBeChecked();
+    });
+
+    it('does not offer it on the stage that closes the pipeline', async () => {
+      // A lead sitting there has already closed, so the server refuses it — and a control
+      // that only ever produces a 400 is worse than no control.
+      render(OWNER, withLate);
+      await screen.findByText('Paid and issued');
+
+      const rows = screen.getAllByRole('listitem');
+      const closing = rows.find((li) => li.textContent?.includes('Paid and issued'))!;
+      expect(closing.querySelector('[role="switch"]')).toBeNull();
+    });
+
+    it('ticks one, sending a real boolean', async () => {
+      const stub = render(OWNER, withLate);
+      await screen.findByText('Not yet approached');
+
+      await userEvent.click(screen.getAllByRole('switch', { name: 'Expected to close' })[0]);
+
+      const sent = stub.calls.find((c) => String(c.url).includes('/late-stage'));
+      expect(String(sent?.url)).toContain('/lead-statuses/s0/late-stage');
+      expect(JSON.parse(String(sent?.init?.body))).toEqual({ isLateStage: true });
+    });
+
+    it('unticks one, because an untick is as much a decision as a tick', async () => {
+      const stub = render(OWNER, withLate);
+      await screen.findByText('Policy submitted');
+
+      await userEvent.click(screen.getAllByRole('switch', { name: 'Expected to close' })[1]);
+
+      const sent = stub.calls.find((c) => String(c.url).includes('/late-stage'));
+      expect(JSON.parse(String(sent?.init?.body))).toEqual({ isLateStage: false });
+    });
+
+    it('tells the reader what the flag is for, once per ladder', async () => {
+      render(OWNER, withLate);
+
+      expect(await screen.findByText(/Switch on the stages a lead is usually close to/))
+        .toBeInTheDocument();
+    });
+
+    it('shows a reader who cannot write a badge, and never both', async () => {
+      // A badge beside a switch is two controls answering one question, and whichever one
+      // the reader trusts the other contradicts.
+      render(AGENT, withLate);
+
+      expect(await screen.findByText('Expected to close')).toBeInTheDocument();
+      expect(screen.queryByRole('switch')).toBeNull();
+    });
   });
 
   describe('where the code is shown (P4-T24, parity I-64)', () => {

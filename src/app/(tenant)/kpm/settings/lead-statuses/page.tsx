@@ -5,7 +5,7 @@ import { PublishBar } from '@/components/publish-bar';
 import { SettingsScreen } from '@/components/settings-screen';
 import { DragHandle } from '@/components/ui/drag-handle';
 import {
-  Button, Card, CodeField, Field, FieldRow, TextInput,
+  Button, Card, CodeField, Field, FieldRow, Switch, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -17,6 +17,7 @@ import {
   renameLeadStatus,
   reorderLeadStatuses,
   restoreLeadStatus,
+  setLateStageLeadStatus,
   setTerminalLeadStatus,
   type LeadPipeline,
   type LeadPipelineRow,
@@ -38,6 +39,12 @@ const TITLE: Record<LeadPipeline, string> = {
  * **The code is on screen beside every stage**, for the same reason it is on the activity
  * types screen: a lead holds the code, the label is free to change, and somebody about to
  * rename a stage should be able to see that the thing underneath does not move.
+ *
+ * **`Expected to close` is a switch, and it is the only thing that says so** (ADR-0043). It
+ * decides which stages the KPM Overview's *Expected to close* tile counts — the tile that
+ * could not be computed at all until this flag existed. A reader who cannot write sees a
+ * badge instead; nobody sees both, because a badge beside a switch is two controls
+ * answering one question and whichever one a reader trusts, the other contradicts it.
  */
 export default function LeadStatusesPage() {
   const canWrite = useCan('tenant_config:write');
@@ -189,6 +196,15 @@ export default function LeadStatusesPage() {
               <h2 className="font-display text-lg font-bold text-navy">
                 {TITLE[pipeline.pipeline]}
               </h2>
+              {canWrite && (
+                /* Named once per card and pointed at by every switch, so the reader is told
+                   what the flag *does* rather than having to infer it from the label. */
+                <p id="late-stage-hint" className="mt-1 text-md text-muted">
+                  Switch on the stages a lead is usually close to converting from. The KPM
+                  Overview counts those as <strong className="font-semibold">Expected to
+                  close</strong>.
+                </p>
+              )}
 
               <ol className="mt-3 flex flex-col divide-y divide-hairline">
                 {pipeline.statuses.map((stage) => (
@@ -273,6 +289,11 @@ export default function LeadStatusesPage() {
                                 Open
                               </span>
                             )}
+                            {!canWrite && stage.isLateStage && (
+                              <span className="rounded-full bg-success/10 px-2 py-0.5 text-sm font-semibold uppercase tracking-wide text-success">
+                                Expected to close
+                              </span>
+                            )}
                           </p>
                           {stage.status === 'archived' && (
                             <p className="mt-0.5 text-sm text-muted">archived</p>
@@ -289,6 +310,18 @@ export default function LeadStatusesPage() {
                         >
                           Edit
                         </Button>
+                        {!stage.isTerminal && stage.status === 'active' && (
+                          <Switch
+                            id={`late-${stage.id}`}
+                            label="Expected to close"
+                            checked={stage.isLateStage}
+                            disabled={busy}
+                            describedBy="late-stage-hint"
+                            onChange={(next) => void run(
+                              () => setLateStageLeadStatus(stage.id, next),
+                            )}
+                          />
+                        )}
                         {!stage.isTerminal && stage.status === 'active' && (
                           <Button
                             variant="inline"
