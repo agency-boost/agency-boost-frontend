@@ -21,6 +21,11 @@ export interface Lead {
   thisMonth: boolean;
   /** Every month this lead was promised for, oldest first, as `YYYY-MM` in the office's zone. */
   committedMonths: string[];
+  /**
+   * Who last changed it, when that was not the agent whose lead it is (ADR-0044) — `null`
+   * otherwise. A leader's edit carries their name; the agent's own does not need one.
+   */
+  lastEditedBy: { membershipId: string; name: string | null } | null;
   remarks: string | null;
   nextActionDate: string | null;
   nextActionNote: string | null;
@@ -115,17 +120,24 @@ export const readLead = (id: string) => api<Lead>(`/leads/${id}`);
 export const createLead = (body: Partial<Lead> & { name: string }) =>
   api<Lead>('/leads', { method: 'POST', body });
 
-/** One field at a time, so a refusal names the field that caused it. */
-export const updateLead = (id: string, body: Record<string, unknown>) =>
-  api<Lead>(`/leads/${id}`, { method: 'PATCH', body });
+/**
+ * One field at a time, so a refusal names the field that caused it — and the `version` it was
+ * read at, so a write the record has moved past is refused rather than applied.
+ *
+ * Two people in one 1-on-1 on two devices is the realistic case: the leader opens the lead, the
+ * agent edits a remark, and last-write-wins would silently discard what they typed in front of
+ * them.
+ */
+export const updateLead = (id: string, body: Record<string, unknown>, version?: number) =>
+  api<Lead>(`/leads/${id}`, { method: 'PATCH', body: { ...body, version } });
 
 /** Moving. Any active stage of the lead's own ladder, at any time (ADR-0045). */
-export const setLeadStatus = (id: string, statusCode: string) =>
-  api<Lead>(`/leads/${id}/status`, { method: 'PATCH', body: { statusCode } });
+export const setLeadStatus = (id: string, statusCode: string, version?: number) =>
+  api<Lead>(`/leads/${id}/status`, { method: 'PATCH', body: { statusCode, version } });
 
 /** Closing, or reopening. Its own act, and its own permission. */
-export const setLeadOutcome = (id: string, outcome: LeadOutcome | null) =>
-  api<Lead>(`/leads/${id}/outcome`, { method: 'PATCH', body: { outcome } });
+export const setLeadOutcome = (id: string, outcome: LeadOutcome | null, version?: number) =>
+  api<Lead>(`/leads/${id}/outcome`, { method: 'PATCH', body: { outcome, version } });
 
 export const deleteLead = (id: string) =>
   api<{ id: string; deletedAt: string }>(`/leads/${id}`, { method: 'DELETE' });

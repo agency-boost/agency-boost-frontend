@@ -114,11 +114,11 @@ export default function LeadsPage() {
   /**
    * One write, and whatever the server says about it, on this row.
    *
-   * **A refusal that means the row itself has changed re-reads it.** `LEAD_ALREADY_CLOSED` is
-   * somebody else's act — a second tab, or a leader in a coaching session — so the screen catches
-   * up rather than going on showing a lead as open. Every other refusal leaves the typing alone:
-   * re-reading a name the server rejected as too short would throw away what was typed and tell
-   * the person nothing.
+   * **A refusal that means the row itself has changed re-reads it.** `LEAD_ALREADY_CLOSED` and
+   * `VERSION_CONFLICT` are somebody else's act — a second tab, or a leader in a coaching session —
+   * so the screen catches up rather than going on showing a lead the server no longer holds. Every
+   * other refusal leaves the typing alone: re-reading a name the server rejected as too short would
+   * throw away what was typed and tell the person nothing.
    */
   async function run(id: string, write: () => Promise<Lead>) {
     setBusy((b) => ({ ...b, [id]: true }));
@@ -129,8 +129,18 @@ export default function LeadsPage() {
     } catch (err) {
       const shown = toDisplayError(err);
       setRowError((e) => ({ ...e, [id]: shown }));
-      if (shown.code === 'LEAD_ALREADY_CLOSED') {
-        try { replaceRow(await readLead(id)); } catch { /* the banner already says what happened */ }
+      if (shown.code === 'LEAD_ALREADY_CLOSED' || shown.code === 'VERSION_CONFLICT') {
+        try {
+          replaceRow(await readLead(id));
+          /*
+           * **And the typing goes with it.** Leaving a draft sitting on top of a reloaded row
+           * would show the reader their own words over a record that says something else — and
+           * the next save would succeed, because the version is now current, silently overwriting
+           * the change this refusal exists to protect. The banner says what happened; the row
+           * says what is stored.
+           */
+          setDrafts((d) => { const next = { ...d }; delete next[id]; return next; });
+        } catch { /* the banner already says what happened */ }
       }
     } finally {
       setBusy((b) => ({ ...b, [id]: false }));
@@ -151,7 +161,7 @@ export default function LeadsPage() {
     if (typed === undefined) return;
     const trimmed = typed.trim();
     if (trimmed === (stored ?? '')) return;
-    void run(row.id, () => updateLead(row.id, body(trimmed === '' ? null : trimmed)));
+    void run(row.id, () => updateLead(row.id, body(trimmed === '' ? null : trimmed), row.version));
   }
 
   /**
@@ -167,7 +177,7 @@ export default function LeadsPage() {
       && !window.confirm('Changing the type clears this lead’s stage and its commitment for this month. Continue?')) {
       return;
     }
-    void run(row.id, () => updateLead(row.id, { type }));
+    void run(row.id, () => updateLead(row.id, { type }, row.version));
   }
 
   const sortable = (label: string, key: SortKey): Column => ({
@@ -363,6 +373,18 @@ export default function LeadsPage() {
                       {row.flags.map((flag) => (
                         <StatusPill key={flag} status="alert" label={flagLabel(flag, row.overdueDays)} />
                       ))}
+                      {/*
+                        * **The exit criterion, and it is checked here** (P7-T7 AC-2). A leader may
+                        * write a downline's lead; the agent has to be able to tell that work from
+                        * their own. Two columns rather than a flag — `updatedBy` differing from
+                        * `ownerMembershipId` is the whole signal (ADR-0044).
+                        */}
+                      {row.lastEditedBy && (
+                        <StatusPill
+                          status="neutral"
+                          label={`Edited by ${row.lastEditedBy.name ?? 'someone in your office'}`}
+                        />
+                      )}
                       {row.outcome && (
                         <StatusPill
                           status={row.outcome === 'won' ? 'success' : 'alert'}
@@ -389,7 +411,7 @@ export default function LeadsPage() {
                         draftOf={draftOf}
                         setDraftValue={setDraftValue}
                         commitText={commitText}
-                        onLawfulBasis={(value) => run(row.id, () => updateLead(row.id, { lawfulBasis: value }))}
+                        onLawfulBasis={(value) => run(row.id, () => updateLead(row.id, { lawfulBasis: value }, row.version))}
                       />
                     )}
                   </Cell>
@@ -417,7 +439,7 @@ export default function LeadsPage() {
                       disabled={saving || closed || !row.type}
                       onChange={(e) => {
                         if (!e.target.value) return;
-                        void run(row.id, () => setLeadStatus(row.id, e.target.value));
+                        void run(row.id, () => setLeadStatus(row.id, e.target.value, row.version));
                       }}
                     >
                       <option value="">No status yet</option>
@@ -444,7 +466,7 @@ export default function LeadsPage() {
                         className="h-4 w-4"
                         checked={row.thisMonth}
                         disabled={saving || closed}
-                        onChange={(e) => run(row.id, () => updateLead(row.id, { thisMonth: e.target.checked }))}
+                        onChange={(e) => run(row.id, () => updateLead(row.id, { thisMonth: e.target.checked }, row.version))}
                       />
                       <span className="sr-only">{monthAction}</span>
                     </label>
@@ -473,7 +495,7 @@ export default function LeadsPage() {
                       onChange={(e) => {
                         setDraftValue(row.id, 'nextActionDate', e.target.value);
                         const value = e.target.value || null;
-                        void run(row.id, () => updateLead(row.id, { nextActionDate: value }));
+                        void run(row.id, () => updateLead(row.id, { nextActionDate: value }, row.version));
                       }}
                     />
                     <TextInput
@@ -493,7 +515,7 @@ export default function LeadsPage() {
                         <Button
                           variant="inline"
                           disabled={saving}
-                          onClick={() => run(row.id, () => setLeadOutcome(row.id, null))}
+                          onClick={() => run(row.id, () => setLeadOutcome(row.id, null, row.version))}
                         >
                           ↺ Move to active
                         </Button>
@@ -505,7 +527,7 @@ export default function LeadsPage() {
                             title={isTerminal(row)
                               ? 'Mark successful'
                               : 'Available once the stage that closes this pipeline is reached'}
-                            onClick={() => run(row.id, () => setLeadOutcome(row.id, 'won'))}
+                            onClick={() => run(row.id, () => setLeadOutcome(row.id, 'won', row.version))}
                           >
                             <span aria-hidden="true">✓</span>
                             <span className="sr-only">Mark successful</span>
@@ -515,7 +537,7 @@ export default function LeadsPage() {
                             variant="inline"
                             disabled={saving}
                             title="Mark not successful"
-                            onClick={() => run(row.id, () => setLeadOutcome(row.id, 'lost'))}
+                            onClick={() => run(row.id, () => setLeadOutcome(row.id, 'lost', row.version))}
                           >
                             <span aria-hidden="true">✕</span>
                             <span className="sr-only">Mark not successful</span>

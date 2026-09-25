@@ -53,6 +53,7 @@ const lead = (over: Record<string, unknown> = {}) => ({
   flags: [],
   overdueDays: null,
   committedMonths: [],
+  lastEditedBy: null,
   ...over,
 });
 
@@ -192,7 +193,7 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
 
       await waitFor(() => {
         const sent = calls.filter((c) => c.init.method === 'PATCH').at(-1);
-        expect(JSON.parse(String(sent?.init.body))).toEqual({ remarks: 'Hot button: Hubungan' });
+        expect(JSON.parse(String(sent?.init.body))).toEqual({ remarks: 'Hot button: Hubungan', version: 2 });
       });
     });
 
@@ -314,7 +315,7 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       await waitFor(() => {
         const sent = calls.filter((c) => c.url.includes('/leads/l1/status')).at(-1);
         expect(sent?.init.method).toBe('PATCH');
-        expect(JSON.parse(String(sent?.init.body))).toEqual({ statusCode: 'PAID_AND_ISSUED' });
+        expect(JSON.parse(String(sent?.init.body))).toEqual({ statusCode: 'PAID_AND_ISSUED', version: 2 });
       });
     });
 
@@ -335,7 +336,7 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
 
       await waitFor(() => {
         const sent = calls.filter((c) => c.url.includes('/leads/l1/outcome')).at(-1);
-        expect(JSON.parse(String(sent?.init.body))).toEqual({ outcome: 'won' });
+        expect(JSON.parse(String(sent?.init.body))).toEqual({ outcome: 'won', version: 2 });
       });
     });
 
@@ -353,7 +354,7 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
 
       await waitFor(() => {
         const sent = calls.filter((c) => c.url.includes('/leads/l1/outcome')).at(-1);
-        expect(JSON.parse(String(sent?.init.body))).toEqual({ outcome: null });
+        expect(JSON.parse(String(sent?.init.body))).toEqual({ outcome: null, version: 2 });
       });
     });
 
@@ -471,7 +472,7 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
 
       await waitFor(() => {
         const sent = calls.filter((c) => c.init.method === 'PATCH').at(-1);
-        expect(JSON.parse(String(sent?.init.body))).toEqual({ lawfulBasis: 'consent' });
+        expect(JSON.parse(String(sent?.init.body))).toEqual({ lawfulBasis: 'consent', version: 2 });
       });
     });
 
@@ -510,7 +511,7 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
 
       await waitFor(() => {
         const sent = calls.filter((c) => c.init.method === 'PATCH').at(-1);
-        expect(JSON.parse(String(sent?.init.body))).toEqual({ thisMonth: true });
+        expect(JSON.parse(String(sent?.init.body))).toEqual({ thisMonth: true, version: 2 });
       });
     });
 
@@ -524,7 +525,7 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       await userEvent.tab();
       await waitFor(() => {
         expect(JSON.parse(String(calls.filter((c) => c.init.method === 'PATCH').at(-1)?.init.body)))
-          .toEqual({ nextActionNote: 'Meet at Starbucks' });
+          .toEqual({ nextActionNote: 'Meet at Starbucks', version: 2 });
       });
 
       await userEvent.click(screen.getByRole('button', { name: 'Details' }));
@@ -532,7 +533,7 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       await userEvent.tab();
       await waitFor(() => {
         expect(JSON.parse(String(calls.filter((c) => c.init.method === 'PATCH').at(-1)?.init.body)))
-          .toEqual({ source: 'Referral — Desi' });
+          .toEqual({ source: 'Referral — Desi', version: 2 });
       });
     });
 
@@ -549,7 +550,7 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
 
       await waitFor(() => {
         expect(JSON.parse(String(calls.filter((c) => c.init.method === 'PATCH').at(-1)?.init.body)))
-          .toEqual({ contact: { phone: '0812-1100-2200', email: 'budi@example.com' } });
+          .toEqual({ contact: { phone: '0812-1100-2200', email: 'budi@example.com' }, version: 2 });
       });
     });
 
@@ -574,7 +575,7 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
 
       await waitFor(() => {
         expect(JSON.parse(String(calls.filter((c) => c.init.method === 'PATCH').at(-1)?.init.body)))
-          .toEqual({ nextActionDate: null });
+          .toEqual({ nextActionDate: null, version: 2 });
       });
     });
   });
@@ -640,6 +641,104 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       expect(await screen.findByLabelText('Close this month')).not.toBeChecked();
       await userEvent.click(screen.getByRole('button', { name: 'Details' }));
       expect(screen.getByText('Promised for Sep 2026')).toBeInTheDocument();
+    });
+  });
+
+  describe('P7-T7 — a leader\u2019s edit carries their name', () => {
+    it('AC-2: names whoever changed it, when that was not the agent whose lead it is', async () => {
+      // The phase's exit criterion, checked where it is claimed: the agent's own screen.
+      render({
+        '/leads': {
+          body: page([lead({ lastEditedBy: { membershipId: 'mem-aab', name: 'Ibu Sari' } })]),
+        },
+      });
+
+      expect(await screen.findByText('Edited by Ibu Sari')).toBeInTheDocument();
+    });
+
+    it('AC-2: says nothing when the last change was the agent\u2019s own', async () => {
+      render({ '/leads': { body: page([lead({ lastEditedBy: null })]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      expect(screen.queryByText(/Edited by/)).not.toBeInTheDocument();
+    });
+
+    it('names the office rather than a blank when the membership resolves to nobody', async () => {
+      render({
+        '/leads': { body: page([lead({ lastEditedBy: { membershipId: 'mem-gone', name: null } })]) },
+      });
+
+      expect(await screen.findByText('Edited by someone in your office')).toBeInTheDocument();
+    });
+
+    it('AC-3: pins the version every write was read at', async () => {
+      const { calls } = render({
+        '/leads': { body: page([lead({ version: 7 })]) },
+        '/leads/l1': { body: lead({ version: 8 }) },
+      });
+
+      const remarks = await screen.findByLabelText('Remarks, row 1');
+      await userEvent.clear(remarks);
+      await userEvent.type(remarks, 'Changed.');
+      await userEvent.tab();
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PATCH').at(-1);
+        expect(JSON.parse(String(sent?.init.body))).toEqual({ remarks: 'Changed.', version: 7 });
+      });
+    });
+
+    it('AC-3: pins a move, and then pins what the move left behind', async () => {
+      // The second write pins **8**, not the 7 the page loaded with: a screen that captured the
+      // version once would refuse its own previous save from then on.
+      const { calls } = render({
+        '/leads': { body: page([lead({ version: 7, statusCode: 'FOLLOW_UP' })]) },
+        '/leads/l1/status': { body: lead({ version: 8, statusCode: 'PAID_AND_ISSUED' }) },
+        '/leads/l1/outcome': { body: lead({ version: 9, outcome: 'won' }) },
+      });
+
+      await userEvent.selectOptions(await screen.findByLabelText('Status, row 1'), 'PAID_AND_ISSUED');
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.url.includes('/status')).at(-1);
+        expect(JSON.parse(String(sent?.init.body)))
+          .toEqual({ statusCode: 'PAID_AND_ISSUED', version: 7 });
+      });
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Mark successful' }));
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.url.includes('/outcome')).at(-1);
+        expect(JSON.parse(String(sent?.init.body))).toEqual({ outcome: 'won', version: 8 });
+      });
+    });
+
+    it('AC-3: a stale write reloads the row rather than arguing with it', async () => {
+      render({
+        '/leads': { body: page([lead({ version: 7, remarks: 'Mine.' })]) },
+        '/leads/l1': [
+          {
+            status: 409,
+            body: {
+              error: {
+                code: 'VERSION_CONFLICT',
+                message: 'This record changed since you loaded it. Reload and try again.',
+                requestId: 'req-6',
+              },
+            },
+          },
+          { body: lead({ version: 9, remarks: 'What the leader saved.' }) },
+        ],
+      });
+
+      const remarks = await screen.findByLabelText('Remarks, row 1');
+      await userEvent.clear(remarks);
+      await userEvent.type(remarks, 'Stale.');
+      await userEvent.tab();
+
+      expect(await screen.findByText(/changed since you loaded it/)).toBeInTheDocument();
+      // The row shows what is actually stored, not what this screen last believed.
+      await waitFor(() => {
+        expect(screen.getByLabelText('Remarks, row 1')).toHaveValue('What the leader saved.');
+      });
     });
   });
 
