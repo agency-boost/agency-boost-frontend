@@ -12,7 +12,7 @@ import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   createLead, deleteLead, listLeads, readLead, setLeadOutcome, setLeadStatus, updateLead,
-  FLAG_LABEL, LAWFUL_BASIS_LABEL,
+  flagLabel, LAWFUL_BASIS_LABEL,
   type Lead, type LeadOutcome, type LeadQuery, type LeadType,
 } from '@/lib/leads';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
@@ -361,7 +361,7 @@ export default function LeadsPage() {
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       {row.thisMonth && <StatusPill status="success" label={monthChip} />}
                       {row.flags.map((flag) => (
-                        <StatusPill key={flag} status="alert" label={FLAG_LABEL[flag]} />
+                        <StatusPill key={flag} status="alert" label={flagLabel(flag, row.overdueDays)} />
                       ))}
                       {row.outcome && (
                         <StatusPill

@@ -51,6 +51,7 @@ const lead = (over: Record<string, unknown> = {}) => ({
   dateRegistered: '2026-09-04T03:00:00.000Z',
   version: 2,
   flags: [],
+  overdueDays: null,
   ...over,
 });
 
@@ -424,13 +425,29 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
   describe('attention, and the commitment that does not hide it', () => {
     it('P7-T4 AC-2: shows both the commitment and what is overdue', async () => {
       render({
-        '/leads': { body: page([lead({ thisMonth: true, flags: ['overdue', 'no-remarks'] })]) },
+        '/leads': {
+          body: page([lead({ thisMonth: true, flags: ['overdue', 'no-remarks'], overdueDays: 14 })]),
+        },
       });
 
       const table = within(await screen.findByRole('table'));
       expect(table.getByText('Closes this month')).toBeInTheDocument();
-      expect(table.getByText('Overdue')).toBeInTheDocument();
+      expect(table.getByText('Overdue 14 days')).toBeInTheDocument();
       expect(table.getByText('No remarks')).toBeInTheDocument();
+    });
+
+    it('P7-T4: says how late, and counts in the office’s days rather than the browser’s', async () => {
+      // The number is the server's: it is whole calendar days in the office's timezone, and a
+      // screen subtracting two dates itself would be wrong for anybody on another device zone.
+      render({ '/leads': { body: page([lead({ flags: ['overdue'], overdueDays: 1 })]) } });
+
+      expect(await screen.findByText('Overdue 1 day')).toBeInTheDocument();
+    });
+
+    it('P7-T4: falls back to the bare word when the server sends no count', async () => {
+      render({ '/leads': { body: page([lead({ flags: ['overdue'], overdueDays: null })]) } });
+
+      expect(await within(await screen.findByRole('table')).findByText('Overdue')).toBeInTheDocument();
     });
 
     it('words the commitment for the ladder the lead is on', async () => {

@@ -26,6 +26,8 @@ export interface Lead {
   dateRegistered: string | null;
   version: number;
   flags: LeadFlag[];
+  /** How late, in the office's own days. `null` unless `flags` carries `overdue`. */
+  overdueDays: number | null;
 }
 
 export interface LeadPage {
@@ -52,6 +54,20 @@ export const FLAG_LABEL: Record<LeadFlag, string> = {
   overdue: 'Overdue',
   'no-next-action': 'No next action',
   'no-remarks': 'No remarks',
+};
+
+/**
+ * What a flag reads as on a row — *Overdue 14 days* rather than *Overdue*, as the prototype has
+ * it (`leads-management.md` §4).
+ *
+ * **The count comes from the server, not from the browser's clock.** `overdueDays` is whole
+ * calendar days in the **office's** timezone; a screen subtracting two dates itself would be
+ * wrong for anybody whose device is in another zone, which is the defect the whole day-boundary
+ * rule exists to stop (invariant §9).
+ */
+export const flagLabel = (flag: LeadFlag, overdueDays: number | null): string => {
+  if (flag !== 'overdue' || overdueDays === null) return FLAG_LABEL[flag];
+  return `Overdue ${overdueDays} ${overdueDays === 1 ? 'day' : 'days'}`;
 };
 
 export const LAWFUL_BASIS_LABEL: Record<LawfulBasis, string> = {
