@@ -92,7 +92,7 @@ function Chrome({
         // 2026-09-24).
         { label: 'Activity management', href: '/activity/log', active: on('/activity'), icon: 'activity' },
         { label: 'Leads management', href: '/leads', active: on('/leads'), icon: 'funnel' },
-        { label: 'Goal settings', href: '/goals', icon: 'target', upcoming: true },
+        { label: 'Goal settings', href: '/goals', active: on('/goals'), icon: 'target' },
         { label: 'Personal summary', href: '/summary', icon: 'user', upcoming: true },
       ],
     },

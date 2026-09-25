@@ -1,0 +1,351 @@
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import AgentLayout from '@/app/(agent)/layout';
+import { makeMe, renderInLayout, stubFetch } from '@test/harness';
+import GoalSettingsPage from './page';
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => '/goals',
+}));
+
+const AGENT = makeMe({ permissions: ['goal:read', 'goal:update'] });
+
+const PERIOD = String(new Date().getFullYear());
+
+/** The prototype's defaults over five months: 6 policies, 20 appointments, 67 leads. */
+const projection = (over: Record<string, unknown> = {}) => ({
+  annualApeTargetMinor: 500_000_000_00,
+  apeAchievedMinor: 0,
+  remainingApeMinor: 500_000_000_00,
+  monthlyApeTargetMinor: 100_000_000_00,
+  policiesPerMonth: 6,
+  policiesPerWeek: 2,
+  appointmentsPerMonth: 20,
+  appointmentsPerWeek: 5,
+  leadsPerMonth: 67,
+  leadsPerWeek: 16,
+  targetMet: false,
+  ...over,
+});
+
+const goal = (over: Record<string, unknown> = {}) => ({
+  period: PERIOD,
+  mode: 'direct',
+  annualApeTargetMinor: 500_000_000_00,
+  savingsTargetMinor: 50_000_000_00,
+  commissionRatePct: 10,
+  monthsLeft: 5,
+  apeAchievedMinor: 0,
+  caseSizeMinor: 18_000_000_00,
+  leadsToApptPct: 30,
+  closingRatePct: 30,
+  snapshot: {
+    monthlyApeTargetMinor: 100_000_000_00,
+    policiesPerMonth: 6,
+    appointmentsPerMonth: 20,
+    leadsPerMonth: 67,
+  },
+  projected: projection(),
+  cascadeMapping: {
+    leadsCode: 'LEADS_CONTACTED',
+    appointmentsCode: 'SELL_PRESENTATION',
+    closingsCode: 'SELL_SUBMISSION',
+  },
+  savedAt: '2026-09-13T04:00:00.000Z',
+  savedByMembershipId: 'mem-1',
+  ...over,
+});
+
+const base = {
+  '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+  '/kpm/org-levels': { body: [] },
+};
+
+const render = (routes: Record<string, unknown>, me = AGENT) => {
+  const stub = stubFetch({ ...base, ...routes } as Parameters<typeof stubFetch>[0]);
+  renderInLayout(AgentLayout, <GoalSettingsPage />, { me });
+  return stub;
+};
+
+describe('Goal settings (P8-T3)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('renders five numbered cards and the commitment', async () => {
+    render({ '/goals': { body: goal() } });
+
+    expect(await screen.findByRole('heading', { name: /Annual APE target/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Current progress/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /From APE to policy count/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Conversion assumptions/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Monthly activity target/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /My commitment/ })).toBeInTheDocument();
+  });
+
+  describe('AC-2 — the server is the only source of the numbers', () => {
+    it('renders the cascade it was given, not one it worked out', async () => {
+      // The prototype's markup says 80 leads and its calculator says 67. The screen holds no
+      // copy of the formula, so there is nothing here that could disagree with the server.
+      render({ '/goals': { body: goal() } });
+
+      expect(await screen.findByText('67')).toBeInTheDocument();
+      expect(screen.getByText('20')).toBeInTheDocument();
+      expect(screen.getByText('≈ 16/week')).toBeInTheDocument();
+    });
+
+    it('AC-2b: shows the recomputed figure, not the stored snapshot', async () => {
+      /*
+       * Moved here from P8-T1's AC-4. A plan agreed in January with five months left, read in
+       * October with two, is a different monthly target — and the screen has to show the second
+       * one or it is describing a year that no longer exists (client PRD §17).
+       */
+      render({
+        '/goals': {
+          body: goal({
+            snapshot: {
+              monthlyApeTargetMinor: 100_000_000_00,
+              policiesPerMonth: 6, appointmentsPerMonth: 20, leadsPerMonth: 67,
+            },
+            projected: projection({
+              monthlyApeTargetMinor: 250_000_000_00,
+              policiesPerMonth: 14, appointmentsPerMonth: 47, leadsPerMonth: 157,
+            }),
+          }),
+        },
+      });
+
+      expect(await screen.findByText('157')).toBeInTheDocument();
+      expect(screen.queryByText('67')).not.toBeInTheDocument();
+    });
+
+    it('sends the six inputs and renders what comes back', async () => {
+      const { calls } = render({
+        '/goals': [
+          { body: goal() },
+          { body: goal({ caseSizeMinor: 9_000_000_00, projected: projection({ policiesPerMonth: 11 }) }) },
+        ],
+      });
+
+      const caseSize = await screen.findByLabelText('Average case size (Rp)');
+      await userEvent.clear(caseSize);
+      await userEvent.type(caseSize, '9000000');
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body))).toMatchObject({ caseSizeMinor: 9_000_000_00 });
+      });
+      // The Closings column and the policies-per-month figure both read it back.
+      expect((await screen.findAllByText('11')).length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('money is typed in rupiah and sent in sen', () => {
+    it('shows 500,000,000 where the record holds 50,000,000,000', async () => {
+      render({ '/goals': { body: goal() } });
+
+      expect(await screen.findByLabelText('Annual APE target (Rp)')).toHaveValue(500_000_000);
+      // Indonesian grouping, which the prototype's `toLocaleString('en-US')` gets wrong for its
+      // own audience. It appears in the remaining-needed figure and in the commitment sentence.
+      expect(screen.getAllByText('Rp 500.000.000').length).toBeGreaterThan(0);
+    });
+
+    it('converts on the way out, so nobody types twelve digits for a nine-digit figure', async () => {
+      const { calls } = render({
+        '/goals': [{ body: goal() }, { body: goal() }],
+      });
+
+      const target = await screen.findByLabelText('Annual APE target (Rp)');
+      await userEvent.clear(target);
+      await userEvent.type(target, '300000000');
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body)).annualApeTargetMinor).toBe(300_000_000_00);
+      });
+    });
+  });
+
+  describe('every field reaches the server', () => {
+    it('sends all six inputs, including the ones the defaults already fill', async () => {
+      /*
+       * A field nobody types into is a field nobody has proved is wired. Each of these moves a
+       * number the cascade divides by, so a control that silently does not reach the server would
+       * show the agent a plan they did not set.
+       */
+      const { calls } = render({ '/goals': [{ body: goal() }, { body: goal() }] });
+
+      const type = async (label: string, value: string) => {
+        const field = await screen.findByLabelText(label);
+        await userEvent.clear(field);
+        await userEvent.type(field, value);
+      };
+
+      await type('Months left', '2.5');
+      await type('APE produced so far (Rp)', '120000000');
+      await type('Contacted leads that become an appointment (%)', '25');
+      await type('Appointments that become a closing (%)', '40');
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body))).toMatchObject({
+          monthsLeft: 2.5,
+          apeAchievedMinor: 120_000_000_00,
+          leadsToApptPct: 25,
+          closingRatePct: 40,
+        });
+      });
+    });
+  });
+
+  describe('the two entry modes', () => {
+    it('offers the savings pair when that is how the agent thinks', async () => {
+      render({ '/goals': { body: goal({ mode: 'from_savings' }) } });
+
+      expect(await screen.findByLabelText('Annual savings target (Rp)')).toBeInTheDocument();
+      expect(screen.getByLabelText('Commission rate (%)')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Annual APE target (Rp)')).not.toBeInTheDocument();
+    });
+
+    it('takes a decimal rate, which the prototype cannot (I-108)', async () => {
+      const { calls } = render({
+        '/goals': [{ body: goal({ mode: 'from_savings' }) }, { body: goal({ mode: 'from_savings' }) }],
+      });
+
+      const rate = await screen.findByLabelText('Commission rate (%)');
+      await userEvent.clear(rate);
+      await userEvent.type(rate, '12.5');
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body)).commissionRatePct).toBe(12.5);
+      });
+    });
+  });
+
+  describe('AC-6 and the states a plan can be in', () => {
+    it('replaces the cascade with a sentence when the target is met (ADR-0047)', async () => {
+      // Not *contact 0 leads*, printed to the best producer in the office.
+      render({
+        '/goals': {
+          body: goal({
+            projected: projection({
+              targetMet: true, remainingApeMinor: 0, monthlyApeTargetMinor: 0,
+              policiesPerMonth: 0, appointmentsPerMonth: 0, leadsPerMonth: 0,
+            }),
+          }),
+        },
+      });
+
+      expect(await screen.findByText(/passed your annual target/)).toBeInTheDocument();
+      expect(screen.queryByText('Leads contacted')).not.toBeInTheDocument();
+    });
+
+    it('says which numbers it cannot work from, rather than showing nothing', async () => {
+      render({ '/goals': { body: goal({ projected: null }) } });
+
+      expect(await screen.findByText(/cannot be worked out/)).toBeInTheDocument();
+      expect(screen.getByText(/case size and the two/)).toBeInTheDocument();
+    });
+
+    it('shows the server’s refusal of an unusable assumption', async () => {
+      render({
+        '/goals': [
+          { body: goal() },
+          {
+            status: 422,
+            body: {
+              error: {
+                code: 'GOAL_INVALID_ASSUMPTION',
+                message: 'Average case size must be above zero: it is what a policy is worth.',
+                requestId: 'req-1',
+              },
+            },
+          },
+        ],
+      });
+      await screen.findByLabelText('Average case size (Rp)');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      expect(await screen.findByText(/case size must be above zero/)).toBeInTheDocument();
+    });
+
+    it('shows a skeleton while it loads, and an error instead of an empty form', async () => {
+      render({
+        '/goals': {
+          status: 500,
+          body: { error: { code: 'INTERNAL_ERROR', message: 'Nope.', requestId: 'r' } },
+        },
+      });
+
+      expect(await screen.findByText('Nope.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Save goal' })).not.toBeInTheDocument();
+    });
+
+    it('refuses the screen to somebody without goal:read', async () => {
+      render({ '/goals': { body: goal() } }, makeMe({ permissions: [] }));
+
+      expect(await screen.findByText(/needs the/)).toBeInTheDocument();
+      expect(screen.getByText('goal:read')).toBeInTheDocument();
+    });
+  });
+
+  describe('what the prototype gets wrong and this does not', () => {
+    it('dates the commitment from the goal, not from a string typed into the markup', async () => {
+      // The prototype's header reads "as of Aug 28, 2026" and JS never updates it.
+      render({ '/goals': { body: goal({ savedAt: '2026-09-13T04:00:00.000Z' }) } });
+
+      expect(await screen.findByText(/13 Sept 2026/)).toBeInTheDocument();
+    });
+
+    it('keeps the disclaimer the retired section files carried (L-29)', async () => {
+      render({ '/goals': { body: goal() } });
+
+      expect(await screen.findByText(/Estimates for personal planning/)).toBeInTheDocument();
+    });
+
+    it('says saved when it is saved, rather than on every recalculation', async () => {
+      // The prototype marks the goal unsaved on page load and on any cross-tab read.
+      render({ '/goals': { body: goal() } });
+      // The loading skeleton is also a `status`, so wait for the form before asking.
+      await screen.findByRole('button', { name: 'Save goal' });
+
+      expect(screen.getByRole('status')).toHaveTextContent('Saved');
+    });
+
+    it('says not yet saved when there is no goal to have saved', async () => {
+      render({ '/goals': { body: goal({ savedAt: null, savedByMembershipId: null }) } });
+      await screen.findByRole('button', { name: 'Save goal' });
+
+      expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
+    });
+
+    it('names the activity codes the cascade counts against, never #3 #4 #6', async () => {
+      render({ '/goals': { body: goal() } });
+
+      expect(await screen.findByText(/LEADS_CONTACTED/)).toBeInTheDocument();
+      expect(screen.queryByText(/#3/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('a goal somebody else set (ADR-0046)', () => {
+    it('names the leader who set it, on the agent’s own screen', async () => {
+      render({ '/goals': { body: goal({ savedByMembershipId: 'mem-leader' }) } });
+
+      expect(await screen.findByText('Set by your leader')).toBeInTheDocument();
+      expect(screen.getByText(/it is your plan/)).toBeInTheDocument();
+    });
+
+    it('says nothing when the agent set it themselves', async () => {
+      render({ '/goals': { body: goal({ savedByMembershipId: 'mem-1' }) } });
+      await screen.findByRole('heading', { name: /My commitment/ });
+
+      expect(screen.queryByText('Set by your leader')).not.toBeInTheDocument();
+    });
+  });
+});

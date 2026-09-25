@@ -40,6 +40,7 @@ import KpmOverviewPage from './(tenant)/kpm/overview/page';
 import UnitDashboardPage from './(agent)/unit/dashboard/page';
 import LogActivityPage from './(agent)/activity/log/page';
 import LeadsPage from './(agent)/leads/page';
+import GoalSettingsPage from './(agent)/goals/page';
 import FindLeaderPage from './(agent)/user-management/leader/page';
 import AddAgentsPage from './(agent)/user-management/add/page';
 import PendingPage from './(agent)/user-management/pending/page';
@@ -414,6 +415,52 @@ describe('screens have no axe violations', () => {
     // The detail panel is part of the row, so it is walked open rather than left closed.
     await userEvent.click(await screen.findByRole('button', { name: 'Details' }));
     await expectClean('leads');
+  });
+
+  it('goal settings: five numbered cards, two entry modes and a live cascade', async () => {
+    const period = String(new Date().getFullYear());
+    stubFetch({
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/goals': {
+        body: {
+          period,
+          mode: 'direct',
+          annualApeTargetMinor: 500_000_000_00,
+          savingsTargetMinor: 50_000_000_00,
+          commissionRatePct: 10,
+          monthsLeft: 5,
+          apeAchievedMinor: 0,
+          caseSizeMinor: 18_000_000_00,
+          leadsToApptPct: 30,
+          closingRatePct: 30,
+          snapshot: {
+            monthlyApeTargetMinor: 100_000_000_00,
+            policiesPerMonth: 6, appointmentsPerMonth: 20, leadsPerMonth: 67,
+          },
+          projected: {
+            annualApeTargetMinor: 500_000_000_00, apeAchievedMinor: 0,
+            remainingApeMinor: 500_000_000_00, monthlyApeTargetMinor: 100_000_000_00,
+            policiesPerMonth: 6, policiesPerWeek: 2,
+            appointmentsPerMonth: 20, appointmentsPerWeek: 5,
+            leadsPerMonth: 67, leadsPerWeek: 16, targetMet: false,
+          },
+          cascadeMapping: {
+            leadsCode: 'LEADS_CONTACTED',
+            appointmentsCode: 'SELL_PRESENTATION',
+            closingsCode: 'SELL_SUBMISSION',
+          },
+          savedAt: '2026-09-13T04:00:00.000Z',
+          savedByMembershipId: 'mem-leader',
+        },
+      },
+    });
+    renderInLayout(AgentLayout, <GoalSettingsPage />, {
+      me: makeMe({ permissions: ['goal:read', 'goal:update'] }),
+    });
+
+    await screen.findByRole('button', { name: 'Save goal' });
+    await expectClean('goals');
   });
 
   it('the invite screen, with a code to share and a team below it', async () => {

@@ -113,10 +113,20 @@ describe('the sidebar matches the prototype', () => {
     // The route is `/group-tree`, so `Admin` is the group that opens itself. One group is
     // open at a time, so reaching another is a click.
     await userEvent.click(screen.getByRole('button', { name: /^Personal tools/ }));
-    // Goal settings, not Leads management: that one shipped with P7-T2 and is a live link now.
+    // Personal summary: Leads management shipped with P7-T2 and Goal settings with P8-T3.
+    const summary = screen.getByText('Personal summary').closest('a')!;
+    expect(summary).toHaveAttribute('aria-disabled');
+    expect(within(summary).getByText('Upcoming')).toBeInTheDocument();
+  });
+
+  it('agent app: Goal settings is a live link, not a pill', async () => {
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+    await userEvent.click(screen.getByRole('button', { name: /^Personal tools/ }));
+
     const goals = screen.getByText('Goal settings').closest('a')!;
-    expect(goals).toHaveAttribute('aria-disabled');
-    expect(within(goals).getByText('Upcoming')).toBeInTheDocument();
+    expect(goals).toHaveAttribute('href', '/goals');
+    expect(goals).not.toHaveAttribute('aria-disabled');
+    expect(within(goals).queryByText('Upcoming')).not.toBeInTheDocument();
   });
 
   it('agent app: Leads management is a live link, not a pill', async () => {
