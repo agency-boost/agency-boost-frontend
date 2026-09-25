@@ -394,6 +394,7 @@ describe('screens have no axe violations', () => {
             statusCode: 'FOLLOW_UP', thisMonth: true, remarks: 'Hobi golf',
             nextActionDate: '2026-10-02', nextActionNote: null, outcome: null, source: null,
             dateRegistered: '2026-09-04T03:00:00.000Z', version: 2, flags: ['overdue'],
+            overdueDays: 9, committedMonths: ['2026-09'],
           }],
           total: 1, page: 1, pageSize: 50,
         },

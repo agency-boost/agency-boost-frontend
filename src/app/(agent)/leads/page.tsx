@@ -12,7 +12,7 @@ import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   createLead, deleteLead, listLeads, readLead, setLeadOutcome, setLeadStatus, updateLead,
-  flagLabel, LAWFUL_BASIS_LABEL,
+  flagLabel, monthLabel, LAWFUL_BASIS_LABEL,
   type Lead, type LeadOutcome, type LeadQuery, type LeadType,
 } from '@/lib/leads';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
@@ -663,6 +663,20 @@ function Details({
           />
         </Field>
       </FieldRow>
+
+      {/*
+        * What was promised, and when (P7-T5).
+        *
+        * **The rollover is visible here rather than anywhere else.** The tick box above shows the
+        * *current* month, and it unticks itself when the month turns because nothing stores it —
+        * so this line is what answers *did they do what they said* afterwards. A lead carried from
+        * one month into the next shows both, which is the thing worth noticing about it.
+        */}
+      {row.committedMonths.length > 0 && (
+        <p className="mt-3 text-sm text-muted">
+          Promised for {row.committedMonths.map(monthLabel).join(' · ')}
+        </p>
+      )}
     </div>
   );
 }

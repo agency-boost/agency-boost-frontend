@@ -17,7 +17,10 @@ export interface Lead {
   consentAt: string | null;
   /** The code, never the label: renaming a stage must not orphan the leads sitting on it. */
   statusCode: string | null;
+  /** Derived from `committedMonths`, never stored — so nothing has to clear it (P7-T5). */
   thisMonth: boolean;
+  /** Every month this lead was promised for, oldest first, as `YYYY-MM` in the office's zone. */
+  committedMonths: string[];
   remarks: string | null;
   nextActionDate: string | null;
   nextActionNote: string | null;
@@ -68,6 +71,19 @@ export const FLAG_LABEL: Record<LeadFlag, string> = {
 export const flagLabel = (flag: LeadFlag, overdueDays: number | null): string => {
   if (flag !== 'overdue' || overdueDays === null) return FLAG_LABEL[flag];
   return `Overdue ${overdueDays} ${overdueDays === 1 ? 'day' : 'days'}`;
+};
+
+/**
+ * `2026-09` as *Sep 2026*.
+ *
+ * Built from the month's own numbers rather than parsed as a date: `new Date('2026-09')` is
+ * midnight **UTC**, which renders as August for anybody west of Greenwich — the same
+ * off-by-one-day class of bug the whole day-boundary rule exists to stop.
+ */
+export const monthLabel = (month: string): string => {
+  const [year, index] = month.split('-');
+  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${names[Number(index) - 1] ?? month} ${year}`;
 };
 
 export const LAWFUL_BASIS_LABEL: Record<LawfulBasis, string> = {

@@ -52,6 +52,7 @@ const lead = (over: Record<string, unknown> = {}) => ({
   version: 2,
   flags: [],
   overdueDays: null,
+  committedMonths: [],
   ...over,
 });
 
@@ -607,6 +608,38 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
 
       await userEvent.click(screen.getByRole('button', { name: 'Previous' }));
       await waitFor(() => expect(lastList(calls).get('page')).toBe('1'));
+    });
+  });
+
+  describe('P7-T5 — the promise, and the month it was made for', () => {
+    it('shows what was promised, which is what the tick box cannot say once the month turns', async () => {
+      render({ '/leads': { body: page([lead({ committedMonths: ['2026-09', '2026-10'] })]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+      expect(screen.getByText('Promised for Sep 2026 · Oct 2026')).toBeInTheDocument();
+    });
+
+    it('says nothing about a lead that was never promised', async () => {
+      render({ '/leads': { body: page([lead({ committedMonths: [] })]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+      expect(screen.queryByText(/Promised for/)).not.toBeInTheDocument();
+    });
+
+    it('unticks itself when the month has turned, with nothing having run', async () => {
+      // September's promise, read in October: the server derives `thisMonth` from the month it
+      // names, so the box is empty and the archive still says September.
+      render({
+        '/leads': { body: page([lead({ thisMonth: false, committedMonths: ['2026-09'] })]) },
+      });
+
+      expect(await screen.findByLabelText('Close this month')).not.toBeChecked();
+      await userEvent.click(screen.getByRole('button', { name: 'Details' }));
+      expect(screen.getByText('Promised for Sep 2026')).toBeInTheDocument();
     });
   });
 
