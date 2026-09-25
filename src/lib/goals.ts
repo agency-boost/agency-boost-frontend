@@ -41,15 +41,27 @@ export interface GoalInputs {
   annualApeTargetMinor: number;
   savingsTargetMinor: number;
   commissionRatePct: number;
-  monthsLeft: number;
+  /**
+   * `null` means **use the office's calendar**, and it is what to send unless the agent typed over
+   * the figure.
+   *
+   * Sending the number back would store it, and a stored divisor goes stale: a plan saved in
+   * January with 11.9 months left would still claim 11.9 in October, and a monthly target a fifth
+   * of the truth (client PRD §17).
+   */
+  monthsLeft: number | null;
   apeAchievedMinor: number;
   caseSizeMinor: number;
   leadsToApptPct: number;
   closingRatePct: number;
 }
 
-export interface Goal extends GoalInputs {
+export interface Goal extends Omit<GoalInputs, 'monthsLeft'> {
   period: string;
+  /** The figure **in force** — derived from the office's calendar unless it was overridden. */
+  monthsLeft: number;
+  /** Whether the figure above is the agent's own choice or the office's calendar. */
+  monthsLeftIsOverride: boolean;
   snapshot: GoalSnapshot;
   /** `null` when the stored inputs cannot produce a plan — the screen says which of them. */
   projected: GoalProjection | null;

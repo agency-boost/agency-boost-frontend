@@ -436,6 +436,7 @@ describe('screens have no axe violations', () => {
           savingsTargetMinor: 50_000_000_00,
           commissionRatePct: 10,
           monthsLeft: 5,
+          monthsLeftIsOverride: false,
           apeAchievedMinor: 0,
           caseSizeMinor: 18_000_000_00,
           leadsToApptPct: 30,

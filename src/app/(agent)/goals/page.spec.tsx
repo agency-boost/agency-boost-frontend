@@ -53,6 +53,7 @@ const goal = (over: Record<string, unknown> = {}) => ({
     appointmentsCode: 'SELL_PRESENTATION',
     closingsCode: 'SELL_SUBMISSION',
   },
+  monthsLeftIsOverride: false,
   savedAt: '2026-09-13T04:00:00.000Z',
   savedByMembershipId: 'mem-1',
   ...over,
@@ -337,6 +338,73 @@ describe('Goal settings (P8-T3)', () => {
 
       expect(await screen.findByText(/LEADS_CONTACTED/)).toBeInTheDocument();
       expect(screen.queryByText(/#3/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('P8-T5 — the divisor the office works out, and the one you choose', () => {
+    it('sends null when the figure is the office’s, so nothing stale is stored', async () => {
+      /*
+       * The defect this closes: a plan saved in January with 11.9 months left, stored and served
+       * back, still claimed 11.9 in October — and a monthly target a fifth of the truth
+       * (client PRD §17).
+       */
+      const { calls } = render({
+        '/goals': [{ body: goal({ monthsLeft: 3.1, monthsLeftIsOverride: false }) }, { body: goal() }],
+      });
+      await screen.findByLabelText('Months left');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body)).monthsLeft).toBeNull();
+      });
+    });
+
+    it('shows the figure in force even while it sends null', async () => {
+      render({ '/goals': { body: goal({ monthsLeft: 3.1, monthsLeftIsOverride: false }) } });
+
+      // Empty, with the office's figure as the placeholder: prefilling it meant clearing the box
+      // refilled it, so typing over the number appended to it.
+      const field = await screen.findByLabelText('Months left');
+      expect(field).toHaveValue(null);
+      expect(field).toHaveAttribute('placeholder', '3.1');
+      expect(screen.getByText(/office’s calendar says 3.1/)).toBeInTheDocument();
+    });
+
+    it('sends the number once the agent types over it', async () => {
+      const { calls } = render({
+        '/goals': [{ body: goal({ monthsLeft: 3.1, monthsLeftIsOverride: false }) }, { body: goal() }],
+      });
+
+      await userEvent.type(await screen.findByLabelText('Months left'), '2');
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body)).monthsLeft).toBe(2);
+      });
+    });
+
+    it('says whose figure it is, and how to go back to the office’s', async () => {
+      render({ '/goals': { body: goal({ monthsLeft: 2, monthsLeftIsOverride: true }) } });
+
+      expect(await screen.findByText(/Your own figure/)).toBeInTheDocument();
+      expect(screen.getByText(/Empty the box/)).toBeInTheDocument();
+    });
+
+    it('goes back to the office’s calendar when the box is cleared', async () => {
+      const { calls } = render({
+        '/goals': [{ body: goal({ monthsLeft: 2, monthsLeftIsOverride: true }) }, { body: goal() }],
+      });
+
+      await userEvent.clear(await screen.findByLabelText('Months left'));
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body)).monthsLeft).toBeNull();
+      });
     });
   });
 

@@ -221,18 +221,35 @@ export default function GoalSettingsPage() {
 
         <Step n={2} title="Current progress">
           <FieldRow>
+            {/*
+              * **`null` means *use the office's calendar***, and that is what is sent unless the
+              * agent types over the figure. Sending the number back would store it, and a stored
+              * divisor goes stale: a plan saved in January with 11.9 months left claimed 11.9 in
+              * October, with a monthly target a fifth of the truth (client PRD §17).
+              */}
             <Field
               label="Months left"
               htmlFor="goal-months"
-              hint="Worked out from your office's calendar. Change it if you know better."
+              hint={draft.monthsLeft === null
+                ? `Your office\u2019s calendar says ${goal.monthsLeft}. Type a number to use your own.`
+                : 'Your own figure. Empty the box to go back to your office\u2019s calendar.'}
             >
+              {/*
+                * **Empty means the office's calendar**, with the figure as the placeholder — not
+                * prefilled. Prefilling it made clearing the box refill it, so typing over the
+                * number appended to it: `3.1` became `3.12`. An empty box that says what it will
+                * fall back to is the honest control.
+                */}
               <TextInput
                 id="goal-months"
                 type="number"
                 step="0.1"
                 min="0.1"
-                value={draft.monthsLeft}
-                onChange={(e) => set({ monthsLeft: Number(e.target.value) })}
+                placeholder={String(goal.monthsLeft)}
+                value={draft.monthsLeft ?? ''}
+                onChange={(e) => set({
+                  monthsLeft: e.target.value === '' ? null : Number(e.target.value),
+                })}
               />
             </Field>
             <Rupiah
@@ -336,7 +353,7 @@ export default function GoalSettingsPage() {
           {projected && !projected.targetMet && (
             <p className="mt-2 text-md text-navy">
               To reach APE <strong>{formatRupiah(projected.annualApeTargetMinor)}</strong> this year
-              ({draft.monthsLeft} months left), this month&apos;s target is APE{' '}
+              ({goal.monthsLeft} months left), this month&apos;s target is APE{' '}
               <strong>{formatRupiah(projected.monthlyApeTargetMinor)}</strong> — I will contact{' '}
               <strong>{projected.leadsPerMonth} leads</strong>, get{' '}
               <strong>{projected.appointmentsPerMonth} appointments</strong>, and close{' '}
@@ -367,7 +384,8 @@ function inputsOf(goal: Goal): GoalInputs {
     annualApeTargetMinor: goal.annualApeTargetMinor,
     savingsTargetMinor: goal.savingsTargetMinor,
     commissionRatePct: goal.commissionRatePct,
-    monthsLeft: goal.monthsLeft,
+    // The **override**, not the figure in force: `null` says *use the office's calendar*.
+    monthsLeft: goal.monthsLeftIsOverride ? goal.monthsLeft : null,
     apeAchievedMinor: goal.apeAchievedMinor,
     caseSizeMinor: goal.caseSizeMinor,
     leadsToApptPct: goal.leadsToApptPct,
