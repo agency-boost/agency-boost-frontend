@@ -59,12 +59,32 @@ export interface Goal extends GoalInputs {
   savedByMembershipId: string | null;
 }
 
-/** The goal, or the office's defaults when there is none. Nothing is written by reading. */
-export const readGoal = (period: string) => api<Goal>(`/goals/${period}`);
+/**
+ * `?for=<membershipId>`, or nothing.
+ *
+ * Appended with `+`, never interpolated: the API-consumer gate reads path **literals** out of each
+ * call, and an interpolation at the end of one reads as part of the path.
+ */
+const forWhom = (membershipId?: string) =>
+  (membershipId ? `?for=${encodeURIComponent(membershipId)}` : '');
 
-/** The whole plan, in one write: five cards are one agreement, not five edits. */
-export const saveGoal = (period: string, inputs: GoalInputs) =>
-  api<Goal>(`/goals/${period}`, { method: 'PUT', body: inputs });
+/**
+ * The goal, or the office's defaults when there is none. Nothing is written by reading.
+ *
+ * `membershipId` reads **somebody else's** — a downline, a unit member, or anybody in the office,
+ * as §3.6 allows. Outside the reader's grant it is a 404, never a 403.
+ */
+export const readGoal = (period: string, membershipId?: string) =>
+  api<Goal>(`/goals/${period}` + forWhom(membershipId));
+
+/**
+ * The whole plan, in one write: five cards are one agreement, not five edits.
+ *
+ * Saving somebody else's makes it **their** goal immediately — there is no acceptance step
+ * (ADR-0046) — the record names who saved it, and they are notified.
+ */
+export const saveGoal = (period: string, inputs: GoalInputs, membershipId?: string) =>
+  api<Goal>(`/goals/${period}` + forWhom(membershipId), { method: 'PUT', body: inputs });
 
 /** IDR sen per rupiah. One place, so a screen cannot hold a second opinion about the unit. */
 export const MINOR_UNITS_PER_MAJOR = 100;

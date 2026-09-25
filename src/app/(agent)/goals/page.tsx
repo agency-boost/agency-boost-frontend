@@ -11,6 +11,7 @@ import {
   formatRupiah, readGoal, saveGoal, toMajor, toMinor,
   type Goal, type GoalInputs, type GoalMode,
 } from '@/lib/goals';
+import { readMyTeam, type TeamMember } from '@/lib/org';
 import { useSession } from '@/lib/session';
 
 /**
@@ -33,23 +34,40 @@ export default function GoalSettingsPage() {
    */
   const period = String(new Date().getFullYear());
 
+  /**
+   * Whose plan is on screen (P8-T4).
+   *
+   * **A Fill.** §3.6 lets a leader, an Owner and an Admin set somebody else's goal, and until the
+   * coaching session arrives in Phase 13 there is nowhere to do it — the prototype's leader-facing
+   * copy of this calculator lives inside that session and nothing like it exists on this screen.
+   * This is the smallest honest surface for a permission the matrix already grants: a picker and a
+   * banner, not a coaching session.
+   */
+  const [subject, setSubject] = useState<string | null>(null);
+  const [team, setTeam] = useState<TeamMember[]>([]);
   const [goal, setGoal] = useState<Goal | null>(null);
   const [draft, setDraft] = useState<GoalInputs | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  useEffect(() => {
+    // A reader who leads nobody gets an empty list and no picker. Failing is the same answer:
+    // the screen is about their own plan either way.
+    void readMyTeam().then(setTeam).catch(() => setTeam([]));
+  }, []);
+
   const load = useCallback(async () => {
     setError(null);
     try {
-      const next = await readGoal(period);
+      const next = await readGoal(period, subject ?? undefined);
       setGoal(next);
       setDraft(inputsOf(next));
       setSaved(next.savedAt !== null);
     } catch (err) {
       setError(toDisplayError(err));
     }
-  }, [period]);
+  }, [period, subject]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -66,7 +84,7 @@ export default function GoalSettingsPage() {
     setBusy(true);
     setError(null);
     try {
-      const result = await saveGoal(period, next);
+      const result = await saveGoal(period, next, subject ?? undefined);
       setGoal(result);
       setDraft(inputsOf(result));
       setSaved(true);
@@ -89,8 +107,11 @@ export default function GoalSettingsPage() {
 
   const set = (patch: Partial<GoalInputs>) => setDraft({ ...draft, ...patch });
   const projected = goal.projected;
-  const byLeader = goal.savedByMembershipId !== null
+  const mine = subject === null;
+  const byLeader = mine
+    && goal.savedByMembershipId !== null
     && goal.savedByMembershipId !== me?.membership?.membershipId;
+  const whose = team.find((m) => m.membershipId === subject);
 
   return (
     <Page
@@ -104,6 +125,40 @@ export default function GoalSettingsPage() {
       )}
     >
       {error && <div className="mb-4"><ErrorBanner {...error} /></div>}
+
+      {team.length > 0 && (
+        <Card className="mb-4">
+          <FieldRow>
+            <Field
+              label="Whose plan"
+              htmlFor="goal-subject"
+              hint="Saving somebody else’s becomes their goal at once, carries your name, and tells them."
+            >
+              <Select
+                id="goal-subject"
+                value={subject ?? ''}
+                onChange={(e) => setSubject(e.target.value === '' ? null : e.target.value)}
+              >
+                <option value="">Mine</option>
+                {team.map((member) => (
+                  <option key={member.membershipId} value={member.membershipId}>
+                    {member.fullName}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </FieldRow>
+        </Card>
+      )}
+
+      {whose && (
+        <Card className="mb-4 border-navy/30 bg-navy/5">
+          <p className="text-md text-navy">
+            You are setting <strong>{whose.fullName}</strong>&apos;s plan. It becomes their goal as
+            soon as you save, their screen will say you set it, and they will be told.
+          </p>
+        </Card>
+      )}
 
       {/*
         * **Who set this, when it was not you** (ADR-0046). A leader saves a downline's goal

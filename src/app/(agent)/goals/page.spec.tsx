@@ -61,7 +61,14 @@ const goal = (over: Record<string, unknown> = {}) => ({
 const base = {
   '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
   '/kpm/org-levels': { body: [] },
+  // A reader who leads nobody. The picker only appears for somebody who does.
+  '/members/my-team': { body: [] },
 };
+
+const teammate = (over: Record<string, unknown> = {}) => ({
+  membershipId: 'mem-rina', fullName: 'Rina Wijaya', initials: 'RW',
+  agentCode: 'PRU-001', role: 'agent', directCount: 0, canChangeRole: false, ...over,
+});
 
 const render = (routes: Record<string, unknown>, me = AGENT) => {
   const stub = stubFetch({ ...base, ...routes } as Parameters<typeof stubFetch>[0]);
@@ -330,6 +337,95 @@ describe('Goal settings (P8-T3)', () => {
 
       expect(await screen.findByText(/LEADS_CONTACTED/)).toBeInTheDocument();
       expect(screen.queryByText(/#3/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('P8-T4 — setting somebody else’s plan', () => {
+    it('offers no picker to somebody who leads nobody', async () => {
+      render({ '/goals': { body: goal() } });
+      await screen.findByRole('button', { name: 'Save goal' });
+
+      expect(screen.queryByLabelText('Whose plan')).not.toBeInTheDocument();
+    });
+
+    it('offers the people you lead, and opens on your own', async () => {
+      render({ '/goals': { body: goal() }, '/members/my-team': { body: [teammate()] } });
+
+      const picker = await screen.findByLabelText('Whose plan');
+      expect(picker).toHaveValue('');
+      expect(screen.getByRole('option', { name: 'Rina Wijaya' })).toBeInTheDocument();
+    });
+
+    it('reads their plan when you pick them', async () => {
+      const { calls } = render({
+        '/goals': { body: goal() },
+        '/members/my-team': { body: [teammate()] },
+      });
+
+      await userEvent.selectOptions(await screen.findByLabelText('Whose plan'), 'mem-rina');
+
+      await waitFor(() => {
+        expect(calls.some((c) => c.url.includes('for=mem-rina') && (c.init.method ?? 'GET') === 'GET'))
+          .toBe(true);
+      });
+      expect(screen.getByText(/becomes their goal as soon as you save/)).toBeInTheDocument();
+      // Named in the banner as well as in the option, so the reader is never guessing whose
+      // numbers are on screen.
+      expect(screen.getAllByText('Rina Wijaya').length).toBeGreaterThan(1);
+    });
+
+    it('says what saving somebody else’s does, before it is saved', async () => {
+      // There is no acceptance step (ADR-0046), so the screen owes them the consequence up front.
+      render({ '/goals': { body: goal() }, '/members/my-team': { body: [teammate()] } });
+      await userEvent.selectOptions(await screen.findByLabelText('Whose plan'), 'mem-rina');
+
+      expect(screen.getByText(/becomes their goal as soon as you save/)).toBeInTheDocument();
+      expect(screen.getByText(/they will be told/)).toBeInTheDocument();
+    });
+
+    it('AC-4: writes nothing until Save is pressed', async () => {
+      /*
+       * The prototype writes into shared state on **every input event**, so a leader who opened
+       * somebody's plan and typed a digit had already changed it. This is the divergence.
+       */
+      const { calls } = render({
+        '/goals': { body: goal() },
+        '/members/my-team': { body: [teammate()] },
+      });
+      await userEvent.selectOptions(await screen.findByLabelText('Whose plan'), 'mem-rina');
+
+      const target = screen.getByLabelText('Annual APE target (Rp)');
+      await userEvent.clear(target);
+      await userEvent.type(target, '900000000');
+
+      expect(calls.filter((c) => c.init.method === 'PUT')).toHaveLength(0);
+    });
+
+    it('sends their membership on save', async () => {
+      const { calls } = render({
+        '/goals': [{ body: goal() }, { body: goal() }, { body: goal() }],
+        '/members/my-team': { body: [teammate()] },
+      });
+      await userEvent.selectOptions(await screen.findByLabelText('Whose plan'), 'mem-rina');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(sent?.url).toContain('for=mem-rina');
+      });
+    });
+
+    it('does not tell a leader their own goal was set by somebody else', async () => {
+      // The *Set by your leader* banner is for the agent reading their own plan. On somebody
+      // else's it would be describing the reader to themselves.
+      render({
+        '/goals': { body: goal({ savedByMembershipId: 'mem-leader' }) },
+        '/members/my-team': { body: [teammate()] },
+      });
+      await userEvent.selectOptions(await screen.findByLabelText('Whose plan'), 'mem-rina');
+
+      expect(screen.queryByText('Set by your leader')).not.toBeInTheDocument();
     });
   });
 

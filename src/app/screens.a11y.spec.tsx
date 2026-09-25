@@ -422,6 +422,12 @@ describe('screens have no axe violations', () => {
     stubFetch({
       '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
       '/kpm/org-levels': { body: [] },
+      '/members/my-team': {
+        body: [{
+          membershipId: 'mem-rina', fullName: 'Rina Wijaya', initials: 'RW',
+          agentCode: 'PRU-001', role: 'agent', directCount: 0, canChangeRole: false,
+        }],
+      },
       '/goals': {
         body: {
           period,
