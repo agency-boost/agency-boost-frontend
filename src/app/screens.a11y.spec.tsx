@@ -39,6 +39,7 @@ import RegisterKpmPage from './(agent)/user-management/kpm/page';
 import KpmOverviewPage from './(tenant)/kpm/overview/page';
 import UnitDashboardPage from './(agent)/unit/dashboard/page';
 import LogActivityPage from './(agent)/activity/log/page';
+import LeadsPage from './(agent)/leads/page';
 import FindLeaderPage from './(agent)/user-management/leader/page';
 import AddAgentsPage from './(agent)/user-management/add/page';
 import PendingPage from './(agent)/user-management/pending/page';
@@ -366,6 +367,45 @@ describe('screens have no axe violations', () => {
 
     await screen.findByLabelText('Day');
     await expectClean('activity/log');
+  });
+
+  it('the leads table, with its sortable headings and a row of inline editors', async () => {
+    stubFetch({
+      '/kpm/config': {
+        body: {
+          activity: [],
+          ratios: [],
+          leadPipelines: [{
+            pipeline: 'sales',
+            statuses: [{
+              id: 's1', pipeline: 'sales', code: 'FOLLOW_UP', label: 'Follow-up', rank: 1,
+              isTerminal: false, isLateStage: false, version: 1, status: 'active',
+            }],
+          }],
+          version: 1,
+        },
+      },
+      '/kpm/org-levels': { body: [] },
+      '/leads': {
+        body: {
+          rows: [{
+            id: 'l1', ownerMembershipId: 'mem-1', type: 'sales', name: 'Pak Budi',
+            contact: { phone: null, email: null }, lawfulBasis: null, consentAt: null,
+            statusCode: 'FOLLOW_UP', thisMonth: true, remarks: 'Hobi golf',
+            nextActionDate: '2026-10-02', nextActionNote: null, outcome: null, source: null,
+            dateRegistered: '2026-09-04T03:00:00.000Z', version: 2, flags: ['overdue'],
+          }],
+          total: 1, page: 1, pageSize: 50,
+        },
+      },
+    });
+    renderInLayout(AgentLayout, <LeadsPage />, {
+      me: makeMe({ permissions: ['lead:read', 'lead:update', 'lead:mark_outcome'] }),
+    });
+
+    // The detail panel is part of the row, so it is walked open rather than left closed.
+    await userEvent.click(await screen.findByRole('button', { name: 'Details' }));
+    await expectClean('leads');
   });
 
   it('the invite screen, with a code to share and a team below it', async () => {

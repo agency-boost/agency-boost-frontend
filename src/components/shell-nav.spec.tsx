@@ -113,9 +113,20 @@ describe('the sidebar matches the prototype', () => {
     // The route is `/group-tree`, so `Admin` is the group that opens itself. One group is
     // open at a time, so reaching another is a click.
     await userEvent.click(screen.getByRole('button', { name: /^Personal tools/ }));
+    // Goal settings, not Leads management: that one shipped with P7-T2 and is a live link now.
+    const goals = screen.getByText('Goal settings').closest('a')!;
+    expect(goals).toHaveAttribute('aria-disabled');
+    expect(within(goals).getByText('Upcoming')).toBeInTheDocument();
+  });
+
+  it('agent app: Leads management is a live link, not a pill', async () => {
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+    await userEvent.click(screen.getByRole('button', { name: /^Personal tools/ }));
+
     const leads = screen.getByText('Leads management').closest('a')!;
-    expect(leads).toHaveAttribute('aria-disabled');
-    expect(within(leads).getByText('Upcoming')).toBeInTheDocument();
+    expect(leads).toHaveAttribute('href', '/leads');
+    expect(leads).not.toHaveAttribute('aria-disabled');
+    expect(within(leads).queryByText('Upcoming')).not.toBeInTheDocument();
   });
 
   it('KPM Owner: Overview alone at the top, People last, and no invented Office group', () => {

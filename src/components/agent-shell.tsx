@@ -91,7 +91,7 @@ function Chrome({
         // of the sidebar — a glance rather than a place to work (client feedback,
         // 2026-09-24).
         { label: 'Activity management', href: '/activity/log', active: on('/activity'), icon: 'activity' },
-        { label: 'Leads management', href: '/leads', icon: 'funnel', upcoming: true },
+        { label: 'Leads management', href: '/leads', active: on('/leads'), icon: 'funnel' },
         { label: 'Goal settings', href: '/goals', icon: 'target', upcoming: true },
         { label: 'Personal summary', href: '/summary', icon: 'user', upcoming: true },
       ],
