@@ -11,9 +11,9 @@ import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  createLead, deleteLead, listLeads, readLead, setLeadOutcome, setLeadStatus, updateLead,
-  flagLabel, monthLabel, LAWFUL_BASIS_LABEL,
-  type Lead, type LeadOutcome, type LeadQuery, type LeadType,
+  createLead, deleteLead, listLeads, readLead, readLeadSummary, setLeadOutcome, setLeadStatus,
+  updateLead, flagLabel, monthLabel, FLAG_LABEL, LAWFUL_BASIS_LABEL,
+  type Lead, type LeadFlag, type LeadOutcome, type LeadQuery, type LeadSummary, type LeadType,
 } from '@/lib/leads';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import type { LeadStatusRow } from '@/lib/tenant-config';
@@ -55,6 +55,7 @@ export default function LeadsPage() {
 
   const [pageData, setPageData] = useState<{ rows: Lead[]; total: number; page: number; pageSize: number } | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  const [counts, setCounts] = useState<LeadSummary | null>(null);
 
   // What is being typed, which is not yet what is being asked for: the search runs on submit
   // rather than on every keystroke, so a long name is one request and not eleven.
@@ -85,6 +86,12 @@ export default function LeadsPage() {
       });
       setPageData(result);
       setDrafts({});
+      /*
+       * **Beside the page, not after it.** The counts answer *what is waiting for me* and the page
+       * answers *what am I looking at*; asking for them in sequence would make the strip arrive a
+       * round trip after the table it sits above.
+       */
+      readLeadSummary().then(setCounts).catch(() => setCounts(null));
     } catch (err) {
       setError(toDisplayError(err));
       setPageData(null);
@@ -339,6 +346,19 @@ export default function LeadsPage() {
             {pageData.total} lead{pageData.total === 1 ? '' : 's'}
             {filters.outcome === 'open' ? ' still open' : ''}
           </p>
+
+          {counts && (
+            <Counts
+              counts={counts}
+              active={filters.attention}
+              onAttention={(flag) => {
+                const next = { ...NO_FILTERS, attention: flag };
+                setForm(next);
+                setFilters(next);
+                setPage(1);
+              }}
+            />
+          )}
 
           <DataTable caption="Your leads" columns={columns} tableClassName="min-w-[64rem]">
             {rows.map((row, index) => {
@@ -605,6 +625,66 @@ export default function LeadsPage() {
         </>
       )}
     </Page>
+  );
+}
+
+/**
+ * What is waiting for the reader, above the rows it is counted from (P7-T6).
+ *
+ * **Every number is a link into the rows behind it.** A strip that says *3 overdue* and leaves
+ * somebody to reconstruct the filter is a strip that gets read once — and the attention counts are
+ * keyed by exactly the value `?attention=` takes, so the link cannot drift from the number.
+ *
+ * **The two recruitment figures only appear for somebody who has recruitment leads.** They are the
+ * metric registry's `RECRUITMENT_PIPELINE_NOW` and `RECRUITMENT_EXPECTED_TO_CLOSE`, whose proper
+ * home is the Owner's Overview in Phase 14; here they are the recruiting half of the reader's own
+ * work, and on a purely sales agent's screen two zeroes would be noise.
+ */
+function Counts({
+  counts,
+  active,
+  onAttention,
+}: {
+  counts: LeadSummary;
+  active: '' | LeadFlag;
+  onAttention: (flag: LeadFlag) => void;
+}) {
+  const flags = (Object.keys(FLAG_LABEL) as LeadFlag[]).filter((f) => counts.attention[f] > 0);
+
+  return (
+    <Card className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 p-4">
+      <Figure label="Open" value={counts.open} />
+      <Figure label="Promised this month" value={counts.committedThisMonth} />
+      {counts.recruitmentPipelineNow > 0 && (
+        <>
+          <Figure label="Recruitment pipeline" value={counts.recruitmentPipelineNow} />
+          <Figure label="Expected to close" value={counts.recruitmentExpectedToClose} />
+        </>
+      )}
+      {flags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {flags.map((flag) => (
+            <Button
+              key={flag}
+              variant={active === flag ? 'secondary' : 'inline'}
+              aria-pressed={active === flag}
+              onClick={() => onAttention(flag)}
+            >
+              {counts.attention[flag]} {FLAG_LABEL[flag].toLowerCase()}
+            </Button>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Figure({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div className="font-display text-xl font-bold text-navy">{value}</div>
+      <div className="text-sm text-muted">{label}</div>
+    </div>
   );
 }
 

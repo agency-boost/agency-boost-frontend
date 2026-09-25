@@ -386,6 +386,12 @@ describe('screens have no axe violations', () => {
         },
       },
       '/kpm/org-levels': { body: [] },
+      '/leads/summary': {
+        body: {
+          open: 1, committedThisMonth: 1, recruitmentPipelineNow: 0, recruitmentExpectedToClose: 0,
+          attention: { overdue: 1, 'no-next-action': 0, 'no-remarks': 0 },
+        },
+      },
       '/leads': {
         body: {
           rows: [{

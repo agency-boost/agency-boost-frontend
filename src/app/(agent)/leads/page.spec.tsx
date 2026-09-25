@@ -61,9 +61,17 @@ const page = (rows: unknown[], over: Record<string, unknown> = {}) => ({
   rows, total: rows.length, page: 1, pageSize: 50, ...over,
 });
 
+/** The counts strip. Keyed longer than `/leads`, so the stub matcher prefers it. */
+const summary = (over: Record<string, unknown> = {}) => ({
+  open: 1, committedThisMonth: 0, recruitmentPipelineNow: 0, recruitmentExpectedToClose: 0,
+  attention: { overdue: 0, 'no-next-action': 0, 'no-remarks': 0 },
+  ...over,
+});
+
 const base = {
   '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: PIPELINES, version: 1 } },
   '/kpm/org-levels': { body: [] },
+  '/leads/summary': { body: summary() },
 };
 
 const render = (routes: Record<string, unknown>, me = AGENT) => {
@@ -739,6 +747,87 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       await waitFor(() => {
         expect(screen.getByLabelText('Remarks, row 1')).toHaveValue('What the leader saved.');
       });
+    });
+  });
+
+  describe('P7-T6 — the counts above the rows', () => {
+    it('shows what is waiting, beside the page rather than after it', async () => {
+      render({
+        '/leads': { body: page([lead()]) },
+        '/leads/summary': { body: summary({ open: 12, committedThisMonth: 3 }) },
+      });
+
+      expect(await screen.findByText('12')).toBeInTheDocument();
+      expect(screen.getByText('Open')).toBeInTheDocument();
+      expect(screen.getByText('Promised this month')).toBeInTheDocument();
+    });
+
+    it('AC-1: shows the two recruitment figures to somebody who recruits', async () => {
+      render({
+        '/leads': { body: page([lead({ type: 'recruitment', statusCode: null })]) },
+        '/leads/summary': {
+          body: summary({ recruitmentPipelineNow: 4, recruitmentExpectedToClose: 2 }),
+        },
+      });
+
+      expect(await screen.findByText('Recruitment pipeline')).toBeInTheDocument();
+      expect(screen.getByText('Expected to close')).toBeInTheDocument();
+    });
+
+    it('AC-1: and shows neither to somebody who only sells', async () => {
+      // Two zeroes on a purely sales agent's screen is noise, not information.
+      render({ '/leads': { body: page([lead()]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      expect(screen.queryByText('Recruitment pipeline')).not.toBeInTheDocument();
+    });
+
+    it('links each attention count to the rows behind it', async () => {
+      const { calls } = render({
+        '/leads': { body: page([lead()]) },
+        '/leads/summary': {
+          body: summary({ attention: { overdue: 3, 'no-next-action': 0, 'no-remarks': 2 } }),
+        },
+      });
+
+      const overdue = await screen.findByRole('button', { name: '3 overdue' });
+      expect(screen.queryByRole('button', { name: /no next action/ })).not.toBeInTheDocument();
+
+      await userEvent.click(overdue);
+
+      await waitFor(() => expect(lastList(calls).get('attention')).toBe('overdue'));
+      expect(screen.getByRole('button', { name: '3 overdue' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('reloads the counts after a write, because a write is what changes them', async () => {
+      const { calls } = render({
+        '/leads': { body: page([lead()]) },
+        '/leads/l1': { body: lead({ remarks: 'Done.' }) },
+      });
+
+      const before = calls.filter((c) => c.url.includes('/leads/summary')).length;
+      const remarks = await screen.findByLabelText('Remarks, row 1');
+      await userEvent.clear(remarks);
+      await userEvent.type(remarks, 'Done.');
+      await userEvent.tab();
+
+      // The write replaces the row in place; the counts follow on the next load of the list.
+      await waitFor(() => expect(calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+      expect(calls.filter((c) => c.url.includes('/leads/summary')).length).toBeGreaterThanOrEqual(before);
+    });
+
+    it('renders the table even when the counts cannot be read', async () => {
+      // A strip that fails is not worth an error banner over the work the screen is for.
+      render({
+        '/leads': { body: page([lead()]) },
+        '/leads/summary': {
+          status: 500,
+          body: { error: { code: 'INTERNAL_ERROR', message: 'Nope.', requestId: 'r' } },
+        },
+      });
+
+      expect(await screen.findByDisplayValue('Pak Budi')).toBeInTheDocument();
+      expect(screen.queryByText('Open')).not.toBeInTheDocument();
     });
   });
 

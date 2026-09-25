@@ -45,6 +45,22 @@ export interface LeadPage {
   pageSize: number;
 }
 
+/**
+ * The rollups behind the list (P7-T6), scoped exactly as the list is.
+ *
+ * Every number is something already defined: two are the metric registry's, the rest are the
+ * commitment and the attention flags this module defines. Nothing here is a figure invented for
+ * this screen.
+ */
+export interface LeadSummary {
+  open: number;
+  committedThisMonth: number;
+  recruitmentPipelineNow: number;
+  recruitmentExpectedToClose: number;
+  /** Keyed by the value `?attention=` takes, so a count links straight to its rows. */
+  attention: Record<LeadFlag, number>;
+}
+
 export interface LeadQuery {
   search?: string;
   type?: LeadType | 'unassigned';
@@ -114,6 +130,9 @@ const qs = (query: LeadQuery) => {
 };
 
 export const listLeads = (query: LeadQuery = {}) => api<LeadPage>('/leads' + qs(query));
+
+/** Counts and never rows — the one lead route an Owner and an Admin may call (§3.7). */
+export const readLeadSummary = () => api<LeadSummary>('/leads/summary');
 
 export const readLead = (id: string) => api<Lead>(`/leads/${id}`);
 
