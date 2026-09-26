@@ -95,7 +95,7 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
     const status = screen.getByLabelText('Status, row 1');
     expect(status).toHaveValue('FOLLOW_UP');
     expect(within(status).getByRole('option', { name: 'Follow-up' })).toBeInTheDocument();
-    expect(screen.getByText('4 Sept 2026')).toBeInTheDocument();
+    expect(screen.getByText('Sep 4, 2026')).toBeInTheDocument();
   });
 
   describe('AC-1 — search and filters, which the prototype’s busiest screen has neither of', () => {
@@ -413,14 +413,29 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
     it('says what changing the type will cost before it does it', async () => {
       // The server clears the stage and the commitment, because the two ladders share no
       // stage. The prototype does the same and does it silently — that part is not copied.
-      const confirm = vi.fn(() => false);
-      vi.stubGlobal('confirm', confirm);
+      // It asks in the product's own dialog, not `window.confirm`.
       const { calls } = render({ '/leads': { body: page([lead({ thisMonth: true })]) } });
 
       await userEvent.selectOptions(await screen.findByLabelText('Type, row 1'), 'recruitment');
 
-      expect(confirm).toHaveBeenCalledWith(expect.stringContaining('clears this lead’s stage'));
+      const dialog = await screen.findByRole('dialog');
+      expect(dialog).toHaveTextContent('clears this lead’s stage');
+      expect(screen.getByRole('button', { name: 'Change the type' })).toBeInTheDocument();
+
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
       expect(calls.filter((c) => c.init.method === 'PATCH')).toHaveLength(0);
+    });
+
+    it('changes the type once the question is answered', async () => {
+      const { calls } = render({ '/leads': { body: page([lead({ thisMonth: true })]) } });
+
+      await userEvent.selectOptions(await screen.findByLabelText('Type, row 1'), 'recruitment');
+      await userEvent.click(await screen.findByRole('button', { name: 'Change the type' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PATCH').at(-1);
+        expect(JSON.parse(String(sent?.init.body))).toMatchObject({ type: 'recruitment' });
+      });
     });
 
     it('shows a retired stage as the code the lead still holds', async () => {
@@ -885,17 +900,30 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
     });
 
     it('does not delete when the question is answered no', async () => {
-      vi.stubGlobal('confirm', vi.fn(() => false));
       const { calls } = render({ '/leads': { body: page([lead()]) } });
       await screen.findByDisplayValue('Pak Budi');
 
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      const dialog = await screen.findByRole('dialog');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(calls.filter((c) => c.init.method === 'DELETE')).toHaveLength(0);
     });
 
+    it('names the lead in the question, and names what the button will do', async () => {
+      // `window.confirm` says OK and Cancel whatever was asked. This says *Delete lead*.
+      render({ '/leads': { body: page([lead()]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+      expect(await screen.findByRole('dialog')).toHaveTextContent('Delete Pak Budi?');
+      expect(screen.getByRole('button', { name: 'Delete lead' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'OK' })).not.toBeInTheDocument();
+    });
+
     it('shows a refused delete on the row', async () => {
-      vi.stubGlobal('confirm', vi.fn(() => true));
       render({
         '/leads': { body: page([lead()]) },
         '/leads/l1': {
@@ -906,12 +934,12 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       await screen.findByDisplayValue('Pak Budi');
 
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Delete lead' }));
 
       expect(await screen.findByText('Lead not found.')).toBeInTheDocument();
     });
 
     it('asks before deleting, and deletes through the route that only hides it', async () => {
-      vi.stubGlobal('confirm', vi.fn(() => true));
       const { calls } = render({
         '/leads': { body: page([lead()]) },
         '/leads/l1': { body: { id: 'l1', deletedAt: '2026-09-25T02:00:00.000Z' } },
@@ -919,10 +947,124 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       await screen.findByDisplayValue('Pak Budi');
 
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Delete lead' }));
 
       await waitFor(() => {
         expect(calls.some((c) => c.url.includes('/leads/l1') && c.init.method === 'DELETE')).toBe(true);
       });
+    });
+  });
+  describe('the prototype’s own shape (third UI pass)', () => {
+    it('reads as a list, not a form — every cell is text until you touch it', async () => {
+      render({ '/leads': { body: page([lead()]) } });
+
+      const name = await screen.findByDisplayValue('Pak Budi');
+      expect(name.className).toContain('border-transparent');
+      expect(name.className).toContain('hover:border-hairline');
+      expect(name.className).not.toContain('h-10');
+    });
+
+    it('packs the table to the prototype’s density, with fixed columns', async () => {
+      render({ '/leads': { body: page([lead()]) } });
+
+      await screen.findByDisplayValue('Pak Budi');
+      const table = document.querySelector('table')!;
+      expect(table.className).toContain('table-fixed');
+      expect(table.className).toContain('[&_td]:py-[3px]');
+      // Nine widths, one per column.
+      expect(table.querySelectorAll('colgroup col')).toHaveLength(9);
+    });
+
+    it('tints a stage by where it sits on its own ladder', async () => {
+      render({
+        '/leads': {
+          body: page([
+            lead({ id: 'l1', name: 'First rung', statusCode: 'NOT_YET_APPROACHED' }),
+            lead({ id: 'l2', name: 'Last rung', statusCode: 'PAID_AND_ISSUED' }),
+          ]),
+        },
+      });
+
+      await screen.findByDisplayValue('First rung');
+      // Red where nothing has happened yet, green where the ladder ends.
+      expect(screen.getByLabelText('Status, row 1').className).toContain('bg-alert');
+      expect(screen.getByLabelText('Status, row 2').className).toContain('bg-success');
+      // And the words stay navy: no amber clears 4.5:1 at this size (F-71).
+      expect(screen.getByLabelText('Status, row 1').className).toContain('text-navy');
+    });
+
+    it('tints the two ladders differently, and keeps the word readable', async () => {
+      render({
+        '/leads': {
+          body: page([
+            lead({ type: 'sales' }),
+            lead({ id: 'l2', name: 'Calon', type: 'recruitment' }),
+          ]),
+        },
+      });
+
+      const sales = await screen.findByLabelText('Type, row 1');
+      const recruitment = screen.getByLabelText('Type, row 2');
+      expect(sales.className).toContain('bg-amber/[0.13]');
+      expect(recruitment.className).toContain('bg-navy-soft/[0.09]');
+      // The text is navy in both: no amber reaches 4.5:1 at 12.5px, and it read as grey on white.
+      expect(sales.className).toContain('text-navy');
+      expect(sales.className).not.toContain('text-amber');
+      // And colour is never the only cue.
+      expect(sales).toHaveValue('sales');
+    });
+
+    it('writes out what ticking This month promises', async () => {
+      // It was `sr-only`, so a sighted reader had a bare checkbox under a column headed
+      // *This month* and no way to know whether it promised a close or a recruitment.
+      render({ '/leads': { body: page([lead({ type: 'sales' }), lead({ id: 'l2', name: 'Calon', type: 'recruitment' })]) } });
+
+      await screen.findByDisplayValue('Pak Budi');
+      expect(screen.getByText('Close this month')).toBeVisible();
+      expect(screen.getByText('Recruit this month')).toBeVisible();
+    });
+
+    it('gives the row three glyph buttons that still say what they do', async () => {
+      render({ '/leads': { body: page([lead()]) } });
+
+      await screen.findByDisplayValue('Pak Budi');
+      for (const name of ['Mark successful', 'Mark not successful', 'Delete']) {
+        const button = screen.getByRole('button', { name });
+        expect(button.className).toContain('h-7');
+        expect(button.className).toContain('w-7');
+      }
+      // Success hovers green, failure red — the meaning is in the hover, not the resting state.
+      expect(screen.getByRole('button', { name: 'Mark successful' }).className)
+        .toContain('hover:text-success');
+      expect(screen.getByRole('button', { name: 'Mark not successful' }).className)
+        .toContain('hover:text-alert');
+    });
+
+    it('puts the count and Add lead in one row directly above the table', async () => {
+      render({ '/leads': { body: page([lead()]) } });
+
+      await screen.findByDisplayValue('Pak Budi');
+      const count = screen.getByText(/active lead/);
+      const add = screen.getByRole('button', { name: '+ Add lead' });
+      // Same toolbar row, as `Overall.html:2791-2794` has it.
+      expect(count.closest('div')!.parentElement).toContainElement(add);
+    });
+
+    it('keeps every count the strip had, as tiles', async () => {
+      render({ '/leads': { body: page([lead()]) } });
+
+      await screen.findByDisplayValue('Pak Budi');
+      for (const label of ['Open', 'Promised this month']) {
+        expect(screen.getByText(label).closest('[data-variant]')).toBeInTheDocument();
+      }
+    });
+
+    it('grows the remarks cell instead of boxing it at two rows', async () => {
+      render({ '/leads': { body: page([lead()]) } });
+
+      const remarks = await screen.findByLabelText('Remarks, row 1');
+      expect(remarks).toHaveAttribute('rows', '1');
+      expect(remarks.className).toContain('resize-none');
     });
   });
 });

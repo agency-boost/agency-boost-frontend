@@ -38,6 +38,8 @@ import AdminsPage from './(tenant)/people/admins/page';
 import RegisterKpmPage from './(agent)/user-management/kpm/page';
 import KpmOverviewPage from './(tenant)/kpm/overview/page';
 import UnitDashboardPage from './(agent)/unit/dashboard/page';
+import ActivityDashboardPage from './(agent)/activity/dashboard/page';
+import ActivityRatioPage from './(agent)/activity/ratio/page';
 import LogActivityPage from './(agent)/activity/log/page';
 import LeadsPage from './(agent)/leads/page';
 import GoalSettingsPage from './(agent)/goals/page';
@@ -322,6 +324,20 @@ describe('screens have no axe violations', () => {
     await expectClean('unit/dashboard');
   });
 
+  it('Activity Dashboard, a signpost carrying the section’s tab strip', async () => {
+    // A placeholder with chrome: the strip is how a reader learns the other two views exist, and it
+    // is the one thing on the page — so a `nav` with an `aria-current` link is all axe has to read.
+    renderInLayout(AgentLayout, <ActivityDashboardPage />, {});
+    await screen.findByText('Arrives in phase 10');
+    await expectClean('activity/dashboard');
+  });
+
+  it('Activity Ratios, the same', async () => {
+    renderInLayout(AgentLayout, <ActivityRatioPage />, {});
+    await screen.findByText('Arrives in phase 10');
+    await expectClean('activity/ratio');
+  });
+
   it('Log activity, populated with the office’s own taxonomy (P6-T2)', async () => {
     // It was a `ComingInPhase` sign until P6-T2. Every count is a labelled number input, and
     // the sections are the office's categories — so the axe run is over real form controls
@@ -366,7 +382,7 @@ describe('screens have no axe violations', () => {
     });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: makeMe() });
 
-    await screen.findByLabelText('Day');
+    await screen.findByLabelText('Date');
     await expectClean('activity/log');
   });
 

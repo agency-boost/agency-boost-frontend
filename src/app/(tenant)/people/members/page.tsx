@@ -739,7 +739,7 @@ export default function MembersPage() {
 
 function Tag({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-pill bg-amber/20 px-2 py-0.5 text-2xs font-bold uppercase tracking-wide text-amber-dark">
+    <span className="rounded-pill bg-amber/20 px-2 py-0.5 text-2xs font-bold uppercase tracking-wide text-amber-deep">
       {children}
     </span>
   );

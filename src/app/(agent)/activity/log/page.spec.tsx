@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -83,8 +83,8 @@ describe('Log activity (P6-T2)', () => {
 
     expect(await screen.findByRole('heading', { name: 'Leads' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Selling' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Submission polis')).toHaveValue(1);
-    expect(screen.getByLabelText('Menghubungi prospek yang sudah ada')).toHaveValue(2);
+    expect(screen.getByLabelText('Count for Submission polis')).toHaveValue(1);
+    expect(screen.getByLabelText('Count for Menghubungi prospek yang sudah ada')).toHaveValue(2);
   });
 
   it('takes the day from the server, never from the browser’s clock', async () => {
@@ -93,17 +93,17 @@ describe('Log activity (P6-T2)', () => {
     stubFetch({ ...base, '/activity/log': { body: day({ localDate: '2026-03-11' }) } });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
-    expect(await screen.findByLabelText('Day')).toHaveValue('2026-03-11');
+    expect(await screen.findByLabelText('Date')).toHaveValue('2026-03-11');
   });
 
   it('sends the whole day, keyed by code', async () => {
     const { calls } = stubFetch({ ...base, '/activity/log': { body: day() } });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
-    const field = await screen.findByLabelText('Submission polis');
+    const field = await screen.findByLabelText('Count for Submission polis');
     await userEvent.clear(field);
     await userEvent.type(field, '4');
-    await userEvent.click(screen.getByRole('button', { name: 'Save the day' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save activity' }));
 
     await waitFor(() => {
       const sent = calls.filter((c) => c.init?.method === 'PUT').at(-1);
@@ -120,7 +120,7 @@ describe('Log activity (P6-T2)', () => {
     const { calls } = stubFetch({ ...base, '/activity/log': { body: day() } });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Save the day' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Save activity' }));
 
     await waitFor(() => {
       const sent = calls.filter((c) => c.init?.method === 'PUT').at(-1);
@@ -146,7 +146,7 @@ describe('Log activity (P6-T2)', () => {
 
       expect(await screen.findByText('Closed for editing')).toBeInTheDocument();
       expect(screen.getByLabelText('Why is this being corrected?')).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Save the day' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Save activity' })).toBeNull();
     });
 
     it('keeps the correction button disabled until there is a reason', async () => {
@@ -232,5 +232,110 @@ describe('Log activity (P6-T2)', () => {
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
     expect(await screen.findByText(/has not happened yet/)).toBeInTheDocument();
+  });
+  it('reaches the other two views of the same data (L-32)', async () => {
+    stubFetch({ ...base, '/activity/log': { body: day() } });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+    const strip = await screen.findByRole('navigation', { name: 'Activity management' });
+    expect(strip).toContainElement(screen.getByRole('link', { name: 'Activity Dashboard' }));
+    expect(strip).toContainElement(screen.getByRole('link', { name: 'Activity Ratios' }));
+    // The one you are on says so, rather than only looking different.
+    expect(screen.getByRole('link', { name: 'Log Activity' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('counts each category and totals the day, live as you step', async () => {
+    stubFetch({ ...base, '/activity/log': { body: day() } });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+    // Leads: 0 + 2. Selling: 1. Total: 3.
+    await screen.findByRole('heading', { name: 'Leads' });
+    expect(screen.getByText('Total touches today').parentElement).toHaveTextContent('3');
+
+    await userEvent.click(screen.getByLabelText('Increase Submission polis'));
+    expect(screen.getByText('Total touches today').parentElement).toHaveTextContent('4');
+    expect(screen.getByText('Selling', { selector: 'span' }).parentElement).toHaveTextContent('2');
+  });
+
+  it('counts with buttons, not by typing a number', async () => {
+    // The control an agent taps a dozen times a day on a phone (`Overall.html:129-145`).
+    stubFetch({ ...base, '/activity/log': { body: day() } });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+    await screen.findByRole('heading', { name: 'Leads' });
+    expect(screen.getByLabelText('Increase Submission polis')).toBeInTheDocument();
+    expect(screen.getByLabelText('Decrease Submission polis')).toBeInTheDocument();
+  });
+
+  it('numbers each activity and counts the items in each card', async () => {
+    stubFetch({ ...base, '/activity/log': { body: day() } });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+    await screen.findByRole('heading', { name: 'Leads' });
+    expect(screen.getByText('2 items')).toBeInTheDocument();
+    expect(screen.getByText('1 item')).toBeInTheDocument();
+  });
+
+  it('shows an activity’s own description under its name', async () => {
+    const described = TAXONOMY.map((c) => ({
+      ...c,
+      types: c.types.map((ty) => (
+        ty.code === 'SELL_SUBMISSION'
+          ? { ...ty, description: 'Berkas lengkap masuk ke sistem.' }
+          : ty
+      )),
+    }));
+    stubFetch({
+      ...base,
+      '/kpm/config': { body: { activity: described, ratios: [], leadPipelines: [], version: 1 } },
+      '/activity/log': { body: day() },
+    });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+    expect(await screen.findByText('Berkas lengkap masuk ke sistem.')).toBeInTheDocument();
+  });
+
+  it('says whether the day is saved, in one live region', async () => {
+    stubFetch({ ...base, '/activity/log': { body: day() } });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+    await screen.findByRole('heading', { name: 'Leads' });
+    expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save activity' }));
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved · 3 touches'));
+  });
+
+  it('asks in the product’s own dialog before discarding a day’s typing', async () => {
+    // It used to ask with `window.confirm`, whose buttons say OK and Cancel whatever the
+    // question was, and which on a phone arrives as a system sheet over the app (I-95).
+    stubFetch({ ...base, '/activity/log': { body: day() } });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+    await userEvent.click(await screen.findByLabelText('Increase Submission polis'));
+    await userEvent.clear(screen.getByLabelText('Date'));
+    await userEvent.type(screen.getByLabelText('Date'), '2026-03-10');
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveTextContent('You have unsaved counts');
+    expect(screen.getByRole('button', { name: 'Discard counts' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'OK' })).not.toBeInTheDocument();
+  });
+
+  it('keeps what was typed when the discard is refused', async () => {
+    stubFetch({ ...base, '/activity/log': { body: day() } });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+    await userEvent.click(await screen.findByLabelText('Increase Submission polis'));
+    expect(screen.getByLabelText('Count for Submission polis')).toHaveValue(2);
+
+    await userEvent.clear(screen.getByLabelText('Date'));
+    await userEvent.type(screen.getByLabelText('Date'), '2026-03-10');
+    // Scoped to the dialog: the page has its own Cancel, which a modal makes unreachable.
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Count for Submission polis')).toHaveValue(2);
   });
 });

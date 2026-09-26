@@ -11,7 +11,11 @@ const config: Config = {
     extend: {
       colors: {
         navy: { DEFAULT: 'var(--color-navy)', soft: 'var(--color-navy-soft)' },
-        amber: { DEFAULT: 'var(--color-amber)', dark: 'var(--color-amber-dark)' },
+        amber: {
+          DEFAULT: 'var(--color-amber)',
+          dark: 'var(--color-amber-dark)',
+          deep: 'var(--color-amber-deep)',
+        },
         base: 'var(--color-base)',
         card: 'var(--color-card)',
         muted: 'var(--color-muted)',

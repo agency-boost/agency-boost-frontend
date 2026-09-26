@@ -97,8 +97,8 @@ describe('Goal settings (P8-T3)', () => {
   it('renders five numbered cards and the commitment', async () => {
     render({ '/goals': { body: goal() } });
 
-    expect(await screen.findByRole('heading', { name: /Annual APE target/ })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /Current progress/ })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /APE target this year/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Your current progress/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /From APE to policy count/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Conversion assumptions/ })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Monthly activity target/ })).toBeInTheDocument();
@@ -149,7 +149,7 @@ describe('Goal settings (P8-T3)', () => {
         ],
       });
 
-      const caseSize = await screen.findByLabelText('Average case size (Rp)');
+      const caseSize = await screen.findByLabelText('Average case size (APE per policy)');
       await userEvent.clear(caseSize);
       await userEvent.type(caseSize, '9000000');
       await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
@@ -167,7 +167,7 @@ describe('Goal settings (P8-T3)', () => {
     it('shows 500,000,000 where the record holds 50,000,000,000', async () => {
       render({ '/goals': { body: goal() } });
 
-      expect(await screen.findByLabelText('Annual APE target (Rp)')).toHaveValue(500_000_000);
+      expect(await screen.findByLabelText('Annual APE target')).toHaveValue(500_000_000);
       // Indonesian grouping, which the prototype's `toLocaleString('en-US')` gets wrong for its
       // own audience. It appears in the remaining-needed figure and in the commitment sentence.
       expect(screen.getAllByText('Rp 500.000.000').length).toBeGreaterThan(0);
@@ -178,7 +178,7 @@ describe('Goal settings (P8-T3)', () => {
         '/goals': [{ body: goal() }, { body: goal() }],
       });
 
-      const target = await screen.findByLabelText('Annual APE target (Rp)');
+      const target = await screen.findByLabelText('Annual APE target');
       await userEvent.clear(target);
       await userEvent.type(target, '300000000');
       await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
@@ -199,16 +199,16 @@ describe('Goal settings (P8-T3)', () => {
        */
       const { calls } = render({ '/goals': [{ body: goal() }, { body: goal() }] });
 
-      const type = async (label: string, value: string) => {
+      const type = async (label: string | RegExp, value: string) => {
         const field = await screen.findByLabelText(label);
         await userEvent.clear(field);
         await userEvent.type(field, value);
       };
 
-      await type('Months left', '2.5');
-      await type('APE produced so far (Rp)', '120000000');
-      await type('Contacted leads that become an appointment (%)', '25');
-      await type('Appointments that become a closing (%)', '40');
+      await type(/Months left this year/, '2.5');
+      await type('APE already produced this year', '120000000');
+      await type('Leads to Appointment', '25');
+      await type('Closing rate', '40');
       await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
 
       await waitFor(() => {
@@ -227,9 +227,9 @@ describe('Goal settings (P8-T3)', () => {
     it('offers the savings pair when that is how the agent thinks', async () => {
       render({ '/goals': { body: goal({ mode: 'from_savings' }) } });
 
-      expect(await screen.findByLabelText('Annual savings target (Rp)')).toBeInTheDocument();
-      expect(screen.getByLabelText('Commission rate (%)')).toBeInTheDocument();
-      expect(screen.queryByLabelText('Annual APE target (Rp)')).not.toBeInTheDocument();
+      expect(await screen.findByLabelText('Annual savings target')).toBeInTheDocument();
+      expect(screen.getByLabelText('Commission rate')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Annual APE target')).not.toBeInTheDocument();
     });
 
     it('takes a decimal rate, which the prototype cannot (I-108)', async () => {
@@ -237,7 +237,7 @@ describe('Goal settings (P8-T3)', () => {
         '/goals': [{ body: goal({ mode: 'from_savings' }) }, { body: goal({ mode: 'from_savings' }) }],
       });
 
-      const rate = await screen.findByLabelText('Commission rate (%)');
+      const rate = await screen.findByLabelText('Commission rate');
       await userEvent.clear(rate);
       await userEvent.type(rate, '12.5');
       await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
@@ -290,7 +290,7 @@ describe('Goal settings (P8-T3)', () => {
           },
         ],
       });
-      await screen.findByLabelText('Average case size (Rp)');
+      await screen.findByLabelText('Average case size (APE per policy)');
 
       await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
 
@@ -322,7 +322,7 @@ describe('Goal settings (P8-T3)', () => {
       // The prototype's header reads "as of Aug 28, 2026" and JS never updates it.
       render({ '/goals': { body: goal({ savedAt: '2026-09-13T04:00:00.000Z' }) } });
 
-      expect(await screen.findByText(/13 Sept 2026/)).toBeInTheDocument();
+      expect(await screen.findByText(/Sep 13, 2026/)).toBeInTheDocument();
     });
 
     it('keeps the disclaimer the retired section files carried (L-29)', async () => {
@@ -431,7 +431,7 @@ describe('Goal settings (P8-T3)', () => {
       const { calls } = render({
         '/goals': [{ body: goal({ monthsLeft: 3.1, monthsLeftIsOverride: false }) }, { body: goal() }],
       });
-      await screen.findByLabelText('Months left');
+      await screen.findByLabelText(/Months left this year/);
 
       await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
 
@@ -446,7 +446,7 @@ describe('Goal settings (P8-T3)', () => {
 
       // Empty, with the office's figure as the placeholder: prefilling it meant clearing the box
       // refilled it, so typing over the number appended to it.
-      const field = await screen.findByLabelText('Months left');
+      const field = await screen.findByLabelText(/Months left this year/);
       expect(field).toHaveValue(null);
       expect(field).toHaveAttribute('placeholder', '3.1');
       expect(screen.getByText(/office’s calendar says 3.1/)).toBeInTheDocument();
@@ -457,7 +457,7 @@ describe('Goal settings (P8-T3)', () => {
         '/goals': [{ body: goal({ monthsLeft: 3.1, monthsLeftIsOverride: false }) }, { body: goal() }],
       });
 
-      await userEvent.type(await screen.findByLabelText('Months left'), '2');
+      await userEvent.type(await screen.findByLabelText(/Months left this year/), '2');
       await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
 
       await waitFor(() => {
@@ -478,7 +478,7 @@ describe('Goal settings (P8-T3)', () => {
         '/goals': [{ body: goal({ monthsLeft: 2, monthsLeftIsOverride: true }) }, { body: goal() }],
       });
 
-      await userEvent.clear(await screen.findByLabelText('Months left'));
+      await userEvent.clear(await screen.findByLabelText(/Months left this year/));
       await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
 
       await waitFor(() => {
@@ -542,7 +542,7 @@ describe('Goal settings (P8-T3)', () => {
       });
       await userEvent.selectOptions(await screen.findByLabelText('Whose plan'), 'mem-rina');
 
-      const target = screen.getByLabelText('Annual APE target (Rp)');
+      const target = screen.getByLabelText('Annual APE target');
       await userEvent.clear(target);
       await userEvent.type(target, '900000000');
 
@@ -590,6 +590,136 @@ describe('Goal settings (P8-T3)', () => {
       await screen.findByRole('heading', { name: /My commitment/ });
 
       expect(screen.queryByText('Set by your leader')).not.toBeInTheDocument();
+    });
+  });
+  describe('the prototype’s own shape (third UI pass)', () => {
+    it('offers both entry modes as visible segments, not behind a dropdown', async () => {
+      render({ '/goals': { body: goal() } });
+
+      await screen.findByRole('tab', { name: 'Set APE target directly' });
+      expect(screen.getByRole('tab', { name: 'Calculate from savings target' })).toBeInTheDocument();
+      // A dropdown hid the second mode from an agent who thinks in take-home pay.
+      expect(screen.queryByRole('combobox', { name: /how you want/i })).not.toBeInTheDocument();
+    });
+
+    it('swaps the panel when the other mode is chosen', async () => {
+      render({ '/goals': { body: goal() } });
+
+      await userEvent.click(await screen.findByRole('tab', { name: 'Calculate from savings target' }));
+      expect(screen.getByLabelText('Annual savings target')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Annual APE target')).not.toBeInTheDocument();
+    });
+
+    it('puts the unit inside the box rather than in the question', async () => {
+      render({ '/goals': { body: goal() } });
+
+      await screen.findByLabelText('Annual APE target');
+      // Visible, and out of the accessible name — the label is the question.
+      const rp = screen.getAllByText('Rp').find((el) => el.getAttribute('aria-hidden') === 'true');
+      expect(rp).toBeDefined();
+      expect(screen.getByText('months')).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('says the months figure is automatic, and stops saying so once it is overridden', async () => {
+      render({ '/goals': { body: goal() } });
+
+      expect(await screen.findByText('auto')).toBeInTheDocument();
+      await userEvent.type(await screen.findByLabelText(/Months left this year/), '3');
+      expect(screen.queryByText('auto')).not.toBeInTheDocument();
+    });
+
+    it('marks this month’s target as the number the card is for', async () => {
+      render({ '/goals': { body: goal() } });
+
+      await screen.findByText("This month's APE target");
+      const tile = screen.getByText("This month's APE target").closest('[data-variant]')!;
+      expect(tile).toHaveAttribute('data-variant', 'insight');
+      // The two figures beside it merely restate what was typed.
+      expect(screen.getByText('Already produced').closest('[data-variant]'))
+        .toHaveAttribute('data-variant', 'plain');
+      expect(document.querySelectorAll('[data-variant]').length).toBeGreaterThan(2);
+    });
+
+    it('draws the cascade as a cascade — codes, hero and the rate between steps', async () => {
+      render({ '/goals': { body: goal() } });
+
+      await screen.findByText('Leads contacted');
+      // Each column names the activity code it counts against (invariant §4, never a position).
+      expect(screen.getByText('LEADS_CONTACTED')).toBeInTheDocument();
+      expect(screen.getByText('SELL_PRESENTATION')).toBeInTheDocument();
+      expect(screen.getByText('SELL_SUBMISSION')).toBeInTheDocument();
+      // The closings column is the hero.
+      expect(document.querySelector('[data-hero="true"]')).toHaveTextContent('Closings');
+      // And the arrow's percentage is spelled out, because the glyph is decorative.
+      expect(screen.getByText('30% of leads contacted become appointments')).toBeInTheDocument();
+    });
+
+    it('inverts the commitment, and paints its figures amber', async () => {
+      render({ '/goals': { body: goal() } });
+
+      const heading = await screen.findByRole('heading', { name: /My commitment/ });
+      expect(heading.parentElement!.className).toContain('bg-navy');
+      // Every figure in the sentence is emphasised in amber — on navy, which is 6.3:1.
+      const figure = screen.getByText('67 leads');
+      expect(figure.tagName).toBe('STRONG');
+      expect(figure.className).toContain('text-amber');
+    });
+
+    it('puts the save status beside the button, and has only one live region', async () => {
+      render({ '/goals': { body: goal() } });
+
+      // Wait for the plan: the loading skeleton is itself a live region, and the two never coexist —
+      // which is why a screen gets exactly one `role="status"` and this query would otherwise read it.
+      await screen.findByRole('heading', { name: /APE target this year/ });
+
+      // A stored plan says so, with a green dot.
+      const status = screen.getByRole('status');
+      expect(status).toHaveTextContent('Saved');
+      expect(status.className).toContain('text-success');
+
+      // Same header as the Save button, rather than 500px below it.
+      const header = screen.getByRole('button', { name: 'Save goal' }).parentElement!;
+      expect(header).toContainElement(status);
+    });
+
+    it('stops claiming to be saved the moment a number is changed', async () => {
+      // The dot stayed green while the agent typed a new target, so the screen said *Saved* about
+      // numbers nobody had saved. `refreshSaveStatus()` in the prototype reports from a dirty flag.
+      render({ '/goals': { body: goal() } });
+      await screen.findByRole('heading', { name: /APE target this year/ });
+      expect(screen.getByRole('status')).toHaveTextContent('Saved');
+
+      await userEvent.type(screen.getByLabelText('Annual APE target'), '1');
+      expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
+      expect(screen.getByRole('status').className).not.toContain('text-success');
+    });
+
+    it('holds every card on the screen to one width and one padding', async () => {
+      // The picker and the two banners were outside the measure at `p-6`, so the first cards a leader
+      // saw were wider and more thickly padded than the plan underneath.
+      render({ '/goals': { body: goal() }, '/members/my-team': { body: [teammate()] } });
+
+      const picker = (await screen.findByLabelText('Whose plan')).closest('.rounded-lg')!;
+      const step = screen.getByRole('heading', { name: /APE target this year/ }).closest('.rounded-lg')!;
+      // One padding utility each, and the same one — not `p-6` plus an override whose winner depends
+      // on the order Tailwind emits them in.
+      expect(picker.className).toContain('px-5');
+      expect(picker.className).not.toContain('p-6');
+      expect(step.className).toContain('px-5');
+      expect(step.className).not.toContain('p-6');
+      // Same parent, so the same measure applies to both.
+      expect(picker.parentElement).toBe(step.parentElement);
+    });
+
+    it('holds the plan to a readable measure', async () => {
+      render({ '/goals': { body: goal() } });
+
+      await screen.findByText('Leads contacted');
+      // 820px, as `.content` has it — five cards across a 1,600px window put a label a hand's
+      // width from its input.
+      expect(document.querySelector('[class*="max-w-"]')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /APE target this year/ }).closest('.mx-auto'))
+        .toBeInTheDocument();
     });
   });
 });

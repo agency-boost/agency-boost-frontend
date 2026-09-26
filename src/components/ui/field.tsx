@@ -57,7 +57,12 @@ export function Field({
   children,
   className,
 }: {
-  label: string;
+  /**
+   * Usually a string. `ReactNode` because a label may carry a badge — *Months left this year* with
+   * an `auto` chip beside it (`Overall.html:2913`) — and a badge inside the `<label>` is how the
+   * prototype does it and how it stays on the same line as the words it qualifies.
+   */
+  label: React.ReactNode;
   hint?: string;
   error?: string;
   htmlFor: string;
@@ -173,38 +178,108 @@ export function ReadOnlyField({
   );
 }
 
+/**
+ * How much room a control takes, and whether it looks like a control at rest.
+ *
+ * `default` is a form field: a 40px box you can see. **`cell` is a table cell you can type into** —
+ * transparent until you touch it, revealing a hairline on hover and an amber ring on focus
+ * (`Overall.html:453-467`). `components-and-patterns.md` has specified that treatment for the data
+ * table since Phase 1; there was no way to express it, so the leads screen shipped 40px boxes in every
+ * cell of every row and the table read as a form rather than as a list.
+ *
+ * The border is present at both densities and only *coloured* differently, so nothing reflows when a
+ * cell is hovered — a transparent border that becomes visible costs no layout, one that appears does.
+ */
+const DENSITY = {
+  default: 'h-10 rounded-md border bg-card px-3 text-base',
+  cell:
+    'w-full rounded-sm border bg-transparent px-1.5 py-[3px] text-base leading-tight '
+    + 'hover:border-hairline focus:border-amber focus:bg-card focus:ring-1 focus:ring-amber',
+} as const;
+
+/** `cell` starts transparent; `default` shows its hairline at rest. */
+const DENSITY_REST = { default: 'border-hairline', cell: 'border-transparent' } as const;
+
+export type Density = keyof typeof DENSITY;
+
+function controlClass(density: Density, invalid?: boolean) {
+  return cn(DENSITY[density], 'text-navy', invalid ? 'border-alert' : DENSITY_REST[density]);
+}
+
 export function TextInput({
   className,
   invalid,
+  density = 'default',
+  prefix,
+  suffix,
   ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }) {
-  return (
+}: React.InputHTMLAttributes<HTMLInputElement> & {
+  invalid?: boolean;
+  density?: Density;
+  /** `Rp` before the number. */
+  prefix?: React.ReactNode;
+  /** `%`, `months` after it. */
+  suffix?: React.ReactNode;
+} ) {
+  const input = (
     <input
       {...props}
       aria-invalid={invalid || undefined}
-      className={cn(
-        'h-10 rounded-md border bg-card px-3 text-base text-navy',
-        invalid ? 'border-alert' : 'border-hairline',
-        className,
-      )}
+      className={cn(controlClass(density, invalid), prefix || suffix ? AFFIXED_INPUT : className)}
     />
   );
+
+  /**
+   * **The wrapper exists only when there is an affix**, and that is load-bearing rather than tidy:
+   * `ui.spec.tsx` reaches a `FieldRow` by walking up from the labelled control, and an
+   * unconditional wrapper lands that walk one level short — failing in a test about row alignment,
+   * nowhere near the change that caused it.
+   */
+  if (!prefix && !suffix) return input;
+
+  return (
+    <span
+      className={cn(
+        'inline-flex h-10 items-center overflow-hidden rounded-md border-[1.5px] bg-card',
+        invalid ? 'border-alert' : 'border-hairline',
+        'focus-within:border-amber focus-within:ring-1 focus-within:ring-amber',
+        className,
+      )}
+    >
+      {prefix ? <span aria-hidden="true" className={AFFIX}>{prefix}</span> : null}
+      {input}
+      {suffix ? <span aria-hidden="true" className={AFFIX}>{suffix}</span> : null}
+    </span>
+  );
 }
+
+/**
+ * `Rp` and `%` inside the box, as the prototype's `.input-affix` has them
+ * (`Overall.html:669-682`).
+ *
+ * **Not appended to the label.** *"Annual APE target (Rp)"* makes the unit part of the question's
+ * name, which is what a screen reader then reads back, and it leaves the field itself saying nothing
+ * about what it wants. Inside the box the unit is where the number goes.
+ *
+ * `aria-hidden`, because the label already names the field and the unit is either implied by it or
+ * carried by the hint. A screen reader announcing "Rp" as a second unnamed thing beside the input is
+ * noise.
+ */
+const AFFIX = 'shrink-0 select-none px-3 text-base font-semibold text-muted';
+/** Inside the group the input owns no border or ground of its own. */
+const AFFIXED_INPUT = 'h-full min-w-0 flex-1 border-0 bg-transparent px-0 pr-3 text-base text-navy focus:ring-0';
 
 export function Select({
   className,
   invalid,
+  density = 'default',
   ...props
-}: React.SelectHTMLAttributes<HTMLSelectElement> & { invalid?: boolean }) {
+}: React.SelectHTMLAttributes<HTMLSelectElement> & { invalid?: boolean; density?: Density }) {
   return (
     <select
       {...props}
       aria-invalid={invalid || undefined}
-      className={cn(
-        'h-10 rounded-md border bg-card px-3 text-base text-navy',
-        invalid ? 'border-alert' : 'border-hairline',
-        className,
-      )}
+      className={cn(controlClass(density, invalid), className)}
     />
   );
 }
@@ -351,15 +426,23 @@ export function Switch({
 export function Textarea({
   className,
   invalid,
+  density = 'default',
   ...props
-}: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { invalid?: boolean }) {
+}: React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  invalid?: boolean;
+  density?: Density;
+  /** React 19 passes a ref as an ordinary prop; `AutoGrowTextarea` measures the element. */
+  ref?: React.Ref<HTMLTextAreaElement>;
+}) {
   return (
     <textarea
       {...props}
       aria-invalid={invalid || undefined}
       className={cn(
-        'min-h-20 rounded-md border bg-card px-3 py-2 text-base text-navy',
-        invalid ? 'border-alert' : 'border-hairline',
+        density === 'default'
+          ? cn('min-h-20 rounded-md border bg-card px-3 py-2 text-base text-navy',
+              invalid ? 'border-alert' : 'border-hairline')
+          : cn(controlClass(density, invalid), 'resize-none overflow-hidden leading-snug'),
         className,
       )}
     />
@@ -403,10 +486,31 @@ const BUTTON_VARIANT = {
    * has it. A row of permanently red links reads as a list of warnings.
    */
   inlineDanger: 'text-muted underline-offset-2 hover:text-alert hover:underline',
+  /**
+   * A glyph in a table row: `✓ ✕ 🗑` (`Overall.html:489-498`).
+   *
+   * Grey at rest like the inline variants and for the same reason, with the **hover** carrying the
+   * meaning — green where it succeeds, red where it does not. Pass `tone` to say which; the glyph and
+   * its `aria-label` are the caller's.
+   *
+   * Used where a row has three or more actions and their words would be wider than the data. Two
+   * actions stay text (`inline`): an icon is only a saving once there are enough of them to crowd.
+   */
+  icon: 'text-muted',
 } as const;
 
-/** The two that are text rather than a box, so `Button` picks the right base. */
+/** Hover tint and colour for `variant="icon"`, which is grey until you reach for it. */
+const ICON_TONE = {
+  success: 'hover:bg-success/[0.12] hover:text-success',
+  alert: 'hover:bg-alert/10 hover:text-alert',
+  neutral: 'hover:bg-navy/[0.08] hover:text-navy',
+} as const;
+
+/** The three that are not a 40px box, so `Button` picks the right base. */
 const INLINE_VARIANTS = new Set(['inline', 'inlineDanger']);
+/** 19×19 in the prototype; 28px here, because 19px is not a tap target on a phone. */
+const ICON_BASE =
+  'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-sm leading-none';
 
 /**
  * `type="button"` by default, which is **not** what a bare `<button>` does.
@@ -424,19 +528,31 @@ const INLINE_VARIANTS = new Set(['inline', 'inlineDanger']);
 export function Button({
   variant = 'primary',
   type = 'button',
+  tone = 'neutral',
   className,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: keyof typeof BUTTON_VARIANT;
+  /** `variant="icon"` only: which way the hover reads. */
+  tone?: keyof typeof ICON_TONE;
+  /** React 19 passes a ref as an ordinary prop; `Dialog` moves focus onto its buttons. */
+  ref?: React.Ref<HTMLButtonElement>;
 }) {
+  const base =
+    variant === 'icon' ? ICON_BASE : INLINE_VARIANTS.has(variant) ? INLINE_BASE : BUTTON_BASE;
   return (
     <button
       type={type}
       {...props}
       className={cn(
-        INLINE_VARIANTS.has(variant) ? INLINE_BASE : BUTTON_BASE,
-        'disabled:cursor-not-allowed disabled:opacity-40',
+        base,
+        'disabled:cursor-not-allowed',
+        // 40% everywhere, except the icon button, where the prototype uses 30% (`:497`) — a row of
+        // three glyphs needs the unavailable one to recede further than a lone button does.
+        variant === 'icon' ? 'disabled:opacity-30' : 'disabled:opacity-40',
         BUTTON_VARIANT[variant],
+        variant === 'icon' && ICON_TONE[tone],
+        variant === 'icon' && 'disabled:hover:bg-transparent disabled:hover:text-muted',
         className,
       )}
     />
@@ -484,13 +600,27 @@ export function ButtonLink({
   );
 }
 
+/**
+ * `compact` is the prototype's own card: `padding:16px 20px` (`Overall.html:635`), snapped to the
+ * spacing scale. `default` is the roomier `--space-6` this product uses for a form.
+ *
+ * **A prop rather than `className="px-5 py-4"`**, because `twMerge` does not drop `p-6` when a caller
+ * adds `px`/`py` — the two do not fully overlap — so the card would carry three padding utilities and
+ * which one won would depend on the order Tailwind happens to emit them in.
+ */
+const CARD_PADDING = { default: 'p-6', compact: 'px-5 py-4' } as const;
+
 export function Card({
   children,
   className,
+  density = 'default',
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+}: React.HTMLAttributes<HTMLDivElement> & { density?: keyof typeof CARD_PADDING }) {
   return (
-    <div {...props} className={cn('rounded-lg border border-hairline bg-card p-6', className)}>
+    <div
+      {...props}
+      className={cn('rounded-lg border border-hairline bg-card', CARD_PADDING[density], className)}
+    >
       {children}
     </div>
   );

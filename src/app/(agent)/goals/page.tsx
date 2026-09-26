@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
+import { ConfigBadge } from '@/components/ui/config-badge';
+import { CascadeRow } from '@/components/ui/cascade-row';
+import { KpiTile } from '@/components/ui/kpi-tile';
+import { NumberBadge } from '@/components/ui/number-badge';
+import { formatDay, formatDayLong } from '@/lib/format';
+import { SaveStatus } from '@/components/ui/save-status';
+import { Segmented } from '@/components/ui/segmented';
 import {
   Button, Card, ErrorBanner, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
@@ -111,7 +118,18 @@ export default function GoalSettingsPage() {
     );
   }
 
-  const set = (patch: Partial<GoalInputs>) => setDraft({ ...draft, ...patch });
+  /**
+   * Editing anything means what is on screen is no longer what is stored.
+   *
+   * Without this the dot stayed green while the agent typed a new target, so the screen said *Saved*
+   * about numbers nobody had saved. The prototype gets this right — `refreshSaveStatus()` reports
+   * `Not yet saved` from a dirty flag (`Overall.html:4935-4947`) — and it only became visible here
+   * once the status had a dot to be wrong with.
+   */
+  const set = (patch: Partial<GoalInputs>) => {
+    setDraft({ ...draft, ...patch });
+    setSaved(false);
+  };
   const projected = goal.projected;
   const mine = subject === null;
   const byLeader = mine
@@ -124,108 +142,143 @@ export default function GoalSettingsPage() {
       title="Goal settings"
       subtitle="From this year's target back to this week's work."
       permission="goal:read"
-      actions={(
-        <Button onClick={() => commit(draft)} disabled={busy}>
-          {busy ? 'Saving…' : 'Save goal'}
-        </Button>
-      )}
     >
-      {error && <div className="mb-4"><ErrorBanner {...error} /></div>}
-
-      {team.length > 0 && (
-        <Card className="mb-4">
-          <FieldRow>
-            <Field
-              label="Whose plan"
-              htmlFor="goal-subject"
-              hint="Saving somebody else’s becomes their goal at once, carries your name, and tells them."
-            >
-              <Select
-                id="goal-subject"
-                value={subject ?? ''}
-                onChange={(e) => setSubject(e.target.value === '' ? null : e.target.value)}
-              >
-                <option value="">Mine</option>
-                {team.map((member) => (
-                  <option key={member.membershipId} value={member.membershipId}>
-                    {member.fullName}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </FieldRow>
-        </Card>
-      )}
-
-      {whose && (
-        <Card className="mb-4 border-navy/30 bg-navy/5">
-          <p className="text-md text-navy">
-            You are setting <strong>{whose.fullName}</strong>&apos;s plan. It becomes their goal as
-            soon as you save, their screen will say you set it, and they will be told.
-          </p>
-        </Card>
-      )}
-
       {/*
-        * **Who set this, when it was not you** (ADR-0046). A leader saves a downline's goal
-        * directly — there is no acceptance step anywhere in the prototype, and the consent one
-        * would model already happens in the room — so what the agent is owed is knowing.
+        * **A measure, and centred** — `.content` is `max-width:820px; margin:0 auto` (`:632`). Five
+        * cards stretched across a 1,600px window put a two-word label a hand's width from its input,
+        * and the cascade's three columns 400px apart. A plan is read top to bottom, not across.
+        *
+        * **Everything on the screen is inside it, including the picker and the banners.** They were
+        * outside, at `p-6` against the steps' `px-5 py-4`, so the first two cards a leader saw were
+        * wider and more thickly padded than the plan underneath — the same thing said in two shapes.
         */}
-      {byLeader && (
-        <Card className="mb-4 border-amber/40 bg-amber/5">
-          <p className="text-md text-navy">
-            <strong>Set by your leader</strong>
-            {goal.savedAt ? ` on ${new Date(goal.savedAt).toLocaleDateString('en-GB', {
-              day: 'numeric', month: 'long', year: 'numeric',
-            })}` : ''}. You can change it — it is your plan.
-          </p>
-        </Card>
-      )}
+      <div className="mx-auto flex max-w-[51.25rem] flex-col gap-3">
+        {error && <ErrorBanner {...error} />}
 
-      <div className="flex flex-col gap-4">
-        <Step n={1} title="Annual APE target">
-          <FieldRow>
-            <Field label="How you want to set it" htmlFor="goal-mode">
-              <Select
-                id="goal-mode"
-                value={draft.mode}
-                onChange={(e) => set({ mode: e.target.value as GoalMode })}
+        {team.length > 0 && (
+          <Card density="compact">
+            <FieldRow>
+              <Field
+                label="Whose plan"
+                htmlFor="goal-subject"
+                className="w-64"
+                hint="Saving somebody else’s becomes their goal at once, carries your name, and tells them."
               >
-                <option value="direct">Set APE target directly</option>
-                <option value="from_savings">Calculate from savings target</option>
-              </Select>
-            </Field>
+                <Select
+                  id="goal-subject"
+                  className="w-full"
+                  value={subject ?? ''}
+                  onChange={(e) => setSubject(e.target.value === '' ? null : e.target.value)}
+                >
+                  <option value="">Mine</option>
+                  {team.map((member) => (
+                    <option key={member.membershipId} value={member.membershipId}>
+                      {member.fullName}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </FieldRow>
+          </Card>
+        )}
 
-            {draft.mode === 'direct' ? (
-              <Rupiah
-                label="Annual APE target"
-                id="goal-ape"
-                value={draft.annualApeTargetMinor}
-                onChange={(annualApeTargetMinor) => set({ annualApeTargetMinor })}
-              />
+        {whose && (
+          <Card density="compact" className="border-navy/30 bg-navy/5">
+            <p className="text-md text-navy">
+              You are setting <strong>{whose.fullName}</strong>&apos;s plan. It becomes their goal as
+              soon as you save, their screen will say you set it, and they will be told.
+            </p>
+          </Card>
+        )}
+
+        {/*
+          * **Who set this, when it was not you** (ADR-0046). A leader saves a downline's goal
+          * directly — there is no acceptance step anywhere in the prototype, and the consent one
+          * would model already happens in the room — so what the agent is owed is knowing.
+          */}
+        {byLeader && (
+          <Card density="compact" className="border-amber/40 bg-amber/5">
+            <p className="text-md text-navy">
+              <strong>Set by your leader</strong>
+              {goal.savedAt ? ` on ${formatDayLong(goal.savedAt)}` : ''}. You can change it — it is your plan.
+            </p>
+          </Card>
+        )}
+
+        <Step
+          n={1}
+          title="What's your APE target this year?"
+          actions={(
+            <div className="flex items-center gap-3">
+              {/*
+                * **The status beside the button, not at the bottom of the page.** Its job is to answer
+                * *did that land* where you are already looking (`:2854-2862`, `:627-632`). It was 500
+                * pixels below the button, which is nowhere.
+                */}
+              <SaveStatus state={saved && !busy ? 'saved' : 'unsaved'}>
+                {busy ? 'Saving…' : saved ? 'Saved' : 'Not yet saved'}
+              </SaveStatus>
+              <Button onClick={() => commit(draft)} disabled={busy}>
+                {busy ? 'Saving…' : 'Save goal'}
+              </Button>
+            </div>
+          )}
+        >
+          {/*
+            * **Two segments, both visible** (`:2865-2868`). This was a `<select>`, and a dropdown hides
+            * the alternative behind a click: an agent who thinks in take-home pay rather than in APE
+            * could not see the product had a mode for them. It also sat in the same row as the value it
+            * governs, so the mode competed with the number.
+            */}
+          <Segmented
+            label="How you want to set it"
+            tabs={[
+              { id: 'direct', label: 'Set APE target directly' },
+              { id: 'from_savings', label: 'Calculate from savings target' },
+            ]}
+            active={draft.mode}
+            onSelect={(mode) => set({ mode: mode as GoalMode })}
+          >
+            {(mode) => (mode === 'direct' ? (
+              <FieldRow>
+                <Rupiah
+                  label="Annual APE target"
+                  id="goal-ape"
+                  value={draft.annualApeTargetMinor}
+                  onChange={(annualApeTargetMinor) => set({ annualApeTargetMinor })}
+                />
+              </FieldRow>
             ) : (
               <>
-                <Rupiah
-                  label="Annual savings target"
-                  id="goal-savings"
-                  value={draft.savingsTargetMinor}
-                  onChange={(savingsTargetMinor) => set({ savingsTargetMinor })}
-                />
-                <Percent
-                  label="Commission rate"
-                  id="goal-commission"
-                  value={draft.commissionRatePct}
-                  onChange={(commissionRatePct) => set({ commissionRatePct })}
-                />
+                <FieldRow>
+                  <Rupiah
+                    label="Annual savings target"
+                    id="goal-savings"
+                    value={draft.savingsTargetMinor}
+                    onChange={(savingsTargetMinor) => set({ savingsTargetMinor })}
+                  />
+                  <Percent
+                    label="Commission rate"
+                    id="goal-commission"
+                    value={draft.commissionRatePct}
+                    onChange={(commissionRatePct) => set({ commissionRatePct })}
+                    hint="% of APE that becomes income / savings"
+                  />
+                </FieldRow>
+                {projected && (
+                  <KpiTile
+                    className="mt-3"
+                    variant="insight"
+                    label="That is an APE target of"
+                    value={formatRupiah(projected.annualApeTargetMinor)}
+                  />
+                )}
               </>
-            )}
-          </FieldRow>
-          {draft.mode === 'from_savings' && projected && (
-            <Result label="That is an APE target of" value={formatRupiah(projected.annualApeTargetMinor)} />
-          )}
+            ))}
+          </Segmented>
         </Step>
 
-        <Step n={2} title="Current progress">
+        <Step n={2} title="Your current progress">
           <FieldRow>
             {/*
               * **`null` means *use the office's calendar***, and that is what is sent unless the
@@ -234,8 +287,21 @@ export default function GoalSettingsPage() {
               * October, with a monthly target a fifth of the truth (client PRD §17).
               */}
             <Field
-              label="Months left"
+              label={(
+                <>
+                  Months left this year{' '}
+                  {/*
+                    * The prototype's `.auto-badge` (`:662-667`, `:2913`), which said the field fills
+                    * itself in. It was dropped when the field became a plain input, and the hint below
+                    * had to do its work in a sentence.
+                    */}
+                  {draft.monthsLeft === null && (
+                    <ConfigBadge tone="navy" className="ml-1 align-middle">auto</ConfigBadge>
+                  )}
+                </>
+              )}
               htmlFor="goal-months"
+              className="w-56"
               hint={draft.monthsLeft === null
                 ? `Your office\u2019s calendar says ${goal.monthsLeft}. Type a number to use your own.`
                 : 'Your own figure. Empty the box to go back to your office\u2019s calendar.'}
@@ -251,6 +317,8 @@ export default function GoalSettingsPage() {
                 type="number"
                 step="0.1"
                 min="0.1"
+                suffix="months"
+                className="w-full"
                 placeholder={String(goal.monthsLeft)}
                 value={draft.monthsLeft ?? ''}
                 onChange={(e) => set({
@@ -259,58 +327,81 @@ export default function GoalSettingsPage() {
               />
             </Field>
             <Rupiah
-              label="APE produced so far"
+              label="APE already produced this year"
               id="goal-achieved"
               value={draft.apeAchievedMinor}
               onChange={(apeAchievedMinor) => set({ apeAchievedMinor })}
             />
           </FieldRow>
           {projected && (
-            <div className="mt-3 flex flex-wrap gap-6">
-              <Figure label="Already produced" value={formatRupiah(projected.apeAchievedMinor)} />
-              <Figure label="Remaining needed" value={formatRupiah(projected.remainingApeMinor)} />
-              <Figure
+            <>
+              {/* Two-up, as `.kpi-row` is (`:686`) — a grid rather than a wrap, so they stay equal. */}
+              <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+                <KpiTile label="Already produced" value={formatRupiah(projected.apeAchievedMinor)} />
+                <KpiTile label="Remaining needed" value={formatRupiah(projected.remainingApeMinor)} />
+              </div>
+              {/*
+                * **The one number this card is for.** It was the third of three identical figures, so
+                * the answer looked like the two echoes of what you had just typed (`:2938-2941`).
+                */}
+              <KpiTile
+                className="mt-2.5"
+                variant="insight"
                 label="This month's APE target"
                 value={formatRupiah(projected.monthlyApeTargetMinor)}
               />
-            </div>
+            </>
           )}
         </Step>
 
         <Step n={3} title="From APE to policy count">
           <FieldRow>
             <Rupiah
-              label="Average case size"
+              label="Average case size (APE per policy)"
               id="goal-case-size"
               value={draft.caseSizeMinor}
               onChange={(caseSizeMinor) => set({ caseSizeMinor })}
-              hint="APE per closing. Increase if one appointment often yields multiple policies."
             />
           </FieldRow>
           {projected && (
-            <div className="mt-3 flex flex-wrap gap-6">
-              <Figure label="Policies per month" value={String(projected.policiesPerMonth)} />
-              <Figure label="Policies per week" value={`≈ ${projected.policiesPerWeek}`} />
+            <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+              <KpiTile
+                label="Policies per month"
+                value={projected.policiesPerMonth}
+                unit="policies"
+              />
+              <KpiTile label="Policies per week" value={`≈ ${projected.policiesPerWeek}`} />
             </div>
           )}
+          <Tip glyph="💡">
+            APE per closing. Increase if one appointment often yields multiple policies.
+          </Tip>
         </Step>
 
         <Step n={4} title="Conversion assumptions">
           <FieldRow>
+            {/*
+              * The prototype's own labels, with its `.field-sub` explanation underneath as the hint
+              * (`:2981-2999`). The sub-line is a `<span>` inside the label there, which makes it part of
+              * the field's accessible name; ours is a `hint` bound by `aria-describedby`, so it is
+              * announced after the name rather than as part of it (L-20).
+              */}
             <Percent
-              label="Contacted leads that become an appointment"
+              label="Leads to Appointment"
               id="goal-leads-to-appt"
               value={draft.leadsToApptPct}
               onChange={(leadsToApptPct) => set({ leadsToApptPct })}
+              hint="% of contacted leads that become an appointment"
             />
             <Percent
-              label="Appointments that become a closing"
+              label="Closing rate"
               id="goal-closing"
               value={draft.closingRatePct}
               onChange={(closingRatePct) => set({ closingRatePct })}
+              hint="% of appointments that become a closing"
             />
           </FieldRow>
-          <p className="mt-2 text-sm text-muted">Use your real conversion ratios for accuracy.</p>
+          <Tip glyph="💡">Use your real conversion ratios for accuracy.</Tip>
         </Step>
 
         <Step n={5} title="Monthly activity target">
@@ -326,44 +417,81 @@ export default function GoalSettingsPage() {
               going — there is nothing left for this plan to ask of you.
             </p>
           ) : projected ? (
-            <div className="flex flex-wrap items-end gap-4">
-              <Column label="Leads contacted" month={projected.leadsPerMonth} week={projected.leadsPerWeek} />
-              <Arrow pct={draft.leadsToApptPct} />
-              <Column label="Appointments" month={projected.appointmentsPerMonth} week={projected.appointmentsPerWeek} />
-              <Arrow pct={draft.closingRatePct} />
-              <Column label="Closings" month={projected.policiesPerMonth} week={projected.policiesPerWeek} hero />
-            </div>
+            /*
+             * **The cascade, as a cascade** (`:3014-3060`). Three filled panels with an icon plate and
+             * the activity each counts against, joined by arrows carrying the rate — which is what makes
+             * it read as *67 leads, of which 30% become 20 appointments, of which 30% become 6
+             * closings*. It was five bare divs in a flex row with `—30%→` as grey caption text, so the
+             * three numbers were adjacent rather than consequent.
+             */
+            <CascadeRow
+              columns={[
+                {
+                  label: 'Leads contacted',
+                  chip: goal.cascadeMapping.leadsCode,
+                  icon: 'clipboard',
+                  month: String(projected.leadsPerMonth),
+                  week: `≈ ${projected.leadsPerWeek}/week`,
+                },
+                {
+                  label: 'Appointments',
+                  chip: goal.cascadeMapping.appointmentsCode,
+                  icon: 'calendar',
+                  month: String(projected.appointmentsPerMonth),
+                  week: `≈ ${projected.appointmentsPerWeek}/week`,
+                },
+                {
+                  label: 'Closings',
+                  chip: goal.cascadeMapping.closingsCode,
+                  icon: 'target',
+                  month: String(projected.policiesPerMonth),
+                  week: `≈ ${projected.policiesPerWeek}/week`,
+                  hero: true,
+                },
+              ]}
+              links={[`${draft.leadsToApptPct}%`, `${draft.closingRatePct}%`]}
+            />
           ) : (
             <p className="text-md text-alert">
               This plan cannot be worked out from the numbers above. Check the case size and the two
               conversion rates — each has to be more than zero.
             </p>
           )}
-          <p className="mt-3 text-sm text-muted">
-            Counts against {goal.cascadeMapping.leadsCode}, {goal.cascadeMapping.appointmentsCode} and{' '}
-            {goal.cascadeMapping.closingsCode} in Activity management.
-          </p>
+          {/*
+            * The prototype's 🔗 tip reads *"Maps to activities #3, #4, #6 in Activity Management"* — and
+            * those numbers are display order, which an office can drag (invariant §4). The chips above
+            * carry the codes; this says where they are counted.
+            */}
+          <Tip glyph="🔗">Counted in Activity management, against the codes above.</Tip>
         </Step>
 
-        <Card>
-          <h2 className="font-display text-lg font-bold text-navy">
+        {/*
+          * **The one inverted panel on the screen** (`.commit-card`, `:738-744`). Navy ground, 16px
+          * text at 1.6, and every figure in amber. It is the sentence an agent reads back to
+          * themselves, and it was a white card with 14px navy text and plain bold — indistinguishable
+          * from the five cards of working above it, so the conclusion looked like another step.
+          */}
+        <div className="rounded-lg bg-navy px-5 py-4 text-sidebar-text">
+          {/*
+            * `.commit-eyebrow` is a `<p>` in the prototype (`:3070`); ours is an `<h2>` painted the same
+            * way. The commitment is a section of the page, and leaving it out of the heading outline
+            * means a screen-reader user tabbing by heading lands on the five steps and never on the
+            * conclusion. Nothing about it looks different.
+            */}
+          <h2 className="text-xs font-bold uppercase tracking-[0.06em] text-sidebar-text/60">
             My commitment
             {goal.savedAt && (
-              <span className="ml-2 text-sm font-normal text-muted">
-                (as of {new Date(goal.savedAt).toLocaleDateString('en-GB', {
-                  day: 'numeric', month: 'short', year: 'numeric',
-                })})
-              </span>
+              <> (as of {formatDay(goal.savedAt)})</>
             )}
           </h2>
           {projected && !projected.targetMet && (
-            <p className="mt-2 text-md text-navy">
-              To reach APE <strong>{formatRupiah(projected.annualApeTargetMinor)}</strong> this year
+            <p className="mt-2 text-lg leading-relaxed text-white">
+              To reach APE <Figure>{formatRupiah(projected.annualApeTargetMinor)}</Figure> this year
               ({goal.monthsLeft} months left), this month&apos;s target is APE{' '}
-              <strong>{formatRupiah(projected.monthlyApeTargetMinor)}</strong> — I will contact{' '}
-              <strong>{projected.leadsPerMonth} leads</strong>, get{' '}
-              <strong>{projected.appointmentsPerMonth} appointments</strong>, and close{' '}
-              <strong>{projected.policiesPerMonth} policies</strong> this month.
+              <Figure>{formatRupiah(projected.monthlyApeTargetMinor)}</Figure> — I will contact{' '}
+              <Figure>{projected.leadsPerMonth} leads</Figure>, get{' '}
+              <Figure>{projected.appointmentsPerMonth} appointments</Figure>, and close{' '}
+              <Figure>{projected.policiesPerMonth} policies</Figure> this month.
             </p>
           )}
           {/*
@@ -371,18 +499,29 @@ export default function GoalSettingsPage() {
             * and it survives only in three retired section files. A screen printing *contact 67
             * leads* without it reads as an instruction from the office (L-29).
             */}
-          <p className="mt-3 text-sm text-muted">
+          <p className="mt-3 text-sm text-sidebar-text/70">
             Estimates for personal planning — assumptions vary per individual.
           </p>
-          <p className="mt-2 text-sm text-muted" role="status">
-            {busy ? 'Saving…' : saved ? 'Saved' : 'Not yet saved'}
-          </p>
-        </Card>
+        </div>
 
         {history.length > 1 && <History entries={history} />}
       </div>
     </Page>
   );
+}
+
+/**
+ * A figure inside the commitment sentence: `.commit-text b` is `font-weight:700; color:var(--amber)`
+ * (`Overall.html:744`).
+ *
+ * **Amber rather than amber-deep, because the ground is navy.** The contrast question is the other way
+ * round here — plain amber on navy is 6.3:1, and it is the one place in the product where amber is a
+ * text colour that comfortably clears AA. Pinned in `a11y.spec.tsx`.
+ *
+ * Still a `<strong>`: the emphasis is semantic, and a reader who cannot see the colour still hears it.
+ */
+function Figure({ children }: { children: React.ReactNode }) {
+  return <strong className="font-bold text-amber">{children}</strong>;
 }
 
 /**
@@ -397,8 +536,10 @@ export default function GoalSettingsPage() {
  */
 function History({ entries }: { entries: GoalHistoryEntry[] }) {
   return (
-    <Card>
-      <h2 className="font-display text-lg font-bold text-navy">What this plan has been</h2>
+    // Same padding as every other card on this screen. A panel that is more thickly padded than the
+    // plan above it reads as a different kind of thing.
+    <Card density="compact">
+      <h2 className="font-display text-md font-bold text-navy">What this plan has been</h2>
       <p className="mt-1 text-md text-muted">
         Every version, newest first. A plan somebody coached against does not stop having existed
         because it was revised.
@@ -413,9 +554,7 @@ function History({ entries }: { entries: GoalHistoryEntry[] }) {
                 {i === 0 ? 'Now' : `Version ${entry.version}`}
                 {entry.at && (
                   <span className="ml-2 text-sm font-normal text-muted">
-                    {new Date(entry.at).toLocaleDateString('en-GB', {
-                      day: 'numeric', month: 'short', year: 'numeric',
-                    })}
+                    {formatDay(entry.at)}
                   </span>
                 )}
                 {entry.byName && (
@@ -462,17 +601,52 @@ function inputsOf(goal: Goal): GoalInputs {
   };
 }
 
-function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+/**
+ * One of the five steps: an outlined ordinal, a question, and the fields that answer it.
+ *
+ * The badge is **outlined navy** (`Overall.html:637-640`), not the filled disc with white 10px text
+ * this screen had — which announces rather than numbers, and made a step head read as a status.
+ * `aria-hidden` lives in `NumberBadge`: the heading beside it is the name.
+ *
+ * `actions` is card 1's only: the prototype puts Save and the save status in the **first** step's
+ * header (`:2854-2862`), where the plan starts rather than at the bottom of the page.
+ */
+function Step({
+  n, title, actions, children,
+}: {
+  n: number;
+  title: string;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <Card>
-      <h2 className="font-display text-lg font-bold text-navy">
-        <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-full bg-navy text-2xs text-white">
-          {n}
-        </span>
-        {title}
-      </h2>
-      <div className="mt-3">{children}</div>
+    <Card density="compact">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2.5 font-display text-md font-bold text-navy">
+          <NumberBadge n={n} size="md" />
+          {title}
+        </h2>
+        {actions}
+      </div>
+      <div className="mt-3.5">{children}</div>
     </Card>
+  );
+}
+
+/**
+ * The prototype's `.tip` (`:701-702`, used at `:2969`, `:3001`, `:3062`): an emoji in its own span, a
+ * sentence beside it.
+ *
+ * The emoji is not decoration — 💡 says *this is advice you can act on* and 🔗 says *this points at
+ * another screen*, and they are the difference between a hint and a footnote at a glance. It is
+ * `aria-hidden` because the sentence says the same thing in words.
+ */
+function Tip({ glyph, children }: { glyph: string; children: React.ReactNode }) {
+  return (
+    <p className="mt-3 flex items-start gap-2 text-sm leading-relaxed text-muted">
+      <span aria-hidden="true" className="shrink-0">{glyph}</span>
+      <span>{children}</span>
+    </p>
   );
 }
 
@@ -488,11 +662,13 @@ function Rupiah({
   label: string; id: string; value: number; onChange: (minor: number) => void; hint?: string;
 }) {
   return (
-    <Field label={`${label} (Rp)`} htmlFor={id} hint={hint}>
+    <Field label={label} htmlFor={id} hint={hint}>
       <TextInput
         id={id}
         type="number"
         min="0"
+        prefix="Rp"
+        className="w-full"
         value={toMajor(value)}
         onChange={(e) => onChange(toMinor(Number(e.target.value)))}
       />
@@ -502,18 +678,20 @@ function Rupiah({
 
 /** A percentage, with decimals — which the prototype's parser cannot read (I-108). */
 function Percent({
-  label, id, value, onChange,
+  label, id, value, onChange, hint,
 }: {
-  label: string; id: string; value: number; onChange: (pct: number) => void;
+  label: string; id: string; value: number; onChange: (pct: number) => void; hint?: string;
 }) {
   return (
-    <Field label={`${label} (%)`} htmlFor={id}>
+    <Field label={label} htmlFor={id} hint={hint}>
       <TextInput
         id={id}
         type="number"
         step="0.1"
         min="0"
         max="100"
+        suffix="%"
+        className="w-full"
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
       />
@@ -521,41 +699,3 @@ function Percent({
   );
 }
 
-function Result({ label, value }: { label: string; value: string }) {
-  return (
-    <p className="mt-3 text-md text-navy">
-      {label} <strong>{value}</strong>
-    </p>
-  );
-}
-
-function Figure({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="font-display text-xl font-bold text-navy">{value}</div>
-      <div className="text-sm text-muted">{label}</div>
-    </div>
-  );
-}
-
-function Column({
-  label, month, week, hero,
-}: { label: string; month: number; week: number; hero?: boolean }) {
-  return (
-    <div>
-      <div className={hero ? 'font-display text-2xl font-bold text-navy' : 'font-display text-xl font-bold text-navy'}>
-        {month}
-      </div>
-      <div className="text-sm text-muted">{label}</div>
-      <div className="text-2xs text-muted">≈ {week}/week</div>
-    </div>
-  );
-}
-
-function Arrow({ pct }: { pct: number }) {
-  return (
-    <div className="pb-6 text-sm text-muted" aria-hidden="true">
-      —{pct}%→
-    </div>
-  );
-}

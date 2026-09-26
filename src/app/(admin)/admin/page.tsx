@@ -122,7 +122,7 @@ export default function AdminOverviewPage() {
 const SEVERITY: Record<AttentionItem['severity'], string> = {
   structural: 'bg-alert/10 text-alert',
   approval: 'bg-info/10 text-info',
-  template: 'bg-amber/12 text-amber-dark',
+  template: 'bg-amber/12 text-amber-deep',
 };
 
 function AttentionRow({ item }: { item: AttentionItem }) {
@@ -137,7 +137,7 @@ function AttentionRow({ item }: { item: AttentionItem }) {
         <span className="block text-md font-semibold text-navy">{item.title}</span>
         <span className="block text-sm text-muted">{item.detail}</span>
       </span>
-      <Link href={item.href} className="text-md font-semibold text-amber-dark underline">
+      <Link href={item.href} className="text-md font-semibold text-amber-deep underline">
         {item.actionLabel} →
       </Link>
     </li>
@@ -149,7 +149,7 @@ function Tile({ label, value, lead }: { label: string; value: number; lead?: boo
     <Card>
       <p className="text-sm font-semibold uppercase tracking-wide text-muted">{label}</p>
       <p
-        className={`mt-1 font-display text-3xl font-bold ${lead ? 'text-amber-dark' : 'text-navy'}`}
+        className={`mt-1 font-display text-3xl font-bold ${lead ? 'text-amber-deep' : 'text-navy'}`}
       >
         {value.toLocaleString('en-GB')}
       </p>

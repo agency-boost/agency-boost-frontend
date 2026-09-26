@@ -33,7 +33,7 @@ export const SEEDED_LADDER: OrgLevel[] = [
 
 /** Senior first. The first rung gets the strongest colour. */
 const PALETTE = [
-  { badge: 'bg-role-ab/15 text-amber-dark', muted: 'bg-navy/10 text-navy', avatar: 'bg-role-ab text-navy' },
+  { badge: 'bg-role-ab/15 text-amber-deep', muted: 'bg-navy/10 text-navy', avatar: 'bg-role-ab text-navy' },
   { badge: 'bg-role-aab/15 text-navy-soft', muted: 'bg-navy-soft/[0.12] text-navy-soft', avatar: 'bg-role-aab text-card' },
   { badge: 'bg-navy/10 text-navy', muted: 'bg-muted/10 text-muted', avatar: 'bg-role-agent text-card' },
   // A fourth rung, and anything beyond it, is quiet rather than absent.

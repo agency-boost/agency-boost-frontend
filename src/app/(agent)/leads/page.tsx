@@ -2,10 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Page } from '@/components/page';
+import { AutoGrowTextarea } from '@/components/ui/auto-grow-textarea';
+import { Dialog } from '@/components/ui/dialog';
+import { KpiTile } from '@/components/ui/kpi-tile';
+import { formatDay } from '@/lib/format';
+import { cn } from '@/lib/cn';
 import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
-  Button, Card, ErrorBanner, Field, FieldRow, Select, TextInput, Textarea,
+  Button, Card, ErrorBanner, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
@@ -70,6 +75,15 @@ export default function LeadsPage() {
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [expanded, setExpanded] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  /**
+   * The two questions this screen has to ask, each held until answered.
+   *
+   * They were `window.confirm`, which the prototype deliberately does not use — it built `.modal-box`
+   * for exactly these (`Overall.html:539-553`) because the browser's dialog says OK and Cancel whatever
+   * was asked, cannot be read in the page's voice, and arrives on a phone as a system sheet.
+   */
+  const [confirmDelete, setConfirmDelete] = useState<Lead | null>(null);
+  const [confirmType, setConfirmType] = useState<{ row: Lead; type: LeadType | null } | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -180,8 +194,9 @@ export default function LeadsPage() {
   function changeType(row: Lead, next: '' | LeadType) {
     const type = next === '' ? null : next;
     if (type === row.type) return;
-    if ((row.statusCode || row.thisMonth)
-      && !window.confirm('Changing the type clears this lead’s stage and its commitment for this month. Continue?')) {
+    // Only worth asking when there is something to lose.
+    if (row.statusCode || row.thisMonth) {
+      setConfirmType({ row, type });
       return;
     }
     void run(row.id, () => updateLead(row.id, { type }, row.version));
@@ -219,12 +234,9 @@ export default function LeadsPage() {
       title="Leads Management"
       subtitle="Track and follow up on your sales and recruitment leads."
       permission="lead:read"
-      actions={(
-        <Button onClick={() => setAdding((open) => !open)} aria-expanded={adding}>
-          + Add lead
-        </Button>
-      )}
     >
+      {counts && <Counts counts={counts} />}
+
       {adding && (
         <AddLead
           onCancel={() => setAdding(false)}
@@ -342,25 +354,34 @@ export default function LeadsPage() {
 
       {pageData && rows.length > 0 && (
         <>
-          <p className="mb-2 text-sm text-muted">
-            {pageData.total} lead{pageData.total === 1 ? '' : 's'}
-            {filters.outcome === 'open' ? ' still open' : ''}
-          </p>
+          <Toolbar
+            total={pageData.total}
+            openOnly={filters.outcome === 'open'}
+            counts={counts}
+            active={filters.attention}
+            onAttention={(flag) => {
+              const next = { ...NO_FILTERS, attention: flag };
+              setForm(next);
+              setFilters(next);
+              setPage(1);
+            }}
+            onAdd={() => setAdding((open) => !open)}
+            adding={adding}
+          />
 
-          {counts && (
-            <Counts
-              counts={counts}
-              active={filters.attention}
-              onAttention={(flag) => {
-                const next = { ...NO_FILTERS, attention: flag };
-                setForm(next);
-                setFilters(next);
-                setPage(1);
-              }}
-            />
-          )}
-
-          <DataTable caption="Your leads" columns={columns} tableClassName="min-w-[64rem]">
+          {/*
+            * **Nine explicit widths and a fixed layout** (`Overall.html:412`, `:426-435`,
+            * markup `:2799-2802`). Without them a long remark widens its own column and every other
+            * cell in the table moves, which in an inline-editable list means the control you were
+            * reaching for is no longer where it was.
+            */}
+          <DataTable
+            caption="Your leads"
+            columns={columns}
+            density="compact"
+            widths={['2rem', '9rem', '7rem', '12rem', '7rem', '13rem', '13rem', '5.5rem', '6.5rem']}
+            tableClassName="min-w-[64rem]"
+          >
             {rows.map((row, index) => {
               const ladder = laddersFor(row.type);
               const retired = row.statusCode && !ladder.some((s) => s.code === row.statusCode);
@@ -381,6 +402,7 @@ export default function LeadsPage() {
                   <Cell className="min-w-[12rem]">
                     <TextInput
                       aria-label={`Lead name, row ${index + 1}`}
+                      density="cell"
                       className="w-full"
                       value={draftOf(row, 'name', row.name)}
                       placeholder="First Last"
@@ -437,8 +459,23 @@ export default function LeadsPage() {
                   </Cell>
 
                   <Cell>
+                    {/*
+                      * **The ladder's colour is the ground, and the text stays navy.**
+                      * `.type-badge-select` (`Overall.html:476-477`) colours the words — amber for
+                      * sales, navy-soft for recruitment — and at the 12.5px this table uses that is
+                      * `4.34:1` for the darkest amber in the palette, under the 4.5:1 small text
+                      * needs. It read as grey on white. Same answer as the Status column beside it:
+                      * tint the cell, keep the word readable (F-71).
+                      */}
                     <Select
                       aria-label={`Type, row ${index + 1}`}
+                      density="cell"
+                      className={cn(
+                        'font-semibold',
+                        row.type === 'sales' && 'bg-amber/[0.13] text-navy',
+                        row.type === 'recruitment' && 'bg-navy-soft/[0.09] text-navy',
+                        row.type === null && 'text-muted',
+                      )}
                       value={row.type ?? ''}
                       disabled={saving || closed}
                       onChange={(e) => changeType(row, e.target.value as '' | LeadType)}
@@ -450,8 +487,20 @@ export default function LeadsPage() {
                   </Cell>
 
                   <Cell>
+                    {/*
+                      * **Tinted by where the stage sits on its own ladder** (`statusStyle()`,
+                      * `Overall.html:5463-5478`): red at the first rung, green at the last, and a
+                      * middle rung wearing its ladder's colour. It is how a leader reads a column of
+                      * twenty leads without reading twenty stage names.
+                      *
+                      * **The text stays navy, unlike the prototype's.** At 12.5px amber on its own
+                      * tint is 2.8:1, and the darkest amber in the palette still misses 4.5:1 — so
+                      * here the tint is a background and the words carry the meaning (F-71).
+                      */}
                     <Select
                       aria-label={`Status, row ${index + 1}`}
+                      density="cell"
+                      className={cn('font-semibold', stageTint(row, ladder))}
                       value={row.statusCode ?? ''}
                       // The prototype disables this until a ladder is chosen, and it is right to:
                       // a stage means nothing until we know which of the two it belongs to. The
@@ -480,23 +529,28 @@ export default function LeadsPage() {
                   </Cell>
 
                   <Cell>
-                    <label className="flex items-center gap-2 text-sm text-muted">
+                    {/*
+                      * **The promise is written out beside the box** (`.month-check-wrap`,
+                      * `Overall.html:479-487`). It was `sr-only`, so a sighted reader had a bare
+                      * checkbox in a column headed *This month* and no way to know whether ticking it
+                      * promised a close or a recruitment — which are different promises.
+                      */}
+                    <label className="flex items-start gap-1.5 text-xs leading-tight text-muted">
                       <input
                         type="checkbox"
-                        className="h-4 w-4"
+                        className="mt-px h-[13px] w-[13px] shrink-0 accent-success"
                         checked={row.thisMonth}
                         disabled={saving || closed}
                         onChange={(e) => run(row.id, () => updateLead(row.id, { thisMonth: e.target.checked }, row.version))}
                       />
-                      <span className="sr-only">{monthAction}</span>
+                      {monthAction}
                     </label>
                   </Cell>
 
                   <Cell className="min-w-[12rem]">
-                    <Textarea
+                    <AutoGrowTextarea
                       aria-label={`Remarks, row ${index + 1}`}
-                      className="w-full min-h-10"
-                      rows={2}
+                      className="w-full"
                       value={draftOf(row, 'remarks', row.remarks)}
                       placeholder="Notes, hot buttons, life events…"
                       disabled={saving}
@@ -509,6 +563,7 @@ export default function LeadsPage() {
                     <TextInput
                       type="date"
                       aria-label={`Next action date, row ${index + 1}`}
+                      density="cell"
                       className="w-full"
                       value={draftOf(row, 'nextActionDate', row.nextActionDate)}
                       disabled={saving}
@@ -520,7 +575,8 @@ export default function LeadsPage() {
                     />
                     <TextInput
                       aria-label={`Next action note, row ${index + 1}`}
-                      className="mt-1 w-full"
+                      density="cell"
+                      className="mt-0.5 w-full"
                       value={draftOf(row, 'nextActionNote', row.nextActionNote)}
                       placeholder="e.g. Meet at Starbucks"
                       disabled={saving}
@@ -530,7 +586,13 @@ export default function LeadsPage() {
                   </Cell>
 
                   <Cell>
-                    <div className="flex items-center gap-2">
+                    {/*
+                      * **Glyphs, not words** (`.row-actions`, `Overall.html:489-498`). Three actions
+                      * spelled out are wider than any data in the row; grey at rest with the hover
+                      * carrying the meaning — green where it succeeds, red where it does not. Each
+                      * keeps its `sr-only` name, so nothing is lost to a reader who cannot see it.
+                      */}
+                    <div className="flex items-center gap-px">
                       {closed ? (
                         <Button
                           variant="inline"
@@ -542,7 +604,8 @@ export default function LeadsPage() {
                       ) : (
                         <>
                           <Button
-                            variant="inline"
+                            variant="icon"
+                            tone="success"
                             disabled={saving || !isTerminal(row)}
                             title={isTerminal(row)
                               ? 'Mark successful'
@@ -554,7 +617,8 @@ export default function LeadsPage() {
                           </Button>
                           {/* Lost is allowed at any stage (§3.7); only won is gated. */}
                           <Button
-                            variant="inline"
+                            variant="icon"
+                            tone="alert"
                             disabled={saving}
                             title="Mark not successful"
                             onClick={() => run(row.id, () => setLeadOutcome(row.id, 'lost', row.version))}
@@ -565,21 +629,10 @@ export default function LeadsPage() {
                         </>
                       )}
                       <Button
-                        variant="inlineDanger"
+                        variant="icon"
                         disabled={saving}
                         title="Delete"
-                        onClick={async () => {
-                          if (!window.confirm(`Delete ${row.name || 'this lead'}? It stops appearing here.`)) return;
-                          setBusy((b) => ({ ...b, [row.id]: true }));
-                          try {
-                            await deleteLead(row.id);
-                            await load();
-                          } catch (err) {
-                            setRowError((e) => ({ ...e, [row.id]: toDisplayError(err) }));
-                          } finally {
-                            setBusy((b) => ({ ...b, [row.id]: false }));
-                          }
-                        }}
+                        onClick={() => setConfirmDelete(row)}
                       >
                         <span aria-hidden="true">🗑</span>
                         <span className="sr-only">Delete</span>
@@ -590,11 +643,7 @@ export default function LeadsPage() {
                   <Cell className="whitespace-nowrap text-muted">
                     {row.dateRegistered
                       ? (
-                        <time dateTime={row.dateRegistered}>
-                          {new Date(row.dateRegistered).toLocaleDateString('en-GB', {
-                            day: 'numeric', month: 'short', year: 'numeric',
-                          })}
-                        </time>
+                        <time dateTime={row.dateRegistered}>{formatDay(row.dateRegistered)}</time>
                       )
                       : '—'}
                   </Cell>
@@ -624,6 +673,39 @@ export default function LeadsPage() {
           </div>
         </>
       )}
+
+      <Dialog
+        open={confirmDelete !== null}
+        message={`Delete ${confirmDelete?.name || 'this lead'}? It stops appearing here — nothing is erased, and it stays recoverable.`}
+        confirmLabel="Delete lead"
+        tone="danger"
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={async () => {
+          const row = confirmDelete!;
+          setConfirmDelete(null);
+          setBusy((b) => ({ ...b, [row.id]: true }));
+          try {
+            await deleteLead(row.id);
+            await load();
+          } catch (err) {
+            setRowError((e) => ({ ...e, [row.id]: toDisplayError(err) }));
+          } finally {
+            setBusy((b) => ({ ...b, [row.id]: false }));
+          }
+        }}
+      />
+
+      <Dialog
+        open={confirmType !== null}
+        message="Changing the type clears this lead’s stage and its commitment for this month. The two ladders share no stage. Continue?"
+        confirmLabel="Change the type"
+        onCancel={() => setConfirmType(null)}
+        onConfirm={() => {
+          const { row, type } = confirmType!;
+          setConfirmType(null);
+          void run(row.id, () => updateLead(row.id, { type }, row.version));
+        }}
+      />
     </Page>
   );
 }
@@ -640,50 +722,98 @@ export default function LeadsPage() {
  * home is the Owner's Overview in Phase 14; here they are the recruiting half of the reader's own
  * work, and on a purely sales agent's screen two zeroes would be noise.
  */
-function Counts({
-  counts,
-  active,
-  onAttention,
-}: {
-  counts: LeadSummary;
-  active: '' | LeadFlag;
-  onAttention: (flag: LeadFlag) => void;
-}) {
-  const flags = (Object.keys(FLAG_LABEL) as LeadFlag[]).filter((f) => counts.attention[f] > 0);
+/**
+ * Where this stage sits on **its own** ladder, as a tint.
+ *
+ * `statusStyle()` (`Overall.html:5463-5478`): the first rung is alert — nothing has happened yet — the
+ * last is success, and a rung in between wears its ladder's colour, amber for sales and navy-soft for
+ * recruitment. Rank is read from the ladder the lead is actually on, because a sales rank 2 and a
+ * recruitment rank 2 are not the same distance from anywhere.
+ *
+ * **The text stays navy and only the ground changes.** The prototype colours the words, and at the
+ * 12.5px this table uses no amber in the palette reaches 4.5:1 on its own tint (F-71). The stage name
+ * is in the box either way, so nothing depends on the colour.
+ */
+function stageTint(row: Lead, ladder: readonly { code: string }[]): string {
+  if (!row.statusCode || ladder.length === 0) return 'text-muted';
+  const at = ladder.findIndex((s) => s.code === row.statusCode);
+  if (at === -1) return 'text-muted';
+  if (at === 0) return 'bg-alert/[0.08] text-navy';
+  if (at === ladder.length - 1) return 'bg-success/10 text-navy';
+  return row.type === 'recruitment' ? 'bg-navy-soft/[0.09] text-navy' : 'bg-amber/[0.13] text-navy';
+}
 
+function Counts({ counts }: { counts: LeadSummary }) {
   return (
-    <Card className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-2 p-4">
-      <Figure label="Open" value={counts.open} />
-      <Figure label="Promised this month" value={counts.committedThisMonth} />
+    <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <KpiTile label="Open" value={counts.open} />
+      <KpiTile label="Promised this month" value={counts.committedThisMonth} />
       {counts.recruitmentPipelineNow > 0 && (
         <>
-          <Figure label="Recruitment pipeline" value={counts.recruitmentPipelineNow} />
-          <Figure label="Expected to close" value={counts.recruitmentExpectedToClose} />
+          <KpiTile label="Recruitment pipeline" value={counts.recruitmentPipelineNow} />
+          <KpiTile label="Expected to close" value={counts.recruitmentExpectedToClose} />
         </>
       )}
-      {flags.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          {flags.map((flag) => (
-            <Button
-              key={flag}
-              variant={active === flag ? 'secondary' : 'inline'}
-              aria-pressed={active === flag}
-              onClick={() => onAttention(flag)}
-            >
-              {counts.attention[flag]} {FLAG_LABEL[flag].toLowerCase()}
-            </Button>
-          ))}
-        </div>
-      )}
-    </Card>
+    </div>
   );
 }
 
-function Figure({ label, value }: { label: string; value: number }) {
+/**
+ * The prototype's toolbar: the count on the left, the screen's own action on the right, **directly
+ * above the table** (`Overall.html:391-394`, `:2791-2794`).
+ *
+ * What sat between the title and the first row was a filter card, a bare count paragraph and a counts
+ * card — three stacked blocks, so on a laptop a reader scrolled to reach their leads. The filters are a
+ * registered Fill (L-28) and stay; the count and the attention chips come here, which is where the
+ * prototype puts the one thing it has.
+ *
+ * **The attention chips belong here rather than in the tile strip.** They are filters, not figures: each
+ * narrows the table below to exactly the rows it counted, and `aria-pressed` says which one is on.
+ */
+function Toolbar({
+  total,
+  openOnly,
+  counts,
+  active,
+  onAttention,
+  onAdd,
+  adding,
+}: {
+  total: number;
+  openOnly: boolean;
+  counts: LeadSummary | null;
+  active: '' | LeadFlag;
+  onAttention: (flag: LeadFlag) => void;
+  onAdd: () => void;
+  adding: boolean;
+}) {
+  const flags = counts
+    ? (Object.keys(FLAG_LABEL) as LeadFlag[]).filter((f) => counts.attention[f] > 0)
+    : [];
+
   return (
-    <div>
-      <div className="font-display text-xl font-bold text-navy">{value}</div>
-      <div className="text-sm text-muted">{label}</div>
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <p className="text-sm text-muted">
+          {total} active lead{total === 1 ? '' : 's'}
+          {openOnly ? '' : ' shown'}
+        </p>
+        {flags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            {flags.map((flag) => (
+              <Button
+                key={flag}
+                variant={active === flag ? 'secondary' : 'inline'}
+                aria-pressed={active === flag}
+                onClick={() => onAttention(flag)}
+              >
+                {counts!.attention[flag]} {FLAG_LABEL[flag].toLowerCase()}
+              </Button>
+            ))}
+          </div>
+        )}
+      </div>
+      <Button onClick={onAdd} aria-expanded={adding}>+ Add lead</Button>
     </div>
   );
 }

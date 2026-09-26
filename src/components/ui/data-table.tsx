@@ -45,12 +45,41 @@ function isSortable(column: Column): column is SortableColumn {
   return typeof column !== 'string' && 'sort' in column;
 }
 
+/**
+ * A dense table, on one class string applied to the `<table>`.
+ *
+ * `components-and-patterns.md` has specified `table-layout: fixed` with explicit widths since Phase 1
+ * and no screen could ask for it, so the leads table shipped at three times the prototype's row height
+ * (`px-4 py-2.5 text-md` against `padding:3px 8px; font-size:12.5px`) and a reader saw five rows where
+ * the prototype shows fifteen.
+ *
+ * **Arbitrary descendant variants, not a React context.** `skeleton.tsx` builds `SkeletonTable` from
+ * this component and is deliberately *not* a client component, so `loading.tsx` can render it directly
+ * — a `createContext` here would pull every route group's loading state into the client bundle, and the
+ * failure would read as a missing boundary rather than a missing provider. `[&_td]:px-2` has
+ * specificity `0,1,1` and beats `Cell`'s own `.px-4` at `0,1,0` deterministically, which a context
+ * would not do any better.
+ *
+ * The header's `bg-base` band is `--warm-base` in the prototype (`Overall.html:416`), and the row hover
+ * is the 1.5%-navy wash at `:424` — faint on purpose: it tells you which row your pointer is on without
+ * competing with the amber focus ring inside it.
+ */
+const DENSITY_COMPACT = [
+  'table-fixed',
+  '[&_thead]:bg-base',
+  '[&_th]:px-2 [&_th]:py-[7px] [&_th]:text-2xs',
+  '[&_td]:px-2 [&_td]:py-[3px] [&_td]:text-base [&_td]:leading-tight',
+  '[&_tbody_tr]:hover:bg-navy/[0.015]',
+].join(' ');
+
 export function DataTable({
   caption,
   columns,
   children,
   className,
   tableClassName,
+  density = 'default',
+  widths,
 }: {
   caption: string;
   columns: readonly Column[];
@@ -62,11 +91,34 @@ export function DataTable({
    * table squashes to fit and the horizontal scroll this wrapper exists for never happens.
    */
   tableClassName?: string;
+  /** `compact` is the prototype's editable-list density. Opt-in: eleven other screens use this. */
+  density?: 'default' | 'compact';
+  /**
+   * One CSS width per column, rendered as a `<colgroup>` (`Overall.html:2799-2802`, `:426-435`).
+   *
+   * **Only meaningful with `density="compact"`**, which sets `table-fixed` — without a fixed layout
+   * the browser treats these as suggestions and a long remark still widens its column, which is the
+   * whole thing a nine-column editable table has to prevent.
+   */
+  widths?: readonly string[];
 }) {
   return (
     <div className={cn('overflow-x-auto rounded-lg border border-hairline bg-card', className)}>
-      <table className={cn('w-full border-collapse text-left text-md', tableClassName)}>
+      <table
+        className={cn(
+          'w-full border-collapse text-left text-md',
+          density === 'compact' && DENSITY_COMPACT,
+          tableClassName,
+        )}
+      >
         <caption className="sr-only">{caption}</caption>
+        {widths ? (
+          <colgroup>
+            {widths.map((w, i) => (
+              <col key={i} style={{ width: w }} />
+            ))}
+          </colgroup>
+        ) : null}
         <thead>
           <tr className="border-b border-hairline">
             {columns.map((column) => {
@@ -83,7 +135,7 @@ export function DataTable({
                     <button
                       type="button"
                       onClick={column.onSort}
-                      className="inline-flex items-center gap-1 uppercase tracking-wide hover:text-navy"
+                      className="inline-flex items-center gap-1 rounded-sm uppercase tracking-wide hover:text-navy"
                     >
                       {label}
                       <span aria-hidden="true" className="text-2xs">{SORT_GLYPH[column.sort]}</span>

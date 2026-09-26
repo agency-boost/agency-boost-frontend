@@ -6,14 +6,20 @@ import { cn } from '@/lib/cn';
  * holds something agents are offered, `open` when it does not.
  *
  * Its words carry the state — *6 skills · 10 modules published*, *Empty*, *Draft* — so colour is
- * never the only cue, and the two tones differ in border as well as hue.
+ * never the only cue, and the tones differ in border as well as hue.
+ *
+ * **`navy` is the quiet chip**, not a state: `.activity-tag` naming which activity a cascade column
+ * counts against (`Overall.html:718-721`) and `.auto-badge` saying a field is filled in for you
+ * (`:662-667`). The prototype sets no `text-transform` on the first and `uppercase` on the second,
+ * so a chip carrying a phrase rather than a state passes `className="normal-case tracking-normal"` —
+ * `cn` merges with `twMerge`, so the later class wins and nothing here needs a second knob.
  */
 export function ConfigBadge({
   tone,
   children,
   className,
 }: {
-  tone: 'won' | 'open';
+  tone: 'won' | 'open' | 'navy';
   children: ReactNode;
   className?: string;
 }) {
@@ -22,7 +28,9 @@ export function ConfigBadge({
       data-tone={tone}
       className={cn(
         'inline-flex whitespace-nowrap rounded-pill px-2 py-0.5 text-2xs font-bold uppercase tracking-wide',
-        tone === 'won' ? 'bg-success/10 text-success' : 'border border-hairline bg-base text-muted',
+        tone === 'won' && 'bg-success/10 text-success',
+        tone === 'open' && 'border border-hairline bg-base text-muted',
+        tone === 'navy' && 'bg-navy/[0.06] text-navy',
         className,
       )}
     >
