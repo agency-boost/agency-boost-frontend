@@ -15,7 +15,8 @@ import {
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  changesBetween, FIELD_LABEL, formatRupiah, readGoal, readGoalHistory, saveGoal, toMajor, toMinor,
+  changesBetween, FIELD_LABEL, formatRupiah, groupDigits, parseDigits, readGoal, readGoalHistory,
+  saveGoal, toMajor, toMinor,
   type Goal, type GoalHistoryEntry, type GoalInputs, type GoalMode,
 } from '@/lib/goals';
 import { readMyTeam, type TeamMember } from '@/lib/org';
@@ -663,14 +664,21 @@ function Rupiah({
 }) {
   return (
     <Field label={label} htmlFor={id} hint={hint}>
+      {/*
+        * **Text, not `type="number"`**, so the figure can be grouped while it is being typed —
+        * `500.000.000` rather than `500000000`. A number input cannot carry a separator, and nine
+        * digits in a row is a figure you have to count rather than read. `inputMode="numeric"` keeps
+        * the phone keypad; the prototype does exactly this (`Overall.html:2874`).
+        */}
       <TextInput
         id={id}
-        type="number"
-        min="0"
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
         prefix="Rp"
         className="w-full"
-        value={toMajor(value)}
-        onChange={(e) => onChange(toMinor(Number(e.target.value)))}
+        value={groupDigits(toMajor(value))}
+        onChange={(e) => onChange(toMinor(parseDigits(e.target.value)))}
       />
     </Field>
   );

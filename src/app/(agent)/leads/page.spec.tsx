@@ -72,6 +72,13 @@ const base = {
   '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: PIPELINES, version: 1 } },
   '/kpm/org-levels': { body: [] },
   '/leads/summary': { body: summary() },
+  /*
+   * The two closed lists below the table fetch their own page each. Keyed on the query rather than
+   * the path — the stub matches on `url.includes`, longest key first — so `/leads` keeps answering
+   * the table and these answer the cards.
+   */
+  'outcome=won': { body: page([]) },
+  'outcome=lost': { body: page([]) },
 };
 
 const render = (routes: Record<string, unknown>, me = AGENT) => {
@@ -80,9 +87,19 @@ const render = (routes: Record<string, unknown>, me = AGENT) => {
   return stub;
 };
 
-/** The query string of the last `GET /leads` the screen asked for. */
+/**
+ * The query string of the last `GET /leads` **the table** asked for.
+ *
+ * The two closed cards below it fetch `/leads` as well, and theirs land last — so this has to tell
+ * them apart. They are the only calls that name a `pageSize`: the table takes whatever size the
+ * service states and never asks for one.
+ */
 const lastList = (calls: { url: string; init: RequestInit }[]) =>
-  new URL(calls.filter((c) => /\/leads(\?|$)/.test(c.url) && (c.init.method ?? 'GET') === 'GET').at(-1)!.url)
+  new URL(calls
+    .filter((c) => /\/leads(\?|$)/.test(c.url)
+      && (c.init.method ?? 'GET') === 'GET'
+      && !c.url.includes('pageSize='))
+    .at(-1)!.url)
     .searchParams;
 
 describe('Leads Management (P7-T2, P7-T3)', () => {
@@ -107,7 +124,6 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       await userEvent.selectOptions(screen.getByLabelText('Type'), 'recruitment');
       await userEvent.selectOptions(screen.getByLabelText('Stage'), 'AAJI_LICENSED');
       await userEvent.selectOptions(screen.getByLabelText('Show'), 'won');
-      await userEvent.selectOptions(screen.getByLabelText('Needs attention'), 'overdue');
       await userEvent.click(screen.getByRole('button', { name: 'Search' }));
 
       await waitFor(() => {
@@ -116,8 +132,41 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
         expect(q.get('type')).toBe('recruitment');
         expect(q.get('statusCode')).toBe('AAJI_LICENSED');
         expect(q.get('outcome')).toBe('won');
-        expect(q.get('attention')).toBe('overdue');
       });
+    });
+
+    it('has no attention filter of its own — the chips beside the count are it', async () => {
+      // Two controls for one job, and this was the weaker: no counts, flags nothing matched, and
+      // two actions where the chip takes one.
+      render({
+        '/leads': { body: page([lead()]) },
+        '/leads/summary': { body: summary({ attention: { overdue: 3, 'no-next-action': 0, 'no-remarks': 0 } }) },
+      });
+      await screen.findByDisplayValue('Pak Budi');
+
+      expect(screen.queryByLabelText('Needs attention')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '3 overdue' })).toBeInTheDocument();
+      // And a flag nothing matches is not offered at all, which a select could not manage.
+      expect(screen.queryByRole('button', { name: /no remarks/ })).not.toBeInTheDocument();
+    });
+
+    it('turns an attention filter off by pressing the chip again', async () => {
+      // `aria-pressed` said it was a toggle from the start and it was not — pressing the active one
+      // re-applied the same filter. It went unnoticed while a select above offered *Anything*.
+      const { calls } = render({
+        '/leads': { body: page([lead()]) },
+        '/leads/summary': { body: summary({ attention: { overdue: 3, 'no-next-action': 0, 'no-remarks': 0 } }) },
+      });
+      await screen.findByDisplayValue('Pak Budi');
+
+      const chip = screen.getByRole('button', { name: '3 overdue' });
+      await userEvent.click(chip);
+      await waitFor(() => expect(lastList(calls).get('attention')).toBe('overdue'));
+      expect(screen.getByRole('button', { name: '3 overdue' })).toHaveAttribute('aria-pressed', 'true');
+
+      await userEvent.click(screen.getByRole('button', { name: '3 overdue' }));
+      await waitFor(() => expect(lastList(calls).get('attention')).toBeNull());
+      expect(screen.getByRole('button', { name: '3 overdue' })).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('opens on the leads that are still open, because that is the work', async () => {
@@ -456,9 +505,12 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       });
 
       const table = within(await screen.findByRole('table'));
-      expect(table.getByText('Closes this month')).toBeInTheDocument();
+      // The commitment is the ticked box in the This month column — it used to be repeated as a
+      // pill under the name, in the same row, which is the noise that hid the warnings beside it.
+      expect(table.getByLabelText('Close this month')).toBeChecked();
       expect(table.getByText('Overdue 14 days')).toBeInTheDocument();
       expect(table.getByText('No remarks')).toBeInTheDocument();
+      expect(table.queryByText('Closes this month')).not.toBeInTheDocument();
     });
 
     it('P7-T4: says how late, and counts in the office’s days rather than the browser’s', async () => {
@@ -478,7 +530,41 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
     it('words the commitment for the ladder the lead is on', async () => {
       render({ '/leads': { body: page([lead({ type: 'recruitment', statusCode: null, thisMonth: true })]) } });
 
-      expect(await screen.findByText('Recruiting this month')).toBeInTheDocument();
+      // *Recruit*, not *Close*: they are different promises, and the box says which one it is.
+      expect(await screen.findByLabelText('Recruit this month')).toBeChecked();
+      expect(screen.queryByLabelText('Close this month')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('the row says only what it does not already say (third UI pass)', () => {
+    it('keeps a leader’s attribution on the row, quietly', async () => {
+      // P7-T7 AC-2: a leader may write a downline's lead and the agent must be able to tell that
+      // work from their own. It was an uppercase pill among four others, so provenance shouted
+      // louder than *Overdue 6 days*.
+      render({
+        '/leads': {
+          body: page([lead({ lastEditedBy: { membershipId: 'mem-9', name: 'Ibu Sari' } })]),
+        },
+      });
+
+      const edited = await screen.findByText('Edited by Ibu Sari');
+      expect(edited.className).toContain('text-muted');
+      expect(edited.className).not.toContain('uppercase');
+    });
+
+    it('opens the details across the whole table, not inside the name cell', async () => {
+      // Under a fixed layout the name column is 9rem, so a four-field form was squeezed into a
+      // ninth of the table and spilled over the row beneath it.
+      render({ '/leads': { body: page([lead()]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+      const panel = await screen.findByLabelText('Why you may hold these');
+      const cell = panel.closest('td')!;
+      expect(cell.getAttribute('colspan')).toBe('9');
+      // And it is a row of its own, below the lead rather than inside it.
+      expect(cell.closest('tr')).not.toBe(screen.getByDisplayValue('Pak Budi').closest('tr'));
     });
   });
 
@@ -608,13 +694,13 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       const { calls } = render({ '/leads': { body: page([]) } });
       await screen.findByText('No leads yet — add your first one above.');
 
-      await userEvent.selectOptions(screen.getByLabelText('Needs attention'), 'overdue');
+      await userEvent.selectOptions(screen.getByLabelText('Show'), 'won');
       await userEvent.click(screen.getByRole('button', { name: 'Search' }));
       await screen.findByText('No leads match what you asked for.');
 
       await userEvent.click(screen.getByRole('button', { name: 'Clear the filters' }));
 
-      await waitFor(() => expect(lastList(calls).get('attention')).toBeNull());
+      await waitFor(() => expect(lastList(calls).get('outcome')).toBe('open'));
       expect(await screen.findByText('No leads yet — add your first one above.')).toBeInTheDocument();
     });
 
@@ -1065,6 +1151,94 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       const remarks = await screen.findByLabelText('Remarks, row 1');
       expect(remarks).toHaveAttribute('rows', '1');
       expect(remarks.className).toContain('resize-none');
+    });
+  });
+  describe('closed leads live below the table, as the prototype has them', () => {
+    const closed = (over: Record<string, unknown> = {}) => ({
+      'outcome=won': { body: page([lead({ id: 'w1', name: 'Ibu Wulan Sari', outcome: 'won', statusCode: 'PAID_AND_ISSUED' })], { total: 1 }) },
+      'outcome=lost': { body: page([lead({ id: 'x1', name: 'Pak Joko', outcome: 'lost', type: 'recruitment', statusCode: 'NOT_APPROACHED' })], { total: 1 }) },
+      ...over,
+    });
+
+    it('renders both cards, each with what it holds and how it went', async () => {
+      render({ '/leads': { body: page([lead()]) }, ...closed() });
+
+      expect(await screen.findByRole('heading', { name: 'Closed leads' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: '✓ Successful' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: '✕ Not successful' })).toBeInTheDocument();
+      expect(screen.getByText('Ibu Wulan Sari')).toBeInTheDocument();
+      expect(screen.getByText('Pak Joko')).toBeInTheDocument();
+    });
+
+    it('names the ladder and the stage the lead ended on', async () => {
+      // The lead carries the code; the office's own word for it comes from the published snapshot.
+      render({ '/leads': { body: page([lead()]) }, ...closed() });
+
+      expect(await screen.findByText('Sales · Paid and issued')).toBeInTheDocument();
+      expect(screen.getByText('Recruitment · Not approached')).toBeInTheDocument();
+    });
+
+    it('counts the whole total, not the few it lists', async () => {
+      // The standing count the Show filter could never give: the header is the office's answer even
+      // though the list under it is a page.
+      render({
+        '/leads': { body: page([lead()]) },
+        ...closed({
+          'outcome=won': { body: page([lead({ id: 'w1', name: 'Ibu Wulan Sari', outcome: 'won' })], { total: 23 }) },
+        }),
+      });
+
+      const card = (await screen.findByRole('heading', { name: '✓ Successful' })).parentElement!;
+      expect(card).toHaveTextContent('23');
+      // And the rest is a click away, through the filter that already pages them.
+      expect(screen.getByRole('button', { name: 'See all 23' })).toBeInTheDocument();
+    });
+
+    it('sends the table to that outcome when the rest is asked for', async () => {
+      const { calls } = render({
+        '/leads': { body: page([lead()]) },
+        ...closed({
+          'outcome=won': { body: page([lead({ id: 'w1', name: 'Ibu Wulan Sari', outcome: 'won' })], { total: 23 }) },
+        }),
+      });
+
+      await userEvent.click(await screen.findByRole('button', { name: 'See all 23' }));
+
+      await waitFor(() => expect(lastList(calls).get('outcome')).toBe('won'));
+    });
+
+    it('reopens from the card, through the route that clears the outcome', async () => {
+      const { calls } = render({
+        '/leads': { body: page([lead()]) },
+        '/leads/w1/outcome': { body: lead({ id: 'w1', name: 'Ibu Wulan Sari', outcome: null }) },
+        ...closed(),
+      });
+      await screen.findByText('Ibu Wulan Sari');
+
+      await userEvent.click(screen.getAllByRole('button', { name: '↺ Move to active' })[0]);
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.url.includes('/leads/w1/outcome')).at(-1);
+        expect(JSON.parse(String(sent?.init.body))).toMatchObject({ outcome: null });
+      });
+    });
+
+    it('says so when a card holds nothing, rather than showing an empty box', async () => {
+      render({ '/leads': { body: page([lead()]) } });
+
+      expect(await screen.findByText('No successful leads yet.')).toBeInTheDocument();
+      expect(screen.getByText('No lost leads yet.')).toBeInTheDocument();
+    });
+
+    it('stands down while the table is already showing closed leads', async () => {
+      // Set Show to Successful and the same rows would be in the table and in the card at once.
+      render({ '/leads': { body: page([lead({ outcome: 'won' })]) }, ...closed() });
+      await screen.findByDisplayValue('Pak Budi');
+
+      await userEvent.selectOptions(screen.getByLabelText('Show'), 'won');
+      await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+
+      await waitFor(() => expect(screen.queryByRole('heading', { name: 'Closed leads' })).not.toBeInTheDocument());
     });
   });
 });

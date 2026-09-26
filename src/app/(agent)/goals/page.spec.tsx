@@ -167,7 +167,9 @@ describe('Goal settings (P8-T3)', () => {
     it('shows 500,000,000 where the record holds 50,000,000,000', async () => {
       render({ '/goals': { body: goal() } });
 
-      expect(await screen.findByLabelText('Annual APE target')).toHaveValue(500_000_000);
+      // Grouped in the box as well as beside it: nine digits in a row is a figure you have to
+      // count rather than read, and a number input cannot carry a separator at all.
+      expect(await screen.findByLabelText('Annual APE target')).toHaveValue('500.000.000');
       // Indonesian grouping, which the prototype's `toLocaleString('en-US')` gets wrong for its
       // own audience. It appears in the remaining-needed figure and in the commitment sentence.
       expect(screen.getAllByText('Rp 500.000.000').length).toBeGreaterThan(0);
@@ -692,6 +694,40 @@ describe('Goal settings (P8-T3)', () => {
       await userEvent.type(screen.getByLabelText('Annual APE target'), '1');
       expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
       expect(screen.getByRole('status').className).not.toContain('text-success');
+    });
+
+    it('groups a figure as it is typed, and sends the digits', async () => {
+      const { calls } = render({ '/goals': [{ body: goal() }, { body: goal() }] });
+
+      const field = await screen.findByLabelText('Annual APE target');
+      await userEvent.clear(field);
+      await userEvent.type(field, '750000000');
+      expect(field).toHaveValue('750.000.000');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        // Separators out, sen in: 750,000,000 rupiah is 75,000,000,000 sen.
+        expect(JSON.parse(String(sent?.init.body))).toMatchObject({
+          annualApeTargetMinor: 75_000_000_000,
+        });
+      });
+    });
+
+    it('leaves the unit in the affix rather than inside the value', async () => {
+      // `Rp` is the field's prefix. Putting it in the value too would print it twice in one box.
+      render({ '/goals': { body: goal() } });
+      expect(await screen.findByLabelText('Annual APE target')).not.toHaveValue('Rp 500.000.000');
+    });
+
+    it('pads a field whose affix is on the other side', async () => {
+      // `30 %` and `3.2 months` had the number hard against the left border: the affix supplies the
+      // gap on its own side only.
+      render({ '/goals': { body: goal() } });
+      const pct = await screen.findByLabelText('Leads to Appointment');
+      expect(pct.className).toContain('pl-3');
+      // And the side that does have one is not padded twice.
+      expect(screen.getByLabelText('Annual APE target').className).not.toContain('pl-3');
     });
 
     it('holds every card on the screen to one width and one padding', async () => {

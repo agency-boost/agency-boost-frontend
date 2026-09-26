@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { Page } from '@/components/page';
 import { AutoGrowTextarea } from '@/components/ui/auto-grow-textarea';
 import { Dialog } from '@/components/ui/dialog';
@@ -18,7 +18,8 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   createLead, deleteLead, listLeads, readLead, readLeadSummary, setLeadOutcome, setLeadStatus,
   updateLead, flagLabel, monthLabel, FLAG_LABEL, LAWFUL_BASIS_LABEL,
-  type Lead, type LeadFlag, type LeadOutcome, type LeadQuery, type LeadSummary, type LeadType,
+  type Lead, type LeadFlag, type LeadOutcome, type LeadPage, type LeadQuery, type LeadSummary,
+  type LeadType,
 } from '@/lib/leads';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import type { LeadStatusRow } from '@/lib/tenant-config';
@@ -51,6 +52,9 @@ interface Filters {
   attention: '' | NonNullable<LeadQuery['attention']>;
 }
 
+/** How many closed leads a card lists before it says how many more there are. */
+const CLOSED_SHOWN = 5;
+
 const NO_FILTERS: Filters = {
   search: '', type: '', statusCode: '', outcome: 'open', attention: '',
 };
@@ -82,6 +86,15 @@ export default function LeadsPage() {
    * for exactly these (`Overall.html:539-553`) because the browser's dialog says OK and Cancel whatever
    * was asked, cannot be read in the page's voice, and arrives on a phone as a system sheet.
    */
+  /**
+   * The two closed lists below the table (`Overall.html:2824-2842`).
+   *
+   * **A page each, not everything.** The prototype holds every lead in memory and prints both lists
+   * whole; ours pages, and two unbounded lists below a paged table would be two more of the thing the
+   * paging exists to avoid. Each card shows the first few and its **real total** in the header — the
+   * standing count the Show filter could never give — with the rest a click away through that filter.
+   */
+  const [closed, setClosed] = useState<{ won: LeadPage; lost: LeadPage } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Lead | null>(null);
   const [confirmType, setConfirmType] = useState<{ row: Lead; type: LeadType | null } | null>(null);
 
@@ -106,6 +119,16 @@ export default function LeadsPage() {
        * round trip after the table it sits above.
        */
       readLeadSummary().then(setCounts).catch(() => setCounts(null));
+      /*
+       * Beside the page as well. `total` on each response is what the card's count shows, so the
+       * figure is the office's whole answer even though the list under it is the first few.
+       */
+      Promise.all([
+        listLeads({ outcome: 'won', pageSize: CLOSED_SHOWN, sort: 'dateRegistered', dir: 'desc' }),
+        listLeads({ outcome: 'lost', pageSize: CLOSED_SHOWN, sort: 'dateRegistered', dir: 'desc' }),
+      ])
+        .then(([won, lost]) => setClosed({ won, lost }))
+        .catch(() => setClosed(null));
     } catch (err) {
       setError(toDisplayError(err));
       setPageData(null);
@@ -300,18 +323,14 @@ export default function LeadsPage() {
                 <option value="">Everything</option>
               </Select>
             </Field>
-            <Field label="Needs attention" htmlFor="lead-filter-attention">
-              <Select
-                id="lead-filter-attention"
-                value={form.attention}
-                onChange={(e) => setForm({ ...form, attention: e.target.value as Filters['attention'] })}
-              >
-                <option value="">Anything</option>
-                <option value="overdue">Overdue</option>
-                <option value="no-next-action">No next action</option>
-                <option value="no-remarks">No remarks</option>
-              </Select>
-            </Field>
+            {/*
+              * **There is no *Needs attention* select here, and that is deliberate.**
+              *
+              * It listed the same three flags the chips beside the count already carry — two controls
+              * for one job, and the weaker one: the select showed no counts, offered flags nothing
+              * matched, and took two actions where the chip takes one. The chips carry the number,
+              * appear only when it is not zero, and toggle.
+              */}
             <FieldRow.Actions>
               <Button type="submit">Search</Button>
               <Button
@@ -360,7 +379,13 @@ export default function LeadsPage() {
             counts={counts}
             active={filters.attention}
             onAttention={(flag) => {
-              const next = { ...NO_FILTERS, attention: flag };
+              /*
+               * **A chip turns itself off.** `aria-pressed` said it was a toggle from the start and it
+               * was not — pressing the active one re-applied the same filter. That went unnoticed while
+               * a select sat above offering *Anything*; with the select gone it is the only way back.
+               */
+              const attention: Filters['attention'] = filters.attention === flag ? '' : flag;
+              const next = { ...NO_FILTERS, attention };
               setForm(next);
               setFilters(next);
               setPage(1);
@@ -387,15 +412,19 @@ export default function LeadsPage() {
               const retired = row.statusCode && !ladder.some((s) => s.code === row.statusCode);
               const saving = busy[row.id] === true;
               const closed = row.outcome !== null;
-              // Two strings, deliberately: the checkbox is a promise the agent makes — *Close this
-              // month* — and the chip is the state that promise puts the lead in. One string for
-              // both would give the chip and the control the same accessible name.
+              /*
+               * One string now, where there were two. The second — *Closes this month* — labelled a
+               * pill under the name that repeated this very checkbox, two cells along, in the same
+               * row, under a heading reading *This month*.
+               */
               const monthAction = row.type === 'recruitment' ? 'Recruit this month' : 'Close this month';
-              const monthChip = row.type === 'recruitment' ? 'Recruiting this month' : 'Closes this month';
 
               return (
-                <Row key={row.id}>
-                  <Cell className="text-sm text-muted">
+                <Fragment key={row.id}>
+                <Row>
+                  {/* `.row-num` is grey and semibold (`Overall.html:451`) — a quiet ordinal that is
+                      still findable when you are counting down a page. */}
+                  <Cell className="font-semibold text-muted">
                     {(pageData.page - 1) * pageData.pageSize + index + 1}
                   </Cell>
 
@@ -410,23 +439,38 @@ export default function LeadsPage() {
                       onChange={(e) => setDraftValue(row.id, 'name', e.target.value)}
                       onBlur={() => commitText(row, 'name', row.name, (name) => ({ name }))}
                     />
+                    {/*
+                      * **Attribution, quietly** (P7-T7 AC-2, ADR-0044). A leader may write a
+                      * downline's lead, and the agent has to be able to tell that work from their
+                      * own — so it stays on the row. It was an uppercase pill among four others,
+                      * which made provenance shout louder than *Overdue 6 days*; it is a sentence
+                      * now, under the name it qualifies.
+                      */}
+                    {row.lastEditedBy && (
+                      <p className="mt-0.5 text-xs text-muted">
+                        Edited by {row.lastEditedBy.name ?? 'someone in your office'}
+                      </p>
+                    )}
+
+                    {/*
+                      * **Only what the row does not already say.**
+                      *
+                      * This carried up to five uppercase pills stacked down a 9rem column, and one of
+                      * them — *Closes this month* — repeated the checkbox two cells along, in the same
+                      * row, under a heading that reads *This month*. A pill that restates its own row
+                      * is noise twice over: it costs a line and it teaches the reader that the pills
+                      * are decoration.
+                      *
+                      * What stays is what has nowhere else to be: the attention flags, which are the
+                      * triage signal the counts strip filters on, and the outcome, which is the only
+                      * place a closed lead says so. At most two flags can appear — *Overdue* and *No
+                      * next action* are mutually exclusive, because a lead with no date cannot be late
+                      * for one.
+                      */}
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                      {row.thisMonth && <StatusPill status="success" label={monthChip} />}
                       {row.flags.map((flag) => (
                         <StatusPill key={flag} status="alert" label={flagLabel(flag, row.overdueDays)} />
                       ))}
-                      {/*
-                        * **The exit criterion, and it is checked here** (P7-T7 AC-2). A leader may
-                        * write a downline's lead; the agent has to be able to tell that work from
-                        * their own. Two columns rather than a flag — `updatedBy` differing from
-                        * `ownerMembershipId` is the whole signal (ADR-0044).
-                        */}
-                      {row.lastEditedBy && (
-                        <StatusPill
-                          status="neutral"
-                          label={`Edited by ${row.lastEditedBy.name ?? 'someone in your office'}`}
-                        />
-                      )}
                       {row.outcome && (
                         <StatusPill
                           status={row.outcome === 'won' ? 'success' : 'alert'}
@@ -445,16 +489,6 @@ export default function LeadsPage() {
                       <div className="mt-2">
                         <ErrorBanner {...rowError[row.id]} />
                       </div>
-                    )}
-                    {expanded === row.id && (
-                      <Details
-                        row={row}
-                        saving={saving}
-                        draftOf={draftOf}
-                        setDraftValue={setDraftValue}
-                        commitText={commitText}
-                        onLawfulBasis={(value) => run(row.id, () => updateLead(row.id, { lawfulBasis: value }, row.version))}
-                      />
                     )}
                   </Cell>
 
@@ -640,6 +674,8 @@ export default function LeadsPage() {
                     </div>
                   </Cell>
 
+                  {/* Grey, as `.registered-cell` has it (`:501`). It was forced to navy while the
+                      theme was painting bare cell text near-white; that is fixed at the root now. */}
                   <Cell className="whitespace-nowrap text-muted">
                     {row.dateRegistered
                       ? (
@@ -648,6 +684,29 @@ export default function LeadsPage() {
                       : '—'}
                   </Cell>
                 </Row>
+
+                {/*
+                  * **The details are a row, not a panel inside a cell.**
+                  *
+                  * They rendered inside the name cell, which under a fixed layout is 9rem wide — so a
+                  * four-field form was squeezed into a ninth of the table and spilled over the row
+                  * beneath it. `Cell` has taken a `colSpan` since Phase 4 and nothing was using it.
+                  */}
+                {expanded === row.id && (
+                  <Row key={`${row.id}-details`}>
+                    <Cell colSpan={columns.length} className="bg-base/60">
+                      <Details
+                        row={row}
+                        saving={saving}
+                        draftOf={draftOf}
+                        setDraftValue={setDraftValue}
+                        commitText={commitText}
+                        onLawfulBasis={(value) => run(row.id, () => updateLead(row.id, { lawfulBasis: value }, row.version))}
+                      />
+                    </Cell>
+                  </Row>
+                )}
+                </Fragment>
               );
             })}
           </DataTable>
@@ -672,6 +731,26 @@ export default function LeadsPage() {
             </span>
           </div>
         </>
+      )}
+
+      {/*
+        * Below the table, as the prototype has it — and only while the table is showing the open
+        * ones, or the same rows would be in both at once.
+        */}
+      {closed && filters.outcome === 'open' && (
+        <ClosedLeads
+          won={closed.won}
+          lost={closed.lost}
+          busy={busy}
+          stageLabel={(row) => laddersFor(row.type).find((s) => s.code === row.statusCode)?.label ?? null}
+          onReopen={(row) => run(row.id, () => setLeadOutcome(row.id, null, row.version))}
+          onSeeAll={(outcome) => {
+            const next = { ...NO_FILTERS, outcome };
+            setForm(next);
+            setFilters(next);
+            setPage(1);
+          }}
+        />
       )}
 
       <Dialog
@@ -722,6 +801,117 @@ export default function LeadsPage() {
  * home is the Owner's Overview in Phase 14; here they are the recruiting half of the reader's own
  * work, and on a purely sales agent's screen two zeroes would be noise.
  */
+/**
+ * The two lists below the table: what was won, and what was not (`Overall.html:2824-2842`).
+ *
+ * **They answer a different question from the table.** The table is the work — leads still open — and
+ * these are the record: how the year has gone, and somewhere to reopen from when a lead comes back.
+ * Folding them into a filter made both reachable and neither visible, and lost the standing counts.
+ *
+ * **A page each, with the real total in the header.** The prototype prints both lists whole because it
+ * holds every lead in memory; ours pages, and two unbounded lists under a paged table are two more of
+ * the thing paging exists to prevent. So each card lists the most recent few and says how many there
+ * are, with the rest one click away through the **Show** filter — which is the control that already
+ * pages them.
+ *
+ * **Shown only while the table is showing open leads.** Set Show to *Successful* and the same rows
+ * would be in the table and in the card at once; the cards are where closed leads live when you are
+ * looking at something else.
+ */
+function ClosedLeads({
+  won,
+  lost,
+  busy,
+  stageLabel,
+  onReopen,
+  onSeeAll,
+}: {
+  won: LeadPage;
+  lost: LeadPage;
+  busy: Record<string, boolean>;
+  /**
+   * The office's own word for the stage. A lead carries the **code** — renaming a stage must not
+   * orphan the leads sitting on it (invariant §3) — so the label is resolved from the published
+   * snapshot, and a stage the office has since retired has none to resolve.
+   */
+  stageLabel: (row: Lead) => string | null;
+  onReopen: (row: Lead) => void;
+  onSeeAll: (outcome: LeadOutcome) => void;
+}) {
+  const cards = [
+    { outcome: 'won' as const, title: '✓ Successful', page: won, empty: 'No successful leads yet.' },
+    { outcome: 'lost' as const, title: '✕ Not successful', page: lost, empty: 'No lost leads yet.' },
+  ];
+
+  return (
+    <section className="mt-8">
+      <h2 className="mb-3 font-display text-md font-bold text-navy">Closed leads</h2>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {cards.map(({ outcome, title, page: card, empty }) => (
+          <div key={outcome} className="overflow-hidden rounded-lg border border-hairline bg-card">
+            <header
+              className={cn(
+                'flex items-center justify-between gap-3 border-b border-hairline px-4 py-3 text-md font-bold',
+                outcome === 'won' ? 'bg-success/[0.06] text-success' : 'bg-alert/[0.06] text-alert',
+              )}
+            >
+              <h3>{title}</h3>
+              <span className="text-sm font-semibold text-muted">{card.total}</span>
+            </header>
+
+            {card.rows.length === 0 ? (
+              <p className="px-4 py-4 text-sm italic text-muted">{empty}</p>
+            ) : (
+              <>
+                {card.rows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="flex items-center justify-between gap-2.5 border-b border-hairline px-4 py-2.5 last:border-b-0"
+                  >
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="truncate text-md font-semibold text-navy">
+                        {row.name || '(unnamed)'}
+                      </span>
+                      <span className="text-xs text-muted">
+                        {row.type === 'recruitment' ? 'Recruitment' : 'Sales'}
+                        {stageLabel(row) ? ` · ${stageLabel(row)}` : ''}
+                      </span>
+                    </span>
+                    {/*
+                      * `.reopen-btn` is an outlined pill rather than one of the row-action glyphs
+                      * (`Overall.html:524-529`): there is one action here and it is not destructive,
+                      * so it says what it does.
+                      */}
+                    <button
+                      type="button"
+                      disabled={busy[row.id] === true}
+                      onClick={() => onReopen(row)}
+                      className={cn(
+                        'shrink-0 whitespace-nowrap rounded-pill border border-hairline px-2.5 py-1',
+                        'text-xs font-semibold text-navy-soft hover:bg-navy-soft/[0.08]',
+                        'disabled:cursor-not-allowed disabled:opacity-40',
+                      )}
+                    >
+                      ↺ Move to active
+                    </button>
+                  </div>
+                ))}
+                {card.total > card.rows.length && (
+                  <div className="px-4 py-2.5">
+                    <Button variant="inline" onClick={() => onSeeAll(outcome)}>
+                      {`See all ${card.total}`}
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /**
  * Where this stage sits on **its own** ladder, as a tint.
  *

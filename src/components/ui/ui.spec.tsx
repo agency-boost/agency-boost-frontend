@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { StatusPill, statusFor, STATUS_LABEL } from './status-pill';
@@ -217,6 +217,17 @@ describe('Stepper', () => {
     expect(minus).toBeDisabled();
     expect(minus.className).toContain('opacity-40');
     expect(minus.className).not.toContain('opacity-30');
+  });
+
+  it('drops focus on a wheel rather than counting it', () => {
+    // Twelve rows of these on a day: a scroll over a focused count is an increment nobody made.
+    const onChange = vi.fn();
+    render(<Stepper value={3} onChange={onChange} label="Leads" />);
+    const input = screen.getByLabelText('Count for Leads');
+    input.focus();
+    fireEvent.wheel(input, { deltaY: 100 });
+    expect(input).not.toHaveFocus();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('states its own colours rather than inheriting them', () => {
@@ -485,10 +496,65 @@ describe('TextInput affixes', () => {
     expect(screen.getByText('Rp')).toHaveAttribute('aria-hidden', 'true');
   });
 
+  it('grows no spinner on a number, and lets a wheel scroll the page', async () => {
+    // A focused `type="number"` treats a scroll as an increment, so reading down a form changes a
+    // field that is already off screen. The arrows are a 12px target nobody aims for on purpose.
+    const onChange = vi.fn();
+    render(<TextInput type="number" value="3" onChange={onChange} aria-label="Months" />);
+    const input = screen.getByLabelText('Months');
+
+    expect(input.className).toContain('[appearance:textfield]');
+    expect(input.className).toContain('[&::-webkit-inner-spin-button]:appearance-none');
+
+    input.focus();
+    expect(input).toHaveFocus();
+    fireEvent.wheel(input, { deltaY: 100 });
+    // Focus is dropped rather than the value changed: the reader has moved on from the field.
+    expect(input).not.toHaveFocus();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('leaves a text field’s wheel alone', () => {
+    const onChange = vi.fn();
+    render(<TextInput value="Pak Budi" onChange={onChange} aria-label="Name" />);
+    const input = screen.getByLabelText('Name');
+    input.focus();
+    fireEvent.wheel(input, { deltaY: 100 });
+    expect(input).toHaveFocus();
+  });
+
   it('renders a bare input when there is no affix — the wrapper is conditional on purpose', () => {
     // An unconditional wrapper breaks the FieldRow walk in this very file, one level up.
     const { container } = render(<TextInput value="" onChange={() => {}} />);
     expect(container.firstElementChild!.tagName).toBe('INPUT');
+  });
+
+  it('draws one focus ring, on the group rather than on both halves', () => {
+    // `globals.css` outlines every `:focus-visible`, and the group rings on `focus-within` — so an
+    // affixed field drew two, one around the number and one around the number and its unit. It read
+    // as two fields stacked on each other, because that is what it looked like.
+    const { container } = render(<TextInput suffix="months" value="3.2" onChange={() => {}} />);
+    const group = container.firstElementChild!;
+    const input = container.querySelector('input')!;
+
+    expect(group.className).toContain('focus-within:ring-2');
+    expect(group.className).toContain('focus-within:ring-amber');
+    expect(input.className).toContain('focus-visible:outline-none');
+    expect(input.className).toContain('focus:ring-0');
+  });
+
+  it('pads the side that has no affix, and not the side that does', () => {
+    // `30 %` had the number hard against the left border — the affix supplies the gap on its own
+    // side only, and a suffix-only field has nothing on the side the text starts from.
+    const { container, rerender } = render(<TextInput suffix="%" value="30" onChange={() => {}} />);
+    let input = container.querySelector('input')!;
+    expect(input.className).toContain('pl-3');
+    expect(input.className).not.toContain('pr-3');
+
+    rerender(<TextInput prefix="Rp" value="0" onChange={() => {}} />);
+    input = container.querySelector('input')!;
+    expect(input.className).toContain('pr-3');
+    expect(input.className).not.toContain('pl-3');
   });
 
   it('wraps only when an affix is present', () => {
@@ -707,6 +773,24 @@ describe('DataTable density and widths', () => {
     expect(cls).toContain('[&_thead]:bg-base');
     expect(cls).toContain('[&_td]:py-[3px]');
     expect(cls).toContain('[&_tbody_tr]:hover:bg-navy/[0.015]');
+  });
+
+  it('sizes the body by inheritance, never through a `[&_td]` variant', () => {
+    /*
+     * The regression guard. Scoping the size to every cell was a trap two ways over: the size name
+     * was also a colour name, near-white, and the arbitrary variant gave it specificity `0,1,1` —
+     * enough to beat a cell's own `.text-muted` at `0,1,0`, so the row number and the registered
+     * date disappeared.
+     *
+     * On the table it is inherited instead, and **an inherited value loses to any declaration on the
+     * element**, whatever its specificity. A cell that states its colour keeps it.
+     */
+    const { container } = table({ density: 'compact' });
+    const cls = container.querySelector('table')!.className;
+    expect(cls).toContain('text-base');
+    // No per-cell size variant: built from parts so the scanner does not emit the class from here.
+    expect(cls).not.toContain(`[&_td]${':'}text-`);
+    expect(cls).not.toContain('text-md');
   });
 
   it('renders one col per declared width', () => {

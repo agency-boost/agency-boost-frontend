@@ -8,6 +8,27 @@ import type { Config } from 'tailwindcss';
 const config: Config = {
   content: ['./src/**/*.{ts,tsx}'],
   theme: {
+    /**
+     * **`text-base` is a size and must never also be a colour.**
+     *
+     * `colors.base` and `fontSize.base` both generate a `.text-base` rule, and the colour one is
+     * emitted second — so `text-base` painted every element it was on in `--color-base`, a
+     * near-white. It only showed where nothing set a colour afterwards and the class carried extra
+     * specificity: `[&_td]:text-base` on the leads table (0,1,1) beat the cell's own `.text-navy`
+     * (0,1,0), and the row number and the registered date came out invisible on white.
+     *
+     * **At `theme`, not `theme.extend`.** Inside `extend` this merged with the default scale, and
+     * the default `textColor` *is* `theme('colors')` — so `base` came straight back through it and
+     * the rule stayed in the stylesheet. Declared here it replaces the scale, and `theme('colors')`
+     * resolves after the extend below, so every other colour survives, `text-white` included.
+     *
+     * Nothing wants near-white text on a light ground; `text-card` and `text-white` exist for the
+     * dark ones. `theme.spec.ts` asserts no colour name collides with a font size again.
+     */
+    textColor: ({ theme }) => {
+      const { base: _base, ...rest } = theme('colors') as Record<string, string>;
+      return rest;
+    },
     extend: {
       colors: {
         navy: { DEFAULT: 'var(--color-navy)', soft: 'var(--color-navy-soft)' },

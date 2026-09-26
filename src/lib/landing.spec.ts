@@ -73,9 +73,21 @@ describe('where signing in takes you', () => {
     expect(landingFor(makeMe({ membership: both }))).toBe('/kpm/overview');
   });
 
-  it('sends somebody who leads people to their unit', () => {
+  it('sends somebody who leads people to their own day, while the unit is a signpost', () => {
+    /*
+     * **The `/unit/dashboard` redirect is commented out in `landing.ts`** (`a47f4c8`), and this test
+     * had gone on asserting it.
+     *
+     * The reason is worth keeping: `/unit/dashboard` is a `ComingInPhase` placeholder until Phase 13,
+     * so every AB and AAB signing in landed on a page that tells them to come back later. Landing on
+     * work beats landing on a sign.
+     *
+     * **Restore the branch when Phase 13 builds the screen**, and this test with it — the rule it
+     * encodes, that leading is the graph and not the role (OD-23), is unchanged and the test below
+     * still holds it.
+     */
     expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 2 }) }))).toBe(
-      '/unit/dashboard',
+      '/activity/log',
     );
   });
 

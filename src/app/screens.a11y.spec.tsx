@@ -423,6 +423,22 @@ describe('screens have no axe violations', () => {
           total: 1, page: 1, pageSize: 50,
         },
       },
+      // The two closed cards below the table fetch a page each, keyed on the query so they do not
+      // borrow the table's rows. Populated, because the reopen pill is a control axe should see.
+      'outcome=won': {
+        body: {
+          rows: [{
+            id: 'w1', ownerMembershipId: 'mem-1', type: 'sales', name: 'Ibu Wulan Sari',
+            contact: { phone: null, email: null }, lawfulBasis: null, consentAt: null,
+            statusCode: 'PAID_AND_ISSUED', thisMonth: false, remarks: null,
+            nextActionDate: null, nextActionNote: null, outcome: 'won', source: null,
+            dateRegistered: '2026-08-01T03:00:00.000Z', version: 3, flags: [],
+            overdueDays: null, committedMonths: [], lastEditedBy: null,
+          }],
+          total: 12, page: 1, pageSize: 5,
+        },
+      },
+      'outcome=lost': { body: { rows: [], total: 0, page: 1, pageSize: 5 } },
     });
     renderInLayout(AgentLayout, <LeadsPage />, {
       me: makeMe({ permissions: ['lead:read', 'lead:update', 'lead:mark_outcome'] }),
@@ -430,6 +446,7 @@ describe('screens have no axe violations', () => {
 
     // The detail panel is part of the row, so it is walked open rather than left closed.
     await userEvent.click(await screen.findByRole('button', { name: 'Details' }));
+    await screen.findByRole('heading', { name: 'Closed leads' });
     await expectClean('leads');
   });
 

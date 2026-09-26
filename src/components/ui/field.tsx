@@ -206,12 +206,28 @@ function controlClass(density: Density, invalid?: boolean) {
   return cn(DENSITY[density], 'text-navy', invalid ? 'border-alert' : DENSITY_REST[density]);
 }
 
+/**
+ * A number field grows no spinner, and a wheel over it scrolls the page instead of the value.
+ *
+ * The arrows are a 12px target nobody aims for on purpose, and they cost far more than they give: a
+ * focused `type="number"` treats a scroll as an **increment**, so somebody reading down a form with the
+ * case-size field still focused changes it without touching it — and the field they changed is off
+ * screen by the time it happens.
+ *
+ * Blurring on wheel rather than preventing it: React attaches `wheel` passively at the root, so
+ * `preventDefault()` there does nothing. Losing focus is also the honest outcome — the reader has
+ * moved on from the field.
+ */
+const NUMBER_INPUT = '[appearance:textfield] '
+  + '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none';
+
 export function TextInput({
   className,
   invalid,
   density = 'default',
   prefix,
   suffix,
+  onWheel,
   ...props
 }: React.InputHTMLAttributes<HTMLInputElement> & {
   invalid?: boolean;
@@ -221,11 +237,28 @@ export function TextInput({
   /** `%`, `months` after it. */
   suffix?: React.ReactNode;
 } ) {
+  const numeric = props.type === 'number';
   const input = (
     <input
       {...props}
       aria-invalid={invalid || undefined}
-      className={cn(controlClass(density, invalid), prefix || suffix ? AFFIXED_INPUT : className)}
+      onWheel={numeric
+        ? (e) => { e.currentTarget.blur(); onWheel?.(e); }
+        : onWheel}
+      className={cn(
+        controlClass(density, invalid),
+        numeric && NUMBER_INPUT,
+        (prefix || suffix) && AFFIXED_INPUT,
+        /*
+         * **Pad the side that has no affix.** The affix supplies the gap on its own side, and a
+         * field with only a suffix — `30 %`, `3.2 months` — had the number hard against the left
+         * border with nothing between them. The prototype's input carries no padding because both
+         * its fields happen to have an affix on the side the text starts from; ours do not.
+         */
+        (prefix || suffix) && !prefix && 'pl-3',
+        (prefix || suffix) && !suffix && 'pr-3',
+        (prefix || suffix) ? undefined : className,
+      )}
     />
   );
 
@@ -242,7 +275,9 @@ export function TextInput({
       className={cn(
         'inline-flex h-10 items-center overflow-hidden rounded-md border-[1.5px] bg-card',
         invalid ? 'border-alert' : 'border-hairline',
-        'focus-within:border-amber focus-within:ring-1 focus-within:ring-amber',
+        // The same weight the global rule gives a bare input — 2px amber, offset by one — so nothing
+        // is lost by moving the indicator out here.
+        'focus-within:border-amber focus-within:ring-2 focus-within:ring-amber focus-within:ring-offset-1',
         className,
       )}
     >
@@ -266,8 +301,18 @@ export function TextInput({
  * noise.
  */
 const AFFIX = 'shrink-0 select-none px-3 text-base font-semibold text-muted';
-/** Inside the group the input owns no border or ground of its own. */
-const AFFIXED_INPUT = 'h-full min-w-0 flex-1 border-0 bg-transparent px-0 pr-3 text-base text-navy focus:ring-0';
+/**
+ * Inside the group the input owns no border, no ground and **no focus ring of its own**.
+ *
+ * `globals.css` puts a 2px amber outline on every `:focus-visible`, and the group draws the same ring
+ * on `focus-within` — so focusing an affixed field drew two, one around the number and one around the
+ * number *and* its unit. It read as two fields stacked on each other, which is what it was.
+ *
+ * Suppressing the inner outline is not the defect that rule guards against: the replacement is larger
+ * and more visible than what it replaces, and it surrounds the whole control rather than half of it.
+ */
+const AFFIXED_INPUT = 'h-full min-w-0 flex-1 border-0 bg-transparent px-0 text-base text-navy '
+  + 'focus:outline-none focus-visible:outline-none focus:ring-0';
 
 export function Select({
   className,

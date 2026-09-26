@@ -68,8 +68,22 @@ const DENSITY_COMPACT = [
   'table-fixed',
   '[&_thead]:bg-base',
   '[&_th]:px-2 [&_th]:py-[7px] [&_th]:text-2xs',
-  '[&_td]:px-2 [&_td]:py-[3px] [&_td]:text-base [&_td]:leading-tight',
+  '[&_td]:px-2 [&_td]:py-[3px] [&_td]:leading-tight',
   '[&_tbody_tr]:hover:bg-navy/[0.015]',
+  /*
+   * **The body's type size rides on the `<table>`, not on a per-cell variant** — it replaces the
+   * `text-md` already there, and a cell inherits it because `Cell` sets no size of its own.
+   *
+   * It used to be a descendant variant scoping the size to every `td`, and that is a trap two ways
+   * over. The size name was also a colour name until the theme stopped it, near-white; and wrapped
+   * in an arbitrary variant it carried specificity `0,1,1`, enough to beat a cell's own `.text-muted`
+   * at `0,1,0`. The row number and the registered date were invisible.
+   *
+   * Inheritance cannot do that. **An inherited value loses to any declaration on the element**,
+   * whatever its specificity — so a cell that states its colour keeps it even if the collision is
+   * ever reintroduced. The theme fix and this one are independent, and either alone is enough.
+   */
+  'text-base',
 ].join(' ');
 
 export function DataTable({

@@ -62,7 +62,9 @@ export function Stepper({
       aria-label={label}
       className={cn(
         'inline-flex shrink-0 items-center overflow-hidden rounded-md border border-hairline bg-card',
-        'focus-within:border-amber',
+        // One indicator, on the group, at the weight `globals.css` gives a bare input — the inner
+        // input suppresses its own, or focusing the field draws two rings around two halves of it.
+        'focus-within:border-amber focus-within:ring-2 focus-within:ring-amber focus-within:ring-offset-1',
       )}
     >
       <button
@@ -83,9 +85,16 @@ export function Stepper({
         max={max}
         disabled={disabled}
         onChange={(e) => set(parseInt(e.target.value, 10) || 0)}
+        /*
+         * **A wheel scrolls the page, never the count.** A focused `type="number"` treats a scroll as
+         * an increment, so an agent reading down a twelve-row day changes a count they are not looking
+         * at. React attaches `wheel` passively at the root, so `preventDefault()` there does nothing;
+         * dropping focus is both the fix and the honest outcome.
+         */
+        onWheel={(e) => e.currentTarget.blur()}
         className={cn(
           'h-[34px] w-10 border-x border-hairline bg-card text-center text-base font-semibold text-navy',
-          'focus:bg-input-focus focus:outline-none [appearance:textfield]',
+          'focus:bg-input-focus focus:outline-none focus-visible:outline-none [appearance:textfield]',
           'disabled:opacity-40',
           '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none',
           '[@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-14',

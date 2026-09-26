@@ -115,6 +115,28 @@ export const formatRupiah = (minor: number) =>
   `Rp ${toMajor(minor).toLocaleString('id-ID')}`;
 
 /**
+ * The same grouping, for what somebody is **typing**: `500000000` shows as `500.000.000`.
+ *
+ * The prototype's money fields are `type="text" inputmode="numeric"` carrying a grouped value
+ * (`Overall.html:2874`), and its `parseNum` strips the dots back out. Ours were `type="number"`,
+ * which cannot show a separator at all — so an agent entering a nine-digit target had to count
+ * zeroes, and a mistyped one was indistinguishable from a right one.
+ *
+ * No `Rp` here: the prefix is the field's own affix, and repeating it inside the value would put it
+ * twice in the box.
+ */
+export const groupDigits = (major: number) => major.toLocaleString('id-ID');
+
+/**
+ * What was typed, back to a number: everything that is not a digit goes.
+ *
+ * **Digits only, deliberately.** A grouping separator in `id-ID` is `.`, which is also a decimal
+ * point in most of the world — so parsing `1.500` as a decimal would read one and a half rupiah
+ * where fifteen hundred was meant. Rupiah has no subunit anybody types, so there is nothing to lose.
+ */
+export const parseDigits = (typed: string) => Number(typed.replace(/\D/g, '')) || 0;
+
+/**
  * One plan that was agreed, current or replaced (P8-T6).
  *
  * **Whole states, newest first.** What changed between two of them is worked out here rather than
