@@ -428,6 +428,19 @@ describe('screens have no axe violations', () => {
           agentCode: 'PRU-001', role: 'agent', directCount: 0, canChangeRole: false,
         }],
       },
+      // Two versions, so the history panel is walked open rather than absent.
+      [`/goals/${String(new Date().getFullYear())}/history`]: {
+        body: [2, 1].map((version) => ({
+          version, at: '2026-01-13T04:00:00.000Z', byMembershipId: 'mem-1', byName: 'Ibu Sari',
+          mode: 'direct', annualApeTargetMinor: version === 2 ? 500_000_000_00 : 300_000_000_00,
+          savingsTargetMinor: 50_000_000_00, commissionRatePct: 10, monthsLeftOverride: null,
+          apeAchievedMinor: 0, caseSizeMinor: 18_000_000_00, leadsToApptPct: 30, closingRatePct: 30,
+          snapshot: {
+            monthlyApeTargetMinor: 60_000_000_00,
+            policiesPerMonth: 4, appointmentsPerMonth: 14, leadsPerMonth: 47,
+          },
+        })),
+      },
       '/goals': {
         body: {
           period,

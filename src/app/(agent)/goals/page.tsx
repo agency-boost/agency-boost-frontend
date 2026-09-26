@@ -8,8 +8,8 @@ import {
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  formatRupiah, readGoal, saveGoal, toMajor, toMinor,
-  type Goal, type GoalInputs, type GoalMode,
+  changesBetween, FIELD_LABEL, formatRupiah, readGoal, readGoalHistory, saveGoal, toMajor, toMinor,
+  type Goal, type GoalHistoryEntry, type GoalInputs, type GoalMode,
 } from '@/lib/goals';
 import { readMyTeam, type TeamMember } from '@/lib/org';
 import { useSession } from '@/lib/session';
@@ -50,6 +50,7 @@ export default function GoalSettingsPage() {
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [history, setHistory] = useState<GoalHistoryEntry[]>([]);
 
   useEffect(() => {
     // A reader who leads nobody gets an empty list and no picker. Failing is the same answer:
@@ -64,6 +65,9 @@ export default function GoalSettingsPage() {
       setGoal(next);
       setDraft(inputsOf(next));
       setSaved(next.savedAt !== null);
+      // Beside the plan, not after it: the panel is closed until somebody opens it, and a history
+      // that arrives a round trip late reads as a panel that does not work.
+      readGoalHistory(period, subject ?? undefined).then(setHistory).catch(() => setHistory([]));
     } catch (err) {
       setError(toDisplayError(err));
     }
@@ -88,6 +92,8 @@ export default function GoalSettingsPage() {
       setGoal(result);
       setDraft(inputsOf(result));
       setSaved(true);
+      // A save is what adds to it, so it reloads with the plan.
+      readGoalHistory(period, subject ?? undefined).then(setHistory).catch(() => setHistory([]));
     } catch (err) {
       setError(toDisplayError(err));
       setSaved(false);
@@ -372,8 +378,71 @@ export default function GoalSettingsPage() {
             {busy ? 'Saving…' : saved ? 'Saved' : 'Not yet saved'}
           </p>
         </Card>
+
+        {history.length > 1 && <History entries={history} />}
       </div>
     </Page>
+  );
+}
+
+/**
+ * Every plan agreed for this period, and what each one changed (P8-T6, AC-3).
+ *
+ * **The difference is worked out here, from two whole states.** Nothing had to decide in advance
+ * which fields were worth recording, and a field added later is compared without a migration —
+ * which is the reasoning ADR-0042 gives for keeping states rather than diffs.
+ *
+ * Only shown once there is something to compare: a plan agreed once and never revised has no
+ * history worth a panel.
+ */
+function History({ entries }: { entries: GoalHistoryEntry[] }) {
+  return (
+    <Card>
+      <h2 className="font-display text-lg font-bold text-navy">What this plan has been</h2>
+      <p className="mt-1 text-md text-muted">
+        Every version, newest first. A plan somebody coached against does not stop having existed
+        because it was revised.
+      </p>
+
+      <ol className="mt-4 flex flex-col gap-4">
+        {entries.map((entry, i) => {
+          const changes = changesBetween(entry, entries[i + 1]);
+          return (
+            <li key={entry.version} className="border-l-2 border-hairline pl-3">
+              <p className="text-md font-semibold text-navy">
+                {i === 0 ? 'Now' : `Version ${entry.version}`}
+                {entry.at && (
+                  <span className="ml-2 text-sm font-normal text-muted">
+                    {new Date(entry.at).toLocaleDateString('en-GB', {
+                      day: 'numeric', month: 'short', year: 'numeric',
+                    })}
+                  </span>
+                )}
+                {entry.byName && (
+                  <span className="ml-2 text-sm font-normal text-muted">· {entry.byName}</span>
+                )}
+              </p>
+
+              {changes.length === 0 ? (
+                <p className="text-sm text-muted">
+                  {i === entries.length - 1 ? 'The first plan for this year.' : 'Nothing changed.'}
+                </p>
+              ) : (
+                <ul className="mt-1 flex flex-col gap-0.5 text-sm text-muted">
+                  {changes.map((change) => (
+                    <li key={change.field}>
+                      <span className="text-navy">{FIELD_LABEL[change.field]}</span>
+                      {': '}
+                      {change.from} → <strong className="text-navy">{change.to}</strong>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </Card>
   );
 }
 

@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -13,6 +13,18 @@ vi.mock('next/navigation', () => ({
 const AGENT = makeMe({ permissions: ['goal:read', 'goal:update'] });
 
 const PERIOD = String(new Date().getFullYear());
+
+const revision = (over: Record<string, unknown> = {}) => ({
+  version: 1, at: '2026-01-13T04:00:00.000Z', byMembershipId: 'mem-1', byName: 'Rina Wijaya',
+  mode: 'direct', annualApeTargetMinor: 300_000_000_00, savingsTargetMinor: 50_000_000_00,
+  commissionRatePct: 10, monthsLeftOverride: null, apeAchievedMinor: 0,
+  caseSizeMinor: 18_000_000_00, leadsToApptPct: 30, closingRatePct: 30,
+  snapshot: {
+    monthlyApeTargetMinor: 60_000_000_00,
+    policiesPerMonth: 4, appointmentsPerMonth: 14, leadsPerMonth: 47,
+  },
+  ...over,
+});
 
 /** The prototype's defaults over five months: 6 policies, 20 appointments, 67 leads. */
 const projection = (over: Record<string, unknown> = {}) => ({
@@ -64,6 +76,8 @@ const base = {
   '/kpm/org-levels': { body: [] },
   // A reader who leads nobody. The picker only appears for somebody who does.
   '/members/my-team': { body: [] },
+  // Keyed longer than `/goals`, so the stub matcher prefers it.
+  '/goals/2026/history': { body: [] },
 };
 
 const teammate = (over: Record<string, unknown> = {}) => ({
@@ -338,6 +352,72 @@ describe('Goal settings (P8-T3)', () => {
 
       expect(await screen.findByText(/LEADS_CONTACTED/)).toBeInTheDocument();
       expect(screen.queryByText(/#3/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('P8-T6 — what this plan has been', () => {
+    const history = (entries: unknown[]) => ({ '/goals/2026/history': { body: entries } });
+
+    it('says nothing when the plan has only ever been one thing', async () => {
+      render({ '/goals': { body: goal() }, ...history([revision({ version: 1 })]) });
+      await screen.findByRole('button', { name: 'Save goal' });
+
+      expect(screen.queryByText('What this plan has been')).not.toBeInTheDocument();
+    });
+
+    it('AC-3: lists every version, newest first, with who agreed it', async () => {
+      render({
+        '/goals': { body: goal() },
+        ...history([
+          revision({ version: 2, annualApeTargetMinor: 500_000_000_00, byName: 'Ibu Sari' }),
+          revision({ version: 1, annualApeTargetMinor: 300_000_000_00 }),
+        ]),
+      });
+
+      expect(await screen.findByText('What this plan has been')).toBeInTheDocument();
+      expect(screen.getByText('Now')).toBeInTheDocument();
+      expect(screen.getByText('Version 1')).toBeInTheDocument();
+      expect(screen.getByText(/Ibu Sari/)).toBeInTheDocument();
+    });
+
+    it('AC-3: says what changed, worked out from two whole states', async () => {
+      render({
+        '/goals': { body: goal() },
+        ...history([
+          revision({ version: 2, annualApeTargetMinor: 500_000_000_00, caseSizeMinor: 9_000_000_00 }),
+          revision({ version: 1, annualApeTargetMinor: 300_000_000_00, caseSizeMinor: 18_000_000_00 }),
+        ]),
+      });
+
+      // Scoped to the panel: the field's own label appears on its card as well, which is the
+      // point — the history names a change in the words the card uses.
+      const panel = within((await screen.findByText('What this plan has been')).closest('div')!);
+      expect(panel.getByText('Annual APE target')).toBeInTheDocument();
+      expect(panel.getByText(/Rp 300\.000\.000 →/)).toBeInTheDocument();
+      expect(panel.getByText('Rp 500.000.000')).toBeInTheDocument();
+      expect(panel.getByText('Average case size')).toBeInTheDocument();
+    });
+
+    it('calls the oldest one the first plan rather than saying nothing changed', async () => {
+      render({
+        '/goals': { body: goal() },
+        ...history([revision({ version: 2 }), revision({ version: 1 })]),
+      });
+
+      expect(await screen.findByText('The first plan for this year.')).toBeInTheDocument();
+    });
+
+    it('renders the plan even when the history cannot be read', async () => {
+      render({
+        '/goals': { body: goal() },
+        '/goals/2026/history': {
+          status: 500,
+          body: { error: { code: 'INTERNAL_ERROR', message: 'Nope.', requestId: 'r' } },
+        },
+      });
+
+      expect(await screen.findByRole('button', { name: 'Save goal' })).toBeInTheDocument();
+      expect(screen.queryByText('What this plan has been')).not.toBeInTheDocument();
     });
   });
 

@@ -113,3 +113,69 @@ export const toMinor = (major: number) => Math.round(major * MINOR_UNITS_PER_MAJ
  */
 export const formatRupiah = (minor: number) =>
   `Rp ${toMajor(minor).toLocaleString('id-ID')}`;
+
+/**
+ * One plan that was agreed, current or replaced (P8-T6).
+ *
+ * **Whole states, newest first.** What changed between two of them is worked out here rather than
+ * stored: a diff is only readable against a base the reader still has, and the point of keeping
+ * these is that a leader who coached against January's plan can read January's plan (ADR-0042).
+ */
+export interface GoalHistoryEntry extends Omit<GoalInputs, 'monthsLeft'> {
+  version: number;
+  at: string | null;
+  byMembershipId: string | null;
+  /** `null` when the membership resolves to nobody — somebody who has left the office. */
+  byName: string | null;
+  monthsLeftOverride: number | null;
+  snapshot: GoalSnapshot;
+}
+
+export const readGoalHistory = (period: string, membershipId?: string) =>
+  api<GoalHistoryEntry[]>(`/goals/${period}/history` + forWhom(membershipId));
+
+/** What a reader is told changed, in the words the cards use. */
+export const FIELD_LABEL: Record<string, string> = {
+  mode: 'How the target is set',
+  annualApeTargetMinor: 'Annual APE target',
+  savingsTargetMinor: 'Annual savings target',
+  commissionRatePct: 'Commission rate',
+  monthsLeftOverride: 'Months left',
+  apeAchievedMinor: 'APE produced so far',
+  caseSizeMinor: 'Average case size',
+  leadsToApptPct: 'Leads that become an appointment',
+  closingRatePct: 'Appointments that become a closing',
+};
+
+const MONEY_FIELDS = new Set([
+  'annualApeTargetMinor', 'savingsTargetMinor', 'apeAchievedMinor', 'caseSizeMinor',
+]);
+
+/** One field's value, in the unit a reader thinks in. */
+export const showValue = (field: string, value: unknown): string => {
+  if (value === null || value === undefined) return 'your office’s calendar';
+  if (MONEY_FIELDS.has(field)) return formatRupiah(Number(value));
+  if (field === 'mode') return value === 'direct' ? 'directly' : 'from a savings target';
+  if (field.endsWith('Pct')) return `${value}%`;
+  return String(value);
+};
+
+/**
+ * What one plan changed, against the one before it.
+ *
+ * **Derived, not stored.** Nothing had to decide in advance which fields were worth recording, and
+ * a field added later is compared without a migration.
+ */
+export const changesBetween = (
+  now: GoalHistoryEntry, before: GoalHistoryEntry | undefined,
+): { field: string; from: string; to: string }[] => {
+  if (!before) return [];
+  return Object.keys(FIELD_LABEL)
+    .filter((field) => (now as unknown as Record<string, unknown>)[field]
+      !== (before as unknown as Record<string, unknown>)[field])
+    .map((field) => ({
+      field,
+      from: showValue(field, (before as unknown as Record<string, unknown>)[field]),
+      to: showValue(field, (now as unknown as Record<string, unknown>)[field]),
+    }));
+};
