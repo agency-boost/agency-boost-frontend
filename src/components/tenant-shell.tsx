@@ -44,7 +44,7 @@ const SECTIONS: readonly {
     label: 'Reporting',
     items: [
       { label: 'KPM analytics', href: '/kpm/analytics', icon: 'chart', upcoming: true },
-      { label: 'Data upload', href: '/kpm/data-upload', icon: 'upload', upcoming: true },
+      { label: 'Data upload', href: '/kpm/data-upload', icon: 'upload' },
       { label: 'Advanced analytics', href: '/kpm/advanced-analytics', icon: 'chartUp', upcoming: true },
     ],
     divider: true,

@@ -37,6 +37,7 @@ import MemberPage from './(tenant)/people/members/[membershipId]/page';
 import AdminsPage from './(tenant)/people/admins/page';
 import RegisterKpmPage from './(agent)/user-management/kpm/page';
 import KpmOverviewPage from './(tenant)/kpm/overview/page';
+import DataUploadPage from './(tenant)/kpm/data-upload/page';
 import UnitDashboardPage from './(agent)/unit/dashboard/page';
 import ActivityDashboardPage from './(agent)/activity/dashboard/page';
 import ActivityRatioPage from './(agent)/activity/ratio/page';
@@ -296,6 +297,36 @@ describe('screens have no axe violations', () => {
     renderInLayout(AgentLayout, <FindLeaderPage />, { me: joiner });
     await screen.findByText('Request sent');
     await expectClean('user-management/leader');
+  });
+
+  it('the month table: every member a row, a dash where nothing has been reported (P9-T1)', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: true, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: ['member:read_profile', 'data_upload:read'],
+    });
+    const empty = { value: null, provenance: null };
+    const metrics = Object.fromEntries(
+      ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount']
+        .map((m) => [m, { monthly: empty, ytd: empty }]),
+    );
+    stubFetch({
+      '/kpm/data-upload/': {
+        body: {
+          month: '2026-09', withData: 1,
+          rows: [
+            { membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya',
+              metrics: { ...metrics, ape: { monthly: { value: 15000000000, provenance: 'imported' }, ytd: empty } } },
+            { membershipId: 'mem-budi', agentCode: 'PRU-002', name: 'Budi Santoso', metrics },
+          ],
+        },
+      },
+    });
+    renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
+    await screen.findByText('Budi Santoso');
+    await expectClean('kpm/data-upload');
   });
 
   it('the office overview, real half and placeholder half together', async () => {
