@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -120,11 +120,12 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       const { calls } = render({ '/leads': { body: page([lead()]) } });
       await screen.findByDisplayValue('Pak Budi');
 
-      await userEvent.type(screen.getByLabelText('Search'), 'budi');
+      // Nothing here waits for a button: a filter is a question and the answer is the list.
       await userEvent.selectOptions(screen.getByLabelText('Type'), 'recruitment');
       await userEvent.selectOptions(screen.getByLabelText('Stage'), 'AAJI_LICENSED');
       await userEvent.selectOptions(screen.getByLabelText('Show'), 'won');
-      await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+      // Enter in the search box runs it now rather than after the pause.
+      await userEvent.type(screen.getByLabelText('Search'), 'budi{Enter}');
 
       await waitFor(() => {
         const q = lastList(calls);
@@ -135,38 +136,117 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       });
     });
 
-    it('has no attention filter of its own — the chips beside the count are it', async () => {
-      // Two controls for one job, and this was the weaker: no counts, flags nothing matched, and
-      // two actions where the chip takes one.
+    it('has no Search button, because a filter is a question and the list is the answer', async () => {
+      render({ '/leads': { body: page([lead()]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      expect(screen.queryByRole('button', { name: 'Search' })).not.toBeInTheDocument();
+      // And Clear is not there either, because nothing is on yet.
+      expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+    });
+
+    it('offers Clear only once something is on, including a sort', async () => {
+      // A button that does nothing is a button a reader has to press to learn that.
+      render({ '/leads': { body: page([lead()]) } });
+      await screen.findByDisplayValue('Pak Budi');
+      expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+
+      await userEvent.selectOptions(screen.getByLabelText('Type'), 'sales');
+      expect(await screen.findByRole('button', { name: 'Clear' })).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument());
+
+      // Sorting counts too, and Clear puts the order back to newest first.
+      await userEvent.click(screen.getByRole('button', { name: 'Lead name' }));
+      expect(await screen.findByRole('button', { name: 'Clear' })).toBeInTheDocument();
+    });
+
+    it('offers Clear while a term is only typed, not yet searched for', async () => {
+      // The box has words in it, and emptying the box is what Clear is for.
+      render({ '/leads': { body: page([lead()]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      await userEvent.type(screen.getByLabelText('Search'), 'b');
+      expect(await screen.findByRole('button', { name: 'Clear' })).toBeInTheDocument();
+    });
+
+    it('waits for the typing to stop before searching', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        const { calls } = render({ '/leads': { body: page([lead()]) } });
+        await screen.findByDisplayValue('Pak Budi');
+        const before = calls.length;
+
+        await userEvent.type(screen.getByLabelText('Search'), 'budi');
+        // Four letters, and nothing asked for yet — it is the last one that starts the clock.
+        expect(lastList(calls).get('search')).toBeNull();
+
+        await act(async () => { vi.advanceTimersByTime(400); });
+        await waitFor(() => expect(lastList(calls).get('search')).toBe('budi'));
+
+        // One search for the word, not one per letter.
+        const searches = calls.filter((c) => c.url.includes('search=')).length;
+        expect(searches).toBe(1);
+        expect(calls.length).toBeGreaterThan(before);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('clears the box and the search together', async () => {
+      const { calls } = render({ '/leads': { body: page([lead()]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      await userEvent.type(screen.getByLabelText('Search'), 'budi{Enter}');
+      await waitFor(() => expect(lastList(calls).get('search')).toBe('budi'));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+      expect(screen.getByLabelText('Search')).toHaveValue('');
+      await waitFor(() => expect(lastList(calls).get('search')).toBeNull());
+    });
+
+    it('sorts without being asked twice', async () => {
+      // Sorting already applied itself; the selects did not, and the difference was invisible.
+      const { calls } = render({ '/leads': { body: page([lead()]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Lead name' }));
+
+      await waitFor(() => expect(lastList(calls).get('sort')).toBe('name'));
+    });
+
+    it('narrows by attention with a select that carries the figures', async () => {
+      // A fifth dropdown, beside the other four — a group of chips among four selects reads as a
+      // different kind of control. The counts come along inside the option labels, which is the one
+      // thing the chips had: you can see a kind of attention you have none of before choosing it.
       render({
         '/leads': { body: page([lead()]) },
-        '/leads/summary': { body: summary({ attention: { overdue: 3, 'no-next-action': 0, 'no-remarks': 0 } }) },
+        '/leads/summary': { body: summary({ attention: { overdue: 3, 'no-next-action': 0, 'no-remarks': 1 } }) },
       });
       await screen.findByDisplayValue('Pak Budi');
 
-      expect(screen.queryByLabelText('Needs attention')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: '3 overdue' })).toBeInTheDocument();
-      // And a flag nothing matches is not offered at all, which a select could not manage.
-      expect(screen.queryByRole('button', { name: /no remarks/ })).not.toBeInTheDocument();
+      const select = screen.getByLabelText('Needs attention');
+      expect(within(select).getByRole('option', { name: 'Overdue (3)' })).toBeInTheDocument();
+      expect(within(select).getByRole('option', { name: 'No next action (0)' })).toBeInTheDocument();
+      expect(within(select).getByRole('option', { name: 'Anything' })).toBeInTheDocument();
+      // In the same card as the other filters.
+      expect(select.closest('form')).toContainElement(screen.getByLabelText('Type'));
     });
 
-    it('turns an attention filter off by pressing the chip again', async () => {
-      // `aria-pressed` said it was a toggle from the start and it was not — pressing the active one
-      // re-applied the same filter. It went unnoticed while a select above offered *Anything*.
+    it('applies the attention filter as it is chosen', async () => {
       const { calls } = render({
         '/leads': { body: page([lead()]) },
         '/leads/summary': { body: summary({ attention: { overdue: 3, 'no-next-action': 0, 'no-remarks': 0 } }) },
       });
       await screen.findByDisplayValue('Pak Budi');
 
-      const chip = screen.getByRole('button', { name: '3 overdue' });
-      await userEvent.click(chip);
+      await userEvent.selectOptions(screen.getByLabelText('Needs attention'), 'overdue');
       await waitFor(() => expect(lastList(calls).get('attention')).toBe('overdue'));
-      expect(screen.getByRole('button', { name: '3 overdue' })).toHaveAttribute('aria-pressed', 'true');
 
-      await userEvent.click(screen.getByRole('button', { name: '3 overdue' }));
+      await userEvent.selectOptions(screen.getByLabelText('Needs attention'), '');
       await waitFor(() => expect(lastList(calls).get('attention')).toBeNull());
-      expect(screen.getByRole('button', { name: '3 overdue' })).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('opens on the leads that are still open, because that is the work', async () => {
@@ -308,7 +388,6 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       await screen.findByText('No leads yet — add your first one above.');
 
       await userEvent.selectOptions(screen.getByLabelText('Type'), 'recruitment');
-      await userEvent.click(screen.getByRole('button', { name: 'Search' }));
 
       expect(await screen.findByText('No leads match what you asked for.')).toBeInTheDocument();
     });
@@ -695,7 +774,6 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       await screen.findByText('No leads yet — add your first one above.');
 
       await userEvent.selectOptions(screen.getByLabelText('Show'), 'won');
-      await userEvent.click(screen.getByRole('button', { name: 'Search' }));
       await screen.findByText('No leads match what you asked for.');
 
       await userEvent.click(screen.getByRole('button', { name: 'Clear the filters' }));
@@ -884,20 +962,24 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
     });
 
     it('links each attention count to the rows behind it', async () => {
+      // The figure and the filter are one control: the option says how many, and choosing it shows
+      // exactly those rows — so nobody has to work out which leads a number meant.
       const { calls } = render({
         '/leads': { body: page([lead()]) },
         '/leads/summary': {
           body: summary({ attention: { overdue: 3, 'no-next-action': 0, 'no-remarks': 2 } }),
         },
       });
+      await screen.findByDisplayValue('Pak Budi');
 
-      const overdue = await screen.findByRole('button', { name: '3 overdue' });
-      expect(screen.queryByRole('button', { name: /no next action/ })).not.toBeInTheDocument();
+      const select = screen.getByLabelText('Needs attention');
+      expect(within(select).getByRole('option', { name: 'Overdue (3)' })).toBeInTheDocument();
+      expect(within(select).getByRole('option', { name: 'No remarks (2)' })).toBeInTheDocument();
 
-      await userEvent.click(overdue);
+      await userEvent.selectOptions(select, 'overdue');
 
       await waitFor(() => expect(lastList(calls).get('attention')).toBe('overdue'));
-      expect(screen.getByRole('button', { name: '3 overdue' })).toHaveAttribute('aria-pressed', 'true');
+      expect(select).toHaveValue('overdue');
     });
 
     it('reloads the counts after a write, because a write is what changes them', async () => {
@@ -1236,7 +1318,6 @@ describe('Leads Management (P7-T2, P7-T3)', () => {
       await screen.findByDisplayValue('Pak Budi');
 
       await userEvent.selectOptions(screen.getByLabelText('Show'), 'won');
-      await userEvent.click(screen.getByRole('button', { name: 'Search' }));
 
       await waitFor(() => expect(screen.queryByRole('heading', { name: 'Closed leads' })).not.toBeInTheDocument());
     });

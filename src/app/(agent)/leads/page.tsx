@@ -52,6 +52,17 @@ interface Filters {
   attention: '' | NonNullable<LeadQuery['attention']>;
 }
 
+/**
+ * Newest first, which is where the screen opens.
+ *
+ * Named so that *is anything turned on* has an answer for sorting as well as for the filters — and so
+ * that **Clear** puts it back rather than leaving one narrowing behind.
+ */
+const DEFAULT_SORT = { key: 'dateRegistered' as const, dir: 'desc' as const };
+
+/** How long the typing has to stop before the search runs. About a gap between words. */
+const SEARCH_SETTLES_MS = 350;
+
 /** How many closed leads a card lists before it says how many more there are. */
 const CLOSED_SHOWN = 5;
 
@@ -68,9 +79,17 @@ export default function LeadsPage() {
 
   // What is being typed, which is not yet what is being asked for: the search runs on submit
   // rather than on every keystroke, so a long name is one request and not eleven.
-  const [form, setForm] = useState<Filters>(NO_FILTERS);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
-  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'dateRegistered', dir: 'desc' });
+  /**
+   * What is in the search box, which is not yet what is being searched for.
+   *
+   * **The only filter that needs two pieces of state.** Every other control is a choice — one click,
+   * one answer — so it applies as it is made and there is nothing to stage. Typing is not: a
+   * nine-letter name is nine intermediate states nobody meant to search for, so it lands in `filters`
+   * once the typing stops. `Enter` skips the wait.
+   */
+  const [term, setTerm] = useState('');
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>(DEFAULT_SORT);
   const [page, setPage] = useState(1);
 
   /** In-flight text, per row and field. The row keeps showing what was typed while it saves. */
@@ -136,6 +155,31 @@ export default function LeadsPage() {
   }, [filters, sort, page]);
 
   useEffect(() => { void load(); }, [load]);
+
+  /**
+   * The typing settles, then the search runs.
+   *
+   * **350ms**, which is about the gap between words rather than between letters — long enough that a
+   * name is one request, short enough that nobody wonders whether it heard them.
+   *
+   * Guarded on `term === filters.search` so it does nothing on mount and nothing after `Clear`, and
+   * the cleanup cancels the pending timer on every keystroke — so it is the *last* letter that starts
+   * the clock, not the first.
+   */
+  useEffect(() => {
+    if (term === filters.search) return undefined;
+    const timer = setTimeout(() => {
+      setFilters((current) => ({ ...current, search: term }));
+      setPage(1);
+    }, SEARCH_SETTLES_MS);
+    return () => clearTimeout(timer);
+  }, [term, filters.search]);
+
+  /** Any control other than the search box: it applies as it is chosen, and returns to page one. */
+  const narrow = (patch: Partial<Filters>) => {
+    setFilters((current) => ({ ...current, ...patch }));
+    setPage(1);
+  };
 
   const statuses = useMemo(() => config?.leadPipelines ?? [], [config]);
   const laddersFor = useCallback(
@@ -250,6 +294,24 @@ export default function LeadsPage() {
   const rows = pageData?.rows ?? [];
   const filtered = filters.search !== '' || filters.type !== '' || filters.statusCode !== ''
     || filters.attention !== '' || filters.outcome !== 'open';
+  /**
+   * Is anything turned on — including a sort, and including a term still being typed?
+   *
+   * **Clear only appears when there is something to clear.** A button that does nothing is a button a
+   * reader has to test to learn that, and this one sits at the end of a row of controls that all do
+   * something. `term` counts even before it has been searched for: the box has words in it, and
+   * emptying the box is the thing Clear is for.
+   */
+  const anythingOn = filtered || term !== ''
+    || sort.key !== DEFAULT_SORT.key || sort.dir !== DEFAULT_SORT.dir;
+
+  /** Back to how the screen opens: no narrowing, no term, newest first. */
+  const clearAll = () => {
+    setTerm('');
+    setFilters(NO_FILTERS);
+    setSort(DEFAULT_SORT);
+    setPage(1);
+  };
   const lastPage = pageData ? Math.max(1, Math.ceil(pageData.total / pageData.pageSize)) : 1;
 
   return (
@@ -268,23 +330,35 @@ export default function LeadsPage() {
       )}
 
       <Card className="mb-4">
+        {/*
+          * **Nothing here waits for a button.** A filter is a question, and the answer to *show me
+          * recruitment* is the list — not a second click confirming that is what you meant. Sorting
+          * already worked this way; the selects did not, and the difference was invisible.
+          *
+          * The form stays for the keyboard: `Enter` in the search box runs the search now rather than
+          * after the pause.
+          */}
         <form
-          onSubmit={(e) => { e.preventDefault(); setPage(1); setFilters(form); }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            narrow({ search: term });
+          }}
         >
           <FieldRow>
             <Field label="Search" htmlFor="lead-search" hint="Over the name and the remarks.">
               <TextInput
                 id="lead-search"
-                value={form.search}
+                type="search"
+                value={term}
                 placeholder="Name or remarks"
-                onChange={(e) => setForm({ ...form, search: e.target.value })}
+                onChange={(e) => setTerm(e.target.value)}
               />
             </Field>
             <Field label="Type" htmlFor="lead-filter-type">
               <Select
                 id="lead-filter-type"
-                value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value as Filters['type'] })}
+                value={filters.type}
+                onChange={(e) => narrow({ type: e.target.value as Filters['type'] })}
               >
                 <option value="">All types</option>
                 <option value="sales">Sales</option>
@@ -295,8 +369,8 @@ export default function LeadsPage() {
             <Field label="Stage" htmlFor="lead-filter-status">
               <Select
                 id="lead-filter-status"
-                value={form.statusCode}
-                onChange={(e) => setForm({ ...form, statusCode: e.target.value })}
+                value={filters.statusCode}
+                onChange={(e) => narrow({ statusCode: e.target.value })}
               >
                 <option value="">Any stage</option>
                 {statuses.map((pipeline) => (
@@ -314,8 +388,8 @@ export default function LeadsPage() {
             <Field label="Show" htmlFor="lead-filter-outcome">
               <Select
                 id="lead-filter-outcome"
-                value={form.outcome}
-                onChange={(e) => setForm({ ...form, outcome: e.target.value as Filters['outcome'] })}
+                value={filters.outcome}
+                onChange={(e) => narrow({ outcome: e.target.value as Filters['outcome'] })}
               >
                 <option value="open">Open leads</option>
                 <option value="won">Successful</option>
@@ -323,23 +397,37 @@ export default function LeadsPage() {
                 <option value="">Everything</option>
               </Select>
             </Field>
+
             {/*
-              * **There is no *Needs attention* select here, and that is deliberate.**
+              * **A fifth select, not a row of toggles.** Attention is a filter like the four beside
+              * it, and a group of chips among four dropdowns reads as a different kind of control
+              * doing a different kind of thing.
               *
-              * It listed the same three flags the chips beside the count already carry — two controls
-              * for one job, and the weaker one: the select showed no counts, offered flags nothing
-              * matched, and took two actions where the chip takes one. The chips carry the number,
-              * appear only when it is not zero, and toggle.
+              * **The counts come with it, inside the option labels.** That was the one thing the
+              * chips had over a select — *3 overdue* says how many as well as what — and putting the
+              * figure in the option keeps it: you can see a kind of attention you have none of before
+              * you choose it, rather than choosing it and finding an empty table.
               */}
-            <FieldRow.Actions>
-              <Button type="submit">Search</Button>
-              <Button
-                variant="secondary"
-                onClick={() => { setForm(NO_FILTERS); setFilters(NO_FILTERS); setPage(1); }}
+            <Field label="Needs attention" htmlFor="lead-filter-attention">
+              <Select
+                id="lead-filter-attention"
+                value={filters.attention}
+                onChange={(e) => narrow({ attention: e.target.value as Filters['attention'] })}
               >
-                Clear
-              </Button>
-            </FieldRow.Actions>
+                <option value="">Anything</option>
+                {(Object.keys(FLAG_LABEL) as LeadFlag[]).map((flag) => (
+                  <option key={flag} value={flag}>
+                    {counts ? `${FLAG_LABEL[flag]} (${counts.attention[flag]})` : FLAG_LABEL[flag]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            {anythingOn && (
+              <FieldRow.Actions>
+                <Button variant="secondary" onClick={clearAll}>Clear</Button>
+              </FieldRow.Actions>
+            )}
           </FieldRow>
         </form>
       </Card>
@@ -361,7 +449,7 @@ export default function LeadsPage() {
               ? (
                 <Button
                   variant="secondary"
-                  onClick={() => { setForm(NO_FILTERS); setFilters(NO_FILTERS); setPage(1); }}
+                  onClick={() => { setTerm(''); setFilters(NO_FILTERS); setPage(1); }}
                 >
                   Clear the filters
                 </Button>
@@ -376,20 +464,6 @@ export default function LeadsPage() {
           <Toolbar
             total={pageData.total}
             openOnly={filters.outcome === 'open'}
-            counts={counts}
-            active={filters.attention}
-            onAttention={(flag) => {
-              /*
-               * **A chip turns itself off.** `aria-pressed` said it was a toggle from the start and it
-               * was not — pressing the active one re-applied the same filter. That went unnoticed while
-               * a select sat above offering *Anything*; with the select gone it is the only way back.
-               */
-              const attention: Filters['attention'] = filters.attention === flag ? '' : flag;
-              const next = { ...NO_FILTERS, attention };
-              setForm(next);
-              setFilters(next);
-              setPage(1);
-            }}
             onAdd={() => setAdding((open) => !open)}
             adding={adding}
           />
@@ -745,9 +819,8 @@ export default function LeadsPage() {
           stageLabel={(row) => laddersFor(row.type).find((s) => s.code === row.statusCode)?.label ?? null}
           onReopen={(row) => run(row.id, () => setLeadOutcome(row.id, null, row.version))}
           onSeeAll={(outcome) => {
-            const next = { ...NO_FILTERS, outcome };
-            setForm(next);
-            setFilters(next);
+            setTerm('');
+            setFilters({ ...NO_FILTERS, outcome });
             setPage(1);
           }}
         />
@@ -953,56 +1026,29 @@ function Counts({ counts }: { counts: LeadSummary }) {
  * above the table** (`Overall.html:391-394`, `:2791-2794`).
  *
  * What sat between the title and the first row was a filter card, a bare count paragraph and a counts
- * card — three stacked blocks, so on a laptop a reader scrolled to reach their leads. The filters are a
- * registered Fill (L-28) and stay; the count and the attention chips come here, which is where the
- * prototype puts the one thing it has.
+ * card — three stacked blocks, so on a laptop a reader scrolled to reach their leads.
  *
- * **The attention chips belong here rather than in the tile strip.** They are filters, not figures: each
- * narrows the table below to exactly the rows it counted, and `aria-pressed` says which one is on.
+ * **It carried the attention chips for a day and no longer does.** They are filters, and filters
+ * belong with the filters — having them here put two ways of narrowing the same list in two places,
+ * and the pair that was *not* with the others was the pair carrying the counts.
  */
 function Toolbar({
   total,
   openOnly,
-  counts,
-  active,
-  onAttention,
   onAdd,
   adding,
 }: {
   total: number;
   openOnly: boolean;
-  counts: LeadSummary | null;
-  active: '' | LeadFlag;
-  onAttention: (flag: LeadFlag) => void;
   onAdd: () => void;
   adding: boolean;
 }) {
-  const flags = counts
-    ? (Object.keys(FLAG_LABEL) as LeadFlag[]).filter((f) => counts.attention[f] > 0)
-    : [];
-
   return (
     <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <p className="text-sm text-muted">
-          {total} active lead{total === 1 ? '' : 's'}
-          {openOnly ? '' : ' shown'}
-        </p>
-        {flags.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            {flags.map((flag) => (
-              <Button
-                key={flag}
-                variant={active === flag ? 'secondary' : 'inline'}
-                aria-pressed={active === flag}
-                onClick={() => onAttention(flag)}
-              >
-                {counts!.attention[flag]} {FLAG_LABEL[flag].toLowerCase()}
-              </Button>
-            ))}
-          </div>
-        )}
-      </div>
+      <p className="text-sm text-muted">
+        {total} active lead{total === 1 ? '' : 's'}
+        {openOnly ? '' : ' shown'}
+      </p>
       <Button onClick={onAdd} aria-expanded={adding}>+ Add lead</Button>
     </div>
   );
