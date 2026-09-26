@@ -40,7 +40,7 @@ export function landingFor(me: Me | null): string {
 
   // Leading people — by the graph, not the role (OD-23). An AAB with no reports has no
   // unit to look at, and lands where their own work is instead.
-  if (membership.directCount > 0) return '/unit/dashboard';
+  // if (membership.directCount > 0) return '/unit/dashboard';
 
   // Everyone else: their own day.
   return '/activity/log';
