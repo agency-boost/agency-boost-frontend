@@ -337,6 +337,55 @@ describe('screens have no axe violations', () => {
     await expectClean('kpm/data-upload');
   });
 
+  it('the preview of a filled file: summary, what is not taken, and the diff (P9-T3)', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: true, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: ['member:read_profile', 'data_upload:read', 'data_upload:upload_and_preview'],
+    });
+    const empty = { value: null, provenance: null };
+    const metrics = Object.fromEntries(
+      ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'].map((m) => [m, { monthly: empty, ytd: empty }]),
+    );
+    const cells = (['monthly', 'ytd'] as const).flatMap((cadence) =>
+      ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'].map((metric) => ({
+        metric, cadence, status: 'not_provided',
+        before: null as number | null, after: null as number | null, raw: null as string | null,
+      })));
+    cells[0] = { ...cells[0], status: 'new', after: 150000000, raw: '1.5' };
+    cells[1] = { ...cells[1], status: 'refused', raw: '140' };
+    stubFetch({
+      '/kpm/data-upload/': {
+        body: { month: '2026-09', withData: 0, rows: [{ membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', metrics }] },
+      },
+      '/kpm/data-upload/preview': {
+        body: {
+          month: '2026-09', filename: 'filled.csv', templateVersion: 1, encoding: 'utf-8', delimiter: ',',
+          summary: { rows: 2, ready: 1, refused: 1, newCells: 1, changedCells: 0, unchangedCells: 0, notProvidedCells: 10, refusedCells: 1, notInFile: 0 },
+          rows: [
+            {
+              line: 2, agentCode: 'PRU-001', membershipId: 'mem-rina', resolvedAgentCode: 'PRU-001', name: 'Rina Wijaya',
+              fileName: 'Rina Wijaya', nameDiffers: false, codeRecovered: false, status: 'ready', cells,
+              issues: [{ code: 'UPLOAD_VALUE_OUT_OF_RANGE', metric: 'persistency', cadence: 'monthly', message: 'Rolling Persistency (%) — This Month: “140” is above 100.' }],
+            },
+            {
+              line: 3, agentCode: 'PRU-999', membershipId: null, resolvedAgentCode: null, name: null, fileName: 'X',
+              nameDiffers: false, codeRecovered: false, status: 'refused', cells: [],
+              issues: [{ code: 'UPLOAD_UNKNOWN_AGENT_CODE', metric: null, cadence: null, message: 'No active member of this office has this code.' }],
+            },
+          ],
+        },
+      },
+    });
+    renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
+    const input = await screen.findByLabelText('+ Upload filled template');
+    await userEvent.upload(input, new File(['x'], 'filled.csv', { type: 'text/csv' }));
+    await screen.findByRole('table', { name: 'What “filled.csv” would change' });
+    await expectClean('kpm/data-upload with a preview');
+  });
+
   it('the office overview, real half and placeholder half together', async () => {
     const owner = makeMe({
       membership: {

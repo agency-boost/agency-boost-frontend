@@ -36,6 +36,24 @@ describe('api client', () => {
     expect(calls[0].url).toBe('http://api.test/api/v1/widgets');
   });
 
+  it('sends a form as it is, and leaves the Content-Type to the browser', async () => {
+    const { calls } = stubFetch({ '/uploads': { body: { ok: true } } });
+    const form = new FormData();
+    form.append('file', new File(['a,b'], 'x.csv', { type: 'text/csv' }));
+    await api('/uploads', { method: 'POST', body: form });
+
+    expect(calls[0].init.body).toBe(form);
+    // A header set here would carry no multipart boundary, and the server could not read the form.
+    expect(calls[0].init.headers).not.toHaveProperty('Content-Type');
+  });
+
+  it('sends anything else as JSON', async () => {
+    const { calls } = stubFetch({ '/widgets': { body: { ok: true } } });
+    await api('/widgets', { method: 'POST', body: { a: 1 } });
+    expect(calls[0].init.body).toBe('{"a":1}');
+    expect((calls[0].init.headers as Record<string, string>)['Content-Type']).toBe('application/json');
+  });
+
   it('refreshes once and replays the request on a 401', async () => {
     setAccessToken('stale');
     const { calls } = stubFetch({

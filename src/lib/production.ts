@@ -62,6 +62,79 @@ export interface TemplateFile {
 export const readTemplate = (month: string) =>
   api<TemplateFile>(`/kpm/data-upload/template?month=${encodeURIComponent(month)}`);
 
+export type Cadence = 'monthly' | 'ytd';
+
+/** `not_provided` is a blank cell — it changes nothing, because a file never clears a figure. */
+export type CellStatus = 'new' | 'changed' | 'unchanged' | 'not_provided' | 'refused';
+
+export interface PreviewIssue {
+  code: string;
+  /** Names the column in the header's own words, and what is wrong. */
+  message: string;
+  metric: ProductionMetric | null;
+  cadence: Cadence | null;
+}
+
+export interface PreviewCell {
+  metric: ProductionMetric;
+  cadence: Cadence;
+  status: CellStatus;
+  /** Stored now. Money in minor units, as everywhere. */
+  before: number | null;
+  after: number | null;
+  /** As the file has it — money in Rp M. */
+  raw: string | null;
+}
+
+export interface PreviewRow {
+  line: number;
+  agentCode: string;
+  membershipId: string | null;
+  resolvedAgentCode: string | null;
+  name: string | null;
+  fileName: string;
+  nameDiffers: boolean;
+  codeRecovered: boolean;
+  status: 'ready' | 'refused';
+  issues: PreviewIssue[];
+  cells: PreviewCell[];
+}
+
+export interface PreviewSummary {
+  rows: number;
+  ready: number;
+  refused: number;
+  newCells: number;
+  changedCells: number;
+  unchangedCells: number;
+  notProvidedCells: number;
+  refusedCells: number;
+  notInFile: number;
+}
+
+/** What a filled file would change. Nothing has been saved when this arrives. */
+export interface UploadPreview {
+  month: string;
+  filename: string;
+  templateVersion: number;
+  encoding: 'utf-8' | 'windows-1252';
+  delimiter: ',' | ';' | '\t';
+  summary: PreviewSummary;
+  rows: PreviewRow[];
+}
+
+/**
+ * The file as **bytes**, in a form. `FileReader.readAsText` — what the roster import does — would
+ * decode it in the browser first, and a byte the encoding cannot explain would already be U+FFFD
+ * when it reached the server that knows how to read it (ADR-0052).
+ */
+export const previewUpload = (month: string, file: File) => {
+  const form = new FormData();
+  form.append('month', month);
+  form.append('file', file);
+  return api<UploadPreview>('/kpm/data-upload/preview', { method: 'POST', body: form });
+};
+
 /** The UTF-8 byte-order mark, percent-encoded: `EF BB BF`. */
 const UTF8_BOM = '%EF%BB%BF';
 

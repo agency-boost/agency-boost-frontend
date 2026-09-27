@@ -112,21 +112,27 @@ export function isImpersonating(): boolean {
 
 interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  /**
+   * JSON, or a `FormData` sent as it is — for a file the server has to read as bytes (P9-T3). A
+   * form sets no `Content-Type`: the browser writes `multipart/form-data` with its boundary, and a
+   * header set here would have no boundary in it.
+   */
   body?: unknown;
   /** Set on the refresh call itself, so a failed refresh cannot recurse. */
   skipRefresh?: boolean;
 }
 
 async function raw(path: string, options: RequestOptions = {}): Promise<Response> {
+  const form = typeof FormData !== 'undefined' && options.body instanceof FormData;
   return fetch(apiUrl(path), {
     method: options.method ?? 'GET',
     headers: {
-      'Content-Type': 'application/json',
+      ...(form ? {} : { 'Content-Type': 'application/json' }),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
     // Sends and receives the httpOnly refresh cookie.
     credentials: 'include',
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body: options.body === undefined ? undefined : form ? (options.body as FormData) : JSON.stringify(options.body),
   });
 }
 

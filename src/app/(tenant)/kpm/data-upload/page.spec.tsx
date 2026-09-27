@@ -14,7 +14,9 @@ const membership = {
 };
 const OWNER = makeMe({
   membership,
-  permissions: ['kpm:read_profile', 'data_upload:read', 'data_upload:download_template'],
+  permissions: [
+    'kpm:read_profile', 'data_upload:read', 'data_upload:download_template', 'data_upload:upload_and_preview',
+  ],
 });
 /** Holds the table and not the file — the two grants are separate in §3.9. */
 const READER = makeMe({ membership, permissions: ['kpm:read_profile', 'data_upload:read'] });
@@ -276,3 +278,203 @@ describe('Data upload — the month table (P9-T1)', () => {
     expect(calls.filter((c) => c.url.includes('/kpm/data-upload/'))).toHaveLength(0);
   });
 });
+
+// ── P9-T3 ────────────────────────────────────────────────────────────────────────────────────
+
+const METRICS = ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'] as const;
+/** Twelve cells, not provided unless given, keyed `metric.cadence`. */
+const cells = (given: Record<string, Partial<{ status: string; before: number | null; after: number | null; raw: string }>> = {}) =>
+  (['monthly', 'ytd'] as const).flatMap((cadence) => METRICS.map((metric) => ({
+    metric, cadence, status: 'not_provided', before: null, after: null, raw: null,
+    ...given[`${metric}.${cadence}`],
+  })));
+
+const PREVIEW = {
+  month: '2026-09',
+  filename: 'filled.csv',
+  templateVersion: 1,
+  encoding: 'utf-8',
+  delimiter: ';',
+  summary: {
+    rows: 3, ready: 2, refused: 1, newCells: 1, changedCells: 1, unchangedCells: 0,
+    notProvidedCells: 21, refusedCells: 1, notInFile: 4,
+  },
+  rows: [
+    {
+      line: 2, agentCode: 'PRU-001', membershipId: 'mem-rina', resolvedAgentCode: 'PRU-001', name: 'Rina Wijaya',
+      fileName: 'Rina Wijaya', nameDiffers: false, codeRecovered: false, status: 'ready',
+      issues: [{
+        code: 'UPLOAD_VALUE_OUT_OF_RANGE', metric: 'persistency', cadence: 'monthly',
+        message: 'Rolling Persistency (%) — This Month: “140” is above 100 — persistency is a percentage.',
+      }],
+      cells: cells({
+        'ape.monthly': { status: 'new', after: 150_000_000, raw: '1,5' },
+        'ape.ytd': { status: 'changed', before: 100_000_000, after: 600_000_000, raw: '6' },
+        'persistency.monthly': { status: 'refused', raw: '140' },
+      }),
+    },
+    {
+      line: 3, agentCode: '88213', membershipId: 'mem-sari', resolvedAgentCode: '00088213', name: 'Sari Dewi',
+      fileName: 'Sari D.', nameDiffers: true, codeRecovered: true, status: 'ready', issues: [], cells: cells(),
+    },
+    {
+      line: 4, agentCode: 'PRU-999', membershipId: null, resolvedAgentCode: null, name: null,
+      fileName: 'Nobody', nameDiffers: false, codeRecovered: false, status: 'refused', cells: [],
+      issues: [{ code: 'UPLOAD_UNKNOWN_AGENT_CODE', metric: null, cadence: null, message: 'No active member of this office has this code.' }],
+    },
+  ],
+};
+
+const csvFile = () => new File(['Agent Code;Agent Name'], 'filled.csv', { type: 'text/csv' });
+const choose = async (file = csvFile()) => {
+  const input = await screen.findByLabelText('+ Upload filled template');
+  fireEvent.change(input, { target: { files: [file] } });
+};
+
+describe('Data upload — reading a filled file (P9-T3)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const withPreview = (preview: unknown = PREVIEW, status = 200) => ({
+    ...routes(month([rina(), budi()])),
+    '/kpm/data-upload/preview': { status, body: preview },
+  });
+
+  it('offers the upload to somebody who holds its grant, and not to somebody who may only read', async () => {
+    stubFetch(withPreview());
+    const { unmount } = renderWithSession(<DataUploadPage />, { me: OWNER });
+    expect(await screen.findByLabelText('+ Upload filled template')).toHaveAttribute('type', 'file');
+    unmount();
+
+    stubFetch(withPreview());
+    renderWithSession(<DataUploadPage />, { me: READER });
+    await screen.findByText('Rina Wijaya');
+    expect(screen.queryByLabelText('+ Upload filled template')).not.toBeInTheDocument();
+  });
+
+  it('AC-11: sends the file as bytes, in a form, with the month the table shows', async () => {
+    const { calls } = stubFetch(withPreview());
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    const file = csvFile();
+    await choose(file);
+
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/kpm/data-upload/preview'))).toBe(true));
+    const sent = calls.find((c) => c.url.includes('/kpm/data-upload/preview'))!;
+    expect(sent.init.method).toBe('POST');
+    const form = sent.init.body as FormData;
+    expect(form).toBeInstanceOf(FormData);
+    expect(form.get('month')).toBe('2026-09');
+    expect(form.get('file')).toBe(file);
+  });
+
+  it('says what would change, in the prototype’s words, and takes focus so a screen reader hears it', async () => {
+    stubFetch(withPreview());
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+
+    const heading = await screen.findByRole('heading', { name: '2 agents ready to import, 1 row skipped.' });
+    await waitFor(() => expect(heading).toHaveFocus());
+    const card = screen.getByRole('region', { name: '2 agents ready to import, 1 row skipped.' });
+    expect(card).toHaveTextContent(
+      'Figures: 1 new · 1 changed · 0 already as stored · 21 left blank, which keep what is stored · 1 not taken.',
+    );
+    expect(card).toHaveTextContent('4 active members are not in the file and keep what they have.');
+  });
+
+  it('AC-8: says plainly that nothing has been saved, and offers no confirm yet', async () => {
+    stubFetch(withPreview());
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+
+    const card = await screen.findByRole('region');
+    expect(card).toHaveTextContent('Nothing has been saved. Confirming the import arrives in the next release');
+    expect(within(card).queryByRole('button', { name: 'Confirm import' })).not.toBeInTheDocument();
+  });
+
+  it('lists every row and figure not taken, with its line, its code and its reason', async () => {
+    stubFetch(withPreview());
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+
+    const list = (await screen.findByRole('heading', { name: 'Not taken (2)' })).nextElementSibling as HTMLElement;
+    const items = within(list).getAllByRole('listitem');
+    expect(items[0]).toHaveTextContent('Line 2 · PRU-001 · Rina Wijaya');
+    expect(items[0]).toHaveTextContent('“140” is above 100');
+    expect(items[1]).toHaveTextContent('Line 4 · PRU-999');
+    expect(items[1]).toHaveTextContent('No active member of this office has this code.');
+  });
+
+  it('AC-9: shows a diff — new, changed with what it was, not taken, and a blank that keeps what is stored', async () => {
+    stubFetch(withPreview());
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+
+    const table = await screen.findByRole('table', { name: 'What “filled.csv” would change' });
+    const rinaRow = within(table).getAllByRole('row').find((r) => within(r).queryByText('Rina Wijaya'))!;
+    const cellsOf = within(rinaRow).getAllByRole('cell');
+    expect(cellsOf[2]).toHaveTextContent('Rp 1.500.000');
+    expect(cellsOf[3]).toHaveTextContent('Rp 6.000.000');
+    expect(cellsOf[3]).toHaveTextContent('was Rp 1.000.000');
+    expect(cellsOf[4]).toHaveTextContent('✕ 140 — not taken');
+    expect(within(cellsOf[5]).getByLabelText('left blank')).toHaveTextContent('—');
+    // The row the file could not attribute is in the list, not the table.
+    expect(within(table).queryByText('PRU-999')).not.toBeInTheDocument();
+  });
+
+  it('AC-6: shows a recovered code and a different name, and still takes the row', async () => {
+    stubFetch(withPreview());
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+
+    const table = await screen.findByRole('table', { name: 'What “filled.csv” would change' });
+    const sari = within(table).getAllByRole('row').find((r) => within(r).queryByText('Sari Dewi'))!;
+    expect(sari).toHaveTextContent('00088213read from “88213”');
+    expect(sari).toHaveTextContent('the file says “Sari D.”');
+  });
+
+  it('refuses a file whole with the server’s reason, and leaves the table as it was', async () => {
+    stubFetch(withPreview({
+      error: {
+        code: 'UPLOAD_TEMPLATE_MISMATCH', requestId: 'req-7',
+        message: 'Column 5 of the header reads “Recruits”; the template’s reads “Recruitment — This Month”.',
+      },
+    }, 422));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+
+    expect(await screen.findByText('“filled.csv” was not read. Nothing has been saved.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Column 5 of the header reads “Recruits”');
+    expect(screen.getByRole('alert')).toHaveTextContent('UPLOAD_TEMPLATE_MISMATCH · req-7');
+    expect(screen.getByText('Budi Santoso')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('puts the preview away on Cancel', async () => {
+    stubFetch(withPreview());
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('region')).not.toBeInTheDocument();
+  });
+
+  it('puts the preview away when the month changes — it compared the other month’s figures', async () => {
+    stubFetch({ ...withPreview(), '/kpm/data-upload/2026-08': { body: month([rina()], 0, '2026-08') } });
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+    await screen.findByRole('region');
+
+    fireEvent.change(screen.getByLabelText('Month'), { target: { value: '2026-08' } });
+    expect(screen.queryByRole('region')).not.toBeInTheDocument();
+  });
+
+  it('keeps one status region on the screen with a preview open', async () => {
+    stubFetch(withPreview());
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+    await screen.findByRole('region');
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
+});
+
