@@ -39,3 +39,17 @@ export function formatDayLong(iso: string): string {
   if (Number.isNaN(at.getTime())) return '';
   return at.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
+
+/**
+ * A calendar day the server already resolved in the office's zone — `2026-10-07` — spelled for a
+ * sentence: `October 7, 2026`.
+ *
+ * **Built from its three numbers, never parsed as an instant.** `new Date('2026-10-07')` is midnight
+ * UTC, which a browser west of Greenwich shows as October 6 — the one-day slip invariant §9 exists to
+ * prevent, on a day the office's lock turns on.
+ */
+export function formatCalendarDay(day: string): string {
+  const [y, m, d] = day.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}

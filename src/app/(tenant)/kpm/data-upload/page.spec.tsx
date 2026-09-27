@@ -37,7 +37,12 @@ const rina = (over: Record<string, unknown> = {}) => ({
 });
 const budi = () => ({ membershipId: 'mem-budi', agentCode: 'PRU-002', name: 'Budi Santoso', metrics: blank() });
 
-const month = (rows: unknown[], withData = 0, m = '2026-09') => ({ month: m, rows, withData });
+/** A month's state as the server answers it: open, and three writes in (P9-T4). */
+const state = (m = '2026-09', over: Record<string, unknown> = {}) => ({
+  month: m, revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07',
+  changedAt: null, changedBy: null, ...over,
+});
+const month = (rows: unknown[], withData = 0, m = '2026-09', st: unknown = state(m)) => ({ month: m, rows, withData, state: st });
 
 const HEADER = 'Agent Code,Agent Name,APE (Rp M) — This Month,Rolling Persistency (%) — This Month,'
   + 'Recruitment — This Month,New Active Agents — This Month,FYP (Rp M) — This Month,# of Policy — This Month,'
@@ -289,12 +294,14 @@ const cells = (given: Record<string, Partial<{ status: string; before: number | 
     ...given[`${metric}.${cadence}`],
   })));
 
+const PREVIEW_REVISION = 3;
 const PREVIEW = {
   month: '2026-09',
   filename: 'filled.csv',
   templateVersion: 1,
   encoding: 'utf-8',
   delimiter: ';',
+  revision: PREVIEW_REVISION,
   summary: {
     rows: 3, ready: 2, refused: 1, newCells: 1, changedCells: 1, unchangedCells: 0,
     notProvidedCells: 21, refusedCells: 1, notInFile: 4,
@@ -380,13 +387,14 @@ describe('Data upload — reading a filled file (P9-T3)', () => {
     expect(card).toHaveTextContent('4 active members are not in the file and keep what they have.');
   });
 
-  it('AC-8: says plainly that nothing has been saved, and offers no confirm yet', async () => {
+  it('AC-8: says plainly that nothing has been saved yet, and offers no confirm without its grant', async () => {
     stubFetch(withPreview());
     renderWithSession(<DataUploadPage />, { me: OWNER });
     await choose();
 
     const card = await screen.findByRole('region');
-    expect(card).toHaveTextContent('Nothing has been saved. Confirming the import arrives in the next release');
+    expect(card).toHaveTextContent('Nothing has been saved yet. Confirm import writes the figures in bold');
+    // OWNER here holds upload_and_preview and not commit_import — §3.9 grants them apart.
     expect(within(card).queryByRole('button', { name: 'Confirm import' })).not.toBeInTheDocument();
   });
 
@@ -475,6 +483,192 @@ describe('Data upload — reading a filled file (P9-T3)', () => {
     await choose();
     await screen.findByRole('region');
     expect(screen.getAllByRole('status')).toHaveLength(1);
+  });
+});
+
+// ── P9-T4 ────────────────────────────────────────────────────────────────────────────────────
+
+const EVERYTHING = makeMe({
+  membership,
+  permissions: [
+    'kpm:read_profile', 'data_upload:read', 'data_upload:download_template', 'data_upload:upload_and_preview',
+    'data_upload:commit_import', 'data_upload:revert_batch', 'data_upload:read_history',
+    'data_upload:lock_month', 'data_upload:reopen_month',
+  ],
+});
+
+const batch = (over: Record<string, unknown> = {}) => ({
+  id: 'b-2', month: '2026-09', filename: 'KPM0417-agent-data-Sep-2026-corrected.csv', status: 'committed',
+  templateVersion: 1, rowCount: 6, writtenRowCount: 6, cellCount: 72, issueCount: 0,
+  committedAt: '2026-09-26T07:00:00.000Z', committedBy: 'Wilson Tanoto',
+  revertedAt: null, revertedBy: null, restoredCellCount: 0, keptCellCount: 0, canRevert: true, ...over,
+});
+const REVERTED = batch({
+  id: 'b-1', filename: 'KPM0417-agent-data-Sep-2026.csv', status: 'reverted', canRevert: false, writtenRowCount: 8,
+  cellCount: 96, revertedAt: '2026-09-25T07:00:00.000Z', revertedBy: 'Maya Halim', restoredCellCount: 96,
+});
+const result = (b: Record<string, unknown>, st = state('2026-09', { revision: 4 })) => ({ batch: batch(b), state: st });
+
+describe('Data upload — confirm, history, revert and the month lock (P9-T4)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const everything = (over: Record<string, unknown> = {}) => ({
+    ...routes(month([rina(), budi()], 1)),
+    '/kpm/data-upload/preview': { body: PREVIEW },
+    '/kpm/data-upload/history': { body: { month: '2026-09', batches: [batch(), REVERTED] } },
+    ...over,
+  });
+
+  describe('the month lock (ADR-0050)', () => {
+    it('says a month is open, and until when', async () => {
+      stubFetch(everything());
+      renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+      expect(await screen.findByText('Open for imports and corrections until October 7, 2026, when it locks.')).toBeInTheDocument();
+    });
+
+    it.each([
+      [{ locked: true, reason: 'schedule', editableUntil: '2026-09-07' }, 'Locked — its window closed after September 7, 2026. Reopen it to change its figures.'],
+      [{ locked: true, reason: 'locked_by_hand', changedBy: 'Maya Halim', changedAt: '2026-09-20T03:00:00.000Z' }, 'Locked by Maya Halim on September 20, 2026. Reopen it to change its figures.'],
+      [{ locked: false, reason: 'reopened', changedBy: 'Wilson Tanoto', changedAt: '2026-09-21T03:00:00.000Z' }, 'Reopened by Wilson Tanoto on September 21, 2026. It stays open until somebody locks it again.'],
+    ])('says why: %j', async (over, sentence) => {
+      stubFetch(everything({ '/kpm/data-upload/': { body: month([rina()], 1, '2026-09', state('2026-09', over)) } }));
+      renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+      expect(await screen.findByText(sentence)).toBeInTheDocument();
+    });
+
+    it('locks the month after asking, and says so', async () => {
+      const { calls } = stubFetch(everything({
+        '/kpm/data-upload/months/2026-09/lock': { body: state('2026-09', { locked: true, reason: 'locked_by_hand', revision: 4 }) },
+      }));
+      renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Lock month' }));
+      expect(screen.getByRole('dialog')).toHaveTextContent('Lock September 2026? Imports, reverts and corrections to it will be refused');
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Lock month' }));
+
+      expect(await screen.findByText('September 2026 is locked.')).toBeInTheDocument();
+      expect(calls.find((c) => c.url.includes('/months/2026-09/lock'))!.init.method).toBe('POST');
+    });
+
+    it('offers Reopen on a locked month, and neither without the grants', async () => {
+      stubFetch(everything({ '/kpm/data-upload/': { body: month([rina()], 1, '2026-09', state('2026-09', { locked: true, reason: 'schedule' })) } }));
+      const { unmount } = renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+      expect(await screen.findByRole('button', { name: 'Reopen month' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Lock month' })).not.toBeInTheDocument();
+      unmount();
+
+      stubFetch(everything());
+      renderWithSession(<DataUploadPage />, { me: OWNER });
+      await screen.findByText('Rina Wijaya');
+      expect(screen.queryByRole('button', { name: /month$/ })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Confirm import', () => {
+    it('sends the same file with the revision its preview saw, then reloads and says what it did', async () => {
+      const { calls } = stubFetch(everything({ '/kpm/data-upload/commit': { status: 201, body: result({ writtenRowCount: 2 }) } }));
+      renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+      const file = csvFile();
+      await choose(file);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirm import' }));
+
+      const notice = await screen.findByText('Imported 2 agent records for September 2026.');
+      await waitFor(() => expect(notice).toHaveFocus());
+      const sent = calls.find((c) => c.url.includes('/kpm/data-upload/commit'))!;
+      const form = sent.init.body as FormData;
+      expect([form.get('month'), form.get('revision'), form.get('file')]).toEqual(['2026-09', String(PREVIEW_REVISION), file]);
+      // The preview is put away, and the month is read again.
+      await waitFor(() => expect(screen.queryByRole('region', { name: /ready to import/ })).not.toBeInTheDocument());
+      expect(calls.filter((c) => /\/kpm\/data-upload\/2026-09$/.test(c.url)).length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('keeps the preview open and says why when the month has moved on', async () => {
+      stubFetch(everything({
+        '/kpm/data-upload/commit': {
+          status: 409,
+          body: { error: { code: 'VERSION_CONFLICT', message: 'September 2026 has changed since you looked at it.', requestId: 'r' } },
+        },
+      }));
+      renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+      await choose();
+      fireEvent.click(await screen.findByRole('button', { name: 'Confirm import' }));
+
+      const card = screen.getByRole('region', { name: /ready to import/ });
+      expect(await within(card).findByRole('alert')).toHaveTextContent('September 2026 has changed since you looked at it.');
+      expect(within(card).getByRole('button', { name: 'Confirm import' })).toBeEnabled();
+    });
+
+    it('is unavailable in a locked month, saying so', async () => {
+      stubFetch(everything({ '/kpm/data-upload/': { body: month([rina()], 1, '2026-09', state('2026-09', { locked: true, reason: 'schedule' })) } }));
+      renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+      await choose();
+      const card = await screen.findByRole('region', { name: /ready to import/ });
+      expect(within(card).getByRole('button', { name: 'Confirm import' })).toBeDisabled();
+      expect(card).toHaveTextContent('September 2026 is locked — reopen it to import.');
+    });
+
+    it('is unavailable when the file would change nothing, saying so', async () => {
+      const idle = { ...PREVIEW, summary: { ...PREVIEW.summary, newCells: 0, changedCells: 0 } };
+      stubFetch(everything({ '/kpm/data-upload/preview': { body: idle } }));
+      renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+      await choose();
+      const card = await screen.findByRole('region', { name: /ready to import/ });
+      expect(within(card).getByRole('button', { name: 'Confirm import' })).toBeDisabled();
+      expect(card).toHaveTextContent('Nothing in this file would change a figure.');
+    });
+  });
+
+  describe('the history', () => {
+    it('lists each import: the file, who and when, what it wrote, and whether it stands', async () => {
+      stubFetch(everything());
+      renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+
+      const section = await screen.findByRole('region', { name: 'Imports for September 2026' });
+      const items = await within(section).findAllByRole('listitem');
+      expect(items[0]).toHaveTextContent('KPM0417-agent-data-Sep-2026-corrected.csv');
+      expect(items[0]).toHaveTextContent('Imported by Wilson Tanoto on September 26, 2026 · 6 agents, 72 figures');
+      expect(items[0]).toHaveTextContent('Standing');
+      expect(items[1]).toHaveTextContent('Reverted by Maya Halim on September 25, 2026 — 96 figures put back.');
+      expect(within(items[1]).queryByRole('button', { name: 'Revert' })).not.toBeInTheDocument();
+    });
+
+    it('reverts the latest standing import after asking, and says what came back', async () => {
+      const { calls } = stubFetch(everything({
+        '/kpm/data-upload/revert': { body: result({ status: 'reverted', restoredCellCount: 70, keptCellCount: 2, canRevert: false }) },
+      }));
+      renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Revert' }));
+      expect(screen.getByRole('dialog')).toHaveTextContent('Every figure it wrote into September 2026 goes back to what it was before — empty where it was empty.');
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Revert import' }));
+
+      expect(await screen.findByText(
+        'Reverted “KPM0417-agent-data-Sep-2026-corrected.csv”: 70 figures put back, 2 kept because something changed them since.',
+      )).toBeInTheDocument();
+      expect(JSON.parse(calls.find((c) => c.url.includes('/revert'))!.init.body as string)).toEqual({ batchId: 'b-2' });
+    });
+
+    it('holds Revert back in a locked month, saying so', async () => {
+      stubFetch(everything({ '/kpm/data-upload/': { body: month([rina()], 1, '2026-09', state('2026-09', { locked: true, reason: 'schedule' })) } }));
+      renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+      expect(await screen.findByRole('button', { name: 'Revert' })).toBeDisabled();
+      expect(screen.getByText('September 2026 is locked — reopen it to revert an import.')).toBeInTheDocument();
+    });
+
+    it('says so when nothing has been imported', async () => {
+      stubFetch(everything({ '/kpm/data-upload/history': { body: { month: '2026-09', batches: [] } } }));
+      renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+      expect(await screen.findByText('Nothing has been imported for September 2026 yet.')).toBeInTheDocument();
+    });
+
+    it('is neither shown nor asked for without its grant', async () => {
+      const { calls } = stubFetch(everything());
+      renderWithSession(<DataUploadPage />, { me: OWNER });
+      await screen.findByText('Rina Wijaya');
+      expect(screen.queryByRole('region', { name: /Imports for/ })).not.toBeInTheDocument();
+      expect(calls.some((c) => c.url.includes('/history'))).toBe(false);
+    });
   });
 });
 

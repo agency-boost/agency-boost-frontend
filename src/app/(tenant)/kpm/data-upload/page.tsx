@@ -10,19 +10,23 @@ import { cn } from '@/lib/cn';
 import { formatRupiah } from '@/lib/goals';
 import { useCan } from '@/lib/session';
 import {
-  METRIC_LABEL, MONEY_METRICS, PRODUCTION_METRICS, previewUpload, readMonth, readTemplate,
-  templateHref, type MetricCell, type MonthView, type PreviewCell, type ProductionMetric,
-  type TemplateFile, type UploadPreview,
+  commitUpload, METRIC_LABEL, MONEY_METRICS, PRODUCTION_METRICS, previewUpload, readMonth,
+  readTemplate, templateHref, type ImportResult, type MetricCell, type MonthState, type MonthView,
+  type PreviewCell, type ProductionMetric, type TemplateFile, type UploadPreview,
 } from '@/lib/production';
+import { ImportHistory } from './import-history';
+import { monthLabel, plural } from './month-label';
+import { MonthLock } from './month-lock';
 
 /**
  * The office's production, month by month (P9-T1, P9-T2, P9-T3).
  *
  * **The month table, before the file.** The prototype draws the toolbar, the preview and the table on
  * day one over an in-memory array (`KPM_Owner.html:1289-1324`). P9-T1 shipped the picker and the
- * table, P9-T2 the download, P9-T3 the upload and its preview; **Confirm import** arrives with P9-T4,
- * the task that gives it a route to call, because a button with nothing behind it is the defect
- * `backend-then-frontend.md` exists to prevent.
+ * table, P9-T2 the download, P9-T3 the upload and its preview, P9-T4 Confirm import, the history
+ * with its Revert, and the month's lock. Inline correction arrives with P9-T5, the task that gives it
+ * a route to call, because a control with nothing behind it is the defect `backend-then-frontend.md`
+ * exists to prevent.
  *
  * **Every active member is a row, and a dash is not a zero.** A row of dashes says the carrier has not
  * reported this person; a `0` says it reported nothing produced. An empty table would say the office
@@ -114,19 +118,47 @@ function MonthTable() {
   const [upload, setUpload] = useState<UploadState>({ kind: 'idle' });
   /** Which reading is current: a file read for a month the picker has left is thrown away. */
   const reading = useRef(0);
+  /**
+   * Advanced after every write — an import, a revert, a lock — so the table, the history and the
+   * month's state are read again. The table stays on screen while they are; only a new month clears it.
+   */
+  const [generation, setGeneration] = useState(0);
+  /** What the last write did, in a sentence. It takes focus, which is how a screen reader hears it. */
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    setView(null);
+    setNotice(null);
+  }, [month]);
 
   useEffect(() => {
     let live = true;
-    setView(null);
     setError(null);
-    // A preview is of one month's figures. Another month is another comparison.
+    // A preview is of one month's figures, at one revision. Another month, or a write to this one,
+    // is another comparison.
     reading.current += 1;
     setUpload({ kind: 'idle' });
     readMonth(month)
       .then((next) => { if (live) setView(next); })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
     return () => { live = false; };
-  }, [month]);
+  }, [month, generation]);
+
+  useEffect(() => { if (notice) noticeRef.current?.focus(); }, [notice]);
+
+  const wrote = (sentence: string) => {
+    setNotice(sentence);
+    setGeneration((g) => g + 1);
+  };
+  const imported = (result: ImportResult) =>
+    wrote(`Imported ${plural(result.batch.writtenRowCount, 'agent record')} for ${monthLabel(result.batch.month)}.`);
+  const reverted = (result: ImportResult) => wrote(
+    `Reverted “${result.batch.filename}”: ${plural(result.batch.restoredCellCount, 'figure')} put back`
+    + `${result.batch.keptCellCount ? `, ${result.batch.keptCellCount} kept because something changed them since` : ''}.`,
+  );
+  const relocked = (next: MonthState) =>
+    wrote(`${monthLabel(next.month)} is ${next.locked ? 'locked' : 'open again'}.`);
 
   const read = async (file: File) => {
     if (!view) return;
@@ -134,7 +166,7 @@ function MonthTable() {
     setUpload({ kind: 'reading', filename: file.name });
     try {
       const preview = await previewUpload(view.month, file);
-      if (reading.current === mine) setUpload({ kind: 'preview', preview });
+      if (reading.current === mine) setUpload({ kind: 'preview', preview, file });
     } catch (err) {
       if (reading.current === mine) setUpload({ kind: 'failed', filename: file.name, error: toDisplayError(err) });
     }
@@ -170,7 +202,28 @@ function MonthTable() {
         {view && <UploadButton busy={upload.kind === 'reading'} onFile={read} />}
       </div>
 
-      {view && <UploadResult state={upload} month={view.month} columns={columns} onCancel={dismiss} />}
+      {view && <MonthLock state={view.state} onChanged={relocked} />}
+
+      {notice && (
+        <p
+          ref={noticeRef}
+          tabIndex={-1}
+          className="mb-4 rounded-md border-l-4 border-success bg-success/5 px-3 py-2 text-sm font-semibold text-navy"
+        >
+          {notice}
+        </p>
+      )}
+
+      {view && (
+        <UploadResult
+          state={upload}
+          month={view.month}
+          monthState={view.state}
+          columns={columns}
+          onCancel={dismiss}
+          onImported={imported}
+        />
+      )}
 
       {error && <ErrorBanner {...error} />}
 
@@ -211,6 +264,8 @@ function MonthTable() {
               </Row>
             ))}
           </DataTable>
+
+          <ImportHistory month={view.month} state={view.state} generation={generation} onReverted={reverted} />
         </>
       )}
     </>
@@ -238,7 +293,8 @@ function formatFigure(metric: ProductionMetric, value: number): string {
 type UploadState =
   | { kind: 'idle' }
   | { kind: 'reading'; filename: string }
-  | { kind: 'preview'; preview: UploadPreview }
+  /** The file is kept: Confirm import sends it again, and the server reads it afresh. */
+  | { kind: 'preview'; preview: UploadPreview; file: File }
   | { kind: 'failed'; filename: string; error: ApiError };
 
 /**
@@ -293,12 +349,14 @@ function UploadButton({ busy, onFile }: { busy: boolean; onFile: (file: File) =>
  * cannot be read is an alert.
  */
 function UploadResult({
-  state, month, columns, onCancel,
+  state, month, monthState, columns, onCancel, onImported,
 }: {
   state: UploadState;
   month: string;
+  monthState: MonthState;
   columns: readonly Column[];
   onCancel: () => void;
+  onImported: (result: ImportResult) => void;
 }) {
   if (state.kind === 'idle') return null;
 
@@ -327,10 +385,18 @@ function UploadResult({
     );
   }
 
-  return <PreviewCard preview={state.preview} month={month} columns={columns} onCancel={onCancel} />;
+  return (
+    <PreviewCard
+      preview={state.preview}
+      file={state.file}
+      month={month}
+      monthState={monthState}
+      columns={columns}
+      onCancel={onCancel}
+      onImported={onImported}
+    />
+  );
 }
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /**
  * What the file would change — **a diff, not the file** (P9-T3 AC-8).
@@ -342,16 +408,39 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * rows that are, cell by cell against the month table's own columns.
  */
 function PreviewCard({
-  preview, month, columns, onCancel,
+  preview, file, month, monthState, columns, onCancel, onImported,
 }: {
   preview: UploadPreview;
+  file: File;
   month: string;
+  monthState: MonthState;
   columns: readonly Column[];
   onCancel: () => void;
+  onImported: (result: ImportResult) => void;
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
   const headingId = useId();
   useEffect(() => { heading.current?.focus(); }, [preview]);
+  const canConfirm = useCan('data_upload:commit_import');
+  const [confirming, setConfirming] = useState(false);
+  const [refused, setRefused] = useState<ApiError | null>(null);
+  const nothing = preview.summary.newCells + preview.summary.changedCells === 0;
+
+  /**
+   * **Confirm import** (`KPM_Owner.html:1309`). The same file again with the revision the preview was
+   * taken against: if the month has moved since — somebody else imported, reverted or locked it — the
+   * server refuses rather than writing a diff nobody saw.
+   */
+  const confirm = async () => {
+    setConfirming(true);
+    setRefused(null);
+    try {
+      onImported(await commitUpload(month, preview.revision, file));
+    } catch (err) {
+      setRefused(toDisplayError(err));
+      setConfirming(false);
+    }
+  };
 
   const { summary } = preview;
   const ready = preview.rows.filter((r) => r.status === 'ready');
@@ -376,8 +465,8 @@ function PreviewCard({
         {summary.notInFile > 0 && ` ${plural(summary.notInFile, 'active member is', 'active members are')} not in the file and keep what they have.`}
       </p>
       <p className="mt-2 text-sm text-navy">
-        <strong>Nothing has been saved.</strong> Confirming the import arrives in the next release —
-        until then this shows what the file would change for {monthLabel(month)}.
+        <strong>Nothing has been saved yet.</strong> Confirm import writes the figures in bold into{' '}
+        {monthLabel(month)}; a blank keeps what is stored, and what is not taken is left out.
       </p>
 
       {issues.length > 0 && (
@@ -430,8 +519,21 @@ function PreviewCard({
         </div>
       )}
 
-      <div className="mt-3 flex gap-2.5">
-        <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+      {refused && <div className="mt-3"><ErrorBanner {...refused} /></div>}
+
+      <div className="mt-3 flex flex-wrap items-center gap-2.5">
+        {canConfirm && (
+          <Button onClick={confirm} disabled={confirming || nothing || monthState.locked}>
+            {confirming ? 'Importing…' : 'Confirm import'}
+          </Button>
+        )}
+        <Button variant="secondary" onClick={onCancel} disabled={confirming}>Cancel</Button>
+        {canConfirm && monthState.locked && (
+          <span className="text-sm text-muted">{monthLabel(month)} is locked — reopen it to import.</span>
+        )}
+        {canConfirm && !monthState.locked && nothing && (
+          <span className="text-sm text-muted">Nothing in this file would change a figure.</span>
+        )}
       </div>
     </Card>
   );
@@ -464,13 +566,4 @@ function Change({ cell }: { cell: PreviewCell }) {
         </span>
       );
   }
-}
-
-/** `2026-09` → `September 2026`. `en-US`, for the reason `lib/format.ts` gives. */
-function monthLabel(month: string): string {
-  const [y, m] = month.split('-').map(Number);
-  if (!y || !m) return month;
-  return new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString('en-US', {
-    month: 'long', year: 'numeric', timeZone: 'UTC',
-  });
 }

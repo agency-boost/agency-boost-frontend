@@ -316,6 +316,7 @@ describe('screens have no axe violations', () => {
       '/kpm/data-upload/': {
         body: {
           month: '2026-09', withData: 1,
+          state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null },
           rows: [
             { membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya',
               metrics: { ...metrics, ape: { monthly: { value: 15000000000, provenance: 'imported' }, ytd: empty } } },
@@ -335,6 +336,48 @@ describe('screens have no axe violations', () => {
     await screen.findByText('Budi Santoso');
     await screen.findByRole('link', { name: '⬇ Download template' });
     await expectClean('kpm/data-upload');
+  });
+
+  it('the month with its lock and its imports, one reverted and one standing (P9-T4)', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: true, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: [
+        'member:read_profile', 'data_upload:read', 'data_upload:read_history', 'data_upload:revert_batch',
+        'data_upload:lock_month', 'data_upload:reopen_month',
+      ],
+    });
+    const empty = { value: null, provenance: null };
+    const metrics = Object.fromEntries(
+      ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'].map((m) => [m, { monthly: empty, ytd: empty }]),
+    );
+    const batch = {
+      id: 'b-2', month: '2026-09', filename: 'KPM0417-agent-data-Sep-2026-corrected.csv', status: 'committed',
+      templateVersion: 1, rowCount: 6, writtenRowCount: 6, cellCount: 72, issueCount: 0,
+      committedAt: '2026-09-26T07:00:00.000Z', committedBy: 'Wilson Tanoto', revertedAt: null, revertedBy: null,
+      restoredCellCount: 0, keptCellCount: 0, canRevert: true,
+    };
+    stubFetch({
+      '/kpm/data-upload/': {
+        body: {
+          month: '2026-09', withData: 0,
+          state: { month: '2026-09', revision: 3, locked: false, reason: 'reopened', editableUntil: '2026-10-07', changedAt: '2026-09-21T03:00:00.000Z', changedBy: 'Maya Halim' },
+          rows: [{ membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', metrics }],
+        },
+      },
+      '/kpm/data-upload/history': {
+        body: {
+          month: '2026-09',
+          batches: [batch, { ...batch, id: 'b-1', status: 'reverted', canRevert: false, revertedAt: '2026-09-25T07:00:00.000Z', revertedBy: 'Maya Halim', restoredCellCount: 96 }],
+        },
+      },
+    });
+    renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
+    await screen.findByRole('button', { name: 'Revert' });
+    await screen.findByRole('button', { name: 'Lock month' });
+    await expectClean('kpm/data-upload with its lock and history');
   });
 
   it('the preview of a filled file: summary, what is not taken, and the diff (P9-T3)', async () => {
@@ -358,7 +401,7 @@ describe('screens have no axe violations', () => {
     cells[1] = { ...cells[1], status: 'refused', raw: '140' };
     stubFetch({
       '/kpm/data-upload/': {
-        body: { month: '2026-09', withData: 0, rows: [{ membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', metrics }] },
+        body: { month: '2026-09', withData: 0, state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null }, rows: [{ membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', metrics }] },
       },
       '/kpm/data-upload/preview': {
         body: {

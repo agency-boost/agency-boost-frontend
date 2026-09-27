@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDay, formatDayLong } from './format';
+import { formatCalendarDay, formatDay, formatDayLong } from './format';
 
 describe('formatDay', () => {
   it('writes a date the way the prototype does', () => {
@@ -28,3 +28,20 @@ describe('formatDayLong', () => {
     expect(formatDayLong('nope')).toBe('');
   });
 });
+
+describe('formatCalendarDay', () => {
+  it('spells an office calendar day for a sentence', () => {
+    expect(formatCalendarDay('2026-10-07')).toBe('October 7, 2026');
+  });
+
+  it('never slips a day, whatever zone the browser is in — it is not an instant', () => {
+    // Built from its numbers: there is no midnight-UTC to fall back across.
+    expect(formatCalendarDay('2026-01-01')).toBe('January 1, 2026');
+  });
+
+  it('gives nothing for something that is not a day', () => {
+    expect(formatCalendarDay('')).toBe('');
+    expect(formatCalendarDay('soon')).toBe('');
+  });
+});
+

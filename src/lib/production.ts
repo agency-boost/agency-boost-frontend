@@ -37,11 +37,27 @@ export interface MonthRow {
   metrics: Record<ProductionMetric, { monthly: MetricCell; ytd: MetricCell }>;
 }
 
+/** Why a month is open or locked (ADR-0050). */
+export type LockReason = 'open' | 'schedule' | 'locked_by_hand' | 'reopened';
+
+export interface MonthState {
+  month: string;
+  /** A preview carries it and Confirm import sends it back; any write to the month advances it. */
+  revision: number;
+  locked: boolean;
+  reason: LockReason;
+  /** The last day the schedule leaves it open, as an office calendar day. */
+  editableUntil: string;
+  changedAt: string | null;
+  changedBy: string | null;
+}
+
 export interface MonthView {
   month: string;
   rows: MonthRow[];
   /** Rows holding at least one figure. Zero means nothing has been uploaded. */
   withData: number;
+  state: MonthState;
 }
 
 /** A template literal, as every parameterised path is: the consumer gate reads `${…}` as `:month`. */
@@ -119,6 +135,8 @@ export interface UploadPreview {
   templateVersion: number;
   encoding: 'utf-8' | 'windows-1252';
   delimiter: ',' | ';' | '\t';
+  /** The month's revision the preview was taken against. */
+  revision: number;
   summary: PreviewSummary;
   rows: PreviewRow[];
 }
@@ -134,6 +152,56 @@ export const previewUpload = (month: string, file: File) => {
   form.append('file', file);
   return api<UploadPreview>('/kpm/data-upload/preview', { method: 'POST', body: form });
 };
+
+/** An import, as the history lists it. Names, not ids — the server resolves them. */
+export interface BatchView {
+  id: string;
+  month: string;
+  filename: string;
+  status: 'committed' | 'reverting' | 'reverted';
+  templateVersion: number;
+  rowCount: number;
+  writtenRowCount: number;
+  cellCount: number;
+  issueCount: number;
+  committedAt: string | null;
+  committedBy: string | null;
+  revertedAt: string | null;
+  revertedBy: string | null;
+  restoredCellCount: number;
+  keptCellCount: number;
+  /** The month's latest standing import — the only one revert takes. */
+  canRevert: boolean;
+}
+
+export interface ImportResult {
+  batch: BatchView;
+  state: MonthState;
+}
+
+/**
+ * **Confirm import.** The same file again, with the revision its preview was taken against — the
+ * server reads it afresh and refuses it if the month has moved since (P9-T4).
+ */
+export const commitUpload = (month: string, revision: number, file: File) => {
+  const form = new FormData();
+  form.append('month', month);
+  form.append('revision', String(revision));
+  form.append('file', file);
+  return api<ImportResult>('/kpm/data-upload/commit', { method: 'POST', body: form });
+};
+
+export const revertImport = (batchId: string) =>
+  api<ImportResult>('/kpm/data-upload/revert', { method: 'POST', body: { batchId } });
+
+export const readHistory = (month: string) =>
+  api<{ month: string; batches: BatchView[] }>(`/kpm/data-upload/history?month=${encodeURIComponent(month)}`);
+
+export const lockMonth = (month: string) =>
+  api<MonthState>(`/kpm/data-upload/months/${month}/lock`, { method: 'POST' });
+
+export const reopenMonth = (month: string) =>
+  api<MonthState>(`/kpm/data-upload/months/${month}/reopen`, { method: 'POST' });
 
 /** The UTF-8 byte-order mark, percent-encoded: `EF BB BF`. */
 const UTF8_BOM = '%EF%BB%BF';
