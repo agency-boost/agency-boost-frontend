@@ -19,7 +19,7 @@ import { DataTable, Row, Cell } from './data-table';
 import { RouteTabs } from './route-tabs';
 import { SectionCard } from './section-card';
 import {
-  Button, Card, CodeField, ColorInput, Field, FieldRow, Switch, TextInput,
+  Button, Card, CodeField, ColorInput, Field, FieldRow, Switch, TextInput, ButtonLink, buttonClass,
 } from './field';
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/activity/log' }));
@@ -1129,5 +1129,25 @@ describe('ColorInput', () => {
       </Field>,
     );
     expect(screen.getByLabelText('Color')).toHaveValue('');
+  });
+});
+
+describe('buttonClass — the look of a button, for an element that cannot be one', () => {
+  it.each(['primary', 'secondary', 'danger', 'inline', 'inlineDanger'] as const)(
+    'is what ButtonLink renders with, for %s',
+    (variant) => {
+      render(<ButtonLink href="/x" variant={variant}>Go</ButtonLink>);
+      expect(screen.getByRole('link', { name: 'Go' }).className).toBe(buttonClass(variant));
+    },
+  );
+
+  it('is a 40px box for a boxed variant, and text for an inline one', () => {
+    expect(buttonClass('secondary')).toContain('h-10');
+    expect(buttonClass('secondary')).toContain('border-hairline');
+    expect(buttonClass('inline')).not.toContain('h-10');
+  });
+
+  it('lets the caller add to it', () => {
+    expect(buttonClass('secondary', 'w-full')).toContain('w-full');
   });
 });

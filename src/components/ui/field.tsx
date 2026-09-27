@@ -553,6 +553,28 @@ const ICON_TONE = {
 
 /** The three that are not a 40px box, so `Button` picks the right base. */
 const INLINE_VARIANTS = new Set(['inline', 'inlineDanger']);
+
+/**
+ * The classes a button of this variant wears — for the rare element that must look like one and
+ * cannot be one.
+ *
+ * An `<a download>` is the case: it saves a file, which is neither an action a `<button>` can
+ * perform nor a navigation `ButtonLink`'s `next/link` should intercept. Rather than a third component
+ * or a copied class string, it is the expression `ButtonLink` itself renders with.
+ *
+ * **Not `icon`.** That variant has its own base and a `tone`, and only `Button` knows both; the type
+ * leaves it out so it cannot be asked for here and painted as a 40px box.
+ */
+export function buttonClass(
+  variant: Exclude<keyof typeof BUTTON_VARIANT, 'icon'> = 'primary',
+  className?: string,
+) {
+  return cn(
+    INLINE_VARIANTS.has(variant) ? INLINE_BASE : BUTTON_BASE,
+    BUTTON_VARIANT[variant],
+    className,
+  );
+}
 /** 19×19 in the prototype; 28px here, because 19px is not a tap target on a phone. */
 const ICON_BASE =
   'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-sm leading-none';
@@ -619,8 +641,8 @@ export function ButtonLink({
   children,
 }: {
   href: string;
-  /** The same set `Button` offers — a link inside a row is a row action like any other. */
-  variant?: keyof typeof BUTTON_VARIANT;
+  /** The set `Button` offers, less `icon` — a link inside a row is a row action like any other. */
+  variant?: Exclude<keyof typeof BUTTON_VARIANT, 'icon'>;
   className?: string;
   /**
    * For a link that may have to ask first — the training list holds unsaved edits that leaving
@@ -631,15 +653,7 @@ export function ButtonLink({
   children: React.ReactNode;
 }) {
   return (
-    <Link
-      href={href}
-      onClick={onClick}
-      className={cn(
-        INLINE_VARIANTS.has(variant) ? INLINE_BASE : BUTTON_BASE,
-        BUTTON_VARIANT[variant],
-        className,
-      )}
-    >
+    <Link href={href} onClick={onClick} className={buttonClass(variant, className)}>
       {children}
     </Link>
   );

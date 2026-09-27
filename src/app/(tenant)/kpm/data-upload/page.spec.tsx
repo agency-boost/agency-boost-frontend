@@ -12,7 +12,12 @@ const membership = {
   membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab' as const,
   status: 'active' as const, isKpmOwner: true, isKpmAdmin: false, directCount: 2,
 };
-const OWNER = makeMe({ membership, permissions: ['kpm:read_profile', 'data_upload:read'] });
+const OWNER = makeMe({
+  membership,
+  permissions: ['kpm:read_profile', 'data_upload:read', 'data_upload:download_template'],
+});
+/** Holds the table and not the file — the two grants are separate in §3.9. */
+const READER = makeMe({ membership, permissions: ['kpm:read_profile', 'data_upload:read'] });
 const AGENT = makeMe({
   membership: { ...membership, membershipId: 'mem-agent', orgLevelCode: 'AGENT', hierarchyRole: 'agent' as const, isKpmOwner: false },
   permissions: ['kpm:read_profile'],
@@ -32,11 +37,151 @@ const budi = () => ({ membershipId: 'mem-budi', agentCode: 'PRU-002', name: 'Bud
 
 const month = (rows: unknown[], withData = 0, m = '2026-09') => ({ month: m, rows, withData });
 
+const HEADER = 'Agent Code,Agent Name,APE (Rp M) — This Month,Rolling Persistency (%) — This Month,'
+  + 'Recruitment — This Month,New Active Agents — This Month,FYP (Rp M) — This Month,# of Policy — This Month,'
+  + 'APE (Rp M) — YTD,Rolling Persistency (%) — YTD,Recruitment — YTD,New Active Agents — YTD,'
+  + 'FYP (Rp M) — YTD,# of Policy — YTD';
+const template = (m = '2026-09') => ({
+  month: m, version: 1, filename: 'KPM0417-agent-data-Sep-2026.csv', header: HEADER.split(','),
+  file: `${HEADER}\nPRU-001,"Rina Wijaya",,,,,,,,,,,,`, rowCount: 1,
+});
+
+/**
+ * Both routes, keyed so the stub tells them apart: `template` is the longer key and wins for the
+ * template call, `/kpm/data-upload/` catches the month.
+ */
+const routes = (view: unknown, t: unknown = template()) => ({
+  '/kpm/data-upload/': { body: view },
+  '/kpm/data-upload/template': { body: t },
+});
+
 describe('Data upload — the month table (P9-T1)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  describe('the template (P9-T2)', () => {
+    const link = () => screen.findByRole('link', { name: '⬇ Download template' });
+    const templateCalls = (calls: { url: string }[]) =>
+      calls.filter((c) => c.url.includes('/kpm/data-upload/template'));
+
+    it('offers the file as a download named for the office and the month', async () => {
+      stubFetch(routes(month([rina()])));
+      renderWithSession(<DataUploadPage />, { me: OWNER });
+
+      const a = await link();
+      expect(a).toHaveAttribute('download', 'KPM0417-agent-data-Sep-2026.csv');
+      // A data: URL carrying the whole file, so saving it needs no second request.
+      const href = a.getAttribute('href')!;
+      expect(href.startsWith('data:text/csv;charset=utf-8,')).toBe(true);
+      expect(decodeURIComponent(href.split(',').slice(1).join(','))).toContain('PRU-001,"Rina Wijaya"');
+    });
+
+    it('opens the saved file with a byte-order mark, so a spreadsheet reads the em dashes', async () => {
+      stubFetch(routes(month([rina()])));
+      renderWithSession(<DataUploadPage />, { me: OWNER });
+
+      const payload = (await link()).getAttribute('href')!.slice('data:text/csv;charset=utf-8,'.length);
+      expect(payload.startsWith('%EF%BB%BF')).toBe(true);
+      // And the header follows it directly: the mark is the file's first three bytes, not a line.
+      expect(decodeURIComponent(payload).slice(1).startsWith('Agent Code,Agent Name,')).toBe(true);
+    });
+
+    it('asks only once the month has answered, and never beside it', async () => {
+      const { calls } = stubFetch(routes(month([rina()])));
+      renderWithSession(<DataUploadPage />, { me: OWNER });
+      await link();
+
+      const asked = calls.map((c) => c.url).filter((u) => u.includes('/kpm/data-upload/'));
+      expect(asked).toHaveLength(2);
+      expect(asked[0]).not.toContain('template');
+      expect(asked[1]).toContain('/kpm/data-upload/template?month=2026-09');
+    });
+
+    it('names the file for the month that is picked, and never for the one that was left', async () => {
+      stubFetch({
+        ...routes(month([rina()])),
+        '/kpm/data-upload/2026-08': { body: month([rina()], 0, '2026-08') },
+        '/kpm/data-upload/template?month=2026-08': {
+          body: { ...template('2026-08'), filename: 'KPM0417-agent-data-Aug-2026.csv' },
+        },
+      });
+      renderWithSession(<DataUploadPage />, { me: OWNER });
+      expect(await link()).toHaveAttribute('download', 'KPM0417-agent-data-Sep-2026.csv');
+
+      fireEvent.change(screen.getByLabelText('Month'), { target: { value: '2026-08' } });
+
+      // Gone at once — the link is for the month the table shows, and the table is reloading.
+      expect(screen.queryByRole('link', { name: '⬇ Download template' })).not.toBeInTheDocument();
+      await waitFor(async () => {
+        expect(await link()).toHaveAttribute('download', 'KPM0417-agent-data-Aug-2026.csv');
+      });
+    });
+
+    it('says so beside the picker when the file cannot be prepared, and leaves the table alone', async () => {
+      stubFetch({
+        '/kpm/data-upload/': { body: month([rina()]) },
+        '/kpm/data-upload/template': {
+          status: 500,
+          body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong on our side.', requestId: 'req-42' } },
+        },
+      });
+      renderWithSession(<DataUploadPage />, { me: OWNER });
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('The template could not be prepared. Something went wrong on our side.');
+      expect(alert).toHaveTextContent('INTERNAL_ERROR · req-42');
+      expect(within(alert).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: '⬇ Download template' })).not.toBeInTheDocument();
+      // The table it sits beside loaded, and says so.
+      expect(screen.getByText('Rina Wijaya')).toBeInTheDocument();
+      expect(screen.getByRole('status')).toBeInTheDocument();
+    });
+
+    it('tries again when asked, and offers the file once it arrives', async () => {
+      const { calls } = stubFetch({
+        '/kpm/data-upload/': { body: month([rina()]) },
+        '/kpm/data-upload/template': [
+          { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'x', requestId: 'r' } } },
+          { body: template() },
+        ],
+      });
+      renderWithSession(<DataUploadPage />, { me: OWNER });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+
+      expect(await link()).toHaveAttribute('download', 'KPM0417-agent-data-Sep-2026.csv');
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(templateCalls(calls)).toHaveLength(2);
+    });
+
+    it('does not ask for a file when the month itself could not be read', async () => {
+      const { calls } = stubFetch({
+        '/kpm/data-upload/': {
+          status: 500,
+          body: { error: { code: 'INTERNAL_ERROR', message: 'x', requestId: 'r' } },
+        },
+        '/kpm/data-upload/template': { body: template() },
+      });
+      renderWithSession(<DataUploadPage />, { me: OWNER });
+
+      await screen.findByRole('alert');
+      expect(templateCalls(calls)).toHaveLength(0);
+      expect(screen.queryByRole('link', { name: '⬇ Download template' })).not.toBeInTheDocument();
+    });
+
+    it('shows the table and not the control to somebody who may read and may not download', async () => {
+      const { calls } = stubFetch(routes(month([rina()])));
+      renderWithSession(<DataUploadPage />, { me: READER });
+
+      await screen.findByText('Rina Wijaya');
+      expect(screen.queryByRole('link', { name: '⬇ Download template' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      // Not asked for either: a grant enforced on the pixels and not on the wire is the defect.
+      expect(templateCalls(calls)).toHaveLength(0);
+    });
+  });
+
   it('AC-7: lists every member for the month, code and name', async () => {
-    stubFetch({ '/kpm/data-upload/': { body: month([rina(), budi()]) } });
+    stubFetch(routes(month([rina(), budi()])));
     renderWithSession(<DataUploadPage />, { me: OWNER });
 
     expect(await screen.findByText('Rina Wijaya')).toBeInTheDocument();
@@ -49,7 +194,7 @@ describe('Data upload — the month table (P9-T1)', () => {
     const reported = rina({
       metrics: { ...blank(), ape: { monthly: cell(0), ytd: empty }, policyCount: { monthly: cell(3), ytd: cell(3) } },
     });
-    stubFetch({ '/kpm/data-upload/': { body: month([reported, budi()], 1) } });
+    stubFetch(routes(month([reported, budi()], 1)));
     renderWithSession(<DataUploadPage />, { me: OWNER });
 
     const rows = await screen.findAllByRole('row');
@@ -64,18 +209,16 @@ describe('Data upload — the month table (P9-T1)', () => {
   });
 
   it('formats money as rupiah in full, not as the file’s Rp M', async () => {
-    stubFetch({
-      '/kpm/data-upload/': {
-        body: month([rina({ metrics: { ...blank(), ape: { monthly: cell(150_000_000_00), ytd: empty } } })], 1),
-      },
-    });
+    stubFetch(routes(
+      month([rina({ metrics: { ...blank(), ape: { monthly: cell(150_000_000_00), ytd: empty } } })], 1),
+    ));
     renderWithSession(<DataUploadPage />, { me: OWNER });
 
     expect(await screen.findByText('Rp 150.000.000')).toBeInTheDocument();
   });
 
   it('says so when nothing has been uploaded, and still lists everybody', async () => {
-    stubFetch({ '/kpm/data-upload/': { body: month([rina(), budi()], 0) } });
+    stubFetch(routes(month([rina(), budi()], 0)));
     renderWithSession(<DataUploadPage />, { me: OWNER });
 
     // Wait for the table: the loading skeleton is itself a live region, and `findByRole` resolves
@@ -86,7 +229,7 @@ describe('Data upload — the month table (P9-T1)', () => {
   });
 
   it('counts the rows that hold a figure once something has', async () => {
-    stubFetch({ '/kpm/data-upload/': { body: month([rina(), budi()], 1) } });
+    stubFetch(routes(month([rina(), budi()], 1)));
     renderWithSession(<DataUploadPage />, { me: OWNER });
 
     await screen.findByText('Rina Wijaya');
@@ -94,7 +237,7 @@ describe('Data upload — the month table (P9-T1)', () => {
   });
 
   it('asks the server for the month that is picked', async () => {
-    const { calls } = stubFetch({ '/kpm/data-upload/': { body: month([rina()]) } });
+    const { calls } = stubFetch(routes(month([rina()])));
     renderWithSession(<DataUploadPage />, { me: OWNER });
     await screen.findByText('Rina Wijaya');
 
@@ -112,6 +255,7 @@ describe('Data upload — the month table (P9-T1)', () => {
         status: 400,
         body: { error: { code: 'VALIDATION_FAILED', message: 'september is not a month. Use YYYY-MM.', requestId: 'r1' } },
       },
+      '/kpm/data-upload/template': { body: template() },
     });
     renderWithSession(<DataUploadPage />, { me: OWNER });
 
@@ -123,11 +267,12 @@ describe('Data upload — the month table (P9-T1)', () => {
     // Both halves. The table was withheld from the start; the request was not, because the effect
     // lived in the page component around the gate rather than in a child inside it — a permission
     // enforced on the pixels and not on the wire.
-    const { calls } = stubFetch({ '/kpm/data-upload/': { body: month([rina()]) } });
+    const { calls } = stubFetch(routes(month([rina()])));
     renderWithSession(<DataUploadPage />, { me: AGENT });
 
     expect(await screen.findByText(/needs the/)).toBeInTheDocument();
     expect(screen.queryByText('Rina Wijaya')).not.toBeInTheDocument();
+    // Neither the month nor the template is asked for.
     expect(calls.filter((c) => c.url.includes('/kpm/data-upload/'))).toHaveLength(0);
   });
 });

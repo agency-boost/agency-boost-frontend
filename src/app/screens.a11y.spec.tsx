@@ -305,7 +305,7 @@ describe('screens have no axe violations', () => {
         membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: true, isKpmAdmin: false, directCount: 2,
       },
-      permissions: ['member:read_profile', 'data_upload:read'],
+      permissions: ['member:read_profile', 'data_upload:read', 'data_upload:download_template'],
     });
     const empty = { value: null, provenance: null };
     const metrics = Object.fromEntries(
@@ -323,9 +323,17 @@ describe('screens have no axe violations', () => {
           ],
         },
       },
+      // The download link is a control axe should see, so the template arrives too (P9-T2).
+      '/kpm/data-upload/template': {
+        body: {
+          month: '2026-09', version: 1, filename: 'KPM0417-agent-data-Sep-2026.csv',
+          header: ['Agent Code', 'Agent Name'], file: 'Agent Code,Agent Name\nPRU-001,"Rina Wijaya"', rowCount: 1,
+        },
+      },
     });
     renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
     await screen.findByText('Budi Santoso');
+    await screen.findByRole('link', { name: '⬇ Download template' });
     await expectClean('kpm/data-upload');
   });
 
