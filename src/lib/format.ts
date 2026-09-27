@@ -53,3 +53,13 @@ export function formatCalendarDay(day: string): string {
   if (!y || !m || !d) return '';
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
+
+/**
+ * An office calendar month — `2026-09` — as a sentence names it: `September 2026`. Built from its
+ * numbers, for the reason `formatCalendarDay` gives.
+ */
+export function formatMonth(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  if (!y || !m) return month;
+  return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}

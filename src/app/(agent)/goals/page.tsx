@@ -6,11 +6,11 @@ import { ConfigBadge } from '@/components/ui/config-badge';
 import { CascadeRow } from '@/components/ui/cascade-row';
 import { KpiTile } from '@/components/ui/kpi-tile';
 import { NumberBadge } from '@/components/ui/number-badge';
-import { formatDay, formatDayLong } from '@/lib/format';
+import { formatDay, formatDayLong, formatMonth } from '@/lib/format';
 import { SaveStatus } from '@/components/ui/save-status';
 import { Segmented } from '@/components/ui/segmented';
 import {
-  Button, Card, ErrorBanner, Field, FieldRow, Select, TextInput,
+  Button, Card, ErrorBanner, Field, FieldRow, ReadOnlyField, Select, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -327,18 +327,37 @@ export default function GoalSettingsPage() {
                 })}
               />
             </Field>
-            <Rupiah
-              label="APE already produced this year"
-              id="goal-achieved"
-              value={draft.apeAchievedMinor}
-              onChange={(apeAchievedMinor) => set({ apeAchievedMinor })}
-            />
+            {/*
+              * **The agent's own figure until the carrier's file says otherwise** (P9-T6, ADR-0008) —
+              * the promise Phase 8 made. Once the office holds a year-to-date figure the plan is
+              * measured against that, and the box becomes a statement of where the number came from:
+              * a field you could type into and that nothing would read would be a lie with a cursor.
+              * The typed figure is kept, and still saved, for the year a file stops arriving.
+              */}
+            {goal.achieved.provenance === 'self_reported' ? (
+              <Rupiah
+                label="APE already produced this year"
+                id="goal-achieved"
+                value={draft.apeAchievedMinor}
+                onChange={(apeAchievedMinor) => set({ apeAchievedMinor })}
+                hint="By your own count — used until your office uploads the carrier’s monthly production."
+              />
+            ) : (
+              <ReadOnlyField
+                label="APE already produced this year"
+                value={formatRupiah(goal.achieved.minor)}
+                reason={achievedReason(goal)}
+              />
+            )}
           </FieldRow>
           {projected && (
             <>
               {/* Two-up, as `.kpi-row` is (`:686`) — a grid rather than a wrap, so they stay equal. */}
               <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
-                <KpiTile label="Already produced" value={formatRupiah(projected.apeAchievedMinor)} />
+                <KpiTile
+                  label={<>Already produced <span className="font-normal normal-case">· {SOURCE_SHORT[goal.achieved.provenance]}</span></>}
+                  value={formatRupiah(projected.apeAchievedMinor)}
+                />
                 <KpiTile label="Remaining needed" value={formatRupiah(projected.remainingApeMinor)} />
               </div>
               {/*
@@ -705,5 +724,24 @@ function Percent({
       />
     </Field>
   );
+}
+
+/** The KPI's word for whose figure it is (P9-T6). */
+const SOURCE_SHORT: Record<Goal['achieved']['provenance'], string> = {
+  imported: 'carrier’s file',
+  corrected: 'corrected by the office',
+  self_reported: 'your own figure',
+};
+
+/** Where the figure the plan is measured against came from, and what happened to the typed one. */
+function achievedReason(goal: Goal): string {
+  const { achieved, apeAchievedMinor: typed } = goal;
+  const asOf = achieved.month ? `, year to date as of ${formatMonth(achieved.month)}` : '';
+  const source = achieved.provenance === 'corrected'
+    ? `From your office’s production, corrected by hand${asOf}.`
+    : `From the carrier’s monthly file${asOf}.`;
+  return typed > 0 && typed !== achieved.minor
+    ? `${source} The ${formatRupiah(typed)} typed on this plan is kept, and no longer used.`
+    : source;
 }
 

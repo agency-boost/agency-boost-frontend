@@ -50,6 +50,8 @@ const goal = (over: Record<string, unknown> = {}) => ({
   commissionRatePct: 10,
   monthsLeft: 5,
   apeAchievedMinor: 0,
+  // No production held yet: the plan is measured against the agent's own figure (P9-T6).
+  achieved: { minor: (over.apeAchievedMinor as number | undefined) ?? 0, provenance: 'self_reported', month: null },
   caseSizeMinor: 18_000_000_00,
   leadsToApptPct: 30,
   closingRatePct: 30,
@@ -759,3 +761,50 @@ describe('Goal settings (P8-T3)', () => {
     });
   });
 });
+
+// ── P9-T6: the figure the plan is measured against, and whose it is ─────────────────────────
+
+describe('Goal settings — the APE already produced, once the office holds production (P9-T6)', () => {
+  const imported = (over: Record<string, unknown> = {}) => goal({
+    apeAchievedMinor: 50_000_000_00,
+    achieved: { minor: 120_000_000_00, provenance: 'imported', month: '2026-08' },
+    projected: projection({ apeAchievedMinor: 120_000_000_00, remainingApeMinor: 380_000_000_00 }),
+    ...over,
+  });
+
+  it('shows the carrier’s figure in place of the box, and says where it came from and what became of the typed one', async () => {
+    render({ '/goals': { body: imported() } });
+
+    const shown = (await screen.findByText('APE already produced this year')).closest('dl')!;
+    expect(shown).toHaveTextContent('Rp 120.000.000');
+    expect(shown).toHaveTextContent(
+      'From the carrier’s monthly file, year to date as of August 2026. The Rp 50.000.000 typed on this plan is kept, and no longer used.',
+    );
+    expect(screen.queryByRole('textbox', { name: 'APE already produced this year' })).not.toBeInTheDocument();
+    expect(screen.getByText('Already produced').closest('div')!).toHaveTextContent('· carrier’s file');
+  });
+
+  it('says so when the office corrected it by hand', async () => {
+    render({ '/goals': { body: imported({ achieved: { minor: 120_000_000_00, provenance: 'corrected', month: '2026-08' } }) } });
+    const shown = (await screen.findByText('APE already produced this year')).closest('dl')!;
+    expect(shown).toHaveTextContent('From your office’s production, corrected by hand, year to date as of August 2026.');
+    expect(screen.getByText('Already produced').closest('div')!).toHaveTextContent('· corrected by the office');
+  });
+
+  it('keeps the typed figure on save, untouched — it is the agent’s own', async () => {
+    const { calls } = render({ '/goals': [{ body: imported() }, { body: imported() }] });
+    await screen.findByText('APE already produced this year');
+    await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+    await waitFor(() => expect(calls.some((c) => c.init.method === 'PUT')).toBe(true));
+    const sent = JSON.parse(calls.find((c) => c.init.method === 'PUT')!.init.body as string);
+    expect(sent.apeAchievedMinor).toBe(50_000_000_00);
+  });
+
+  it('leaves the box for the agent’s own figure until production arrives, and says so', async () => {
+    render({ '/goals': { body: goal() } });
+    const box = await screen.findByRole('textbox', { name: 'APE already produced this year' });
+    expect(box).toHaveAccessibleDescription('By your own count — used until your office uploads the carrier’s monthly production.');
+    expect(screen.getByText('Already produced').closest('div')!).toHaveTextContent('· your own figure');
+  });
+});
+

@@ -350,7 +350,10 @@ describe('screens have no axe violations', () => {
     const metrics: Record<string, unknown> = Object.fromEntries(
       ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'].map((m) => [m, { monthly: empty, ytd: empty }]),
     );
-    metrics.ape = { monthly: { value: 150000000, provenance: 'imported' }, ytd: empty };
+    metrics.ape = {
+      monthly: { value: 150000000, provenance: 'imported', correction: null },
+      ytd: { value: 900000000, provenance: 'corrected', correction: { by: 'Maya Halim', at: '2026-09-26T03:00:00.000Z', reason: 'Carrier restated it' } },
+    };
     stubFetch({
       '/kpm/data-upload/': {
         body: {
@@ -655,6 +658,74 @@ describe('screens have no axe violations', () => {
           monthsLeft: 5,
           monthsLeftIsOverride: false,
           apeAchievedMinor: 0,
+          achieved: { minor: 0, provenance: 'self_reported', month: null },
+          caseSizeMinor: 18_000_000_00,
+          leadsToApptPct: 30,
+          closingRatePct: 30,
+          snapshot: {
+            monthlyApeTargetMinor: 100_000_000_00,
+            policiesPerMonth: 6, appointmentsPerMonth: 20, leadsPerMonth: 67,
+          },
+          projected: {
+            annualApeTargetMinor: 500_000_000_00, apeAchievedMinor: 0,
+            remainingApeMinor: 500_000_000_00, monthlyApeTargetMinor: 100_000_000_00,
+            policiesPerMonth: 6, policiesPerWeek: 2,
+            appointmentsPerMonth: 20, appointmentsPerWeek: 5,
+            leadsPerMonth: 67, leadsPerWeek: 16, targetMet: false,
+          },
+          cascadeMapping: {
+            leadsCode: 'LEADS_CONTACTED',
+            appointmentsCode: 'SELL_PRESENTATION',
+            closingsCode: 'SELL_SUBMISSION',
+          },
+          savedAt: '2026-09-13T04:00:00.000Z',
+          savedByMembershipId: 'mem-leader',
+        },
+      },
+    });
+    renderInLayout(AgentLayout, <GoalSettingsPage />, {
+      me: makeMe({ permissions: ['goal:read', 'goal:update'] }),
+    });
+
+    await screen.findByRole('button', { name: 'Save goal' });
+    await expectClean('goals');
+  });
+
+  it('goal settings: five numbered cards, two entry modes and a live cascade, measured against the carrier’s figure (P9-T6)', async () => {
+    const period = String(new Date().getFullYear());
+    stubFetch({
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/members/my-team': {
+        body: [{
+          membershipId: 'mem-rina', fullName: 'Rina Wijaya', initials: 'RW',
+          agentCode: 'PRU-001', role: 'agent', directCount: 0, canChangeRole: false,
+        }],
+      },
+      // Two versions, so the history panel is walked open rather than absent.
+      [`/goals/${String(new Date().getFullYear())}/history`]: {
+        body: [2, 1].map((version) => ({
+          version, at: '2026-01-13T04:00:00.000Z', byMembershipId: 'mem-1', byName: 'Ibu Sari',
+          mode: 'direct', annualApeTargetMinor: version === 2 ? 500_000_000_00 : 300_000_000_00,
+          savingsTargetMinor: 50_000_000_00, commissionRatePct: 10, monthsLeftOverride: null,
+          apeAchievedMinor: 0, caseSizeMinor: 18_000_000_00, leadsToApptPct: 30, closingRatePct: 30,
+          snapshot: {
+            monthlyApeTargetMinor: 60_000_000_00,
+            policiesPerMonth: 4, appointmentsPerMonth: 14, leadsPerMonth: 47,
+          },
+        })),
+      },
+      '/goals': {
+        body: {
+          period,
+          mode: 'direct',
+          annualApeTargetMinor: 500_000_000_00,
+          savingsTargetMinor: 50_000_000_00,
+          commissionRatePct: 10,
+          monthsLeft: 5,
+          monthsLeftIsOverride: false,
+          apeAchievedMinor: 0,
+          achieved: { minor: 120_000_000_00, provenance: 'imported', month: '2026-08' },
           caseSizeMinor: 18_000_000_00,
           leadsToApptPct: 30,
           closingRatePct: 30,

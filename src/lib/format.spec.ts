@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatCalendarDay, formatDay, formatDayLong } from './format';
+import { formatCalendarDay, formatDay, formatDayLong, formatMonth } from './format';
 
 describe('formatDay', () => {
   it('writes a date the way the prototype does', () => {
@@ -42,6 +42,17 @@ describe('formatCalendarDay', () => {
   it('gives nothing for something that is not a day', () => {
     expect(formatCalendarDay('')).toBe('');
     expect(formatCalendarDay('soon')).toBe('');
+  });
+});
+
+describe('formatMonth', () => {
+  it('names an office calendar month', () => {
+    expect(formatMonth('2026-09')).toBe('September 2026');
+    expect(formatMonth('2027-01')).toBe('January 2027');
+  });
+
+  it('hands back what is not a month', () => {
+    expect(formatMonth('soon')).toBe('soon');
   });
 });
 

@@ -56,8 +56,21 @@ export interface GoalInputs {
   closingRatePct: number;
 }
 
+/**
+ * The APE a plan is measured against, and whose figure it is (P9-T6): the carrier's year-to-date
+ * figure once the office holds one — imported or corrected by hand — and the agent's own until then.
+ */
+export interface GoalAchieved {
+  minor: number;
+  provenance: 'imported' | 'corrected' | 'self_reported';
+  /** The month whose year-to-date figure it is; `null` for the agent's own. */
+  month: string | null;
+}
+
 export interface Goal extends Omit<GoalInputs, 'monthsLeft'> {
   period: string;
+  /** What `projected` is computed from. `apeAchievedMinor` stays the agent's own typed figure. */
+  achieved: GoalAchieved;
   /** The figure **in force** — derived from the office's calendar unless it was overridden. */
   monthsLeft: number;
   /** Whether the figure above is the agent's own choice or the office's calendar. */

@@ -940,3 +940,63 @@ describe('Data upload — a correction the file would change (ADR-0053)', () => 
   });
 });
 
+// ── P9-T6: whose each figure is ─────────────────────────────────────────────────────────────
+
+describe('Data upload — whose each figure is (P9-T6)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const corrected = (value: number | null, reason: string) => ({
+    value, provenance: 'corrected' as const,
+    correction: { by: 'Maya Halim', at: '2026-09-26T03:00:00.000Z', reason },
+  });
+  const withCorrections = () => rina({
+    metrics: {
+      ...blank(),
+      ape: { monthly: corrected(200_000_000, 'Carrier restated it'), ytd: cell(900_000_000) },
+      fyp: { monthly: corrected(null, 'Belongs to October'), ytd: empty },
+    },
+  });
+
+  it('says once, above the table, that figures are the carrier’s unless marked', async () => {
+    stubFetch(routes(month([withCorrections()], 1)));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    expect(await screen.findByText(/Figures are from the carrier’s file unless marked/)).toHaveTextContent(
+      'Figures are from the carrier’s file unless marked ✎ corrected by hand; —a dash is nothing reported.',
+    );
+  });
+
+  it('marks a corrected figure, with who, when and why for a reader and a screen reader', async () => {
+    stubFetch(routes(month([withCorrections()], 1)));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    const row = (await screen.findByText('Rina Wijaya')).closest('tr')!;
+    const cells = within(row).getAllByRole('cell');
+
+    expect(cells[2]).toHaveTextContent('Rp 2.000.000✎, corrected by hand by Maya Halim on September 26, 2026 — “Carrier restated it”');
+    expect(within(cells[2]).getByTitle('corrected by hand by Maya Halim on September 26, 2026 — “Carrier restated it”')).toBeInTheDocument();
+    // A carrier figure is plain.
+    expect(cells[3]).toHaveTextContent('Rp 9.000.000');
+    expect(cells[3]).not.toHaveTextContent('✎');
+  });
+
+  it('marks a figure emptied by hand apart from one nothing was ever reported for', async () => {
+    stubFetch(routes(month([withCorrections()], 1)));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    const row = (await screen.findByText('Rina Wijaya')).closest('tr')!;
+    const cells = within(row).getAllByRole('cell');
+    expect(cells[10]).toHaveTextContent('—✎, emptied by hand by Maya Halim on September 26, 2026 — “Belongs to October”');
+    expect(within(cells[11]).getByLabelText('nothing reported')).toBeInTheDocument();
+  });
+
+  it('carries the same note on a correctable figure’s name, and in the form it opens', async () => {
+    stubFetch(routes(month([withCorrections()], 1)));
+    renderWithSession(<DataUploadPage />, { me: CORRECTOR });
+    const button = await screen.findByRole('button', {
+      name: 'Correct APE this month for Rina Wijaya, now Rp 2.000.000, corrected by hand by Maya Halim on September 26, 2026 — “Carrier restated it”',
+    });
+    fireEvent.click(button);
+    expect(screen.getByRole('region', { name: 'Correct APE this month for Rina Wijaya' })).toHaveTextContent(
+      'Now: Rp 2.000.000 (corrected by hand by Maya Halim on September 26, 2026 — “Carrier restated it”)',
+    );
+  });
+});
+

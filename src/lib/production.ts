@@ -7,9 +7,18 @@ export type Provenance = 'imported' | 'corrected' | 'self_reported';
  * One figure and where it came from. **`null` is not zero**: a cell nothing has written is *no data*,
  * a cell the carrier reported as nothing is `0`, and the table shows them differently.
  */
+/** Which writer a figure came from, as a reader is told it (P9-T6). */
+export const PROVENANCE_LABEL: Record<'imported' | 'corrected' | 'self_reported', string> = {
+  imported: 'the carrier’s file',
+  corrected: 'corrected by hand',
+  self_reported: 'the agent’s own figure',
+};
+
 export interface MetricCell {
   value: number | null;
   provenance: Provenance | null;
+  /** A correction by hand — who, when, why. A figure emptied by hand is `corrected` with no value. */
+  correction: { by: string | null; at: string | null; reason: string | null } | null;
 }
 
 export const PRODUCTION_METRICS = [

@@ -278,10 +278,15 @@ function MonthTable() {
               : `${view.withData} of ${view.rows.length} members have figures for this month.`}
           </p>
           {correctable && (
-            <p className="-mt-2 mb-3 text-sm text-muted">
+            <p className="-mt-2 mb-1 text-sm text-muted">
               Click any number to correct it manually — no need to re-upload for a single fix.
             </p>
           )}
+          {/* Where every figure came from, said once rather than on every cell (P9-T6 AC-4). */}
+          <p className="mb-3 text-xs text-muted">
+            Figures are from the carrier’s file unless marked <span className="font-bold text-navy">✎</span>{' '}
+            corrected by hand; <span aria-hidden="true">—</span><span className="sr-only">a dash</span> is nothing reported.
+          </p>
 
           <DataTable
             caption={`Data for ${monthLabel(view.month)}`}
@@ -305,7 +310,7 @@ function MonthTable() {
                             membershipId: row.membershipId, name: row.name, agentCode: row.agentCode,
                             metric: m, cadence, current: cell,
                           })}
-                          aria-label={`Correct ${figureLabel(m, cadence)} for ${row.name}, now ${showFigure(m, cell.value)}`}
+                          aria-label={`Correct ${figureLabel(m, cadence)} for ${row.name}, now ${showFigure(m, cell.value)}${cell.provenance === 'corrected' ? `, ${correctedNote(cell)}` : ''}`}
                           className="-mx-1 rounded-sm px-1 underline-offset-2 hover:bg-navy/[0.06] hover:underline"
                         >
                           <Figure metric={m} cell={cell} />
@@ -330,12 +335,34 @@ function MonthTable() {
 /**
  * One cell. **A dash for nothing, a number for something — including zero.** The dash is muted so a
  * month nobody has uploaded reads as quiet rather than as a wall of failures.
+ *
+ * **And whose it is** (P9-T6 AC-4). A figure from the carrier's file is plain — it is most of the
+ * table, and marking every one would mark none. A figure corrected by hand carries **✎**, with who,
+ * when and why in its tooltip and, for a screen reader, in its text; a figure **emptied** by hand is a
+ * dash with the same mark, because *nothing is held* and *somebody decided nothing is held* are two
+ * different things to know about a month.
  */
 function Figure({ metric, cell }: { metric: ProductionMetric; cell: MetricCell }) {
-  if (cell.value === null) {
-    return <span className="text-muted" aria-label="nothing reported">—</span>;
-  }
-  return <span className="text-navy">{formatFigure(metric, cell.value)}</span>;
+  const mark = cell.provenance === 'corrected' ? correctedNote(cell) : null;
+  const shown = cell.value === null
+    ? <span className="text-muted" aria-label={mark ? undefined : 'nothing reported'}>—</span>
+    : <span className="text-navy">{formatFigure(metric, cell.value)}</span>;
+  if (!mark) return shown;
+  return (
+    <span title={mark}>
+      {shown}
+      <span aria-hidden="true" className="ml-1 text-2xs font-bold text-navy">✎</span>
+      <span className="sr-only">{`, ${mark}`}</span>
+    </span>
+  );
+}
+
+/** `corrected by hand by Maya Halim on September 26, 2026 — “Carrier restated it”` */
+function correctedNote(cell: MetricCell): string {
+  const c = cell.correction;
+  const verb = cell.value === null ? 'emptied by hand' : 'corrected by hand';
+  if (!c) return verb;
+  return `${verb}${c.by ? ` by ${c.by}` : ''}${c.at ? ` on ${formatDayLong(c.at)}` : ''}${c.reason ? ` — “${c.reason}”` : ''}`;
 }
 
 /** Money in full rupiah, persistency with its sign, counts as they are — the table's own formats. */

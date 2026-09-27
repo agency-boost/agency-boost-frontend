@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from 'react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import { formatDayLong } from '@/lib/format';
 import { formatRupiah, groupDigits, parseDigits, toMajor, toMinor } from '@/lib/goals';
 import {
   correctCell, figureLabel, MONEY_METRICS, type Cadence, type CorrectionResult, type MetricCell,
@@ -123,7 +124,11 @@ export function CorrectionPanel({
       <h2 id={headingId} className="text-md font-semibold text-navy">Correct {label} for {name}</h2>
       <p className="mt-1 text-sm text-muted">
         {editing.agentCode} · {monthLabel(month)} · Now: {showFigure(metric, current.value)}
-        {current.value !== null && current.provenance ? ` (${SOURCE[current.provenance]})` : ''}
+        {current.provenance ? ` (${SOURCE[current.provenance]}` : ''}
+        {current.correction?.by ? ` by ${current.correction.by}` : ''}
+        {current.correction?.at ? ` on ${formatDayLong(current.correction.at)}` : ''}
+        {current.correction?.reason ? ` — “${current.correction.reason}”` : ''}
+        {current.provenance ? ')' : ''}
       </p>
 
       <form onSubmit={save} noValidate className="mt-3 grid gap-3 sm:grid-cols-2">
