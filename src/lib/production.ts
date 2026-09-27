@@ -100,6 +100,17 @@ export interface PreviewCell {
   after: number | null;
   /** As the file has it — money in Rp M. */
   raw: string | null;
+  /**
+   * Set when the stored figure was corrected by hand and the file would change it — replaced only if
+   * whoever imports ticks it (ADR-0053).
+   */
+  correction: {
+    by: string | null;
+    at: string | null;
+    reason: string | null;
+    /** The figure the correction replaced: the file carrying it again is probably the old file. */
+    replacedValue: number | null;
+  } | null;
 }
 
 export interface PreviewRow {
@@ -125,6 +136,8 @@ export interface PreviewSummary {
   unchangedCells: number;
   notProvidedCells: number;
   refusedCells: number;
+  /** Figures corrected by hand the file would change. */
+  correctionCells: number;
   notInFile: number;
 }
 
@@ -170,6 +183,8 @@ export interface BatchView {
   revertedBy: string | null;
   restoredCellCount: number;
   keptCellCount: number;
+  keptCorrectionCount: number;
+  replacedCorrectionCount: number;
   /** The month's latest standing import — the only one revert takes. */
   canRevert: boolean;
 }
@@ -183,10 +198,12 @@ export interface ImportResult {
  * **Confirm import.** The same file again, with the revision its preview was taken against — the
  * server reads it afresh and refuses it if the month has moved since (P9-T4).
  */
-export const commitUpload = (month: string, revision: number, file: File) => {
+export const commitUpload = (month: string, revision: number, file: File, replace: readonly string[] = []) => {
   const form = new FormData();
   form.append('month', month);
   form.append('revision', String(revision));
+  // The corrections by hand to replace, `membershipId:field`; none named, every one stays (ADR-0053).
+  if (replace.length) form.append('replace', replace.join(','));
   form.append('file', file);
   return api<ImportResult>('/kpm/data-upload/commit', { method: 'POST', body: form });
 };

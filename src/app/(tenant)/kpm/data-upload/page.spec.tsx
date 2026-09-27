@@ -841,3 +841,102 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
   });
 });
 
+// ── P9-T5 AC-3, ADR-0053 ─────────────────────────────────────────────────────────────────────
+
+describe('Data upload — a correction the file would change (ADR-0053)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Rina's APE this month: corrected to Rp 2.000.000 by Maya; the file says Rp 1.500.000 — what it replaced. */
+  const CONFLICTED = {
+    ...PREVIEW,
+    summary: { ...PREVIEW.summary, rows: 1, ready: 1, refused: 0, newCells: 0, changedCells: 2, refusedCells: 0, correctionCells: 1 },
+    rows: [{
+      ...PREVIEW.rows[0],
+      issues: [],
+      cells: cells({
+        'ape.monthly': {
+          status: 'changed', before: 200_000_000, after: 150_000_000, raw: '1,5',
+          correction: { by: 'Maya Halim', at: '2026-09-26T03:00:00.000Z', reason: 'Carrier restated it', replacedValue: 150_000_000 },
+        } as never,
+        'fyp.monthly': { status: 'changed', before: 50_000_000, after: 60_000_000, raw: '0,6' },
+      }),
+    }],
+  };
+  const withConflict = (preview: unknown = CONFLICTED, commit: unknown = result({ writtenRowCount: 1, keptCorrectionCount: 1 })) => ({
+    ...routes(month([rina()], 1)),
+    '/kpm/data-upload/preview': { body: preview },
+    '/kpm/data-upload/commit': { status: 201, body: commit },
+  });
+  const choice = () => screen.getByRole('checkbox', { name: 'APE this month for Rina Wijaya: Replace with the file’s figure' });
+
+  it('lists the correction with who, when, why and what the file says — and that it is the figure it replaced', async () => {
+    stubFetch(withConflict());
+    renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+    await choose();
+
+    const list = (await screen.findByRole('heading', { name: 'Corrected by hand (1)' })).closest('div')!.parentElement!;
+    expect(list).toHaveTextContent(
+      'Corrected to Rp 2.000.000 by Maya Halim on September 26, 2026 — “Carrier restated it”. '
+      + 'The file says Rp 1.500.000 — the figure the correction replaced, so this is probably the old file.',
+    );
+    expect(choice()).not.toBeChecked();
+    expect(choice()).toHaveAccessibleDescription(/Corrected to Rp 2\.000\.000 by Maya Halim/);
+  });
+
+  it('keeps it by default: the diff shows the correction, and Confirm sends nothing to replace', async () => {
+    const { calls } = stubFetch(withConflict());
+    renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+    await choose();
+
+    const table = await screen.findByRole('table', { name: 'What “filled.csv” would change' });
+    expect(within(table).getAllByRole('cell')[2]).toHaveTextContent('Rp 2.000.000correction kept');
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm import' }));
+
+    expect(await screen.findByText('Imported 1 agent record for September 2026. 1 correction kept.')).toBeInTheDocument();
+    const form = calls.find((c) => c.url.includes('/commit'))!.init.body as FormData;
+    expect(form.get('replace')).toBeNull();
+  });
+
+  it('replaces it when ticked, and says so in the diff and after', async () => {
+    const { calls } = stubFetch(withConflict(CONFLICTED, result({ writtenRowCount: 1, replacedCorrectionCount: 1 })));
+    renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+    await choose();
+    await screen.findByRole('heading', { name: 'Corrected by hand (1)' });
+
+    fireEvent.click(choice());
+    const table = screen.getByRole('table', { name: 'What “filled.csv” would change' });
+    expect(within(table).getAllByRole('cell')[2]).toHaveTextContent('Rp 1.500.000replaces a correction');
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm import' }));
+
+    expect(await screen.findByText('Imported 1 agent record for September 2026. 1 correction replaced with the file’s figure.')).toBeInTheDocument();
+    const form = calls.find((c) => c.url.includes('/commit'))!.init.body as FormData;
+    expect(form.get('replace')).toBe('mem-rina:apeMonthly');
+  });
+
+  it('ticks and unticks them all', async () => {
+    stubFetch(withConflict());
+    renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+    await choose();
+    fireEvent.click(await screen.findByRole('button', { name: 'Replace all' }));
+    expect(choice()).toBeChecked();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep all' }));
+    expect(choice()).not.toBeChecked();
+  });
+
+  it('holds Confirm back when the only change is a correction left unticked, saying why', async () => {
+    const only = {
+      ...CONFLICTED,
+      summary: { ...CONFLICTED.summary, changedCells: 1 },
+      rows: [{ ...CONFLICTED.rows[0], cells: CONFLICTED.rows[0].cells.map((c) => (c.metric === 'fyp' ? { ...c, status: 'not_provided', after: null } : c)) }],
+    };
+    stubFetch(withConflict(only));
+    renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+    await choose();
+
+    expect(await screen.findByRole('button', { name: 'Confirm import' })).toBeDisabled();
+    expect(screen.getByText('Nothing would change — every figure it would, somebody corrected, and none is ticked.')).toBeInTheDocument();
+    fireEvent.click(choice());
+    expect(screen.getByRole('button', { name: 'Confirm import' })).toBeEnabled();
+  });
+});
+

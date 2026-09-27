@@ -7,6 +7,7 @@ import { Button, buttonClass, Card, ErrorBanner, Field, TextInput } from '@/comp
 import { SkeletonBar, SkeletonTable } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { formatDayLong } from '@/lib/format';
 import { formatRupiah } from '@/lib/goals';
 import { useCan } from '@/lib/session';
 import {
@@ -156,8 +157,15 @@ function MonthTable() {
     setNotice(sentence);
     setGeneration((g) => g + 1);
   };
-  const imported = (result: ImportResult) =>
-    wrote(`Imported ${plural(result.batch.writtenRowCount, 'agent record')} for ${monthLabel(result.batch.month)}.`);
+  const imported = (result: ImportResult) => {
+    const { keptCorrectionCount: kept, replacedCorrectionCount: replaced } = result.batch;
+    const corrections = [
+      ...(kept ? [`${plural(kept, 'correction')} kept`] : []),
+      ...(replaced ? [`${plural(replaced, 'correction')} replaced with the file’s figure`] : []),
+    ].join(', ');
+    wrote(`Imported ${plural(result.batch.writtenRowCount, 'agent record')} for ${monthLabel(result.batch.month)}.`
+      + (corrections ? ` ${corrections[0].toUpperCase()}${corrections.slice(1)}.` : ''));
+  };
   const reverted = (result: ImportResult) => wrote(
     `Reverted “${result.batch.filename}”: ${plural(result.batch.restoredCellCount, 'figure')} put back`
     + `${result.batch.keptCellCount ? `, ${result.batch.keptCellCount} kept because something changed them since` : ''}.`,
@@ -471,7 +479,23 @@ function PreviewCard({
   const canConfirm = useCan('data_upload:commit_import');
   const [confirming, setConfirming] = useState(false);
   const [refused, setRefused] = useState<ApiError | null>(null);
-  const nothing = preview.summary.newCells + preview.summary.changedCells === 0;
+
+  /**
+   * **Figures somebody corrected by hand that the file would change** (ADR-0053). Each is replaced
+   * only if ticked, and none is ticked to begin with: re-uploading a file must never undo a correction
+   * unless somebody chose that, with who corrected it and why in front of them.
+   */
+  const corrections = preview.rows.flatMap((row) => row.cells
+    .filter((c) => c.correction && (c.status === 'new' || c.status === 'changed'))
+    .map((cell) => ({ row, cell, key: `${row.membershipId}:${fieldOf(cell)}` })));
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
+  const toggle = (key: string, on: boolean) => setTicked((now) => {
+    const next = new Set(now);
+    if (on) next.add(key); else next.delete(key);
+    return next;
+  });
+  const written = preview.summary.newCells + preview.summary.changedCells - (corrections.length - ticked.size);
+  const nothing = written === 0;
 
   /**
    * **Confirm import** (`KPM_Owner.html:1309`). The same file again with the revision the preview was
@@ -482,7 +506,7 @@ function PreviewCard({
     setConfirming(true);
     setRefused(null);
     try {
-      onImported(await commitUpload(month, preview.revision, file));
+      onImported(await commitUpload(month, preview.revision, file, [...ticked]));
     } catch (err) {
       setRefused(toDisplayError(err));
       setConfirming(false);
@@ -499,6 +523,7 @@ function PreviewCard({
     `${summary.unchangedCells} already as stored`,
     `${summary.notProvidedCells} left blank, which keep what is stored`,
     ...(summary.refusedCells ? [`${summary.refusedCells} not taken`] : []),
+    ...(summary.correctionCells ? [`${summary.correctionCells} corrected by hand, kept unless you tick them`] : []),
   ].join(' · ');
 
   return (
@@ -515,6 +540,32 @@ function PreviewCard({
         <strong>Nothing has been saved yet.</strong> Confirm import writes the figures in bold into{' '}
         {monthLabel(month)}; a blank keeps what is stored, and what is not taken is left out.
       </p>
+
+      {corrections.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-3">
+            <h3 className="text-sm font-semibold text-navy">Corrected by hand ({corrections.length})</h3>
+            <span className="flex gap-3">
+              <Button variant="inline" onClick={() => setTicked(new Set(corrections.map((c) => c.key)))}>Replace all</Button>
+              <Button variant="inline" onClick={() => setTicked(new Set())}>Keep all</Button>
+            </span>
+          </div>
+          <p className="mb-1 text-sm text-muted">
+            The file would change these figures, which somebody corrected by hand. Each is kept unless you tick it.
+          </p>
+          <ul>
+            {corrections.map(({ row, cell, key }) => (
+              <CorrectionChoice
+                key={key}
+                name={row.name ?? row.agentCode}
+                cell={cell}
+                ticked={ticked.has(key)}
+                onChange={(on) => toggle(key, on)}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
 
       {issues.length > 0 && (
         <div className="mt-4">
@@ -557,7 +608,10 @@ function PreviewCard({
                 </Cell>
                 {PRODUCTION_METRICS.flatMap((m) => (['monthly', 'ytd'] as const).map((cadence) => (
                   <Cell key={`${m}-${cadence}`} className="whitespace-nowrap text-right">
-                    <Change cell={row.cells.find((c) => c.metric === m && c.cadence === cadence)!} />
+                    <Change
+                      cell={row.cells.find((c) => c.metric === m && c.cadence === cadence)!}
+                      replacing={ticked.has(`${row.membershipId}:${m}${cadence === 'monthly' ? 'Monthly' : 'Ytd'}`)}
+                    />
                   </Cell>
                 )))}
               </Row>
@@ -579,7 +633,11 @@ function PreviewCard({
           <span className="text-sm text-muted">{monthLabel(month)} is locked — reopen it to import.</span>
         )}
         {canConfirm && !monthState.locked && nothing && (
-          <span className="text-sm text-muted">Nothing in this file would change a figure.</span>
+          <span className="text-sm text-muted">
+            {corrections.length
+              ? 'Nothing would change — every figure it would, somebody corrected, and none is ticked.'
+              : 'Nothing in this file would change a figure.'}
+          </span>
         )}
       </div>
     </Card>
@@ -591,7 +649,24 @@ function PreviewCard({
  * a figure already as stored, or a blank, which keeps what is stored. A refusal shows what the file
  * had, in the alert colour, and its reason is in the list above.
  */
-function Change({ cell }: { cell: PreviewCell }) {
+function Change({ cell, replacing }: { cell: PreviewCell; replacing: boolean }) {
+  // A correction the file would change: kept unless ticked, and the cell says which (ADR-0053).
+  if (cell.correction && !replacing) {
+    return (
+      <>
+        <span className="text-muted">{cell.before === null ? '—' : formatFigure(cell.metric, cell.before)}</span>
+        <span className="block text-2xs text-muted">correction kept</span>
+      </>
+    );
+  }
+  if (cell.correction && replacing) {
+    return (
+      <>
+        <span className="font-semibold text-navy">{formatFigure(cell.metric, cell.after!)}</span>
+        <span className="block text-2xs text-alert">replaces a correction</span>
+      </>
+    );
+  }
   switch (cell.status) {
     case 'new':
       return <span className="font-semibold text-navy">{formatFigure(cell.metric, cell.after!)}</span>;
@@ -614,3 +689,51 @@ function Change({ cell }: { cell: PreviewCell }) {
       );
   }
 }
+
+/** The month row's field for a cell — `apeMonthly` — which is how a ticked correction is named. */
+const fieldOf = (c: { metric: ProductionMetric; cadence: 'monthly' | 'ytd' }) =>
+  `${c.metric}${c.cadence === 'monthly' ? 'Monthly' : 'Ytd'}`;
+
+/**
+ * One figure somebody corrected, that the file would change — and the choice (ADR-0053).
+ *
+ * Everything needed to decide is on the line: what the correction made it, who, when and why, and
+ * what the file says — with a note when the file's figure is **the one the correction replaced**,
+ * which is how an old file uploaded again looks.
+ */
+function CorrectionChoice({
+  name, cell, ticked, onChange,
+}: {
+  name: string;
+  cell: PreviewCell;
+  ticked: boolean;
+  onChange: (on: boolean) => void;
+}) {
+  const detailId = useId();
+  const c = cell.correction!;
+  const label = figureLabel(cell.metric, cell.cadence);
+  const now = cell.before === null ? 'emptied' : `corrected to ${formatFigure(cell.metric, cell.before)}`;
+  const same = c.replacedValue !== null && c.replacedValue === cell.after;
+  return (
+    <li className="border-b border-hairline py-2 text-sm last:border-b-0">
+      <p className="font-semibold text-navy">{name} · {label}</p>
+      <p id={detailId} className="text-muted">
+        {now[0].toUpperCase() + now.slice(1)} by {c.by ?? 'somebody'}
+        {c.at ? ` on ${formatDayLong(c.at)}` : ''}{c.reason ? ` — “${c.reason}”` : ''}.
+        {' '}The file says {formatFigure(cell.metric, cell.after!)}
+        {same ? ' — the figure the correction replaced, so this is probably the old file' : ''}.
+      </p>
+      <label className="mt-1 inline-flex cursor-pointer items-center gap-2 text-navy">
+        <input
+          type="checkbox"
+          className="h-4 w-4 accent-navy"
+          checked={ticked}
+          onChange={(e) => onChange(e.target.checked)}
+          aria-describedby={detailId}
+        />
+        <span><span className="sr-only">{label} for {name}: </span>Replace with the file’s figure</span>
+      </label>
+    </li>
+  );
+}
+

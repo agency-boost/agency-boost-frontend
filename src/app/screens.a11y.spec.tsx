@@ -433,6 +433,11 @@ describe('screens have no axe violations', () => {
       })));
     cells[0] = { ...cells[0], status: 'new', after: 150000000, raw: '1.5' };
     cells[1] = { ...cells[1], status: 'refused', raw: '140' };
+    // A correction the file would change, with its choice (ADR-0053).
+    cells[4] = {
+      ...cells[4], status: 'changed', before: 70000000, after: 60000000, raw: '0.6',
+      correction: { by: 'Maya Halim', at: '2026-09-26T03:00:00.000Z', reason: 'Carrier restated it', replacedValue: 60000000 },
+    } as never;
     stubFetch({
       '/kpm/data-upload/': {
         body: { month: '2026-09', withData: 0, state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null }, rows: [{ membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', metrics }] },
@@ -460,6 +465,7 @@ describe('screens have no axe violations', () => {
     const input = await screen.findByLabelText('+ Upload filled template');
     await userEvent.upload(input, new File(['x'], 'filled.csv', { type: 'text/csv' }));
     await screen.findByRole('table', { name: 'What “filled.csv” would change' });
+    await screen.findByRole('checkbox', { name: 'FYP this month for Rina Wijaya: Replace with the file’s figure' });
     await expectClean('kpm/data-upload with a preview');
   });
 
