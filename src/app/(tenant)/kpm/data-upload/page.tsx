@@ -26,9 +26,9 @@ import { MonthLock } from './month-lock';
  * **The month table, before the file.** The prototype draws the toolbar, the preview and the table on
  * day one over an in-memory array (`KPM_Owner.html:1289-1324`). P9-T1 shipped the picker and the
  * table, P9-T2 the download, P9-T3 the upload and its preview, P9-T4 Confirm import, the history
- * with its Revert, and the month's lock, P9-T5 the correction of one figure by hand. Each arrived with
- * the route it calls, because a control with nothing behind it is the defect
- * `backend-then-frontend.md` exists to prevent.
+ * with its Revert, and the month's lock, P9-T5 the correction of one figure by hand, and ADR-0054 the
+ * *Active (MAA)* column. Each arrived with the route it calls, because a control with nothing behind
+ * it is the defect `backend-then-frontend.md` exists to prevent.
  *
  * **Every active member is a row, and a dash is not a zero.** A row of dashes says the carrier has not
  * reported this person; a `0` says it reported nothing produced. An empty table would say the office
@@ -206,6 +206,12 @@ function MonthTable() {
     'Name',
     ...PRODUCTION_METRICS.flatMap((m) => [`${METRIC_LABEL[m]} — month`, `${METRIC_LABEL[m]} — YTD`]),
   ];
+  /**
+   * The month table's own, one wider: **Active (MAA)** closes the row, as in the prototype
+   * (`KPM_Owner.html:4843`). The preview does not carry it — a file's rows are figures to write, and
+   * whether somebody is active is read from what was written, not from what might be.
+   */
+  const tableColumns: readonly Column[] = [...columns, 'Active (MAA)'];
 
   return (
     <>
@@ -264,7 +270,7 @@ function MonthTable() {
       {error && <ErrorBanner {...error} />}
 
       {!error && view === null && (
-        <SkeletonTable caption={`Data for ${monthLabel(month)}`} columns={columns} rows={5} />
+        <SkeletonTable caption={`Data for ${monthLabel(month)}`} columns={tableColumns} rows={5} />
       )}
 
       {view && (
@@ -286,14 +292,16 @@ function MonthTable() {
           <p className="mb-3 text-xs text-muted">
             Figures are from the carrier’s file unless marked <span className="font-bold text-navy">✎</span>{' '}
             corrected by hand; <span aria-hidden="true">—</span><span className="sr-only">a dash</span> is nothing reported.
+            {' '}<span className="font-semibold text-navy">Active (MAA):</span> Derived, not entered — Active this
+            month if Monthly APE &gt; 0 or Monthly # of Policy &gt; 0. A dash until that is known.
           </p>
 
           <DataTable
             caption={`Data for ${monthLabel(view.month)}`}
-            columns={columns}
+            columns={tableColumns}
             density="compact"
-            widths={['6rem', '11rem', ...PRODUCTION_METRICS.flatMap(() => ['7.5rem', '7.5rem'])]}
-            tableClassName="min-w-[96rem]"
+            widths={['6rem', '11rem', ...PRODUCTION_METRICS.flatMap(() => ['7.5rem', '7.5rem']), '6.5rem']}
+            tableClassName="min-w-[102.5rem]"
           >
             {view.rows.map((row) => (
               <Row key={row.membershipId}>
@@ -321,6 +329,7 @@ function MonthTable() {
                     </Cell>
                   );
                 }))}
+                <Cell className="text-center"><ActiveMark active={row.monthlyActiveAgent} /></Cell>
               </Row>
             ))}
           </DataTable>
@@ -348,11 +357,44 @@ function Figure({ metric, cell }: { metric: ProductionMetric; cell: MetricCell }
     ? <span className="text-muted" aria-label={mark ? undefined : 'nothing reported'}>—</span>
     : <span className="text-navy">{formatFigure(metric, cell.value)}</span>;
   if (!mark) return shown;
+  // `relative`, so the screen-reader note is placed inside the table's scroll box and not beside the
+  // page: an `sr-only` span is absolutely positioned, and with no positioned ancestor it escaped the
+  // box and widened the page by the width of its column — 5px at 400px, found walking the screen.
   return (
-    <span title={mark}>
+    <span title={mark} className="relative">
       {shown}
       <span aria-hidden="true" className="ml-1 text-2xs font-bold text-navy">✎</span>
       <span className="sr-only">{`, ${mark}`}</span>
+    </span>
+  );
+}
+
+/**
+ * The Monthly Active Agent (ADR-0054): the prototype's ✓, ✕ and grey dash (`KPM_Owner.html:4830-4832`).
+ *
+ * **The server's answer, drawn — never worked out here.** The prototype computes it in the page; ours
+ * is `MONTHLY_ACTIVE_AGENT`, one function on the server, and a screen re-deriving it is how the
+ * product came to hold four definitions of *active* (invariant §8).
+ *
+ * **The glyph is navy and the wash is the colour.** The prototype's blue ✓ and amber ✕ miss 4.5:1 on
+ * their own tints (`a11y.spec.tsx` pins both), which is the leads table's mid-stage status again, and
+ * settled the same way. The shape says which, the words say it to a screen reader, and colour is
+ * never the only cue.
+ */
+function ActiveMark({ active }: { active: boolean | null | undefined }) {
+  if (active === null || active === undefined) {
+    return <span role="img" aria-label="Not reported" className="text-muted">—</span>;
+  }
+  return (
+    <span
+      role="img"
+      aria-label={active ? 'Active' : 'Not active'}
+      className={cn(
+        'inline-flex h-6 w-6 items-center justify-center rounded-full text-sm font-bold text-navy',
+        active ? 'bg-info/[0.12]' : 'bg-amber/[0.16]',
+      )}
+    >
+      {active ? '✓' : '✕'}
     </span>
   );
 }

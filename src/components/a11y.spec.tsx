@@ -327,5 +327,21 @@ describe('accessibility', () => {
        */
       expect(ratio(AMBER_DEEP, ground)).toBeLessThan(4.5);
     });
+
+    it('the Active (MAA) marks put a navy glyph on the tint — the prototype’s coloured ones miss (ADR-0054)', () => {
+      /*
+       * `KPM_Owner.html:830-831`: a blue ✓ on a 12% blue wash, an amber-dark ✕ on a 16% amber one, at
+       * 13px bold — small text. Neither clears 4.5:1, and the ✕ misses even 3:1. So the glyph is navy
+       * and the wash carries the colour, which is the leads table's mid-stage status settled again.
+       */
+      const INFO = '#2F80ED';
+      const activeWash = over(INFO, 0.12, CARD);
+      const inactiveWash = over(AMBER, 0.16, CARD);
+
+      expect(ratio(INFO, activeWash)).toBeLessThan(4.5);
+      expect(ratio(AMBER_DARK, inactiveWash)).toBeLessThan(3);
+      expect(ratio(NAVY, activeWash)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(NAVY, inactiveWash)).toBeGreaterThanOrEqual(4.5);
+    });
   });
 });

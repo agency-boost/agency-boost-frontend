@@ -1,6 +1,22 @@
 import type { Config } from 'tailwindcss';
 
 /**
+ * A colour token that takes an opacity modifier — `bg-amber/15`, `bg-navy/[0.06]`.
+ *
+ * **A bare `var(--color-amber)` does not.** Tailwind 3 cannot see a colour inside a custom
+ * property, so it cannot split it into channels, and it drops every class that asks for an opacity
+ * — no rule is emitted at all. That is how every tint in the product rendered transparent: the role
+ * badge's wash, the leads table's status rungs, the notices, the hover states, the KPI tiles. Found
+ * walking the *Active (MAA)* column in a browser (ADR-0054), whose tinted circles were not there,
+ * after every jsdom test had passed — jsdom applies no stylesheet, so no test could have seen it.
+ *
+ * `color-mix` against `transparent` is how Tailwind 4 does it, and it keeps the token a token:
+ * `<alpha-value>` is `1` for `bg-amber` and `0.15` for `bg-amber/15`. `theme.spec.ts` compiles the
+ * classes and asserts the rules exist, so this cannot silently go back.
+ */
+const token = (name: string) => `color-mix(in srgb, var(--color-${name}) calc(<alpha-value> * 100%), transparent)`;
+
+/**
  * The theme maps to the CSS custom properties in globals.css, so a token change
  * propagates without rebuilding class names — and so no component ever needs a raw
  * hex value. `bg-[#F2994A]` fails review.
@@ -31,26 +47,26 @@ const config: Config = {
     },
     extend: {
       colors: {
-        navy: { DEFAULT: 'var(--color-navy)', soft: 'var(--color-navy-soft)' },
+        navy: { DEFAULT: token('navy'), soft: token('navy-soft') },
         amber: {
-          DEFAULT: 'var(--color-amber)',
-          dark: 'var(--color-amber-dark)',
-          deep: 'var(--color-amber-deep)',
+          DEFAULT: token('amber'),
+          dark: token('amber-dark'),
+          deep: token('amber-deep'),
         },
-        base: 'var(--color-base)',
-        card: 'var(--color-card)',
-        muted: 'var(--color-muted)',
-        hairline: 'var(--color-hairline)',
-        'sidebar-text': 'var(--color-sidebar-text)',
-        'input-focus': 'var(--color-input-focus)',
-        success: 'var(--color-success)',
-        alert: 'var(--color-alert)',
-        neutral: 'var(--color-neutral)',
-        info: 'var(--color-info)',
+        base: token('base'),
+        card: token('card'),
+        muted: token('muted'),
+        hairline: token('hairline'),
+        'sidebar-text': token('sidebar-text'),
+        'input-focus': token('input-focus'),
+        success: token('success'),
+        alert: token('alert'),
+        neutral: token('neutral'),
+        info: token('info'),
         role: {
-          ab: 'var(--color-role-ab)',
-          aab: 'var(--color-role-aab)',
-          agent: 'var(--color-role-agent)',
+          ab: token('role-ab'),
+          aab: token('role-aab'),
+          agent: token('role-agent'),
         },
       },
       fontFamily: {

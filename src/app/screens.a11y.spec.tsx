@@ -318,9 +318,13 @@ describe('screens have no axe violations', () => {
           month: '2026-09', withData: 1,
           state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null },
           rows: [
-            { membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya',
+            // All three Active (MAA) marks, so axe reads each one's name (ADR-0054).
+            { membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', monthlyActiveAgent: true,
               metrics: { ...metrics, ape: { monthly: { value: 15000000000, provenance: 'imported' }, ytd: empty } } },
-            { membershipId: 'mem-budi', agentCode: 'PRU-002', name: 'Budi Santoso', metrics },
+            { membershipId: 'mem-budi', agentCode: 'PRU-002', name: 'Budi Santoso', metrics, monthlyActiveAgent: null },
+            { membershipId: 'mem-sari', agentCode: 'PRU-003', name: 'Sari Dewi', monthlyActiveAgent: false,
+              metrics: { ...metrics, ape: { monthly: { value: 0, provenance: 'imported' }, ytd: empty },
+                policyCount: { monthly: { value: 0, provenance: 'imported' }, ytd: empty } } },
           ],
         },
       },

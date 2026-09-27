@@ -44,6 +44,12 @@ export interface MonthRow {
   agentCode: string;
   name: string;
   metrics: Record<ProductionMetric, { monthly: MetricCell; ytd: MetricCell }>;
+  /**
+   * `MONTHLY_ACTIVE_AGENT` for the month (ADR-0054): APE or a policy above zero. **The server's
+   * answer, never recomputed here** — one definition per metric (invariant §8). `null` is *not
+   * reported*, which is not `false`.
+   */
+  monthlyActiveAgent: boolean | null;
 }
 
 /** Why a month is open or locked (ADR-0050). */

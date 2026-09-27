@@ -1000,3 +1000,60 @@ describe('Data upload — whose each figure is (P9-T6)', () => {
   });
 });
 
+
+describe('Data upload — the Active (MAA) column (OD-21, ADR-0054)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const sari = (over: Record<string, unknown> = {}) => ({
+    membershipId: 'mem-sari', agentCode: 'PRU-003', name: 'Sari Dewi', metrics: blank(), ...over,
+  });
+  const mark = async (name: string) => {
+    const row = (await screen.findByText(name)).closest('tr')!;
+    return within(row).getAllByRole('cell').at(-1)!;
+  };
+
+  it('closes every row with ✓, ✕ or a dash — active, not active, not reported', async () => {
+    stubFetch(routes(month([
+      rina({ monthlyActiveAgent: true }),
+      { ...budi(), monthlyActiveAgent: false },
+      sari({ monthlyActiveAgent: null }),
+    ], 2)));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+
+    expect(within(await mark('Rina Wijaya')).getByRole('img', { name: 'Active' })).toHaveTextContent('✓');
+    expect(within(await mark('Budi Santoso')).getByRole('img', { name: 'Not active' })).toHaveTextContent('✕');
+    expect(within(await mark('Sari Dewi')).getByRole('img', { name: 'Not reported' })).toHaveTextContent('—');
+    expect(screen.getAllByRole('columnheader').at(-1)).toHaveTextContent('Active (MAA)');
+  });
+
+  it('draws the server’s answer and never works it out itself — one definition (invariant §8)', async () => {
+    // APE above zero on the row, and the server says it is not known: the screen believes the server.
+    stubFetch(routes(month([
+      rina({ metrics: { ...blank(), ape: { monthly: cell(150_000_000_00), ytd: empty } }, monthlyActiveAgent: null }),
+    ], 1)));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+
+    expect(within(await mark('Rina Wijaya')).getByRole('img', { name: 'Not reported' })).toBeInTheDocument();
+  });
+
+  it('says what the column is beside the table, in the prototype’s words, rather than in a hover', async () => {
+    stubFetch(routes(month([rina({ monthlyActiveAgent: true })], 1)));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+
+    expect(await screen.findByText(/Figures are from the carrier’s file unless marked/)).toHaveTextContent(
+      'Active (MAA): Derived, not entered — Active this month if Monthly APE > 0 or Monthly # of Policy > 0. '
+        + 'A dash until that is known.',
+    );
+  });
+
+  it('is not a column of the preview — a file says what to write, not who is active', async () => {
+    stubFetch({ ...routes(month([rina(), budi()])), '/kpm/data-upload/preview': { body: PREVIEW } });
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+
+    const preview = await screen.findByRole('table', { name: 'What “filled.csv” would change' });
+    expect(within(preview).queryByRole('columnheader', { name: 'Active (MAA)' })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('table', { name: 'Data for September 2026' }))
+      .getByRole('columnheader', { name: 'Active (MAA)' })).toBeInTheDocument();
+  });
+});
