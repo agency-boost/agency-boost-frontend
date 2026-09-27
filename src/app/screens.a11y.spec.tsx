@@ -338,6 +338,40 @@ describe('screens have no axe violations', () => {
     await expectClean('kpm/data-upload');
   });
 
+  it('the month with a figure being corrected, and a refusal on it (P9-T5)', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: true, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: ['member:read_profile', 'data_upload:read', 'data_upload:correct_cell'],
+    });
+    const empty = { value: null, provenance: null };
+    const metrics: Record<string, unknown> = Object.fromEntries(
+      ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'].map((m) => [m, { monthly: empty, ytd: empty }]),
+    );
+    metrics.ape = { monthly: { value: 150000000, provenance: 'imported' }, ytd: empty };
+    stubFetch({
+      '/kpm/data-upload/': {
+        body: {
+          month: '2026-09', withData: 1,
+          state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null },
+          rows: [{ membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', metrics }],
+        },
+      },
+      '/kpm/data-upload/cell': {
+        status: 422,
+        body: { error: { code: 'UPLOAD_VALUE_OUT_OF_RANGE', message: 'APE this month is negative.', requestId: 'r' } },
+      },
+    });
+    renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
+    await userEvent.click(await screen.findByRole('button', { name: 'Correct APE this month for Rina Wijaya, now Rp 1.500.000' }));
+    await userEvent.type(screen.getByLabelText('Why is it being corrected?'), 'Carrier restated it');
+    await userEvent.click(screen.getByRole('button', { name: 'Save correction' }));
+    await screen.findByText('APE this month is negative.');
+    await expectClean('kpm/data-upload with a correction refused');
+  });
+
   it('the month with its lock and its imports, one reverted and one standing (P9-T4)', async () => {
     const owner = makeMe({
       membership: {

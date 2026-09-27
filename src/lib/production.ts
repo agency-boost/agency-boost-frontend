@@ -203,6 +203,36 @@ export const lockMonth = (month: string) =>
 export const reopenMonth = (month: string) =>
   api<MonthState>(`/kpm/data-upload/months/${month}/reopen`, { method: 'POST' });
 
+/** One figure, corrected by hand — the unit it is stored in, money in sen; `null` clears it (P9-T5). */
+export interface CorrectionInput {
+  month: string;
+  membershipId: string;
+  metric: ProductionMetric;
+  cadence: Cadence;
+  value: number | null;
+  /** The month's revision the reader saw: a month that moved since refuses the correction. */
+  revision: number;
+  reason: string;
+}
+
+export interface CorrectionResult {
+  membershipId: string;
+  metric: ProductionMetric;
+  cadence: Cadence;
+  /** `false` when the figure already held that value — nothing was written. */
+  changed: boolean;
+  before: MetricCell;
+  after: MetricCell;
+  state: MonthState;
+}
+
+export const correctCell = (input: CorrectionInput) =>
+  api<CorrectionResult>('/kpm/data-upload/cell', { method: 'PATCH', body: input });
+
+/** `APE this month`, `# of policy year to date` — a figure named the way a sentence names it. */
+export const figureLabel = (metric: ProductionMetric, cadence: Cadence) =>
+  `${METRIC_LABEL[metric]} ${cadence === 'monthly' ? 'this month' : 'year to date'}`;
+
 /** The UTF-8 byte-order mark, percent-encoded: `EF BB BF`. */
 const UTF8_BOM = '%EF%BB%BF';
 

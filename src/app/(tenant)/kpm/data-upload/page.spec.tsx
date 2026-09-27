@@ -672,3 +672,172 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
   });
 });
 
+// ── P9-T5 ────────────────────────────────────────────────────────────────────────────────────
+
+const CORRECTOR = makeMe({
+  membership,
+  permissions: ['kpm:read_profile', 'data_upload:read', 'data_upload:correct_cell'],
+});
+
+describe('Data upload — correcting one figure (P9-T5)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const withApe = () => rina({ metrics: { ...blank(), ape: { monthly: cell(150_000_000), ytd: empty } } });
+  const correction = (over: Record<string, unknown> = {}) => ({
+    membershipId: 'mem-rina', metric: 'ape', cadence: 'monthly', changed: true,
+    before: { value: 150_000_000, provenance: 'imported' }, after: { value: 200_000_000, provenance: 'corrected' },
+    state: state('2026-09', { revision: 4 }), ...over,
+  });
+  const openApe = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Correct APE this month for Rina Wijaya, now Rp 1.500.000' }));
+    return screen.getByRole('region', { name: 'Correct APE this month for Rina Wijaya' });
+  };
+
+  it('makes every figure a control for somebody who may correct it, and says so in the prototype’s words', async () => {
+    stubFetch(routes(month([withApe()], 1)));
+    renderWithSession(<DataUploadPage />, { me: CORRECTOR });
+    expect(await screen.findByText('Click any number to correct it manually — no need to re-upload for a single fix.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Correct FYP year to date for Rina Wijaya, now nothing reported' })).toBeInTheDocument();
+  });
+
+  it('leaves figures as text without the grant, and in a locked month', async () => {
+    stubFetch(routes(month([withApe()], 1)));
+    const { unmount } = renderWithSession(<DataUploadPage />, { me: OWNER });
+    await screen.findByText('Rina Wijaya');
+    expect(screen.queryByRole('button', { name: /^Correct / })).not.toBeInTheDocument();
+    unmount();
+
+    stubFetch(routes(month([withApe()], 1, '2026-09', state('2026-09', { locked: true, reason: 'schedule' }))));
+    renderWithSession(<DataUploadPage />, { me: CORRECTOR });
+    await screen.findByText('Rina Wijaya');
+    expect(screen.queryByRole('button', { name: /^Correct / })).not.toBeInTheDocument();
+  });
+
+  it('opens on the figure: what it reads now and where it came from, typed in rupiah, grouped', async () => {
+    stubFetch(routes(month([withApe()], 1)));
+    renderWithSession(<DataUploadPage />, { me: CORRECTOR });
+    const panel = await openApe();
+
+    expect(panel).toHaveTextContent('PRU-001 · September 2026 · Now: Rp 1.500.000 (from the carrier’s file)');
+    const input = within(panel).getByLabelText('New figure');
+    await waitFor(() => expect(input).toHaveFocus());
+    expect(input).toHaveValue('1.500.000');
+    fireEvent.change(input, { target: { value: '2000000' } });
+    expect(input).toHaveValue('2.000.000');
+  });
+
+  it('sends the figure in sen, with the month’s revision and the reason, and says what changed', async () => {
+    const { calls } = stubFetch({ ...routes(month([withApe()], 1)), '/kpm/data-upload/cell': { body: correction() } });
+    renderWithSession(<DataUploadPage />, { me: CORRECTOR });
+    const panel = await openApe();
+
+    fireEvent.change(within(panel).getByLabelText('New figure'), { target: { value: '2.000.000' } });
+    fireEvent.change(within(panel).getByLabelText('Why is it being corrected?'), { target: { value: 'Carrier restated it' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save correction' }));
+
+    expect(await screen.findByText('Corrected APE this month for Rina Wijaya: Rp 1.500.000 → Rp 2.000.000.')).toBeInTheDocument();
+    const sent = calls.find((c) => c.url.includes('/kpm/data-upload/cell'))!;
+    expect(sent.init.method).toBe('PATCH');
+    expect(JSON.parse(sent.init.body as string)).toEqual({
+      month: '2026-09', membershipId: 'mem-rina', metric: 'ape', cadence: 'monthly',
+      value: 200_000_000, revision: 3, reason: 'Carrier restated it',
+    });
+    expect(screen.queryByRole('region', { name: /^Correct / })).not.toBeInTheDocument();
+  });
+
+  it('asks for a reason before sending anything', async () => {
+    const { calls } = stubFetch(routes(month([withApe()], 1)));
+    renderWithSession(<DataUploadPage />, { me: CORRECTOR });
+    const panel = await openApe();
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save correction' }));
+
+    expect(within(panel).getByLabelText('Why is it being corrected?')).toHaveAccessibleDescription(/Say why the figure is being corrected\./);
+    expect(calls.some((c) => c.url.includes('/cell'))).toBe(false);
+  });
+
+  it('AC-1: puts a refusal on the figure it is about', async () => {
+    stubFetch({
+      ...routes(month([withApe()], 1)),
+      '/kpm/data-upload/cell': {
+        status: 422,
+        body: { error: { code: 'UPLOAD_VALUE_OUT_OF_RANGE', message: 'Rolling persistency this month is above 100 — persistency is a percentage.', requestId: 'r' } },
+      },
+    });
+    renderWithSession(<DataUploadPage />, { me: CORRECTOR });
+    fireEvent.click(await screen.findByRole('button', { name: 'Correct Rolling persistency this month for Rina Wijaya, now nothing reported' }));
+    const panel = screen.getByRole('region', { name: 'Correct Rolling persistency this month for Rina Wijaya' });
+
+    fireEvent.change(within(panel).getByLabelText('New figure'), { target: { value: '140' } });
+    fireEvent.change(within(panel).getByLabelText('Why is it being corrected?'), { target: { value: 'x' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save correction' }));
+
+    await waitFor(() => expect(within(panel).getByLabelText('New figure'))
+      .toHaveAccessibleDescription('Rolling persistency this month is above 100 — persistency is a percentage.'));
+  });
+
+  it('reads a decimal comma in a persistency figure', async () => {
+    const { calls } = stubFetch({ ...routes(month([withApe()], 1)), '/kpm/data-upload/cell': { body: correction({ metric: 'persistency' }) } });
+    renderWithSession(<DataUploadPage />, { me: CORRECTOR });
+    fireEvent.click(await screen.findByRole('button', { name: 'Correct Rolling persistency this month for Rina Wijaya, now nothing reported' }));
+    const panel = screen.getByRole('region', { name: /Rolling persistency/ });
+    fireEvent.change(within(panel).getByLabelText('New figure'), { target: { value: '92,5' } });
+    fireEvent.change(within(panel).getByLabelText('Why is it being corrected?'), { target: { value: 'x' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save correction' }));
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/cell'))).toBe(true));
+    expect(JSON.parse(calls.find((c) => c.url.includes('/cell'))!.init.body as string).value).toBe(92.5);
+  });
+
+  it('shows a refusal about the month — it moved, or was locked — above the buttons', async () => {
+    stubFetch({
+      ...routes(month([withApe()], 1)),
+      '/kpm/data-upload/cell': {
+        status: 409,
+        body: { error: { code: 'VERSION_CONFLICT', message: 'September 2026 has changed since you looked at it.', requestId: 'r' } },
+      },
+    });
+    renderWithSession(<DataUploadPage />, { me: CORRECTOR });
+    const panel = await openApe();
+    fireEvent.change(within(panel).getByLabelText('Why is it being corrected?'), { target: { value: 'x' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save correction' }));
+    expect(await within(panel).findByText('September 2026 has changed since you looked at it.')).toBeInTheDocument();
+  });
+
+  it('AC-4: clears a figure after asking, sending an explicit null', async () => {
+    const { calls } = stubFetch({
+      ...routes(month([withApe()], 1)),
+      '/kpm/data-upload/cell': { body: correction({ after: { value: null, provenance: 'corrected' } }) },
+    });
+    renderWithSession(<DataUploadPage />, { me: CORRECTOR });
+    const panel = await openApe();
+    fireEvent.change(within(panel).getByLabelText('Why is it being corrected?'), { target: { value: 'Belongs to August' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Clear figure' }));
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('Clear APE this month for Rina Wijaya in September 2026?');
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Clear figure' }));
+
+    expect(await screen.findByText('Corrected APE this month for Rina Wijaya: Rp 1.500.000 → nothing reported.')).toBeInTheDocument();
+    expect(JSON.parse(calls.find((c) => c.url.includes('/cell'))!.init.body as string).value).toBeNull();
+  });
+
+  it('says so when the figure already read that', async () => {
+    stubFetch({
+      ...routes(month([withApe()], 1)),
+      '/kpm/data-upload/cell': { body: correction({ changed: false, after: { value: 150_000_000, provenance: 'imported' } }) },
+    });
+    renderWithSession(<DataUploadPage />, { me: CORRECTOR });
+    const panel = await openApe();
+    fireEvent.change(within(panel).getByLabelText('Why is it being corrected?'), { target: { value: 'x' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save correction' }));
+    expect(await screen.findByText('APE this month for Rina Wijaya already reads Rp 1.500.000 — nothing was changed.')).toBeInTheDocument();
+  });
+
+  it('puts the form away on Cancel', async () => {
+    stubFetch(routes(month([withApe()], 1)));
+    renderWithSession(<DataUploadPage />, { me: CORRECTOR });
+    const panel = await openApe();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('region', { name: /^Correct / })).not.toBeInTheDocument();
+  });
+});
+

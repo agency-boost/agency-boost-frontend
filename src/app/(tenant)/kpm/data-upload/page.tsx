@@ -10,10 +10,11 @@ import { cn } from '@/lib/cn';
 import { formatRupiah } from '@/lib/goals';
 import { useCan } from '@/lib/session';
 import {
-  commitUpload, METRIC_LABEL, MONEY_METRICS, PRODUCTION_METRICS, previewUpload, readMonth,
-  readTemplate, templateHref, type ImportResult, type MetricCell, type MonthState, type MonthView,
-  type PreviewCell, type ProductionMetric, type TemplateFile, type UploadPreview,
+  commitUpload, figureLabel, METRIC_LABEL, MONEY_METRICS, PRODUCTION_METRICS, previewUpload, readMonth,
+  readTemplate, templateHref, type CorrectionResult, type ImportResult, type MetricCell, type MonthState,
+  type MonthView, type PreviewCell, type ProductionMetric, type TemplateFile, type UploadPreview,
 } from '@/lib/production';
+import { CorrectionPanel, type Editing, showFigure } from './correction-panel';
 import { ImportHistory } from './import-history';
 import { monthLabel, plural } from './month-label';
 import { MonthLock } from './month-lock';
@@ -24,9 +25,9 @@ import { MonthLock } from './month-lock';
  * **The month table, before the file.** The prototype draws the toolbar, the preview and the table on
  * day one over an in-memory array (`KPM_Owner.html:1289-1324`). P9-T1 shipped the picker and the
  * table, P9-T2 the download, P9-T3 the upload and its preview, P9-T4 Confirm import, the history
- * with its Revert, and the month's lock. Inline correction arrives with P9-T5, the task that gives it
- * a route to call, because a control with nothing behind it is the defect `backend-then-frontend.md`
- * exists to prevent.
+ * with its Revert, and the month's lock, P9-T5 the correction of one figure by hand. Each arrived with
+ * the route it calls, because a control with nothing behind it is the defect
+ * `backend-then-frontend.md` exists to prevent.
  *
  * **Every active member is a row, and a dash is not a zero.** A row of dashes says the carrier has not
  * reported this person; a `0` says it reported nothing produced. An empty table would say the office
@@ -126,6 +127,9 @@ function MonthTable() {
   /** What the last write did, in a sentence. It takes focus, which is how a screen reader hears it. */
   const [notice, setNotice] = useState<string | null>(null);
   const noticeRef = useRef<HTMLParagraphElement>(null);
+  /** The figure being corrected, if one is (P9-T5). */
+  const [editing, setEditing] = useState<Editing | null>(null);
+  const canCorrect = useCan('data_upload:correct_cell');
 
   useEffect(() => {
     setView(null);
@@ -139,6 +143,7 @@ function MonthTable() {
     // is another comparison.
     reading.current += 1;
     setUpload({ kind: 'idle' });
+    setEditing(null);
     readMonth(month)
       .then((next) => { if (live) setView(next); })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
@@ -159,6 +164,18 @@ function MonthTable() {
   );
   const relocked = (next: MonthState) =>
     wrote(`${monthLabel(next.month)} is ${next.locked ? 'locked' : 'open again'}.`);
+  const corrected = (r: CorrectionResult) => {
+    const who = editing?.name ?? 'this member';
+    const label = figureLabel(r.metric, r.cadence);
+    // Closed here, in the same render as the sentence that replaces it — not by the reload's effect,
+    // which would leave the form and the sentence on screen together for a frame.
+    setEditing(null);
+    wrote(r.changed
+      ? `Corrected ${label} for ${who}: ${showFigure(r.metric, r.before.value)} → ${showFigure(r.metric, r.after.value)}.`
+      : `${label} for ${who} already reads ${showFigure(r.metric, r.after.value)} — nothing was changed.`);
+  };
+  /** A figure is a control only for somebody who may correct it, in a month that is open. */
+  const correctable = !!view && canCorrect && !view.state.locked;
 
   const read = async (file: File) => {
     if (!view) return;
@@ -214,6 +231,17 @@ function MonthTable() {
         </p>
       )}
 
+      {view && editing && (
+        <CorrectionPanel
+          key={`${editing.membershipId}-${editing.metric}-${editing.cadence}`}
+          editing={editing}
+          month={view.month}
+          revision={view.state.revision}
+          onDone={corrected}
+          onCancel={() => setEditing(null)}
+        />
+      )}
+
       {view && (
         <UploadResult
           state={upload}
@@ -241,6 +269,11 @@ function MonthTable() {
               ? `Nothing has been uploaded for ${monthLabel(view.month)} yet. Every member is listed so you can see who the file will need to cover.`
               : `${view.withData} of ${view.rows.length} members have figures for this month.`}
           </p>
+          {correctable && (
+            <p className="-mt-2 mb-3 text-sm text-muted">
+              Click any number to correct it manually — no need to re-upload for a single fix.
+            </p>
+          )}
 
           <DataTable
             caption={`Data for ${monthLabel(view.month)}`}
@@ -253,14 +286,28 @@ function MonthTable() {
               <Row key={row.membershipId}>
                 <Cell className="whitespace-nowrap font-semibold text-muted">{row.agentCode}</Cell>
                 <Cell className="whitespace-nowrap">{row.name}</Cell>
-                {PRODUCTION_METRICS.flatMap((m) => [
-                  <Cell key={`${m}-m`} className="whitespace-nowrap text-right">
-                    <Figure metric={m} cell={row.metrics[m].monthly} />
-                  </Cell>,
-                  <Cell key={`${m}-y`} className="whitespace-nowrap text-right">
-                    <Figure metric={m} cell={row.metrics[m].ytd} />
-                  </Cell>,
-                ])}
+                {PRODUCTION_METRICS.flatMap((m) => (['monthly', 'ytd'] as const).map((cadence) => {
+                  const cell = row.metrics[m][cadence];
+                  return (
+                    <Cell key={`${m}-${cadence}`} className="whitespace-nowrap text-right">
+                      {correctable ? (
+                        <button
+                          type="button"
+                          onClick={() => setEditing({
+                            membershipId: row.membershipId, name: row.name, agentCode: row.agentCode,
+                            metric: m, cadence, current: cell,
+                          })}
+                          aria-label={`Correct ${figureLabel(m, cadence)} for ${row.name}, now ${showFigure(m, cell.value)}`}
+                          className="-mx-1 rounded-sm px-1 underline-offset-2 hover:bg-navy/[0.06] hover:underline"
+                        >
+                          <Figure metric={m} cell={cell} />
+                        </button>
+                      ) : (
+                        <Figure metric={m} cell={cell} />
+                      )}
+                    </Cell>
+                  );
+                }))}
               </Row>
             ))}
           </DataTable>
