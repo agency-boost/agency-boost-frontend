@@ -14,10 +14,10 @@ import { cn } from '@/lib/cn';
 import { formatMonth, formatShortDay } from '@/lib/format';
 import { formatRupiah } from '@/lib/goals';
 import { flagLabel } from '@/lib/leads';
-import { formatRatioForStatus } from '@/lib/ratio-format';
+import { formatBenchmark, formatRatioForStatus } from '@/lib/ratio-format';
 import {
-  readSummary, type ActivityTarget, type FigureSource, type OpenLead, type Pace, type PeriodFigures, type Summary,
-  type SummaryActivity,
+  readSummary, type ActivityTarget, type FigureSource, type Insight, type OpenLead, type Pace, type PeriodFigures,
+  type Summary, type SummaryActivity,
 } from '@/lib/summary';
 
 /**
@@ -35,8 +35,9 @@ import {
  * **The leads that need you** (P10-T6): your own open leads, nearest next action first, flagged as the
  * Leads screen flags them — with the way back to that screen the prototype's card never had.
  *
- * **Later cards arrive with their tasks** — the insight cards (P10-T7). The page shows what is built and
- * nothing standing in for the rest.
+ * **What to do next, and how to improve** (P10-T7, ADR-0060): named rules over your own numbers, at most
+ * four, each saying which rule made it — labelled as rules, where the prototype's static strings said
+ * *AI-powered*.
  */
 type View = 'month' | 'year';
 
@@ -128,15 +129,16 @@ function Cards({
       <TargetsCard activity={month ? summary.activity.monthly : summary.activity.yearly} month={month} period={period} />
       <PulseCard pulse={pulse} error={pulseError} />
       <LeadsCard leads={summary.leads} />
+      <InsightCards insights={summary.insights} />
     </div>
   );
 }
 
 function SummaryCard({
-  id, title, icon, tag, children,
-}: { id: string; title: string; icon: NavIconName; tag?: string; children: ReactNode }) {
+  id, title, icon, tag, badge, className, children,
+}: { id: string; title: string; icon: NavIconName; tag?: string; badge?: string; className?: string; children: ReactNode }) {
   return (
-    <section aria-labelledby={id} className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
+    <section aria-labelledby={id} className={cn('rounded-lg border border-hairline bg-card px-[22px] py-[18px]', className)}>
       {/* Wraps rather than squeezes: on a phone a long tag drops under the title instead of folding it. */}
       <div className="mb-3.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
         <h2 id={id} className="flex items-center gap-2 text-md font-bold text-navy">
@@ -144,6 +146,9 @@ function SummaryCard({
           {title}
         </h2>
         {tag && <span className="whitespace-nowrap rounded-pill bg-base px-2.5 py-0.5 text-2xs font-semibold text-muted">{tag}</span>}
+        {badge && (
+          <span className="whitespace-nowrap rounded-pill bg-navy px-2.5 py-0.5 text-2xs font-bold uppercase tracking-wide text-white">{badge}</span>
+        )}
       </div>
       {children}
     </section>
@@ -501,5 +506,129 @@ function LeadRow({ lead }: { lead: OpenLead }) {
         )}
       </div>
     </li>
+  );
+}
+
+/** The rule each card names (ADR-0060) — the words a reader can hold the suggestion to. */
+const RULE_NAME: Record<Insight['rule'], string> = {
+  NOTHING_LOGGED: 'Nothing logged',
+  BEHIND_PACE: 'Behind pace',
+  LEAD_OVERDUE: 'Lead overdue',
+  LEAD_NEGLECTED: 'Lead with no next step',
+  RATIO_BELOW: 'Ratio below benchmark',
+  RATIO_STRENGTH: 'Ratio well above benchmark',
+};
+
+const days = (n: number) => plural(n, 'day', 'days');
+const link = (href: string, text: string) => <Link href={href} className="font-semibold text-navy underline">{text}</Link>;
+
+/** The sentence for a card. Every number in it is one the server read, from a registered metric. */
+function insightText(card: Insight): ReactNode {
+  switch (card.rule) {
+    case 'NOTHING_LOGGED':
+      return card.facts.lastLoggedOn === null
+        ? <>You haven’t logged any activity yet — a few minutes in {link('/activity/log', 'Log Activity')} each day is what every number on this page is made of.</>
+        : <>Nothing logged in the last {days(card.facts.windowDays)} — your last entry was {formatShortDay(card.facts.lastLoggedOn)}. Every number on this page is made of what you log in {link('/activity/log', 'Log Activity')}.</>;
+    case 'BEHIND_PACE':
+      return (
+        <>
+          You’re behind pace — at this rate you’ll close <strong>{card.facts.projected}</strong> of <strong>{card.facts.closingTarget}</strong> this
+          month.{' '}
+          {card.facts.weeksLeft === 1
+            ? <>About <strong>{plural(card.facts.neededPerWeek, 'policy', 'policies')}</strong> in the week left would catch up.</>
+            : <>About <strong>{plural(card.facts.neededPerWeek, 'policy', 'policies')} a week</strong> for the {card.facts.weeksLeft} weeks left would catch up.</>}
+        </>
+      );
+    case 'LEAD_OVERDUE':
+      return (
+        <>
+          <strong>{card.facts.name}</strong>’s next action is {days(card.facts.overdueDays)} overdue — reschedule it or set a new date this week
+          in {link('/leads', 'Leads Management')}.
+          {card.facts.others > 0 && <> {plural(card.facts.others, 'more of your leads is', 'more of your leads are')} overdue too.</>}
+        </>
+      );
+    case 'LEAD_NEGLECTED':
+      return (
+        <>
+          <strong>{card.facts.name}</strong> has no next action and no remarks — follow up and log what happened so this lead doesn’t stall.
+          {card.facts.others > 0 && <> {plural(card.facts.others, 'more lead has', 'more leads have')} neither.</>}
+        </>
+      );
+    case 'RATIO_BELOW':
+      return (
+        <>
+          <strong>{card.facts.label}</strong> is {formatRatioForStatus(card.facts.value, card.facts.displayUnit, card.facts.benchmark, 'alert')} over
+          the last 30 days, below its benchmark of {formatBenchmark(card.facts.benchmark, card.facts.displayUnit)} — that step is where your activity
+          is not yet converting. {link('/activity/ratio', 'Activity Ratios')} shows what it counts.
+        </>
+      );
+    case 'RATIO_STRENGTH':
+      return (
+        <>
+          <strong>{card.facts.label}</strong> is a genuine strength —{' '}
+          {formatRatioForStatus(card.facts.value, card.facts.displayUnit, card.facts.benchmark, 'success')} over the last 30 days, well above its
+          benchmark of {formatBenchmark(card.facts.benchmark, card.facts.displayUnit)}.
+        </>
+      );
+  }
+}
+
+const FOOTNOTE = 'Suggestions from your numbers — rules, not AI.';
+
+/**
+ * *What to do next* and *How you can improve your performance* (`Overall.html:3228-3258`, P10-T7):
+ * **named rules, labelled as rules** (ADR-0060, D-02).
+ *
+ * The prototype's two cards are static strings under an **AI-powered** badge, in a blue gradient that is
+ * the visual language of generated insight. These are rules over your own numbers, so they wear the
+ * product's own colours and say what they are — and each names the rule that made it. The server picks
+ * at most four in a fixed priority; a card with nothing in it is not drawn, and when no rule fired the
+ * page says so rather than going quiet.
+ */
+function InsightCards({ insights }: { insights: Insight[] }) {
+  const actions = insights.filter((card) => card.kind === 'action');
+  const improve = insights.filter((card) => card.kind === 'improve');
+  return (
+    <>
+      {(actions.length > 0 || improve.length === 0) && (
+        <SummaryCard id="summary-next" title="What to do next" icon="spark" badge="Rules, not AI" className="border-l-4 border-l-navy-soft">
+          {actions.length === 0 ? (
+            <p className="text-sm text-navy">Nothing in your numbers asks for anything right now — keep logging, and this is where it will show.</p>
+          ) : (
+            <ol className="flex flex-col gap-2.5">
+              {actions.map((card, i) => (
+                <li key={card.rule} className="flex items-start gap-2.5 text-sm leading-normal text-navy">
+                  <span aria-hidden="true" className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-navy text-2xs font-bold text-white">{i + 1}</span>
+                  <InsightBody card={card} />
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="mt-3 text-xs italic text-muted">{FOOTNOTE}</p>
+        </SummaryCard>
+      )}
+      {improve.length > 0 && (
+        <SummaryCard id="summary-improve" title="How you can improve your performance" icon="trend" badge="Rules, not AI" className="border-l-4 border-l-amber">
+          <ul className="flex flex-col gap-3">
+            {improve.map((card) => (
+              <li key={card.rule} className="flex items-start gap-2.5 text-sm leading-normal text-navy">
+                <span aria-hidden="true" className="mt-1.5 h-[7px] w-[7px] shrink-0 rounded-full bg-amber" />
+                <InsightBody card={card} />
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs italic text-muted">{FOOTNOTE}</p>
+        </SummaryCard>
+      )}
+    </>
+  );
+}
+
+function InsightBody({ card }: { card: Insight }) {
+  return (
+    <div className="min-w-0">
+      <p>{insightText(card)}</p>
+      <p className="mt-0.5 text-2xs font-semibold uppercase tracking-wide text-muted">Rule: {RULE_NAME[card.rule]}</p>
+    </div>
   );
 }

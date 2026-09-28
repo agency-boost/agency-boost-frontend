@@ -1,5 +1,6 @@
 import { api } from './api-client';
 import type { LeadFlag } from './leads';
+import type { RatioDisplayUnit } from './ratio-format';
 
 /**
  * The Personal Summary (P10). **Every number is the server's** — the arithmetic lives in
@@ -77,6 +78,27 @@ export interface OpenLead {
   nextActionNote: string | null;
 }
 
+/** What a ratio rule read (P10-T7). */
+export interface RatioFacts {
+  code: string;
+  label: string;
+  value: number;
+  benchmark: number;
+  displayUnit: RatioDisplayUnit;
+}
+
+/**
+ * One insight card (P10-T7, ADR-0060): the rule that fired and the facts it read. **The server decides
+ * which rules fire; this screen writes the words**, as it writes the pace line.
+ */
+export type Insight =
+  | { rule: 'NOTHING_LOGGED'; kind: 'action'; facts: { windowDays: number; lastLoggedOn: string | null } }
+  | { rule: 'BEHIND_PACE'; kind: 'action'; facts: { projected: number; closingTarget: number; neededPerWeek: number; weeksLeft: number } }
+  | { rule: 'LEAD_OVERDUE'; kind: 'action'; facts: { leadId: string; name: string; overdueDays: number; others: number } }
+  | { rule: 'LEAD_NEGLECTED'; kind: 'action'; facts: { leadId: string; name: string; others: number } }
+  | { rule: 'RATIO_BELOW'; kind: 'improve'; facts: RatioFacts }
+  | { rule: 'RATIO_STRENGTH'; kind: 'improve'; facts: RatioFacts };
+
 export interface Summary {
   year: string;
   month: string;
@@ -89,6 +111,8 @@ export interface Summary {
   activity: { monthly: SummaryActivity; yearly: SummaryActivity };
   /** The nearest of the reader's own open leads, and how many there are. */
   leads: { rows: OpenLead[]; total: number };
+  /** The rules that fired, in their fixed priority, at most four. */
+  insights: Insight[];
 }
 
 /** Your own Summary. There is no `membershipId`: a leader's view of a downline's is Phase 13's. */

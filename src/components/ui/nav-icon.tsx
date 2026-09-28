@@ -72,6 +72,10 @@ const PATHS: Record<string, React.ReactNode> = {
   flag: <><path d="M5 21V4" /><path d="M5 4h13l-3.5 4L18 12H5" /></>,
   /** A burst of energy — *Activity pulse* (`Overall.html:3187`). */
   bolt: <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" />,
+  /** Ideas radiating out — *What to do next* (`Overall.html:3231`). */
+  spark: <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />,
+  /** A line going up — *How you can improve your performance* (`Overall.html:3245`). */
+  trend: <><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></>,
   /** Somebody to go and see — *Leads that need you* (`Overall.html:3213`). */
   pin: <><path d="M12 21s7-6.4 7-11.5A7 7 0 0 0 5 9.5C5 14.6 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.3" /></>,
 };

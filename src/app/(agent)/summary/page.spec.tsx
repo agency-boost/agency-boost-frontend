@@ -30,6 +30,7 @@ const summary = (over: Record<string, unknown> = {}) => ({
   },
   activity: { monthly: activity(), yearly: activity(YEAR) },
   leads: { rows: LEADS, total: LEADS.length },
+  insights: [],
   ...over,
 });
 
@@ -383,5 +384,88 @@ describe('the Personal Summary — leads that need you, and the way to each scre
     for (const href of ['/goals', '/leads', '/activity/dashboard', '/activity/ratio']) expect(hrefs).toContain(href);
     expect(within(await card('Your sales activity targets')).getByRole('link', { name: 'Activity Dashboard' }))
       .toHaveAttribute('href', '/activity/dashboard');
+  });
+});
+
+describe('the Personal Summary — insight cards, named rules over your own numbers (P10-T7)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const INSIGHTS = [
+    { rule: 'BEHIND_PACE', kind: 'action', facts: { projected: 2, closingTarget: 5, neededPerWeek: 1, weeksLeft: 3 } },
+    { rule: 'LEAD_OVERDUE', kind: 'action', facts: { leadId: 'l-1', name: 'Pak Heri', overdueDays: 8, others: 2 } },
+    { rule: 'LEAD_NEGLECTED', kind: 'action', facts: { leadId: 'l-2', name: 'Pak Alvin', others: 0 } },
+    {
+      rule: 'RATIO_BELOW', kind: 'improve',
+      facts: { code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate', value: 0.0909, benchmark: 0.15, displayUnit: 'percent' },
+    },
+  ];
+
+  it('AC-1, AC-2: each card says what its rule found, names the rule, and is labelled as rules — never AI', async () => {
+    show(summary({ insights: INSIGHTS }));
+    const next = await card('What to do next');
+    const items = within(next).getAllByRole('listitem');
+
+    expect(items.map((li) => li.textContent?.slice(0, 1))).toEqual(['1', '2', '3']);
+    expect(items[0]).toHaveTextContent('You’re behind pace — at this rate you’ll close 2 of 5 this month. About 1 policy a week for the 3 weeks left would catch up.');
+    expect(items[0]).toHaveTextContent('Rule: Behind pace');
+    expect(items[1]).toHaveTextContent('Pak Heri’s next action is 8 days overdue — reschedule it or set a new date this week in Leads Management. 2 more of your leads are overdue too.');
+    expect(items[1]).toHaveTextContent('Rule: Lead overdue');
+    expect(items[2]).toHaveTextContent('Pak Alvin has no next action and no remarks — follow up and log what happened so this lead doesn’t stall.');
+    expect(items[2]).not.toHaveTextContent('neither');
+
+    expect(within(next).getByText('Rules, not AI')).toBeInTheDocument();
+    expect(next).toHaveTextContent('Suggestions from your numbers — rules, not AI.');
+    expect(screen.queryByText(/AI-powered/i)).not.toBeInTheDocument();
+  });
+
+  it('AC-1: a ratio below its benchmark goes on the improvement card, written as the ratio screen writes it', async () => {
+    show(summary({ insights: INSIGHTS }));
+    const improve = await card('How you can improve your performance');
+
+    expect(improve).toHaveTextContent('Selling success rate is 9.1% over the last 30 days, below its benchmark of 15.0%');
+    expect(improve).toHaveTextContent('Rule: Ratio below benchmark');
+    expect(within(improve).getByRole('link', { name: 'Activity Ratios' })).toHaveAttribute('href', '/activity/ratio');
+  });
+
+  it('AC-1: a strength, and silence in the logging window, each in their own words', async () => {
+    show(summary({
+      insights: [
+        { rule: 'NOTHING_LOGGED', kind: 'action', facts: { windowDays: 7, lastLoggedOn: '2026-09-01' } },
+        {
+          rule: 'RATIO_STRENGTH', kind: 'improve',
+          facts: { code: 'LEADS_PER_ACTIVITY', label: 'Leads per activity', value: 0.6, benchmark: 0.3, displayUnit: 'decimal' },
+        },
+      ],
+    }));
+
+    const next = await card('What to do next');
+    expect(next).toHaveTextContent('Nothing logged in the last 7 days — your last entry was Sep 1.');
+    expect(within(next).getByRole('link', { name: 'Log Activity' })).toHaveAttribute('href', '/activity/log');
+    expect(await card('How you can improve your performance')).toHaveTextContent(
+      'Leads per activity is a genuine strength — 0.60 over the last 30 days, well above its benchmark of 0.30.',
+    );
+  });
+
+  it('AC-1: the month’s last week is the week left, not “the 1 week left”', async () => {
+    show(summary({ insights: [{ rule: 'BEHIND_PACE', kind: 'action', facts: { projected: 0, closingTarget: 3, neededPerWeek: 3, weeksLeft: 1 } }] }));
+    expect(await card('What to do next')).toHaveTextContent('About 3 policies in the week left would catch up.');
+  });
+
+  it('AC-1: somebody who never logged is told where to start', async () => {
+    show(summary({ insights: [{ rule: 'NOTHING_LOGGED', kind: 'action', facts: { windowDays: 7, lastLoggedOn: null } }] }));
+    expect(await card('What to do next')).toHaveTextContent('You haven’t logged any activity yet');
+    expect(screen.queryByRole('region', { name: 'How you can improve your performance' })).not.toBeInTheDocument();
+  });
+
+  it('AC-3: no rule fired says so, rather than going quiet — and draws no improvement card', async () => {
+    show(summary({ insights: [] }));
+    expect(await card('What to do next')).toHaveTextContent('Nothing in your numbers asks for anything right now');
+    expect(screen.queryByRole('region', { name: 'How you can improve your performance' })).not.toBeInTheDocument();
+  });
+
+  it('AC-3: only improvements draws only that card', async () => {
+    show(summary({ insights: [INSIGHTS[3]] }));
+    await card('How you can improve your performance');
+    expect(screen.queryByRole('region', { name: 'What to do next' })).not.toBeInTheDocument();
   });
 });

@@ -530,7 +530,7 @@ describe('screens have no axe violations', () => {
     await expectClean('activity/dashboard');
   });
 
-  it('Personal Summary, populated: the period tabs, progress bars, the pace, the chips, the pulse and the leads (P10-T4 to T6)', async () => {
+  it('Personal Summary, populated: the period tabs, progress bars, the pace, the chips, the pulse, the leads and the insights (P10-T4 to T7)', async () => {
     const M = 1_000_000 * 100;
     const figures = {
       targetMinor: 75 * M, actualMinor: 30 * M, attainmentPct: 40, gapMinor: 45 * M, overMinor: 0, policiesNeeded: 3, targetMet: false,
@@ -575,6 +575,15 @@ describe('screens have no axe violations', () => {
               },
             ],
           },
+          // Both insight cards: a numbered action list and a bulleted improvement list.
+          insights: [
+            { rule: 'LEAD_OVERDUE', kind: 'action', facts: { leadId: 'l-1', name: 'Pak Hendro', overdueDays: 6, others: 0 } },
+            { rule: 'NOTHING_LOGGED', kind: 'action', facts: { windowDays: 7, lastLoggedOn: '2026-09-01' } },
+            {
+              rule: 'RATIO_STRENGTH', kind: 'improve',
+              facts: { code: 'LPA', label: 'Leads per activity', value: 0.6, benchmark: 0.3, displayUnit: 'decimal' },
+            },
+          ],
         },
       },
     });
