@@ -530,12 +530,29 @@ describe('screens have no axe violations', () => {
     await expectClean('activity/dashboard');
   });
 
-  it('Personal Summary, populated: the period tabs, a progress bar and the pace (P10-T4)', async () => {
+  it('Personal Summary, populated: the period tabs, progress bars, the pace, the chips and the pulse (P10-T4, P10-T5)', async () => {
     const M = 1_000_000 * 100;
     const figures = {
       targetMinor: 75 * M, actualMinor: 30 * M, attainmentPct: 40, gapMinor: 45 * M, overMinor: 0, policiesNeeded: 3, targetMet: false,
     };
+    const target = (key: string, logged: number, goal: number | null) => ({
+      key, code: key, logged, target: goal, attainmentPct: goal ? Math.round((logged / goal) * 100) : null, targetMet: false,
+    });
+    const activity = {
+      from: '2026-09-01', to: '2026-09-14', total: 42,
+      // One chip with a bar, one with no target, one met at 0 — every shape the card draws.
+      targets: [target('leads', 20, 57), target('appointments', 6, null), { ...target('closings', 2, 0), targetMet: true }],
+      sections: [{ code: 'RECRUITMENT', label: 'Recruitment', total: 3, rows: [{ code: 'RECRUIT_PRESENTATION', label: 'Presentasi NBO', count: 3 }] }],
+    };
+    const rate = (code: string, value: number | null, status: string) => ({
+      code, label: code, comparison: 'gte', displayUnit: 'percent', benchmark: 0.15, tag: null, sides: null,
+      numerator: [], denominator: [], purpose: null, divergesFromStandard: false, value, share: null,
+      numeratorCount: 1, denominatorCount: 10, status,
+    });
     stubFetch({
+      '/activity/ratios': {
+        body: { membershipId: 'm-1', from: '2026-08-16', to: '2026-09-14', days: 30, ratios: [rate('SSR', 0.1, 'alert'), rate('LPA', null, 'neutral')] },
+      },
       '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
       '/summary': {
         body: {
@@ -544,11 +561,13 @@ describe('screens have no axe violations', () => {
           monthly: { ...figures, source: { provenance: 'imported', month: '2026-09' } },
           yearly: { ...figures, targetMinor: 500 * M, source: { provenance: 'self_reported', month: null } },
           pace: { closingTarget: 6, closingsLogged: 2, dayOfMonth: 14, daysInMonth: 30, projected: 4, weeksLeft: 3, neededPerWeek: 2, targetMet: false },
+          activity: { monthly: activity, yearly: activity },
         },
       },
     });
     renderInLayout(AgentLayout, <PersonalSummaryPage />, {});
     await screen.findByRole('region', { name: 'The gap' });
+    await screen.findByText('SSR');
     await expectClean('summary');
   });
 

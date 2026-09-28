@@ -33,6 +33,34 @@ export interface Pace {
   targetMet: boolean;
 }
 
+/** One of *Your sales activity targets* (P10-T5): a cascade code logged against the period's target. */
+export interface ActivityTarget {
+  key: 'leads' | 'appointments' | 'closings';
+  code: string;
+  logged: number;
+  /** `null` without an APE target to derive it from; 0 when the month needs nothing more — met. */
+  target: number | null;
+  /** `null` on a zero or missing target — never `NaN%`. */
+  attainmentPct: number | null;
+  targetMet: boolean;
+}
+
+/** A section the reader is shown that holds none of the three codes above, with its rows. */
+export interface SectionChip {
+  code: string;
+  label: string;
+  total: number;
+  rows: { code: string; label: string; count: number }[];
+}
+
+export interface SummaryActivity {
+  from: string;
+  to: string;
+  targets: ActivityTarget[];
+  total: number;
+  sections: SectionChip[];
+}
+
 export interface Summary {
   year: string;
   month: string;
@@ -42,6 +70,7 @@ export interface Summary {
   monthly: PeriodFigures & { source: FigureSource | null };
   yearly: PeriodFigures & { source: FigureSource };
   pace: Pace | null;
+  activity: { monthly: SummaryActivity; yearly: SummaryActivity };
 }
 
 /** Your own Summary. There is no `membershipId`: a leader's view of a downline's is Phase 13's. */

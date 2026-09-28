@@ -4,14 +4,19 @@ import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Page } from '@/components/page';
 import { Card, ErrorBanner } from '@/components/ui/field';
-import { NavIcon } from '@/components/ui/nav-icon';
+import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
 import { Segmented } from '@/components/ui/segmented';
-import { SkeletonCards } from '@/components/ui/skeleton';
+import { Skeleton, SkeletonBar, SkeletonCards } from '@/components/ui/skeleton';
+import { StatusPill } from '@/components/ui/status-pill';
+import { readActivityRatios, type ActivityRatio, type ActivityRatios } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatMonth } from '@/lib/format';
 import { formatRupiah } from '@/lib/goals';
-import { readSummary, type FigureSource, type Pace, type PeriodFigures, type Summary } from '@/lib/summary';
+import { formatRatioForStatus } from '@/lib/ratio-format';
+import {
+  readSummary, type ActivityTarget, type FigureSource, type Pace, type PeriodFigures, type Summary, type SummaryActivity,
+} from '@/lib/summary';
 
 /**
  * The Personal Summary (P10-T4): your goal against what you produced, this month and this year, and
@@ -21,9 +26,12 @@ import { readSummary, type FigureSource, type Pace, type PeriodFigures, type Sum
  * figure is an input that writes Goal Settings; here it is shown with where it came from, and the
  * agent's own figure is changed on Goal Settings alone.
  *
- * **Later cards arrive with their tasks** — the activity targets and pulse (P10-T5), the leads that need
- * you (P10-T6), the insight cards (P10-T7). The page shows what is built and nothing standing in for
- * the rest.
+ * **What you logged against the plan** (P10-T5): leads contacted, appointments and closings against the
+ * cascade on the period's own APE target, a chip per other section, and the activity pulse — the ratio
+ * engine's answer for your rung, which the prototype printed as four hardcoded tiles.
+ *
+ * **Later cards arrive with their tasks** — the leads that need you (P10-T6), the insight cards
+ * (P10-T7). The page shows what is built and nothing standing in for the rest.
  */
 type View = 'month' | 'year';
 
@@ -36,12 +44,19 @@ export default function PersonalSummaryPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [view, setView] = useState<View>('month');
+  // The pulse is the ratio screen's own read (P10-T2, P10-T3), fetched once — it is the last 30 days
+  // whichever period is showing, so switching views does not ask again.
+  const [pulse, setPulse] = useState<ActivityRatios | null>(null);
+  const [pulseError, setPulseError] = useState<ApiError | null>(null);
 
   useEffect(() => {
     let live = true;
     readSummary()
       .then((next) => { if (live) setSummary(next); })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
+    readActivityRatios()
+      .then((next) => { if (live) setPulse(next); })
+      .catch((err) => { if (live) setPulseError(toDisplayError(err)); });
     return () => { live = false; };
   }, []);
 
@@ -58,7 +73,7 @@ export default function PersonalSummaryPage() {
             onSelect={(id) => setView(id as View)}
             className="w-fit [&_button]:whitespace-nowrap [&_button]:px-3.5"
           >
-            {() => <Cards summary={summary} view={view} />}
+            {() => <Cards summary={summary} view={view} pulse={pulse} pulseError={pulseError} />}
           </Segmented>
         )}
       </div>
@@ -66,7 +81,9 @@ export default function PersonalSummaryPage() {
   );
 }
 
-function Cards({ summary, view }: { summary: Summary; view: View }) {
+function Cards({
+  summary, view, pulse, pulseError,
+}: { summary: Summary; view: View; pulse: ActivityRatios | null; pulseError: ApiError | null }) {
   const month = view === 'month';
   const figures = month ? summary.monthly : summary.yearly;
   const period = month ? 'this month' : 'this year';
@@ -102,13 +119,16 @@ function Cards({ summary, view }: { summary: Summary; view: View }) {
           <GapCard figures={figures} period={period} pace={month ? summary.pace : null} />
         </>
       )}
+
+      <TargetsCard activity={month ? summary.activity.monthly : summary.activity.yearly} month={month} period={period} />
+      <PulseCard pulse={pulse} error={pulseError} />
     </div>
   );
 }
 
 function SummaryCard({
   id, title, icon, tag, children,
-}: { id: string; title: string; icon: 'target' | 'chart'; tag?: string; children: ReactNode }) {
+}: { id: string; title: string; icon: NavIconName; tag?: string; children: ReactNode }) {
   return (
     <section aria-labelledby={id} className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
       <div className="mb-3.5 flex items-center justify-between gap-3">
@@ -263,5 +283,147 @@ function PaceNote({ pace }: { pace: Pace }) {
       <span aria-hidden="true">{tone === 'good' ? '✅' : tone === 'behind' ? '⚠️' : '•'}</span>
       <span>{text}</span>
     </p>
+  );
+}
+
+/** The prototype's three chip labels (`Overall.html:3146-3160`), verbatim. */
+const TARGET_LABEL: Record<ActivityTarget['key'], string> = {
+  leads: 'Leads contacted',
+  appointments: 'Appointments',
+  closings: 'Closings',
+};
+
+/**
+ * *Your sales activity targets* (`Overall.html:3139-3182`, P10-T5).
+ *
+ * The targets are the cascade run on this card's period — this month's fixed APE target, or the year's —
+ * so the closings chip and the pace sentence above name one number (ADR-0056). **No target is said, not
+ * divided by**: the prototype's bars had no guard, and a zero target printed `NaN%` (F-25).
+ */
+function TargetsCard({ activity, month, period }: { activity: SummaryActivity; month: boolean; period: string }) {
+  return (
+    <SummaryCard id="summary-targets" title="Your sales activity targets" icon="flag" tag={month ? 'This month' : 'This year'}>
+      <p className="-mt-2 mb-3.5 text-xs text-muted">
+        From <Link href="/goals" className="font-semibold text-navy-soft underline">Goal Settings</Link> — appointments
+        and closings are your Sales pipeline targets.
+      </p>
+      <div className="grid gap-2.5 md:grid-cols-3">
+        {activity.targets.map((target) => <TargetChip key={target.key} target={target} month={month} />)}
+      </div>
+      <p className="mt-3 text-center text-xs text-muted">
+        <strong className="text-navy">{activity.total}</strong> total activities logged {period} across all categories.
+      </p>
+      {activity.sections.length > 0 && (
+        <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
+          {activity.sections.map((section) => (
+            <section key={section.code} aria-labelledby={`summary-section-${section.code}`} className="rounded-[10px] border border-hairline bg-base px-3.5 py-3">
+              <div className="mb-2 flex items-center justify-between gap-3 border-b border-hairline pb-2">
+                <h3 id={`summary-section-${section.code}`} className="text-sm font-semibold text-navy">{section.label} activities</h3>
+                <span className="font-body text-lg font-bold text-navy-soft">{section.total}</span>
+              </div>
+              <ul>
+                {section.rows.map((row) => (
+                  <li key={row.code} className="flex items-baseline justify-between gap-3 py-0.5 text-xs text-muted">
+                    <span>{row.label}</span>
+                    <span className="font-body font-bold text-navy">{row.count}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
+    </SummaryCard>
+  );
+}
+
+function TargetChip({ target, month }: { target: ActivityTarget; month: boolean }) {
+  const label = TARGET_LABEL[target.key];
+  const pct = target.attainmentPct;
+  return (
+    <div className="rounded-[10px] border border-hairline bg-base p-3">
+      <span className="mb-1.5 block text-xs text-muted">{label}</span>
+      <span className="mb-2 block font-body text-lg font-bold text-navy">
+        {target.logged}
+        {target.target !== null && target.target > 0 && (
+          <span className="text-xs font-medium text-muted"> / {target.target}</span>
+        )}
+      </span>
+      {target.target === null ? (
+        <span className="block text-xs text-muted">No target yet</span>
+      ) : target.target === 0 ? (
+        <span className="block text-xs text-muted">Nothing more needed {month ? 'this month' : 'this year'}</span>
+      ) : (
+        <div
+          role="progressbar"
+          aria-label={`${label} against target`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.min(100, pct ?? 0)}
+          aria-valuetext={`${target.logged} of ${target.target}`}
+          className="h-1.5 overflow-hidden rounded bg-navy/[0.08]"
+        >
+          <div className="h-full rounded bg-navy-soft" style={{ width: `${Math.min(100, pct ?? 0)}%` }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The pulse's columns follow its tiles: the prototype's four across (`Overall.html:929`) when there are
+ * four, three when there are three or five — an agent's seed, or an office that added a ratio — so a row
+ * never ends in a hole wider than a tile. Literal class names, so Tailwind sees every one.
+ */
+const pulseColumns = (n: number) => (n === 4 || n >= 7 ? 'lg:grid-cols-4' : n === 2 ? '' : n === 1 ? 'sm:grid-cols-1' : 'lg:grid-cols-3');
+
+const PULSE_VALUE: Record<ActivityRatio['status'], string> = {
+  success: 'text-success',
+  alert: 'text-alert',
+  neutral: 'text-navy',
+};
+
+/**
+ * *Activity pulse* (`Overall.html:3184-3208`, P10-T5): **the ratio engine's answer for your rung** — the
+ * prototype's four tiles were markup, 9.1% and 0.0% whatever anybody logged.
+ *
+ * The rates only. The balance is a track with two named ends, and it lives on the ratio screen with the
+ * formulas, which this card links to.
+ */
+function PulseCard({ pulse, error }: { pulse: ActivityRatios | null; error: ApiError | null }) {
+  const rates = pulse?.ratios.filter((r) => r.comparison !== 'band') ?? [];
+  const hasBalance = pulse?.ratios.some((r) => r.comparison === 'band') ?? false;
+  return (
+    <SummaryCard id="summary-pulse" title="Activity pulse" icon="bolt" tag="Last 30 days">
+      {error && <ErrorBanner {...error} />}
+      {!pulse && !error && (
+        <Skeleton label="Working out your ratios…">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[0, 1, 2].map((i) => <SkeletonBar key={i} className="h-[92px] rounded-[10px]" />)}
+          </div>
+        </Skeleton>
+      )}
+      {pulse && (rates.length === 0 ? (
+        <p className="text-sm text-navy">Your office has no ratios for your role yet.</p>
+      ) : (
+        <div className={cn('grid gap-3 sm:grid-cols-2', pulseColumns(rates.length))}>
+          {rates.map((ratio) => (
+            <div key={ratio.code} className="rounded-[10px] border border-hairline bg-base px-3.5 py-3">
+              <span className="mb-1 block text-xs text-muted">{ratio.label}</span>
+              <span className={cn('mb-1.5 block font-body text-xl font-bold', PULSE_VALUE[ratio.status])}>
+                {formatRatioForStatus(ratio.value, ratio.displayUnit, ratio.benchmark, ratio.status)}
+              </span>
+              <StatusPill status={ratio.status} />
+            </div>
+          ))}
+        </div>
+      ))}
+      {pulse && (
+        <p className="mt-3 text-xs text-muted">
+          {hasBalance ? 'Your selling and recruitment balance, and how each ratio is worked out, are on ' : 'How each ratio is worked out is on '}
+          <Link href="/activity/ratio" className="font-semibold text-navy underline">Activity Ratios</Link>.
+        </p>
+      )}
+    </SummaryCard>
   );
 }

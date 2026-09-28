@@ -28,12 +28,61 @@ const summary = (over: Record<string, unknown> = {}) => ({
     closingTarget: 5, closingsLogged: 2, dayOfMonth: 14, daysInMonth: 30, projected: 4, weeksLeft: 3,
     neededPerWeek: 1, targetMet: false,
   },
+  activity: { monthly: activity(), yearly: activity(YEAR) },
   ...over,
 });
 
-const show = (body: unknown) => {
-  stubFetch({ '/summary': { body } });
+const chip = (key: string, code: string, logged: number, target: number | null, attainmentPct: number | null) =>
+  ({ key, code, logged, target, attainmentPct, targetMet: target !== null && logged >= target });
+function activity(over: Record<string, unknown> = {}) {
+  return {
+    from: '2026-09-01', to: '2026-09-14',
+    targets: [
+      chip('leads', 'LEADS_CONTACTED', 20, 57, 35),
+      chip('appointments', 'SELL_PRESENTATION', 6, 17, 35),
+      chip('closings', 'SELL_SUBMISSION', 2, 5, 40),
+    ],
+    total: 42,
+    sections: [
+      {
+        code: 'RECRUITMENT', label: 'Recruitment', total: 6,
+        rows: [
+          { code: 'RECRUIT_PRESENTATION', label: 'Presentasi NBO', count: 3 },
+          { code: 'RECRUIT_FOLLOWUP', label: 'Follow up NBO', count: 2 },
+          { code: 'RECRUIT_AGENT_CODE', label: 'NPA', count: 1 },
+        ],
+      },
+      { code: 'TEAM_DEVELOPMENT', label: 'Team Development', total: 4, rows: [{ code: 'DEV_TEAM_ACTIVITY', label: 'Aktivitas team development', count: 4 }] },
+    ],
+    ...over,
+  };
+}
+const YEAR = {
+  from: '2026-01-01',
+  targets: [
+    chip('leads', 'LEADS_CONTACTED', 120, 314, 38),
+    chip('appointments', 'SELL_PRESENTATION', 36, 94, 38),
+    chip('closings', 'SELL_SUBMISSION', 11, 28, 39),
+  ],
+  total: 310,
+};
+
+const ratio = (over: Record<string, unknown>) => ({
+  code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate', comparison: 'gte', displayUnit: 'percent',
+  benchmark: 0.15, tag: null, sides: null, numerator: [], denominator: [], purpose: null, divergesFromStandard: false,
+  value: 0.0909, share: null, numeratorCount: 1, denominatorCount: 11, status: 'alert', ...over,
+});
+const ratios = (list: unknown[]) => ({ membershipId: 'm-1', from: '2026-08-16', to: '2026-09-14', days: 30, ratios: list });
+const AGENT_RATIOS = ratios([
+  ratio({}),
+  ratio({ code: 'LEADS_PER_ACTIVITY', label: 'Leads per activity', displayUnit: 'decimal', benchmark: 0.3, value: 0.375, status: 'success' }),
+  ratio({ code: 'MEETING_PER_APPROACH', label: 'Meeting per approach', displayUnit: 'decimal', benchmark: 1.5, value: null, status: 'neutral' }),
+]);
+
+const show = (body: unknown, pulse: { status?: number; body: unknown } = { body: AGENT_RATIOS }) => {
+  const stub = stubFetch({ '/summary': { body }, '/activity/ratios': pulse });
   renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+  return stub;
 };
 const card = (name: string) => screen.findByRole('region', { name });
 
@@ -157,8 +206,118 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
   });
 
   it('waits in the shape of cards, and says so when it fails', async () => {
-    stubFetch({ '/summary': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.' } } } });
+    stubFetch({
+      '/summary': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.' } } },
+      '/activity/ratios': { body: AGENT_RATIOS },
+    });
     renderWithSession(<PersonalSummaryPage />, { me: AGENT });
     expect(await screen.findByText('Something went wrong.')).toBeInTheDocument();
+  });
+});
+
+describe('the Personal Summary — activity targets, chips and the pulse (P10-T5)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('AC-1: this month’s three counts against their targets, each with its bar, and where the targets come from', async () => {
+    show(summary());
+    const targets = await card('Your sales activity targets');
+
+    expect(within(targets).getByText('This month')).toBeInTheDocument();
+    expect(targets).toHaveTextContent('Leads contacted20 / 57');
+    expect(targets).toHaveTextContent('Appointments6 / 17');
+    expect(targets).toHaveTextContent('Closings2 / 5');
+    expect(within(targets).getByRole('progressbar', { name: 'Closings against target' })).toHaveAttribute('aria-valuenow', '40');
+    expect(within(targets).getByRole('progressbar', { name: 'Leads contacted against target' })).toHaveAttribute('aria-valuetext', '20 of 57');
+    expect(within(targets).getByRole('link', { name: 'Goal Settings' })).toHaveAttribute('href', '/goals');
+    expect(targets).toHaveTextContent('42 total activities logged this month across all categories.');
+  });
+
+  it('AC-1: the year to date against the year’s targets', async () => {
+    show(summary());
+    await card('Your sales activity targets');
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
+
+    const targets = await card('Your sales activity targets');
+    expect(within(targets).getByText('This year')).toBeInTheDocument();
+    expect(targets).toHaveTextContent('Closings11 / 28');
+    expect(targets).toHaveTextContent('310 total activities logged this year across all categories.');
+  });
+
+  it('AC-1: no goal is no target — the counts still show, and nothing is divided by zero (F-25)', async () => {
+    const none = activity({
+      targets: [chip('leads', 'LEADS_CONTACTED', 5, null, null), chip('appointments', 'SELL_PRESENTATION', 0, null, null), chip('closings', 'SELL_SUBMISSION', 1, null, null)],
+    });
+    show(summary({ goal: { set: false, savedAt: null }, pace: null, activity: { monthly: none, yearly: none } }));
+    const targets = await card('Your sales activity targets');
+
+    expect(targets).toHaveTextContent('Leads contacted5No target yet');
+    expect(within(targets).queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(targets).not.toHaveTextContent('NaN');
+    expect(targets).not.toHaveTextContent('/');
+  });
+
+  it('AC-1: a month whose year is already made needs nothing more — met, not a bar against 0', async () => {
+    const made = activity({
+      targets: [chip('leads', 'LEADS_CONTACTED', 3, 0, null), chip('appointments', 'SELL_PRESENTATION', 1, 0, null), chip('closings', 'SELL_SUBMISSION', 2, 0, null)],
+    });
+    show(summary({ activity: { monthly: made, yearly: activity(YEAR) } }));
+    const targets = await card('Your sales activity targets');
+
+    expect(targets).toHaveTextContent('Closings2Nothing more needed this month');
+    expect(within(targets).queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  it('AC-2: a chip per other section, with its total and its rows', async () => {
+    show(summary());
+    const recruitment = await screen.findByRole('region', { name: 'Recruitment activities' });
+
+    expect(recruitment).toHaveTextContent('Recruitment activities6');
+    expect(within(recruitment).getAllByRole('listitem').map((li) => li.textContent))
+      .toEqual(['Presentasi NBO3', 'Follow up NBO2', 'NPA1']);
+    expect(screen.getByRole('region', { name: 'Team Development activities' })).toHaveTextContent('4');
+  });
+
+  it('AC-3: the pulse is the ratio screen’s answer — the rates only, each in words, with a way to the rest', async () => {
+    const { calls } = show(summary());
+    const pulse = await card('Activity pulse');
+
+    expect(within(pulse).getByText('Last 30 days')).toBeInTheDocument();
+    expect(await within(pulse).findByText('Selling success rate')).toBeInTheDocument();
+    expect(pulse).toHaveTextContent('9.1%');
+    expect(within(pulse).getByText('Below benchmark')).toBeInTheDocument();
+    expect(pulse).toHaveTextContent('Leads per activity0.38');
+    expect(within(pulse).getByText('Not enough data')).toBeInTheDocument();
+    expect(within(pulse).getByRole('link', { name: 'Activity Ratios' })).toHaveAttribute('href', '/activity/ratio');
+    // Once, whichever period is showing.
+    await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
+    expect(calls.filter((c) => c.url.includes('/activity/ratios'))).toHaveLength(1);
+  });
+
+  it('AC-3: leaves the balance to the ratio screen, and says it is there', async () => {
+    show(summary(), {
+      body: ratios([
+        ratio({}),
+        ratio({ code: 'SELLING_VS_RECRUITMENT', label: 'Selling vs Recruitment', comparison: 'band', displayUnit: 'points', benchmark: 30, value: 24.4, share: 62.2, status: 'success' }),
+      ]),
+    });
+    const pulse = await card('Activity pulse');
+
+    await within(pulse).findByText('Selling success rate');
+    expect(within(pulse).queryByText('Selling vs Recruitment')).not.toBeInTheDocument();
+    expect(pulse).toHaveTextContent('Your selling and recruitment balance, and how each ratio is worked out, are on Activity Ratios.');
+  });
+
+  it('AC-3: an office with no ratios for the rung says so', async () => {
+    show(summary(), { body: ratios([]) });
+    expect(await screen.findByText('Your office has no ratios for your role yet.')).toBeInTheDocument();
+  });
+
+  it('AC-3: a failed ratio read stays inside its card, and the rest of the page stands', async () => {
+    show(summary(), { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'The ratios could not be read.' } } });
+    const pulse = await card('Activity pulse');
+
+    expect(await within(pulse).findByText('The ratios could not be read.')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Your sales activity targets' })).toBeInTheDocument();
   });
 });

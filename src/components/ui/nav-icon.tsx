@@ -68,6 +68,10 @@ const PATHS: Record<string, React.ReactNode> = {
   compass: <><circle cx="12" cy="12" r="9" /><path d="m15.5 8.5-2 5-5 2 2-5z" /></>,
   /** A shelf of products. */
   box: <><path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5z" /><path d="m3 8.5 9 4.5 9-4.5M12 13v7" /></>,
+  /** A marker planted ahead — *Your sales activity targets* (`Overall.html:3141`). */
+  flag: <><path d="M5 21V4" /><path d="M5 4h13l-3.5 4L18 12H5" /></>,
+  /** A burst of energy — *Activity pulse* (`Overall.html:3187`). */
+  bolt: <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" />,
 };
 
 export type NavIconName = keyof typeof PATHS;
