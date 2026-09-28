@@ -98,8 +98,8 @@ export function SkeletonTable({
       <DataTable caption={caption} columns={columns}>
         {Array.from({ length: rows }, (_, r) => (
           <Row key={r}>
-            {columns.map((column, c) => (
-              <Cell key={typeof column === 'string' ? column : column.label}>
+            {columns.map((_column, c) => (
+              <Cell key={c}>
                 <SkeletonBar className={LINE_WIDTHS[(r + c) % LINE_WIDTHS.length]} />
               </Cell>
             ))}

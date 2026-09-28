@@ -502,11 +502,30 @@ describe('screens have no axe violations', () => {
     await expectClean('unit/dashboard');
   });
 
-  it('Activity Dashboard, a signpost carrying the section’s tab strip', async () => {
-    // A placeholder with chrome: the strip is how a reader learns the other two views exist, and it
-    // is the one thing on the page — so a `nav` with an `aria-current` link is all axe has to read.
+  it('Activity Dashboard, populated: the range tabs, the strip and the table (P10-T1)', async () => {
+    // It was a signpost until P10-T1. The range is a `tablist` whose panel is the whole report, the
+    // headings carry a second line, and a row the office has since archived wears its badge.
+    const counts = [3, 0, 1, 0, 2, 0, 0];
+    const day = (d: string) => ({ from: d, to: d, days: 1, kind: 'day' });
+    stubFetch({
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/activity/dashboard': {
+        body: {
+          range: 'ROLLING_7D', from: '2026-09-22', to: '2026-09-28', days: 7, today: '2026-09-28',
+          buckets: ['28', '27', '26', '25', '24', '23', '22'].map((d) => day(`2026-09-${d}`)),
+          sections: [{
+            code: 'SELLING', label: 'Selling', standing: 'shown', total: 6, counts,
+            types: [
+              { code: 'SELL_SUBMISSION', label: 'Submission polis', description: null, displayOrder: 6, standing: 'shown', total: 4, counts: [2, 0, 1, 0, 1, 0, 0] },
+              { code: 'SELL_OLD', label: 'An archived item', description: 'Retired in August', displayOrder: 9, standing: 'archived', total: 2, counts: [1, 0, 0, 0, 1, 0, 0] },
+            ],
+          }],
+          total: 6, counts, daysLogged: 5, correctedDays: 1,
+        },
+      },
+    });
     renderInLayout(AgentLayout, <ActivityDashboardPage />, {});
-    await screen.findByText('Arrives in phase 10');
+    await screen.findByText('Submission polis');
     await expectClean('activity/dashboard');
   });
 

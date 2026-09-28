@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { formatCalendarDay, formatDay, formatDayLong, formatMonth } from './format';
+import {
+  formatCalendarDay, formatDay, formatDayLong, formatMonth, formatShortDay, formatWeekday,
+} from './format';
 
 describe('formatDay', () => {
   it('writes a date the way the prototype does', () => {
@@ -53,6 +55,25 @@ describe('formatMonth', () => {
 
   it('hands back what is not a month', () => {
     expect(formatMonth('soon')).toBe('soon');
+  });
+});
+
+describe('formatShortDay and formatWeekday (P10-T1)', () => {
+  it('writes a column’s day, and a range’s last one with its year', () => {
+    expect(formatShortDay('2026-09-22')).toBe('Sep 22');
+    expect(formatShortDay('2026-09-28', { year: true })).toBe('Sep 28, 2026');
+  });
+
+  it('names the weekday from the calendar day, not from an instant', () => {
+    // 2026-09-28 is a Monday wherever the browser is; parsing it as UTC midnight would make it a
+    // Sunday west of Greenwich.
+    expect(formatWeekday('2026-09-28')).toBe('Mon');
+    expect(formatWeekday('2026-03-01')).toBe('Sun');
+  });
+
+  it('writes nothing for something that is not a day', () => {
+    expect(formatShortDay('')).toBe('');
+    expect(formatWeekday('soon')).toBe('');
   });
 });
 

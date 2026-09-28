@@ -18,6 +18,7 @@ import { cn } from '@/lib/cn';
 export type Column =
   | string
   | { label: string; visuallyHidden: true }
+  | { label: string; detail: string }
   | SortableColumn;
 
 /**
@@ -135,12 +136,16 @@ export function DataTable({
         ) : null}
         <thead>
           <tr className="border-b border-hairline">
-            {columns.map((column) => {
+            {columns.map((column, i) => {
               const label = typeof column === 'string' ? column : column.label;
               const hidden = typeof column !== 'string' && 'visuallyHidden' in column;
+              // A second, smaller line under the heading — the Activity Dashboard's *Week 1* over its
+              // dates (`Overall.html:5043`). Keyed by position too: a month of daily columns repeats
+              // every weekday's name.
+              const detail = typeof column !== 'string' && 'detail' in column ? column.detail : null;
               return (
                 <th
-                  key={label}
+                  key={`${i}-${label}`}
                   scope="col"
                   aria-sort={isSortable(column) ? column.sort : undefined}
                   className="px-4 py-2.5 text-sm font-semibold uppercase tracking-wide text-muted"
@@ -157,6 +162,9 @@ export function DataTable({
                   ) : (
                     <span className={hidden ? 'sr-only' : undefined}>{label}</span>
                   )}
+                  {detail ? (
+                    <span className="block text-2xs font-normal normal-case tracking-normal">{detail}</span>
+                  ) : null}
                 </th>
               );
             })}
@@ -168,8 +176,8 @@ export function DataTable({
   );
 }
 
-export function Row({ children }: { children: React.ReactNode }) {
-  return <tr className="border-b border-hairline last:border-b-0">{children}</tr>;
+export function Row({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <tr className={cn('border-b border-hairline last:border-b-0', className)}>{children}</tr>;
 }
 
 export function Cell({

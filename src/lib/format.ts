@@ -63,3 +63,26 @@ export function formatMonth(month: string): string {
   if (!y || !m) return month;
   return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
+
+/** A calendar day's three numbers, as a local `Date` — never parsed as an instant. */
+function localDate(day: string): Date | null {
+  const [y, m, d] = day.split('-').map(Number);
+  return y && m && d ? new Date(y, m - 1, d) : null;
+}
+
+/**
+ * A calendar day the server resolved in the office's zone, compact for a column or a range:
+ * `Sep 22`, or `Sep 28, 2026` with the year. Built from its numbers, as `formatCalendarDay` is.
+ */
+export function formatShortDay(day: string, { year = false }: { year?: boolean } = {}): string {
+  const at = localDate(day);
+  if (!at) return '';
+  return at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(year ? { year: 'numeric' } : {}) });
+}
+
+/** The weekday a calendar day falls on — `Mon` — for a column heading (`Overall.html:5003`). */
+export function formatWeekday(day: string): string {
+  const at = localDate(day);
+  return at ? at.toLocaleDateString('en-US', { weekday: 'short' }) : '';
+}
+

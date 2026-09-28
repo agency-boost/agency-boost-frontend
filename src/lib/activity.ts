@@ -36,6 +36,54 @@ export interface ActivitySummary {
   totalCount: number;
 }
 
+/** Why a row is on the Dashboard: `shown` today, or history kept so the totals add up (P10-T1). */
+export type DashboardStanding = 'shown' | 'archived' | 'not_shown';
+
+export type DashboardRange = 'ROLLING_7D' | 'ROLLING_30D' | 'CUSTOM';
+
+/** One column, most recent first. `week` is a 7-day block counted back from the range's end. */
+export interface DashboardBucket {
+  from: string;
+  to: string;
+  days: number;
+  kind: 'day' | 'week' | 'remainder';
+}
+
+export interface DashboardType {
+  code: string;
+  label: string;
+  description: string | null;
+  displayOrder: number;
+  standing: DashboardStanding;
+  total: number;
+  counts: number[];
+}
+
+export interface DashboardSection {
+  code: string;
+  label: string;
+  standing: DashboardStanding;
+  total: number;
+  counts: number[];
+  types: DashboardType[];
+}
+
+/** The Activity Dashboard (P10-T1): your own days over a range. Every number is the server's. */
+export interface ActivityDashboard {
+  range: DashboardRange;
+  from: string;
+  to: string;
+  days: number;
+  /** Today in the office's timezone — the latest a custom range may end. */
+  today: string;
+  buckets: DashboardBucket[];
+  sections: DashboardSection[];
+  total: number;
+  counts: number[];
+  daysLogged: number;
+  correctedDays: number;
+}
+
 export interface ActivityCompliance {
   membershipId: string;
   compliant7d: boolean;
@@ -73,6 +121,11 @@ export const correctActivityDay = (
 export const readActivitySummary = (
   params: { period?: string; from?: string; to?: string; membershipId?: string } = {},
 ) => api<ActivitySummary>('/activity/summary' + query(params));
+
+/** Your own days over a range. There is no `membershipId`: the Dashboard is first-person (P10-T1). */
+export const readActivityDashboard = (
+  params: { range?: DashboardRange; from?: string; to?: string } = {},
+) => api<ActivityDashboard>('/activity/dashboard' + query(params));
 
 export const readActivityCompliance = (params: { membershipId?: string } = {}) =>
   api<ActivityCompliance>('/activity/compliance' + query(params));
