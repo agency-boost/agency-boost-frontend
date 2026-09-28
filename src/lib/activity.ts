@@ -1,4 +1,5 @@
 import { api } from './api-client';
+import type { RatioDisplayUnit } from './ratio-format';
 
 /**
  * What an agent did, day by day (P6).
@@ -84,6 +85,44 @@ export interface ActivityDashboard {
   correctedDays: number;
 }
 
+/** One activity code in a ratio's formula, as the office names and numbers it. */
+export interface RatioTerm {
+  code: string;
+  label: string;
+  /** The number the log screen shows beside it; 0 when the code is unknown. */
+  displayOrder: number;
+}
+
+/** One of the office's ratios over the member's last 30 days (P10-T2). Every number is the server's. */
+export interface ActivityRatio {
+  code: string;
+  label: string;
+  comparison: 'gte' | 'band';
+  displayUnit: RatioDisplayUnit;
+  benchmark: number;
+  tag: { code: string | null; label: string } | null;
+  sides: { numerator: string | null; denominator: string | null } | null;
+  numerator: RatioTerm[];
+  denominator: RatioTerm[];
+  purpose: string | null;
+  divergesFromStandard: boolean;
+  /** A rate's proportion, or the balance's lean in points toward the numerator. `null` is not enough data. */
+  value: number | null;
+  share: number | null;
+  numeratorCount: number;
+  denominatorCount: number;
+  status: 'success' | 'alert' | 'neutral';
+}
+
+export interface ActivityRatios {
+  membershipId: string;
+  from: string;
+  to: string;
+  days: number;
+  /** Only the ratios that apply to this member's rung (ADR-0020). */
+  ratios: ActivityRatio[];
+}
+
 export interface ActivityCompliance {
   membershipId: string;
   compliant7d: boolean;
@@ -126,6 +165,9 @@ export const readActivitySummary = (
 export const readActivityDashboard = (
   params: { range?: DashboardRange; from?: string; to?: string } = {},
 ) => api<ActivityDashboard>('/activity/dashboard' + query(params));
+
+/** The office's ratios over your last 30 days. Your own only: there is no `membershipId` (P10-T2). */
+export const readActivityRatios = () => api<ActivityRatios>('/activity/ratios');
 
 export const readActivityCompliance = (params: { membershipId?: string } = {}) =>
   api<ActivityCompliance>('/activity/compliance' + query(params));

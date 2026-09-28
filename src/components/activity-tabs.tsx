@@ -7,8 +7,8 @@ import { RouteTabs } from '@/components/ui/route-tabs';
  * records them: *Log Activity* captures, *Activity Dashboard* aggregates, *Activity Ratios* converts.
  * They are three views of one thing, which is why they are a strip rather than three nav items.
  *
- * **Two of the three are signposts until Phase 10**, and the strip ships anyway: it is how a reader
- * learns the other views exist at all, and the registry has assigned both routes since Phase 0.
+ * **All three are built** — the Dashboard in P10-T1, the Ratios in P10-T2. Until then two were signposts,
+ * and the strip shipped anyway: it is how a reader learns the other views exist at all (L-32).
  */
 export function ActivityTabs() {
   return (

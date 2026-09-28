@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  benchmarkFromInput, benchmarkToInput, formatBenchmark, reexpress, unitFor,
+  benchmarkFromInput, benchmarkToInput, formatBenchmark, formatRatioForStatus, formatRatioValue, reexpress,
+  unitFor,
 } from '@/lib/ratio-format';
 
 /*
@@ -76,3 +77,41 @@ describe('unitFor', () => {
     expect(unitFor({ comparison: 'gte' })).toBe('decimal');
   });
 });
+
+describe('formatRatioValue (P10-T2)', () => {
+  it('writes a rate as its benchmark is written', () => {
+    expect(formatRatioValue(0.0909, 'percent')).toBe('9.1%');
+    expect(formatRatioValue(0.375, 'decimal')).toBe('0.38');
+    expect(formatRatioValue(2.25, 'decimal')).toBe('2.25');
+  });
+
+  it('writes the balance’s lean in whole points, without a sign', () => {
+    expect(formatRatioValue(-24.4, 'points')).toBe('24 points');
+    expect(formatRatioValue(1, 'points')).toBe('1 point');
+    expect(formatRatioValue(0, 'points')).toBe('0 points');
+  });
+
+  it('writes not enough data as a dash, never as zero', () => {
+    expect(formatRatioValue(null, 'percent')).toBe('–');
+    expect(formatRatioValue(null, 'points')).toBe('–');
+  });
+});
+
+describe('formatRatioForStatus — a rounded figure never reads as the other side of its status', () => {
+  it('writes one more decimal where a miss would round onto the benchmark', () => {
+    expect(formatRatioForStatus(8 / 27, 'decimal', 0.3, 'alert')).toBe('0.296');
+    expect(formatRatioForStatus(0.1496, 'percent', 0.15, 'alert')).toBe('14.96%');
+  });
+
+  it('writes a lean just outside the band with its decimal, and one well outside as whole points', () => {
+    expect(formatRatioForStatus(30.43, 'points', 30, 'alert')).toBe('30.4 points');
+    expect(formatRatioForStatus(-48, 'points', 30, 'alert')).toBe('48 points');
+  });
+
+  it('leaves an on-track figure, a clear miss and not enough data as they are', () => {
+    expect(formatRatioForStatus(0.3, 'decimal', 0.3, 'success')).toBe('0.30');
+    expect(formatRatioForStatus(0.09, 'percent', 0.15, 'alert')).toBe('9.0%');
+    expect(formatRatioForStatus(null, 'percent', 0.15, 'neutral')).toBe('–');
+  });
+});
+

@@ -60,6 +60,42 @@ export function formatBenchmark(value: number, unit: RatioDisplayUnit): string {
   return fixed(value, 2);
 }
 
+/**
+ * A computed ratio, written as its benchmark is (P10-T2): `9.1%`, `0.38`, and the balance's lean as
+ * whole points — `24 points`, without a sign, since the sentence around it says which way. `null` is
+ * *not enough data* and is written `–`, the prototype's own (`Overall.html:5330`): never `0`.
+ */
+export function formatRatioValue(value: number | null, unit: RatioDisplayUnit): string {
+  if (value === null) return '–';
+  if (unit === 'points') {
+    const points = Math.round(Math.abs(value));
+    return `${points} ${points === 1 ? 'point' : 'points'}`;
+  }
+  return formatBenchmark(value, unit);
+}
+
+/**
+ * A computed ratio written so that **the number never contradicts the status beside it**.
+ *
+ * The status is judged on the exact value, and the display rounds: `8 ÷ 27` is 0.296 — below a 0.30
+ * benchmark — and `formatRatioValue` writes it `0.30`, beside *Benchmark: 0.30* and *Below benchmark*.
+ * A lean of 30.43 points is outside a ±30 band and writes `30 points`. Where the rounded figure would
+ * land on the benchmark's own text or inside its band while the status says it missed, one more decimal
+ * is written: `0.296`, `30.4 points`.
+ */
+export function formatRatioForStatus(
+  value: number | null, unit: RatioDisplayUnit, benchmark: number, status: 'success' | 'alert' | 'neutral',
+): string {
+  const text = formatRatioValue(value, unit);
+  if (value === null || status !== 'alert') return text;
+  if (unit === 'points') {
+    const lean = Math.abs(value);
+    return Math.round(lean) <= benchmark ? `${lean.toFixed(1)} points` : text;
+  }
+  if (text !== formatBenchmark(benchmark, unit)) return text;
+  return unit === 'percent' ? `${(value * 100).toFixed(2)}%` : value.toFixed(3);
+}
+
 /** What goes in the input for a stored value: `15` for 0.15 shown as a percentage. */
 export function benchmarkToInput(value: number, unit: RatioDisplayUnit): string {
   // Rounded before printing so 0.155 × 100 reads `15.5`, not `15.500000000000002`.

@@ -1,4 +1,4 @@
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -529,9 +529,36 @@ describe('screens have no axe violations', () => {
     await expectClean('activity/dashboard');
   });
 
-  it('Activity Ratios, the same', async () => {
+  it('Activity Ratios, populated: a rate, one with not enough data, and the balance, explained (P10-T2)', async () => {
+    // It was a signpost until P10-T2. Each card is an `article` named by its heading, the formula's
+    // numbers are hidden behind a sentence a screen reader reads, and the explanation is a disclosure.
+    const term = (code: string, label: string, displayOrder: number) => ({ code, label, displayOrder });
+    const base = {
+      comparison: 'gte', displayUnit: 'percent', benchmark: 0.15, tag: { code: 'SELLING', label: 'Selling' },
+      sides: null, numerator: [term('SELL_SUBMISSION', 'Submission polis', 6)],
+      denominator: [term('SELL_PRESENTATION', 'Presentasi penjualan', 4)],
+      purpose: 'Mengukur tingkat konversi aktivitas selling menjadi submission', divergesFromStandard: false,
+      share: null, numeratorCount: 1, denominatorCount: 11,
+    };
+    stubFetch({
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/activity/ratios': {
+        body: {
+          membershipId: 'm-1', from: '2026-08-30', to: '2026-09-28', days: 30,
+          ratios: [
+            { ...base, code: 'SELLING_VS_RECRUITMENT', label: 'Selling vs Recruitment', comparison: 'band',
+              displayUnit: 'points', benchmark: 30, tag: { code: null, label: 'Balance' },
+              sides: { numerator: 'Selling', denominator: 'Recruitment' }, value: 24, share: 62, status: 'success' },
+            { ...base, code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate', value: 0.09, status: 'alert' },
+            { ...base, code: 'LEADS_PER_ACTIVITY', label: 'Leads per activity', displayUnit: 'decimal',
+              benchmark: 0.3, value: null, status: 'neutral' },
+          ],
+        },
+      },
+    });
     renderInLayout(AgentLayout, <ActivityRatioPage />, {});
-    await screen.findByText('Arrives in phase 10');
+    const card = await screen.findByRole('article', { name: 'Selling success rate' });
+    await userEvent.click(within(card).getByText('What is this ratio?'));
     await expectClean('activity/ratio');
   });
 
