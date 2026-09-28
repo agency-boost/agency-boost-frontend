@@ -20,6 +20,7 @@ import {
   type Goal, type GoalHistoryEntry, type GoalInputs, type GoalMode,
 } from '@/lib/goals';
 import { readMyTeam, type TeamMember } from '@/lib/org';
+import { formatBenchmark } from '@/lib/ratio-format';
 import { useSession } from '@/lib/session';
 
 /**
@@ -406,19 +407,27 @@ export default function GoalSettingsPage() {
               * the field's accessible name; ours is a `hint` bound by `aria-describedby`, so it is
               * announced after the name rather than as part of it (L-20).
               */}
+            {/*
+              * **What the subject actually logged, under each assumption** (ADR-0048, ADR-0055): the
+              * line the prototype's tip asks for — *"Use your real conversion ratios"* — without making
+              * the agent go and work it out. In the hint, so a screen reader hears it after the field's
+              * name. It fills nothing in: the field stays the agent's.
+              */}
             <Percent
               label="Leads to Appointment"
               id="goal-leads-to-appt"
+              className="min-w-[14rem] flex-1"
               value={draft.leadsToApptPct}
               onChange={(leadsToApptPct) => set({ leadsToApptPct })}
-              hint="% of contacted leads that become an appointment"
+              hint={`% of contacted leads that become an appointment. ${measuredLine(goal.measured.leadToAppointmentRate, mine)}`}
             />
             <Percent
               label="Closing rate"
               id="goal-closing"
+              className="min-w-[14rem] flex-1"
               value={draft.closingRatePct}
               onChange={(closingRatePct) => set({ closingRatePct })}
-              hint="% of appointments that become a closing"
+              hint={`% of appointments that become a closing. ${measuredLine(goal.measured.closingRate, mine)}`}
             />
           </FieldRow>
           <Tip glyph="💡">Use your real conversion ratios for accuracy.</Tip>
@@ -705,12 +714,14 @@ function Rupiah({
 
 /** A percentage, with decimals — which the prototype's parser cannot read (I-108). */
 function Percent({
-  label, id, value, onChange, hint,
+  label, id, value, onChange, hint, className,
 }: {
   label: string; id: string; value: number; onChange: (pct: number) => void; hint?: string;
+  /** How the field sits in its row. A long description otherwise sizes it, and the pair stops sharing a line. */
+  className?: string;
 }) {
   return (
-    <Field label={label} htmlFor={id} hint={hint}>
+    <Field label={label} htmlFor={id} hint={hint} className={className}>
       <TextInput
         id={id}
         type="number"
@@ -724,6 +735,18 @@ function Percent({
       />
     </Field>
   );
+}
+
+/**
+ * The measured line under a conversion assumption (ADR-0055): *"Your logged rate: 25.0% over the last
+ * 30 days."* — or, with nothing to divide by, that there is not enough yet. **Never 0%**: an agent who
+ * logged no appointments has no closing rate, not a closing rate of nothing.
+ */
+function measuredLine(rate: number | null, mine: boolean): string {
+  const whose = mine ? 'Your' : 'Their';
+  return rate === null
+    ? `${whose} logged rate: not enough logged in the last 30 days to measure it.`
+    : `${whose} logged rate: ${formatBenchmark(rate, 'percent')} over the last 30 days.`;
 }
 
 /** The KPI's word for whose figure it is (P9-T6). */

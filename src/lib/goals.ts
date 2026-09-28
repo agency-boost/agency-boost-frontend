@@ -67,6 +67,18 @@ export interface GoalAchieved {
   month: string | null;
 }
 
+/**
+ * The two conversion assumptions as the subject actually logged them over the last 30 days
+ * (ADR-0055, P10-T9). Proportions; `null` is not enough data. Read only — nothing is filled in.
+ */
+export interface GoalMeasured {
+  from: string;
+  to: string;
+  days: number;
+  leadToAppointmentRate: number | null;
+  closingRate: number | null;
+}
+
 export interface Goal extends Omit<GoalInputs, 'monthsLeft'> {
   period: string;
   /** What `projected` is computed from. `apeAchievedMinor` stays the agent's own typed figure. */
@@ -79,6 +91,8 @@ export interface Goal extends Omit<GoalInputs, 'monthsLeft'> {
   /** `null` when the stored inputs cannot produce a plan — the screen says which of them. */
   projected: GoalProjection | null;
   cascadeMapping: { leadsCode: string; appointmentsCode: string; closingsCode: string };
+  /** The subject's own rates over the last 30 days, printed under the fields they measure. */
+  measured: GoalMeasured;
   savedAt: string | null;
   /** Differing from the reader's own membership is a leader's goal-setting (ADR-0046). */
   savedByMembershipId: string | null;

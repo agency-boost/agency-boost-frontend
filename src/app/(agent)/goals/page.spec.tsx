@@ -67,6 +67,7 @@ const goal = (over: Record<string, unknown> = {}) => ({
     appointmentsCode: 'SELL_PRESENTATION',
     closingsCode: 'SELL_SUBMISSION',
   },
+  measured: { from: '2026-08-15', to: '2026-09-13', days: 30, leadToAppointmentRate: 0.25, closingRate: null },
   monthsLeftIsOverride: false,
   savedAt: '2026-09-13T04:00:00.000Z',
   savedByMembershipId: 'mem-1',
@@ -578,6 +579,45 @@ describe('Goal settings (P8-T3)', () => {
       await userEvent.selectOptions(await screen.findByLabelText('Whose plan'), 'mem-rina');
 
       expect(screen.queryByText('Set by your leader')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('P10-T9 — the measured rate under each assumption (ADR-0055)', () => {
+    it('AC-1: says what you actually logged, in the field’s own description', async () => {
+      render({ '/goals': { body: goal() } });
+
+      expect(await screen.findByLabelText('Leads to Appointment')).toHaveAccessibleDescription(
+        '% of contacted leads that become an appointment. Your logged rate: 25.0% over the last 30 days.',
+      );
+    });
+
+    it('AC-2: says there is not enough logged yet, never 0%', async () => {
+      render({ '/goals': { body: goal() } });
+
+      const closing = await screen.findByLabelText('Closing rate');
+      expect(closing).toHaveAccessibleDescription(
+        '% of appointments that become a closing. Your logged rate: not enough logged in the last 30 days to measure it.',
+      );
+      expect(closing).not.toHaveAccessibleDescription(/0\.0%/);
+    });
+
+    it('AC-3: says whose rate it is when a leader has somebody else’s plan open', async () => {
+      render({
+        '/goals': { body: goal({ measured: { from: '2026-08-15', to: '2026-09-13', days: 30, leadToAppointmentRate: 0.1, closingRate: 0.5 } }) },
+        '/members/my-team': { body: [teammate()] },
+      });
+      await userEvent.selectOptions(await screen.findByLabelText('Whose plan'), 'mem-rina');
+
+      await waitFor(() => expect(screen.getByLabelText('Closing rate'))
+        .toHaveAccessibleDescription(/Their logged rate: 50\.0% over the last 30 days/));
+    });
+
+    it('AC-4: fills nothing in — the field keeps what the agent typed', async () => {
+      render({ '/goals': { body: goal() } });
+
+      const leads = await screen.findByLabelText('Leads to Appointment');
+      expect(leads).toHaveValue(goal().leadsToApptPct);
+      expect(leads).not.toHaveValue(25);
     });
   });
 
