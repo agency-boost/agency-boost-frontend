@@ -40,6 +40,7 @@ import KpmOverviewPage from './(tenant)/kpm/overview/page';
 import DataUploadPage from './(tenant)/kpm/data-upload/page';
 import UnitDashboardPage from './(agent)/unit/dashboard/page';
 import ActivityDashboardPage from './(agent)/activity/dashboard/page';
+import PersonalSummaryPage from './(agent)/summary/page';
 import ActivityRatioPage from './(agent)/activity/ratio/page';
 import LogActivityPage from './(agent)/activity/log/page';
 import LeadsPage from './(agent)/leads/page';
@@ -527,6 +528,28 @@ describe('screens have no axe violations', () => {
     renderInLayout(AgentLayout, <ActivityDashboardPage />, {});
     await screen.findByText('Submission polis');
     await expectClean('activity/dashboard');
+  });
+
+  it('Personal Summary, populated: the period tabs, a progress bar and the pace (P10-T4)', async () => {
+    const M = 1_000_000 * 100;
+    const figures = {
+      targetMinor: 75 * M, actualMinor: 30 * M, attainmentPct: 40, gapMinor: 45 * M, overMinor: 0, policiesNeeded: 3, targetMet: false,
+    };
+    stubFetch({
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/summary': {
+        body: {
+          year: '2026', month: '2026-09', today: '2026-09-14', goal: { set: true, savedAt: '2026-09-01T02:00:00.000Z' },
+          caseSizeMinor: 18 * M,
+          monthly: { ...figures, source: { provenance: 'imported', month: '2026-09' } },
+          yearly: { ...figures, targetMinor: 500 * M, source: { provenance: 'self_reported', month: null } },
+          pace: { closingTarget: 6, closingsLogged: 2, dayOfMonth: 14, daysInMonth: 30, projected: 4, weeksLeft: 3, neededPerWeek: 2, targetMet: false },
+        },
+      },
+    });
+    renderInLayout(AgentLayout, <PersonalSummaryPage />, {});
+    await screen.findByRole('region', { name: 'The gap' });
+    await expectClean('summary');
   });
 
   it('Activity Ratios, populated: a rate, one with not enough data, and the balance, explained (P10-T2)', async () => {

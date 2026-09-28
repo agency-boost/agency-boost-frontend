@@ -111,12 +111,21 @@ describe('the sidebar matches the prototype', () => {
   it('agent app: an unbuilt item is disabled and keeps its pill', async () => {
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
     // The route is `/group-tree`, so `Admin` is the group that opens itself. One group is
-    // open at a time, so reaching another is a click.
+    // open at a time, so reaching another is a click. Personal summary was this example until
+    // P10-T4 built it; Training modules is Phase 12's.
+    await userEvent.click(screen.getByRole('button', { name: /^Training/ }));
+    const training = screen.getByText('Training modules').closest('a')!;
+    expect(training).toHaveAttribute('aria-disabled');
+    expect(within(training).getByText('Upcoming')).toBeInTheDocument();
+  });
+
+  it('agent app: Personal summary is a live link, not a pill (P10-T4)', async () => {
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
     await userEvent.click(screen.getByRole('button', { name: /^Personal tools/ }));
-    // Personal summary: Leads management shipped with P7-T2 and Goal settings with P8-T3.
     const summary = screen.getByText('Personal summary').closest('a')!;
-    expect(summary).toHaveAttribute('aria-disabled');
-    expect(within(summary).getByText('Upcoming')).toBeInTheDocument();
+    expect(summary).toHaveAttribute('href', '/summary');
+    expect(summary).not.toHaveAttribute('aria-disabled');
+    expect(within(summary).queryByText('Upcoming')).not.toBeInTheDocument();
   });
 
   it('agent app: Goal settings is a live link, not a pill', async () => {
