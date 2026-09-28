@@ -29,8 +29,19 @@ const summary = (over: Record<string, unknown> = {}) => ({
     neededPerWeek: 1, targetMet: false,
   },
   activity: { monthly: activity(), yearly: activity(YEAR) },
+  leads: { rows: LEADS, total: LEADS.length },
   ...over,
 });
+
+const openLead = (over: Record<string, unknown>) => ({
+  id: 'l-1', name: 'Pak Hendro Gunawan', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Follow-up',
+  thisMonth: false, flags: [], overdueDays: null, nextActionDate: '2026-09-20', nextActionNote: null, ...over,
+});
+const LEADS = [
+  openLead({ id: 'l-1', thisMonth: true, flags: ['overdue'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Chase the illustration.' }),
+  openLead({ id: 'l-2', name: 'Ibu Wulan Sari', statusLabel: 'Policy submitted', nextActionDate: '2026-09-16' }),
+  openLead({ id: 'l-3', name: 'Pak Bambang', type: null, statusCode: null, statusLabel: null, flags: ['no-next-action'], nextActionDate: null }),
+];
 
 const chip = (key: string, code: string, logged: number, target: number | null, attainmentPct: number | null) =>
   ({ key, code, logged, target, attainmentPct, targetMet: target !== null && logged >= target });
@@ -319,5 +330,58 @@ describe('the Personal Summary — activity targets, chips and the pulse (P10-T5
 
     expect(await within(pulse).findByText('The ratios could not be read.')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Your sales activity targets' })).toBeInTheDocument();
+  });
+});
+
+describe('the Personal Summary — leads that need you, and the way to each screen (P10-T6)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('AC-1: your open leads in the server’s order — the date and note, or no date set', async () => {
+    show(summary());
+    const leads = await card('Leads that need you');
+    const rows = within(leads).getAllByRole('listitem');
+
+    expect(rows.map((row) => within(row).getByText(/^(Pak|Ibu)/).textContent)).toEqual(['Pak Hendro Gunawan', 'Ibu Wulan Sari', 'Pak Bambang']);
+    expect(rows[0]).toHaveTextContent('Sales · Follow-up');
+    expect(rows[0]).toHaveTextContent('Sep 8 — Chase the illustration.');
+    expect(rows[1]).toHaveTextContent('Sales · Policy submitted');
+    expect(rows[2]).toHaveTextContent('Unassigned · No status yet');
+    expect(rows[2]).toHaveTextContent('No date set');
+  });
+
+  it('AC-1: the Leads screen’s flags, and a promise for this month hides none of them (I-103)', async () => {
+    show(summary());
+    const [late, , undated] = within(await card('Leads that need you')).getAllByRole('listitem');
+
+    expect(within(late).getByText('Closes this month')).toBeInTheDocument();
+    expect(within(late).getByText('Overdue 6 days')).toBeInTheDocument();
+    expect(within(undated).getByText('No next action')).toBeInTheDocument();
+  });
+
+  it('AC-1: lists the nearest and counts the rest, with the way to every one', async () => {
+    show(summary({ leads: { rows: LEADS, total: 14 } }));
+    const leads = await card('Leads that need you');
+
+    expect(leads).toHaveTextContent('The 3 nearest of your 14 open leads. Leads Management has every one.');
+    expect(within(leads).getByRole('link', { name: 'Leads Management' })).toHaveAttribute('href', '/leads');
+  });
+
+  it('AC-1: no open leads says so, and where to add one', async () => {
+    show(summary({ leads: { rows: [], total: 0 } }));
+    const leads = await card('Leads that need you');
+
+    expect(leads).toHaveTextContent('No active leads yet — add some in Leads Management.');
+    expect(within(leads).queryByRole('list')).not.toBeInTheDocument();
+  });
+
+  it('AC-2: a way from the Summary to Goal Settings, Leads, the Dashboard and the ratios', async () => {
+    show(summary());
+    await card('Leads that need you');
+    await within(await card('Activity pulse')).findByText('Selling success rate');
+
+    const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
+    for (const href of ['/goals', '/leads', '/activity/dashboard', '/activity/ratio']) expect(hrefs).toContain(href);
+    expect(within(await card('Your sales activity targets')).getByRole('link', { name: 'Activity Dashboard' }))
+      .toHaveAttribute('href', '/activity/dashboard');
   });
 });

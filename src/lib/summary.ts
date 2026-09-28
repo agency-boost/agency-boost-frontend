@@ -1,4 +1,5 @@
 import { api } from './api-client';
+import type { LeadFlag } from './leads';
 
 /**
  * The Personal Summary (P10). **Every number is the server's** — the arithmetic lives in
@@ -61,6 +62,21 @@ export interface SummaryActivity {
   sections: SectionChip[];
 }
 
+/** One of *Leads that need you* (P10-T6): the reader's own open lead, flagged as the Leads screen flags it. */
+export interface OpenLead {
+  id: string;
+  name: string;
+  type: 'sales' | 'recruitment' | null;
+  statusCode: string | null;
+  statusLabel: string | null;
+  /** Promised for this month. It hides none of the flags (I-103). */
+  thisMonth: boolean;
+  flags: LeadFlag[];
+  overdueDays: number | null;
+  nextActionDate: string | null;
+  nextActionNote: string | null;
+}
+
 export interface Summary {
   year: string;
   month: string;
@@ -71,6 +87,8 @@ export interface Summary {
   yearly: PeriodFigures & { source: FigureSource };
   pace: Pace | null;
   activity: { monthly: SummaryActivity; yearly: SummaryActivity };
+  /** The nearest of the reader's own open leads, and how many there are. */
+  leads: { rows: OpenLead[]; total: number };
 }
 
 /** Your own Summary. There is no `membershipId`: a leader's view of a downline's is Phase 13's. */

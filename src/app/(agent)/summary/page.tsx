@@ -11,11 +11,13 @@ import { StatusPill } from '@/components/ui/status-pill';
 import { readActivityRatios, type ActivityRatio, type ActivityRatios } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { formatMonth } from '@/lib/format';
+import { formatMonth, formatShortDay } from '@/lib/format';
 import { formatRupiah } from '@/lib/goals';
+import { flagLabel } from '@/lib/leads';
 import { formatRatioForStatus } from '@/lib/ratio-format';
 import {
-  readSummary, type ActivityTarget, type FigureSource, type Pace, type PeriodFigures, type Summary, type SummaryActivity,
+  readSummary, type ActivityTarget, type FigureSource, type OpenLead, type Pace, type PeriodFigures, type Summary,
+  type SummaryActivity,
 } from '@/lib/summary';
 
 /**
@@ -30,8 +32,11 @@ import {
  * cascade on the period's own APE target, a chip per other section, and the activity pulse — the ratio
  * engine's answer for your rung, which the prototype printed as four hardcoded tiles.
  *
- * **Later cards arrive with their tasks** — the leads that need you (P10-T6), the insight cards
- * (P10-T7). The page shows what is built and nothing standing in for the rest.
+ * **The leads that need you** (P10-T6): your own open leads, nearest next action first, flagged as the
+ * Leads screen flags them — with the way back to that screen the prototype's card never had.
+ *
+ * **Later cards arrive with their tasks** — the insight cards (P10-T7). The page shows what is built and
+ * nothing standing in for the rest.
  */
 type View = 'month' | 'year';
 
@@ -122,6 +127,7 @@ function Cards({
 
       <TargetsCard activity={month ? summary.activity.monthly : summary.activity.yearly} month={month} period={period} />
       <PulseCard pulse={pulse} error={pulseError} />
+      <LeadsCard leads={summary.leads} />
     </div>
   );
 }
@@ -131,12 +137,13 @@ function SummaryCard({
 }: { id: string; title: string; icon: NavIconName; tag?: string; children: ReactNode }) {
   return (
     <section aria-labelledby={id} className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
-      <div className="mb-3.5 flex items-center justify-between gap-3">
+      {/* Wraps rather than squeezes: on a phone a long tag drops under the title instead of folding it. */}
+      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
         <h2 id={id} className="flex items-center gap-2 text-md font-bold text-navy">
           <NavIcon name={icon} className="h-[17px] w-[17px] text-navy-soft" />
           {title}
         </h2>
-        {tag && <span className="rounded-pill bg-base px-2.5 py-0.5 text-2xs font-semibold text-muted">{tag}</span>}
+        {tag && <span className="whitespace-nowrap rounded-pill bg-base px-2.5 py-0.5 text-2xs font-semibold text-muted">{tag}</span>}
       </div>
       {children}
     </section>
@@ -312,6 +319,7 @@ function TargetsCard({ activity, month, period }: { activity: SummaryActivity; m
       </div>
       <p className="mt-3 text-center text-xs text-muted">
         <strong className="text-navy">{activity.total}</strong> total activities logged {period} across all categories.
+        {' '}Day by day on the <Link href="/activity/dashboard" className="font-semibold text-navy underline">Activity Dashboard</Link>.
       </p>
       {activity.sections.length > 0 && (
         <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
@@ -425,5 +433,73 @@ function PulseCard({ pulse, error }: { pulse: ActivityRatios | null; error: ApiE
         </p>
       )}
     </SummaryCard>
+  );
+}
+
+const LEAD_TYPE: Record<'sales' | 'recruitment', string> = { sales: 'Sales', recruitment: 'Recruitment' };
+
+/**
+ * *Leads that need you* (`Overall.html:3210-3217`, `:6151-6218`, P10-T6): your **own** open leads — a
+ * leader's downline's are theirs to read on the Leads screen — nearest next action first, undated last.
+ *
+ * **The flags are the Leads screen's**, from the server's one definition, and *Closes this month* hides
+ * none of them (I-103): the prototype showed only the green chip on a lead two weeks late. The nearest
+ * ten are listed and the rest counted, and the card leads back to the screen where each is acted on —
+ * the prototype's card named what needed attention and gave no way to it.
+ */
+function LeadsCard({ leads }: { leads: Summary['leads'] }) {
+  return (
+    <SummaryCard id="summary-leads" title="Leads that need you" icon="pin" tag="Your open leads, nearest date first">
+      {leads.total === 0 ? (
+        <p className="text-sm text-muted">
+          No active leads yet — add some in{' '}
+          <Link href="/leads" className="font-semibold text-navy underline">Leads Management</Link>.
+        </p>
+      ) : (
+        <>
+          <ul>
+            {leads.rows.map((lead) => <LeadRow key={lead.id} lead={lead} />)}
+          </ul>
+          <p className="mt-3 text-xs text-muted">
+            {leads.total > leads.rows.length
+              ? `The ${leads.rows.length} nearest of your ${leads.total} open leads. `
+              : ''}
+            <Link href="/leads" className="font-semibold text-navy underline">Leads Management</Link>
+            {leads.total > leads.rows.length ? ' has every one.' : ' is where you act on them.'}
+          </p>
+        </>
+      )}
+    </SummaryCard>
+  );
+}
+
+function LeadRow({ lead }: { lead: OpenLead }) {
+  return (
+    // Side by side from `sm`; on a phone the date goes under the name, which a 240px column would squeeze.
+    <li className="flex flex-col gap-1.5 border-b border-hairline py-3 last:border-b-0 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="text-sm font-semibold text-navy">{lead.name || '(unnamed)'}</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted">
+            {lead.type ? LEAD_TYPE[lead.type] : 'Unassigned'} · {lead.statusLabel ?? 'No status yet'}
+          </span>
+          {lead.thisMonth && <StatusPill status="success" label="Closes this month" className="whitespace-nowrap" />}
+          {lead.flags.map((flag) => (
+            <StatusPill key={flag} status="alert" label={flagLabel(flag, lead.overdueDays)} className="whitespace-nowrap" />
+          ))}
+        </div>
+      </div>
+      <div className="leading-normal sm:max-w-[240px] sm:shrink-0 sm:pt-px sm:text-right">
+        {lead.nextActionDate ? (
+          <>
+            {/* Navy, not the prototype's amber: small amber text clears no contrast floor (`tokens.md`). */}
+            <span className="text-xs font-bold text-navy">{formatShortDay(lead.nextActionDate)}</span>
+            {lead.nextActionNote && <span className="text-xs text-navy-soft"> — {lead.nextActionNote}</span>}
+          </>
+        ) : (
+          <span className="text-xs font-semibold text-muted">No date set</span>
+        )}
+      </div>
+    </li>
   );
 }

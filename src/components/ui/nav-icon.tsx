@@ -72,6 +72,8 @@ const PATHS: Record<string, React.ReactNode> = {
   flag: <><path d="M5 21V4" /><path d="M5 4h13l-3.5 4L18 12H5" /></>,
   /** A burst of energy — *Activity pulse* (`Overall.html:3187`). */
   bolt: <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" />,
+  /** Somebody to go and see — *Leads that need you* (`Overall.html:3213`). */
+  pin: <><path d="M12 21s7-6.4 7-11.5A7 7 0 0 0 5 9.5C5 14.6 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.3" /></>,
 };
 
 export type NavIconName = keyof typeof PATHS;

@@ -530,7 +530,7 @@ describe('screens have no axe violations', () => {
     await expectClean('activity/dashboard');
   });
 
-  it('Personal Summary, populated: the period tabs, progress bars, the pace, the chips and the pulse (P10-T4, P10-T5)', async () => {
+  it('Personal Summary, populated: the period tabs, progress bars, the pace, the chips, the pulse and the leads (P10-T4 to T6)', async () => {
     const M = 1_000_000 * 100;
     const figures = {
       targetMinor: 75 * M, actualMinor: 30 * M, attainmentPct: 40, gapMinor: 45 * M, overMinor: 0, policiesNeeded: 3, targetMet: false,
@@ -562,6 +562,19 @@ describe('screens have no axe violations', () => {
           yearly: { ...figures, targetMinor: 500 * M, source: { provenance: 'self_reported', month: null } },
           pace: { closingTarget: 6, closingsLogged: 2, dayOfMonth: 14, daysInMonth: 30, projected: 4, weeksLeft: 3, neededPerWeek: 2, targetMet: false },
           activity: { monthly: activity, yearly: activity },
+          leads: {
+            total: 12,
+            rows: [
+              {
+                id: 'l-1', name: 'Pak Hendro', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Follow-up', thisMonth: true,
+                flags: ['overdue', 'no-remarks'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Chase the illustration.',
+              },
+              {
+                id: 'l-2', name: 'Pak Bambang', type: null, statusCode: null, statusLabel: null, thisMonth: false,
+                flags: ['no-next-action'], overdueDays: null, nextActionDate: null, nextActionNote: null,
+              },
+            ],
+          },
         },
       },
     });
