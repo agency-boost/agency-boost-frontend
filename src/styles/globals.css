@@ -95,3 +95,27 @@ h3 {
   outline: 2px solid var(--color-amber);
   outline-offset: 1px;
 }
+
+/**
+ * Print (P10-T8, ADR-0061) — the page as it is seen, on white.
+ *
+ * **Colours are printed exactly.** A browser leaves backgrounds off by default, and on this product the
+ * backgrounds are figures: a progress bar is a filled track, a status is a tinted pill. Printed without
+ * them, a month at 89% of its target came out as an empty bar — the reading *an empty track is zero*
+ * that the screen was fixed for. The page itself goes on white rather than the app's warm base, as the
+ * prototype's own print rules put it (`Overall.html:1027`), and the sheet keeps a margin.
+ */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    background: var(--color-card);
+  }
+
+  @page {
+    margin: 14mm;
+  }
+}

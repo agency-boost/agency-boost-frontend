@@ -409,7 +409,8 @@ export function AppShell({
           It used to be `hidden md:flex`, which took the only route to sign out with it. */}
       <aside
         className={cn(
-          'sticky top-0 z-10 flex w-full shrink-0 flex-row items-center bg-navy px-4 py-3.5 text-sidebar-text md:h-screen md:flex-col md:items-stretch md:py-5',
+          // `print:hidden`: a printed page is the page, not the app around it (`Overall.html:1022`, ADR-0061).
+          'sticky top-0 z-10 flex w-full shrink-0 flex-row items-center bg-navy px-4 py-3.5 text-sidebar-text print:hidden md:h-screen md:flex-col md:items-stretch md:py-5',
           /*
            * **An arbitrary value, not a theme key.** `w-sidebar-rail` would need a new entry in
            * `tailwind.config.ts`, and Tailwind's JIT does not pick a config change up without a
@@ -561,7 +562,7 @@ export function AppShell({
         <SidebarFoot rail={rail} user={user} account={account} notifications={notifications} />
       </aside>
 
-      <main className="min-w-0 flex-1 px-5 py-6 md:px-10 md:pb-14 md:pt-8">
+      <main className="min-w-0 flex-1 px-5 py-6 print:p-0 md:px-10 md:pb-14 md:pt-8">
         {title !== undefined && (
           <PageHeader title={title} subtitle={subtitle} actions={actions} />
         )}

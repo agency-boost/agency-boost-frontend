@@ -469,3 +469,40 @@ describe('the Personal Summary — insight cards, named rules over your own numb
     expect(screen.queryByRole('region', { name: 'What to do next' })).not.toBeInTheDocument();
   });
 });
+
+describe('the Personal Summary — Print (P10-T8, ADR-0061)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('AC-3: says Print and prints the page — nothing is downloaded, and nothing is asked of the server', async () => {
+    const print = vi.fn();
+    vi.stubGlobal('print', print);
+    const { calls } = show(summary());
+    await card('Goal vs. actual (APE)');
+    const before = calls.length;
+
+    await userEvent.click(screen.getByRole('button', { name: 'Print' }));
+
+    expect(print).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(before);
+    expect(screen.queryByRole('button', { name: /download/i })).not.toBeInTheDocument();
+  });
+
+  it('AC-3: keeps the button and the period switch off the paper, and each card whole on it', async () => {
+    show(summary());
+    await card('Goal vs. actual (APE)');
+
+    expect(screen.getByRole('button', { name: 'Print' })).toHaveClass('print:hidden');
+    expect(screen.getByRole('tablist')).toHaveClass('print:hidden');
+    expect(await card('The gap')).toHaveClass('print:break-inside-avoid');
+  });
+
+  it('offers no Print before there is anything to print', async () => {
+    stubFetch({
+      '/summary': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.' } } },
+      '/activity/ratios': { body: AGENT_RATIOS },
+    });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    await screen.findByText('Something went wrong.');
+    expect(screen.queryByRole('button', { name: 'Print' })).not.toBeInTheDocument();
+  });
+});

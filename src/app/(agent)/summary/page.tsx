@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Page } from '@/components/page';
-import { Card, ErrorBanner } from '@/components/ui/field';
+import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
 import { Segmented } from '@/components/ui/segmented';
 import { Skeleton, SkeletonBar, SkeletonCards } from '@/components/ui/skeleton';
@@ -34,6 +34,10 @@ import {
  *
  * **The leads that need you** (P10-T6): your own open leads, nearest next action first, flagged as the
  * Leads screen flags them — with the way back to that screen the prototype's card never had.
+ *
+ * **Print** (P10-T8, ADR-0061): the page as you see it, on paper or as the browser's PDF — the prototype's
+ * *⬇ Download* was `window.print()` under a label that promised a file. The app around the page, the
+ * period switch and the button itself stay off the paper, and no card breaks across two sheets.
  *
  * **What to do next, and how to improve** (P10-T7, ADR-0060): named rules over your own numbers, at most
  * four, each saying which rule made it — labelled as rules, where the prototype's static strings said
@@ -67,7 +71,13 @@ export default function PersonalSummaryPage() {
   }, []);
 
   return (
-    <Page title="Personal Summary" subtitle="Your goals, activity and leads — on one page.">
+    <Page
+      title="Personal Summary"
+      subtitle="Your goals, activity and leads — on one page."
+      actions={summary && (
+        <Button variant="primary" onClick={() => window.print()} className="print:hidden">Print</Button>
+      )}
+    >
       <div className="mx-auto max-w-[860px]">
         {error && <ErrorBanner {...error} />}
         {!summary && !error && <SkeletonCards count={2} label="Putting your summary together…" />}
@@ -77,7 +87,7 @@ export default function PersonalSummaryPage() {
             tabs={VIEWS}
             active={view}
             onSelect={(id) => setView(id as View)}
-            className="w-fit [&_button]:whitespace-nowrap [&_button]:px-3.5"
+            className="w-fit print:hidden [&_button]:whitespace-nowrap [&_button]:px-3.5"
           >
             {() => <Cards summary={summary} view={view} pulse={pulse} pulseError={pulseError} />}
           </Segmented>
@@ -138,7 +148,7 @@ function SummaryCard({
   id, title, icon, tag, badge, className, children,
 }: { id: string; title: string; icon: NavIconName; tag?: string; badge?: string; className?: string; children: ReactNode }) {
   return (
-    <section aria-labelledby={id} className={cn('rounded-lg border border-hairline bg-card px-[22px] py-[18px]', className)}>
+    <section aria-labelledby={id} className={cn('rounded-lg border border-hairline bg-card px-[22px] py-[18px] print:break-inside-avoid', className)}>
       {/* Wraps rather than squeezes: on a phone a long tag drops under the title instead of folding it. */}
       <div className="mb-3.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
         <h2 id={id} className="flex items-center gap-2 text-md font-bold text-navy">
