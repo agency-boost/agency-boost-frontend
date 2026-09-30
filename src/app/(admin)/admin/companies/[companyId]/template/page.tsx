@@ -16,6 +16,7 @@ import { Button, Card } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useHashTab } from '@/lib/use-hash-tab';
+import { tileRefusal } from '@/lib/summary-tiles';
 import {
   publishTemplate, readTemplate, saveTemplateDraft,
   type CompanyTemplate, type TemplateKind,
@@ -269,7 +270,8 @@ export default function CompanyTemplatePage({
       setLoaded({ kind: row.kind, template: row, payload: row.payload });
       setDirty(false);
     } catch (err) {
-      setError(toDisplayError(err));
+      const shown = toDisplayError(err);
+      setError(tileRefusal(shown) ?? shown);
     } finally {
       setBusy(false);
     }

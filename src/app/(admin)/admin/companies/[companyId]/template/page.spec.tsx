@@ -177,6 +177,50 @@ describe('a company’s Company template (P4-T8)', () => {
     expect(body.payload.types[0].code).toBe('SELL_SUBMISSION');
   });
 
+  it('P10.1-T5 AC-4, AC-5: saves the summary tile with the draft, and shows a refused one', async () => {
+    // Both fields ride in the payload; the server keeps one label per tile, and says so when a
+    // draft breaks that — in the screen's own banner, with nothing saved.
+    const { calls } = stubFetch({
+      '/admin/companies/c1/template': [
+        { body: TAXONOMY },
+        {
+          status: 422,
+          body: {
+            error: {
+              code: 'CONFIG_SUMMARY_GROUP_LABEL_MISMATCH',
+              message: 'The sections in summary tile SELLING must share one label.',
+              requestId: 'r-7',
+              details: { summaryGroupCode: 'SELLING', labels: ['Selling', 'Sales'] },
+            },
+          },
+        },
+      ],
+    });
+    renderWithSession(
+      <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
+      { me: SUPER_ADMIN },
+    );
+    await screen.findByText('Submission polis');
+    // The section's head, not its card: the card holds every one of its types' Edit buttons too.
+    const head = screen.getByRole('heading', { name: 'Selling' }).closest('.flex') as HTMLElement;
+    await userEvent.click(within(head).getByRole('button', { name: 'Edit' }));
+    await userEvent.type(within(head).getByLabelText('Summary tile'), 'Selling');
+    await userEvent.click(within(head).getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+    const put = calls.find((c) => c.init.method === 'PUT')!;
+    // The section's own name is a tile of its own (OD-101): both fields ride, as null.
+    expect(JSON.parse(put.init.body as string).payload.categories[0]).toMatchObject({
+      code: 'SELLING', summaryGroupCode: null, summaryGroupLabel: null,
+    });
+    const alerts = await screen.findAllByRole('alert');
+    const banner = alerts.find((a) => a.textContent?.includes('One summary tile, two names'));
+    expect(banner).toHaveTextContent('One summary tile, two names: “Selling” and “Sales”. Give every section in it the same tile name.');
+    expect(banner).toHaveTextContent('CONFIG_SUMMARY_GROUP_LABEL_MISMATCH · r-7');
+    // Still held, so the Super Admin can correct it rather than type it again.
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeEnabled();
+  });
+
   /**
    * The three tabs P5-T9 finished (AC-4).
    *

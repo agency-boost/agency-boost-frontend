@@ -505,11 +505,22 @@ describe('screens have no axe violations', () => {
 
   it('Activity Dashboard, populated: the range tabs, the strip and the table (P10-T1)', async () => {
     // It was a signpost until P10-T1. The range is a `tablist` whose panel is the whole report, the
-    // headings carry a second line, and a row the office has since archived wears its badge.
+    // headings carry a second line, and a row the office has since archived wears its badge. The
+    // strip is the office's grouping (P10.1-T5), so the configuration names a tile for it to draw.
     const counts = [3, 0, 1, 0, 2, 0, 0];
     const day = (d: string) => ({ from: d, to: d, days: 1, kind: 'day' });
     stubFetch({
-      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/config': {
+        body: {
+          activity: [{
+            id: 'c1', code: 'SELLING', label: 'Selling', description: null,
+            appliesToOrgLevelCodes: [], displayOrder: 1, version: 1, status: 'active',
+            summaryGroupCode: 'SELLING', summaryGroupLabel: 'Selling', types: [],
+          }],
+          ratios: [], leadPipelines: [], version: 1,
+        },
+      },
+      '/kpm/org-levels': { body: [] },
       '/activity/dashboard': {
         body: {
           range: 'ROLLING_7D', from: '2026-09-22', to: '2026-09-28', days: 7, today: '2026-09-28',
@@ -527,6 +538,7 @@ describe('screens have no axe violations', () => {
     });
     renderInLayout(AgentLayout, <ActivityDashboardPage />, {});
     await screen.findByText('Submission polis');
+    await screen.findByText('Total touches');
     await expectClean('activity/dashboard');
   });
 
@@ -629,13 +641,15 @@ describe('screens have no axe violations', () => {
   it('Log activity, populated with the office’s own taxonomy (P6-T2)', async () => {
     // It was a `ComingInPhase` sign until P6-T2. Every count is a labelled number input, and
     // the sections are the office's categories — so the axe run is over real form controls
-    // rather than over a paragraph.
+    // rather than over a paragraph. Since P10.1-T5 the day is a closed, corrected one, so the
+    // run also covers the strip, the reason field and the hint it is described by.
     stubFetch({
       '/kpm/config': {
         body: {
           activity: [{
             id: 'c1', code: 'LEADS', label: 'Leads', description: null,
             appliesToOrgLevelCodes: [], displayOrder: 1, version: 1, status: 'active',
+            summaryGroupCode: 'LEADS', summaryGroupLabel: 'Leads Generation',
             types: [{
               id: 't1', code: 'LEADS_CONTACTED', label: 'Menghubungi prospek yang sudah ada',
               categoryCode: 'LEADS', description: null, displayOrder: 1, version: 1,
@@ -653,24 +667,16 @@ describe('screens have no axe violations', () => {
           entries: [],
           totalCount: 0,
           version: 1,
-          frozenAt: null,
-          editable: true,
-          correctionCount: 0,
+          frozenAt: '2026-03-12T00:00:00Z',
+          editable: false,
+          correctionCount: 2,
         },
-      },
-      '/activity/compliance': {
-        body: {
-          membershipId: 'mem-1', compliant7d: false, compliantMonth: false,
-          lastLoggedOn: null, windowDays: 7,
-        },
-      },
-      '/activity/summary': {
-        body: { from: '2026-03-05', to: '2026-03-11', totals: [], daysLogged: 0, totalCount: 0 },
       },
     });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: makeMe() });
 
-    await screen.findByLabelText('Date');
+    await screen.findByLabelText('Why is this being corrected?');
+    expect(screen.getByText('Leads Generation')).toBeInTheDocument();
     await expectClean('activity/log');
   });
 
@@ -1485,6 +1491,7 @@ describe('screens have no axe violations', () => {
     const TAXONOMY = [{
       id: 'c1', code: 'SELLING', label: 'Selling', description: null,
       appliesToOrgLevelCodes: [], displayOrder: 1, version: 1, status: 'active',
+      summaryGroupCode: 'SELLING', summaryGroupLabel: 'Selling',
       types: [TYPE],
     }];
     const RATIOS = [{
@@ -1516,6 +1523,18 @@ describe('screens have no axe violations', () => {
       );
       await screen.findByText('Submission polis');
       await expectClean('kpm/settings/activity-types');
+    });
+
+    it('activity types, a section’s edit open with its summary tile (P10.1-T5)', async () => {
+      stubFetch({ ...configStubs, '/kpm/settings/activity-types': { body: TAXONOMY } });
+      renderInLayout(
+        TenantLayout,
+        <ActivityTypesPage />,
+        { me: settingsOwner },
+      );
+      await userEvent.click(await screen.findByRole('button', { name: 'Rename' }));
+      expect(screen.getByLabelText('Summary tile')).toHaveValue('Selling');
+      await expectClean('kpm/settings/activity-types, section edit');
     });
 
     it('ratio benchmarks, populated', async () => {

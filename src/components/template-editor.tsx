@@ -11,9 +11,19 @@ import {
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { DragHandle } from '@/components/ui/drag-handle';
 import { suggestCode } from '@/lib/config-code';
+import { planSummaryTile, summaryGroups, summaryTileName } from '@/lib/summary-tiles';
 
 export interface TaxonomyPayload {
-  categories: { code: string; label: string; displayOrder: number }[];
+  categories: {
+    code: string; label: string; displayOrder: number;
+    /**
+     * The summary tile the section counts toward, and its label (ADR-0064). Both or neither, and
+     * one label per code across the payload — saving or publishing refuses anything else. Optional
+     * because a payload authored before the fields existed carries neither: a tile of its own.
+     */
+    summaryGroupCode?: string | null;
+    summaryGroupLabel?: string | null;
+  }[];
   types: {
     code: string; categoryCode: string; label: string;
     description: string | null; displayOrder: number;
@@ -205,9 +215,20 @@ function EditableRow({
   fields: {
     key: string; label: string; hint?: string; kind?: 'color';
     options?: { value: string; label: string }[];
+    /**
+     * The id of a `<datalist>` whose names the text input offers — a free field with suggestions,
+     * where a select would close off the one value that is new.
+     */
+    list?: string;
+    /** The longest value the server accepts, so a longer one cannot be typed at all. */
+    maxLength?: number;
   }[];
   values: Record<string, string>;
-  onSave: (next: Record<string, string>) => void;
+  /**
+   * Save the row. Returning `{ field, error }` refuses it: the row stays open, and the reason shows
+   * at that field — for a refusal the screen can know before anything is sent.
+   */
+  onSave: (next: Record<string, string>) => void | { field: string; error: string };
   /**
    * Adjust the rest of the draft when one field changes.
    *
@@ -241,6 +262,7 @@ function EditableRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(values);
+  const [refusal, setRefusal] = useState<{ field: string; error: string } | null>(null);
 
   if (!editing) {
     return (
@@ -257,7 +279,7 @@ function EditableRow({
           <Button
             variant="inline"
             disabled={disabled}
-            onClick={() => { setDraft(values); setEditing(true); }}
+            onClick={() => { setDraft(values); setRefusal(null); setEditing(true); }}
           >
             Edit
           </Button>
@@ -280,11 +302,18 @@ function EditableRow({
       )}
       {fields.map((field) => {
         const change = (value: string) => {
+          if (refusal?.field === field.key) setRefusal(null);
           const next = { ...draft, [field.key]: value };
           setDraft(reshape ? reshape(next, field.key, draft) : next);
         };
         return (
-          <Field key={field.key} label={field.label} htmlFor={id(field.key)} hint={field.hint}>
+          <Field
+            key={field.key}
+            label={field.label}
+            htmlFor={id(field.key)}
+            hint={field.hint}
+            error={refusal?.field === field.key ? refusal.error : undefined}
+          >
             {field.options ? (
               <Select
                 id={id(field.key)}
@@ -306,6 +335,8 @@ function EditableRow({
             ) : (
               <TextInput
                 id={id(field.key)}
+                list={field.list}
+                maxLength={field.maxLength}
                 value={draft[field.key] ?? ''}
                 disabled={disabled}
                 onChange={(e) => change(e.target.value)}
@@ -317,7 +348,14 @@ function EditableRow({
       <span className="flex flex-wrap gap-2">
         <Button
           disabled={disabled || !(draft[fields[0].key] ?? '').trim()}
-          onClick={() => { onSave(draft); setEditing(false); }}
+          onClick={() => {
+            const refused = onSave(draft);
+            if (refused) {
+              setRefusal(refused);
+              return;
+            }
+            setEditing(false);
+          }}
         >
           Save
         </Button>
@@ -353,13 +391,6 @@ export function TaxonomyEditor({
     ...payload,
     types: types.map((t) => (t.code === code ? { ...t, ...fields } : t)),
   });
-
-  /** A section's name, which nothing could change until now — a typo was permanent. */
-  const patchCategory = (code: string, fields: Partial<TaxonomyPayload['categories'][number]>) =>
-    onChange({
-      ...payload,
-      categories: categories.map((c) => (c.code === code ? { ...c, ...fields } : c)),
-    });
 
   const drag = useRowDrag(
     types,
@@ -407,6 +438,13 @@ export function TaxonomyEditor({
         />
       </div>
 
+      {/* The tiles a section can join, offered by every section's *Summary tile* field. */}
+      <datalist id="template-summary-tile-names">
+        {summaryGroups(categories).map((group) => (
+          <option key={group.code} value={group.label} />
+        ))}
+      </datalist>
+
       {/* `acttype-grid`: two columns, one per section, collapsing at the prototype's own
           760px — the same shape the Owner's screen uses, because a Super Admin filling a
           template is looking at what an Owner will see. */}
@@ -426,13 +464,45 @@ export function TaxonomyEditor({
                 {...sectionDrag.handleProps(category.code)}
               />
               <div className="min-w-0 flex-1">
+                {/*
+                  * **The summary tile is one more field in the section's own edit** (ADR-0064,
+                  * ADR-0062 §2), the same field the Owner has, so a template is authored in the
+                  * terms an office will edit it in. Both stored fields are always written.
+                  */}
                 <EditableRow
                   rowKey={`section-${category.code}`}
                   disabled={disabled}
                   code={category.code}
-                  fields={[{ key: 'label', label: 'Name' }]}
-                  values={{ label: category.label }}
-                  onSave={(next) => patchCategory(category.code, { label: next.label.trim() })}
+                  fields={[
+                    { key: 'label', label: 'Name' },
+                    {
+                      key: 'tile',
+                      label: 'Summary tile',
+                      hint: 'Sections with the same tile are counted together. Empty gives it a tile of its own.',
+                      list: 'template-summary-tile-names',
+                      maxLength: 80,
+                    },
+                  ]}
+                  values={{ label: category.label, tile: summaryTileName(category) }}
+                  onSave={(next) => {
+                    const label = next.label.trim();
+                    const plan = planSummaryTile(next.tile ?? '', { ...category, label }, categories);
+                    if ('refused' in plan) return { field: 'tile', error: plan.refused };
+                    // Every section the name changes — joined, renamed with the tile, or left alone
+                    // in it — in one draft, so the save sends one consistent state.
+                    const changed = new Map(plan.changes.map((c) => [c.code, c]));
+                    onChange({
+                      ...payload,
+                      categories: categories.map((c) => {
+                        const tile = changed.get(c.code);
+                        const named = c.code === category.code ? { label } : {};
+                        return tile
+                          ? { ...c, ...named, summaryGroupCode: tile.summaryGroupCode, summaryGroupLabel: tile.summaryGroupLabel }
+                          : { ...c, ...named };
+                      }),
+                    });
+                    return undefined;
+                  }}
                   badge={(
                     <ConfigBadge tone={mine.length > 0 ? 'won' : 'open'}>
                       {mine.length} {mine.length === 1 ? 'item' : 'items'}

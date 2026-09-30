@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -63,14 +63,36 @@ const day = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+/*
+ * No `/activity/compliance` or `/activity/summary`: the screen stopped asking for them with the
+ * standing card (P10.1-T5 AC-1), and `stubFetch` throws on a request it has no answer for.
+ */
 const base = {
   '/kpm/config': { body: { activity: TAXONOMY, ratios: [], leadPipelines: [], version: 1 } },
   '/kpm/org-levels': { body: [] },
-  '/activity/compliance': {
-    body: { membershipId: 'mem-1', compliant7d: true, compliantMonth: true, lastLoggedOn: '2026-03-11', windowDays: 7 },
-  },
-  '/activity/summary': { body: { from: '2026-03-05', to: '2026-03-11', totals: [], daysLogged: 3, totalCount: 9 } },
 };
+
+/** The five seeded sections, grouped as the seed groups them (ADR-0064). */
+const SEEDED = [
+  ['LEADS_GENERATION', 'Leads Generation', 'LEADS_GENERATION', 'Leads Generation', 'LEADS_CONTACTED'],
+  ['SELLING', 'Selling', 'SELLING', 'Selling', 'SELL_SUBMISSION'],
+  ['RECRUITMENT', 'Recruitment', 'RECRUITMENT', 'Recruitment', 'RECRUIT_NBO_PRESENTATION'],
+  ['PERSONAL_DEVELOPMENT', 'Personal Development', 'DEVELOPMENT', 'Development', 'DEV_TRAINING'],
+  ['TEAM_DEVELOPMENT', 'Team Development', 'DEVELOPMENT', 'Development', 'DEV_TEAM_ACTIVITY'],
+].map(([code, label, summaryGroupCode, summaryGroupLabel, typeCode], i) => ({
+  id: `c${i}`, code, label, description: null, appliesToOrgLevelCodes: [] as string[],
+  displayOrder: i + 1, version: 1, status: 'active', summaryGroupCode, summaryGroupLabel,
+  types: [{
+    id: `t${i}`, code: typeCode, label: `Item ${i + 1}`, categoryCode: code, description: null,
+    displayOrder: i + 1, version: 1, status: 'active',
+  }],
+}));
+
+/** The strip's tiles, label and value each, read off the page. */
+function strip() {
+  const row = screen.getByText(/^Total touches/).closest('[data-total]')!.parentElement!;
+  return [...row.children].map((tile) => [tile.children[0].textContent, tile.children[1].textContent]);
+}
 
 describe('Log activity (P6-T2)', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -128,25 +150,106 @@ describe('Log activity (P6-T2)', () => {
     });
   });
 
-  it('shows the agent their own standing beside the form', async () => {
-    stubFetch({ ...base, '/activity/log': { body: day() } });
-    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+  describe('P10.1-T5 AC-1: what the client asked to have removed', () => {
+    it('AC-1: shows no Logged / Missed card, and asks for neither read behind it', async () => {
+      const { calls } = stubFetch({ ...base, '/activity/log': { body: day() } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Leads' });
 
-    expect(await screen.findByText('Logged')).toBeInTheDocument();
-    expect(screen.getByText(/3 of the last 7 days/)).toBeInTheDocument();
-    expect(screen.getByText(/9 touches this week/)).toBeInTheDocument();
+      expect(screen.queryByText('Logged')).toBeNull();
+      expect(screen.queryByText('Missed')).toBeNull();
+      expect(screen.queryByText(/of the last 7 days/)).toBeNull();
+      expect(calls.some((c) => c.url.includes('/activity/compliance'))).toBe(false);
+      expect(calls.some((c) => c.url.includes('/activity/summary'))).toBe(false);
+    });
+
+    it('AC-1: shows no day-status card, on an open day or a closed one', async () => {
+      stubFetch({ ...base, '/activity/log': { body: day({ correctionCount: 2 }) } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Leads' });
+
+      expect(screen.queryByText('Open')).toBeNull();
+      expect(screen.queryByText('Closed for editing')).toBeNull();
+      // A corrected day that is open again says nothing: the log is where it is corrected.
+      expect(screen.queryByText(/corrected/i)).toBeNull();
+    });
+
+    it('AC-1: shows no section description, only the prototype’s heading and count', async () => {
+      stubFetch({ ...base, '/activity/log': { body: day() } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Leads' });
+
+      expect(screen.queryByText('Finding people to talk to.')).toBeNull();
+      expect(screen.getByText('2 items')).toBeInTheDocument();
+    });
   });
 
   describe('a day whose window has closed', () => {
     const frozen = day({ editable: false, frozenAt: '2026-03-08T00:00:00Z', correctionCount: 1 });
 
-    it('asks for a reason and offers a correction rather than a save', async () => {
+    it('AC-2: asks for a reason and offers a correction rather than a save', async () => {
       stubFetch({ ...base, '/activity/log': { body: frozen } });
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
-      expect(await screen.findByText('Closed for editing')).toBeInTheDocument();
-      expect(screen.getByLabelText('Why is this being corrected?')).toBeInTheDocument();
+      expect(await screen.findByLabelText('Why is this being corrected?')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Save the correction' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Save activity' })).toBeNull();
+    });
+
+    it('AC-2: is one field with no card around it', async () => {
+      stubFetch({ ...base, '/activity/log': { body: frozen } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      const field = await screen.findByLabelText('Why is this being corrected?');
+      // `Card` and `SectionCard` are both `rounded-lg` with a hairline: neither holds the field.
+      expect(field.closest('.rounded-lg')).toBeNull();
+      expect(screen.getAllByRole('textbox')).toHaveLength(1);
+    });
+
+    it('AC-2: offers nothing on a closed day that was never logged — the API would refuse both', async () => {
+      // No entry to correct, and the window closed for a save: the day is shown, and nothing asked
+      // of the reader that can only be refused (found walking P10.1-T5, 2026-10-01).
+      const never = day({
+        editable: false, frozenAt: null, version: 0, totalCount: 0, correctionCount: 0,
+        entries: day().entries.map((e) => ({ ...e, count: 0 })),
+      });
+      stubFetch({ ...base, '/activity/log': { body: never } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      expect(await screen.findByText('This day is closed, and nothing was logged for it.')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Why is this being corrected?')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Save the correction' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Save activity' })).toBeNull();
+      const steppers = screen.getAllByRole('button', { name: /^(Increase|Decrease) / });
+      expect(steppers.length).toBeGreaterThan(0);
+      for (const button of steppers) expect(button).toBeDisabled();
+      for (const count of screen.getAllByLabelText(/^Count for /)) expect(count).toBeDisabled();
+    });
+
+    it('AC-2: marks the reason required, and caps it where the API does', async () => {
+      stubFetch({ ...base, '/activity/log': { body: frozen } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      const field = await screen.findByLabelText('Why is this being corrected?');
+      expect(field).toBeRequired();
+      expect(field).toHaveAttribute('maxLength', '500');
+    });
+
+    it('AC-2: shows no field on an open day', async () => {
+      stubFetch({ ...base, '/activity/log': { body: day({ correctionCount: 1 }) } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Leads' });
+
+      expect(screen.queryByLabelText('Why is this being corrected?')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Save the correction' })).toBeNull();
+    });
+
+    it('AC-2: says in the field’s hint that the day is closed, and nothing more when uncorrected', async () => {
+      stubFetch({ ...base, '/activity/log': { body: { ...frozen, correctionCount: 0 } } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      const field = await screen.findByLabelText('Why is this being corrected?');
+      expect(field).toHaveAccessibleDescription('This day is closed.');
     });
 
     it('keeps the correction button disabled until there is a reason', async () => {
@@ -160,11 +263,36 @@ describe('Log activity (P6-T2)', () => {
       expect(save).toBeEnabled();
     });
 
-    it('says how many times it has already been corrected', async () => {
+    it('AC-2: says in the same sentence how many times it has been corrected', async () => {
+      // ADR-0042: a screen showing a corrected record says so. One sentence, in the hint.
       stubFetch({ ...base, '/activity/log': { body: frozen } });
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
-      expect(await screen.findByText(/Corrected once since/)).toBeInTheDocument();
+      expect(await screen.findByLabelText('Why is this being corrected?'))
+        .toHaveAccessibleDescription('This day is closed, and has been corrected once.');
+    });
+
+    it('AC-2: counts past one', async () => {
+      stubFetch({ ...base, '/activity/log': { body: { ...frozen, correctionCount: 3 } } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      expect(await screen.findByLabelText('Why is this being corrected?'))
+        .toHaveAccessibleDescription('This day is closed, and has been corrected 3 times.');
+    });
+
+    it('AC-2: sends the reason with the counts', async () => {
+      const { calls } = stubFetch({ ...base, '/activity/log': { body: frozen } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      await userEvent.type(await screen.findByLabelText('Why is this being corrected?'), '  Wrong day. ');
+      await userEvent.click(screen.getByRole('button', { name: 'Save the correction' }));
+
+      await waitFor(() => {
+        const sent = calls.find((c) => c.url.includes('/activity/log/correction'));
+        expect(JSON.parse(String(sent?.init?.body))).toMatchObject({
+          date: '2026-03-11', reason: 'Wrong day.', counts: { LEADS_CONTACTED: 2 },
+        });
+      });
     });
   });
 
@@ -213,7 +341,7 @@ describe('Log activity (P6-T2)', () => {
     expect(await screen.findByRole('heading', { name: 'Selling' })).toBeInTheDocument();
   });
 
-  it('says what to do when the office has no activity types yet', async () => {
+  it('AC-10: says what to do when the office has no activity types yet, and draws no strip', async () => {
     stubFetch({
       ...base,
       '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
@@ -222,6 +350,7 @@ describe('Log activity (P6-T2)', () => {
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
     expect(await screen.findByText(/has not set up its activity types yet/)).toBeInTheDocument();
+    expect(screen.queryByText('Total touches today')).toBeNull();
   });
 
   it('shows the server’s refusal rather than swallowing it', async () => {
@@ -233,28 +362,90 @@ describe('Log activity (P6-T2)', () => {
 
     expect(await screen.findByText(/has not happened yet/)).toBeInTheDocument();
   });
-  it('reaches the other two views of the same data (L-32)', async () => {
+  it('AC-7: reaches the other two views of the same data, in the prototype’s words (L-32)', async () => {
     stubFetch({ ...base, '/activity/log': { body: day() } });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
-    const strip = await screen.findByRole('navigation', { name: 'Activity management' });
-    expect(strip).toContainElement(screen.getByRole('link', { name: 'Activity Dashboard' }));
-    expect(strip).toContainElement(screen.getByRole('link', { name: 'Activity Ratios' }));
+    // `Overall.html:2712-2716`: Log Activity · Dashboard · Ratio.
+    const tabs = await screen.findByRole('navigation', { name: 'Activity management' });
+    expect(within(tabs).getAllByRole('link').map((a) => a.textContent))
+      .toEqual(['Log Activity', 'Dashboard', 'Ratio']);
+    expect(within(tabs).getByRole('link', { name: 'Dashboard' })).toHaveAttribute('href', '/activity/dashboard');
+    expect(within(tabs).getByRole('link', { name: 'Ratio' })).toHaveAttribute('href', '/activity/ratio');
     // The one you are on says so, rather than only looking different.
-    expect(screen.getByRole('link', { name: 'Log Activity' })).toHaveAttribute('aria-current', 'page');
+    expect(within(tabs).getByRole('link', { name: 'Log Activity' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('counts each category and totals the day, live as you step', async () => {
+  it('AC-4: counts each tile and totals the day, live as you step', async () => {
     stubFetch({ ...base, '/activity/log': { body: day() } });
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
-    // Leads: 0 + 2. Selling: 1. Total: 3.
+    // Neither section names a tile, so each has its own. Leads: 0 + 2. Selling: 1. Total: 3.
     await screen.findByRole('heading', { name: 'Leads' });
-    expect(screen.getByText('Total touches today').parentElement).toHaveTextContent('3');
+    expect(strip()).toEqual([['Leads', '2'], ['Selling', '1'], ['Total touches today', '3']]);
 
     await userEvent.click(screen.getByLabelText('Increase Submission polis'));
-    expect(screen.getByText('Total touches today').parentElement).toHaveTextContent('4');
-    expect(screen.getByText('Selling', { selector: 'span' }).parentElement).toHaveTextContent('2');
+    expect(strip()).toEqual([['Leads', '2'], ['Selling', '2'], ['Total touches today', '4']]);
+  });
+
+  describe('P10.1-T5 AC-3, AC-4: the strip is the prototype’s, grouped by the office', () => {
+    const seededDay = day({
+      entries: SEEDED.map((c, i) => ({
+        activityTypeId: `t${i}`, activityTypeCode: c.types[0].code, label: c.types[0].label, count: i + 1,
+      })),
+      totalCount: 15,
+    });
+
+    it('AC-3: the seed draws Leads Generation, Selling, Recruitment, Development and the total', async () => {
+      stubFetch({
+        ...base,
+        '/kpm/config': { body: { activity: SEEDED, ratios: [], leadPipelines: [], version: 1 } },
+        '/activity/log': { body: seededDay },
+      });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Team Development' });
+
+      // Development is Personal (4) and Team (5): the office's grouping, not a hardcoded merge.
+      expect(strip()).toEqual([
+        ['Leads Generation', '1'], ['Selling', '2'], ['Recruitment', '3'], ['Development', '9'],
+        ['Total touches today', '15'],
+      ]);
+      // The sections below the strip do not change (I-97): five cards, as before.
+      expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(5);
+    });
+
+    it('AC-3: the total is a white card whose number is amber-deep, with no tint (F-71)', async () => {
+      stubFetch({
+        ...base,
+        '/kpm/config': { body: { activity: SEEDED, ratios: [], leadPipelines: [], version: 1 } },
+        '/activity/log': { body: seededDay },
+      });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Team Development' });
+
+      const total = screen.getByText('Total touches today').closest('[data-total]')!;
+      expect(total).toHaveClass('bg-card', 'rounded-lg');
+      expect(total.className).not.toMatch(/amber/);
+      expect(total.children[1]).toHaveClass('text-amber-deep', 'text-2xl');
+      const plain = screen.getByText('Selling', { selector: 'span' }).parentElement!;
+      expect(plain).toHaveClass('bg-card');
+      expect(plain.children[1]).toHaveClass('text-navy');
+    });
+
+    it('AC-4: a section hidden from this rung drops out of its tile', async () => {
+      const narrowed = SEEDED.map((c) => (c.code === 'TEAM_DEVELOPMENT'
+        ? { ...c, appliesToOrgLevelCodes: ['AB'] }
+        : c));
+      stubFetch({
+        ...base,
+        '/kpm/config': { body: { activity: narrowed, ratios: [], leadPipelines: [], version: 1 } },
+        '/activity/log': { body: seededDay },
+      });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Personal Development' });
+
+      expect(strip()[3]).toEqual(['Development', '4']);
+    });
   });
 
   it('counts with buttons, not by typing a number', async () => {
@@ -295,18 +486,80 @@ describe('Log activity (P6-T2)', () => {
     expect(await screen.findByText('Berkas lengkap masuk ke sistem.')).toBeInTheDocument();
   });
 
-  it('says whether the day is saved, in one live region', async () => {
-    stubFetch({ ...base, '/activity/log': { body: day() } });
-    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+  describe('P10.1-T5 AC-8: the save status tells the truth', () => {
+    const unsaved = (over: Record<string, unknown> = {}) => day({
+      version: 0, totalCount: 0,
+      entries: day().entries.map((e) => ({ ...e, count: 0 })),
+      ...over,
+    });
 
-    await screen.findByRole('heading', { name: 'Leads' });
-    expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
+    it('AC-8: opens a saved day as saved, with the touches it was saved with', async () => {
+      // It opened every day as *Not yet saved*: the status was a message Save set, and nothing
+      // else ever did (`Overall.html:4937-4958` reads the day's own entry).
+      stubFetch({ ...base, '/activity/log': { body: day({ totalCount: 3 }) } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save activity' }));
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved · 3 touches'));
+      await screen.findByRole('heading', { name: 'Leads' });
+      expect(screen.getByRole('status')).toHaveTextContent('Saved · 3 touches');
+    });
+
+    it('AC-8: opens a day with no entry as not yet saved', async () => {
+      stubFetch({ ...base, '/activity/log': { body: unsaved() } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      await screen.findByRole('heading', { name: 'Leads' });
+      expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
+    });
+
+    it('AC-8: saves, then reads Not yet saved on a date that has no entry', async () => {
+      // A save's message followed the reader to the next date (`log/page.tsx:183-189`).
+      stubFetch({
+        ...base,
+        '/activity/log': [
+          { body: unsaved() },
+          { body: day({ version: 1, totalCount: 1, entries: unsaved().entries.map((e) => (
+            e.activityTypeCode === 'SELL_SUBMISSION' ? { ...e, count: 1 } : e)) }) },
+        ],
+        '/activity/log?date=2026-03-10': { body: unsaved({ localDate: '2026-03-10' }) },
+      });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      await userEvent.click(await screen.findByLabelText('Increase Submission polis'));
+      expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
+      await userEvent.click(screen.getByRole('button', { name: 'Save activity' }));
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved · 1 touches'));
+
+      fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-03-10' } });
+      await waitFor(() => expect(screen.getByLabelText('Date')).toHaveValue('2026-03-10'));
+      expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
+    });
+
+    it('AC-8: opens another saved day as saved, with that day’s touches', async () => {
+      stubFetch({
+        ...base,
+        '/activity/log': { body: unsaved() },
+        '/activity/log?date=2026-03-09': { body: day({ localDate: '2026-03-09', version: 2, totalCount: 7 }) },
+      });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Leads' });
+
+      fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-03-09' } });
+
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved · 7 touches'));
+    });
+
+    it('AC-8: sits under the date, as the prototype stacks them (`:2700-2704`)', async () => {
+      stubFetch({ ...base, '/activity/log': { body: day() } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Leads' });
+
+      const field = screen.getByLabelText('Date').parentElement!;
+      expect(field.nextElementSibling).toBe(screen.getByRole('status'));
+      expect(field.parentElement).toHaveClass('flex-col');
+    });
   });
 
-  it('asks in the product’s own dialog before discarding a day’s typing', async () => {
+  it('AC-10: asks in the product’s own dialog before discarding a day’s typing', async () => {
     // It used to ask with `window.confirm`, whose buttons say OK and Cancel whatever the
     // question was, and which on a phone arrives as a system sheet over the app (I-95).
     stubFetch({ ...base, '/activity/log': { body: day() } });

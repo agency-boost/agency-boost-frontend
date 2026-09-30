@@ -487,6 +487,160 @@ describe('the office activity taxonomy (P4-T1)', () => {
     });
   });
 
+  describe('the summary tile (P10.1-T5 AC-5, ADR-0064)', () => {
+    /** Two sections: Selling in its seeded tile, and one the office added, in none. */
+    const GROUPED = [
+      { ...TAXONOMY[0], summaryGroupCode: 'SELLING', summaryGroupLabel: 'Selling' },
+      {
+        id: 'c2', code: 'REFERRALS', label: 'Referrals', description: null,
+        appliesToOrgLevelCodes: [], displayOrder: 2, version: 3, status: 'active',
+        summaryGroupCode: null, summaryGroupLabel: null, types: [],
+      },
+    ];
+
+    /** Open a section's existing edit and hand back its Summary tile field. */
+    async function tileOf(name: string) {
+      const card = (await screen.findByRole('heading', { name })).closest('[data-row]') as HTMLElement;
+      await userEvent.click(within(card).getByRole('button', { name: 'Rename' }));
+      return within(card).getByLabelText('Summary tile');
+    }
+
+    it('AC-5: is one field in the section’s existing edit, holding the tile it counts toward', async () => {
+      render(OWNER, GROUPED);
+      const field = await tileOf('Selling');
+
+      expect(field).toHaveValue('Selling');
+      expect(field).toHaveAccessibleDescription(
+        'Sections with the same tile are counted together. Empty gives it a tile of its own.',
+      );
+      // No card of its own: it sits in the row with Name and Description.
+      expect(field.closest('.flex-wrap')).toContainElement(screen.getByLabelText('Name'));
+    });
+
+    it('AC-5: reads empty for a section with a tile of its own', async () => {
+      render(OWNER, GROUPED);
+      expect(await tileOf('Referrals')).toHaveValue('');
+    });
+
+    it('AC-5: offers the tiles the office already has', async () => {
+      render(OWNER, [...GROUPED, {
+        ...GROUPED[1], id: 'c3', code: 'OLD', label: 'Old', status: 'archived',
+        summaryGroupCode: 'LEGACY', summaryGroupLabel: 'Legacy',
+      }]);
+      const field = await tileOf('Referrals');
+
+      const list = document.getElementById(field.getAttribute('list')!)!;
+      // An archived section's tile is still a tile: it renders history, and the server compares it.
+      expect([...list.querySelectorAll('option')].map((o) => o.value)).toEqual(['Selling', 'Legacy']);
+    });
+
+    it('AC-5: the write carries both fields, joining a tile by its name', async () => {
+      const { calls } = render(OWNER, GROUPED);
+      const field = await tileOf('Referrals');
+      await userEvent.type(field, 'selling');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect((await saved(calls))[0]).toMatchObject({
+        op: 'category.update', id: 'c2', expectedVersion: 3,
+        body: { label: 'Referrals', summaryGroupCode: 'SELLING', summaryGroupLabel: 'Selling' },
+      });
+    });
+
+    it('AC-5 (OD-101): typing another section’s name stages both, in one tile under that name', async () => {
+      // Selling has a tile of its own here: counting Referrals with it moves both into a new shared
+      // tile named *Selling* — never a second *Selling* tile beside the first.
+      const LONE = [{ ...GROUPED[0], summaryGroupCode: null, summaryGroupLabel: null }, GROUPED[1]];
+      const { calls } = render(OWNER, LONE);
+      await userEvent.type(await tileOf('Referrals'), 'selling');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      const ops = await saved(calls);
+      expect(ops).toHaveLength(2);
+      const tiles = ops.map((op) => [op.id, (op.body as Record<string, unknown>).summaryGroupCode, (op.body as Record<string, unknown>).summaryGroupLabel]);
+      expect(tiles).toEqual(expect.arrayContaining([
+        ['c2', expect.any(String), 'Selling'],
+        [GROUPED[0].id, expect.any(String), 'Selling'],
+      ]));
+      expect(tiles[0][1]).toBe(tiles[1][1]);
+    });
+
+    it('AC-5 (OD-101): refuses another name for a tile the section has to itself, at the field', async () => {
+      const LONE = [{ ...GROUPED[0], summaryGroupCode: null, summaryGroupLabel: null }, GROUPED[1]];
+      const { calls } = render(OWNER, LONE);
+      const field = await tileOf('Selling');
+      await userEvent.type(field, 'Penjualan');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      expect(field).toHaveAccessibleDescription(expect.stringContaining('A section with a tile of its own shows its own name.'));
+      expect(screen.queryByText(/change(s)? not saved yet/)).toBeNull();
+      expect(calls.filter((c) => c.init.method === 'POST')).toHaveLength(0);
+    });
+
+    it('AC-5: an emptied field writes both as null — a tile of its own', async () => {
+      const { calls } = render(OWNER, GROUPED);
+      await userEvent.clear(await tileOf('Selling'));
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      const [op] = await saved(calls);
+      expect(op.body).toMatchObject({ summaryGroupCode: null, summaryGroupLabel: null });
+      expect(Object.keys(op.body as object)).toEqual(
+        expect.arrayContaining(['summaryGroupCode', 'summaryGroupLabel']),
+      );
+    });
+
+    it('AC-5: shows a staged regrouping as an edit before anything is saved', async () => {
+      render(OWNER, GROUPED);
+      await userEvent.type(await tileOf('Referrals'), 'Selling');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      const card = screen.getByRole('heading', { name: 'Referrals' }).closest('[data-row]') as HTMLElement;
+      expect(within(card).getByText('Edited — not saved yet')).toBeInTheDocument();
+    });
+
+    it('AC-4: a group whose sections disagree on its label is refused, in the screen’s own banner', async () => {
+      render(OWNER, GROUPED);
+      await screen.findByRole('heading', { name: 'Selling' });
+      stubFetch({
+        '/kpm/settings/activity-types': { body: GROUPED },
+        '/kpm/settings/publish-state': {
+          body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+        },
+        '/kpm/settings/changes': {
+          status: 422,
+          body: {
+            error: {
+              code: 'CONFIG_SUMMARY_GROUP_LABEL_MISMATCH',
+              message: 'The sections in summary tile SELLING must share one label.',
+              requestId: 'r-9',
+              details: { summaryGroupCode: 'SELLING', labels: ['Selling', 'Sales'] },
+            },
+          },
+        },
+      });
+      await userEvent.type(await tileOf('Referrals'), 'Selling');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      const alerts = await screen.findAllByRole('alert');
+      // In the reader's words, from the refusal's own details — not the server's sentence, whose op
+      // prefix and upper-case tile code the screen never shows.
+      const banner = alerts.find((a) => a.textContent?.includes('One summary tile, two names'));
+      expect(banner).toHaveTextContent('One summary tile, two names: “Selling” and “Sales”. Give every section in it the same tile name.');
+      expect(banner).not.toHaveTextContent('must share one label');
+      expect(banner).toHaveTextContent('CONFIG_SUMMARY_GROUP_LABEL_MISMATCH · r-9');
+      // Refused, so still held: nothing was written, and the edit can be corrected or undone.
+      expect(screen.getByText(/1 change not saved yet/)).toBeInTheDocument();
+    });
+
+    it('AC-5: offers a reader without write permission no field at all', async () => {
+      render(AGENT, GROUPED);
+      await screen.findByRole('heading', { name: 'Selling' });
+
+      expect(screen.queryByRole('button', { name: 'Rename' })).toBeNull();
+      expect(screen.queryByLabelText('Summary tile')).toBeNull();
+    });
+  });
+
   describe('staged edits (P4-T19)', () => {
     it('holds everything until Save changes, and says how much is held', async () => {
       const { calls } = render();

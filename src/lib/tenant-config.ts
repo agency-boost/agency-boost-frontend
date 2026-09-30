@@ -24,6 +24,14 @@ export interface ActivityCategoryRow {
   displayOrder: number;
   version: number;
   status: 'active' | 'archived';
+  /**
+   * The summary tile this section counts toward (ADR-0064), and that tile's label. **Both or
+   * neither**: sections sharing a code share a tile, and one with neither has a tile of its own
+   * under its own label. Presentation only — nothing but the strips reads them. Optional because a
+   * configuration published before the fields existed carries neither.
+   */
+  summaryGroupCode?: string | null;
+  summaryGroupLabel?: string | null;
   types: ActivityTypeRow[];
 }
 

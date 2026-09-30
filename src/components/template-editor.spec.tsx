@@ -168,6 +168,91 @@ describe('TaxonomyEditor', () => {
       .toMatchObject({ code: 'SELLING', label: 'Penjualan' });
   });
 
+  describe('the summary tile (P10.1-T5 AC-5, ADR-0064)', () => {
+    /** The seed's shape: Selling in a tile of its own name, Recruiting in none. */
+    const GROUPED: TaxonomyPayload = {
+      ...TAXONOMY,
+      categories: [
+        { ...TAXONOMY.categories[0], summaryGroupCode: 'SELLING', summaryGroupLabel: 'Selling' },
+        TAXONOMY.categories[1],
+      ],
+    };
+
+    async function editSection(name: string) {
+      const head = screen.getByRole('heading', { name }).closest('.flex') as HTMLElement;
+      await userEvent.click(within(head).getByRole('button', { name: 'Edit' }));
+      return { head, tile: within(head).getByLabelText('Summary tile') };
+    }
+
+    it('AC-5: is one field in the section’s own edit, as the Owner has it', async () => {
+      render(<TaxonomyEditor payload={GROUPED} onChange={vi.fn()} />);
+      const { tile } = await editSection('Selling');
+
+      expect(tile).toHaveValue('Selling');
+      expect(tile).toHaveAccessibleDescription(
+        'Sections with the same tile are counted together. Empty gives it a tile of its own.',
+      );
+      const list = document.getElementById(tile.getAttribute('list')!)!;
+      expect([...list.querySelectorAll('option')].map((o) => o.value)).toEqual(['Selling']);
+    });
+
+    it('AC-5: writes both fields into the payload, joining a tile by its name', async () => {
+      const onChange = vi.fn();
+      render(<TaxonomyEditor payload={GROUPED} onChange={onChange} />);
+      const { head, tile } = await editSection('Recruiting');
+      await userEvent.type(tile, 'selling');
+      await userEvent.click(within(head).getByRole('button', { name: 'Save' }));
+
+      expect(onChange.mock.calls[0][0].categories[1]).toEqual({
+        code: 'RECRUITING', label: 'Recruiting', displayOrder: 2,
+        summaryGroupCode: 'SELLING', summaryGroupLabel: 'Selling',
+      });
+    });
+
+    it('AC-5: writes both as null when the field is emptied — a tile of its own', async () => {
+      const onChange = vi.fn();
+      render(<TaxonomyEditor payload={GROUPED} onChange={onChange} />);
+      const { head, tile } = await editSection('Selling');
+      await userEvent.clear(tile);
+      await userEvent.click(within(head).getByRole('button', { name: 'Save' }));
+
+      expect(onChange.mock.calls[0][0].categories[0]).toMatchObject({
+        code: 'SELLING', summaryGroupCode: null, summaryGroupLabel: null,
+      });
+    });
+
+    it('AC-5 (OD-101): refuses another name for a tile the section has to itself, at the field', async () => {
+      // A tile of one is named after its section: the way to change it is to rename the section.
+      const onChange = vi.fn();
+      render(<TaxonomyEditor payload={GROUPED} onChange={onChange} />);
+      const { head, tile } = await editSection('Selling');
+      await userEvent.clear(tile);
+      await userEvent.type(tile, 'Penjualan');
+      await userEvent.click(within(head).getByRole('button', { name: 'Save' }));
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(tile).toHaveAccessibleDescription(expect.stringContaining('A section with a tile of its own shows its own name.'));
+      // Still open, so the reader can clear the box or type another section's tile.
+      expect(within(head).getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    });
+
+    it('AC-5 (OD-101): typing another section’s name counts the two together, both in one draft', async () => {
+      const onChange = vi.fn();
+      const [first, second] = TAXONOMY.categories;
+      render(<TaxonomyEditor payload={TAXONOMY} onChange={onChange} />);
+      const { head, tile } = await editSection(second.label);
+      await userEvent.type(tile, first.label.toLowerCase());
+      await userEvent.click(within(head).getByRole('button', { name: 'Save' }));
+
+      const saved = onChange.mock.calls[0][0].categories as { code: string; summaryGroupCode: string | null; summaryGroupLabel: string | null }[];
+      const tiles = saved.filter((c) => [first.code, second.code].includes(c.code)).map((c) => [c.summaryGroupCode, c.summaryGroupLabel]);
+      expect(tiles).toHaveLength(2);
+      expect(tiles[0]).toEqual(tiles[1]);
+      expect(tiles[0][1]).toBe(first.label);
+      expect(tiles[0][0]).toMatch(/^[A-Z][A-Z0-9_]{2,39}$/);
+    });
+  });
+
   it('leaves the code to be typed — only training suggests one', async () => {
     render(<TaxonomyEditor payload={TAXONOMY} onChange={vi.fn()} />);
 

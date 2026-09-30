@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { TenantConfigProvider } from '@/lib/tenant-config-cache';
 import ActivityDashboardPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -61,12 +62,42 @@ const MONTH = {
 
 const dashboardCalls = (calls: { url: string }[]) => calls.filter((c) => c.url.includes('/activity/dashboard'));
 
+/** The five seeded sections, grouped as the seed groups them (ADR-0064). The strip is drawn from these. */
+const SEEDED = [
+  ['LEADS_GENERATION', 'Leads Generation', 'LEADS_GENERATION', 'Leads Generation'],
+  ['SELLING', 'Selling', 'SELLING', 'Selling'],
+  ['RECRUITMENT', 'Recruitment', 'RECRUITMENT', 'Recruitment'],
+  ['PERSONAL_DEVELOPMENT', 'Personal Development', 'DEVELOPMENT', 'Development'],
+  ['TEAM_DEVELOPMENT', 'Team Development', 'DEVELOPMENT', 'Development'],
+].map(([code, label, summaryGroupCode, summaryGroupLabel], i) => ({
+  id: `c${i}`, code, label, description: null, appliesToOrgLevelCodes: [] as string[],
+  displayOrder: i + 1, version: 1, status: 'active', summaryGroupCode, summaryGroupLabel, types: [],
+}));
+
+/** The office's configuration, which the shell's provider reads once and the strip groups by. */
+const config = (activity: unknown[] = SEEDED) => ({
+  '/kpm/config': { body: { activity, ratios: [], leadPipelines: [], version: 1 } },
+  '/kpm/org-levels': { body: [] },
+});
+
+/** The page as the agent layout hands it over: inside the office's configuration. */
+const render = () => renderWithSession(
+  <TenantConfigProvider><ActivityDashboardPage /></TenantConfigProvider>,
+  { me: AGENT },
+);
+
+/** The strip's tiles, label and value each. */
+function strip() {
+  const row = screen.getByText('Total touches').closest('[data-total]')!.parentElement!;
+  return [...row.children].map((tile) => [tile.children[0].textContent, tile.children[1].textContent]);
+}
+
 describe('the Activity Dashboard (P10-T1)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-1, AC-4: opens on the last 7 days, and says which days they are', async () => {
-    const { calls } = stubFetch({ '/activity/dashboard': { body: WEEK } });
-    renderWithSession(<ActivityDashboardPage />, { me: AGENT });
+    const { calls } = stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    render();
 
     // After the table: while it loads, the skeleton is the screen's one live region.
     await screen.findByText('Menghubungi prospek');
@@ -76,8 +107,8 @@ describe('the Activity Dashboard (P10-T1)', () => {
   });
 
   it('AC-2: heads a day’s column with its weekday and date, most recent first', async () => {
-    stubFetch({ '/activity/dashboard': { body: WEEK } });
-    renderWithSession(<ActivityDashboardPage />, { me: AGENT });
+    stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    render();
 
     const headers = (await screen.findAllByRole('columnheader')).map((h) => h.textContent);
     expect(headers.slice(0, 4)).toEqual(['Activity', 'Total', 'Mon28', 'Sun27']);
@@ -85,10 +116,11 @@ describe('the Activity Dashboard (P10-T1)', () => {
 
   it('AC-2: heads the last 30 days as weeks with their dates, and the two days left over', async () => {
     const { calls } = stubFetch({
+      ...config(),
       '/activity/dashboard': { body: WEEK },
       '/activity/dashboard?range=ROLLING_30D': { body: MONTH },
     });
-    renderWithSession(<ActivityDashboardPage />, { me: AGENT });
+    render();
     await screen.findByText('Menghubungi prospek');
 
     await userEvent.click(screen.getByRole('tab', { name: 'Last 30 days' }));
@@ -96,26 +128,96 @@ describe('the Activity Dashboard (P10-T1)', () => {
     expect(await screen.findByRole('columnheader', { name: 'Week 1 Sep 22–Sep 28' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Remaining 2 days Aug 30–Aug 31' })).toBeInTheDocument();
     expect(dashboardCalls(calls).at(-1)!.url).toContain('range=ROLLING_30D');
-    // AC-7: a corrected day is counted and said.
-    expect(screen.getByRole('status')).toHaveTextContent('30 days · Aug 30 – Sep 28, 2026 · 1 corrected day');
   });
 
-  it('AC-5: a tile per section, and the total — over the range', async () => {
-    stubFetch({ '/activity/dashboard': { body: WEEK } });
-    renderWithSession(<ActivityDashboardPage />, { me: AGENT });
+  it('P10.1-T5 AC-6: says how many days and which, and no longer how many were corrected', async () => {
+    // The Dashboard shows sums, not a corrected record: the log is where a correction is said
+    // (ADR-0042). `MONTH` carries `correctedDays: 1`, and nothing reads it.
+    stubFetch({
+      ...config(),
+      '/activity/dashboard': { body: WEEK },
+      '/activity/dashboard?range=ROLLING_30D': { body: MONTH },
+    });
+    render();
     await screen.findByText('Menghubungi prospek');
 
-    expect(screen.getByText('Leads Generation', { selector: '.text-xs' }).parentElement).toHaveTextContent('Leads Generation12');
-    expect(screen.getByText('Total touches').parentElement).toHaveTextContent('Total touches19');
+    await userEvent.click(screen.getByRole('tab', { name: 'Last 30 days' }));
+
+    await screen.findByRole('columnheader', { name: 'Week 1 Sep 22–Sep 28' });
+    expect(screen.getByRole('status')).toHaveTextContent(/^30 days · Aug 30 – Sep 28, 2026$/);
+    expect(screen.queryByText(/corrected/)).toBeNull();
   });
 
-  it('AC-6: the grand total, each section’s totals, and each type with its number and a muted zero', async () => {
-    stubFetch({ '/activity/dashboard': { body: WEEK } });
-    renderWithSession(<ActivityDashboardPage />, { me: AGENT });
+  it('P10.1-T5 AC-6: the same strip as Log Activity — the office’s tiles, then the total, over the range', async () => {
+    stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    render();
+    await screen.findByText('Menghubungi prospek');
+
+    // `Overall.html:2752-2757`. Recruitment and Development have nothing in this range, and still
+    // have their tiles: the grouping is the office's, not the answer's.
+    await waitFor(() => expect(strip()).toEqual([
+      ['Leads Generation', '12'], ['Selling', '7'], ['Recruitment', '0'], ['Development', '0'],
+      ['Total touches', '19'],
+    ]));
+  });
+
+  it('P10.1-T5 AC-6: counts Personal and Team Development in one Development tile', async () => {
+    const dev = {
+      ...WEEK,
+      sections: [
+        section('PERSONAL_DEVELOPMENT', 'Personal Development', [type('DEV_TRAINING', 'Training', 10, [1, 1, 0, 0, 0, 0, 0])]),
+        section('TEAM_DEVELOPMENT', 'Team Development', [type('DEV_TEAM', 'Team', 12, [3, 0, 0, 0, 0, 0, 0])]),
+      ],
+      counts: [4, 1, 0, 0, 0, 0, 0], total: 5,
+    };
+    stubFetch({ ...config(), '/activity/dashboard': { body: dev } });
+    render();
+    await screen.findByText('Training');
+
+    await waitFor(() => expect(strip()).toEqual([
+      ['Leads Generation', '0'], ['Selling', '0'], ['Recruitment', '0'], ['Development', '5'],
+      ['Total touches', '5'],
+    ]));
+  });
+
+  it('P10.1-T5 AC-6: the total row is drawn in 30-day mode only, as the prototype draws it', async () => {
+    // `renderDashboard` (`Overall.html:5101-5116`) adds it when `rangeMode === '30'`. I-135 had it on
+    // every range, as an Improvement ADR-0062 §4 no longer licenses.
+    stubFetch({
+      ...config(),
+      '/activity/dashboard': { body: WEEK },
+      '/activity/dashboard?range=ROLLING_30D': { body: MONTH },
+    });
+    render();
+    const week = await screen.findByRole('table', { name: 'Your activity' });
+    expect(within(week).queryByText('Total — all categories')).toBeNull();
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Last 30 days' }));
+    await screen.findByRole('columnheader', { name: 'Week 1 Sep 22–Sep 28' });
+
+    const month = screen.getByRole('table', { name: 'Your activity' });
+    expect(within(month).getAllByRole('row')[1]).toHaveTextContent('Total — all categories4');
+  });
+
+  it('P10.1-T5 AC-6: the total row stays out of a custom range too', async () => {
+    const { calls } = stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    render();
+    await screen.findByText('Menghubungi prospek');
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Custom' }));
+    await waitFor(() => expect(dashboardCalls(calls).at(-1)!.url).toContain('range=CUSTOM'));
+
+    expect(screen.queryByText('Total — all categories')).toBeNull();
+  });
+
+  it('AC-6: each section’s totals, and each type with its number and a muted zero', async () => {
+    stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    render();
     const table = await screen.findByRole('table', { name: 'Your activity' });
 
     const rows = within(table).getAllByRole('row');
-    expect(rows[1]).toHaveTextContent('Total — all categories19');
+    // The first body row is a section: the grand total is the 30-day view's alone.
+    expect(rows[1]).toHaveTextContent('Leads Generation12');
     const selling = rows.find((r) => within(r).queryByText('Selling'))!;
     expect(within(selling).getAllByRole('cell').slice(1, 3).map((c) => c.textContent)).toEqual(['7', '3']);
 
@@ -129,8 +231,8 @@ describe('the Activity Dashboard (P10-T1)', () => {
   });
 
   it('AC-3: opens Custom on the last seven days and asks for exactly those', async () => {
-    const { calls } = stubFetch({ '/activity/dashboard': { body: WEEK } });
-    renderWithSession(<ActivityDashboardPage />, { me: AGENT });
+    const { calls } = stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    render();
     await screen.findByText('Menghubungi prospek');
 
     await userEvent.click(screen.getByRole('tab', { name: 'Custom' }));
@@ -143,8 +245,8 @@ describe('the Activity Dashboard (P10-T1)', () => {
   });
 
   it('AC-3: says why a range cannot be shown, beside the dates, and does not ask', async () => {
-    const { calls } = stubFetch({ '/activity/dashboard': { body: WEEK } });
-    renderWithSession(<ActivityDashboardPage />, { me: AGENT });
+    const { calls } = stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    render();
     await screen.findByText('Menghubungi prospek');
     await userEvent.click(screen.getByRole('tab', { name: 'Custom' }));
     await waitFor(() => expect(dashboardCalls(calls).at(-1)!.url).toContain('range=CUSTOM'));
@@ -159,8 +261,8 @@ describe('the Activity Dashboard (P10-T1)', () => {
   });
 
   it('AC-3: asks about a date once it stops changing, not about every value it passes through', async () => {
-    const { calls } = stubFetch({ '/activity/dashboard': { body: WEEK } });
-    renderWithSession(<ActivityDashboardPage />, { me: AGENT });
+    const { calls } = stubFetch({ ...config(), '/activity/dashboard': { body: WEEK } });
+    render();
     await screen.findByText('Menghubungi prospek');
     await userEvent.click(screen.getByRole('tab', { name: 'Custom' }));
     await waitFor(() => expect(dashboardCalls(calls).at(-1)!.url).toContain('range=CUSTOM'));
@@ -176,13 +278,14 @@ describe('the Activity Dashboard (P10-T1)', () => {
 
   it('AC-3: shows the server’s reason when it refuses a range — a year at most', async () => {
     stubFetch({
+      ...config(),
       '/activity/dashboard': { body: WEEK },
       '/activity/dashboard?range=CUSTOM': {
         status: 400,
         body: { error: { code: 'VALIDATION_FAILED', message: 'The range covers 400 days. The dashboard shows up to 366 at a time.', details: { max: 366 } } },
       },
     });
-    renderWithSession(<ActivityDashboardPage />, { me: AGENT });
+    render();
     await screen.findByText('Menghubungi prospek');
 
     await userEvent.click(screen.getByRole('tab', { name: 'Custom' }));
@@ -202,14 +305,21 @@ describe('the Activity Dashboard (P10-T1)', () => {
         ], { standing: 'not_shown' }),
       ],
     };
-    stubFetch({ '/activity/dashboard': { body: archived } });
-    renderWithSession(<ActivityDashboardPage />, { me: AGENT });
+    // The office has since narrowed Team Development to AB: this agent is not shown it.
+    stubFetch({
+      ...config(SEEDED.map((c) => (c.code === 'TEAM_DEVELOPMENT' ? { ...c, appliesToOrgLevelCodes: ['AB'] } : c))),
+      '/activity/dashboard': { body: archived },
+    });
+    render();
     const table = await screen.findByRole('table', { name: 'Your activity' });
 
     expect(within(table).getByText('Archived')).toBeInTheDocument();
     expect(within(table).getByText('No longer in your sections')).toBeInTheDocument();
-    // A section no longer shown gets no tile of its own.
-    expect(screen.queryByText('Team Development', { selector: '.text-xs' })).not.toBeInTheDocument();
+    // A section no longer shown adds to no tile; its history is in the table and the total.
+    await waitFor(() => expect(strip()).toEqual([
+      ['Leads Generation', '0'], ['Selling', '1'], ['Recruitment', '0'], ['Development', '0'],
+      ['Total touches', '19'],
+    ]));
   });
 
   it('AC-11: nothing logged is still a table, with a way to log', async () => {
@@ -221,8 +331,8 @@ describe('the Activity Dashboard (P10-T1)', () => {
       })),
       counts: WEEK.counts.map(() => 0), total: 0, daysLogged: 0,
     };
-    stubFetch({ '/activity/dashboard': { body: empty } });
-    renderWithSession(<ActivityDashboardPage />, { me: AGENT });
+    stubFetch({ ...config(), '/activity/dashboard': { body: empty } });
+    render();
 
     const note = await screen.findByText(/Nothing logged in this range yet/);
     expect(within(note).getByRole('link', { name: 'Log Activity' })).toHaveAttribute('href', '/activity/log');
@@ -231,9 +341,10 @@ describe('the Activity Dashboard (P10-T1)', () => {
 
   it('AC-11: waits in the shape of the table, and says so when it fails', async () => {
     stubFetch({
+      ...config(),
       '/activity/dashboard': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.' } } },
     });
-    renderWithSession(<ActivityDashboardPage />, { me: AGENT });
+    render();
 
     expect(await screen.findByText('Something went wrong.')).toBeInTheDocument();
     expect(screen.queryByRole('table', { name: 'Your activity' })).not.toBeInTheDocument();

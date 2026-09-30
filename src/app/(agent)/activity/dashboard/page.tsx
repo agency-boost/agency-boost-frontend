@@ -7,10 +7,10 @@ import { Page } from '@/components/page';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
 import { ErrorBanner, TextInput } from '@/components/ui/field';
-import { KpiTile } from '@/components/ui/kpi-tile';
 import { NumberBadge } from '@/components/ui/number-badge';
 import { Segmented } from '@/components/ui/segmented';
 import { SkeletonTable } from '@/components/ui/skeleton';
+import { SummaryStrip } from '@/components/summary-strip';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   readActivityDashboard, type ActivityDashboard, type DashboardBucket, type DashboardRange,
@@ -18,6 +18,9 @@ import {
 } from '@/lib/activity';
 import { cn } from '@/lib/cn';
 import { formatShortDay, formatWeekday } from '@/lib/format';
+import { useSession } from '@/lib/session';
+import { summaryTiles } from '@/lib/summary-tiles';
+import { useTenantConfig } from '@/lib/tenant-config-cache';
 
 /**
  * The Activity Dashboard (P10-T1): your own days over a range, types down and time across
@@ -178,18 +181,19 @@ export default function ActivityDashboardPage() {
   );
 }
 
+/**
+ * How many days, and which.
+ *
+ * **No *· {n} corrected days* suffix** (P10.1-T5 AC-6). The Dashboard shows sums, not a corrected
+ * record: a correction is counted here like any other figure, and Log Activity is where a corrected
+ * day says so (ADR-0042). The payload still carries `correctedDays`; nothing here reads it.
+ */
 function RangeLabel({ view }: { view: ActivityDashboard }) {
   return (
     <>
       <strong className="text-navy">{view.days}</strong> {view.days === 1 ? 'day' : 'days'}
       {' · '}
       {formatShortDay(view.from)} – {formatShortDay(view.to, { year: true })}
-      {view.correctedDays > 0 && (
-        <>
-          {' · '}
-          {view.correctedDays === 1 ? '1 corrected day' : `${view.correctedDays} corrected days`}
-        </>
-      )}
     </>
   );
 }
@@ -217,21 +221,32 @@ const STANDING_NOTE: Record<Exclude<DashboardStanding, 'shown'>, string> = {
  * answer, not a blank.
  */
 function Dashboard({ view }: { view: ActivityDashboard }) {
-  const shown = view.sections.filter((s) => s.standing === 'shown');
+  const { config } = useTenantConfig();
+  const { me } = useSession();
   const columns: Column[] = ['Activity', 'Total', ...view.buckets.map(heading)];
   const count = (n: number, key: string) => (
     <Cell key={key} className={cn('text-center', n === 0 ? 'text-muted' : 'font-medium')}>{n}</Cell>
   );
+  /*
+   * **The same strip as Log Activity, over the range** (ADR-0064, `Overall.html:2752-2757`).
+   *
+   * The tiles and their labels are the office's configuration; the numbers are this answer's. A
+   * section the server no longer shows this reader adds to no tile — its history is in the table
+   * and in the total, which is the server's and counts everything.
+   */
+  const totals = new Map(view.sections
+    .filter((s) => s.standing === 'shown')
+    .map((s) => [s.code, s.total]));
+  const tiles = summaryTiles(
+    config?.activity ?? [],
+    me?.membership?.orgLevelCode ?? '',
+    (category) => totals.get(category.code) ?? 0,
+    { label: 'Total touches', value: view.total },
+  );
 
   return (
     <>
-      {/* One tile per section this reader is shown, plus the total (I-117) — over the range. */}
-      <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {shown.map((section) => (
-          <KpiTile key={section.code} label={section.label} value={section.total} />
-        ))}
-        <KpiTile label="Total touches" value={view.total} variant="insight" />
-      </div>
+      <SummaryStrip tiles={tiles} />
 
       {view.total === 0 && (
         <p className="mb-3 text-sm text-muted">
@@ -247,13 +262,20 @@ function Dashboard({ view }: { view: ActivityDashboard }) {
         widths={['18.75rem', '4rem', ...view.buckets.map(() => '4.75rem')]}
         tableClassName="min-w-[40rem] [&_td]:py-2 [&_th]:text-center [&_th:first-child]:text-left"
       >
-        <Row className="bg-amber/[0.16] font-bold">
-          <Cell className="font-display">Total — all categories</Cell>
-          <Cell className="bg-amber/[0.28] text-center">{view.total}</Cell>
-          {view.counts.map((n, i) => (
-            <Cell key={i} className="text-center">{n}</Cell>
-          ))}
-        </Row>
+        {/*
+          * **In 30-day mode only, as the prototype draws it** (`renderDashboard`, `:5101-5116`).
+          * It was on every range as an Improvement (I-135), which ADR-0062 §4 no longer licenses;
+          * the strip's total says the same number above the table on every range.
+          */}
+        {view.range === 'ROLLING_30D' && (
+          <Row className="bg-amber/[0.16] font-bold">
+            <Cell className="font-display">Total — all categories</Cell>
+            <Cell className="bg-amber/[0.28] text-center">{view.total}</Cell>
+            {view.counts.map((n, i) => (
+              <Cell key={i} className="text-center">{n}</Cell>
+            ))}
+          </Row>
+        )}
         {view.sections.map((section) => (
           <SectionRows key={section.code || section.label} section={section} count={count} />
         ))}

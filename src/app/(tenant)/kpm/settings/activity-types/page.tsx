@@ -13,6 +13,7 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { useCan } from '@/lib/session';
 import { projectStaged, unstageRow, STAGED_LABEL } from '@/lib/staged-projection';
+import { planSummaryTile, summaryGroups, summaryTileName, tileRefusal } from '@/lib/summary-tiles';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import {
   applyConfigChanges,
@@ -63,7 +64,14 @@ export default function ActivityTypesPage() {
    * this — that is the identity, and invariant §4 is why.
    */
   const [renaming, setRenaming] = useState<string | null>(null);
-  const [sectionDraft, setSectionDraft] = useState({ label: '', description: '' });
+  /*
+   * `tile` is the section's summary tile (ADR-0064): the name of the tile it counts toward on the
+   * agents' strip, or empty for a tile of its own. One field in this edit, not a card of its own
+   * (ADR-0062 §2) — see `planSummaryTile` for how a name becomes the two stored fields.
+   */
+  const [sectionDraft, setSectionDraft] = useState({ label: '', description: '', tile: '' });
+  /** Why the typed tile name was refused, shown at the field — or null. */
+  const [tileError, setTileError] = useState<string | null>(null);
   /*
    * Codes off the list by default (P4-T24).
    *
@@ -115,7 +123,8 @@ export default function ActivityTypesPage() {
       await load();
       setPublished((n) => n + 1);
     } catch (err) {
-      setError(toDisplayError(err));
+      const shown = toDisplayError(err);
+      setError(tileRefusal(shown) ?? shown);
     } finally {
       setBusy(null);
     }
@@ -549,10 +558,47 @@ export default function ActivityTypesPage() {
                           }))}
                         />
                       </Field>
+                      {/*
+                        * **The summary tile: one field, in the edit that already exists** (ADR-0064,
+                        * ADR-0062 §2). A name, offering the tiles the office already has; sections
+                        * with the same one share a tile above Log Activity and the Dashboard.
+                        */}
+                      <Field
+                        label="Summary tile"
+                        htmlFor={`tile-${category.id}`}
+                        hint="Sections with the same tile are counted together. Empty gives it a tile of its own."
+                        error={tileError ?? undefined}
+                        className="min-w-60 flex-1"
+                      >
+                        <TextInput
+                          id={`tile-${category.id}`}
+                          list="summary-tile-names"
+                          maxLength={80}
+                          value={sectionDraft.tile}
+                          onChange={(e) => {
+                            setTileError(null);
+                            setSectionDraft((d) => ({ ...d, tile: e.target.value }));
+                          }}
+                        />
+                      </Field>
                     </FieldRow>
                     <Button
                       disabled={busy !== null || !sectionDraft.label.trim()}
                       onClick={() => {
+                        // Against every section, archived included — they still render history —
+                        // and under the name being saved, so typing it means a tile of its own.
+                        const plan = planSummaryTile(
+                          sectionDraft.tile, { ...category, label: sectionDraft.label.trim() }, shown,
+                        );
+                        if ('refused' in plan) {
+                          setTileError(plan.refused);
+                          return;
+                        }
+                        const pair = (code: string) => {
+                          const change = plan.changes.find((c) => c.code === code)!;
+                          // Both, always: the server refuses a code without a label, or one alone.
+                          return { summaryGroupCode: change.summaryGroupCode, summaryGroupLabel: change.summaryGroupLabel };
+                        };
                         stage({
                           op: 'category.update',
                           id: category.id,
@@ -560,14 +606,27 @@ export default function ActivityTypesPage() {
                           body: {
                             label: sectionDraft.label,
                             description: sectionDraft.description || undefined,
+                            ...pair(category.code),
                           },
                         });
+                        // The other sections the name changes — joined, renamed with the tile, or
+                        // left alone in it — staged beside it, so one save sends one consistent state.
+                        for (const change of plan.changes.filter((c) => c.code !== category.code)) {
+                          const other = shown.find((s) => s.code === change.code)!;
+                          stage({
+                            op: 'category.update',
+                            id: other.id,
+                            expectedVersion: other.version,
+                            body: pair(other.code),
+                          });
+                        }
+                        setTileError(null);
                         setRenaming(null);
                       }}
                     >
                       Save
                     </Button>
-                    <Button variant="secondary" onClick={() => setRenaming(null)}>Cancel</Button>
+                    <Button variant="secondary" onClick={() => { setTileError(null); setRenaming(null); }}>Cancel</Button>
                   </>
                 ) : (
                   <>
@@ -580,10 +639,12 @@ export default function ActivityTypesPage() {
                         <Button
                           variant="inline"
                           onClick={() => {
+                            setTileError(null);
                             setRenaming(category.id);
                             setSectionDraft({
                               label: category.label,
                               description: category.description ?? '',
+                              tile: summaryTileName(category),
                             });
                           }}
                         >
@@ -861,6 +922,15 @@ export default function ActivityTypesPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {/* The tiles a section can join: the office's groups as they will be, staged edits included. */}
+      {canWrite && (
+        <datalist id="summary-tile-names">
+          {summaryGroups(shown).map((group) => (
+            <option key={group.code} value={group.label} />
+          ))}
+        </datalist>
       )}
     </SettingsScreen>
   );

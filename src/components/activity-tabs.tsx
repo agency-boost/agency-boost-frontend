@@ -9,6 +9,9 @@ import { RouteTabs } from '@/components/ui/route-tabs';
  *
  * **All three are built** — the Dashboard in P10-T1, the Ratios in P10-T2. Until then two were signposts,
  * and the strip shipped anyway: it is how a reader learns the other views exist at all (L-32).
+ *
+ * **The tabs read the prototype's own words**, *Log Activity · Dashboard · Ratio* (`:2712-2716`,
+ * P10.1-T5). They borrowed the page titles, which the prototype keeps for the heading above them.
  */
 export function ActivityTabs() {
   return (
@@ -16,8 +19,8 @@ export function ActivityTabs() {
       label="Activity management"
       tabs={[
         { href: '/activity/log', label: 'Log Activity' },
-        { href: '/activity/dashboard', label: 'Activity Dashboard' },
-        { href: '/activity/ratio', label: 'Activity Ratios' },
+        { href: '/activity/dashboard', label: 'Dashboard' },
+        { href: '/activity/ratio', label: 'Ratio' },
       ]}
     />
   );

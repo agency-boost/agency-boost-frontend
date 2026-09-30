@@ -29,14 +29,6 @@ export interface ActivityDay {
   correctionCount: number;
 }
 
-export interface ActivitySummary {
-  from: string;
-  to: string;
-  totals: { activityTypeCode: string; label: string; count: number }[];
-  daysLogged: number;
-  totalCount: number;
-}
-
 /** Why a row is on the Dashboard: `shown` today, or history kept so the totals add up (P10-T1). */
 export type DashboardStanding = 'shown' | 'archived' | 'not_shown';
 
@@ -123,14 +115,6 @@ export interface ActivityRatios {
   ratios: ActivityRatio[];
 }
 
-export interface ActivityCompliance {
-  membershipId: string;
-  compliant7d: boolean;
-  compliantMonth: boolean;
-  lastLoggedOn: string | null;
-  windowDays: number;
-}
-
 /**
  * `?a=b`, or nothing.
  *
@@ -157,10 +141,6 @@ export const correctActivityDay = (
   body: { date: string; counts: Record<string, number>; reason: string },
 ) => api<ActivityDay>('/activity/log/correction', { method: 'POST', body });
 
-export const readActivitySummary = (
-  params: { period?: string; from?: string; to?: string; membershipId?: string } = {},
-) => api<ActivitySummary>('/activity/summary' + query(params));
-
 /** Your own days over a range. There is no `membershipId`: the Dashboard is first-person (P10-T1). */
 export const readActivityDashboard = (
   params: { range?: DashboardRange; from?: string; to?: string } = {},
@@ -169,5 +149,9 @@ export const readActivityDashboard = (
 /** The office's ratios over your last 30 days. Your own only: there is no `membershipId` (P10-T2). */
 export const readActivityRatios = () => api<ActivityRatios>('/activity/ratios');
 
-export const readActivityCompliance = (params: { membershipId?: string } = {}) =>
-  api<ActivityCompliance>('/activity/compliance' + query(params));
+/*
+ * **No wrapper for `GET /activity/summary` or `GET /activity/compliance`** (P10.1-T5 AC-9). Their one
+ * caller was Log Activity's *Logged / Missed* card, which the client asked to have removed. Both
+ * routes stay, exempted in `scripts/check-api-consumers.py` until the coaching task named there
+ * gives each its caller; a wrapper nothing calls would only hide that from the gate.
+ */
