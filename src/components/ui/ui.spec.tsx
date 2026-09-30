@@ -772,7 +772,9 @@ describe('DataTable density and widths', () => {
     expect(cls).toContain('table-fixed');
     expect(cls).toContain('[&_thead]:bg-base');
     expect(cls).toContain('[&_td]:py-[3px]');
-    expect(cls).toContain('[&_tbody_tr]:hover:bg-navy/[0.015]');
+    // The hovered row, over its own colour — `data-table.spec.tsx` compiles it to prove the selector.
+    expect(cls).toContain('[&_tbody_tr:hover]:[background-image:linear-gradient(var(--row-hover),var(--row-hover))]');
+    expect(cls).not.toContain('[&_tbody_tr]:hover:');
   });
 
   it('sizes the body by inheritance, never through a `[&_td]` variant', () => {

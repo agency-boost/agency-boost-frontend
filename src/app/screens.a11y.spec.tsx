@@ -674,7 +674,7 @@ describe('screens have no axe violations', () => {
     await expectClean('activity/log');
   });
 
-  it('the leads table, with its sortable headings and a row of inline editors', async () => {
+  it('the leads table, with its sortable headings, a row of inline editors and the contact dialog', async () => {
     stubFetch({
       '/kpm/config': {
         body: {
@@ -691,12 +691,6 @@ describe('screens have no axe violations', () => {
         },
       },
       '/kpm/org-levels': { body: [] },
-      '/leads/summary': {
-        body: {
-          open: 1, committedThisMonth: 1, recruitmentPipelineNow: 0, recruitmentExpectedToClose: 0,
-          attention: { overdue: 1, 'no-next-action': 0, 'no-remarks': 0 },
-        },
-      },
       '/leads': {
         body: {
           rows: [{
@@ -707,8 +701,16 @@ describe('screens have no axe violations', () => {
             dateRegistered: '2026-09-04T03:00:00.000Z', version: 2, flags: ['overdue'],
             overdueDays: 9, committedMonths: ['2026-09'],
             lastEditedBy: { membershipId: 'mem-aab', name: 'Ibu Sari' },
+          }, {
+            // A downline's lead, as a leader's screen lists it: 🗑 held in place, and saying why.
+            id: 'l2', ownerMembershipId: 'mem-7', type: 'sales', name: 'Bu Rina',
+            contact: { phone: null, email: null }, lawfulBasis: null, consentAt: null,
+            statusCode: 'FOLLOW_UP', thisMonth: false, remarks: null,
+            nextActionDate: null, nextActionNote: null, outcome: null, source: null,
+            dateRegistered: '2026-09-03T03:00:00.000Z', version: 1, flags: [],
+            overdueDays: null, committedMonths: [], lastEditedBy: null,
           }],
-          total: 1, page: 1, pageSize: 50,
+          total: 2, page: 1, pageSize: 200,
         },
       },
       // The two closed cards below the table fetch a page each, keyed on the query so they do not
@@ -723,18 +725,21 @@ describe('screens have no axe violations', () => {
             dateRegistered: '2026-08-01T03:00:00.000Z', version: 3, flags: [],
             overdueDays: null, committedMonths: [], lastEditedBy: null,
           }],
-          total: 12, page: 1, pageSize: 5,
+          total: 1, page: 1, pageSize: 200,
         },
       },
-      'outcome=lost': { body: { rows: [], total: 0, page: 1, pageSize: 5 } },
+      'outcome=lost': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
     });
     renderInLayout(AgentLayout, <LeadsPage />, {
       me: makeMe({ permissions: ['lead:read', 'lead:update', 'lead:mark_outcome'] }),
     });
 
-    // The detail panel is part of the row, so it is walked open rather than left closed.
-    await userEvent.click(await screen.findByRole('button', { name: 'Details' }));
-    await screen.findByRole('heading', { name: 'Closed leads' });
+    // The contact dialog is part of the row, so it is walked open rather than left closed — over a
+    // row whose last change was a leader's, so the attribution glyph is on the page too.
+    await screen.findByText('Ibu Wulan Sari');
+    await screen.findByRole('button', { name: 'Last changed by Ibu Sari' });
+    await userEvent.click(screen.getAllByRole('button', { name: 'Contact details' })[0]);
+    await screen.findByRole('dialog', { name: 'Contact details for Pak Budi' });
     await expectClean('leads');
   });
 

@@ -64,13 +64,20 @@ function isSortable(column: Column): column is SortableColumn {
  * The header's `bg-base` band is `--warm-base` in the prototype (`Overall.html:416`), and the row hover
  * is the 1.5%-navy wash at `:424` — faint on purpose: it tells you which row your pointer is on without
  * competing with the amber focus ring inside it.
+ *
+ * **The hovered row, and only it, and over its own colour.** This was `[&_tbody_tr]:hover:bg-navy/…`,
+ * which Tailwind 3 compiles to `.table:hover tbody tr` — the *table* hovered, *every* row repainted —
+ * at a specificity (0,2,2) that beat each row's own `bg-*` (0,1,0). Pointing anywhere at the Activity
+ * Dashboard turned its amber total row and its grey section rows white. The arbitrary variant now puts
+ * `:hover` on the row, and the wash is a `background-image` layered over the row's `background-color`,
+ * so a coloured row keeps its colour under the pointer as the prototype's inline-styled rows do.
  */
 const DENSITY_COMPACT = [
   'table-fixed',
   '[&_thead]:bg-base',
   '[&_th]:px-2 [&_th]:py-[7px] [&_th]:text-2xs',
   '[&_td]:px-2 [&_td]:py-[3px] [&_td]:leading-tight',
-  '[&_tbody_tr]:hover:bg-navy/[0.015]',
+  '[&_tbody_tr:hover]:[background-image:linear-gradient(var(--row-hover),var(--row-hover))]',
   /*
    * **The body's type size rides on the `<table>`, not on a per-cell variant** — it replaces the
    * `text-md` already there, and a cell inherits it because `Cell` sets no size of its own.
@@ -119,9 +126,16 @@ export function DataTable({
 }) {
   return (
     <div className={cn('overflow-x-auto rounded-lg border border-hairline bg-card', className)}>
+      {/*
+        * **`relative`, so nothing inside escapes the scroll box.** A `sr-only` name is
+        * `position: absolute`; with no positioned ancestor inside this wrapper it is placed against one
+        * outside it, and the wrapper's `overflow-x-auto` stops clipping it. On /leads the Actions
+        * glyphs' names ran past a 1280px window and widened the whole page to 1379px — the body
+        * scrolled sideways, which it never may (found walking P10.1-T4, 2026-09-30).
+        */}
       <table
         className={cn(
-          'w-full border-collapse text-left text-md',
+          'relative w-full border-collapse text-left text-md',
           density === 'compact' && DENSITY_COMPACT,
           tableClassName,
         )}

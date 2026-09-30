@@ -35,6 +35,11 @@
   /* Warm wash on a focused numeric input, from the prototype's stepper. */
   --color-input-focus: #fff6ec;
 
+  /* The table row hover: the prototype's 1.5%-navy wash (`Overall.html:424`). A colour, not a
+     background, so a table can lay it **over** a row that has its own — a total row stays
+     amber under the pointer — rather than paint the row's colour away (data-table.tsx). */
+  --row-hover: color-mix(in srgb, var(--color-navy) 1.5%, transparent);
+
   /* Status. Three values, not two: "not enough data" is never styled as failure. */
   --color-success: #3b6d11;
   --color-alert: #a32d2d;

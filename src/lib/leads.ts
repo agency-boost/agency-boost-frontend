@@ -45,29 +45,21 @@ export interface LeadPage {
   pageSize: number;
 }
 
-/**
- * The rollups behind the list (P7-T6), scoped exactly as the list is.
- *
- * Every number is something already defined: two are the metric registry's, the rest are the
- * commitment and the attention flags this module defines. Nothing here is a figure invented for
- * this screen.
- */
-export interface LeadSummary {
-  open: number;
-  committedThisMonth: number;
-  recruitmentPipelineNow: number;
-  recruitmentExpectedToClose: number;
-  /** Keyed by the value `?attention=` takes, so a count links straight to its rows. */
-  attention: Record<LeadFlag, number>;
-}
-
 export interface LeadQuery {
   search?: string;
   type?: LeadType | 'unassigned';
   statusCode?: string;
   outcome?: LeadOutcome | 'open';
   attention?: LeadFlag;
-  sort?: 'dateRegistered' | 'name' | 'nextActionDate';
+  /**
+   * One key, sorted on the server over the whole filtered set before it is paged (P10.1-T4 AC-3).
+   *
+   * `type` orders blank, Sales, Recruitment; `status` orders by the stage's rank in **its own**
+   * ladder, blank first, ties broken by type and then registration — so a sales rank 2 and a
+   * recruitment rank 2 sit together by a stated rule rather than by accident. `nextActionDate`
+   * stays for the coaching card; `/leads` no longer offers it.
+   */
+  sort?: 'dateRegistered' | 'name' | 'nextActionDate' | 'type' | 'status';
   dir?: 'asc' | 'desc';
   page?: number;
   pageSize?: number;
@@ -94,19 +86,6 @@ export const flagLabel = (flag: LeadFlag, overdueDays: number | null): string =>
   return `Overdue ${overdueDays} ${overdueDays === 1 ? 'day' : 'days'}`;
 };
 
-/**
- * `2026-09` as *Sep 2026*.
- *
- * Built from the month's own numbers rather than parsed as a date: `new Date('2026-09')` is
- * midnight **UTC**, which renders as August for anybody west of Greenwich — the same
- * off-by-one-day class of bug the whole day-boundary rule exists to stop.
- */
-export const monthLabel = (month: string): string => {
-  const [year, index] = month.split('-');
-  const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${names[Number(index) - 1] ?? month} ${year}`;
-};
-
 export const LAWFUL_BASIS_LABEL: Record<LawfulBasis, string> = {
   consent: 'They agreed',
   contract: 'An application is already under way',
@@ -131,8 +110,63 @@ const qs = (query: LeadQuery) => {
 
 export const listLeads = (query: LeadQuery = {}) => api<LeadPage>('/leads' + qs(query));
 
-/** Counts and never rows — the one lead route an Owner and an Admin may call (§3.7). */
-export const readLeadSummary = () => api<LeadSummary>('/leads/summary');
+/**
+ * The most rows `GET /leads` answers in one page — the service's own cap, the page-size clamp in
+ * `LeadService.list`.
+ *
+ * **Asked for, not assumed.** A larger request is clamped to this on the server, so the number
+ * here only decides how many requests an agent's whole list costs; the loop below ends on what the
+ * server says it holds, never on this.
+ */
+export const LEAD_PAGE_CAP = 200;
+
+/**
+ * The shortest name the server keeps (`LEAD_BOUNDS.name.min` in the backend's `lead-input.ts`).
+ *
+ * The inline row reads it to decide **when to post**. A shorter name is never sent, so the server
+ * never gets to refuse it — the row says so itself, beneath the name, in the same refusal row a
+ * server answer would use, and takes it away once the name is long enough.
+ */
+export const LEAD_NAME_MIN = 2;
+
+/**
+ * Every row one query holds, page after page, handed over as each page lands (P10.1-T4 AC-4).
+ *
+ * **One request after another, never side by side.** The prototype lists every lead and has no
+ * pager (ADR-0063 §3); the server caps a page at 200. So the list asks for page 1, reads the
+ * server's `total` off it, and keeps asking until it holds that many — three requests for 450
+ * leads, and a screen that shows the first 200 while the rest arrive.
+ *
+ * **`isCurrent` is the stale-sort guard.** A header sort starts again from page 1, and a page of
+ * the previous order still in flight must not be appended to the new one: it would put rows sorted
+ * one way under a heading that says another. The caller hands in a check against its own
+ * generation; once it turns false nothing more is delivered and nothing more is asked.
+ *
+ * **What it holds is counted by lead, not by row.** Two leads that tie on the sort key can come
+ * back in either order from one request to the next, so a lead can arrive on two pages. Counted
+ * twice, it would read as the last lead and end the loop one page early; the caller drops the
+ * repeat either way.
+ *
+ * It stops on a short page, so a lead deleted elsewhere between two pages cannot keep it asking for
+ * rows that are no longer there — and on a page that brings nothing new, so a server repeating
+ * itself cannot keep it asking forever.
+ */
+export async function listEveryLead(
+  query: LeadQuery,
+  onPage: (rows: Lead[], total: number, first: boolean) => void,
+  isCurrent: () => boolean,
+): Promise<void> {
+  const held = new Set<string>();
+  for (let page = 1; ; page += 1) {
+    const result = await listLeads({ ...query, page, pageSize: LEAD_PAGE_CAP });
+    if (!isCurrent()) return;
+    onPage(result.rows, result.total, page === 1);
+    const before = held.size;
+    for (const row of result.rows) held.add(row.id);
+    const added = held.size - before;
+    if (held.size >= result.total || result.rows.length < result.pageSize || added === 0) return;
+  }
+}
 
 export const readLead = (id: string) => api<Lead>(`/leads/${id}`);
 
