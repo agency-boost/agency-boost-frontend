@@ -1,5 +1,4 @@
 import { screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { RoleShell } from './role-shell';
@@ -56,9 +55,7 @@ describe('RoleShell', () => {
     });
 
     expect(await screen.findByText('KPM OWNER')).toBeInTheDocument();
-    // `People` is not the group that opens by default, so it is opened — which is the
-    // accordion doing its job rather than an obstacle to working round.
-    await userEvent.click(screen.getByRole('button', { name: /People/ }));
+    // Every group starts open (P10.1-T3), so `People`'s items are there without a click.
     expect(screen.getByRole('link', { name: 'All members' })).toBeInTheDocument();
   });
 
@@ -67,8 +64,7 @@ describe('RoleShell', () => {
     renderWithSession(<RoleShell title="Notifications">body</RoleShell>, {
       me: member({ isKpmAdmin: true }),
     });
-    await userEvent.click(await screen.findByRole('button', { name: /People/ }));
-    expect(screen.getByRole('link', { name: 'All members' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'All members' })).toBeInTheDocument();
   });
 
   it('gives everybody else the agent application', async () => {

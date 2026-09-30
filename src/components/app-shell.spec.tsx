@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { renderToString } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { AppShell, type NavSection } from './app-shell';
 
@@ -55,8 +56,7 @@ describe('AppShell', () => {
 
   it('keeps an upcoming item visible but not navigable, so the roadmap is not a surprise', async () => {
     renderShell();
-    // `Reporting` is not the group that opens first, so it is opened.
-    await userEvent.click(screen.getByRole('button', { name: /Reporting/ }));
+    // Every group starts open (P10.1-T3), so `Reporting`'s item is there without a click.
     const upcoming = screen.getByText('Advanced analytics').closest('a');
     expect(upcoming).toHaveAttribute('aria-disabled', 'true');
     expect(upcoming).not.toHaveAttribute('href');
@@ -111,20 +111,93 @@ describe('AppShell', () => {
     });
   });
 
-  describe('the sidebar collapses (client feedback, 2026-09-24)', () => {
+  describe('every group opens on its own, and all start open (P10.1-T3, client item 3)', () => {
     /*
-     * Nine groups open at once is a column nobody reads to the bottom, and the rail exists
-     * for the same reason from the other end: a reader who knows the product wants the width
-     * back, and the icon is what keeps them oriented once the words are gone.
+     * The client asked on 2026-09-24 for one group open at a time, and on 2026-09-29 for the
+     * opposite; the later request wins (ADR-0062). The toggles stay — they were the first
+     * request's too — and only the rule that opening one closes the rest goes.
      */
-    it('opens one group at a time — opening another closes the first', async () => {
+    const header = (name: RegExp) => screen.getByRole('button', { name });
+
+    it('starts with every group open (AC-1)', () => {
       renderShell();
+
+      expect(screen.getByRole('link', { name: 'Activity management' })).toBeInTheDocument();
+      expect(screen.getByText('Advanced analytics')).toBeInTheDocument();
+      expect(header(/Personal tools/)).toHaveAttribute('aria-expanded', 'true');
+      expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('starts open on the server too, so the first client render has nothing to reconcile (AC-1)', () => {
+      const html = renderToString(
+        <AppShell sections={SECTIONS} user={USER}>
+          <p>content</p>
+        </AppShell>,
+      );
+
+      expect(html.match(/aria-expanded="true" aria-controls="nav-group-/g)).toHaveLength(2);
+      expect(html).not.toMatch(/aria-expanded="false" aria-controls="nav-group-/);
+    });
+
+    it('toggles only its own group — two can be closed, and closing one opens nothing (AC-2)', async () => {
+      renderShell();
+
+      await userEvent.click(header(/Reporting/));
+      expect(screen.queryByText('Advanced analytics')).toBeNull();
       expect(screen.getByRole('link', { name: 'Activity management' })).toBeInTheDocument();
 
-      await userEvent.click(screen.getByRole('button', { name: /Reporting/ }));
-
-      expect(screen.getByText('Advanced analytics')).toBeInTheDocument();
+      await userEvent.click(header(/Personal tools/));
       expect(screen.queryByRole('link', { name: 'Activity management' })).toBeNull();
+      expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'false');
+
+      // Reopening one leaves the other as it was.
+      await userEvent.click(header(/Reporting/));
+      expect(screen.getByText('Advanced analytics')).toBeInTheDocument();
+      expect(header(/Personal tools/)).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('keeps each toggle wired to its own list (AC-2)', () => {
+      renderShell();
+
+      for (const name of [/Personal tools/, /Reporting/]) {
+        const list = document.getElementById(header(name).getAttribute('aria-controls')!);
+        expect(list?.tagName).toBe('UL');
+      }
+    });
+
+    it('reopens a closed group when the page moves into it, and leaves the others alone (AC-3)', async () => {
+      const { rerender } = renderShell();
+      await userEvent.click(header(/Personal tools/));
+      await userEvent.click(header(/Reporting/));
+
+      // The reader follows a link into Reporting: the layout re-renders with it active.
+      const inReporting: readonly NavSection[] = [
+        { ...SECTIONS[0], items: SECTIONS[0].items.map((i) => ({ ...i, active: false })) },
+        { ...SECTIONS[1], items: [{ label: 'Advanced analytics', href: '/analytics', icon: 'chartUp', active: true }] },
+      ];
+      rerender(
+        <AppShell sections={inReporting} user={USER}>
+          <p>content</p>
+        </AppShell>,
+      );
+
+      expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'true');
+      expect(header(/Personal tools/)).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('does not remember a closed group across a reload (AC-4)', async () => {
+      const { unmount } = renderShell();
+      await userEvent.click(header(/Reporting/));
+      // Nothing about groups is stored: the rail is the one remembered preference.
+      expect(Object.keys(window.localStorage)).toEqual([]);
+      unmount();
+
+      render(
+        <AppShell sections={SECTIONS} user={USER}>
+          <p>content</p>
+        </AppShell>,
+      );
+      expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'true');
     });
 
     it('closes a group that was open, so the nav can be put away entirely', async () => {
@@ -149,6 +222,9 @@ describe('AppShell', () => {
 
     it('flattens the groups in the rail, so nothing is behind a heading that is not there', async () => {
       renderShell();
+      // Closed at full width first — every group starts open now (P10.1-T3), so the test makes
+      // the case it is about.
+      await userEvent.click(screen.getByRole('button', { name: /Reporting/ }));
       await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
 
       // `Reporting` was closed at full width; collapsed, its item is reachable.

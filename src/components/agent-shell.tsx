@@ -82,10 +82,18 @@ function Chrome({
 
   const on = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
-  // Eight sections, two dividers, in the prototype's order. Admin is last.
+  /*
+   * Eight sections in the prototype's order, Admin last, **with a line between every two** (client
+   * feedback, 2026-09-30; parity I-144). The prototype draws two lines here, before KPM and before
+   * Admin (`Overall.html:2660`, `:2672`), where the Owner's and the Super Admin's draw one before
+   * every group. Once every group became a toggle of its own (P10.1-T3), a heading with no line
+   * above it read as part of the group before it, so the client asked for the other two shells'
+   * rule here too. Every section but the last carries `divider`.
+   */
   const sections: readonly NavSection[] = [
     {
       label: 'Personal tools',
+      divider: true,
       items: [
         // Notifications is **not** here. It is the bell beside the identity chip at the foot
         // of the sidebar — a glance rather than a place to work (client feedback,
@@ -98,6 +106,7 @@ function Chrome({
     },
     {
       label: 'Unit tools',
+      divider: true,
       items: [
         { label: 'Unit dashboard', href: '/unit/dashboard', icon: 'gauge', active: on('/unit') },
         { label: 'Coaching session', href: '/coaching', icon: 'chat', upcoming: true },
@@ -107,12 +116,17 @@ function Chrome({
       // The prototype hides this whole section when neither item applies
       // (`Overall.html:6638-6642`). Both are Phase 11, so both are upcoming for now.
       label: 'New agent',
+      divider: true,
       items: [
         { label: 'Your 90-day activation', href: '/activation', icon: 'clipboard', upcoming: true },
         { label: 'New hires', href: '/new-hires', icon: 'userPlus', upcoming: true },
       ],
     },
-    { label: 'Training', items: [{ label: 'Training modules', href: '/training', icon: 'graduation', upcoming: true }] },
+    {
+      label: 'Training',
+      divider: true,
+      items: [{ label: 'Training modules', href: '/training', icon: 'graduation', upcoming: true }],
+    },
     {
       label: 'Sales tools',
       items: [
@@ -121,7 +135,11 @@ function Chrome({
       ],
       divider: true,
     },
-    { label: 'KPM', items: [{ label: 'Event list', href: '/events', icon: 'calendar', upcoming: true }] },
+    {
+      label: 'KPM',
+      divider: true,
+      items: [{ label: 'Event list', href: '/events', icon: 'calendar', upcoming: true }],
+    },
     {
       label: 'Campaign',
       items: [{ label: 'Campaign list', href: '/campaigns', icon: 'trophy', upcoming: true }],

@@ -355,27 +355,42 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   /**
-   * **One group open at a time, and it follows you.** The nav is nine groups deep in the Owner
-   * app; open, that is a column nobody reads to the bottom. The group holding the page you are
-   * on opens itself, so arriving somewhere never leaves you looking at a list of closed
-   * headings wondering which one you came through.
+   * **Every group starts open, and each heading toggles its own** (P10.1-T3, client item 3).
    *
-   * A group the reader opened by hand stays open until they open another or the route moves
-   * into a different one — `activeGroup` in the dependency list is what makes the second
-   * happen without overriding the first on every render.
+   * The client asked on 2026-09-24 for one group open at a time, and on 2026-09-29 for every group
+   * to open on its own, all open by default; the later request wins (ADR-0062). The prototype has
+   * no toggles at all — every group is static and open (`Overall.html:2610-2691`) — so all-open is
+   * also the page the prototype draws, with the client's toggles kept on top of it.
+   *
+   * **The closed groups are the state, and the set starts empty.** The server render and the first
+   * client render therefore agree with nothing to reconcile, and nothing is remembered across a
+   * reload: *all open by default* is the ask, and the rail stays the one remembered preference.
    */
   const activeGroup = sections.find((s) => s.items.some((i) => i.active))?.label ?? null;
+  const [closed, setClosed] = useState<ReadonlySet<string>>(() => new Set());
   /*
-   * With nothing active — the reader is on Overview, which sits in the unheaded group — the
-   * **first** group opens rather than none of them. A column of five closed headings is a nav
-   * that has to be opened before it can be read, and the landing page is the worst place to
-   * ask for that.
+   * **Arriving inside a closed group opens that group, and only that one.** A group the reader
+   * closed stays closed while they stay inside it; the route moving into it from elsewhere is what
+   * reopens it — `activeGroup` in the dependency list is what makes that happen without overriding
+   * the reader on every render. Returning the same set when there is nothing to open keeps the
+   * effect from re-rendering the shell on every navigation.
    */
-  const firstGroup = sections.find((s) => s.label)?.label ?? null;
-  const [openGroup, setOpenGroup] = useState<string | null>(activeGroup ?? firstGroup);
   useEffect(() => {
-    if (activeGroup) setOpenGroup(activeGroup);
+    if (!activeGroup) return;
+    setClosed((now) => {
+      if (!now.has(activeGroup)) return now;
+      const next = new Set(now);
+      next.delete(activeGroup);
+      return next;
+    });
   }, [activeGroup]);
+  const toggleGroup = (label: string) => {
+    setClosed((now) => {
+      const next = new Set(now);
+      if (!next.delete(label)) next.add(label);
+      return next;
+    });
+  };
 
   /**
    * **The rail, remembered.** Read in an effect rather than in the initial state: the server
@@ -488,7 +503,7 @@ export function AppShell({
              * collapse and nothing gained by hiding them.
              */
             const collapsible = Boolean(section.label) && !rail;
-            const open = !collapsible || openGroup === section.label;
+            const open = !collapsible || !closed.has(section.label ?? '');
 
             return (
               <div key={id}>
@@ -505,7 +520,7 @@ export function AppShell({
                       type="button"
                       aria-expanded={open}
                       aria-controls={`nav-group-${sectionIndex}`}
-                      onClick={() => setOpenGroup((now) => (now === section.label ? null : section.label))}
+                      onClick={() => toggleGroup(section.label ?? '')}
                       /*
                        * **Readable, not decorative.** It was `text-2xs` at 40% white — 10px of
                        * uppercase at that contrast is a smudge, and this is the control that
@@ -553,7 +568,9 @@ export function AppShell({
                     ))}
                   </ul>
                 )}
-                {section.divider && <div className="mx-1 my-2 h-px bg-white/10" />}
+                {/* A `separator`, so the rule between groups is a thing a test and a screen reader can
+                    both find, rather than a styled `div` only the eye can (parity I-144). */}
+                {section.divider && <div role="separator" className="mx-1 my-2 h-px bg-white/10" />}
               </div>
             );
           })}

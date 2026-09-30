@@ -1,5 +1,4 @@
-import { screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
 import { makeMe, renderInLayout, stubFetch } from '@test/harness';
@@ -59,12 +58,11 @@ describe('office overview', () => {
      * The panel's own link first: **that** is what this test is about — a placeholder that
      * sends somebody onward rather than leaving them on a dead end.
      */
-    const onward = await screen.findByRole('link', { name: 'All members' });
+    // Inside the page, not the nav: every group starts open, so the nav holds one too.
+    const onward = await within(screen.getByRole('main')).findByRole('link', { name: 'All members' });
     expect(onward).toHaveAttribute('href', '/people/members');
 
-    // And the nav still holds it, once its group is opened — the sidebar is an accordion
-    // since 2026-09-24, and Overview sits in no group, so People starts closed.
-    await userEvent.click(screen.getByRole('button', { name: /^People/ }));
+    // And the nav holds it too: every group starts open (P10.1-T3), People included.
     const links = screen.getAllByRole('link', { name: 'All members' });
     expect(links).toHaveLength(2);
     for (const link of links) expect(link).toHaveAttribute('href', '/people/members');

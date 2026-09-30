@@ -1,5 +1,4 @@
 import { screen, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession } from '@test/harness';
 import { AgentShell } from './agent-shell';
@@ -20,30 +19,24 @@ vi.mock('next/navigation', () => ({
  */
 function navLabels() {
   const nav = screen.getByRole('navigation', { name: 'Main' });
-  // Group headings are buttons now, not paragraphs: the sidebar collapses one group at a
-  // time (client feedback, 2026-09-24). The chevron is part of the button's text.
+  // Group headings are buttons, not paragraphs: each group opens and closes on its own
+  // (client feedback, 2026-09-24 and 2026-09-29). The chevron is part of the button's text.
   return Array.from(nav.querySelectorAll('[aria-controls^="nav-group"], a'))
     .map((el) => (el.textContent ?? '').replace('\u25b8', '').trim());
 }
 
 /**
- * Open every group in turn and collect what each holds.
+ * Every destination in the nav, as the reader first sees it.
  *
- * One group is open at a time, so a test that wants every destination has to walk them.
- * That is the accordion doing its job; asserting around it would assert a nav nobody has.
+ * **Every group starts open** (P10.1-T3, client item 3), so the whole nav is on the first render
+ * with nothing to click. This walked the groups one at a time while opening one closed the rest;
+ * reading them without a click is now the assertion that they start open.
  */
 async function everyItem() {
-  const nav = () => screen.getByRole('navigation', { name: 'Main' });
-  const names = Array.from(nav().querySelectorAll('[aria-controls^="nav-group"]'))
-    .map((b) => (b.textContent ?? '').replace('\u25b8', '').trim());
-
-  const items = Array.from(nav().querySelectorAll('a')).map((a) => a as HTMLAnchorElement);
-  for (const name of names) {
-    await userEvent.click(within(nav()).getByRole('button', { name: new RegExp(`^${name}`) }));
-    items.push(...Array.from(nav().querySelectorAll('a')).map((a) => a as HTMLAnchorElement));
-  }
-  // The unheaded group is always open, so its links arrive more than once.
-  return [...new Map(items.map((a) => [a.textContent + a.getAttribute('href'), a])).values()];
+  const nav = screen.getByRole('navigation', { name: 'Main' });
+  const headers = Array.from(nav.querySelectorAll('[aria-controls^="nav-group"]'));
+  expect(headers.every((b) => b.getAttribute('aria-expanded') === 'true')).toBe(true);
+  return Array.from(nav.querySelectorAll('a')).map((a) => a as HTMLAnchorElement);
 }
 
 const AGENT = makeMe({
@@ -110,10 +103,8 @@ describe('the sidebar matches the prototype', () => {
 
   it('agent app: an unbuilt item is disabled and keeps its pill', async () => {
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-    // The route is `/group-tree`, so `Admin` is the group that opens itself. One group is
-    // open at a time, so reaching another is a click. Personal summary was this example until
-    // P10-T4 built it; Training modules is Phase 12's.
-    await userEvent.click(screen.getByRole('button', { name: /^Training/ }));
+    // Every group starts open (P10.1-T3), so no click reaches it. Personal summary was this
+    // example until P10-T4 built it.
     const training = screen.getByText('Training modules').closest('a')!;
     expect(training).toHaveAttribute('aria-disabled');
     expect(within(training).getByText('Upcoming')).toBeInTheDocument();
@@ -121,7 +112,6 @@ describe('the sidebar matches the prototype', () => {
 
   it('agent app: Personal summary is a live link, not a pill (P10-T4)', async () => {
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-    await userEvent.click(screen.getByRole('button', { name: /^Personal tools/ }));
     const summary = screen.getByText('Personal summary').closest('a')!;
     expect(summary).toHaveAttribute('href', '/summary');
     expect(summary).not.toHaveAttribute('aria-disabled');
@@ -130,7 +120,6 @@ describe('the sidebar matches the prototype', () => {
 
   it('agent app: Goal settings is a live link, not a pill', async () => {
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-    await userEvent.click(screen.getByRole('button', { name: /^Personal tools/ }));
 
     const goals = screen.getByText('Goal settings').closest('a')!;
     expect(goals).toHaveAttribute('href', '/goals');
@@ -140,7 +129,6 @@ describe('the sidebar matches the prototype', () => {
 
   it('agent app: Leads management is a live link, not a pill', async () => {
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-    await userEvent.click(screen.getByRole('button', { name: /^Personal tools/ }));
 
     const leads = screen.getByText('Leads management').closest('a')!;
     expect(leads).toHaveAttribute('href', '/leads');
@@ -188,14 +176,11 @@ describe('the sidebar matches the prototype', () => {
 
   it('Superadmin: says Soon where the KPM Owner app says Upcoming', async () => {
     // Each prototype writes its own word. The only unbuilt console destination left is
-    // `Cross-platform analytics`, and `Reporting` is not the group that opens first — so
-    // the word is reached by opening it, which is the accordion working.
+    // `Cross-platform analytics`, in `Reporting`, which starts open like every group (P10.1-T3).
     renderWithSession(
       <AdminShell title="x">body</AdminShell>,
       { me: makeMe({ user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'] }) },
     );
-    await userEvent.click(screen.getByRole('button', { name: /^Reporting/ }));
-
     expect(screen.getAllByText('Soon').length).toBeGreaterThan(0);
   });
 
@@ -254,6 +239,35 @@ describe('the sidebar matches the prototype', () => {
         expect(icon, `${item.textContent?.trim()} has no icon`).not.toBeNull();
         expect(icon!.getAttribute('viewBox')).toBe('0 0 24 24');
       }
+    });
+  });
+});
+
+describe('a line between every two groups, in all three shells (parity I-144)', () => {
+  /*
+   * The Owner's and the Super Admin's prototypes draw a line before every group; the agent's drew
+   * two. Once every group became a toggle of its own (P10.1-T3), a heading with no line above it
+   * read as part of the group before it, and the client asked for one rule everywhere
+   * (2026-09-30). Asserted by count and by position, so a shell that drops one, or draws one
+   * under its last group, fails.
+   */
+  const SUPER = makeMe({
+    user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
+  });
+  const SHELLS = [
+    ['agent', () => renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT })],
+    ['KPM Owner', () => renderWithSession(<TenantShell title="x">body</TenantShell>, { me: OWNER })],
+    ['Superadmin', () => renderWithSession(<AdminShell title="x">body</AdminShell>, { me: SUPER })],
+  ] as const;
+
+  it.each(SHELLS)('%s: every group but the last ends with a line', (_shell, render) => {
+    render();
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    const sections = Array.from(nav.children);
+
+    expect(within(nav).getAllByRole('separator')).toHaveLength(sections.length - 1);
+    sections.forEach((section, i) => {
+      expect(section.lastElementChild?.getAttribute('role') === 'separator').toBe(i < sections.length - 1);
     });
   });
 });
