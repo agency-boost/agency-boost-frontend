@@ -1717,9 +1717,46 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.getByLabelText('Status, row 1').className).toContain('bg-alert');
       expect(screen.getByLabelText('Status, row 2').className).toContain('bg-success');
       expect(screen.getByLabelText('Status, row 1').className).toContain('text-navy');
-      expect(screen.getByLabelText('Type, row 1').className).toContain('bg-amber/[0.13]');
-      expect(screen.getByLabelText('Type, row 3').className).toContain('bg-navy-soft/[0.09]');
-      expect(screen.getByLabelText('Type, row 1').className).not.toContain('text-amber');
+    });
+
+    it('colours the Type word with no background, as the prototype does', async () => {
+      /*
+       * `.type-badge-select` (`Overall.html:476-477`) colours the word on a transparent cell, and
+       * an unchosen type is the plain grey placeholder (`:473`). The client, 2026-10-01: Type had
+       * been given Status's tinted box and the two read as one control twice. Sales is amber-ink —
+       * the prototype's amber-dark is 2.99:1 at this size (a11y.spec.tsx).
+       */
+      render({
+        '/leads': {
+          body: page([
+            lead({ id: 'l1', name: 'Pak Budi' }),
+            lead({ id: 'l2', name: 'Calon', type: 'recruitment', statusCode: 'NOT_APPROACHED' }),
+            lead({ id: 'l3', name: 'Belum', type: null, statusCode: null }),
+          ]),
+        },
+      });
+      await screen.findByDisplayValue('Pak Budi');
+
+      const sales = screen.getByLabelText('Type, row 1').className;
+      expect(sales).toContain('text-amber-ink');
+      expect(sales).toContain('font-semibold');
+      expect(sales).not.toMatch(/(^|\s)bg-amber/);
+
+      const recruitment = screen.getByLabelText('Type, row 2').className;
+      expect(recruitment).toContain('text-navy-soft');
+      expect(recruitment).toContain('font-semibold');
+      expect(recruitment).not.toMatch(/(^|\s)bg-navy-soft/);
+
+      const none = screen.getByLabelText('Type, row 3').className;
+      expect(none).toContain('text-muted');
+      expect(none).not.toContain('font-semibold');
+
+      // The cell's own ground — transparent, hairline on hover — is all any of them has.
+      for (const cls of [sales, recruitment, none]) {
+        expect(cls).toContain('bg-transparent');
+        expect(cls).toContain('border-transparent');
+        expect(cls).toContain('hover:border-hairline');
+      }
     });
 
     it('gives the row its glyph buttons, each still saying what it does', async () => {

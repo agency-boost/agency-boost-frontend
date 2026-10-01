@@ -236,6 +236,8 @@ describe('accessibility', () => {
     const AMBER = '#F2994A';
     const AMBER_DARK = '#D97F30';
     const AMBER_DEEP = '#B5651D';
+    const AMBER_INK = '#A85E1B';
+    const NAVY_SOFT = '#2E4370';
     const BASE = '#FAF9F7';
     const CARD = '#FFFFFF';
     const MUTED = '#5F5E5A';
@@ -313,19 +315,48 @@ describe('accessibility', () => {
       expect(ratio(AMBER_DEEP, ground)).toBeGreaterThan(ratio(AMBER_DARK, ground));
     });
 
-    it.each(GROUNDS)('no amber reaches the SMALL-text floor on %s', (_name, ground) => {
+    it.each(GROUNDS)('amber-deep does not reach the small-text floor on %s', (_name, ground) => {
       /*
        * Which is the boundary on amber-deep's use, and it decides real call sites.
        *
        * A `KpiTile` value is `text-2xl` bold — 20px bold, past WCAG's 18.66px-bold threshold — so it
-       * is large text, 3:1 is its floor, and amber-deep is comfortable. Small amber text is simply not
-       * available: that is why the leads table's mid-stage status at 12.5px carries **navy** text and
-       * the tint is a background rather than a colour cue.
+       * is large text, 3:1 is its floor, and amber-deep is comfortable. As small text it is not: the
+       * leads Type word, 13px semibold, uses **amber-ink** (pinned below), and the leads table's
+       * mid-stage Status keeps **navy** text on a tint, because no amber clears 4.5:1 on that tint.
        *
        * It also means the 10px role badges still miss 4.5:1 with amber-deep (3.87:1). Better than the
        * 2.67:1 they shipped with, and not yet right — recorded rather than silently called fixed.
        */
       expect(ratio(AMBER_DEEP, ground)).toBeLessThan(4.5);
+    });
+
+    /**
+     * The grounds a leads-table word sits on with no tint of its own: the card the table is drawn on,
+     * the page's base, and the row hover — the prototype's 1.5% navy wash (`Overall.html:424`,
+     * `--row-hover` in globals.css) — over each.
+     */
+    const ROW_GROUNDS = [
+      ['white card', CARD],
+      ['base', BASE],
+      ['the row hover on card', over(NAVY, 0.015, CARD)],
+      ['the row hover on base', over(NAVY, 0.015, BASE)],
+    ] as const;
+
+    it.each(ROW_GROUNDS)('the leads Type word clears the small-text floor on %s', (_name, ground) => {
+      /*
+       * `.type-badge-select` colours the word itself (`Overall.html:476-477`) at the table's 13px
+       * semibold — small text, so 4.5:1. The prototype's amber-dark is 2.99:1 at best; amber-ink is
+       * the one amber that clears, and the reason it exists. Recruitment's navy-soft and the
+       * unchosen placeholder's muted grey are the prototype's own and clear with room.
+       */
+      expect(ratio(AMBER_INK, ground)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(NAVY_SOFT, ground)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(MUTED, ground)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it('amber-ink is a word on a plain ground — it misses 4.5:1 on the mid-rung’s amber tint', () => {
+      // Which is why the Status column beside it still carries navy text on its tint (F-71).
+      expect(ratio(AMBER_INK, over(AMBER, 0.13, CARD))).toBeLessThan(4.5);
     });
 
     it('the Active (MAA) marks put a navy glyph on the tint — the prototype’s coloured ones miss (ADR-0054)', () => {

@@ -8,6 +8,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Select, TextInput } from '@/components/ui/field';
 import { Skeleton, SkeletonTable, SkeletonText } from '@/components/ui/skeleton';
+import { INERT_GLYPH, TippedGlyph } from '@/components/ui/tipped-glyph';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatDay } from '@/lib/format';
@@ -58,8 +59,6 @@ const SHORT_NAME: ApiError = {
 
 /** A control on the inline row with nothing to write to yet: there, and plainly not live. */
 const INERT_CONTROL = 'cursor-not-allowed opacity-40';
-/** The same, for a glyph — at the 30% the prototype gives an unavailable one (`Overall.html:497`). */
-const INERT_GLYPH = 'cursor-not-allowed opacity-30 hover:bg-transparent hover:text-muted';
 
 /** Every field a lead starts with, so the inline row renders through the same cells as a real one. */
 const blankLead = (id: string, name: string): Lead => ({
@@ -671,17 +670,21 @@ export function LeadsTable({
 
           <Cell>
             {/*
-              * **The ladder's colour is the ground, and the text stays navy** (F-73).
-              * `.type-badge-select` colours the words (`Overall.html:476-477`), and at 12.5px no amber
-              * in the palette reaches 4.5:1. Tint the cell, keep the word readable.
+              * **The word is coloured and the cell is not** (F-73). `.type-badge-select` colours the
+              * words on the cell's transparent ground (`Overall.html:476-477`), and an unchosen type is
+              * the grey, normal-weight placeholder (`:473`) — so Type reads as a word and Status, beside
+              * it, as a box. Client, 2026-10-01: Type must not look like Status.
+              *
+              * Sales is **amber-ink**, not the prototype's amber-dark: at this size amber-dark is
+              * 2.99:1 on white and amber-deep 4.34:1, both under the 4.5:1 small text needs.
+              * Recruitment is the prototype's navy-soft exactly.
               */}
             <Select
               aria-label={`Type, row ${n}`}
               density="cell"
               className={cn(
-                'font-semibold',
-                row.type === 'sales' && 'bg-amber/[0.13] text-navy',
-                row.type === 'recruitment' && 'bg-navy-soft/[0.09] text-navy',
+                row.type === 'sales' && 'font-semibold text-amber-ink',
+                row.type === 'recruitment' && 'font-semibold text-navy-soft',
                 row.type === null && 'text-muted',
                 isDraft && INERT_CONTROL,
               )}
@@ -701,9 +704,10 @@ export function LeadsTable({
           <Cell>
             {/*
               * **Tinted by where the stage sits on its own ladder** (`statusStyle()`,
-              * `Overall.html:5463-5478`), with navy words for the same reason as Type (F-71). Until
-              * there is a ladder there is nothing to choose from, and the one option says why
-              * (`Overall.html:5447-5455`); the server refuses a stage without one either way.
+              * `Overall.html:5463-5478`), with navy words: not even amber-ink clears 4.5:1 on the
+              * mid-rung's 13% amber tint (F-71). Until there is a ladder there is nothing to choose
+              * from, and the one option says why (`Overall.html:5447-5455`); the server refuses a
+              * stage without one either way.
               */}
             <Select
               aria-label={`Status, row ${n}`}
@@ -1183,94 +1187,6 @@ function ClosedLeads({
         ))}
       </div>
     </section>
-  );
-}
-
-/**
- * A glyph whose words show beside it — on hover, on focus and on a tap (ADR-0062 §2, form 2).
- *
- * **A `title` shows to a mouse and to nobody else.** It never appears for a keyboard, and on a
- * phone — the agent's main device — there is no hover to ask for it. So the words are drawn: a
- * bubble **above** the glyph, right-aligned to it. Not below the row, where the table's own scroll
- * box would clip the last row's; and not beside it, where it covered the ✓, ✕, 🗑 and ☎ of the same
- * row and swallowed the next tap on them (a regression found 2026-09-30, fixed the same day). Above,
- * it overlaps only the row above — or, on the first row, the header — and never the row being
- * worked on.
- *
- * **The words can be hovered** (WCAG 1.4.13). A reader magnifying the screen moves the pointer onto
- * them to bring them into view, so the pointer is watched on the wrapper that holds the glyph and
- * the bubble both, the bubble takes the pointer, and a transparent strip bridges the 4px between
- * them. **A press on the bubble puts it away**, so a tap meant for what lies under it costs one tap,
- * never a stuck bubble. Escape puts it away wherever the focus is — a bubble brought up by the
- * pointer has no focus to listen on — and so do leaving both and looking away.
- *
- * `name` is what a screen reader says; `tip` is what the bubble says. When they are the same —
- * *Last changed by Ibu Sari* — the bubble is hidden from assistive technology rather than read
- * twice; when they differ — *Delete lead*, and why it is not available — the bubble is the button's
- * description.
- *
- * `unavailable` holds the button **focusable** and inert (`aria-disabled`), at the 30% the row's
- * other unavailable glyphs wear: a disabled button cannot be focused, and a reason nobody can
- * reach is not given.
- */
-function TippedGlyph({
-  glyph,
-  name,
-  tip,
-  unavailable = false,
-}: {
-  glyph: string;
-  name: string;
-  tip: string;
-  unavailable?: boolean;
-}) {
-  const [shown, setShown] = useState(false);
-  const tipId = useId();
-  const describes = tip !== name;
-
-  useEffect(() => {
-    if (!shown) return;
-    const dismiss = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShown(false);
-    };
-    document.addEventListener('keydown', dismiss);
-    return () => document.removeEventListener('keydown', dismiss);
-  }, [shown]);
-
-  return (
-    <span
-      className="relative inline-flex"
-      onMouseEnter={() => setShown(true)}
-      onMouseLeave={() => setShown(false)}
-    >
-      <Button
-        variant="icon"
-        aria-disabled={unavailable || undefined}
-        aria-describedby={describes ? tipId : undefined}
-        className={cn(unavailable && INERT_GLYPH)}
-        onFocus={() => setShown(true)}
-        onBlur={() => setShown(false)}
-        onClick={() => setShown(true)}
-      >
-        <span aria-hidden="true">{glyph}</span>
-        <span className="sr-only">{name}</span>
-      </Button>
-      <span
-        id={tipId}
-        role="tooltip"
-        aria-hidden={describes ? undefined : true}
-        hidden={!shown}
-        onPointerDown={() => setShown(false)}
-        className={cn(
-          'absolute bottom-full right-0 z-10 mb-1 whitespace-nowrap',
-          'rounded-sm bg-navy px-2 py-1 text-xs font-semibold text-white shadow-modal',
-          // The bridge across the 4px gap, so the pointer can cross it without the bubble going.
-          "before:absolute before:inset-x-0 before:top-full before:h-1 before:content-['']",
-        )}
-      >
-        {tip}
-      </span>
-    </span>
   );
 }
 

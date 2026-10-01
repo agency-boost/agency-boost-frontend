@@ -52,6 +52,7 @@ const config: Config = {
           DEFAULT: token('amber'),
           dark: token('amber-dark'),
           deep: token('amber-deep'),
+          ink: token('amber-ink'),
         },
         base: token('base'),
         card: token('card'),

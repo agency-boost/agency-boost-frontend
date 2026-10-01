@@ -155,6 +155,16 @@ export interface ShellUser {
  *
  * There is exactly one `<h1>` per screen either way: the shell renders this itself when a
  * page passes a `title`, and does not when a page renders it.
+ *
+ * **The row is top-aligned, so the title never moves** (P10.1-T8, client item 1). It was
+ * `items-end`, which is what three of `Overall.html`'s four `.topbar` rules say (`:76`, `:387`,
+ * `:624`) — but the fourth, `:839`, is `align-items:flex-start`, and the last declaration is the
+ * one that renders. Bottom-aligned, the tallest child sets the line: on `/activity/log` the Date
+ * field with its save status under it is taller than the title block, so the `<h1>` sat about
+ * 25px lower than on Dashboard and Ratio, which pass no actions — and it jumped when the loading
+ * state, which has no Date, was replaced. `KPM_Owner.html:72` and `Superadmin.html:72` say
+ * `flex-end`, but their topbars only ever hold the title (`:930-935`, `:222-227`), so nothing in
+ * those files shows the alignment; `Overall.html` is the one whose topbar carries actions.
  */
 export function PageHeader({
   title,
@@ -166,7 +176,7 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+    <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 className="font-display text-3xl font-bold text-navy">{title}</h1>
         {subtitle && <p className="mt-1 text-md text-muted">{subtitle}</p>}

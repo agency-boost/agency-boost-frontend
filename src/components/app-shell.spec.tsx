@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderToString } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { AppShell, type NavSection } from './app-shell';
+import { AppShell, PageHeader, type NavSection } from './app-shell';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -371,5 +371,30 @@ describe('AppShell', () => {
       expect(panel.className).toContain('w-48');
       expect(within(panel).getByRole('link', { name: 'Your account' })).toBeInTheDocument();
     });
+  });
+});
+
+describe('PageHeader: the title holds its place (P10.1-T8, client item 1)', () => {
+  it('top-aligns the heading row, so an actions slot taller than the title cannot push it down', () => {
+    // `Overall.html:839`, the last of four `.topbar` rules and the one that renders, is
+    // `align-items:flex-start`. Bottom-aligned, Log's Date block set the line and its title sat
+    // ~25px below Dashboard's. jsdom lays nothing out, so the alignment class is what is checked.
+    render(
+      <PageHeader
+        title="Log Activity"
+        subtitle="Enter today's activities in 1 minute."
+        actions={(
+          <div className="flex h-32 flex-col gap-1.5">
+            <label>Date<input type="date" /></label>
+            <span>Not yet saved</span>
+          </div>
+        )}
+      />,
+    );
+    const row = screen.getByRole('heading', { name: 'Log Activity', level: 1 })
+      .parentElement!.parentElement!;
+    expect(row).toContainElement(screen.getByLabelText('Date'));
+    expect(row).toHaveClass('items-start');
+    expect(row).not.toHaveClass('items-end');
   });
 });

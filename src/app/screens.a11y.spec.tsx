@@ -121,6 +121,22 @@ async function expectClean(name: string) {
   expect(violations).toHaveLength(0);
 }
 
+/** The published configuration's two sections holding the goal cascade's types, numbered as the seed numbers them. */
+const cascadeType = (code: string, categoryCode: string, displayOrder: number) => ({
+  id: `t-${code}`, code, categoryCode, label: code, description: null, appliesToOrgLevelCodes: [], displayOrder, version: 1, status: 'active',
+});
+const GOAL_CASCADE_CONFIG = [
+  {
+    id: 'c-lg', code: 'LEADS_GENERATION', label: 'Leads Generation', description: null, appliesToOrgLevelCodes: [], displayOrder: 1,
+    version: 1, status: 'active', types: [cascadeType('LEADS_CONTACTED', 'LEADS_GENERATION', 3)],
+  },
+  {
+    id: 'c-sell', code: 'SELLING', label: 'Selling', description: null, appliesToOrgLevelCodes: [], displayOrder: 2,
+    version: 1, status: 'active',
+    types: [cascadeType('SELL_PRESENTATION', 'SELLING', 4), cascadeType('SELL_SUBMISSION', 'SELLING', 6)],
+  },
+];
+
 const OVERVIEW = {
   tiles: { companies: 1, kpms: 8, totalMembers: 1340, agencyBuilders: 61 },
   attention: [{
@@ -339,7 +355,7 @@ describe('screens have no axe violations', () => {
     });
     renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
     await screen.findByText('Budi Santoso');
-    await screen.findByRole('link', { name: '⬇ Download template' });
+    await screen.findByRole('link', { name: 'Download template' });
     await expectClean('kpm/data-upload');
   });
 
@@ -554,7 +570,17 @@ describe('screens have no axe violations', () => {
       from: '2026-09-01', to: '2026-09-14', total: 42,
       // One chip with a bar, one with no target, one met at 0 — every shape the card draws.
       targets: [target('leads', 20, 57), target('appointments', 6, null), { ...target('closings', 2, 0), targetMet: true }],
-      sections: [{ code: 'RECRUITMENT', label: 'Recruitment', total: 3, rows: [{ code: 'RECRUIT_PRESENTATION', label: 'Presentasi NBO', count: 3 }] }],
+      // The seed's two summary tiles (ADR-0064): a section of its own, and a group of two.
+      sections: [
+        { code: 'RECRUITMENT', label: 'Recruitment', total: 3, rows: [{ code: 'RECRUIT_PRESENTATION', label: 'Presentasi NBO', count: 3 }] },
+        {
+          code: 'DEVELOPMENT', label: 'Development', total: 5,
+          rows: [
+            { code: 'DEV_TRAINING_ATTEND', label: 'Menghadiri meeting atau training dari KPM atau Prudential', count: 2 },
+            { code: 'DEV_TEAM_ACTIVITY', label: 'Aktivitas team development', count: 3 },
+          ],
+        },
+      ],
     };
     const rate = (code: string, value: number | null, status: string) => ({
       code, label: code, comparison: 'gte', displayUnit: 'percent', benchmark: 0.15, tag: null, sides: null,
@@ -752,26 +778,14 @@ describe('screens have no axe violations', () => {
   it('goal settings: five numbered cards, two entry modes and a live cascade', async () => {
     const period = String(new Date().getFullYear());
     stubFetch({
-      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      // The cascade's three types, so each column carries its *Activity #n* chip (P10.1-T6).
+      '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
       '/kpm/org-levels': { body: [] },
       '/members/my-team': {
         body: [{
           membershipId: 'mem-rina', fullName: 'Rina Wijaya', initials: 'RW',
           agentCode: 'PRU-001', role: 'agent', directCount: 0, canChangeRole: false,
         }],
-      },
-      // Two versions, so the history panel is walked open rather than absent.
-      [`/goals/${String(new Date().getFullYear())}/history`]: {
-        body: [2, 1].map((version) => ({
-          version, at: '2026-01-13T04:00:00.000Z', byMembershipId: 'mem-1', byName: 'Ibu Sari',
-          mode: 'direct', annualApeTargetMinor: version === 2 ? 500_000_000_00 : 300_000_000_00,
-          savingsTargetMinor: 50_000_000_00, commissionRatePct: 10, monthsLeftOverride: null,
-          apeAchievedMinor: 0, caseSizeMinor: 18_000_000_00, leadsToApptPct: 30, closingRatePct: 30,
-          snapshot: {
-            monthlyApeTargetMinor: 60_000_000_00,
-            policiesPerMonth: 4, appointmentsPerMonth: 14, leadsPerMonth: 47,
-          },
-        })),
       },
       '/goals': {
         body: {
@@ -820,26 +834,13 @@ describe('screens have no axe violations', () => {
   it('goal settings: five numbered cards, two entry modes and a live cascade, measured against the carrier’s figure (P9-T6)', async () => {
     const period = String(new Date().getFullYear());
     stubFetch({
-      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
       '/kpm/org-levels': { body: [] },
       '/members/my-team': {
         body: [{
           membershipId: 'mem-rina', fullName: 'Rina Wijaya', initials: 'RW',
           agentCode: 'PRU-001', role: 'agent', directCount: 0, canChangeRole: false,
         }],
-      },
-      // Two versions, so the history panel is walked open rather than absent.
-      [`/goals/${String(new Date().getFullYear())}/history`]: {
-        body: [2, 1].map((version) => ({
-          version, at: '2026-01-13T04:00:00.000Z', byMembershipId: 'mem-1', byName: 'Ibu Sari',
-          mode: 'direct', annualApeTargetMinor: version === 2 ? 500_000_000_00 : 300_000_000_00,
-          savingsTargetMinor: 50_000_000_00, commissionRatePct: 10, monthsLeftOverride: null,
-          apeAchievedMinor: 0, caseSizeMinor: 18_000_000_00, leadsToApptPct: 30, closingRatePct: 30,
-          snapshot: {
-            monthlyApeTargetMinor: 60_000_000_00,
-            policiesPerMonth: 4, appointmentsPerMonth: 14, leadsPerMonth: 47,
-          },
-        })),
       },
       '/goals': {
         body: {

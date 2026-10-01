@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import DataUploadPage from './page';
 
@@ -63,10 +63,24 @@ const routes = (view: unknown, t: unknown = template()) => ({
 });
 
 describe('Data upload — the month table (P9-T1)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  // The page offers this month as its default: pinned, so a run on another day reads the same month.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T03:00:00Z')); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  it('defaults to the office’s month, not the browser’s UTC one (invariant §9)', async () => {
+    // 01:00 on 1 October in Jakarta is still 30 September in UTC.
+    vi.setSystemTime(new Date('2026-09-30T18:00:00Z'));
+    const { calls } = stubFetch({
+      ...routes(month([rina()], 0, '2026-10')),
+      '/kpm/settings/branch-info': { body: { timezone: 'Asia/Jakarta' } },
+    });
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+
+    await waitFor(() => expect(calls.some((c) => c.url.includes('/kpm/data-upload/2026-10'))).toBe(true));
+  });
 
   describe('the template (P9-T2)', () => {
-    const link = () => screen.findByRole('link', { name: '⬇ Download template' });
+    const link = () => screen.findByRole('link', { name: 'Download template' });
     const templateCalls = (calls: { url: string }[]) =>
       calls.filter((c) => c.url.includes('/kpm/data-upload/template'));
 
@@ -76,6 +90,9 @@ describe('Data upload — the month table (P9-T1)', () => {
 
       const a = await link();
       expect(a).toHaveAttribute('download', 'KPM0417-agent-data-Sep-2026.csv');
+      // The prototype's ⬇ is drawn and kept out of the name, as on the Summary's Download (ADR-0068).
+      expect(a).toHaveTextContent('⬇Download template');
+      expect(a.querySelector('[aria-hidden="true"]')).toHaveTextContent('⬇');
       // A data: URL carrying the whole file, so saving it needs no second request.
       const href = a.getAttribute('href')!;
       expect(href.startsWith('data:text/csv;charset=utf-8,')).toBe(true);
@@ -117,7 +134,7 @@ describe('Data upload — the month table (P9-T1)', () => {
       fireEvent.change(screen.getByLabelText('Month'), { target: { value: '2026-08' } });
 
       // Gone at once — the link is for the month the table shows, and the table is reloading.
-      expect(screen.queryByRole('link', { name: '⬇ Download template' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Download template' })).not.toBeInTheDocument();
       await waitFor(async () => {
         expect(await link()).toHaveAttribute('download', 'KPM0417-agent-data-Aug-2026.csv');
       });
@@ -137,7 +154,7 @@ describe('Data upload — the month table (P9-T1)', () => {
       expect(alert).toHaveTextContent('The template could not be prepared. Something went wrong on our side.');
       expect(alert).toHaveTextContent('INTERNAL_ERROR · req-42');
       expect(within(alert).getByRole('button', { name: 'Try again' })).toBeInTheDocument();
-      expect(screen.queryByRole('link', { name: '⬇ Download template' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Download template' })).not.toBeInTheDocument();
       // The table it sits beside loaded, and says so.
       expect(screen.getByText('Rina Wijaya')).toBeInTheDocument();
       expect(screen.getByRole('status')).toBeInTheDocument();
@@ -172,7 +189,7 @@ describe('Data upload — the month table (P9-T1)', () => {
 
       await screen.findByRole('alert');
       expect(templateCalls(calls)).toHaveLength(0);
-      expect(screen.queryByRole('link', { name: '⬇ Download template' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Download template' })).not.toBeInTheDocument();
     });
 
     it('shows the table and not the control to somebody who may read and may not download', async () => {
@@ -180,7 +197,7 @@ describe('Data upload — the month table (P9-T1)', () => {
       renderWithSession(<DataUploadPage />, { me: READER });
 
       await screen.findByText('Rina Wijaya');
-      expect(screen.queryByRole('link', { name: '⬇ Download template' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Download template' })).not.toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       // Not asked for either: a grant enforced on the pixels and not on the wire is the defect.
       expect(templateCalls(calls)).toHaveLength(0);
@@ -339,7 +356,9 @@ const choose = async (file = csvFile()) => {
 };
 
 describe('Data upload — reading a filled file (P9-T3)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  // The page offers this month as its default: pinned, so a run on another day reads the same month.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T03:00:00Z')); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
   const withPreview = (preview: unknown = PREVIEW, status = 200) => ({
     ...routes(month([rina(), budi()])),
@@ -510,7 +529,9 @@ const REVERTED = batch({
 const result = (b: Record<string, unknown>, st = state('2026-09', { revision: 4 })) => ({ batch: batch(b), state: st });
 
 describe('Data upload — confirm, history, revert and the month lock (P9-T4)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  // The page offers this month as its default: pinned, so a run on another day reads the same month.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T03:00:00Z')); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
   const everything = (over: Record<string, unknown> = {}) => ({
     ...routes(month([rina(), budi()], 1)),
@@ -680,7 +701,9 @@ const CORRECTOR = makeMe({
 });
 
 describe('Data upload — correcting one figure (P9-T5)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  // The page offers this month as its default: pinned, so a run on another day reads the same month.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T03:00:00Z')); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
   const withApe = () => rina({ metrics: { ...blank(), ape: { monthly: cell(150_000_000), ytd: empty } } });
   const correction = (over: Record<string, unknown> = {}) => ({
@@ -844,7 +867,9 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
 // ── P9-T5 AC-3, ADR-0053 ─────────────────────────────────────────────────────────────────────
 
 describe('Data upload — a correction the file would change (ADR-0053)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  // The page offers this month as its default: pinned, so a run on another day reads the same month.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T03:00:00Z')); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
   /** Rina's APE this month: corrected to Rp 2.000.000 by Maya; the file says Rp 1.500.000 — what it replaced. */
   const CONFLICTED = {
@@ -943,7 +968,9 @@ describe('Data upload — a correction the file would change (ADR-0053)', () => 
 // ── P9-T6: whose each figure is ─────────────────────────────────────────────────────────────
 
 describe('Data upload — whose each figure is (P9-T6)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  // The page offers this month as its default: pinned, so a run on another day reads the same month.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T03:00:00Z')); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
   const corrected = (value: number | null, reason: string) => ({
     value, provenance: 'corrected' as const,
@@ -1002,7 +1029,9 @@ describe('Data upload — whose each figure is (P9-T6)', () => {
 
 
 describe('Data upload — the Active (MAA) column (OD-21, ADR-0054)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  // The page offers this month as its default: pinned, so a run on another day reads the same month.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T03:00:00Z')); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
   const sari = (over: Record<string, unknown> = {}) => ({
     membershipId: 'mem-sari', agentCode: 'PRU-003', name: 'Sari Dewi', metrics: blank(), ...over,

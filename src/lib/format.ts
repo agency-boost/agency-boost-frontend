@@ -64,6 +64,17 @@ export function formatMonth(month: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
+/**
+ * The calendar month an instant falls in **in the office's zone** — `2026-10` at 01:00 on 1 October in
+ * Jakarta, which is still September in UTC (invariant §9). For a default a screen offers, never for a
+ * computation over data: those are the server's.
+ */
+export function monthInZone(timeZone: string, at: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit' }).formatToParts(at);
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}`;
+}
+
 /** A calendar day's three numbers, as a local `Date` — never parsed as an instant. */
 function localDate(day: string): Date | null {
   const [y, m, d] = day.split('-').map(Number);

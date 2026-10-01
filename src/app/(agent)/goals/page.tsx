@@ -6,22 +6,22 @@ import { ConfigBadge } from '@/components/ui/config-badge';
 import { CascadeRow } from '@/components/ui/cascade-row';
 import { KpiTile } from '@/components/ui/kpi-tile';
 import { NumberBadge } from '@/components/ui/number-badge';
-import { formatDay, formatDayLong, formatMonth } from '@/lib/format';
+import { formatDay, formatDayLong } from '@/lib/format';
 import { SaveStatus } from '@/components/ui/save-status';
 import { Segmented } from '@/components/ui/segmented';
 import {
   Button, Card, ErrorBanner, Field, FieldRow, ReadOnlyField, Select, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  changesBetween, FIELD_LABEL, formatRupiah, groupDigits, parseDigits, readGoal, readGoalHistory,
-  saveGoal, toMajor, toMinor,
-  type Goal, type GoalHistoryEntry, type GoalInputs, type GoalMode,
+  formatRupiah, groupDigits, parseDigits, producedFrom, readGoal, saveGoal, toMajor, toMinor,
+  type Goal, type GoalInputs, type GoalMode,
 } from '@/lib/goals';
 import { readMyTeam, type TeamMember } from '@/lib/org';
-import { formatBenchmark } from '@/lib/ratio-format';
 import { useSession } from '@/lib/session';
+import { useTenantConfig, type TenantConfig } from '@/lib/tenant-config-cache';
 
 /**
  * Goal Settings (P8-T3) — `Overall.html:2860-3030`.
@@ -33,10 +33,22 @@ import { useSession } from '@/lib/session';
  * what comes back — it holds no copy of the cascade, because the prototype's own three surfaces
  * disagree (markup 80 / 24, calculator 67 / 20, `PERIOD_DATA` 80 / 24 again) and a second
  * implementation is exactly how that happens.
+ *
+ * **The prototype's screen, and no more** (P10.1-T6, ADR-0062, ADR-0063): its title and subtitle, no
+ * hint sentences under step 2, no measured rate under the assumptions (ADR-0063 §7), and no history
+ * card — the stored revisions keep every version and who saved it (ADR-0042), and the manual does
+ * the explaining the screen stopped doing. What stays beyond the prototype is what a requirement
+ * needs: the *Whose plan* picker (L-30), *Set by your leader* (ADR-0046), the provenance marker on
+ * the APE already produced (ADR-0063 §5), the disclaimer (L-29) and the target-passed state (ADR-0047).
  */
+
+const TITLE = 'Goal Settings';
+/** `Overall.html:10405`, verbatim. */
+const SUBTITLE = "Turn your annual target into this month's activity numbers.";
 
 export default function GoalSettingsPage() {
   const { me } = useSession();
+  const { config } = useTenantConfig();
   /*
    * v1 is annual (ADR-0049), so there is no selector — and `period` is a **field** on the record
    * rather than a constant, which is where a second shape would arrive without a migration.
@@ -59,7 +71,6 @@ export default function GoalSettingsPage() {
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [history, setHistory] = useState<GoalHistoryEntry[]>([]);
 
   useEffect(() => {
     // A reader who leads nobody gets an empty list and no picker. Failing is the same answer:
@@ -74,9 +85,6 @@ export default function GoalSettingsPage() {
       setGoal(next);
       setDraft(inputsOf(next));
       setSaved(next.savedAt !== null);
-      // Beside the plan, not after it: the panel is closed until somebody opens it, and a history
-      // that arrives a round trip late reads as a panel that does not work.
-      readGoalHistory(period, subject ?? undefined).then(setHistory).catch(() => setHistory([]));
     } catch (err) {
       setError(toDisplayError(err));
     }
@@ -101,8 +109,6 @@ export default function GoalSettingsPage() {
       setGoal(result);
       setDraft(inputsOf(result));
       setSaved(true);
-      // A save is what adds to it, so it reloads with the plan.
-      readGoalHistory(period, subject ?? undefined).then(setHistory).catch(() => setHistory([]));
     } catch (err) {
       setError(toDisplayError(err));
       setSaved(false);
@@ -113,7 +119,7 @@ export default function GoalSettingsPage() {
 
   if (!goal || !draft) {
     return (
-      <Page title="Goal settings" subtitle="From this year's target back to this week's work.">
+      <Page title={TITLE} subtitle={SUBTITLE}>
         {error && <ErrorBanner {...error} />}
         {!error && <SkeletonCards count={5} label="Loading your plan…" />}
       </Page>
@@ -138,13 +144,10 @@ export default function GoalSettingsPage() {
     && goal.savedByMembershipId !== null
     && goal.savedByMembershipId !== me?.membership?.membershipId;
   const whose = team.find((m) => m.membershipId === subject);
+  const numbers = activityNumbers(config, goal.cascadeMapping);
 
   return (
-    <Page
-      title="Goal settings"
-      subtitle="From this year's target back to this week's work."
-      permission="goal:read"
-    >
+    <Page title={TITLE} subtitle={SUBTITLE} permission="goal:read">
       {/*
         * **A measure, and centred** — `.content` is `max-width:820px; margin:0 auto` (`:632`). Five
         * cards stretched across a 1,600px window put a two-word label a hand's width from its input,
@@ -293,9 +296,9 @@ export default function GoalSettingsPage() {
                 <>
                   Months left this year{' '}
                   {/*
-                    * The prototype's `.auto-badge` (`:662-667`, `:2913`), which said the field fills
-                    * itself in. It was dropped when the field became a plain input, and the hint below
-                    * had to do its work in a sentence.
+                    * The prototype's `.auto-badge` (`:662-667`, `:2913`), which says the field fills
+                    * itself in. With the placeholder's figure it is all that says so: the hint sentence
+                    * under the box went in P10.1-T6 (ADR-0062), and the manual explains the override.
                     */}
                   {draft.monthsLeft === null && (
                     <ConfigBadge tone="navy" className="ml-1 align-middle">auto</ConfigBadge>
@@ -304,9 +307,6 @@ export default function GoalSettingsPage() {
               )}
               htmlFor="goal-months"
               className="w-56"
-              hint={draft.monthsLeft === null
-                ? `Your office\u2019s calendar says ${goal.monthsLeft}. Type a number to use your own.`
-                : 'Your own figure. Empty the box to go back to your office\u2019s calendar.'}
             >
               {/*
                 * **Empty means the office's calendar**, with the figure as the placeholder — not
@@ -334,6 +334,9 @@ export default function GoalSettingsPage() {
               * measured against that, and the box becomes a statement of where the number came from:
               * a field you could type into and that nothing would read would be a lie with a cursor.
               * The typed figure is kept, and still saved, for the year a file stops arriving.
+              *
+              * **No sentence says so** (P10.1-T6, ADR-0063 §5): whose figure it is, and for which
+              * month, is the marker on *Already produced* below, as on the Summary.
               */}
             {goal.achieved.provenance === 'self_reported' ? (
               <Rupiah
@@ -341,13 +344,26 @@ export default function GoalSettingsPage() {
                 id="goal-achieved"
                 value={draft.apeAchievedMinor}
                 onChange={(apeAchievedMinor) => set({ apeAchievedMinor })}
-                hint="By your own count — used until your office uploads the carrier’s monthly production."
               />
             ) : (
               <ReadOnlyField
-                label="APE already produced this year"
+                label={projected ? 'APE already produced this year' : (
+                  <>
+                    APE already produced this year{' '}
+                    {/*
+                      * No plan, no *Already produced* tile to carry the marker — so it is here, once,
+                      * rather than leaving a carrier's figure with nothing to say whose it is.
+                      */}
+                    <TippedGlyph
+                      glyph="ⓘ"
+                      name={producedFrom(goal.achieved, 'year', mine)}
+                      tip={producedFrom(goal.achieved, 'year', mine)}
+                      align="fit"
+                      className="-my-2 align-middle"
+                    />
+                  </>
+                )}
                 value={formatRupiah(goal.achieved.minor)}
-                reason={achievedReason(goal)}
               />
             )}
           </FieldRow>
@@ -356,7 +372,23 @@ export default function GoalSettingsPage() {
               {/* Two-up, as `.kpi-row` is (`:686`) — a grid rather than a wrap, so they stay equal. */}
               <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
                 <KpiTile
-                  label={<>Already produced <span className="font-normal normal-case">· {SOURCE_SHORT[goal.achieved.provenance]}</span></>}
+                  label={(
+                    <>
+                      Already produced{' '}
+                      {/*
+                        * The provenance marker (ADR-0063 §5), the Summary's: its words say whose figure
+                        * this is and for which month. The negative margin keeps the 28px tap target
+                        * from making this tile's label taller than its neighbour's.
+                        */}
+                      <TippedGlyph
+                        glyph="ⓘ"
+                        name={producedFrom(goal.achieved, 'year', mine)}
+                        tip={producedFrom(goal.achieved, 'year', mine)}
+                        align="fit"
+                        className="-my-2 align-middle"
+                      />
+                    </>
+                  )}
                   value={formatRupiah(projected.apeAchievedMinor)}
                 />
                 <KpiTile label="Remaining needed" value={formatRupiah(projected.remainingApeMinor)} />
@@ -403,15 +435,12 @@ export default function GoalSettingsPage() {
           <FieldRow>
             {/*
               * The prototype's own labels, with its `.field-sub` explanation underneath as the hint
-              * (`:2981-2999`). The sub-line is a `<span>` inside the label there, which makes it part of
-              * the field's accessible name; ours is a `hint` bound by `aria-describedby`, so it is
-              * announced after the name rather than as part of it (L-20).
-              */}
-            {/*
-              * **What the subject actually logged, under each assumption** (ADR-0048, ADR-0055): the
-              * line the prototype's tip asks for — *"Use your real conversion ratios"* — without making
-              * the agent go and work it out. In the hint, so a screen reader hears it after the field's
-              * name. It fills nothing in: the field stays the agent's.
+              * (`:2981-2999`), verbatim. The sub-line is a `<span>` inside the label there, which makes
+              * it part of the field's accessible name; ours is a `hint` bound by `aria-describedby`, so
+              * it is announced after the name rather than as part of it (L-20).
+              *
+              * **Not the measured rate** (ADR-0063 §7): *Your logged rate* left this screen in
+              * P10.1-T6. `GET /goals` keeps `measured`; where coaching shows it is P11-T1's.
               */}
             <Percent
               label="Leads to Appointment"
@@ -419,7 +448,7 @@ export default function GoalSettingsPage() {
               className="min-w-[14rem] flex-1"
               value={draft.leadsToApptPct}
               onChange={(leadsToApptPct) => set({ leadsToApptPct })}
-              hint={`% of contacted leads that become an appointment. ${measuredLine(goal.measured.leadToAppointmentRate, mine)}`}
+              hint="% of contacted leads that become an appointment"
             />
             <Percent
               label="Closing rate"
@@ -427,7 +456,7 @@ export default function GoalSettingsPage() {
               className="min-w-[14rem] flex-1"
               value={draft.closingRatePct}
               onChange={(closingRatePct) => set({ closingRatePct })}
-              hint={`% of appointments that become a closing. ${measuredLine(goal.measured.closingRate, mine)}`}
+              hint="% of appointments that become a closing"
             />
           </FieldRow>
           <Tip glyph="💡">Use your real conversion ratios for accuracy.</Tip>
@@ -457,21 +486,21 @@ export default function GoalSettingsPage() {
               columns={[
                 {
                   label: 'Leads contacted',
-                  chip: goal.cascadeMapping.leadsCode,
+                  chip: chipOf(numbers.leads),
                   icon: 'clipboard',
                   month: String(projected.leadsPerMonth),
                   week: `≈ ${projected.leadsPerWeek}/week`,
                 },
                 {
                   label: 'Appointments',
-                  chip: goal.cascadeMapping.appointmentsCode,
+                  chip: chipOf(numbers.appointments),
                   icon: 'calendar',
                   month: String(projected.appointmentsPerMonth),
                   week: `≈ ${projected.appointmentsPerWeek}/week`,
                 },
                 {
                   label: 'Closings',
-                  chip: goal.cascadeMapping.closingsCode,
+                  chip: chipOf(numbers.closings),
                   icon: 'target',
                   month: String(projected.policiesPerMonth),
                   week: `≈ ${projected.policiesPerWeek}/week`,
@@ -487,11 +516,16 @@ export default function GoalSettingsPage() {
             </p>
           )}
           {/*
-            * The prototype's 🔗 tip reads *"Maps to activities #3, #4, #6 in Activity Management"* — and
-            * those numbers are display order, which an office can drag (invariant §4). The chips above
-            * carry the codes; this says where they are counted.
+            * The prototype's 🔗 tip, verbatim (`:3062-3065`), with the office's own numbers in place of
+            * its literal *#3, #4, #6*: display order, which an office can drag, read from configuration
+            * by code (invariant §4) — so a reordered list renumbers the tip and never rebinds the plan.
+            * Until the configuration has answered there is nothing true to print, so nothing is.
             */}
-          <Tip glyph="🔗">Counted in Activity management, against the codes above.</Tip>
+          {numbers.leads !== null && numbers.appointments !== null && numbers.closings !== null && (
+            <Tip glyph="🔗">
+              Maps to activities #{numbers.leads}, #{numbers.appointments}, #{numbers.closings} in Activity Management.
+            </Tip>
+          )}
         </Step>
 
         {/*
@@ -533,7 +567,6 @@ export default function GoalSettingsPage() {
           </p>
         </div>
 
-        {history.length > 1 && <History entries={history} />}
       </div>
     </Page>
   );
@@ -554,65 +587,27 @@ function Figure({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Every plan agreed for this period, and what each one changed (P8-T6, AC-3).
- *
- * **The difference is worked out here, from two whole states.** Nothing had to decide in advance
- * which fields were worth recording, and a field added later is compared without a migration —
- * which is the reasoning ADR-0042 gives for keeping states rather than diffs.
- *
- * Only shown once there is something to compare: a plan agreed once and never revised has no
- * history worth a panel.
+ * **The number the log screen shows beside each cascade type** (P10.1-T6 AC-11): its display order in
+ * the office's published configuration, found by the code the cascade binds to (invariant §4) — the
+ * prototype's *Activity #3* (`Overall.html:3021`, `:3038`, `:3055`). The code is an internal id and is
+ * never shown (ADR-0062 §3). `null` until the configuration arrives, and for a code it holds no live
+ * type for: a number pointing at nothing on the log is not printed.
  */
-function History({ entries }: { entries: GoalHistoryEntry[] }) {
-  return (
-    // Same padding as every other card on this screen. A panel that is more thickly padded than the
-    // plan above it reads as a different kind of thing.
-    <Card density="compact">
-      <h2 className="font-display text-md font-bold text-navy">What this plan has been</h2>
-      <p className="mt-1 text-md text-muted">
-        Every version, newest first. A plan somebody coached against does not stop having existed
-        because it was revised.
-      </p>
-
-      <ol className="mt-4 flex flex-col gap-4">
-        {entries.map((entry, i) => {
-          const changes = changesBetween(entry, entries[i + 1]);
-          return (
-            <li key={entry.version} className="border-l-2 border-hairline pl-3">
-              <p className="text-md font-semibold text-navy">
-                {i === 0 ? 'Now' : `Version ${entry.version}`}
-                {entry.at && (
-                  <span className="ml-2 text-sm font-normal text-muted">
-                    {formatDay(entry.at)}
-                  </span>
-                )}
-                {entry.byName && (
-                  <span className="ml-2 text-sm font-normal text-muted">· {entry.byName}</span>
-                )}
-              </p>
-
-              {changes.length === 0 ? (
-                <p className="text-sm text-muted">
-                  {i === entries.length - 1 ? 'The first plan for this year.' : 'Nothing changed.'}
-                </p>
-              ) : (
-                <ul className="mt-1 flex flex-col gap-0.5 text-sm text-muted">
-                  {changes.map((change) => (
-                    <li key={change.field}>
-                      <span className="text-navy">{FIELD_LABEL[change.field]}</span>
-                      {': '}
-                      {change.from} → <strong className="text-navy">{change.to}</strong>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          );
-        })}
-      </ol>
-    </Card>
-  );
+function activityNumbers(config: TenantConfig | null, mapping: Goal['cascadeMapping']) {
+  const types = (config?.activity ?? [])
+    .filter((category) => category.status === 'active')
+    .flatMap((category) => category.types)
+    .filter((type) => type.status === 'active');
+  const numberOf = (code: string) => types.find((type) => type.code === code)?.displayOrder ?? null;
+  return {
+    leads: numberOf(mapping.leadsCode),
+    appointments: numberOf(mapping.appointmentsCode),
+    closings: numberOf(mapping.closingsCode),
+  };
 }
+
+/** The chip over a cascade column: *Activity #3*, verbatim, or none while the number is unknown. */
+const chipOf = (n: number | null) => (n === null ? undefined : `Activity #${n}`);
 
 /** The six the server takes. Everything else on a goal is derived or stamped. */
 function inputsOf(goal: Goal): GoalInputs {
@@ -686,12 +681,12 @@ function Tip({ glyph, children }: { glyph: string; children: React.ReactNode }) 
  * the reader never types twelve digits for a figure they think of as nine.
  */
 function Rupiah({
-  label, id, value, onChange, hint,
+  label, id, value, onChange,
 }: {
-  label: string; id: string; value: number; onChange: (minor: number) => void; hint?: string;
+  label: string; id: string; value: number; onChange: (minor: number) => void;
 }) {
   return (
-    <Field label={label} htmlFor={id} hint={hint}>
+    <Field label={label} htmlFor={id}>
       {/*
         * **Text, not `type="number"`**, so the figure can be grouped while it is being typed —
         * `500.000.000` rather than `500000000`. A number input cannot carry a separator, and nine
@@ -736,35 +731,3 @@ function Percent({
     </Field>
   );
 }
-
-/**
- * The measured line under a conversion assumption (ADR-0055): *"Your logged rate: 25.0% over the last
- * 30 days."* — or, with nothing to divide by, that there is not enough yet. **Never 0%**: an agent who
- * logged no appointments has no closing rate, not a closing rate of nothing.
- */
-function measuredLine(rate: number | null, mine: boolean): string {
-  const whose = mine ? 'Your' : 'Their';
-  return rate === null
-    ? `${whose} logged rate: not enough logged in the last 30 days to measure it.`
-    : `${whose} logged rate: ${formatBenchmark(rate, 'percent')} over the last 30 days.`;
-}
-
-/** The KPI's word for whose figure it is (P9-T6). */
-const SOURCE_SHORT: Record<Goal['achieved']['provenance'], string> = {
-  imported: 'carrier’s file',
-  corrected: 'corrected by the office',
-  self_reported: 'your own figure',
-};
-
-/** Where the figure the plan is measured against came from, and what happened to the typed one. */
-function achievedReason(goal: Goal): string {
-  const { achieved, apeAchievedMinor: typed } = goal;
-  const asOf = achieved.month ? `, year to date as of ${formatMonth(achieved.month)}` : '';
-  const source = achieved.provenance === 'corrected'
-    ? `From your office’s production, corrected by hand${asOf}.`
-    : `From the carrier’s monthly file${asOf}.`;
-  return typed > 0 && typed !== achieved.minor
-    ? `${source} The ${formatRupiah(typed)} typed on this plan is kept, and no longer used.`
-    : source;
-}
-

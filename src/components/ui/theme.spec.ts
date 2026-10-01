@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import postcss from 'postcss';
 import tailwindcss from 'tailwindcss';
 import { describe, expect, it } from 'vitest';
@@ -63,6 +65,25 @@ describe('the Tailwind theme', () => {
       expect(css).toContain('var(--color-amber) calc(var(--tw-bg-opacity, 1) * 100%)');
       expect(css).toContain('--tw-bg-opacity: 1');
       expect(css).toContain('var(--color-navy) calc(var(--tw-text-opacity, 1) * 100%)');
+    });
+  });
+
+  describe('the one small-text amber', () => {
+    /*
+     * `text-amber-ink` is the leads Type word (F-73). A class that compiles to an undefined custom
+     * property is invalid at computed-value time and quietly inherits the cell's colour — which reads
+     * as "no amber" and passes every jsdom test, since jsdom applies no stylesheet. So both halves are
+     * pinned: the rule exists, and the variable it reads is defined, at the value a11y.spec.tsx measures.
+     */
+    it('text-amber-ink emits a rule mixed from its own token', async () => {
+      const css = await compile('text-amber-ink');
+      expect(css).toContain('.text-amber-ink');
+      expect(css).toContain('var(--color-amber-ink) calc(var(--tw-text-opacity, 1) * 100%)');
+    });
+
+    it('globals.css defines the token at the value the contrast test measures', () => {
+      const globals = readFileSync(join(__dirname, '../../styles/globals.css'), 'utf8');
+      expect(globals).toMatch(/--color-amber-ink:\s*#a85e1b;/i);
     });
   });
 

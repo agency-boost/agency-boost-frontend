@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  formatCalendarDay, formatDay, formatDayLong, formatMonth, formatShortDay, formatWeekday,
-} from './format';
+  formatCalendarDay, formatDay, formatDayLong, formatMonth, formatShortDay, formatWeekday, monthInZone } from './format';
 
 describe('formatDay', () => {
   it('writes a date the way the prototype does', () => {
@@ -77,3 +76,11 @@ describe('formatShortDay and formatWeekday (P10-T1)', () => {
   });
 });
 
+describe('monthInZone (invariant §9)', () => {
+  it('names the month an instant falls in, in the office’s zone', () => {
+    // 01:00 on 1 October in Jakarta; 18:00 on 30 September in UTC.
+    const at = new Date('2026-09-30T18:00:00Z');
+    expect(monthInZone('Asia/Jakarta', at)).toBe('2026-10');
+    expect(monthInZone('UTC', at)).toBe('2026-09');
+  });
+});

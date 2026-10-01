@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
@@ -55,6 +55,11 @@ function activity(over: Record<string, unknown> = {}) {
       chip('closings', 'SELL_SUBMISSION', 2, 5, 40),
     ],
     total: 42,
+    /*
+     * The seed's two summary tiles, as the server groups them (ADR-0064): *Recruitment*, a section with
+     * a tile of its own under its own code and label, and *Development*, the tile Personal Development
+     * and Team Development share, under the group's code and label, its rows from both sections.
+     */
     sections: [
       {
         code: 'RECRUITMENT', label: 'Recruitment', total: 6,
@@ -64,7 +69,14 @@ function activity(over: Record<string, unknown> = {}) {
           { code: 'RECRUIT_AGENT_CODE', label: 'NPA', count: 1 },
         ],
       },
-      { code: 'TEAM_DEVELOPMENT', label: 'Team Development', total: 4, rows: [{ code: 'DEV_TEAM_ACTIVITY', label: 'Aktivitas team development', count: 4 }] },
+      {
+        code: 'DEVELOPMENT', label: 'Development', total: 7,
+        rows: [
+          { code: 'DEV_TRAINING_ATTEND', label: 'Menghadiri meeting atau training dari KPM atau Prudential', count: 2 },
+          { code: 'DEV_COACHING_RECEIVED', label: '1-on-1 coaching dengan leader saya', count: 1 },
+          { code: 'DEV_TEAM_ACTIVITY', label: 'Aktivitas team development', count: 4 },
+        ],
+      },
     ],
     ...over,
   };
@@ -105,10 +117,10 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
     show(summary());
     const goal = await card('Goal vs. actual (APE)');
 
-    expect(goal).toHaveTextContent('Rp 30.000.000of Rp 75.000.000 target40%');
+    expect(within(goal).getByText('Rp 30.000.000')).toBeInTheDocument();
+    expect(goal).toHaveTextContent('of Rp 75.000.000 target40%');
     expect(within(goal).getByText('This month')).toBeInTheDocument();
     expect(within(goal).getByRole('progressbar', { name: 'This month’s target' })).toHaveAttribute('aria-valuenow', '40');
-    expect(goal).toHaveTextContent('From the carrier’s file, September 2026.');
     expect(screen.getByText('September 2026')).toBeInTheDocument();
   });
 
@@ -119,7 +131,8 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
     await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
 
     const goal = await card('Goal vs. actual (APE)');
-    expect(goal).toHaveTextContent('Rp 230.000.000of Rp 500.000.000 target46%');
+    expect(within(goal).getByText('Rp 230.000.000')).toBeInTheDocument();
+    expect(goal).toHaveTextContent('of Rp 500.000.000 target46%');
     expect(within(goal).getByText('This year')).toBeInTheDocument();
     expect(await card('The gap')).toHaveTextContent('Remaining this yearRp 270.000.000');
   });
@@ -134,13 +147,14 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
     expect(goal).not.toHaveTextContent('%');
     // No bar: an empty track under *Not uploaded yet* reads as zero.
     expect(within(goal).queryByRole('progressbar')).not.toBeInTheDocument();
-    expect(goal).toHaveTextContent('This month’s figure arrives with your office’s upload, after September 2026 ends.');
+    // Nothing produced, so nothing to mark: *Not uploaded yet* says it (P10.1-T6 AC-1).
+    expect(within(goal).queryByRole('button')).not.toBeInTheDocument();
     const gap = await card('The gap');
     expect(gap).toHaveTextContent('Remaining this month—');
     expect(gap).not.toHaveTextContent('Rp 0');
   });
 
-  it('AC-2: edits nothing — the figure is shown, and Goal Settings is where yours is changed', async () => {
+  it('AC-2: edits nothing — the figure is shown, and its marker says it is your own, from Goal Settings', async () => {
     show(summary({ yearly: { ...figures({ actualMinor: 120 * M }), source: { provenance: 'self_reported', month: null } } }));
     await card('Goal vs. actual (APE)');
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
@@ -148,8 +162,7 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
     const goal = await card('Goal vs. actual (APE)');
-    expect(goal).toHaveTextContent('Your own figure, from Goal Settings. Goal Settings is where you change it.');
-    expect(within(goal).getByRole('link', { name: 'Goal Settings' })).toHaveAttribute('href', '/goals');
+    expect(within(goal).getByRole('button', { name: 'Your own figure, entered in Goal Settings' })).toBeInTheDocument();
   });
 
   it('AC-3: the gap in rupiah and in policies, one of which is singular', async () => {
@@ -280,17 +293,17 @@ describe('the Personal Summary — activity targets, chips and the pulse (P10-T5
     expect(within(targets).queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
-  it('AC-2: a chip per other section, with its total and its rows', async () => {
+  it('AC-2: a chip per summary tile, with its total and its rows', async () => {
     show(summary());
     const recruitment = await screen.findByRole('region', { name: 'Recruitment activities' });
 
     expect(recruitment).toHaveTextContent('Recruitment activities6');
     expect(within(recruitment).getAllByRole('listitem').map((li) => li.textContent))
       .toEqual(['Presentasi NBO3', 'Follow up NBO2', 'NPA1']);
-    expect(screen.getByRole('region', { name: 'Team Development activities' })).toHaveTextContent('4');
+    expect(screen.getByRole('region', { name: 'Development activities' })).toHaveTextContent('Development activities7');
   });
 
-  it('AC-3: the pulse is the ratio screen’s answer — the rates only, each in words, with a way to the rest', async () => {
+  it('AC-3: the pulse is the ratio screen’s answer — the rates only, each in words', async () => {
     const { calls } = show(summary());
     const pulse = await card('Activity pulse');
 
@@ -300,13 +313,12 @@ describe('the Personal Summary — activity targets, chips and the pulse (P10-T5
     expect(within(pulse).getByText('Below benchmark')).toBeInTheDocument();
     expect(pulse).toHaveTextContent('Leads per activity0.38');
     expect(within(pulse).getByText('Not enough data')).toBeInTheDocument();
-    expect(within(pulse).getByRole('link', { name: 'Activity Ratios' })).toHaveAttribute('href', '/activity/ratio');
     // Once, whichever period is showing.
     await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
     expect(calls.filter((c) => c.url.includes('/activity/ratios'))).toHaveLength(1);
   });
 
-  it('AC-3: leaves the balance to the ratio screen, and says it is there', async () => {
+  it('AC-3: leaves the balance to the ratio screen', async () => {
     show(summary(), {
       body: ratios([
         ratio({}),
@@ -317,7 +329,6 @@ describe('the Personal Summary — activity targets, chips and the pulse (P10-T5
 
     await within(pulse).findByText('Selling success rate');
     expect(within(pulse).queryByText('Selling vs Recruitment')).not.toBeInTheDocument();
-    expect(pulse).toHaveTextContent('Your selling and recruitment balance, and how each ratio is worked out, are on Activity Ratios.');
   });
 
   it('AC-3: an office with no ratios for the rung says so', async () => {
@@ -334,7 +345,7 @@ describe('the Personal Summary — activity targets, chips and the pulse (P10-T5
   });
 });
 
-describe('the Personal Summary — leads that need you, and the way to each screen (P10-T6)', () => {
+describe('the Personal Summary — leads that need you (P10-T6)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('AC-1: your open leads in the server’s order — the date and note, or no date set', async () => {
@@ -359,12 +370,11 @@ describe('the Personal Summary — leads that need you, and the way to each scre
     expect(within(undated).getByText('No next action')).toBeInTheDocument();
   });
 
-  it('AC-1: lists the nearest and counts the rest, with the way to every one', async () => {
+  it('AC-1: lists the rows the server sent, and no more (P10.1-T6 AC-4)', async () => {
     show(summary({ leads: { rows: LEADS, total: 14 } }));
     const leads = await card('Leads that need you');
 
-    expect(leads).toHaveTextContent('The 3 nearest of your 14 open leads. Leads Management has every one.');
-    expect(within(leads).getByRole('link', { name: 'Leads Management' })).toHaveAttribute('href', '/leads');
+    expect(within(leads).getAllByRole('listitem')).toHaveLength(3);
   });
 
   it('AC-1: no open leads says so, and where to add one', async () => {
@@ -373,17 +383,6 @@ describe('the Personal Summary — leads that need you, and the way to each scre
 
     expect(leads).toHaveTextContent('No active leads yet — add some in Leads Management.');
     expect(within(leads).queryByRole('list')).not.toBeInTheDocument();
-  });
-
-  it('AC-2: a way from the Summary to Goal Settings, Leads, the Dashboard and the ratios', async () => {
-    show(summary());
-    await card('Leads that need you');
-    await within(await card('Activity pulse')).findByText('Selling success rate');
-
-    const hrefs = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
-    for (const href of ['/goals', '/leads', '/activity/dashboard', '/activity/ratio']) expect(hrefs).toContain(href);
-    expect(within(await card('Your sales activity targets')).getByRole('link', { name: 'Activity Dashboard' }))
-      .toHaveAttribute('href', '/activity/dashboard');
   });
 });
 
@@ -400,22 +399,19 @@ describe('the Personal Summary — insight cards, named rules over your own numb
     },
   ];
 
-  it('AC-1, AC-2: each card says what its rule found, names the rule, and is labelled as rules — never AI', async () => {
+  it('AC-1, AC-2: each card says what its rule found, under the prototype’s AI-powered badge (ADR-0069)', async () => {
     show(summary({ insights: INSIGHTS }));
     const next = await card('What to do next');
     const items = within(next).getAllByRole('listitem');
 
     expect(items.map((li) => li.textContent?.slice(0, 1))).toEqual(['1', '2', '3']);
     expect(items[0]).toHaveTextContent('You’re behind pace — at this rate you’ll close 2 of 5 this month. About 1 policy a week for the 3 weeks left would catch up.');
-    expect(items[0]).toHaveTextContent('Rule: Behind pace');
     expect(items[1]).toHaveTextContent('Pak Heri’s next action is 8 days overdue — reschedule it or set a new date this week in Leads Management. 2 more of your leads are overdue too.');
-    expect(items[1]).toHaveTextContent('Rule: Lead overdue');
     expect(items[2]).toHaveTextContent('Pak Alvin has no next action and no remarks — follow up and log what happened so this lead doesn’t stall.');
     expect(items[2]).not.toHaveTextContent('neither');
 
-    expect(within(next).getByText('Rules, not AI')).toBeInTheDocument();
-    expect(next).toHaveTextContent('Suggestions from your numbers — rules, not AI.');
-    expect(screen.queryByText(/AI-powered/i)).not.toBeInTheDocument();
+    expect(within(next).getByText('AI-powered')).toBeInTheDocument();
+    expect(screen.queryByText(/rules, not AI/i)).not.toBeInTheDocument();
   });
 
   it('AC-1: a ratio below its benchmark goes on the improvement card, written as the ratio screen writes it', async () => {
@@ -423,7 +419,6 @@ describe('the Personal Summary — insight cards, named rules over your own numb
     const improve = await card('How you can improve your performance');
 
     expect(improve).toHaveTextContent('Selling success rate is 9.1% over the last 30 days, below its benchmark of 15.0%');
-    expect(improve).toHaveTextContent('Rule: Ratio below benchmark');
     expect(within(improve).getByRole('link', { name: 'Activity Ratios' })).toHaveAttribute('href', '/activity/ratio');
   });
 
@@ -470,39 +465,273 @@ describe('the Personal Summary — insight cards, named rules over your own numb
   });
 });
 
-describe('the Personal Summary — Print (P10-T8, ADR-0061)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+/*
+ * *Amended 2026-10-01 (P10.1-T8, ADR-0068):* the button is the prototype's *⬇ Download* again, at the
+ * client's request — label and glyph — and still the browser's print, as the prototype's handler is. What
+ * is new is the document's title while the print window is open, which names the PDF it saves.
+ */
+describe('the Personal Summary — Download (P10-T8, ADR-0061; P10.1-T8, ADR-0068)', () => {
+  const ORIGINAL_TITLE = 'AgencyBoost';
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.title = ORIGINAL_TITLE;
+  });
 
-  it('AC-3: says Print and prints the page — nothing is downloaded, and nothing is asked of the server', async () => {
-    const print = vi.fn();
+  /** A `print` that notes the title the browser would name its PDF after, at the moment it is called. */
+  const stubPrint = () => {
+    const titles: string[] = [];
+    const print = vi.fn(() => { titles.push(document.title); });
     vi.stubGlobal('print', print);
+    document.title = ORIGINAL_TITLE;
+    return { print, titles };
+  };
+
+  it('says Download, with the prototype’s glyph out of its name, and prints the page — nothing is asked of the server', async () => {
+    const { print } = stubPrint();
     const { calls } = show(summary());
     await card('Goal vs. actual (APE)');
     const before = calls.length;
 
-    await userEvent.click(screen.getByRole('button', { name: 'Print' }));
+    const download = screen.getByRole('button', { name: 'Download' });
+    expect(download).toHaveTextContent('⬇Download');
+    expect(download.querySelector('[aria-hidden="true"]')).toHaveTextContent('⬇');
+    expect(download).toHaveClass('gap-1');
+    await userEvent.click(download);
 
     expect(print).toHaveBeenCalledTimes(1);
     expect(calls).toHaveLength(before);
-    expect(screen.queryByRole('button', { name: /download/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /print/i })).not.toBeInTheDocument();
+  });
+
+  it('titles the page for its month while printing, so the PDF is named for it — and puts the title back after', async () => {
+    const { titles } = stubPrint();
+    show(summary());
+    await card('Goal vs. actual (APE)');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+
+    expect(titles).toEqual(['Personal Summary – September 2026']);
+    // Until the print window closes, the title stays the period's.
+    expect(document.title).toBe('Personal Summary – September 2026');
+    window.dispatchEvent(new Event('afterprint'));
+    expect(document.title).toBe(ORIGINAL_TITLE);
+    // Once: a later print elsewhere does not put back a title from this one.
+    document.title = 'Something else';
+    window.dispatchEvent(new Event('afterprint'));
+    expect(document.title).toBe('Something else');
+  });
+
+  it('puts the title back when the browser fires afterprint inside print() — the listener is there first', async () => {
+    // Chrome and Firefox: print() blocks, and the window closing fires afterprint before it returns.
+    const titles: string[] = [];
+    vi.stubGlobal('print', vi.fn(() => { titles.push(document.title); window.dispatchEvent(new Event('afterprint')); }));
+    document.title = ORIGINAL_TITLE;
+    show(summary());
+    await card('Goal vs. actual (APE)');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+
+    expect(titles).toEqual(['Personal Summary – September 2026']);
+    expect(document.title).toBe(ORIGINAL_TITLE);
+  });
+
+  it('keeps the page’s own title to put back when Download is pressed twice before the window closes', async () => {
+    const { titles } = stubPrint();
+    show(summary());
+    await card('Goal vs. actual (APE)');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+    window.dispatchEvent(new Event('afterprint'));
+
+    expect(titles).toHaveLength(2);
+    expect(document.title).toBe(ORIGINAL_TITLE);
+  });
+
+  it('puts the title back when the page goes, for a browser that never fires afterprint', async () => {
+    stubPrint();
+    stubFetch({ '/summary': { body: summary() }, '/activity/ratios': { body: AGENT_RATIOS } });
+    const { unmount } = renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    await card('Goal vs. actual (APE)');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+    expect(document.title).toBe('Personal Summary – September 2026');
+    unmount();
+
+    expect(document.title).toBe(ORIGINAL_TITLE);
+  });
+
+  it('titles it for the year on the Yearly view', async () => {
+    const { titles } = stubPrint();
+    show(summary());
+    await card('Goal vs. actual (APE)');
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+    window.dispatchEvent(new Event('afterprint'));
+
+    expect(titles).toEqual(['Personal Summary – 2026']);
+    expect(document.title).toBe(ORIGINAL_TITLE);
   });
 
   it('AC-3: keeps the button and the period switch off the paper, and each card whole on it', async () => {
     show(summary());
     await card('Goal vs. actual (APE)');
 
-    expect(screen.getByRole('button', { name: 'Print' })).toHaveClass('print:hidden');
+    expect(screen.getByRole('button', { name: 'Download' })).toHaveClass('print:hidden');
     expect(screen.getByRole('tablist')).toHaveClass('print:hidden');
     expect(await card('The gap')).toHaveClass('print:break-inside-avoid');
   });
 
-  it('offers no Print before there is anything to print', async () => {
+  it('offers no Download before there is anything to download', async () => {
     stubFetch({
       '/summary': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.' } } },
       '/activity/ratios': { body: AGENT_RATIOS },
     });
     renderWithSession(<PersonalSummaryPage />, { me: AGENT });
     await screen.findByText('Something went wrong.');
+    expect(screen.queryByRole('button', { name: /download/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('the Personal Summary, trimmed to the prototype (P10.1-T6, ADR-0063)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  describe('AC-1 — provenance is a marker, not a sentence', () => {
+    it('AC-1: marks the month’s figure as the office’s upload, and names the month', async () => {
+      show(summary());
+      const goal = await card('Goal vs. actual (APE)');
+
+      const marker = within(goal).getByRole('button', { name: 'From your office’s upload, September 2026' });
+      expect(marker.querySelector('[aria-hidden="true"]')).toHaveTextContent('ⓘ');
+      // The words show on focus and on a tap, not only to a mouse — and are said once, by the name.
+      const tip = within(goal).getByText('From your office’s upload, September 2026', { selector: '[role="tooltip"]' });
+      expect(tip).not.toBeVisible();
+      fireEvent.click(marker);
+      expect(tip).toBeVisible();
+      expect(tip).toHaveAttribute('aria-hidden', 'true');
+      // The sentence is gone, and the figure is still not an input (ADR-0058).
+      expect(goal).not.toHaveTextContent('carrier');
+      expect(within(goal).queryByRole('link')).not.toBeInTheDocument();
+      expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    });
+
+    it('AC-1: marks a correction by the office, and the year to date as of its month', async () => {
+      show(summary({
+        yearly: {
+          ...figures({ targetMinor: 500 * M, actualMinor: 230 * M, attainmentPct: 46 }),
+          source: { provenance: 'corrected', month: '2026-08' },
+        },
+      }));
+      await card('Goal vs. actual (APE)');
+      await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
+
+      const goal = await card('Goal vs. actual (APE)');
+      expect(within(goal).getByRole('button', { name: 'Corrected by your office, year to date as of August 2026' }))
+        .toBeInTheDocument();
+    });
+
+    it('AC-1: marks the agent’s own figure, which has no month', async () => {
+      show(summary({ yearly: { ...figures({ actualMinor: 120 * M }), source: { provenance: 'self_reported', month: null } } }));
+      await card('Goal vs. actual (APE)');
+      await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
+
+      expect(within(await card('Goal vs. actual (APE)')).getByRole('button', { name: 'Your own figure, entered in Goal Settings' }))
+        .toBeInTheDocument();
+    });
+  });
+
+  it('AC-2: the footnotes go — the gap note, the Dashboard and ratio links, and the leads footer', async () => {
+    show(summary({
+      monthly: { ...figures({ actualMinor: null, attainmentPct: null, gapMinor: null, policiesNeeded: null }), source: null },
+      leads: { rows: LEADS, total: 14 },
+    }));
+    await card('The gap');
+    await within(await card('Activity pulse')).findByText('Selling success rate');
+
+    expect(screen.queryByText(/worked out once this month’s APE is uploaded/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Day by day/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/how each ratio is worked out/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/nearest of your/)).not.toBeInTheDocument();
+    // What links remain is the prototype's: *From Goal Settings — …* under the targets' title.
+    expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/goals']);
+    expect(await card('Your sales activity targets')).toHaveTextContent('42 total activities logged this month across all categories.');
+  });
+
+  /*
+   * *Amended 2026-10-01 (P10.1-T8, ADR-0069):* the badge is the prototype's *AI-powered*, at the client's
+   * request, where T6 had *Rules, not AI*. Once per card is unchanged, and so is what stays out: the
+   * *Rule:* lines, and the prototype's footnotes, whose learning claims the fixed rules cannot keep.
+   */
+  it('AC-3: one AI-powered per card, in the badge — no Rule line under an item, and no footnote', async () => {
+    show(summary({
+      insights: [
+        { rule: 'BEHIND_PACE', kind: 'action', facts: { projected: 2, closingTarget: 5, neededPerWeek: 1, weeksLeft: 3 } },
+        { rule: 'LEAD_NEGLECTED', kind: 'action', facts: { leadId: 'l-2', name: 'Pak Alvin', others: 0 } },
+        {
+          rule: 'RATIO_STRENGTH', kind: 'improve',
+          facts: { code: 'LEADS_PER_ACTIVITY', label: 'Leads per activity', value: 0.6, benchmark: 0.3, displayUnit: 'decimal' },
+        },
+      ],
+    }));
+
+    for (const name of ['What to do next', 'How you can improve your performance']) {
+      const region = await card(name);
+      expect(within(region).getAllByText(/AI-powered/i)).toHaveLength(1);
+      expect(within(region).getByText('AI-powered')).toBeInTheDocument();
+      expect(region).not.toHaveTextContent(/rules, not AI/i);
+      expect(region).not.toHaveTextContent('Rule:');
+      // The prototype's footnotes (`Overall.html:3246`, `:3261`) promise learning the rules do not do.
+      expect(region).not.toHaveTextContent(/sharper|Generated automatically|Pattern-based/i);
+    }
+    expect(screen.queryByText(/Suggestions from your numbers/)).not.toBeInTheDocument();
+  });
+
+  it('AC-4: Leads that need you keeps its ten and its flags', async () => {
+    const ten = Array.from({ length: 10 }, (_, i) => openLead({ id: `l-${i}`, name: `Pak Lead ${i}`, flags: i === 0 ? ['overdue'] : [], overdueDays: i === 0 ? 3 : null }));
+    show(summary({ leads: { rows: ten, total: 12 } }));
+    const leads = await card('Leads that need you');
+
+    expect(within(leads).getAllByRole('listitem')).toHaveLength(10);
+    expect(within(leads).getByText('Overdue 3 days')).toBeInTheDocument();
+  });
+
+  describe('AC-5 — the section chips follow the summary tiles (ADR-0064)', () => {
+    it('AC-5: on the seed, the prototype’s two — Recruitment activities and Development activities', async () => {
+      show(summary());
+      const targets = await card('Your sales activity targets');
+
+      const chips = within(targets).getAllByRole('region');
+      expect(chips.map((chip) => chip.getAttribute('aria-labelledby'))).toEqual(['summary-section-RECRUITMENT', 'summary-section-DEVELOPMENT']);
+      expect(within(targets).getByRole('region', { name: 'Development activities' })).toHaveTextContent('Development activities7');
+      expect(within(within(targets).getByRole('region', { name: 'Development activities' })).getAllByRole('listitem')).toHaveLength(3);
+      expect(within(targets).queryByRole('region', { name: /Team Development/ })).not.toBeInTheDocument();
+    });
+
+    it('AC-5: draws the chips as the server sends them, and regroups nothing itself', async () => {
+      // An office whose two development sections each keep a tile of their own gets two chips for them.
+      const ungrouped = activity({
+        sections: [
+          { code: 'PERSONAL_DEVELOPMENT', label: 'Personal Development', total: 3, rows: [{ code: 'DEV_TRAINING_ATTEND', label: 'Training', count: 3 }] },
+          { code: 'TEAM_DEVELOPMENT', label: 'Team Development', total: 4, rows: [{ code: 'DEV_TEAM_ACTIVITY', label: 'Aktivitas team development', count: 4 }] },
+        ],
+      });
+      show(summary({ activity: { monthly: ungrouped, yearly: activity(YEAR) } }));
+      const targets = await card('Your sales activity targets');
+
+      expect(within(targets).getByRole('region', { name: 'Personal Development activities' })).toHaveTextContent('3');
+      expect(within(targets).getByRole('region', { name: 'Team Development activities' })).toHaveTextContent('4');
+      expect(within(targets).queryByRole('region', { name: 'Development activities' })).not.toBeInTheDocument();
+    });
+  });
+
+  // *Amended 2026-10-01 (P10.1-T8, ADR-0068):* T6 kept the button as *Print*; it is *Download* again.
+  it('AC-6: the subtitle and the button stay — the button as the prototype’s Download', async () => {
+    show(summary());
+    await card('Goal vs. actual (APE)');
+
+    expect(screen.getByText('Your goals, activity and leads — on one page.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Print' })).not.toBeInTheDocument();
   });
 });

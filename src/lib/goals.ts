@@ -1,4 +1,5 @@
 import { api } from '@/lib/api-client';
+import { formatMonth } from '@/lib/format';
 
 /**
  * An agent's agreed plan for a period (P8).
@@ -91,7 +92,10 @@ export interface Goal extends Omit<GoalInputs, 'monthsLeft'> {
   /** `null` when the stored inputs cannot produce a plan — the screen says which of them. */
   projected: GoalProjection | null;
   cascadeMapping: { leadsCode: string; appointmentsCode: string; closingsCode: string };
-  /** The subject's own rates over the last 30 days, printed under the fields they measure. */
+  /**
+   * The subject's own rates over the last 30 days. Kept in the payload and no longer on the screen
+   * (ADR-0063 §7): where coaching shows them is P11-T1's to decide.
+   */
   measured: GoalMeasured;
   savedAt: string | null;
   /** Differing from the reader's own membership is a leader's goal-setting (ADR-0046). */
@@ -164,67 +168,27 @@ export const groupDigits = (major: number) => major.toLocaleString('id-ID');
 export const parseDigits = (typed: string) => Number(typed.replace(/\D/g, '')) || 0;
 
 /**
- * One plan that was agreed, current or replaced (P8-T6).
+ * **Where the APE produced came from, and for which month** (ADR-0063 §5, P10.1-T6): the words of the
+ * marker beside the figure, on the Summary and on Goal Settings alike — its accessible name and its
+ * tooltip. The payload's `provenance`: the office's upload, a correction by the office, or the
+ * agent's own figure, which has no month. `span` says whether the figure is one month's or the year
+ * to date as of that month.
  *
- * **Whole states, newest first.** What changed between two of them is worked out here rather than
- * stored: a diff is only readable against a base the reader still has, and the point of keeping
- * these is that a leader who coached against January's plan can read January's plan (ADR-0042).
+ * The revisions of a plan are still stored, every version and who saved it (ADR-0042); no screen
+ * lists them since P10.1-T6 retired the history card and its route.
  */
-export interface GoalHistoryEntry extends Omit<GoalInputs, 'monthsLeft'> {
-  version: number;
-  at: string | null;
-  byMembershipId: string | null;
-  /** `null` when the membership resolves to nobody — somebody who has left the office. */
-  byName: string | null;
-  monthsLeftOverride: number | null;
-  snapshot: GoalSnapshot;
+export function producedFrom(
+  source: { provenance: GoalAchieved['provenance']; month: string | null },
+  span: 'month' | 'year',
+  /** `false` on a plan the reader has open for somebody else (the *Whose plan* picker). */
+  own = true,
+): string {
+  if (source.provenance === 'self_reported') {
+    return `${own ? 'Your' : 'Their'} own figure, entered in Goal Settings`;
+  }
+  const words = source.provenance === 'corrected' ? 'Corrected by your office' : 'From your office’s upload';
+  if (!source.month) return words;
+  return span === 'year'
+    ? `${words}, year to date as of ${formatMonth(source.month)}`
+    : `${words}, ${formatMonth(source.month)}`;
 }
-
-export const readGoalHistory = (period: string, membershipId?: string) =>
-  api<GoalHistoryEntry[]>(`/goals/${period}/history` + forWhom(membershipId));
-
-/** What a reader is told changed, in the words the cards use. */
-export const FIELD_LABEL: Record<string, string> = {
-  mode: 'How the target is set',
-  annualApeTargetMinor: 'Annual APE target',
-  savingsTargetMinor: 'Annual savings target',
-  commissionRatePct: 'Commission rate',
-  monthsLeftOverride: 'Months left',
-  apeAchievedMinor: 'APE produced so far',
-  caseSizeMinor: 'Average case size',
-  leadsToApptPct: 'Leads that become an appointment',
-  closingRatePct: 'Appointments that become a closing',
-};
-
-const MONEY_FIELDS = new Set([
-  'annualApeTargetMinor', 'savingsTargetMinor', 'apeAchievedMinor', 'caseSizeMinor',
-]);
-
-/** One field's value, in the unit a reader thinks in. */
-export const showValue = (field: string, value: unknown): string => {
-  if (value === null || value === undefined) return 'your office’s calendar';
-  if (MONEY_FIELDS.has(field)) return formatRupiah(Number(value));
-  if (field === 'mode') return value === 'direct' ? 'directly' : 'from a savings target';
-  if (field.endsWith('Pct')) return `${value}%`;
-  return String(value);
-};
-
-/**
- * What one plan changed, against the one before it.
- *
- * **Derived, not stored.** Nothing had to decide in advance which fields were worth recording, and
- * a field added later is compared without a migration.
- */
-export const changesBetween = (
-  now: GoalHistoryEntry, before: GoalHistoryEntry | undefined,
-): { field: string; from: string; to: string }[] => {
-  if (!before) return [];
-  return Object.keys(FIELD_LABEL)
-    .filter((field) => (now as unknown as Record<string, unknown>)[field]
-      !== (before as unknown as Record<string, unknown>)[field])
-    .map((field) => ({
-      field,
-      from: showValue(field, (before as unknown as Record<string, unknown>)[field]),
-      to: showValue(field, (now as unknown as Record<string, unknown>)[field]),
-    }));
-};

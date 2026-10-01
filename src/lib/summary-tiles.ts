@@ -141,7 +141,11 @@ export const OWN_TILE_REFUSED =
   'A section with a tile of its own shows its own name. Rename the section to change it, or type the '
   + 'tile name of another section to count them together.';
 
-/** A code no other group holds: suggested from the name, then the section's own, then numbered. */
+/**
+ * A code no group and **no section** holds: suggested from the name, then the section's own, then
+ * numbered. A section's code is held even when that section is in the new tile: the day it left,
+ * it would be a tile of its own under the shared tile's code (`CONFIG_SUMMARY_GROUP_CODE_TAKEN`).
+ */
 function freeCode(name: string, fallback: string, held: ReadonlySet<string>): string {
   const candidates = [suggestCode(name), fallback.toUpperCase()].filter((c) => CODE.test(c));
   const free = candidates.find((c) => !held.has(c));
@@ -199,7 +203,11 @@ export function planSummaryTile(
   const lone = others.find((c) => !c.summaryGroupCode?.trim() && same(c.label, name));
   if (lone) {
     const pair = {
-      summaryGroupCode: freeCode(lone.label, lone.code, new Set(groups.map((g) => g.code))),
+      summaryGroupCode: freeCode(lone.label, lone.code, new Set([
+        ...groups.map((g) => g.code),
+        ...categories.map((c) => c.code),
+        self.code,
+      ])),
       summaryGroupLabel: lone.label,
     };
     return { changes: [{ code: self.code, ...pair }, { code: lone.code, ...pair }, ...leave()] };
@@ -218,8 +226,17 @@ export function planSummaryTile(
  *
  * `CONFIG_SUMMARY_GROUP_LABEL_MISMATCH` carries the tile's labels in `details`; its message carries
  * the batch's op prefix and the tile's code, which the screens never show.
+ * `CONFIG_SUMMARY_GROUP_CODE_TAKEN` names the code, because the reader typed it as a section's.
  */
 export function tileRefusal(error: ApiError): ApiError | null {
+  if (error.code === 'CONFIG_SUMMARY_GROUP_CODE_TAKEN') {
+    const code = String(error.details?.summaryGroupCode ?? '');
+    const label = String(error.details?.label ?? '');
+    return {
+      ...error,
+      message: `${code} is already the code of the summary tile “${label}”. Give the section another code.`,
+    };
+  }
   if (error.code !== 'CONFIG_SUMMARY_GROUP_LABEL_MISMATCH') return null;
   const labels = (error.details?.labels as string[] | undefined) ?? [];
   const named = labels.length > 1

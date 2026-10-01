@@ -557,6 +557,22 @@ describe('Log activity (P6-T2)', () => {
       expect(field.nextElementSibling).toBe(screen.getByRole('status'));
       expect(field.parentElement).toHaveClass('flex-col');
     });
+
+    it('P10.1-T8: stands beside the title, top-aligned, so the title sits where Dashboard’s does', async () => {
+      // The client, 2026-10-01: the Log title sat lower than the other tabs', *"mungkin karena ada
+      // tanggal di sebelah kanannya"*. The row was bottom-aligned, so this block — taller than the
+      // title and its sub-line — set the line. `Overall.html:839` top-aligns it.
+      stubFetch({ ...base, '/activity/log': { body: day() } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Leads' });
+
+      const row = screen.getByRole('heading', { name: 'Log Activity', level: 1 })
+        .parentElement!.parentElement!;
+      expect(row).toContainElement(screen.getByLabelText('Date'));
+      expect(row).toContainElement(screen.getByRole('status'));
+      expect(row).toHaveClass('items-start');
+      expect(row).not.toHaveClass('items-end');
+    });
   });
 
   it('AC-10: asks in the product’s own dialog before discarding a day’s typing', async () => {

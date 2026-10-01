@@ -206,17 +206,28 @@ describe('the Summary tile field (P10.1-T5 AC-5, OD-101)', () => {
     // tile named *Selling* — never a second *Selling* tile beside the first.
     expect(plan('selling', REFERRALS)).toEqual({
       changes: [
-        { code: 'REFERRALS', summaryGroupCode: 'SELLING', summaryGroupLabel: 'Selling' },
-        { code: 'SELLING', summaryGroupCode: 'SELLING', summaryGroupLabel: 'Selling' },
+        { code: 'REFERRALS', summaryGroupCode: 'SELLING_2', summaryGroupLabel: 'Selling' },
+        { code: 'SELLING', summaryGroupCode: 'SELLING_2', summaryGroupLabel: 'Selling' },
       ],
     });
   });
 
+  it('3. never takes a section’s code, even one it counts together (P10.1-T6)', () => {
+    // A tile coded SELLING outlives Selling leaving it, and Selling alone is a tile coded SELLING too.
+    const result = plan('selling', REFERRALS);
+    const codes = new Set(WITH.map((c) => c.code));
+    expect('changes' in result && result.changes.every((c) => !codes.has(c.summaryGroupCode!))).toBe(true);
+    // A section whose own code the name would suggest, outside both: still not taken.
+    const named = [...WITH, category('SELLING_2', 'Selling two', 7)];
+    const next = plan('selling', REFERRALS, named);
+    expect('changes' in next && next.changes[0].summaryGroupCode).toBe('SELLING_3');
+  });
+
   it('3. never takes a code a shared tile already holds', () => {
-    const held = [...WITH, category('X1', 'Other', 7, { summaryGroupCode: 'SELLING', summaryGroupLabel: 'Sale' }),
-      category('X2', 'Other two', 8, { summaryGroupCode: 'SELLING', summaryGroupLabel: 'Sale' })];
+    const held = [...WITH, category('X1', 'Other', 7, { summaryGroupCode: 'SELLING_2', summaryGroupLabel: 'Sale' }),
+      category('X2', 'Other two', 8, { summaryGroupCode: 'SELLING_2', summaryGroupLabel: 'Sale' })];
     const result = plan('Selling', REFERRALS, held);
-    expect('changes' in result && result.changes[0].summaryGroupCode).toBe('SELLING_2');
+    expect('changes' in result && result.changes[0].summaryGroupCode).toBe('SELLING_3');
   });
 
   it('4. a new name on a section in a shared tile renames the tile for every section in it, keeping its code', () => {
@@ -265,5 +276,18 @@ describe('the Summary tile field (P10.1-T5 AC-5, OD-101)', () => {
     );
     expect(refused?.message).not.toMatch(/DEVELOPMENT|Change 2/);
     expect(tileRefusal({ code: 'VALIDATION_FAILED', message: 'x', requestId: 'r' })).toBeNull();
+  });
+
+  it('words the server’s taken-code refusal, naming the code the reader typed (P10.1-T6)', () => {
+    const refused = tileRefusal({
+      code: 'CONFIG_SUMMARY_GROUP_CODE_TAKEN',
+      message: 'Change 1 (category.create): DEVELOPMENT is the code of the summary tile …',
+      details: { summaryGroupCode: 'DEVELOPMENT', label: 'Development' },
+      requestId: 'r1',
+    });
+    expect(refused).toMatchObject({
+      code: 'CONFIG_SUMMARY_GROUP_CODE_TAKEN',
+      message: 'DEVELOPMENT is already the code of the summary tile “Development”. Give the section another code.',
+    });
   });
 });

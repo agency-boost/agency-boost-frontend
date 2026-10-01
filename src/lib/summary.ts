@@ -47,7 +47,11 @@ export interface ActivityTarget {
   targetMet: boolean;
 }
 
-/** A section the reader is shown that holds none of the three codes above, with its rows. */
+/**
+ * One of the office's summary tiles the reader is shown, whose sections hold none of the three codes
+ * above, with its rows (ADR-0064). `code` and `label` are the tile's group code and label, or the
+ * section's own when it has a tile of its own. The server groups; the screen draws what it is sent.
+ */
 export interface SectionChip {
   code: string;
   label: string;

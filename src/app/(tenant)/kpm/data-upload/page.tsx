@@ -7,7 +7,7 @@ import { Button, buttonClass, Card, ErrorBanner, Field, TextInput } from '@/comp
 import { SkeletonBar, SkeletonTable } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { formatDayLong } from '@/lib/format';
+import { formatDayLong, monthInZone } from '@/lib/format';
 import { formatRupiah } from '@/lib/goals';
 import { useCan } from '@/lib/session';
 import {
@@ -15,6 +15,7 @@ import {
   readTemplate, templateHref, type CorrectionResult, type ImportResult, type MetricCell, type MonthState,
   type MonthView, type PreviewCell, type ProductionMetric, type TemplateFile, type UploadPreview,
 } from '@/lib/production';
+import { readBranchInfo } from '@/lib/tenant-config';
 import { CorrectionPanel, type Editing, showFigure } from './correction-panel';
 import { ImportHistory } from './import-history';
 import { monthLabel, plural } from './month-label';
@@ -105,8 +106,10 @@ function TemplateDownload({ month }: { month: string }) {
   if (!template) return null;
 
   return (
-    <a href={templateHref(template)} download={template.filename} className={buttonClass('secondary')}>
-      ⬇ Download template
+    // The prototype's glyph before the word, kept out of the link's name as the Summary's ⬇ Download keeps
+    // it (ADR-0068): a screen reader says *Download template*, not *downwards black arrow* first.
+    <a href={templateHref(template)} download={template.filename} className={buttonClass('secondary', 'gap-1')}>
+      <span aria-hidden="true">⬇</span>Download template
     </a>
   );
 }
@@ -115,6 +118,20 @@ function MonthTable() {
   // A convenience for choosing, not a computation over data: the rows for a month are the
   // server's, resolved in the office's zone, and the month is explicit in what the screen asks for.
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  /**
+   * **The office's month, once its zone is known** (invariant §9). The first render offers the UTC
+   * month so the table is not held up; branch info then says the office's zone, and the default moves
+   * to the office's month — for the first seven hours of a Jakarta month, UTC is still in the last
+   * one. A month the reader picked is never moved.
+   */
+  const picked = useRef(false);
+  useEffect(() => {
+    let live = true;
+    readBranchInfo()
+      .then((branch) => { if (live && !picked.current) setMonth(monthInZone(branch.timezone, new Date())); })
+      .catch(() => { /* the UTC month stands; the picker is still there */ });
+    return () => { live = false; };
+  }, []);
   const [view, setView] = useState<MonthView | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [upload, setUpload] = useState<UploadState>({ kind: 'idle' });
@@ -221,7 +238,11 @@ function MonthTable() {
             id="upload-month"
             type="month"
             value={month}
-            onChange={(e) => { if (e.target.value) setMonth(e.target.value); }}
+            onChange={(e) => {
+              if (!e.target.value) return;
+              picked.current = true;
+              setMonth(e.target.value);
+            }}
           />
         </Field>
         {/*

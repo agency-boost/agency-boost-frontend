@@ -8,11 +8,12 @@ import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
 import { Segmented } from '@/components/ui/segmented';
 import { Skeleton, SkeletonBar, SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
+import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { readActivityRatios, type ActivityRatio, type ActivityRatios } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatMonth, formatShortDay } from '@/lib/format';
-import { formatRupiah } from '@/lib/goals';
+import { formatRupiah, producedFrom } from '@/lib/goals';
 import { flagLabel } from '@/lib/leads';
 import { formatBenchmark, formatRatioForStatus } from '@/lib/ratio-format';
 import {
@@ -25,23 +26,30 @@ import {
  * what is left (`Overall.html:3080-3136`, `personal-summary.md`).
  *
  * **Read from what other screens own, and editing none of it** (ADR-0058). The prototype's *produced*
- * figure is an input that writes Goal Settings; here it is shown with where it came from, and the
- * agent's own figure is changed on Goal Settings alone.
+ * figure is an input that writes Goal Settings; here it is read-only, with a marker beside it whose
+ * words say where it came from and for which month (ADR-0063 §5), and the agent's own figure is
+ * changed on Goal Settings alone.
  *
  * **What you logged against the plan** (P10-T5): leads contacted, appointments and closings against the
- * cascade on the period's own APE target, a chip per other section, and the activity pulse — the ratio
- * engine's answer for your rung, which the prototype printed as four hardcoded tiles.
+ * cascade on the period's own APE target, a chip per summary tile (ADR-0064), and the activity pulse —
+ * the ratio engine's answer for your rung, which the prototype printed as four hardcoded tiles.
  *
  * **The leads that need you** (P10-T6): your own open leads, nearest next action first, flagged as the
- * Leads screen flags them — with the way back to that screen the prototype's card never had.
+ * Leads screen flags them.
  *
- * **Print** (P10-T8, ADR-0061): the page as you see it, on paper or as the browser's PDF — the prototype's
- * *⬇ Download* was `window.print()` under a label that promised a file. The app around the page, the
- * period switch and the button itself stay off the paper, and no card breaks across two sheets.
+ * **No footnotes** (P10.1-T6, ADR-0062, ADR-0063): the sentences that explained a card, and the links
+ * under them to the screens each figure comes from, are gone — the prototype's cards have none, and
+ * the manual does the explaining.
  *
- * **What to do next, and how to improve** (P10-T7, ADR-0060): named rules over your own numbers, at most
- * four, each saying which rule made it — labelled as rules, where the prototype's static strings said
- * *AI-powered*.
+ * **Download** (P10-T8, ADR-0061; P10.1-T8, ADR-0068): the prototype's *⬇ Download*, its label and its
+ * handler both — `window.print()` (`Overall.html:2705`, `:6145`). The page as you see it, on paper or as
+ * the browser's PDF, and no file through the API; while the print window is open the document is titled
+ * for the period on the page, so the PDF is saved as *Personal Summary – September 2026* rather than
+ * *AgencyBoost*. The app around the page, the period switch and the button itself stay off the paper,
+ * and no card breaks across two sheets.
+ *
+ * **What to do next, and how to improve** (P10-T7, ADR-0060): fixed rules over your own numbers, at most
+ * four, under the prototype's *AI-powered* badge (ADR-0069, at the client's request).
  */
 type View = 'month' | 'year';
 
@@ -50,6 +58,39 @@ const VIEWS = [
   { id: 'year', label: 'Yearly' },
 ] as const;
 
+/**
+ * The title to put back once the print window closes — held across Downloads, so a second one pressed
+ * before the first's window closed cannot take the first's period title for the page's own.
+ */
+let restoreTo: string | null = null;
+
+function restoreTitle() {
+  if (restoreTo === null) return;
+  document.title = restoreTo;
+  restoreTo = null;
+}
+
+/**
+ * *⬇ Download* (ADR-0068): the browser's print, as the prototype's handler is, under a title that says what
+ * the page holds. Save as PDF names its file after `document.title`, which is *AgencyBoost* on every
+ * screen, so every summary, whatever its period, would be saved as `AgencyBoost.pdf`.
+ *
+ * The title goes back when the print window closes. The listener is registered **before** `print()`:
+ * Chrome and Firefox block inside `print()` and fire `afterprint` before it returns, so a listener added
+ * after it would never run and the title would stay changed. One function, so a second Download adds no
+ * second listener. A browser that never fires `afterprint` gets it back when the page goes (below).
+ */
+function downloadAs(title: string) {
+  restoreTo ??= document.title;
+  document.title = title;
+  window.addEventListener('afterprint', restoreTitle, { once: true });
+  window.print();
+}
+
+/** The PDF's name: the page's title and the period on it — the month on *Monthly*, the year on *Yearly*. */
+const downloadTitle = (summary: Summary, view: View) =>
+  `Personal Summary – ${view === 'month' ? formatMonth(summary.month) : summary.year}`;
+
 export default function PersonalSummaryPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -57,6 +98,9 @@ export default function PersonalSummaryPage() {
   // The pulse is the ratio screen's own read (P10-T2, P10-T3), fetched once — it is the last 30 days
   // whichever period is showing, so switching views does not ask again.
   const [pulse, setPulse] = useState<ActivityRatios | null>(null);
+  // Leaving the page puts the title back, for a browser whose `afterprint` never came: the app's own
+  // title is static, so nothing else would, and every screen after this one would carry the period's.
+  useEffect(() => restoreTitle, []);
   const [pulseError, setPulseError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -75,7 +119,11 @@ export default function PersonalSummaryPage() {
       title="Personal Summary"
       subtitle="Your goals, activity and leads — on one page."
       actions={summary && (
-        <Button variant="primary" onClick={() => window.print()} className="print:hidden">Print</Button>
+        // The prototype's glyph before its label (`Overall.html:2705`), as *⬇ Download template* has it on
+        // the data upload; hidden from the accessible name, which is the word alone.
+        <Button variant="primary" onClick={() => downloadAs(downloadTitle(summary, view))} className="gap-1 print:hidden">
+          <span aria-hidden="true">⬇</span>Download
+        </Button>
       )}
     >
       <div className="mx-auto max-w-[860px]">
@@ -131,7 +179,7 @@ function Cards({
         </Card>
       ) : (
         <>
-          <GoalCard figures={figures} month={month} source={figures.source} summary={summary} />
+          <GoalCard figures={figures} month={month} source={figures.source} />
           <GapCard figures={figures} period={period} pace={month ? summary.pace : null} />
         </>
       )}
@@ -165,16 +213,16 @@ function SummaryCard({
   );
 }
 
-const SOURCE: Record<FigureSource['provenance'], string> = {
-  imported: 'From the carrier’s file',
-  corrected: 'Corrected by your office',
-  self_reported: 'Your own figure, from Goal Settings',
-};
-
-/** *Goal vs. actual (APE)* (`Overall.html:3094-3115`), read-only (ADR-0058). */
+/**
+ * *Goal vs. actual (APE)* (`Overall.html:3094-3115`), read-only (ADR-0058).
+ *
+ * **Where the figure came from is a marker, not a sentence** (ADR-0063 §5): a glyph beside it whose
+ * name and tooltip say whose figure it is and for which month — the office's upload, its correction,
+ * or the agent's own. Before this month's file there is no figure to mark: *Not uploaded yet* says so.
+ */
 function GoalCard({
-  figures, month, source, summary,
-}: { figures: PeriodFigures; month: boolean; source: FigureSource | null; summary: Summary }) {
+  figures, month, source,
+}: { figures: PeriodFigures; month: boolean; source: FigureSource | null }) {
   const pct = figures.attainmentPct;
   // The year was made before this month began: the month has no target left to fill (ADR-0047).
   const madeAlready = figures.targetMet && figures.targetMinor === 0;
@@ -185,7 +233,12 @@ function GoalCard({
           {figures.actualMinor === null ? (
             <strong className="font-body text-2xl font-bold text-muted">Not uploaded yet</strong>
           ) : (
-            <strong className="font-body text-2xl font-bold text-navy">{formatRupiah(figures.actualMinor)}</strong>
+            <>
+              <strong className="font-body text-2xl font-bold text-navy">{formatRupiah(figures.actualMinor)}</strong>
+              {source && (
+                <ProducedMarker words={producedFrom(source, month ? 'month' : 'year')} />
+              )}
+            </>
           )}
           {figures.targetMinor !== null && !madeAlready && (
             <span className="text-sm text-muted">of {formatRupiah(figures.targetMinor)} target</span>
@@ -217,16 +270,13 @@ function GoalCard({
           </div>
         </>
       )}
-      <p className="mt-3 text-xs text-muted">
-        {source === null
-          ? `This month’s figure arrives with your office’s upload, after ${formatMonth(summary.month)} ends.`
-          : `${SOURCE[source.provenance]}${source.month ? `, ${formatMonth(source.month)}` : ''}.`}
-        {' '}
-        <Link href="/goals" className="font-semibold text-navy underline">Goal Settings</Link>
-        {source?.provenance === 'self_reported' ? ' is where you change it.' : ' has the whole plan.'}
-      </p>
     </SummaryCard>
   );
+}
+
+/** The provenance marker (ADR-0063 §5): `ⓘ`, its words on hover, focus and tap — the leads table's glyph. */
+function ProducedMarker({ words }: { words: string }) {
+  return <TippedGlyph glyph="ⓘ" name={words} tip={words} align="fit" className="self-center" />;
 }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -249,9 +299,6 @@ function GapCard({ figures, period, pace }: { figures: PeriodFigures; period: st
             : figures.targetMet ? 'None' : plural(figures.policiesNeeded, 'policy', 'policies')}
         />
       </div>
-      {figures.actualMinor === null && !figures.targetMet && (
-        <p className="mt-3 text-xs text-muted">What is left is worked out once this month’s APE is uploaded.</p>
-      )}
       {pace && <PaceNote pace={pace} />}
     </SummaryCard>
   );
@@ -321,6 +368,11 @@ const TARGET_LABEL: Record<ActivityTarget['key'], string> = {
  * The targets are the cascade run on this card's period — this month's fixed APE target, or the year's —
  * so the closings chip and the pace sentence above name one number (ADR-0056). **No target is said, not
  * divided by**: the prototype's bars had no guard, and a zero target printed `NaN%` (F-25).
+ *
+ * **The section chips are the office's summary tiles** (ADR-0064, P10.1-T6): the server groups the
+ * sections that share a tile into one chip under the tile's label, and leaves out a tile holding a
+ * cascade type. On the seed that is the prototype's two, *Recruitment activities* and *Development
+ * activities* (`Overall.html:3164-3183`). The screen draws the chips as they come and regroups nothing.
  */
 function TargetsCard({ activity, month, period }: { activity: SummaryActivity; month: boolean; period: string }) {
   return (
@@ -334,7 +386,6 @@ function TargetsCard({ activity, month, period }: { activity: SummaryActivity; m
       </div>
       <p className="mt-3 text-center text-xs text-muted">
         <strong className="text-navy">{activity.total}</strong> total activities logged {period} across all categories.
-        {' '}Day by day on the <Link href="/activity/dashboard" className="font-semibold text-navy underline">Activity Dashboard</Link>.
       </p>
       {activity.sections.length > 0 && (
         <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
@@ -411,11 +462,10 @@ const PULSE_VALUE: Record<ActivityRatio['status'], string> = {
  * prototype's four tiles were markup, 9.1% and 0.0% whatever anybody logged.
  *
  * The rates only. The balance is a track with two named ends, and it lives on the ratio screen with the
- * formulas, which this card links to.
+ * formulas.
  */
 function PulseCard({ pulse, error }: { pulse: ActivityRatios | null; error: ApiError | null }) {
   const rates = pulse?.ratios.filter((r) => r.comparison !== 'band') ?? [];
-  const hasBalance = pulse?.ratios.some((r) => r.comparison === 'band') ?? false;
   return (
     <SummaryCard id="summary-pulse" title="Activity pulse" icon="bolt" tag="Last 30 days">
       {error && <ErrorBanner {...error} />}
@@ -441,12 +491,6 @@ function PulseCard({ pulse, error }: { pulse: ActivityRatios | null; error: ApiE
           ))}
         </div>
       ))}
-      {pulse && (
-        <p className="mt-3 text-xs text-muted">
-          {hasBalance ? 'Your selling and recruitment balance, and how each ratio is worked out, are on ' : 'How each ratio is worked out is on '}
-          <Link href="/activity/ratio" className="font-semibold text-navy underline">Activity Ratios</Link>.
-        </p>
-      )}
     </SummaryCard>
   );
 }
@@ -459,8 +503,9 @@ const LEAD_TYPE: Record<'sales' | 'recruitment', string> = { sales: 'Sales', rec
  *
  * **The flags are the Leads screen's**, from the server's one definition, and *Closes this month* hides
  * none of them (I-103): the prototype showed only the green chip on a lead two weeks late. The nearest
- * ten are listed and the rest counted, and the card leads back to the screen where each is acted on —
- * the prototype's card named what needed attention and gave no way to it.
+ * ten are listed. The footer that counted the rest and linked to the Leads screen went with the other
+ * footnotes (P10.1-T6); whether the card lists every open lead, as the prototype does, is a payload
+ * change on the client's sign-off list.
  */
 function LeadsCard({ leads }: { leads: Summary['leads'] }) {
   return (
@@ -471,18 +516,9 @@ function LeadsCard({ leads }: { leads: Summary['leads'] }) {
           <Link href="/leads" className="font-semibold text-navy underline">Leads Management</Link>.
         </p>
       ) : (
-        <>
-          <ul>
-            {leads.rows.map((lead) => <LeadRow key={lead.id} lead={lead} />)}
-          </ul>
-          <p className="mt-3 text-xs text-muted">
-            {leads.total > leads.rows.length
-              ? `The ${leads.rows.length} nearest of your ${leads.total} open leads. `
-              : ''}
-            <Link href="/leads" className="font-semibold text-navy underline">Leads Management</Link>
-            {leads.total > leads.rows.length ? ' has every one.' : ' is where you act on them.'}
-          </p>
-        </>
+        <ul>
+          {leads.rows.map((lead) => <LeadRow key={lead.id} lead={lead} />)}
+        </ul>
       )}
     </SummaryCard>
   );
@@ -518,16 +554,6 @@ function LeadRow({ lead }: { lead: OpenLead }) {
     </li>
   );
 }
-
-/** The rule each card names (ADR-0060) — the words a reader can hold the suggestion to. */
-const RULE_NAME: Record<Insight['rule'], string> = {
-  NOTHING_LOGGED: 'Nothing logged',
-  BEHIND_PACE: 'Behind pace',
-  LEAD_OVERDUE: 'Lead overdue',
-  LEAD_NEGLECTED: 'Lead with no next step',
-  RATIO_BELOW: 'Ratio below benchmark',
-  RATIO_STRENGTH: 'Ratio well above benchmark',
-};
 
 const days = (n: number) => plural(n, 'day', 'days');
 const link = (href: string, text: string) => <Link href={href} className="font-semibold text-navy underline">{text}</Link>;
@@ -583,17 +609,29 @@ function insightText(card: Insight): ReactNode {
   }
 }
 
-const FOOTNOTE = 'Suggestions from your numbers — rules, not AI.';
+/**
+ * The prototype's badge on both cards, verbatim (`Overall.html:3238`, `:3253`). One constant, so the two
+ * cards cannot come to say different things.
+ */
+const INSIGHT_BADGE = 'AI-powered';
 
 /**
- * *What to do next* and *How you can improve your performance* (`Overall.html:3228-3258`, P10-T7):
- * **named rules, labelled as rules** (ADR-0060, D-02).
+ * *What to do next* and *How you can improve your performance* (`Overall.html:3233-3262`, P10-T7):
+ * **named rules over your own numbers** (ADR-0060, D-02), **badged as the prototype badges them**.
  *
- * The prototype's two cards are static strings under an **AI-powered** badge, in a blue gradient that is
- * the visual language of generated insight. These are rules over your own numbers, so they wear the
- * product's own colours and say what they are — and each names the rule that made it. The server picks
- * at most four in a fixed priority; a card with nothing in it is not drawn, and when no rule fired the
- * page says so rather than going quiet.
+ * Both cards wear *AI-powered*, verbatim, at the client's request of 2026-10-01 (ADR-0069, amending
+ * ADR-0063 §6, which had made it *Rules, not AI*). What the cards are has not changed: every suggestion
+ * is one of ADR-0060's fixed rules, worked out on read, and nothing is generated or learned. The manual
+ * says so, which is where ADR-0062 §2 puts an explanation. **The prototype's footnotes stay out** —
+ * *Generated automatically*, *will get sharper the more weeks you log*, *Pattern-based coaching*: they
+ * claim a system that learns from your weeks, and these rules give the same suggestions for the same
+ * numbers however long you log. No item names its rule on screen (ADR-0063 §6): `insights[].rule`
+ * stays in the payload, for the tests and for coaching.
+ *
+ * **The badge is a solid navy pill**, not the prototype's gradients: `#4A6FE0` is in no token, and white
+ * on the improvement card's `--amber-dark` end (`Overall.html:1009-1011`) fails the contrast floor. The
+ * cards keep the product's own navy and amber edges. The server picks at most four in a fixed priority;
+ * a card with nothing in it is not drawn, and when no rule fired the page says so rather than going quiet.
  */
 function InsightCards({ insights }: { insights: Insight[] }) {
   const actions = insights.filter((card) => card.kind === 'action');
@@ -601,7 +639,7 @@ function InsightCards({ insights }: { insights: Insight[] }) {
   return (
     <>
       {(actions.length > 0 || improve.length === 0) && (
-        <SummaryCard id="summary-next" title="What to do next" icon="spark" badge="Rules, not AI" className="border-l-4 border-l-navy-soft">
+        <SummaryCard id="summary-next" title="What to do next" icon="spark" badge={INSIGHT_BADGE} className="border-l-4 border-l-navy-soft">
           {actions.length === 0 ? (
             <p className="text-sm text-navy">Nothing in your numbers asks for anything right now — keep logging, and this is where it will show.</p>
           ) : (
@@ -614,11 +652,10 @@ function InsightCards({ insights }: { insights: Insight[] }) {
               ))}
             </ol>
           )}
-          <p className="mt-3 text-xs italic text-muted">{FOOTNOTE}</p>
         </SummaryCard>
       )}
       {improve.length > 0 && (
-        <SummaryCard id="summary-improve" title="How you can improve your performance" icon="trend" badge="Rules, not AI" className="border-l-4 border-l-amber">
+        <SummaryCard id="summary-improve" title="How you can improve your performance" icon="trend" badge={INSIGHT_BADGE} className="border-l-4 border-l-amber">
           <ul className="flex flex-col gap-3">
             {improve.map((card) => (
               <li key={card.rule} className="flex items-start gap-2.5 text-sm leading-normal text-navy">
@@ -627,7 +664,6 @@ function InsightCards({ insights }: { insights: Insight[] }) {
               </li>
             ))}
           </ul>
-          <p className="mt-3 text-xs italic text-muted">{FOOTNOTE}</p>
         </SummaryCard>
       )}
     </>
@@ -635,10 +671,5 @@ function InsightCards({ insights }: { insights: Insight[] }) {
 }
 
 function InsightBody({ card }: { card: Insight }) {
-  return (
-    <div className="min-w-0">
-      <p>{insightText(card)}</p>
-      <p className="mt-0.5 text-2xs font-semibold uppercase tracking-wide text-muted">Rule: {RULE_NAME[card.rule]}</p>
-    </div>
-  );
+  return <p className="min-w-0">{insightText(card)}</p>;
 }

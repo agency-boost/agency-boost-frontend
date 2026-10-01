@@ -155,8 +155,11 @@ export function CodeField({
  * reader; this is a `<dl>` row, which is what the office detail screen already uses for
  * the same two values.
  *
- * The reason is not optional. A value shown with no control and no explanation reads as
- * a field that failed to load.
+ * A value shown with no control and no explanation reads as a field that failed to load, so
+ * the reason is left out only where the screen already says it beside the figure: Goal
+ * Settings' carrier APE, whose provenance marker sits on the *Already produced* tile under it,
+ * or in this label when there is no tile to carry it (ADR-0063 §5, P10.1-T6) — which is why the
+ * label may hold more than text. Everywhere else the reason is given.
  */
 export function ReadOnlyField({
   label,
@@ -164,16 +167,16 @@ export function ReadOnlyField({
   reason,
   className,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: string;
-  reason: string;
+  reason?: string;
   className?: string;
 }) {
   return (
     <dl className={cn('flex flex-col gap-1 rounded-md border border-hairline bg-base p-3', className)}>
       <dt className="text-sm font-semibold text-navy">{label}</dt>
       <dd className="text-md text-navy">{value}</dd>
-      <dd className="text-xs text-muted">{reason}</dd>
+      {reason && <dd className="text-xs text-muted">{reason}</dd>}
     </dl>
   );
 }

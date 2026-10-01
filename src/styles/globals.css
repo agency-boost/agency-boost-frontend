@@ -25,6 +25,8 @@
    * for a contrast defect it has everywhere else. Pinned in `a11y.spec.tsx`.
    */
   --color-amber-deep: #b5651d;
+  /* The only amber that clears 4.5:1 as small text (4.90:1 on card) — the leads Type word. */
+  --color-amber-ink: #a85e1b;
   /* A warm off-white, not a neutral grey — substituting one loses the product's character. */
   --color-base: #faf9f7;
   --color-card: #ffffff;

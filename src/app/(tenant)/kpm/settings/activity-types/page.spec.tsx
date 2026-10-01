@@ -632,6 +632,38 @@ describe('the office activity taxonomy (P4-T1)', () => {
       expect(screen.getByText(/1 change not saved yet/)).toBeInTheDocument();
     });
 
+    it('a new section under a shared tile’s code is refused in the banner, naming the code (P10.1-T6)', async () => {
+      render(OWNER, GROUPED);
+      await screen.findByRole('heading', { name: 'Selling' });
+      stubFetch({
+        '/kpm/settings/activity-types': { body: GROUPED },
+        '/kpm/settings/publish-state': {
+          body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+        },
+        '/kpm/settings/changes': {
+          status: 422,
+          body: {
+            error: {
+              code: 'CONFIG_SUMMARY_GROUP_CODE_TAKEN',
+              message: 'Change 1 (category.create): SELLING is the code of the summary tile “Selling” …',
+              requestId: 'r-10',
+              details: { summaryGroupCode: 'SELLING', label: 'Selling' },
+            },
+          },
+        },
+      });
+      await userEvent.click(screen.getByRole('button', { name: 'Add a section' }));
+      await userEvent.type(screen.getByLabelText('Code'), 'selling');
+      await userEvent.type(screen.getByLabelText('Name'), 'Selling again');
+      await userEvent.click(screen.getByRole('button', { name: 'Add the section' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+      const banner = (await screen.findAllByRole('alert')).find((a) => a.textContent?.includes('already the code'));
+      expect(banner).toHaveTextContent('SELLING is already the code of the summary tile “Selling”. Give the section another code.');
+      expect(banner).not.toHaveTextContent('Change 1');
+      expect(screen.getByText(/1 change not saved yet/)).toBeInTheDocument();
+    });
+
     it('AC-5: offers a reader without write permission no field at all', async () => {
       render(AGENT, GROUPED);
       await screen.findByRole('heading', { name: 'Selling' });

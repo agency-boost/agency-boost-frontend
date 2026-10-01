@@ -6,7 +6,10 @@ import { ConfigBadge } from './config-badge';
 export interface CascadeColumn {
   /** *Leads contacted*, *Appointments*, *Closings*. */
   readonly label: string;
-  /** The activity type this column counts against — *Activity #3*, or the code when unnumbered. */
+  /**
+   * The activity type this column counts against, as the log screen numbers it — *Activity #3*. Never
+   * the stored code, an internal id (ADR-0062 §3); omitted while the number is unknown.
+   */
   readonly chip?: string;
   readonly icon: NavIconName;
   readonly month: string;
