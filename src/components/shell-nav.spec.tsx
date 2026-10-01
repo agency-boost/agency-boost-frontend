@@ -5,9 +5,11 @@ import { AgentShell } from './agent-shell';
 import { AdminShell } from './admin-shell';
 import { TenantShell } from './tenant-shell';
 
+// Mutable so one test can stand on a typed URL; every other test reads `/group-tree`.
+const route = vi.hoisted(() => ({ path: '/group-tree' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  usePathname: () => '/group-tree',
+  usePathname: () => route.path,
 }));
 
 /**
@@ -108,6 +110,25 @@ describe('the sidebar matches the prototype', () => {
     const training = screen.getByText('Training modules').closest('a')!;
     expect(training).toHaveAttribute('aria-disabled');
     expect(within(training).getByText('Upcoming')).toBeInTheDocument();
+  });
+
+  it('agent app: Unit dashboard is Upcoming, as Coaching session is — its page is a sign (P10.1-T2)', async () => {
+    // The client, 2026-10-01: a page that is not ready says so like the others. It was a live link
+    // to the sign with no pill, beside a Coaching session that had one. On its own typed URL it is
+    // still not the current item: an upcoming item is never where the reader is.
+    route.path = '/unit/dashboard';
+    try {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+      const unit = screen.getByText('Unit dashboard').closest('a')!;
+      expect(unit).toHaveAttribute('aria-disabled');
+      expect(unit).not.toHaveAttribute('href');
+      expect(unit).not.toHaveAttribute('aria-current');
+      // An inert anchor never carries `aria-current`, so the tint is what would show it as here.
+      expect(unit.className).not.toContain('bg-amber/15');
+      expect(within(unit).getByText('Upcoming')).toBeInTheDocument();
+    } finally {
+      route.path = '/group-tree';
+    }
   });
 
   it('agent app: Personal summary is a live link, not a pill (P10-T4)', async () => {

@@ -407,10 +407,11 @@ export default function CampaignsSettingsPage() {
                       <p className="mt-1 text-sm text-muted">Reward: {rule.reward}</p>
                     )}
                     {rule.waitingOnMetrics.length > 0 && (
+                      // The state and what it waits on, and nothing about when (ADR-0070). It read
+                      // "until the production figures arrive", which was timing, and stale besides.
                       <p className="mt-1 text-sm text-muted">
-                        This one cannot be worked out yet: it needs{' '}
-                        {rule.waitingOnMetrics.join(', ')}, which this product does not measure
-                        until the production figures arrive. Nothing here guesses them.
+                        Nothing measures {rule.waitingOnMetrics.join(', ')} yet, so this rule cannot
+                        be worked out. Nothing here guesses them.
                       </p>
                     )}
                   </li>

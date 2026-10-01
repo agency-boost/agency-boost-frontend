@@ -64,6 +64,15 @@ describe('branch info (P4-T5)', () => {
     expect(screen.queryByDisplayValue('Prudential')).toBeNull();
   });
 
+  it('keeps the financial year field, and says nothing about when it will be used', async () => {
+    // Its hint read "Used by the reporting periods that arrive in a later phase." — our schedule,
+    // not something a reader can act on (ADR-0062 §3, P10.1-T2). The field itself stays: it saves.
+    render();
+    await screen.findByDisplayValue('BSD City Branch');
+    expect(screen.getByLabelText('Financial year starts')).toHaveValue('1');
+    expect(document.body).not.toHaveTextContent(/later phase|reporting periods/i);
+  });
+
   it('offers no time zone, language or currency control', async () => {
     // ADR-0016 fixes all three for v1. They are shown, and not offered.
     render();

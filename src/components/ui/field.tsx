@@ -160,18 +160,39 @@ export function CodeField({
  * Settings' carrier APE, whose provenance marker sits on the *Already produced* tile under it,
  * or in this label when there is no tile to carry it (ADR-0063 §5, P10.1-T6) — which is why the
  * label may hold more than text. Everywhere else the reason is given.
+ *
+ * **`layout="field"` stands among inputs** (P10.1-T8). In a {@link FieldRow} the default — a box with
+ * the label inside it — put its label below the row's labels and its figure nowhere near the inputs',
+ * and the client found Goal Settings' row lopsided. As a field, the label is a `Field`'s, on the row's
+ * label line, and the figure sits in a box an affixed input's height and border, so labels line up
+ * with labels and the figure with the inputs. The page's ground, not an input's white, is what says it
+ * cannot be typed into.
  */
 export function ReadOnlyField({
   label,
   value,
   reason,
+  layout = 'card',
   className,
 }: {
   label: React.ReactNode;
   value: string;
   reason?: string;
+  /** `card`, the default, is a box of its own; `field` lines up with the inputs of a `FieldRow`. */
+  layout?: 'card' | 'field';
   className?: string;
 }) {
+  if (layout === 'field') {
+    return (
+      <dl className={cn('flex flex-col gap-1', className)}>
+        <dt className={LABEL_CLASS}>{label}</dt>
+        <dd className="flex h-10 items-center rounded-md border-[1.5px] border-hairline bg-base px-3 text-base text-navy">
+          {value}
+        </dd>
+        {reason && <dd className="text-xs text-muted">{reason}</dd>}
+      </dl>
+    );
+  }
   return (
     <dl className={cn('flex flex-col gap-1 rounded-md border border-hairline bg-base p-3', className)}>
       <dt className="text-sm font-semibold text-navy">{label}</dt>

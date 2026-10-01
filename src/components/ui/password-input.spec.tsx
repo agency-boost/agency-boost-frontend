@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { globSync } from 'node:fs';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -88,8 +87,9 @@ describe('PasswordInput', () => {
  */
 describe('every password field goes through PasswordInput', () => {
   const SRC = join(__dirname, '../..');
-  const files = globSync('**/*.tsx', { cwd: SRC })
-    .filter((f) => !f.includes('.spec.'))
+  // `readdirSync(…, { recursive })`, not `globSync`: CI runs Node 20, and `globSync` is Node 22's.
+  const files = readdirSync(SRC, { encoding: 'utf8', recursive: true })
+    .filter((f) => f.endsWith('.tsx') && !f.includes('.spec.'))
     .map((f) => join(SRC, f));
 
   it('finds the screens at all, so a silent zero cannot pass', () => {

@@ -609,6 +609,25 @@ describe('ActivationChecklistEditor (P5-T3)', () => {
     ]);
   });
 
+  /*
+   * The prototype's sense — *"auto-complete when the agent does that action"* (`KPM_Owner.html:1528`)
+   * — in the future tense, because nothing completes an item yet. It read *"…once the evaluator for
+   * that link ships"*: our build, in a developer's words (P10.1-T2). On Edit and on Add alike.
+   */
+  it('says what a link does, in the reader’s words rather than the build’s', async () => {
+    const HINT = 'A linked item will complete on its own when the agent does that action.';
+    render(<Editor />);
+
+    await userEvent.click(within(rowOf('Learn insurance basics')).getByRole('button', { name: 'Edit' }));
+    expect(screen.getByLabelText('Completes from')).toHaveAccessibleDescription(HINT);
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    const card = screen.getByText('1. Introduction').closest('.rounded-lg') as HTMLElement;
+    await userEvent.click(within(card).getByRole('button', { name: 'Add an item' }));
+    expect(within(card).getByLabelText('Completes from')).toHaveAccessibleDescription(HINT);
+    expect(screen.queryByText(/evaluator|ships/)).not.toBeInTheDocument();
+  });
+
   it('links an item to a module, and clears a link back to manual', async () => {
     const onChange = vi.fn();
     render(<Editor onChange={onChange} />);
@@ -852,7 +871,31 @@ describe('CampaignKindsEditor (P5-T9)', () => {
       onChange={vi.fn()}
     />);
 
-    expect(screen.getByText(/MADE_UP_METRIC — not in the registry yet/)).toBeInTheDocument();
+    /*
+     * The key, and the console's word for what is not built — *Soon*, as the admin nav says it —
+     * with the Owner's words for the same rules behind it, *Not measured yet*, for a pointer and a
+     * screen reader. It read *"MADE_UP_METRIC — not in the registry yet"*: a developer's sentence
+     * (P10.1-T2, the client's request of 2026-10-01).
+     */
+    const row = screen.getByText(/MADE_UP_METRIC/).closest('p')!;
+    const soon = within(row).getByText('Soon');
+    expect(soon.closest('[title]')).toHaveAttribute('title', 'Not measured yet');
+    expect(row).toHaveTextContent(/MADE_UP_METRIC\s*Soon, not measured yet, at least/);
+    expect(row).not.toHaveTextContent(/registry/);
+  });
+
+  it('marks only the metric nothing measures, never one the registry has', () => {
+    render(<CampaignKindsEditor
+      section="production_club"
+      payload={CAMPAIGN_KINDS}
+      metrics={METRICS}
+      onChange={vi.fn()}
+    />);
+
+    // The registry's own name, as it always read, and no pill beside it.
+    const row = screen.getByText(/APE achieved/).closest('p')!;
+    expect(within(row).queryByText('Soon')).not.toBeInTheDocument();
+    expect(row).not.toHaveTextContent(/not measured yet/);
   });
 });
 

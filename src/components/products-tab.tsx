@@ -432,8 +432,11 @@ function ProductEditor({
 
       <fieldset className="mt-4">
         <legend className="text-sm font-semibold text-navy">Who it fits</legend>
+        {/* It ended by naming the phase that builds the fit check: our schedule, which the
+            reader can do nothing with (ADR-0062 §3, P10.1-T2). The bands are saved and read
+            back today. */}
         <p className="text-sm text-muted">
-          What the fit check scores a prospect against, from phase 12.
+          What the fit check scores a prospect against.
         </p>
         <div className="mt-2 flex flex-wrap gap-4">
           <div>

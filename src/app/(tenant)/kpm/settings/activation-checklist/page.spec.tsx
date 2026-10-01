@@ -31,7 +31,7 @@ const goalItem = item({
   autoLink: 'feature:goals',
   link: {
     kind: 'feature:goals', label: 'Goal Settings', route: '/goals',
-    completesWhen: 'the hire has saved any goal since joining this office', live: false, livePhase: 11,
+    completesWhen: 'the hire has saved any goal since joining this office', live: false,
   },
 });
 
@@ -96,13 +96,15 @@ describe('Settings › Activation checklist (P5-T3)', () => {
     expect(screen.getByText(/Applies to every new hire’s 90-day activation/)).toBeInTheDocument();
   });
 
-  it('shows the window read-only, and sends the reader to where it changes', async () => {
+  it('shows the window read-only, and sends nobody to change it where it cannot be changed', async () => {
+    // It used to say "— change it in Branch info" and link there. Branch info has no window field,
+    // and no screen edits the window, so the link led to a page that could not do what it said (X-45).
     render();
     await screen.findByText(/Hires starting now/);
 
     expect(screen.getByText('90 days')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Branch info' }))
-      .toHaveAttribute('href', '/kpm/settings/branch-info');
+    expect(screen.getByText('90 days').closest('p')).toHaveTextContent(/^The window is 90 days\.$/);
+    expect(screen.queryByRole('link', { name: 'Branch info' })).not.toBeInTheDocument();
   });
 
   it('draws each aspect with its items, and marks a linked one Auto', async () => {
@@ -112,18 +114,23 @@ describe('Settings › Activation checklist (P5-T3)', () => {
     expect(screen.getByRole('heading', { name: '2. Initial Setup' })).toBeInTheDocument();
     const linked = rowOf('Goal setting: APE & activity targets');
     expect(within(linked).getByText('Auto')).toBeInTheDocument();
-    // The sentence under the item, not the select's label, which shares the words.
-    expect(within(linked).getByText('Goal Settings', { selector: 'strong' })).toBeInTheDocument();
+    // The select says what it completes from, as the prototype's row does (`KPM_Owner.html:1539`).
+    expect(within(linked).getByLabelText('Completes from')).toHaveValue('feature:goals');
     // A manual item says nothing about completing on its own.
     expect(within(rowOf('Learn insurance basics')).queryByText('Auto')).not.toBeInTheDocument();
   });
 
-  it('says a link is not working yet, rather than implying it is', async () => {
+  it('puts nothing under a linked item, and names no phase anywhere', async () => {
+    // A sub-line here said *"ticked by the leader until the link starts working in phase 11"*: our
+    // schedule, in the old plan's numbers, about a leader screen that does not exist yet (P10.1-T2
+    // AC-13). The prototype's row is the item, the AUTO badge and the select, and nothing under them.
     render();
     await screen.findByText('1. Introduction');
 
-    expect(within(rowOf('Goal setting: APE & activity targets')).getByText(/starts working in phase 11/))
-      .toBeInTheDocument();
+    const linked = rowOf('Goal setting: APE & activity targets');
+    expect(within(linked).getByText('Goal setting: APE & activity targets').nextElementSibling).toBeNull();
+    expect(linked).not.toHaveTextContent(/ticked by the leader|starts working/);
+    expect(document.body).not.toHaveTextContent(/phase/i);
   });
 
   it('offers the three features and only the modules agents are offered', async () => {

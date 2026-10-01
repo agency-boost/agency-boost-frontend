@@ -285,32 +285,23 @@ export default function MembersPage() {
           inactive tabs at the same weight as active — they differ by colour and the amber
           rule, never by weight (`Overall.html:81-89`). */}
       <div className="mb-6 flex flex-wrap gap-6 border-b border-hairline">
-        {TABS.map((t) =>
-          'upcoming' in t && t.upcoming ? (
-            <span
-              key={t.key}
-              aria-disabled
-              title="Arrives with its phase"
-              className="-mb-px cursor-default border-b-2 border-transparent px-0.5 pb-3 text-md font-semibold text-muted/50"
-            >
-              {label(t)}
-            </span>
-          ) : (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key as TabKey)}
-              aria-current={tab === t.key ? 'page' : undefined}
-              className={
-                tab === t.key
-                  ? '-mb-px border-b-2 border-amber px-0.5 pb-3 text-md font-semibold text-navy'
-                  : '-mb-px border-b-2 border-transparent px-0.5 pb-3 text-md font-semibold text-muted'
-              }
-            >
-              {label(t)}
-            </button>
-          ),
-        )}
+        {/* Every tab is built. A disabled branch for an unbuilt one, titled "Arrives with its
+            phase", sat here unreachable — no tab set it — and went in P10.1-T2. */}
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key as TabKey)}
+            aria-current={tab === t.key ? 'page' : undefined}
+            className={
+              tab === t.key
+                ? '-mb-px border-b-2 border-amber px-0.5 pb-3 text-md font-semibold text-navy'
+                : '-mb-px border-b-2 border-transparent px-0.5 pb-3 text-md font-semibold text-muted'
+            }
+          >
+            {label(t)}
+          </button>
+        ))}
       </div>
 
       {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && (

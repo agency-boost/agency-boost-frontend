@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
@@ -180,19 +180,53 @@ describe('the office’s Events screen', () => {
     expect(new Date(sent.endsAt).getTime()).toBeGreaterThan(new Date(sent.startsAt).getTime());
   });
 
-  it('will not send an invitee list it cannot collect yet', async () => {
-    // Phase 12 brings the roster picker. Offering a "chosen people" event with no way to choose
-    // them would be a control that cannot work.
+  it('shows the chosen-people options as coming soon, and will not let either be picked', async () => {
+    // The roster picker that chooses invitees is not built. Offering a "chosen people" event with
+    // no way to choose them would be a control that cannot work, so both options are shown disabled
+    // and marked, as the client asked of everything not built (2026-10-01). The mark is the
+    // prototype's *coming soon* (`Overall.html:3773`): *Upcoming* on this screen is an event's status.
+    // No sentence names a phase in their place.
     render([type()], []);
     await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
 
-    await userEvent.type(screen.getByLabelText('Title'), 'Leaders lunch');
-    await userEvent.type(screen.getByLabelText('Starts'), '2026-10-01T09:00');
-    await userEvent.type(screen.getByLabelText('Ends'), '2026-10-01T13:00');
-    await userEvent.selectOptions(screen.getByLabelText('Who is invited'), 'select_agents');
+    const scope = screen.getByLabelText('Who is invited');
+    const option = (name: string) => within(scope).getByRole('option', { name });
+    expect(option('Chosen people — coming soon')).toBeDisabled();
+    expect(option('Chosen leaders — coming soon')).toBeDisabled();
+    expect(within(scope).queryByRole('option', { name: /upcoming/i })).not.toBeInTheDocument();
+    expect(option('Everybody in the office')).toBeEnabled();
+    expect(option('Leaders — anybody with somebody under them')).toBeEnabled();
 
-    expect(screen.getByText(/arrives with the roster picker in phase 12/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add the event' })).toBeDisabled();
+    // A disabled option cannot be chosen: user-event skips it, as a browser does.
+    await userEvent.selectOptions(scope, 'select_agents');
+    expect(scope).toHaveValue('all_agents');
+    expect(document.body).not.toHaveTextContent(/roster picker|phase \d/i);
+  });
+
+  it('keeps an event the API saved with a chosen list readable, and unsaveable here', async () => {
+    // Only the API can make one. The list reads its plain label; the edit panel cannot send the
+    // invitee list, so Save waits until a scope it can send is picked.
+    render([type()], [event({
+      audience: { issuer: 'kpm', scope: 'select_agents', inviteeMembershipIds: ['mem-2', 'mem-3'] },
+    })]);
+
+    expect(await screen.findByText(/Chosen people · 2 invited/)).toBeInTheDocument();
+    expect(screen.queryByText(/Chosen people — coming soon ·/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const scope = screen.getByLabelText('Who is invited');
+    expect(scope).toHaveValue('select_agents');
+    expect(screen.getByRole('button', { name: 'Save the event' })).toBeDisabled();
+    // The disabled Save carries its reason, on the field's own hint line, linked to the select.
+    const why = 'Pick Everybody or Leaders to save — a chosen list can’t be edited here yet.';
+    expect(scope).toHaveAccessibleDescription(why);
+    expect(screen.queryByText('A leader is somebody with people under them — not a job title.')).not.toBeInTheDocument();
+
+    await userEvent.selectOptions(scope, 'all_agents');
+    expect(screen.getByRole('button', { name: 'Save the event' })).toBeEnabled();
+    // Once a scope this screen can send is picked, the reason goes and the field's usual hint is back.
+    expect(screen.queryByText(why)).not.toBeInTheDocument();
+    expect(scope).toHaveAccessibleDescription('A leader is somebody with people under them — not a job title.');
   });
 
   it('adds and edits an event type, never resending its code', async () => {

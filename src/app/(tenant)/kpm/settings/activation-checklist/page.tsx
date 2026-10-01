@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { SettingsScreen } from '@/components/settings-screen';
 import { DragHandle } from '@/components/ui/drag-handle';
@@ -139,14 +138,6 @@ export default function ActivationChecklistPage() {
   const version = server?.draft?.version ?? ((server?.published?.version ?? 0) + 1);
   /** A draft the office has actually saved. The starting point carries no id, and publishes nothing. */
   const hasDraft = Boolean(server?.draft?.id);
-
-  function linkOf(item: DraftItem) {
-    if (item.autoLink === null) return null;
-    const feature = FEATURE_LINKS.find((f) => f.value === item.autoLink);
-    if (feature) return { label: feature.label, live: false, phase: 11 };
-    const code = item.autoLink.replace(/^training:/, '');
-    return { label: offered.find((m) => m.code === code)?.title ?? code, live: false, phase: 12 };
-  }
 
   /** Drop what is held where `target` sits — within one aspect, or among the aspects. */
   function drop(target: { aspect: string; item?: string }) {
@@ -290,7 +281,6 @@ export default function ActivationChecklistPage() {
 
         <ul className="flex flex-col divide-y divide-hairline">
           {aspect.items.map((item, index) => {
-            const link = linkOf(item);
             return (
               <li
                 key={item.code}
@@ -353,17 +343,11 @@ export default function ActivationChecklistPage() {
                       </FieldRow>
                     </div>
                   ) : (
-                    <>
-                      <p className="text-md text-navy">{item.label}</p>
-                      {link && (
-                        <p className="mt-0.5 text-sm text-muted">
-                          Completes from <strong className="text-navy">{link.label}</strong>
-                          {' — '}
-                          {`ticked by the leader until the ${link.label === 'Training module' ? 'module' : 'link'} `
-                            + `starts working in phase ${link.phase}`}
-                        </p>
-                      )}
-                    </>
+                    /* The item and nothing under it, as the prototype draws the row
+                       (`KPM_Owner.html:1530-1560`): the AUTO badge and the select beside it say
+                       what it completes from. The sub-line that was here said when the link would
+                       start working, by phase number (P10.1-T2 AC-13). */
+                    <p className="text-md text-navy">{item.label}</p>
                   )}
                 </div>
 
@@ -530,13 +514,11 @@ export default function ActivationChecklistPage() {
               part-way through their ninety days keeps the checklist they started on, which is why a
               published version is never edited.
             </p>
-            {/* The one setting this screen shows and does not own. */}
+            {/* The one setting this screen shows and does not own. It used to end "— change it in
+                Branch info", linking there; Branch info has no window field and no screen edits
+                the window, so the sentence states the fact and points nowhere (X-45). */}
             <p className="mt-2 text-sm text-muted">
-              The window is <strong className="text-navy">{server.windowDays} days</strong> — change it
-              in{' '}
-              <Link href="/kpm/settings/branch-info" className="font-semibold text-navy underline">
-                Branch info
-              </Link>.
+              The window is <strong className="text-navy">{server.windowDays} days</strong>.
             </p>
 
             {canWrite && (

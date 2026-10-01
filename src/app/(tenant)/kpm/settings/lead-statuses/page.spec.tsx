@@ -185,8 +185,11 @@ describe('the office lead pipelines (P4-T3)', () => {
     it('tells the reader what the flag is for, once per ladder', async () => {
       render(OWNER, withLate);
 
-      expect(await screen.findByText(/Switch on the stages a lead is usually close to/))
-        .toBeInTheDocument();
+      const hint = await screen.findByText(/Switch on the stages a lead is usually close to/);
+      // The Overview's tile is not built (P10.1-T2): the sentence says it will count them, and no
+      // longer that it does.
+      expect(hint).toHaveTextContent(/will count as Expected to close on the KPM Overview\.$/);
+      expect(hint).not.toHaveTextContent(/Overview counts/);
     });
 
     it('shows a reader who cannot write a badge, and never both', async () => {

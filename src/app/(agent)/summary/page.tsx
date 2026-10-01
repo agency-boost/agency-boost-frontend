@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState, type ReactNode } from 'react';
+import { ComingInPhaseSection } from '@/components/coming-in-phase';
 import { Page } from '@/components/page';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
@@ -50,6 +51,9 @@ import {
  *
  * **What to do next, and how to improve** (P10-T7, ADR-0060): fixed rules over your own numbers, at most
  * four, under the prototype's *AI-powered* badge (ADR-0069, at the client's request).
+ *
+ * **Campaigns you're chasing** (P10.1-T2, ADR-0070): the one prototype card with nothing to read yet,
+ * shown in its slot as an *Upcoming* section rather than left out, at the client's request.
  */
 type View = 'month' | 'year';
 
@@ -187,6 +191,21 @@ function Cards({
       <TargetsCard activity={month ? summary.activity.monthly : summary.activity.yearly} month={month} period={period} />
       <PulseCard pulse={pulse} error={pulseError} />
       <LeadsCard leads={summary.leads} />
+      {/*
+        * *Campaigns you're chasing* (`Overall.html:3225-3232`), in the prototype's slot, as a sign: the
+        * client asked on 2026-10-01 that a section not ready yet show as one rather than be left out
+        * (parity D-11, ADR-0070). Nothing produces a chase yet, so it renders no rows and calls nothing.
+        * A card like its neighbours: SummaryCard's padding and heading size, and the prototype's own icon
+        * for this card, the bolt (`Overall.html:3228`). Off the paper: a sign on the PDF says nothing
+        * about the period.
+        */}
+      <ComingInPhaseSection
+        title="Campaigns you're chasing"
+        what="The campaigns you choose to chase from the Campaign list, and how close you are to each."
+        icon="bolt"
+        headingClassName="text-md"
+        className="px-[22px] py-[18px] print:hidden"
+      />
       <InsightCards insights={summary.insights} />
     </div>
   );

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -748,6 +748,28 @@ describe('Goal settings — the APE already produced, once the office holds prod
     const box = await screen.findByRole('textbox', { name: 'APE already produced this year' });
     expect(box).not.toHaveAccessibleDescription();
     expect(screen.getByRole('button', { name: 'Your own figure, entered in Goal Settings' })).toBeInTheDocument();
+  });
+
+  it('sits beside the months as a field and takes the rest of the row, as the prototype’s does (P10.1-T8)', async () => {
+    // The client, 2026-10-01: the office's figure looked lopsided beside the months box.
+    render({ '/goals': { body: imported() } });
+    const label = await screen.findByText('APE already produced this year');
+    const field = label.closest('dl')!;
+    const months = screen.getByText(/Months left this year/).closest('label')!;
+
+    // One row, the two labels on its label line: the office's figure is not a box with its label inside.
+    expect(field.parentElement).toBe(months.parentElement!.parentElement);
+    expect(field).toHaveClass('grow', 'basis-56');
+    expect(field).not.toHaveClass('p-3');
+    expect(within(field).getByText('Rp 120.000.000')).toHaveClass('h-10');
+    // The auto badge gives back its padding, so the months label is no taller than this one.
+    expect(within(months).getByText('auto')).toHaveClass('-my-0.5');
+  });
+
+  it('gives the agent’s own box the rest of the row too', async () => {
+    render({ '/goals': { body: goal() } });
+    const box = await screen.findByRole('textbox', { name: 'APE already produced this year' });
+    expect(box.closest('.flex-col')).toHaveClass('grow', 'basis-56');
   });
 });
 

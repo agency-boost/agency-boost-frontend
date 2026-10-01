@@ -493,7 +493,8 @@ describe('screens have no axe violations', () => {
     await expectClean('kpm/data-upload with a preview');
   });
 
-  it('the office overview, real half and placeholder half together', async () => {
+  it('the office overview, a sign and nothing else', async () => {
+    // Its two cards went (P10.1-T2): the page is the placeholder, so it reads nothing of its own.
     const owner = makeMe({
       membership: {
         membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
@@ -501,9 +502,9 @@ describe('screens have no axe violations', () => {
       },
       permissions: ['member:read_profile'],
     });
-    stubFetch({ '/admin/tenants/kpm-1': { body: { ...KPM, settings: { activationWindowDays: 90 } } } });
+    stubFetch({});
     renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
-    await screen.findByText('Arrives in phase 14');
+    await within(screen.getByRole('main')).findByText('Upcoming');
     await expectClean('kpm/overview');
   });
 
@@ -515,7 +516,9 @@ describe('screens have no axe violations', () => {
       },
     });
     renderInLayout(AgentLayout, <UnitDashboardPage />, { me: leader });
-    await screen.findByText('Arrives in phase 13');
+    // *Upcoming*, and no phase (P10.1-T2 AC-1): the sign is a region named by the pill and by what
+    // will be there, so the state is heard first.
+    await screen.findByRole('region', { name: /^Upcoming Everyone in your unit in one table/ });
     await expectClean('unit/dashboard');
   });
 
@@ -628,6 +631,8 @@ describe('screens have no axe violations', () => {
     renderInLayout(AgentLayout, <PersonalSummaryPage />, {});
     await screen.findByRole('region', { name: 'The gap' });
     await screen.findByText('SSR');
+    // The *Upcoming* section in card 6's slot is in the pass too (P10.1-T2): its pill inside an h2.
+    await screen.findByRole('region', { name: "Campaigns you're chasing Upcoming" });
     await expectClean('summary');
   });
 
@@ -1843,7 +1848,7 @@ describe('screens have no axe violations', () => {
                     autoLink: 'feature:goals',
                     link: {
                       kind: 'feature:goals', label: 'Goal Settings', route: '/goals',
-                      completesWhen: 'the hire has saved any goal', live: false, livePhase: 11,
+                      completesWhen: 'the hire has saved any goal', live: false,
                     },
                   },
                 ],

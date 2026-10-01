@@ -300,8 +300,13 @@ export default function GoalSettingsPage() {
                     * itself in. With the placeholder's figure it is all that says so: the hint sentence
                     * under the box went in P10.1-T6 (ADR-0062), and the manual explains the override.
                     */}
+                  {/*
+                    * `-my-0.5` takes back the badge's own padding, so the label is a line of text tall
+                    * with it or without: otherwise this box sat a pixel below the APE figure's beside
+                    * it, and jumped when the badge went (P10.1-T8).
+                    */}
                   {draft.monthsLeft === null && (
-                    <ConfigBadge tone="navy" className="ml-1 align-middle">auto</ConfigBadge>
+                    <ConfigBadge tone="navy" className="-my-0.5 ml-1 align-middle">auto</ConfigBadge>
                   )}
                 </>
               )}
@@ -338,15 +343,23 @@ export default function GoalSettingsPage() {
               * **No sentence says so** (P10.1-T6, ADR-0063 §5): whose figure it is, and for which
               * month, is the marker on *Already produced* below, as on the Summary.
               */}
+            {/*
+              * Either way it takes the rest of the row, as the prototype's `flex:1 1 220px` does
+              * (`Overall.html:2919`), and the office's figure is laid out as a field beside the months —
+              * its label on their label's line, its figure level with their box (P10.1-T8).
+              */}
             {goal.achieved.provenance === 'self_reported' ? (
               <Rupiah
                 label="APE already produced this year"
                 id="goal-achieved"
                 value={draft.apeAchievedMinor}
                 onChange={(apeAchievedMinor) => set({ apeAchievedMinor })}
+                className="grow basis-56"
               />
             ) : (
               <ReadOnlyField
+                layout="field"
+                className="grow basis-56"
                 label={projected ? 'APE already produced this year' : (
                   <>
                     APE already produced this year{' '}
@@ -681,12 +694,14 @@ function Tip({ glyph, children }: { glyph: string; children: React.ReactNode }) 
  * the reader never types twelve digits for a figure they think of as nine.
  */
 function Rupiah({
-  label, id, value, onChange,
+  label, id, value, onChange, className,
 }: {
   label: string; id: string; value: number; onChange: (minor: number) => void;
+  /** How the field sits in its row. */
+  className?: string;
 }) {
   return (
-    <Field label={label} htmlFor={id}>
+    <Field label={label} htmlFor={id} className={className}>
       {/*
         * **Text, not `type="number"`**, so the figure can be grouped while it is being typed —
         * `500.000.000` rather than `500000000`. A number input cannot carry a separator, and nine

@@ -117,19 +117,10 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
 
         <StatusCard kpm={kpm} onChanged={load} />
 
-        <Card>
-          <h2 className="font-display text-lg font-bold text-navy">Seeded settings</h2>
-          <p className="mt-1 text-md text-muted">
-            Copied from the platform defaults at provisioning. The office edits these
-            itself from Phase 4 — they are shown here so a reviewer can confirm
-            provisioning actually seeded them.
-          </p>
-          <dl className="mt-3 grid grid-cols-[13rem_1fr] gap-y-1.5 text-md">
-            {Object.entries(kpm.settings ?? {}).map(([k, v]) => (
-              <Detail key={k} term={k} detail={String(v)} />
-            ))}
-          </dl>
-        </Card>
+        {/* No *Seeded settings* card, and no sign in its place (P10.1-T2). It listed the office's
+            ten settings by their raw keys for "a reviewer" to confirm provisioning, under a
+            sentence naming a phase; no prototype has it, and nothing is coming to this slot, so
+            a placeholder would promise a feature that does not exist. */}
       </div>
     </Page>
   );

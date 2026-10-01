@@ -198,11 +198,13 @@ export default function LeadStatusesPage() {
               </h2>
               {canWrite && (
                 /* Named once per card and pointed at by every switch, so the reader is told
-                   what the flag *does* rather than having to infer it from the label. */
+                   what the flag *does* rather than having to infer it from the label. In the
+                   future tense since 2026-10-01 (P10.1-T2): the Overview's tile is not built,
+                   and the sentence said it already counted these. */
                 <p id="late-stage-hint" className="mt-1 text-md text-muted">
-                  Switch on the stages a lead is usually close to converting from. The KPM
-                  Overview counts those as <strong className="font-semibold">Expected to
-                  close</strong>.
+                  Switch on the stages a lead is usually close to converting from. Leads at those
+                  stages will count as <strong className="font-semibold">Expected to close</strong> on
+                  the KPM Overview.
                 </p>
               )}
 

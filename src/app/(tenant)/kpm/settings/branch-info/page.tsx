@@ -140,11 +140,9 @@ export default function BranchInfoPage() {
               reason="Assigned and transferred by the platform, not from inside the office."
             />
 
-            <Field
-              label="Financial year starts"
-              htmlFor="fiscalYearStartMonth"
-              hint="Used by the reporting periods that arrive in a later phase."
-            >
+            {/* No hint. It said "Used by the reporting periods that arrive in a later phase.": our
+                schedule, which a reader can do nothing with (ADR-0062 §3, P10.1-T2). */}
+            <Field label="Financial year starts" htmlFor="fiscalYearStartMonth">
               <Select
                 id="fiscalYearStartMonth"
                 value={String(form.fiscalYearStartMonth)}

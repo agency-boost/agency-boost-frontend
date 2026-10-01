@@ -173,6 +173,17 @@ describe('the Products tab', () => {
       });
   });
 
+  it('says what the bands are for, and not when: no phase in the copy (P10.1-T2)', async () => {
+    render();
+    const row = await open('PRUMapan');
+
+    // It ended by naming the phase that builds the fit check — our schedule, which a Super
+    // Admin can do nothing with (ADR-0062 §3), and the wrong phase once the roadmap moved.
+    const fits = within(row).getByRole('group', { name: 'Who it fits' });
+    expect(within(fits).getByText('What the fit check scores a prospect against.')).toBeInTheDocument();
+    expect(fits).not.toHaveTextContent(/phase/i);
+  });
+
   it('says the commission is not set rather than showing a figure nobody stated', async () => {
     render();
     const row = await open('PRUMapan');

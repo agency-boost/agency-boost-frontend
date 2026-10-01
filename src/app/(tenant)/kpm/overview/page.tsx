@@ -1,94 +1,37 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { ComingInPhase } from '@/components/coming-in-phase';
 import { Page } from '@/components/page';
-import { Card, ErrorBanner } from '@/components/ui/field';
-import { readTenant, type Kpm } from '@/lib/admin';
-import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { useSession } from '@/lib/session';
 
 /**
- * Where a KPM Owner and a KPM Admin land.
+ * Where a KPM Owner and a KPM Admin land, and a sign until the overview is built.
  *
- * Half of it is real and half is a sign, and they are visibly different. The office and
- * the settings provisioning seeded for it are read from the API — that is what an Owner
- * needs to confirm on day one, that their office exists and its defaults are in place.
- * The analytics arrive in Phase 14 with the data that feeds them, and until then the
- * screen says so rather than showing a shell full of zeroes, which would read as "your
- * office has no production".
+ * The prototype's overview is five sections and nothing else (`KPM_Owner.html:937-1222`): Team
+ * composition, Engagement over the last 7 days, Coaching coverage, Recruitment pipeline and
+ * Production this year. None of them is built, so **the whole page is the placeholder**, which is
+ * what the client asked for on 2026-10-01: a screen that is not ready says it is upcoming, as the
+ * nav's unbuilt items do (`KPM_Owner.html:882`), rather than showing pieces of something else.
+ *
+ * It used to carry two cards the prototype has no counterpart for (X-38): the office's time zone and
+ * currency, which Branch info already shows read-only, and the settings provisioning seeded, listed
+ * under their internal names beneath copy that named a phase. Together they made a sign look like a
+ * built screen.
+ *
+ * **It imports only what `scripts/lib/screens.py` allows a placeholder.** That is how the docs and
+ * tenancy gates know it renders no data and calls no endpoint; one data import and they treat it as a
+ * shipped screen again.
  */
 export default function KpmOverviewPage() {
   return (
-    <Page title="Overview" subtitle="Your office at a glance.">
-      <Office />
-    </Page>
-  );
-}
-
-function Office() {
-  const { me } = useSession();
-  const [kpm, setKpm] = useState<Kpm | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  const kpmId = me?.membership?.kpmId;
-
-  useEffect(() => {
-    if (!kpmId) return;
-    void readTenant(kpmId)
-      .then(setKpm)
-      .catch((err) => setError(toDisplayError(err)));
-  }, [kpmId]);
-
-  return (
-    <div className="flex flex-col gap-4">
-      {error && <ErrorBanner {...error} />}
-
-      {kpm && (
-        <Card>
-          <h2 className="font-display text-lg font-bold text-navy">
-            {kpm.code} · {kpm.branchName}
-          </h2>
-          <dl className="mt-3 grid grid-cols-[14rem_1fr] gap-y-1.5 text-md">
-            <dt className="text-muted">Time zone</dt>
-            <dd className="text-navy">{kpm.timezone}</dd>
-            <dt className="text-muted">Currency</dt>
-            <dd className="text-navy">{kpm.currency}</dd>
-          </dl>
-          {/* The sentence used to say "in its own time zone", which implied a choice
-              per office. v1 runs every office on Jakarta time (ADR-0016) — the point
-              that survives is that the boundary is never the reader's clock or the
-              server's. */}
-          <p className="mt-3 text-sm text-muted">
-            Every &ldquo;today&rdquo;, &ldquo;this week&rdquo; and &ldquo;this month&rdquo; in this
-            office is worked out in Jakarta time, not in yours and not in the server&apos;s. Every
-            office on AgencyBoost runs on the same zone and the same currency; neither is yours to
-            change.
-          </p>
-        </Card>
-      )}
-
-      {kpm && (
-        <Card>
-          <h2 className="font-display text-lg font-bold text-navy">Seeded configuration</h2>
-          <p className="mt-1 text-md text-muted">
-            Copied from the platform defaults when your office was set up. You take these over in
-            Phase 4.
-          </p>
-          <dl className="mt-3 grid grid-cols-[14rem_1fr] gap-y-1.5 text-md">
-            {Object.entries(kpm.settings ?? {}).map(([key, value]) => (
-              <div key={key} className="contents">
-                <dt className="text-muted">{key}</dt>
-                <dd className="text-navy">{String(value)}</dd>
-              </div>
-            ))}
-          </dl>
-        </Card>
-      )}
-
+    // The prototype's title, verbatim (`KPM_Owner.html:932`). Its sub-line is the office's name, which a
+    // sign may not fetch, so there is none rather than one the prototype lacks.
+    <Page title="KPM Overview">
       <ComingInPhase
-        phase={14}
-        what="Composition, engagement, coaching coverage, recruitment and production for the whole office, on one screen."
+        // The prototype's five section heads, in the reader's words, and no figure of any kind, so
+        // nothing on the sign can be mistaken for one of the office's.
+        what="Team composition, engagement, coaching coverage, the recruitment pipeline and this year’s production for the whole office, on one screen."
+        // Screens both an Owner and an Admin reach: the tenant shell gives both of them all three,
+        // and `data_upload:read` and `kpm:read_profile` are granted to both (roles-and-permissions §3).
         elsewhere={[
           {
             href: '/people/members',
@@ -96,12 +39,17 @@ function Office() {
             detail: 'The roster: who is here, their role, and who they report to.',
           },
           {
-            href: '/profile',
-            label: 'Your account',
-            detail: 'Your name, pronoun and password.',
+            href: '/kpm/data-upload',
+            label: 'Data upload',
+            detail: 'Each month’s figures for every agent, from one file matched by agent code.',
+          },
+          {
+            href: '/kpm/settings/branch-info',
+            label: 'Branch info',
+            detail: 'Your office’s name, address and contact phone.',
           },
         ]}
       />
-    </div>
+    </Page>
   );
 }

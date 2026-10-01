@@ -15,9 +15,10 @@ import { useSignOut } from '@/lib/use-sign-out';
  * were previously two invented ones — `Your office` and `Your work` — which appear in no
  * prototype file, and which put Admin first when the prototype puts it last.
  *
- * Unbuilt items keep an `Upcoming` pill rather than disappearing, so the roadmap stays
- * visible; that is the prototype's own choice, and `components-and-patterns.md` already
- * documented both the sections and the treatment before the code caught up.
+ * Unbuilt items keep an `Upcoming` pill rather than disappearing, because the client asked on
+ * 2026-10-01 for what is not built to be marked "like the others" (ADR-0070). The pill is not
+ * this file's prototype: `Overall.html` draws no unbuilt item. It is the Owner app's
+ * (`KPM_Owner.html:882`), and the console's *Soon* (`Superadmin.html:177-204`).
  */
 
 export function AgentShell({
@@ -108,7 +109,11 @@ function Chrome({
       label: 'Unit tools',
       divider: true,
       items: [
-        { label: 'Unit dashboard', href: '/unit/dashboard', icon: 'gauge', active: on('/unit') },
+        // *Upcoming*, as *Coaching session* is (P10.1-T2, the client's 2026-10-01 request). The page
+        // is a sign, and the prototypes draw a destination not built yet as a disabled item with the
+        // pill (`KPM_Owner.html:882`), not as a link to a sign. Never `active`: like the other two
+        // shells, an upcoming item is not where the reader is, even on a typed URL.
+        { label: 'Unit dashboard', href: '/unit/dashboard', icon: 'gauge', upcoming: true },
         { label: 'Coaching session', href: '/coaching', icon: 'chat', upcoming: true },
       ],
     },

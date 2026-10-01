@@ -214,12 +214,16 @@ describe('members directory (P3-T1 AC-3)', () => {
     expect(within(table).getByRole('row', { name: /Rina/ })).toHaveTextContent('KPM0417-001');
   });
 
-  it('keeps the tabs it has not built visible rather than hiding the roadmap', async () => {
+  it('draws every tab as one that opens, with none waiting on a later build', async () => {
+    // This used to loop over the unbuilt tabs, and the list had been empty since the last one
+    // shipped, so it asserted nothing. The disabled branch it guarded went with it (P10.1-T2).
     stubFetch({ '/members': { body: { members: [], nextCursor: null, counts: { directory: 0, pending: 0, removed: 0 } } } });
     renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
-    for (const label of []) {
-      expect(await screen.findByText(label)).toHaveAttribute('aria-disabled', 'true');
+
+    for (const name of [/^Directory/, /^Pending/, /^Removed/, 'Role change log', 'Groups']) {
+      expect(await within(screen.getByRole('main')).findByRole('button', { name })).toBeEnabled();
     }
+    expect(within(screen.getByRole('main')).queryByText(/phase/i)).not.toBeInTheDocument();
   });
 
   describe('the role change log tab (P3-T6 AC-4)', () => {

@@ -19,7 +19,7 @@ import { DataTable, Row, Cell } from './data-table';
 import { RouteTabs } from './route-tabs';
 import { SectionCard } from './section-card';
 import {
-  Button, Card, CodeField, ColorInput, Field, FieldRow, Switch, TextInput, ButtonLink, buttonClass,
+  Button, buttonClass, ButtonLink, Card, CodeField, ColorInput, Field, FieldRow, ReadOnlyField, Switch, TextInput,
 } from './field';
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/activity/log' }));
@@ -1012,6 +1012,26 @@ describe('Field', () => {
     expect(follows(control, hint)).toBe(true);
     // Hint before error, matching the order `aria-describedby` announces them in.
     expect(follows(hint, error)).toBe(true);
+  });
+});
+
+describe('ReadOnlyField', () => {
+  it('is a box of its own by default, the label inside it', () => {
+    render(<ReadOnlyField label="Time zone" value="Asia/Jakarta" reason="Every office is on WIB in v1." />);
+    const dl = screen.getByText('Time zone').closest('dl')!;
+    expect(dl).toHaveClass('rounded-md', 'border', 'p-3');
+    expect(screen.getByText('Asia/Jakarta')).not.toHaveClass('h-10');
+  });
+
+  it('lines up with a FieldRow’s inputs as a field: a Field’s label, the figure in an input-height box (P10.1-T8)', () => {
+    render(<ReadOnlyField layout="field" label="APE already produced this year" value="Rp 216.000.000" />);
+    const dl = screen.getByText('APE already produced this year').closest('dl')!;
+    // No box around the pair: the label stands on the row's label line, as a Field's does.
+    expect(dl).not.toHaveClass('border');
+    expect(dl).toHaveClass('flex', 'flex-col', 'gap-1');
+    expect(screen.getByText('APE already produced this year')).toHaveClass('text-sm', 'font-semibold', 'text-navy');
+    // The affixed input's height and border; the page's ground, not an input's white.
+    expect(screen.getByText('Rp 216.000.000')).toHaveClass('h-10', 'border-[1.5px]', 'border-hairline', 'bg-base', 'items-center');
   });
 });
 

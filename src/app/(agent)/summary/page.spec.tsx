@@ -735,3 +735,68 @@ describe('the Personal Summary, trimmed to the prototype (P10.1-T6, ADR-0063)', 
     expect(screen.queryByRole('button', { name: 'Print' })).not.toBeInTheDocument();
   });
 });
+
+/*
+ * The client, 2026-10-01: on a page that is partly ready, show the sections that are and mark the ones
+ * that are not. *Campaigns you're chasing* is the Summary's one prototype card with nothing to read yet —
+ * a chase is made on the Campaign list, which is not built — so it is a sign in its slot (ADR-0070).
+ */
+describe('Campaigns you’re chasing — an Upcoming section in the prototype’s slot (P10.1-T2)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const campaigns = () => card("Campaigns you're chasing Upcoming");
+
+  it('is drawn where the prototype draws it, between Leads that need you and What to do next, titled verbatim with the pill', async () => {
+    show(summary());
+    const section = await campaigns();
+    const heading = within(section).getByRole('heading', { level: 2 });
+
+    expect(heading).toHaveTextContent("Campaigns you're chasing");
+    expect(within(heading).getByText('Upcoming')).toBeInTheDocument();
+    expect(section).toHaveTextContent('The campaigns you choose to chase from the Campaign list, and how close you are to each.');
+    // `Overall.html:3225-3232`: card 6 of the prototype's order, after the leads and before the insights.
+    const leads = await card('Leads that need you');
+    const next = await card('What to do next');
+    expect(leads.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(section.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('renders no campaign and asks the server for none — a sign, not a card with its rows missing', async () => {
+    const { calls } = show(summary());
+    const section = await campaigns();
+    await within(await card('Activity pulse')).findByText('Selling success rate');
+
+    expect(calls.some((c) => /campaign/i.test(c.url))).toBe(false);
+    expect(within(section).queryByRole('listitem')).not.toBeInTheDocument();
+    expect(within(section).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(section).queryByRole('button')).not.toBeInTheDocument();
+    // No number of any kind: not a phase, and not a sample figure.
+    expect(section.textContent).not.toMatch(/\d/);
+  });
+
+  it('is there whatever the period, and whether or not a goal is set — it reads nothing either depends on', async () => {
+    show(summary({ goal: { set: false, savedAt: null } }));
+    await campaigns();
+    await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
+    expect(await campaigns()).toBeInTheDocument();
+  });
+
+  it('stays off the paper: a sign on the PDF says nothing about the period', async () => {
+    show(summary());
+    expect(await campaigns()).toHaveClass('print:hidden');
+  });
+
+  it('is a card like its neighbours: their padding, their heading size, and an icon before the title', async () => {
+    show(summary());
+    const section = await campaigns();
+    const leads = await card('Leads that need you');
+    // `Overall.html:3227-3231` draws it as a `.summary-card` with a card icon, so it takes SummaryCard's
+    // measure; the dashed border is all that sets it apart as a sign.
+    expect(section).toHaveClass('px-[22px]', 'py-[18px]', 'border-dashed');
+    expect(leads).toHaveClass('px-[22px]', 'py-[18px]');
+    const heading = within(section).getByRole('heading', { level: 2 });
+    expect(heading).toHaveClass('text-md');
+    expect(heading.firstElementChild?.tagName.toLowerCase()).toBe('svg');
+    expect(heading.firstElementChild).toHaveClass('h-[17px]', 'w-[17px]', 'text-navy-soft');
+  });
+});

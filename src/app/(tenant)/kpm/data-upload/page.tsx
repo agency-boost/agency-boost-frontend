@@ -51,8 +51,7 @@ export default function DataUploadPage() {
  * **Inside the gate, not around it.** `Page` checks `data_upload:read` and renders its children only
  * once that holds — so the request has to live in a child. With the effect in the page component
  * itself, the table was correctly withheld from an agent and the request for it was sent anyway,
- * which is a permission enforced on the pixels and not on the wire. `KpmOverviewPage` is shaped the
- * same way for the same reason.
+ * which is a permission enforced on the pixels and not on the wire.
  */
 /**
  * **⬇ Download template** — the prototype's own control (`KPM_Owner.html:1301`).

@@ -30,11 +30,19 @@ const ISSUERS = [
   { value: 'company', label: 'Your company' },
   { value: 'group', label: 'A group' },
 ];
-const SCOPES = [
+/**
+ * The two `select_*` scopes need a list of people, and the roster picker that chooses them is not
+ * built. They stay in the select so the reader can see they are coming, **disabled and marked
+ * *coming soon*** like every other unbuilt thing (the client, 2026-10-01). The phrase is the
+ * prototype's own for a thing not built (`Overall.html:3773`), not the nav pill's *Upcoming*: on
+ * this screen *Upcoming* already means an event that has not started. The mark is on the option
+ * only: an event the API saved with one of them still reads as its plain label in the list.
+ */
+const SCOPES: { value: string; label: string; upcoming?: true }[] = [
   { value: 'all_agents', label: 'Everybody in the office' },
   { value: 'leaders', label: 'Leaders — anybody with somebody under them' },
-  { value: 'select_agents', label: 'Chosen people' },
-  { value: 'select_leaders', label: 'Chosen leaders' },
+  { value: 'select_agents', label: 'Chosen people', upcoming: true },
+  { value: 'select_leaders', label: 'Chosen leaders', upcoming: true },
 ];
 
 const PHASE: Record<string, { tone: 'won' | 'open'; text: string }> = {
@@ -52,9 +60,9 @@ const toInstant = (value: string) => (value ? new Date(value).toISOString() : ''
 /**
  * The events an office runs (P5-T6, ADR-0034).
  *
- * **Nothing per-person is here.** RSVP, attendance and feedback are Phase 12's, each a record of
- * its own — the prototype keeps all three on the shared event, so with two users the second
- * overwrites the first's RSVP and reads the first's feedback as their own.
+ * **Nothing per-person is here.** RSVP, attendance and feedback belong to the agent's Events screen,
+ * each a record of its own — the prototype keeps all three on the shared event, so with two users the
+ * second overwrites the first's RSVP and reads the first's feedback as their own.
  *
  * **Nothing says when an event is happening except its dates.** The phase badge is worked out on
  * every read; the prototype hardcodes a status beside a date it never checks against, and labels
@@ -201,6 +209,11 @@ export default function EventsSettingsPage() {
   }
 
   function addPanel(active: EventTypeRow[]) {
+    /*
+     * The two chosen-people options are disabled, so a new event never lands here. Editing one the
+     * API saved with a list does: this screen cannot show or send that list, and saving without it
+     * would be refused or would drop it, so Save waits until the reader picks a scope it can send.
+     */
     const selecting = draft.scope.startsWith('select_');
     const editing = adding !== null && adding !== 'new';
     return (
@@ -308,7 +321,11 @@ export default function EventsSettingsPage() {
           <Field
             label="Who is invited"
             htmlFor="ev-scope"
-            hint="A leader is somebody with people under them — not a job title."
+            // While a scope the API saved with a chosen list is selected, the field's one line says
+            // why Save waits: a disabled button with no stated reason is hard to recover from.
+            hint={selecting
+              ? 'Pick Everybody or Leaders to save — a chosen list can’t be edited here yet.'
+              : 'A leader is somebody with people under them — not a job title.'}
             className="min-w-64 flex-1"
           >
             <Select
@@ -317,17 +334,14 @@ export default function EventsSettingsPage() {
               disabled={busy}
               onChange={(e) => setDraft((n) => ({ ...n, scope: e.target.value }))}
             >
-              {SCOPES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {SCOPES.map((o) => (
+                <option key={o.value} value={o.value} disabled={o.upcoming}>
+                  {o.upcoming ? `${o.label} — coming soon` : o.label}
+                </option>
+              ))}
             </Select>
           </Field>
         </div>
-
-        {selecting && (
-          <p className="mt-2 text-md text-muted">
-            Choosing people one by one arrives with the roster picker in phase 12. Until then,
-            invite everybody or all leaders.
-          </p>
-        )}
 
         <div className="mt-4 flex flex-wrap gap-2">
           <Button

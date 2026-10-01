@@ -1594,6 +1594,13 @@ const ACTIVATION_FEATURE_OPTIONS = [
 ];
 
 /**
+ * What a link does, in the prototype's sense — *"auto-complete when the agent does that action"*
+ * (`KPM_Owner.html:1528`) — and in the future tense, because nothing completes an item yet. It read
+ * *"…once the evaluator for that link ships"*: our build, in a developer's words (P10.1-T2).
+ */
+const ACTIVATION_LINK_HINT = 'A linked item will complete on its own when the agent does that action.';
+
+/**
  * The activation checklist of a company template (P5-T3, ADR-0031).
  *
  * **It mirrors the Owner's own screen**: aspects with items under them, and a link per item. What
@@ -1754,7 +1761,7 @@ export function ActivationChecklistEditor({
                     {
                       key: 'autoLink',
                       label: 'Completes from',
-                      hint: 'A linked item completes on its own once the evaluator for that link ships.',
+                      hint: ACTIVATION_LINK_HINT,
                       options: linkOptions,
                     },
                   ]}
@@ -1799,7 +1806,7 @@ export function ActivationChecklistEditor({
               fields={[{
                 key: 'autoLink',
                 label: 'Completes from',
-                hint: 'A linked item completes on its own once the evaluator for that link ships.',
+                hint: ACTIVATION_LINK_HINT,
                 options: linkOptions,
                 wide: true,
               }]}
@@ -2052,11 +2059,32 @@ export function CampaignKindsEditor({
     put(rules.map((r) => (r.code === code && r.kind === kind ? { ...r, ...fields } : r)));
 
   const metricOptions = metrics.map((m) => ({ value: m.key, label: m.label }));
-  const metricLabel = (key: string) =>
-    metrics.find((m) => m.key === key)?.label
-    // A metric the registry does not define is shown as what it is, not hidden: the rule records
-    // what it is waiting on, and a screen that dropped it would show a rule that never passes.
-    ?? `${key} — not in the registry yet`;
+  const metricLabel = (key: string): React.ReactNode => {
+    const known = metrics.find((m) => m.key === key)?.label;
+    if (known) return known;
+    /*
+     * A metric the registry does not define is shown as what it is, not hidden: the rule records
+     * what it is waiting on, and a screen that dropped it would show a rule that never passes.
+     *
+     * Its key, then the console's own word for what is not built: **Soon**, the admin nav's pill
+     * (`AgencyBoost_Superadmin.html:177`, `admin-shell.tsx`), in the light-ground shape the
+     * placeholders' *Upcoming* pill takes. The words behind it are the Owner's for the same rules,
+     * *Not measured yet* (`/kpm/settings/campaigns`): a tooltip for a pointer and `sr-only` for a
+     * screen reader, the smallest footprint that says it (ADR-0062 §2, forms 2 and 4). It read
+     * *"{key} — not in the registry yet"*, a developer's sentence (P10.1-T2, the client's
+     * request of 2026-10-01 that what is not ready says so).
+     */
+    return (
+      <>
+        {key}
+        {' '}
+        <span title="Not measured yet">
+          <ConfigBadge tone="navy" className="text-muted">Soon</ConfigBadge>
+        </span>
+        <span className="sr-only">, not measured yet,</span>
+      </>
+    );
+  };
 
   return (
     <div className="flex flex-col gap-4">

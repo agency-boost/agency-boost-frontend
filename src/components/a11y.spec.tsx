@@ -254,6 +254,13 @@ describe('accessibility', () => {
       expect(ratio(MUTED, CARD)).toBeGreaterThanOrEqual(4.5);
     });
 
+    it('the Upcoming pill clears 4.5:1: muted words on its 6% navy wash, over the card and the page (P10.1-T2)', () => {
+      // `coming-in-phase.tsx`: 10px bold, so the small-text floor. The card holds a page's sign; the
+      // page's own ground holds a section sign's heading.
+      expect(ratio(MUTED, over(NAVY, 0.06, CARD))).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(MUTED, over(NAVY, 0.06, BASE))).toBeGreaterThanOrEqual(4.5);
+    });
+
     it('status colours clear 4.5:1 on the card surface', () => {
       expect(ratio(SUCCESS, CARD)).toBeGreaterThanOrEqual(4.5);
       expect(ratio(ALERT, CARD)).toBeGreaterThanOrEqual(4.5);

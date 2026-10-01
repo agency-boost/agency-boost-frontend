@@ -142,7 +142,11 @@ describe('the office’s Campaigns screen', () => {
     await openTiers();
 
     expect(await screen.findByText('Not measured yet')).toBeInTheDocument();
-    expect(screen.getByText(/needs NET_APE, DIRECT_AB_COUNT/)).toBeInTheDocument();
+    const why = screen.getByText(
+      'Nothing measures NET_APE, DIRECT_AB_COUNT yet, so this rule cannot be worked out. Nothing here guesses them.',
+    );
+    // The state and what it waits on, and no timing: no phase, no date, no "until … arrive" (ADR-0070).
+    expect(why.textContent).not.toMatch(/until|arrive|phase/i);
   });
 
   it('reads MOC’s two groups as an "or", as the carrier states it', async () => {

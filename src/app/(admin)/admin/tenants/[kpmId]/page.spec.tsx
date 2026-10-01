@@ -33,13 +33,23 @@ const params = routeParams({ kpmId: 'kpm-1' });
 describe('tenant detail', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('shows the seeded settings so provisioning can be verified, not assumed', async () => {
+  /*
+   * P10.1-T2. The page carried a *Seeded settings* card: the office's settings by their raw keys,
+   * for "a reviewer", under a sentence naming the phase the office would take them over in. It
+   * went, and nothing took its slot — no feature is coming to it, so a sign would promise one. The
+   * payload still carries `settings`; this screen just does not print them.
+   */
+  it('shows no seeded settings, no raw setting key and no phase', async () => {
     stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
     renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: SUPER_ADMIN });
 
-    expect(await screen.findByText('activationWindowDays')).toBeInTheDocument();
-    expect(screen.getByText('90')).toBeInTheDocument();
-    expect(screen.getByText('Asia/Jakarta')).toBeInTheDocument();
+    expect(await screen.findByText('Asia/Jakarta')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Seeded settings' })).not.toBeInTheDocument();
+    expect(screen.queryByText('activationWindowDays')).not.toBeInTheDocument();
+    expect(screen.queryByText(/phase \d/i)).not.toBeInTheDocument();
+    // Nor a placeholder where it stood: the four cards are the page.
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent))
+      .toEqual(['Profile', 'Owner', 'People', 'Lifecycle']);
   });
 
   it('P3.5-T14 AC-7: names the owner, and keeps the one id support asks for', async () => {
