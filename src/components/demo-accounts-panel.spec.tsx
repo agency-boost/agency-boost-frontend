@@ -90,7 +90,8 @@ describe('DemoAccountsPanel', () => {
     inDevelopment();
     render(<DemoAccountsPanel onChoose={vi.fn()} />);
     expect(screen.getByText(/pnpm seed:demo/)).toBeInTheDocument();
-    expect(screen.getByText(/development only/)).toBeInTheDocument();
+    // Staging shows it too (ADR-0041), and a staging tester reads this sentence.
+    expect(screen.getByText(/development and staging only/)).toBeInTheDocument();
   });
 
   it('hands the whole account back on a choice', async () => {

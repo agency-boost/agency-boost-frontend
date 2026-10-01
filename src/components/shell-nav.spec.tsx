@@ -85,6 +85,65 @@ describe('the sidebar matches the prototype', () => {
     expect(labels.indexOf('Group tree')).toBeLessThan(labels.indexOf('User management'));
   });
 
+  describe('Unit tools and Group tree follow the graph, not the rung (P10.1-T2 AC-9, OD-23)', () => {
+    /*
+     * The prototype's nav is static for every rung (`Overall.html:2624-2678`), so an Agent saw
+     * *Unit dashboard*, *Coaching session* and *Group tree* — the leak `roles-and-permissions.md`
+     * §4.2 names. A leader is someone with an active direct report (OD-23), so the gate is
+     * `directCount`, and an AAB who leads nobody is on the same side of it as an Agent: the tree
+     * either would see is a leader node and themselves. Per case, because a gate keyed on the
+     * role label would pass the Agent case and fail only the childless AAB.
+     */
+    const member = (role: 'ab' | 'aab' | 'agent', directCount: number) => makeMe({
+      membership: {
+        membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: role.toUpperCase(), hierarchyRole: role,
+        status: 'active', isKpmOwner: false, isKpmAdmin: false, directCount,
+      },
+      permissions: [],
+    });
+    const SECTIONS = ['Personal tools', 'Unit tools', 'New agent', 'Training', 'Sales tools', 'KPM', 'Campaign', 'Admin'];
+
+    it.each([
+      ['an Agent', member('agent', 0)],
+      ['an AAB with no reports', member('aab', 0)],
+      ['an AB with no reports', member('ab', 0)],
+    ])('%s sees neither', (_who, me) => {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me });
+      for (const label of ['Unit tools', 'Unit dashboard', 'Coaching session', 'Group tree']) {
+        expect(screen.queryByText(label), `${label} is offered`).not.toBeInTheDocument();
+      }
+      // The rest of Admin stays: User management is every member's. Seven sections, in order.
+      expect(screen.getByText('User management').closest('a')).toHaveAttribute('href', '/user-management/kpm');
+      expect(navLabels().filter((t) => SECTIONS.includes(t))).toEqual(SECTIONS.filter((s) => s !== 'Unit tools'));
+    });
+
+    it.each([
+      ['an AB with reports', member('ab', 2)],
+      ['an AAB with reports', member('aab', 1)],
+    ])('%s sees both', (_who, me) => {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me });
+      // Both items under *Unit tools*, still Upcoming; *Group tree* a live link, first in Admin.
+      for (const label of ['Unit dashboard', 'Coaching session']) {
+        expect(within(screen.getByText(label).closest('a')!).getByText('Upcoming')).toBeInTheDocument();
+      }
+      expect(screen.getByText('Group tree').closest('a')).toHaveAttribute('href', '/group-tree');
+      const labels = navLabels();
+      expect(labels.filter((t) => SECTIONS.includes(t))).toEqual(SECTIONS);
+      expect(labels.indexOf('Group tree')).toBeLessThan(labels.indexOf('User management'));
+    });
+
+    it('a member with no membership: the gate fails closed, so neither is offered', () => {
+      // `(membership?.directCount ?? 0) > 0`: a reader with no office is on the Agent's side of
+      // the gate, not a leader's. (With no session at all the shell renders nothing, so there is
+      // no nav to assert on.)
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: makeMe({ membership: null }) });
+      for (const label of ['Unit tools', 'Unit dashboard', 'Coaching session', 'Group tree']) {
+        expect(screen.queryByText(label), `${label} is offered`).not.toBeInTheDocument();
+      }
+      expect(screen.getByText('User management').closest('a')).toHaveAttribute('href', '/user-management/kpm');
+    });
+  });
+
   it('agent app: the shell carries no User Management sub-tabs', () => {
     // Three screens used to show them — the group tree, the unit dashboard and the
     // activity log — tabs for a module they are not part of. That was fixed with a
@@ -277,6 +336,9 @@ describe('a line between every two groups, in all three shells (parity I-144)', 
   });
   const SHELLS = [
     ['agent', () => renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT })],
+    // Seven groups, not eight: *Unit tools* is absent for a member who leads nobody (P10.1-T2
+    // AC-9), and the rule must hold for the groups that remain, with Admin still last.
+    ['agent with no reports', () => renderWithSession(<AgentShell title="x">body</AgentShell>, { me: makeMe() })],
     ['KPM Owner', () => renderWithSession(<TenantShell title="x">body</TenantShell>, { me: OWNER })],
     ['Superadmin', () => renderWithSession(<AdminShell title="x">body</AdminShell>, { me: SUPER })],
   ] as const;

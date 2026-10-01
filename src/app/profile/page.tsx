@@ -1,10 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { RoleShell } from '@/components/role-shell';
 import { SessionList } from '@/components/session-list';
-import { RoleBadge } from '@/components/ui/role-badge';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { PasswordInput } from '@/components/ui/password-input';
 import { api, toDisplayError } from '@/lib/api-client';
@@ -18,6 +16,12 @@ import { useSignOut } from '@/lib/use-sign-out';
  * chrome at all until 2026-09-06: you signed in as a Super Admin, clicked your own name,
  * and every link on the screen vanished. Everybody has an account, so the route belongs
  * to no one role family and wears whichever chrome its reader came in with.
+ *
+ * **No *Where you stand* card since 2026-10-01** (P10.1-T2 AC-10, ADR-0062 §3). It listed the
+ * platform role, the raw office id and every permission code, for a Phase 2 reviewer who had
+ * no other screen to see them on. None of those is a customer's word: the sidebar chip already
+ * says who you are, and what you may do is what the screens offer. The password and *Where you
+ * are signed in* sections stay — they are the account's security, not its description.
  */
 export default function ProfilePage() {
   return <Profile />;
@@ -49,78 +53,11 @@ function Profile() {
       }
     >
       <div className="flex max-w-3xl flex-col gap-4">
-        <WhoAmI />
         <ProfileForm onSaved={reload} />
         <PasswordForm />
         <SessionList />
       </div>
     </RoleShell>
-  );
-}
-
-function WhoAmI() {
-  const { me } = useSession();
-  if (!me) return null;
-
-  return (
-    <Card>
-      <h2 className="font-display text-lg font-bold text-navy">Where you stand</h2>
-      <dl className="mt-3 grid grid-cols-[10rem_1fr] gap-y-2 text-md">
-        <dt className="text-muted">Platform role</dt>
-        <dd className="text-navy">
-          {me.user.platformRole === 'super_admin' ? 'Super Admin' : 'None'}
-        </dd>
-
-        <dt className="text-muted">Office</dt>
-        <dd className="text-navy">
-          {me.membership ? <code className="text-sm">{me.membership.kpmId}</code> : 'Not in an office yet'}
-        </dd>
-
-        <dt className="text-muted">Role in office</dt>
-        <dd className="text-navy">
-          {me.membership ? (
-            <span className="flex flex-wrap items-center gap-1.5">
-              <RoleBadge role={me.membership.hierarchyRole} />
-              {me.membership.isKpmOwner && <Tag>KPM Owner</Tag>}
-              {me.membership.isKpmAdmin && <Tag>KPM Admin</Tag>}
-            </span>
-          ) : (
-            '—'
-          )}
-        </dd>
-
-        <dt className="text-muted">Permissions</dt>
-        <dd className="text-navy">
-          {/* Shown because Phase 2 has almost no screens to exercise them on, and a
-              reviewer needs to see that the server resolved a real set rather than a
-              placeholder. */}
-          <details>
-            <summary className="cursor-pointer text-muted">{me.permissions.length} granted</summary>
-            <ul className="mt-1.5 flex flex-wrap gap-1">
-              {me.permissions.map((p) => (
-                <li key={p} className="rounded-pill bg-navy/[0.06] px-2 py-0.5 text-sm">
-                  {p}
-                </li>
-              ))}
-            </ul>
-          </details>
-        </dd>
-      </dl>
-
-      {me.user.platformRole === 'super_admin' && (
-        <Link href="/admin" className="mt-4 inline-block text-md text-navy underline">
-          Open the platform console
-        </Link>
-      )}
-    </Card>
-  );
-}
-
-function Tag({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded-pill bg-amber/20 px-2 py-0.5 text-2xs font-bold uppercase tracking-wide text-amber-deep">
-      {children}
-    </span>
   );
 }
 

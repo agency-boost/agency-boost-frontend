@@ -28,6 +28,23 @@ describe('demo accounts', () => {
     expect(showDemoAccounts()).toBe(false);
   });
 
+  it('is absent from a prospect-facing demo deployment, which names itself `demo`', () => {
+    // ADR-0041, amended 2026-10-01 (P10.1-T2 AC-11): an office being shown the product must never
+    // be shown a seeded password, so the demo deployment's own value is deliberately not one of
+    // the two above, and fails closed like any other — unset and a typo (`Staging`) are the
+    // test above's. Staging keeps the panel for the testers ADR-0041 kept it for; a prospect is
+    // not one of them.
+    //
+    // Only the per-call gate is testable here. `DEMO_GROUPS` is decided once, at module load,
+    // from the literal comparison Next inlines and the minifier folds, so no test can move it
+    // after the import. That its list is genuinely absent from a `demo` build — not hidden,
+    // absent — is `pnpm check:secrets`' assertion against the artifact. CI builds with
+    // `NEXT_PUBLIC_APP_ENV=demo`, the prospect-facing value itself, and runs that check on
+    // every push.
+    process.env.NEXT_PUBLIC_APP_ENV = 'demo';
+    expect(showDemoAccounts()).toBe(false);
+  });
+
   it('has nothing to show once the list has compiled away', () => {
     // The structural gate is NEXT_PUBLIC_APP_ENV read at module load: a bundle built for
     // production holds an empty list, so the panel cannot render even if the variable is

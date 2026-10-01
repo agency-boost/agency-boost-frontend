@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { DEMO_ACCOUNTS, DEMO_GROUPS, showDemoAccounts, type DemoAccount } from '@/lib/demo-accounts';
 
 /**
- * The seeded accounts, on the sign-in screen, in development only.
+ * The seeded accounts, on the sign-in screen, in development and staging only.
  *
  * Rendered as buttons rather than text to copy: the point is to remove the step, not to
  * shorten it. Choosing one fills both fields and signs in, so the values stay visible in
@@ -34,7 +34,7 @@ export function DemoAccountsPanel({
       </h2>
       <p className="mt-0.5 text-sm text-muted">
         Seeded by <code className="text-xs">pnpm seed:demo</code>. Choosing one fills the form and
-        signs in. This panel appears in development only.
+        signs in. This panel appears in development and staging only.
       </p>
 
       <button

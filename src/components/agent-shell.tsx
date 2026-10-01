@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { AppShell, type NavSection } from '@/components/app-shell';
+import { AppShell, type NavItem, type NavSection } from '@/components/app-shell';
 import { RequireSession } from '@/components/require-session';
 import { useLadder } from '@/components/ui/role-badge';
 import { useSession } from '@/lib/session';
@@ -13,7 +13,9 @@ import { useSignOut } from '@/lib/use-sign-out';
  *
  * The eight sections, their order and their labels are the prototype's, verbatim. They
  * were previously two invented ones — `Your office` and `Your work` — which appear in no
- * prototype file, and which put Admin first when the prototype puts it last.
+ * prototype file, and which put Admin first when the prototype puts it last. A member who
+ * leads nobody sees seven: *Unit tools* and *Group tree* follow the graph (`leadsSomeone`,
+ * below), which is the one place this nav departs from the prototype's static markup.
  *
  * Unbuilt items keep an `Upcoming` pill rather than disappearing, because the client asked on
  * 2026-10-01 for what is not built to be marked "like the others" (ADR-0070). The pill is not
@@ -83,6 +85,34 @@ function Chrome({
 
   const on = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
+  const membership = me?.membership;
+
+  /*
+   * Leading is the graph, not the rung (OD-23): a leader is someone with an active direct report,
+   * so an AAB who leads nobody is not one, and neither is an AB with no reports. *Unit tools*
+   * follows that predicate, as `roles-and-permissions.md` §4.2 item 3 and §4.5 say. *Group tree*
+   * follows it too (§4.2 item 2, amended 2026-10-01, P10.1-T2 AC-9): the tree an Agent would see
+   * is a leader node and themselves, and that is as true of a childless AAB. The prototype's nav
+   * is static for every rung (`Overall.html:2624-2678`), which is the leak §4.2 names. The routes
+   * keep their own guards; this decides what the sidebar offers, not what the API allows.
+   */
+  const leadsSomeone = (membership?.directCount ?? 0) > 0;
+
+  const unitTools: NavSection = {
+    label: 'Unit tools',
+    divider: true,
+    items: [
+      // *Upcoming*, as *Coaching session* is (P10.1-T2, the client's 2026-10-01 request). The page
+      // is a sign, and the prototypes draw a destination not built yet as a disabled item with the
+      // pill (`KPM_Owner.html:882`), not as a link to a sign. Never `active`: like the other two
+      // shells, an upcoming item is not where the reader is, even on a typed URL.
+      { label: 'Unit dashboard', href: '/unit/dashboard', icon: 'gauge', upcoming: true },
+      { label: 'Coaching session', href: '/coaching', icon: 'chat', upcoming: true },
+    ],
+  };
+
+  const groupTree: NavItem = { label: 'Group tree', href: '/group-tree', icon: 'tree', active: on('/group-tree') };
+
   /*
    * Eight sections in the prototype's order, Admin last, **with a line between every two** (client
    * feedback, 2026-09-30; parity I-144). The prototype draws two lines here, before KPM and before
@@ -105,18 +135,7 @@ function Chrome({
         { label: 'Personal summary', href: '/summary', active: on('/summary'), icon: 'user' },
       ],
     },
-    {
-      label: 'Unit tools',
-      divider: true,
-      items: [
-        // *Upcoming*, as *Coaching session* is (P10.1-T2, the client's 2026-10-01 request). The page
-        // is a sign, and the prototypes draw a destination not built yet as a disabled item with the
-        // pill (`KPM_Owner.html:882`), not as a link to a sign. Never `active`: like the other two
-        // shells, an upcoming item is not where the reader is, even on a typed URL.
-        { label: 'Unit dashboard', href: '/unit/dashboard', icon: 'gauge', upcoming: true },
-        { label: 'Coaching session', href: '/coaching', icon: 'chat', upcoming: true },
-      ],
-    },
+    ...(leadsSomeone ? [unitTools] : []),
     {
       // The prototype hides this whole section when neither item applies
       // (`Overall.html:6638-6642`). Both are Phase 11, so both are upcoming for now.
@@ -153,7 +172,7 @@ function Chrome({
     {
       label: 'Admin',
       items: [
-        { label: 'Group tree', href: '/group-tree', icon: 'tree', active: on('/group-tree') },
+        ...(leadsSomeone ? [groupTree] : []),
         {
           label: 'User management',
           icon: 'userPlus',
@@ -168,7 +187,6 @@ function Chrome({
     },
   ];
 
-  const membership = me?.membership;
   /*
    * The rung's short form, from the company's ladder (P4-T9).
    *

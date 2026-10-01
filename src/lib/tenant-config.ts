@@ -830,7 +830,7 @@ export interface MetricDefinition {
   /** `idr_minor` means integer sen. */
   unit: string;
   phase: number;
-  /** Whether anything computes it by the phase campaigns are evaluated in. */
+  /** Whether it is measured by the time campaigns are evaluated — the server's answer, never derived from `phase`. */
   computed: boolean;
 }
 

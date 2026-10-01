@@ -174,6 +174,12 @@ const SEEDED: readonly DemoGroup[] = [
  *   gate a test can move and a dev server can change without a rebuild.
  *
  * Both fail closed: unset, misspelled, or `production` all mean no.
+ *
+ * **A prospect-facing demo deployment is not a demo-accounts environment** (ADR-0041, amended
+ * 2026-10-01, P10.1-T2 AC-11). It names itself `demo`, which is deliberately not in this list,
+ * so its build folds `SEEDED` away like production's: an office being shown the product must
+ * never be shown a seeded password. Staging keeps the panel for the people ADR-0041 kept it
+ * for — testers who are not developers. `pnpm check:secrets` is the proof, against the artifact.
  */
 const IS_DEMO_BUILD =
   process.env.NEXT_PUBLIC_APP_ENV === 'development' ||
