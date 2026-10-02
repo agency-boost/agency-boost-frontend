@@ -102,12 +102,16 @@ function Chrome({
     label: 'Unit tools',
     divider: true,
     items: [
-      // *Upcoming*, as *Coaching session* is (P10.1-T2, the client's 2026-10-01 request). The page
-      // is a sign, and the prototypes draw a destination not built yet as a disabled item with the
-      // pill (`KPM_Owner.html:882`), not as a link to a sign. Never `active`: like the other two
-      // shells, an upcoming item is not where the reader is, even on a typed URL.
+      // *Upcoming* (P10.1-T2, the client's 2026-10-01 request): the page is a sign, and the
+      // prototypes draw a destination not built yet as a disabled item with the pill
+      // (`KPM_Owner.html:882`), not as a link to a sign. Never `active`: like the other two shells,
+      // an upcoming item is not where the reader is, even on a typed URL.
       { label: 'Unit dashboard', href: '/unit/dashboard', icon: 'gauge', upcoming: true },
-      { label: 'Coaching session', href: '/coaching', icon: 'chat', upcoming: true },
+      // Live since the roster was built (P11-T6 AC-7), and where a leader lands (`landing.ts`). Every
+      // route under it is coaching — the reader's own notes and each person they coach — so the item
+      // stays current on all of them, as the prototype's returns to the roster from any of them
+      // (`Overall.html:10596`).
+      { label: 'Coaching session', href: '/coaching', icon: 'chat', active: on('/coaching') },
     ],
   };
 

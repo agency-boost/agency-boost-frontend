@@ -128,6 +128,43 @@ describe('SidebarUserMenu', () => {
     expect(screen.getByRole('button', { name: 'Sign out' })).toHaveFocus();
   });
 
+  describe('with the shell’s nav, on a phone (ADR-0085, P11-T6 AC-11)', () => {
+    const NAV = (
+      <nav aria-label="Main">
+        <a href="/leads">Leads management</a>
+      </nav>
+    );
+
+    it('P11-T6 AC-11 opens downward, the caret pointing the way it opens', async () => {
+      setup({ nav: NAV });
+      const trigger = screen.getByRole('button', { name: /Platform Operator/ });
+      expect(trigger).toHaveTextContent('▾');
+      await userEvent.click(trigger);
+      expect(trigger).toHaveTextContent('▴');
+      const panel = document.getElementById('sidebar-user-actions')!;
+      expect(panel.className).toContain('top-full');
+      // The panel hangs from the bar, not from the chip: the chip's box is not its containing block.
+      expect(trigger.parentElement!.className).not.toContain('relative');
+    });
+
+    it('P11-T6 AC-11 puts the nav first, then the account’s two, and focus on the first link', async () => {
+      setup({ nav: NAV });
+      await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
+      const links = screen.getAllByRole('link').map((a) => a.textContent);
+      expect(links).toEqual(['Leads management', 'Your account']);
+      expect(screen.getByRole('link', { name: 'Leads management' })).toHaveFocus();
+    });
+
+    it('P11-T6 AC-11 keeps a desktop chip as it was: upward, caret up, focus on the chip', async () => {
+      setup();
+      const trigger = screen.getByRole('button', { name: /Platform Operator/ });
+      expect(trigger).toHaveTextContent('▴');
+      await userEvent.click(trigger);
+      expect(document.getElementById('sidebar-user-actions')!.className).toContain('bottom-full');
+      expect(trigger).toHaveFocus();
+    });
+  });
+
   it('has no axe violations, open or closed', async () => {
     const { container } = setup();
     const clean = async () =>

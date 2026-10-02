@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { RoleShell } from '@/components/role-shell';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -12,6 +13,7 @@ import {
   readInbox,
   type Inbox,
 } from '@/lib/notifications';
+import { useSession } from '@/lib/session';
 
 /**
  * Your notifications.
@@ -32,8 +34,19 @@ import {
  *
  * The unread count comes back with the list rather than from a second call, so the badge
  * in the sidebar and the page can never disagree with each other.
+ *
+ * **An item with somewhere to go is a link there** (P11-T10 AC-8): the server composes the address
+ * beside the words — a finalized coaching session opens on that session — and the title is the link.
+ * Every other item is the record it always was.
+ *
+ * **The read waits for the session** (P11-T8's browser walk). This route sits outside the group
+ * layouts and their session gate, and a page's effect runs before its parents': on a hard load the
+ * inbox was asked for before `SessionProvider` had refreshed, with no token, and drew a 401. It now goes
+ * out once the session has settled with somebody in it, as `tenant-config-cache.tsx` does since P11-T6.
  */
 export default function NotificationsPage() {
+  const { me, loading } = useSession();
+  const signedIn = !loading && me !== null;
   const [inbox, setInbox] = useState<Inbox | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -48,8 +61,8 @@ export default function NotificationsPage() {
   }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (signedIn) void load();
+  }, [signedIn, load]);
 
   async function act(run: () => Promise<Inbox>) {
     setBusy(true);
@@ -106,7 +119,13 @@ export default function NotificationsPage() {
                 >
                   <div className="flex flex-wrap items-start gap-3">
                     <span className="min-w-0 flex-1">
-                      <span className="block text-md font-semibold text-navy">{item.title}</span>
+                      {item.href ? (
+                        <Link href={item.href} className="block text-md font-semibold text-navy underline underline-offset-2">
+                          {item.title}
+                        </Link>
+                      ) : (
+                        <span className="block text-md font-semibold text-navy">{item.title}</span>
+                      )}
                       {item.detail && (
                         <span className="mt-0.5 block text-md text-muted">{item.detail}</span>
                       )}

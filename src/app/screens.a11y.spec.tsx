@@ -1,4 +1,4 @@
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -39,6 +39,16 @@ import RegisterKpmPage from './(agent)/user-management/kpm/page';
 import KpmOverviewPage from './(tenant)/kpm/overview/page';
 import DataUploadPage from './(tenant)/kpm/data-upload/page';
 import UnitDashboardPage from './(agent)/unit/dashboard/page';
+import CoachingRosterPage from './(agent)/coaching/page';
+import MyCoachingPage from './(agent)/coaching/me/page';
+import CoachingPersonLayout from './(agent)/coaching/[membershipId]/layout';
+import CoacheeSummaryTab from './(agent)/coaching/[membershipId]/summary/page';
+import CoacheeGoalSettingTab from './(agent)/coaching/[membershipId]/goal-setting/page';
+import CoacheeTrainingTab from './(agent)/coaching/[membershipId]/training/page';
+import CoachingSessionTabPage from './(agent)/coaching/[membershipId]/session/page';
+import CoacheeLeaderNotesTab from './(agent)/coaching/[membershipId]/leader-notes/page';
+import CoachingArchivePage from './(agent)/coaching/[membershipId]/archive/[sessionId]/page';
+import { PHONE_QUERY } from '@/lib/use-phone';
 import ActivityDashboardPage from './(agent)/activity/dashboard/page';
 import PersonalSummaryPage from './(agent)/summary/page';
 import ActivityRatioPage from './(agent)/activity/ratio/page';
@@ -54,9 +64,15 @@ import OrgLevelsPage from './(admin)/admin/org-levels/page';
 import TenantRosterImportPage from './(admin)/admin/tenants/[kpmId]/roster/page';
 import ChooseAPasswordPage from './choose-a-password/page';
 
+/**
+ * Where the screen is, for the one shell that reads it: the coaching person shell's archive (P11-T10),
+ * and the address the archive's page reads its ids from (`useParams()`, F5 of P11's final walk).
+ */
+const nav = vi.hoisted(() => ({ pathname: '/admin', params: {} as Record<string, string> }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  usePathname: () => '/admin',
+  usePathname: () => nav.pathname,
+  useParams: () => nav.params,
 }));
 
 /**
@@ -155,6 +171,7 @@ describe('screens have no axe violations', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    nav.pathname = '/admin';
   });
 
   it('login', async () => {
@@ -508,7 +525,7 @@ describe('screens have no axe violations', () => {
     await expectClean('kpm/overview');
   });
 
-  it('the placeholder landing a leader reaches', async () => {
+  it('the Unit Dashboard sign, which a leader reaches by its address', async () => {
     const leader = makeMe({
       membership: {
         membershipId: 'mem-aab', kpmId: 'kpm-1', orgLevelCode: 'AAB', hierarchyRole: 'aab', status: 'active',
@@ -520,6 +537,479 @@ describe('screens have no axe violations', () => {
     // will be there, so the state is heard first.
     await screen.findByRole('region', { name: /^Upcoming Everyone in your unit in one table/ });
     await expectClean('unit/dashboard');
+  });
+
+  describe('coaching (P11-T6)', () => {
+    const leader = makeMe({
+      membership: {
+        membershipId: 'mem-ab', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: ['coaching_session:read'],
+    });
+    const row = (membershipId: string, name: string, over: Record<string, unknown> = {}) => ({
+      membershipId, name, rung: { code: 'AGENT', label: 'Agent' }, depth: 1,
+      lastOneOnOne: { days: 9, date: '2026-09-23', overdue: true, coach: { membershipId: 'mem-ab', name: 'Jordan Pratama' } },
+      status: 'watch_closely', ...over,
+    });
+    const roster = {
+      today: '2026-10-02',
+      overdueAfterDays: 7,
+      directAgents: [row('mem-rina', 'Rina Wijaya'), row('mem-melati', 'Melati Putri', { lastOneOnOne: null, status: 'no_goal_set' })],
+      units: [{
+        head: row('mem-dimas', 'Dimas Aditya', { rung: { code: 'AAB', label: 'Associate Agency Builder' }, status: 'on_track' }),
+        members: [
+          row('mem-wulan', 'Wulan Sari', { depth: 2, rung: { code: 'AAB', label: 'Associate Agency Builder' }, status: 'needs_attention' }),
+          row('mem-tono', 'Tono Saputra', { depth: 3, lastOneOnOne: { days: 0, date: '2026-10-02', overdue: false, coach: null } }),
+        ],
+      }],
+    };
+    const shell = {
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+    };
+    const sessionRatio = (over: Record<string, unknown> = {}) => ({
+      code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate', comparison: 'gte', displayUnit: 'percent', benchmark: 0.15,
+      tag: null, sides: null, numerator: [], denominator: [], purpose: null, divergesFromStandard: false,
+      value: 0.18, share: null, numeratorCount: 9, denominatorCount: 50, status: 'success', ...over,
+    });
+    const sessionRatios = {
+      membershipId: 'mem-rina', from: '2026-09-03', to: '2026-10-02', days: 30,
+      ratios: [
+        sessionRatio(),
+        sessionRatio({ code: 'RECRUITMENT_SUCCESS_RATE', label: 'Recruitment success rate', value: null, status: 'neutral' }),
+        sessionRatio({
+          code: 'BALANCE', label: 'Sales vs. Recruitment', comparison: 'band', displayUnit: 'points', benchmark: 30,
+          value: 40, share: 70, sides: { numerator: 'Selling', denominator: 'Recruitment' }, status: 'alert',
+        }),
+      ],
+    };
+
+    it('the roster, populated: the groups, a unit, a unit nested in it, and every status', async () => {
+      // Row groups headed by a full-width `rowgroup` header, a unit head naming the rest of its
+      // `<tbody>`, row headers for the people, and a screen-reader-only name on the actions column.
+      stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
+      renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
+      await screen.findByRole('table', { name: 'Everyone you coach' });
+      await expectClean('coaching');
+    });
+
+    it('the roster with nobody to coach', async () => {
+      stubFetch({ ...shell, '/coaching/coachees': { body: { ...roster, directAgents: [], units: [] } } });
+      renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
+      await screen.findByText('No one to coach yet.');
+      await expectClean('coaching (empty)');
+    });
+
+    /*
+     * A finalized session as the record draws it (P11-T10): the archive and `/coaching/me` both. Its
+     * figures are the snapshot's, its earlier version carries a reason.
+     */
+    const recordCoach = { membershipId: 'mem-ab', name: 'Jordan Pratama' };
+    const recordM = 1_000_000 * 100;
+    const recordSession = (over: Record<string, unknown> = {}) => ({
+      sessionId: 's-0924', coachee: { membershipId: 'mem-rina', name: 'Rina Wijaya' }, coach: recordCoach,
+      status: 'finalized', version: 4, date: '2026-09-24', startedAt: '2026-09-24T02:00:00.000Z',
+      finalizedAt: '2026-09-25T03:00:00.000Z', finalizedBy: recordCoach, reopenableUntil: '2026-10-01',
+      lastWeek: { sessionId: 's-0917', date: '2026-09-17' },
+      lastWeekItems: [
+        { itemId: 'lw-1', text: 'Confirm submission paperwork', dueDate: '2026-09-17', lead: null, done: true },
+        { itemId: 'lw-2', text: 'Follow up with Alvin Sanjaya', dueDate: '2026-09-17', lead: { leadId: 'l-2', name: 'Alvin Sanjaya' }, done: false },
+      ],
+      leadActions: [{ leadId: 'l-1', leadName: 'Desi Pratama', dueDate: '2026-09-26', text: 'Collect the signed SPAJ.' }],
+      actionItems: [{ itemId: 'a-1', text: 'Shadow Sari on one presentation', dueDate: '2026-10-01' }],
+      tips: [{ tipId: 't-1', text: 'Confirm the next meeting before you leave.' }],
+      snapshot: {
+        takenAt: '2026-09-24T03:00:00.000Z',
+        goal: {
+          period: '2026', month: '2026-09', currency: 'IDR',
+          monthly: { targetMinor: 80 * recordM, actualMinor: 65.6 * recordM, attainmentPct: 82, gapMinor: 14.4 * recordM, targetMet: false },
+          yearly: { targetMinor: 960 * recordM, actualMinor: 620 * recordM, attainmentPct: 65, gapMinor: 340 * recordM, targetMet: false },
+          source: { provenance: 'imported', month: '2026-08' }, savedAt: null, savedByMembershipId: null, goalVersion: 1,
+        },
+        ratios: {
+          from: '2026-08-26', to: '2026-09-24', days: 30,
+          rows: [
+            { code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate', comparison: 'gte', displayUnit: 'percent', benchmark: 0.15, value: 0.18, share: null, status: 'success' },
+            { code: 'RECRUITMENT_SUCCESS_RATE', label: 'Recruitment success rate', comparison: 'gte', displayUnit: 'percent', benchmark: 0.15, value: null, share: null, status: 'neutral' },
+            { code: 'BALANCE', label: 'Sales vs. Recruitment', comparison: 'band', displayUnit: 'points', benchmark: 30, value: 40, share: 70, status: 'alert' },
+          ],
+        },
+        activity: {
+          from: '2026-09-18', to: '2026-09-24',
+          targets: [
+            { key: 'leads', code: 'LEADS_CONTACTED', logged: 14, target: 16 },
+            { key: 'appointments', code: 'SELL_PRESENTATION', logged: 4, target: 5 },
+            { key: 'closings', code: 'SELL_SUBMISSION', logged: 1, target: 1 },
+          ],
+          sections: [{ code: 'DEVELOPMENT', label: 'Development', total: 2, rows: [{ code: 'DEV_TRAINING', label: 'Training attended', count: 2 }] }],
+        },
+      },
+      earlier: [{
+        finalizedAt: '2026-09-24T03:00:00.000Z', finalizedBy: recordCoach, reopenedAt: '2026-09-25T02:00:00.000Z', reopenedBy: recordCoach,
+        reason: 'Two action items had the wrong dates.',
+        lastWeekItems: [{ itemId: 'lw-1', text: 'Confirm submission paperwork', dueDate: '2026-09-17', lead: null, done: true }],
+        leadActions: [], actionItems: [{ itemId: 'a-0', text: 'The first plan', dueDate: '2026-09-30' }], tips: [],
+      }],
+      ...over,
+    });
+
+    it('the reader’s own coaching, populated, with the past sessions and the sessions they led open (P11-T10)', async () => {
+      const me = makeMe({ ...leader, permissions: ['coaching_session:read', 'coaching_session:export_pdf'] });
+      stubFetch({
+        ...shell,
+        '/coaching/me/sessions': {
+          body: {
+            sessions: [
+              { sessionId: 's-0924', date: '2026-09-24', coach: recordCoach, actionItemCount: 2, completedCount: 1 },
+              { sessionId: 's-0917', date: '2026-09-17', coach: recordCoach, actionItemCount: 3, completedCount: 3 },
+            ],
+            ledFormerly: [{ sessionId: 's-led', date: '2026-08-20', coachee: { membershipId: 'mem-bayu', name: 'Bayu Pratama' }, actionItemCount: 2, completedCount: 1 }],
+          },
+        },
+        '/coaching/sessions/s-0924': { body: recordSession({ coachee: { membershipId: 'mem-ab', name: 'Jordan Pratama' }, coach: { membershipId: 'mem-w', name: 'Wilson Tanoto' }, reopenableUntil: null }) },
+      });
+      renderInLayout(AgentLayout, <MyCoachingPage searchParams={routeParams({})} />, { me });
+      await screen.findByRole('region', { name: 'Coaching tips from Wilson' });
+      await userEvent.click(screen.getByRole('button', { name: 'View past sessions' }));
+      await userEvent.click(screen.getByRole('button', { name: 'View what it agreed' }));
+      await expectClean('coaching/me');
+    });
+
+    it('the reader’s own coaching, with no session yet (P11-T10)', async () => {
+      stubFetch({ ...shell, '/coaching/me/sessions': { body: { sessions: [], ledFormerly: [] } } });
+      renderInLayout(AgentLayout, <MyCoachingPage searchParams={routeParams({})} />, { me: leader });
+      await screen.findByText('No coaching sessions yet.');
+      await expectClean('coaching/me (empty)');
+    });
+
+    const rina = {
+      membershipId: 'mem-rina', name: 'Rina Wijaya', pronoun: 'she', rung: { code: 'AGENT', label: 'Agent' },
+      leader: { membershipId: 'mem-ab', name: 'Jordan Pratama' }, direct: true, downline: { members: 0, leaders: 0 },
+      today: '2026-09-14',
+    };
+    const coachLeader = makeMe({
+      ...leader,
+      user: { ...leader.user, fullName: 'Jordan Pratama', initials: 'JP' },
+      permissions: ['coaching_session:read', 'personal_summary:read', 'goal:read', 'goal:update'],
+    });
+    const inShell = (tab: React.ReactNode, membershipId = 'mem-rina') => renderInLayout(
+      AgentLayout,
+      <CoachingPersonLayout params={routeParams({ membershipId })}>{tab}</CoachingPersonLayout>,
+      { me: coachLeader },
+    );
+
+    it('a person’s Personal Summary tab, populated: the shell, the toggle, the tabs and her cards (P11-T7)', async () => {
+      const M = 1_000_000 * 100;
+      const figures = { targetMinor: 75 * M, actualMinor: 30 * M, attainmentPct: 40, gapMinor: 45 * M, overMinor: 0, policiesNeeded: 3, targetMet: false };
+      const activity = {
+        from: '2026-09-01', to: '2026-09-14', total: 42, sections: [],
+        targets: [
+          { key: 'leads', code: 'LEADS_CONTACTED', logged: 20, target: 57, attainmentPct: 35, targetMet: false },
+          { key: 'appointments', code: 'SELL_PRESENTATION', logged: 6, target: 17, attainmentPct: 35, targetMet: false },
+          { key: 'closings', code: 'SELL_SUBMISSION', logged: 2, target: 5, attainmentPct: 40, targetMet: false },
+        ],
+      };
+      stubFetch({
+        ...shell,
+        '/coaching/coachees/': { body: rina },
+        '/summary': {
+          body: {
+            year: '2026', month: '2026-09', today: '2026-09-14', goal: { set: true, savedAt: '2026-09-01T02:00:00.000Z' }, caseSizeMinor: 18 * M,
+            monthly: { ...figures, source: { provenance: 'imported', month: '2026-09' } },
+            yearly: { ...figures, source: { provenance: 'imported', month: '2026-09' } },
+            pace: { closingTarget: 5, closingsLogged: 2, dayOfMonth: 14, daysInMonth: 30, projected: 4, weeksLeft: 3, neededPerWeek: 1, targetMet: false },
+            activity: { monthly: activity, yearly: activity },
+            leads: {
+              rows: [{ id: 'l-1', name: 'Desi Pratama', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Follow-up', thisMonth: true, flags: ['overdue'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Confirm paperwork' }],
+              total: 1,
+            },
+            insights: [{ rule: 'LEAD_OVERDUE', kind: 'action', facts: { leadId: 'l-1', name: 'Desi Pratama', overdueDays: 6, others: 0 } }],
+          },
+        },
+        '/activity/ratios': { body: sessionRatios },
+      });
+      inShell(<CoacheeSummaryTab />);
+      await screen.findByRole('region', { name: 'Leads that need her' });
+      await expectClean('coaching/[membershipId]/summary');
+    });
+
+    it('a person’s Goal Setting tab, populated (P11-T7)', async () => {
+      stubFetch({
+        '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
+        '/kpm/org-levels': { body: [] },
+        '/coaching/coachees/': { body: rina },
+        '/coaching/coachees': { body: roster },
+        '/goals/': {
+          body: {
+            period: '2026', mode: 'direct', annualApeTargetMinor: 500_000_000_00, savingsTargetMinor: 50_000_000_00,
+            commissionRatePct: 10, monthsLeft: 3, monthsLeftIsOverride: false, apeAchievedMinor: 0,
+            achieved: { minor: 120_000_000_00, provenance: 'imported', month: '2026-08' },
+            caseSizeMinor: 18_000_000_00, leadsToApptPct: 30, closingRatePct: 30,
+            snapshot: { monthlyApeTargetMinor: 100_000_000_00, policiesPerMonth: 6, appointmentsPerMonth: 20, leadsPerMonth: 67 },
+            projected: {
+              annualApeTargetMinor: 500_000_000_00, apeAchievedMinor: 120_000_000_00, remainingApeMinor: 380_000_000_00,
+              monthlyApeTargetMinor: 126_000_000_00, policiesPerMonth: 7, policiesPerWeek: 2, appointmentsPerMonth: 24,
+              appointmentsPerWeek: 6, leadsPerMonth: 80, leadsPerWeek: 19, targetMet: false,
+            },
+            cascadeMapping: { leadsCode: 'LEADS_CONTACTED', appointmentsCode: 'SELL_PRESENTATION', closingsCode: 'SELL_SUBMISSION' },
+            measured: null, savedAt: '2026-09-13T04:00:00.000Z', savedByMembershipId: 'mem-ab',
+          },
+        },
+      });
+      inShell(<CoacheeGoalSettingTab />);
+      await screen.findByRole('button', { name: 'Save goal' });
+      await expectClean('coaching/[membershipId]/goal-setting');
+    });
+
+    it('a person’s disabled tab reached by its address: a sign inside the shell (P11-T7 AC-7)', async () => {
+      stubFetch({ ...shell, '/coaching/coachees/': { body: rina } });
+      inShell(<CoacheeTrainingTab params={routeParams({ membershipId: 'mem-rina' })} />);
+      await screen.findByRole('region', { name: /^Upcoming Which training this person has finished/ });
+      await expectClean('coaching/[membershipId]/training');
+    });
+
+    const archiveLeader = makeMe({
+      ...coachLeader,
+      permissions: ['coaching_session:read', 'coaching_session:reopen', 'coaching_session:export_pdf'],
+    });
+
+    it('a past session’s archive, populated: the frozen session, its earlier version open, and Edit again’s dialog (P11-T10)', async () => {
+      nav.pathname = '/coaching/mem-rina/archive/s-0924';
+      nav.params = { membershipId: 'mem-rina', sessionId: 's-0924' };
+      stubFetch({
+        ...shell,
+        '/coaching/coachees/mem-rina': { body: { ...rina, today: '2026-09-28' } },
+        '/coaching/sessions/s-0924': { body: recordSession() },
+      });
+      renderInLayout(
+        AgentLayout,
+        <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}>
+          <CoachingArchivePage />
+        </CoachingPersonLayout>,
+        { me: archiveLeader },
+      );
+      await screen.findByRole('region', { name: 'Earlier versions' });
+      await userEvent.click(screen.getByRole('button', { name: 'View what it agreed' }));
+      await expectClean('coaching/[membershipId]/archive/[sessionId]');
+      await userEvent.click(screen.getByRole('button', { name: 'Edit again' }));
+      await screen.findByRole('dialog', { name: 'Edit this session again?' });
+      await expectClean('coaching/[membershipId]/archive/[sessionId] (Edit again)');
+    });
+
+    it('a past session’s archive read by a former coach: on its own, under the way back (P11-T10 AC-9)', async () => {
+      nav.pathname = '/coaching/mem-rina/archive/s-0924';
+      nav.params = { membershipId: 'mem-rina', sessionId: 's-0924' };
+      stubFetch({
+        ...shell,
+        '/coaching/coachees/mem-rina': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-1' } } },
+        '/coaching/sessions/s-0924': { body: recordSession({ reopenableUntil: null, earlier: [] }) },
+      });
+      renderInLayout(
+        AgentLayout,
+        <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}>
+          <CoachingArchivePage />
+        </CoachingPersonLayout>,
+        { me: archiveLeader },
+      );
+      await screen.findByRole('heading', { level: 2, name: 'Rina Wijaya' });
+      await screen.findByRole('region', { name: 'Coaching tips' });
+      await expectClean('coaching/[membershipId]/archive/[sessionId] (a former coach)');
+    });
+
+    describe('the session tab (P11-T8)', () => {
+      const M = 1_000_000 * 100;
+      const sessionLeader = makeMe({
+        ...coachLeader,
+        permissions: [
+          'coaching_session:read', 'coaching_session:create', 'coaching_session:edit', 'coaching_session:finalize',
+          'coaching_session:reopen', 'personal_summary:read', 'goal:read', 'goal:update', 'activity_ratios:read',
+          'lead:read', 'lead:create', 'lead:update', 'lead:mark_outcome',
+        ],
+      });
+      const coach = { membershipId: 'mem-ab', name: 'Jordan Pratama' };
+      const pastSessions = [{ sessionId: 's-0924', date: '2026-09-24', coach, actionItemCount: 3, completedCount: 1 }];
+      const draft = {
+        sessionId: 's-1', coachee: { membershipId: 'mem-rina', name: 'Rina Wijaya' }, coach, status: 'draft', version: 1,
+        date: null, startedAt: '2026-10-02T02:00:00.000Z', finalizedAt: null, finalizedBy: null, reopenableUntil: null,
+        lastWeek: { sessionId: 's-0924', date: '2026-09-24' },
+        lastWeekItems: [
+          { itemId: 'lw-1', text: 'Confirm submission paperwork with Bp. Andi', dueDate: '2026-09-24', lead: null, done: true },
+          { itemId: 'lw-2', text: 'Follow up with Alvin Sanjaya', dueDate: '2026-09-24', lead: { leadId: 'l-2', name: 'Alvin Sanjaya' }, done: false },
+        ],
+        leadActions: [{ leadId: 'l-1', leadName: 'Desi Pratama', dueDate: '2026-10-05', text: null }],
+        actionItems: [{ itemId: 'a-1', text: 'Practice a tighter close', dueDate: '2026-10-06' }],
+        tips: [{ tipId: 't-1', text: 'Slow down on the opening line.' }],
+      };
+      const figures = (target: number, actual: number, pct: number, gap: number) => ({
+        targetMinor: target, actualMinor: actual, attainmentPct: pct, gapMinor: gap, overMinor: 0, policiesNeeded: 1, targetMet: false,
+      });
+      const none = { from: '2026-10-01', to: '2026-10-02', targets: [], total: 0, sections: [] };
+      const sessionLead = {
+        id: 'l-1', ownerMembershipId: 'mem-rina', type: 'sales', name: 'Desi Pratama', contact: { phone: null, email: null },
+        lawfulBasis: null, consentAt: null, statusCode: null, thisMonth: false, remarks: null, nextActionDate: '2026-10-05',
+        nextActionNote: null, outcome: null, source: null, dateRegistered: '2026-09-04T03:00:00.000Z', version: 1, flags: [],
+        overdueDays: null, committedMonths: [], lastEditedBy: null,
+      };
+      const routes = (session: unknown, current: unknown = { sessionId: 's-1', status: 'draft' }) => ({
+        ...shell,
+        'GET /coaching/coachees/mem-rina': { body: rina },
+        'GET /coaching/coachees/mem-rina/sessions': { body: { today: '2026-10-02', current, sessions: pastSessions } },
+        'GET /coaching/sessions/s-1': { body: session },
+        '/summary?for=mem-rina': {
+          body: {
+            year: '2026', month: '2026-10', today: '2026-10-02', goal: { set: true, savedAt: null }, caseSizeMinor: 18 * M,
+            monthly: { ...figures(80 * M, 65.6 * M, 82, 14.4 * M), source: { provenance: 'imported', month: '2026-09' } },
+            yearly: { ...figures(960 * M, 620 * M, 65, 340 * M), source: { provenance: 'imported', month: '2026-09' } },
+            pace: null, activity: { monthly: none, yearly: none }, leads: { rows: [], total: 0 }, insights: [],
+          },
+        },
+        '/activity/ratios?for=mem-rina': { body: sessionRatios },
+        '/activity/summary?': {
+          body: {
+            from: '2026-09-26', to: '2026-10-02', totals: [], daysLogged: 5, totalCount: 20,
+            targets: [
+              { key: 'leads', code: 'LEADS_CONTACTED', logged: 14, target: 16 },
+              { key: 'appointments', code: 'SELL_PRESENTATION', logged: 4, target: 5 },
+              { key: 'closings', code: 'SELL_SUBMISSION', logged: 1, target: 1 },
+            ],
+            sections: [{ code: 'DEVELOPMENT', label: 'Development', total: 2, rows: [{ code: 'DEV_TRAINING', label: 'Training attended', count: 2 }] }],
+          },
+        },
+        'outcome=open': { body: { rows: [sessionLead], total: 1, page: 1, pageSize: 200 } },
+        'outcome=won': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
+        'outcome=lost': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
+      });
+      const inSession = () => renderInLayout(
+        AgentLayout,
+        <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoachingSessionTabPage /></CoachingPersonLayout>,
+        { me: sessionLeader },
+      );
+
+      it('before it starts: the header, the past sessions open, and ▶ Start coaching session', async () => {
+        stubFetch(routes(draft, null));
+        inSession();
+        await userEvent.click(await screen.findByRole('button', { name: 'View past sessions' }));
+        await screen.findByRole('button', { name: 'Start coaching session' });
+        await expectClean('coaching/[membershipId]/session (before it starts)');
+      });
+
+      it('a draft, populated, with the Activity drill open', async () => {
+        stubFetch(routes(draft));
+        inSession();
+        await screen.findByDisplayValue('Desi Pratama');
+        await screen.findByText('Rp 340.000.000 remaining this year.');
+        await screen.findByText('18.0%');
+        const drill = await screen.findByRole('button', { name: '→ view full dashboard' });
+        await waitFor(() => expect(drill).toBeEnabled());
+        await expectClean('coaching/[membershipId]/session (a draft)');
+        await userEvent.click(drill);
+        await screen.findByRole('dialog', { name: 'Rina Wijaya — Activity Dashboard' });
+        await expectClean('coaching/[membershipId]/session (the Activity drill)');
+      });
+
+      it('finalized, locked, with Edit again’s reason dialog open', async () => {
+        stubFetch(routes(
+          { ...draft, status: 'finalized', version: 3, date: '2026-10-02', finalizedAt: '2026-10-02T03:00:00.000Z', finalizedBy: coach, reopenableUntil: '2026-10-09' },
+          { sessionId: 's-1', status: 'finalized' },
+        ));
+        inSession();
+        await screen.findByDisplayValue('Desi Pratama');
+        await screen.findByText('✓ Finalized Friday, October 2, 2026');
+        await expectClean('coaching/[membershipId]/session (finalized)');
+        await userEvent.click(screen.getByRole('button', { name: 'Edit again' }));
+        await screen.findByRole('dialog', { name: 'Edit this session again?' });
+        await expectClean('coaching/[membershipId]/session (Edit again)');
+      });
+
+      it('past the reopen window: Edit again drawn locked', async () => {
+        stubFetch({
+          ...routes(
+            { ...draft, status: 'finalized', version: 3, date: '2026-09-24', reopenableUntil: '2026-10-01' },
+            { sessionId: 's-1', status: 'finalized' },
+          ),
+        });
+        inSession();
+        const edit = await screen.findByRole('button', { name: 'Edit again' });
+        expect(edit).toHaveAttribute('aria-disabled', 'true');
+        await expectClean('coaching/[membershipId]/session (past the window)');
+      });
+    });
+
+    it('a person’s Leader Notes tab, populated: the ladder, the tracker with an archived tick and its sections off, and both kinds of note (P11-T9)', async () => {
+      const notesLeader = makeMe({
+        ...coachLeader,
+        permissions: ['coaching_session:read', 'coaching_profile:read', 'coaching_profile:update', 'leader_notes:read', 'leader_notes:write'],
+      });
+      const entry = (code: string, label: string, displayOrder: number, status = 'active') => ({ code, label, displayOrder, status });
+      const stage = (code: string, label: string, n: number, required: string[]) => ({ ...entry(code, label, n), stageOrder: n, requiredMilestoneCodes: required });
+      stubFetch({
+        ...shell,
+        'GET /coaching/coachees/mem-rina': { body: rina },
+        'GET /coaching/coachees/mem-rina/profile': {
+          body: {
+            catalog: {
+              stages: [
+                stage('COMPETENT_PRODUCER', 'Competent Producer', 1, ['M1']),
+                stage('INDEPENDENT_PRODUCER', 'Independent Producer', 2, ['M1', 'M2']),
+                stage('PRODUCTIVE_TEAM_BUILDER', 'Productive Team Builder', 3, ['M1', 'M2', 'M3']),
+              ],
+              milestones: [entry('M1', 'Sells policies independently', 1), entry('M2', 'Sells outside direct network', 2), entry('M3', 'Recruits quality agents', 3)],
+              grids: [
+                {
+                  ...entry('PERSONAL_SELLING', 'Personal selling', 1), requiresDownline: false,
+                  items: [entry('LEADS_GEN', 'Leads generation consistency', 1), entry('COLD', 'Cold calling', 2, 'archived')],
+                },
+                {
+                  ...entry('DEVELOPING_DOWNLINE_AGENT', 'Developing downline agent', 2), requiresDownline: true,
+                  items: [entry('AGENT_VISIBILITY', "Visibility into each agent's progress & goals", 1)],
+                },
+                {
+                  ...entry('DEVELOPING_DOWNLINE_LEADER', 'Developing downline leader', 3), requiresDownline: true,
+                  items: [entry('LEADER_TIME', 'Allocating time for team building', 1)],
+                },
+              ],
+            },
+            milestoneCodes: ['M1', 'M2'], skillCodes: ['LEADS_GEN', 'COLD'], stageCode: 'INDEPENDENT_PRODUCER', version: 3,
+            updatedAt: '2026-09-30T03:00:00.000Z', updatedBy: { membershipId: 'mem-ab', name: 'Jordan Pratama' },
+          },
+        },
+        'GET /coaching/coachees/mem-rina/leader-notes': {
+          body: {
+            mine: { noteId: 'n-1', text: 'Strong closer.', version: 2, updatedAt: '2026-09-30T03:00:00.000Z' },
+            others: [{ noteId: 'n-2', author: { membershipId: 'mem-w', name: 'Wilson Tanoto' }, text: 'Keep an eye on her load.', updatedAt: '2026-09-29T03:00:00.000Z' }],
+          },
+        },
+      });
+      renderInLayout(
+        AgentLayout,
+        <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoacheeLeaderNotesTab /></CoachingPersonLayout>,
+        { me: notesLeader },
+      );
+      await screen.findByRole('region', { name: 'Personal notes from Wilson Tanoto' });
+      await screen.findByRole('checkbox', { name: 'Cold calling Archived' });
+      await expectClean('coaching/[membershipId]/leader-notes');
+    });
+
+    it('a person outside the reader’s reach: the not-found state inside the shell (P11-T7 AC-8)', async () => {
+      stubFetch({ ...shell, '/coaching/coachees/': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-1' } } } });
+      inShell(<CoacheeTrainingTab params={routeParams({ membershipId: 'mem-nobody' })} />, 'mem-nobody');
+      await screen.findByRole('heading', { name: 'This person isn’t someone you coach.' });
+      await expectClean('coaching/[membershipId] (not found)');
+    });
+
+    it('the way round on a phone, open (ADR-0085, P11-T6 AC-11)', async () => {
+      vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+        media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      })));
+      stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
+      renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
+      await screen.findByRole('table', { name: 'Everyone you coach' });
+      await userEvent.click(screen.getByRole('button', { name: /Rina/ }));
+      expect(within(document.getElementById('sidebar-user-actions')!).getByRole('navigation', { name: 'Main' }))
+        .toBeInTheDocument();
+      await expectClean('coaching (the phone’s nav open)');
+    });
   });
 
   it('Activity Dashboard, populated: the range tabs, the strip and the table (P10-T1)', async () => {
@@ -786,12 +1276,6 @@ describe('screens have no axe violations', () => {
       // The cascade's three types, so each column carries its *Activity #n* chip (P10.1-T6).
       '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
       '/kpm/org-levels': { body: [] },
-      '/members/my-team': {
-        body: [{
-          membershipId: 'mem-rina', fullName: 'Rina Wijaya', initials: 'RW',
-          agentCode: 'PRU-001', role: 'agent', directCount: 0, canChangeRole: false,
-        }],
-      },
       '/goals': {
         body: {
           period,
@@ -841,12 +1325,6 @@ describe('screens have no axe violations', () => {
     stubFetch({
       '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
       '/kpm/org-levels': { body: [] },
-      '/members/my-team': {
-        body: [{
-          membershipId: 'mem-rina', fullName: 'Rina Wijaya', initials: 'RW',
-          agentCode: 'PRU-001', role: 'agent', directCount: 0, canChangeRole: false,
-        }],
-      },
       '/goals': {
         body: {
           period,
@@ -1441,8 +1919,13 @@ describe('screens have no axe violations', () => {
         body: {
           items: [{
             notificationId: 'n-1', templateId: 'join_request.approved',
-            title: 'You are in', detail: 'Your request was approved.',
+            title: 'You are in', detail: 'Your request was approved.', href: null,
             kpmId: 'kpm-1', createdAt: '2026-09-01T00:00:00.000Z', readAt: null,
+          }, {
+            // An item with somewhere to go: its title is the link (P11-T10 AC-8).
+            notificationId: 'n-2', templateId: 'coaching_session.finalized',
+            title: 'Your coaching session was finalized', detail: 'Wilson Tanoto finalized your session.',
+            href: '/coaching/me?session=s-0924', kpmId: 'kpm-1', createdAt: '2026-09-24T03:00:00.000Z', readAt: '2026-09-25T00:00:00.000Z',
           }],
           unread: 1,
         },
@@ -1450,6 +1933,7 @@ describe('screens have no axe violations', () => {
     });
     renderWithSession(<NotificationsPage />, { me: SUPER_ADMIN });
     await screen.findByRole('button', { name: 'Mark read' });
+    await screen.findByRole('link', { name: 'Your coaching session was finalized' });
     await expectClean('notifications');
   });
 

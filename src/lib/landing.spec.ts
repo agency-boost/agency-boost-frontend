@@ -66,33 +66,41 @@ describe('where signing in takes you', () => {
     expect(landingFor(makeMe({ membership: member({ isKpmAdmin: true }) }))).toBe('/kpm/overview');
   });
 
-  it('prefers running the office over leading a unit, when both are true', () => {
+  it('P11-T6 AC-8 prefers running the office over leading a unit, when both are true (OD-102)', () => {
     // An Owner is an AB at the root with a downline. Both branches match; the order
-    // decides, and the office is the wider job.
+    // decides, and the office is the wider job. The roster does not change it, and nor does
+    // an Admin who also leads people.
     const both = member({ isKpmOwner: true, orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 5 });
     expect(landingFor(makeMe({ membership: both }))).toBe('/kpm/overview');
+    const adminLeader = member({ isKpmAdmin: true, orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 2 });
+    expect(landingFor(makeMe({ membership: adminLeader }))).toBe('/kpm/overview');
   });
 
-  it('sends somebody who leads people to their own day, while the unit is a signpost', () => {
+  it('P11-T6 AC-8 sends somebody who leads people to the roster of everyone they coach', () => {
     /*
-     * **The `/unit/dashboard` redirect is commented out in `landing.ts`** (`a47f4c8`), and this test
-     * had gone on asserting it.
-     *
-     * The reason is worth keeping: `/unit/dashboard` is a `ComingInPhase` placeholder, and its nav item
-     * *Upcoming* (P10.1-T2), so every AB and AAB signing in landed on a page that tells them to come
-     * back later. Landing on work beats landing on a sign.
-     *
-     * **Restore the branch when the Unit Dashboard is built** — the route registry's *Placeholder
-     * routes* table names the phase, P15-T4 when this was written — and this test with it. The rule it
-     * encodes, that leading is the graph and not the role (OD-23), is unchanged and the test below
-     * still holds it.
+     * The leader branch was commented out (`a47f4c8`) while the only leader screen was the Unit
+     * Dashboard's sign: landing on work beats landing on a page that says come back later. The roster
+     * is built, so a leader lands there. `/unit/dashboard` is still a sign, and is not where anybody
+     * lands.
      */
     expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 2 }) }))).toBe(
+      '/coaching',
+    );
+    expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 1 }) }))).toBe(
+      '/coaching',
+    );
+  });
+
+  it('P11-T6 AC-8 leads by the graph, not the rung: an Agent with a report is a leader too (OD-23)', () => {
+    // Whatever the rung says, a direct report is what makes a leader. A rule keyed on the role label
+    // would send this member to their log and an AB with nobody to the roster.
+    expect(landingFor(makeMe({ membership: member({ directCount: 1 }) }))).toBe('/coaching');
+    expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 0 }) }))).toBe(
       '/activity/log',
     );
   });
 
-  it('sends an AAB who leads nobody to their own day, not to an empty unit (OD-23)', () => {
+  it('P11-T6 AC-8 sends an AAB who leads nobody to their own day, not to an empty roster (OD-23)', () => {
     // Leading is the graph, not the role. A childless AAB has no unit to look at.
     expect(landingFor(makeMe({ membership: member({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 0 }) }))).toBe(
       '/activity/log',

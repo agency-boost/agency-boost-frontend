@@ -63,6 +63,12 @@ export interface LeadQuery {
   dir?: 'asc' | 'desc';
   page?: number;
   pageSize?: number;
+  /**
+   * Whose leads: a coachee's, on the coaching session's *Leads* card (P11-T4 AC-3, ADR-0076). Absent,
+   * the list is the reader's scope as `/leads` reads it. The server answers 404 outside the reader's
+   * reach and audits the read.
+   */
+  owner?: string;
 }
 
 /** What each attention flag is called on screen. One place, so two screens cannot disagree. */
@@ -170,8 +176,13 @@ export async function listEveryLead(
 
 export const readLead = (id: string) => api<Lead>(`/leads/${id}`);
 
-export const createLead = (body: Partial<Lead> & { name: string }) =>
-  api<Lead>('/leads', { method: 'POST', body });
+/**
+ * A new lead. Without `owner` it is the reader's own (`/leads`). **With one it is the coachee's**
+ * (ADR-0076): `POST /leads?owner=`, the *+ Add lead* of a coaching session, owned by the coachee,
+ * attributed to the leader, and refused with 404 outside the leader's reach.
+ */
+export const createLead = (body: Partial<Lead> & { name: string }, owner?: string) =>
+  api<Lead>('/leads' + (owner ? `?owner=${encodeURIComponent(owner)}` : ''), { method: 'POST', body });
 
 /**
  * One field at a time, so a refusal names the field that caused it — and the `version` it was

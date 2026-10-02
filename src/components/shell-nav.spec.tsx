@@ -122,10 +122,10 @@ describe('the sidebar matches the prototype', () => {
       ['an AAB with reports', member('aab', 1)],
     ])('%s sees both', (_who, me) => {
       renderWithSession(<AgentShell title="x">body</AgentShell>, { me });
-      // Both items under *Unit tools*, still Upcoming; *Group tree* a live link, first in Admin.
-      for (const label of ['Unit dashboard', 'Coaching session']) {
-        expect(within(screen.getByText(label).closest('a')!).getByText('Upcoming')).toBeInTheDocument();
-      }
+      // Both items under *Unit tools*: *Unit dashboard* still Upcoming, *Coaching session* a live link
+      // since the roster was built (P11-T6 AC-7); *Group tree* a live link, first in Admin.
+      expect(within(screen.getByText('Unit dashboard').closest('a')!).getByText('Upcoming')).toBeInTheDocument();
+      expect(screen.getByText('Coaching session').closest('a')).toHaveAttribute('href', '/coaching');
       expect(screen.getByText('Group tree').closest('a')).toHaveAttribute('href', '/group-tree');
       const labels = navLabels();
       expect(labels.filter((t) => SECTIONS.includes(t))).toEqual(SECTIONS);
@@ -171,10 +171,10 @@ describe('the sidebar matches the prototype', () => {
     expect(within(training).getByText('Upcoming')).toBeInTheDocument();
   });
 
-  it('agent app: Unit dashboard is Upcoming, as Coaching session is — its page is a sign (P10.1-T2)', async () => {
+  it('agent app: Unit dashboard is Upcoming — its page is a sign (P10.1-T2)', async () => {
     // The client, 2026-10-01: a page that is not ready says so like the others. It was a live link
-    // to the sign with no pill, beside a Coaching session that had one. On its own typed URL it is
-    // still not the current item: an upcoming item is never where the reader is.
+    // to the sign with no pill, beside a Coaching session that had one (live since P11-T6). On its own
+    // typed URL it is still not the current item: an upcoming item is never where the reader is.
     route.path = '/unit/dashboard';
     try {
       renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
@@ -188,6 +188,34 @@ describe('the sidebar matches the prototype', () => {
     } finally {
       route.path = '/group-tree';
     }
+  });
+
+  describe('P11-T6 AC-7 Coaching session is live for a member who leads somebody', () => {
+    it('is a link to the roster, with no pill', () => {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+      const coaching = screen.getByText('Coaching session').closest('a')!;
+      expect(coaching).toHaveAttribute('href', '/coaching');
+      expect(coaching).not.toHaveAttribute('aria-disabled');
+      expect(within(coaching).queryByText('Upcoming')).not.toBeInTheDocument();
+    });
+
+    it.each(['/coaching', '/coaching/me', '/coaching/mem-9/session'])('is the current item on %s', (path) => {
+      // The roster, the reader's own notes and every person's tabs are all coaching: the prototype's
+      // item returns to the roster from any of them (`Overall.html:10596`).
+      route.path = path;
+      try {
+        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+        expect(screen.getByText('Coaching session').closest('a')).toHaveAttribute('aria-current', 'page');
+      } finally {
+        route.path = '/group-tree';
+      }
+    });
+
+    it('is not current anywhere else, and Unit dashboard beside it stays a sign', () => {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+      expect(screen.getByText('Coaching session').closest('a')).not.toHaveAttribute('aria-current');
+      expect(screen.getByText('Unit dashboard').closest('a')).toHaveAttribute('aria-disabled');
+    });
   });
 
   it('agent app: Personal summary is a live link, not a pill (P10-T4)', async () => {

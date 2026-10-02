@@ -1,7 +1,8 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import { parse, renderable, sourceFiles, SRC, startOf } from '@test/copy-scan';
 
 /**
  * P10.1-T2 AC-4. **No screen tells a customer our schedule.**
@@ -31,58 +32,17 @@ import { describe, expect, it } from 'vitest';
  * space, and it was folded into the text on the way.
  */
 const PATTERN = /\bphase\s*\{|\bphase\s+\d|\blater\s+phase\b/i;
-const HOLE = '{…}';
-
-/** `src/lib` is in the scan too: its error messages and labels are rendered by the screens that import them. */
-const ROOTS = ['app', 'components', 'lib'] as const;
-const SRC = join(__dirname, '..');
-
-/** The text a node can put on a screen, with `{…}` where a value is spliced in; `null` for anything else. */
-function renderable(node: ts.Node): string | null {
-  if (ts.isJsxText(node)) {
-    const parent = node.parent;
-    const siblings: readonly ts.Node[] = ts.isJsxElement(parent) || ts.isJsxFragment(parent) ? parent.children : [];
-    let text = node.text;
-    for (const next of siblings.slice(siblings.indexOf(node) + 1)) {
-      // `{/* … */}` is an expression container holding only a comment: nothing is spliced in.
-      if (ts.isJsxExpression(next) && !next.expression) continue;
-      // `{' '}` is the house style's space before a value: it is text, so it joins the run.
-      if (ts.isJsxExpression(next) && next.expression && ts.isStringLiteralLike(next.expression) && !next.expression.text.trim()) {
-        text += next.expression.text;
-        continue;
-      }
-      if (ts.isJsxText(next)) {
-        if (next.containsOnlyTriviaWhiteSpaces) continue;
-        break;
-      }
-      // `{expr}`, `<strong>{phase}</strong>`, `<X />`: something is spliced in here.
-      text += HOLE;
-      break;
-    }
-    return text;
-  }
-  if (ts.isTemplateHead(node) || ts.isTemplateMiddle(node)) return node.text + HOLE;
-  if (ts.isTemplateTail(node)) return node.text;
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-    const { parent } = node;
-    const concatenated = ts.isBinaryExpression(parent) && parent.operatorToken.kind === ts.SyntaxKind.PlusToken;
-    return node.text + (concatenated ? HOLE : '');
-  }
-  return null;
-}
 
 /** Every phase in `source`'s renderable strings, as `line: text`. Comments are trivia, and never visited. */
 function phaseMentions(fileName: string, source: string): string[] {
-  const kind = fileName.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
-  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, kind);
+  const sf = parse(fileName, source);
   const found: string[] = [];
 
   const visit = (node: ts.Node): void => {
     const text = renderable(node);
     if (text !== null && PATTERN.test(text)) {
-      // JSX text has no trivia, so its `pos` is its first character and a match inside a multi-line
-      // run lands on its own line; anything else starts at its token.
-      const start = ts.isJsxText(node) ? node.pos : node.getStart(sf);
+      // A match inside a multi-line run of JSX text lands on its own line; anything else starts at its token.
+      const start = startOf(node, sf);
       const at = sf.text.slice(start, node.end).search(PATTERN);
       const { line } = sf.getLineAndCharacterOfPosition(at >= 0 ? start + at : start);
       found.push(`${line + 1}: ${JSON.stringify(text.replace(/\s+/g, ' ').trim())}`);
@@ -133,12 +93,7 @@ describe('the phase scan itself', () => {
 });
 
 describe('no screen tells a customer our schedule', () => {
-  // `readdirSync(…, { recursive })`, not `globSync`: CI runs Node 20, and `globSync` is Node 22's.
-  const files = ROOTS.flatMap((root) =>
-    readdirSync(join(SRC, root), { encoding: 'utf8', recursive: true })
-      .filter((f) => /\.tsx?$/.test(f) && !f.includes('.spec.'))
-      .map((f) => `${root}/${f}`),
-  );
+  const files = sourceFiles();
 
   it('finds the screens at all, so a silent zero cannot pass', () => {
     expect(files.length).toBeGreaterThan(100);

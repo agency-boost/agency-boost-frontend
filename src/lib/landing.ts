@@ -38,9 +38,11 @@ export function landingFor(me: Me | null): string {
   // Running the office.
   if (membership.isKpmOwner || membership.isKpmAdmin) return '/kpm/overview';
 
-  // Leading people — by the graph, not the role (OD-23). An AAB with no reports has no
-  // unit to look at, and lands where their own work is instead.
-  // if (membership.directCount > 0) return '/unit/dashboard';
+  // Leading people — by the graph, not the role (OD-23, ADR-0087). A leader lands on the
+  // roster of everyone they coach (P11-T6 AC-8), the leader screen that is built; the Unit
+  // Dashboard is still a sign. An AAB with no reports has nobody to coach, and lands where
+  // their own work is instead.
+  if (membership.directCount > 0) return '/coaching';
 
   // Everyone else: their own day.
   return '/activity/log';

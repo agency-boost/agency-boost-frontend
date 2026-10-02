@@ -146,12 +146,82 @@ export const readActivityDashboard = (
   params: { range?: DashboardRange; from?: string; to?: string } = {},
 ) => api<ActivityDashboard>('/activity/dashboard' + query(params));
 
-/** The office's ratios over your last 30 days. Your own only: there is no `membershipId` (P10-T2). */
-export const readActivityRatios = () => api<ActivityRatios>('/activity/ratios');
+/**
+ * `?for=<membershipId>`, or nothing. Appended with `+`, never interpolated, for the reason `query`
+ * gives.
+ */
+const forSubject = (membershipId?: string) =>
+  (membershipId ? `?for=${encodeURIComponent(membershipId)}` : '');
+
+/**
+ * The office's ratios over the last 30 days. Without a subject they are the reader's own (P10-T2).
+ *
+ * **With one** — a coachee, on the coaching session's *Ratios* card and the Summary tab's *Activity
+ * pulse* (P11-T4, P11-T8) — they are that member's, **on that member's rung** (ADR-0020): a ratio that
+ * does not apply to them is not in the answer. The server answers 404 outside the reader's reach and
+ * writes one audit entry per read of somebody else (roles §3.5).
+ */
+export const readActivityRatios = (membershipId?: string) =>
+  api<ActivityRatios>('/activity/ratios' + forSubject(membershipId));
+
+/** One activity code's count over the period. */
+export interface ActivityTotal {
+  activityTypeCode: string;
+  label: string;
+  count: number;
+}
+
+/**
+ * One of the three cascade codes over the last 7 days, against `SUB_PERIOD_ACTIVITY_TARGET`: this
+ * month's target scaled to the window, which every screen labels *pro-rated* (metrics §B.3).
+ */
+export interface SubPeriodTarget {
+  key: 'leads' | 'appointments' | 'closings';
+  code: string;
+  logged: number;
+  /** `null` without an APE target to derive it from; 0 when the month needs nothing more. */
+  target: number | null;
+}
+
+/** One activity type's count inside a section chip. */
+export interface ActivitySectionRow {
+  code: string;
+  label: string;
+  count: number;
+}
+
+/** One of the office's summary tiles over the period, with its rows: the Summary's grouping (ADR-0064). */
+export interface ActivitySection {
+  code: string;
+  label: string;
+  total: number;
+  rows: ActivitySectionRow[];
+}
+
+/** `GET /activity/summary`: what somebody logged over a period, with the coaching drill's breakdown. */
+export interface ActivitySummary {
+  from: string;
+  to: string;
+  totals: ActivityTotal[];
+  daysLogged: number;
+  totalCount: number;
+  /** For `ROLLING_7D`. `null` (or absent) for the other periods. */
+  targets?: SubPeriodTarget[] | null;
+  sections?: ActivitySection[];
+}
+
+export type ActivitySummaryPeriod = 'ROLLING_7D' | 'ROLLING_30D' | 'CALENDAR_MONTH';
+
+/**
+ * What a member logged over a period — on the coaching session, the coachee's last 7 days against
+ * their pro-rated targets, with the breakdown its drill draws (P11-T4 AC-4, P11-T8 AC-6). The server
+ * resolves `membershipId` by the reader's reach, answers 404 outside it and audits the read.
+ */
+export const readActivitySummary = (params: { membershipId?: string; period?: ActivitySummaryPeriod } = {}) =>
+  api<ActivitySummary>('/activity/summary' + query(params));
 
 /*
- * **No wrapper for `GET /activity/summary` or `GET /activity/compliance`** (P10.1-T5 AC-9). Their one
- * caller was Log Activity's *Logged / Missed* card, which the client asked to have removed. Both
- * routes stay, exempted in `scripts/check-api-consumers.py` until the coaching task named there
- * gives each its caller; a wrapper nothing calls would only hide that from the gate.
+ * `GET /activity/compliance` had Log Activity's *Logged / Missed* card for its caller and is retired
+ * (P11-T6 AC-10): the roster draws no compliance, and nothing else asked for it. This module never had
+ * a wrapper for it.
  */

@@ -125,4 +125,15 @@ h3 {
   @page {
     margin: 14mm;
   }
+
+  /*
+   * **A print view prints alone** (P11-T10, ADR-0077). A coaching session's *⬇ Download as PDF* puts the
+   * session's paper on the page, off the screen (`hidden print:block`), for as long as the print window
+   * is open; everything else on the page stays off the paper, the app around it and the screen the
+   * button was pressed on alike. Nothing changes for a page with no print view on it: the Summary's
+   * Download still prints the page as it is seen.
+   */
+  body:has(> [data-print-view]) > :not([data-print-view]) {
+    display: none !important;
+  }
 }

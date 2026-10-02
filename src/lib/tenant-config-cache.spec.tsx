@@ -1,7 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { stubFetch } from '@test/harness';
+import { makeSession, stubFetch } from '@test/harness';
+import { SessionContext, type SessionValue } from './session';
 import {
   TenantConfigProvider, useActivityType, useTenantConfig,
 } from './tenant-config-cache';
@@ -85,6 +86,37 @@ describe('the shared tenant configuration (P4-T7)', () => {
     stubFetch({ '/kpm/config': { body: CONFIG }, '/kpm/org-levels': { body: LADDER } });
     render(<TenantConfigProvider><Reader /></TenantConfigProvider>);
     expect(screen.getByText('loading')).toBeInTheDocument();
+  });
+
+  describe('not before the session is (P11-T6 AC-13)', () => {
+    /*
+     * The provider sits outside the session gate, and a child's effect runs before its parent's: on
+     * a hard load this read went out before the session's refresh, with no token, and drew two 401s.
+     */
+    const inSession = (session: SessionValue) => (
+      <SessionContext.Provider value={session}>
+        <TenantConfigProvider><Reader /></TenantConfigProvider>
+      </SessionContext.Provider>
+    );
+
+    it('P11-T6 AC-13 waits while the session is loading, then reads once it has somebody', async () => {
+      const { calls } = stubFetch({ '/kpm/config': { body: CONFIG }, '/kpm/org-levels': { body: LADDER } });
+      const { rerender } = render(inSession(makeSession({ me: null, loading: true })));
+
+      expect(screen.getByText('loading')).toBeInTheDocument();
+      expect(calls).toHaveLength(0);
+
+      rerender(inSession(makeSession({ loading: false })));
+      expect(await screen.findByText('v1')).toBeInTheDocument();
+      expect(calls.map((c) => c.url.split('/api/v1')[1])).toEqual(['/kpm/config', '/kpm/org-levels']);
+    });
+
+    it('P11-T6 AC-13 reads nothing for a session with nobody in it, and stops waiting', async () => {
+      const { calls } = stubFetch({ '/kpm/config': { body: CONFIG }, '/kpm/org-levels': { body: LADDER } });
+      render(inSession(makeSession({ me: null, loading: false })));
+      expect(await screen.findByText('vnone')).toBeInTheDocument();
+      expect(calls).toHaveLength(0);
+    });
   });
 
   it('degrades to nothing configured outside a provider, rather than crashing a shell', () => {

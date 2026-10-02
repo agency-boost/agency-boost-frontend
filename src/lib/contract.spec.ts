@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { LEADER_NOTE_MAX } from './coaching';
 
 /**
  * P3.5-T11 AC-4. The frontend declares its own copy of every response shape, and until
@@ -27,6 +28,7 @@ interface Doc {
 interface Schema {
   $ref?: string;
   type?: string;
+  maxLength?: number;
   items?: Schema;
   properties?: Record<string, Schema>;
 }
@@ -74,6 +76,68 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['join.ts', 'UntaggedMember', 'UntaggedMemberDto'],
   ['join.ts', 'MyLeaderCode', 'MyLeaderCodeDto'],
   ['notifications.ts', 'InboxItem', 'InboxItemDto'],
+  // P11-T6: the roster reads every one of these straight off `GET /coaching/coachees`, and a field
+  // renamed on the server would otherwise pass both suites and draw blank cells.
+  ['coaching.ts', 'Roster', 'CoachingRosterDto'],
+  ['coaching.ts', 'RosterRow', 'RosterRowDto'],
+  ['coaching.ts', 'RosterRung', 'RosterRungDto'],
+  ['coaching.ts', 'RosterUnit', 'RosterUnitDto'],
+  ['coaching.ts', 'LastOneOnOne', 'RosterLastOneOnOneDto'],
+  ['coaching.ts', 'RosterPerson', 'RosterPersonDto'],
+  // P11-T7: the person shell's header reads these straight off `GET /coaching/coachees/:membershipId`.
+  ['coaching.ts', 'Coachee', 'CoacheeDto'],
+  ['coaching.ts', 'CoacheeDownline', 'CoacheeDownlineDto'],
+  // P11-T8: the session workspace reads these straight off the lifecycle's routes.
+  ['coaching.ts', 'SessionHistory', 'SessionHistoryDto'],
+  ['coaching.ts', 'SessionCurrent', 'SessionCurrentDto'],
+  ['coaching.ts', 'PastSession', 'SessionHistoryRowDto'],
+  ['coaching.ts', 'CoachingSession', 'CoachingSessionDto'],
+  ['coaching.ts', 'LastWeekRef', 'LastWeekRefDto'],
+  ['coaching.ts', 'LastWeekItem', 'LastWeekItemDto'],
+  ['coaching.ts', 'SessionLeadTag', 'SessionLeadTagDto'],
+  ['coaching.ts', 'LeadAction', 'LeadActionDto'],
+  ['coaching.ts', 'ActionItem', 'ActionItemDto'],
+  ['coaching.ts', 'CoachingTip', 'TipDto'],
+  ['coaching.ts', 'SessionDraftSaved', 'SessionDraftSavedDto'],
+  // P11-T9: the Leader Notes tab reads the profile and the notes straight off their reads and saves.
+  ['coaching.ts', 'CoachingProfile', 'CoachingProfileDto'],
+  ['coaching.ts', 'CapabilityProfileCatalog', 'ProfileCatalogDto'],
+  ['coaching.ts', 'CapabilityStageRow', 'CapabilityStageDto'],
+  ['coaching.ts', 'CapabilityRow', 'CapabilityEntryDto'],
+  ['coaching.ts', 'CapabilityGridRow', 'CapabilityGridDto'],
+  ['coaching.ts', 'CoachingProfileSaved', 'CoachingProfileSavedDto'],
+  ['coaching.ts', 'LeaderNotes', 'LeaderNotesDto'],
+  ['coaching.ts', 'MyLeaderNote', 'LeaderNoteMineDto'],
+  ['coaching.ts', 'LeaderNote', 'LeaderNoteOtherDto'],
+  ['coaching.ts', 'LeaderNoteSaved', 'LeaderNoteSavedDto'],
+  // P11-T10: the archive reads the snapshot and the earlier versions off the session read; the print
+  // and `/coaching/me` read their own routes.
+  ['coaching.ts', 'SessionSnapshot', 'SessionSnapshotDto'],
+  ['coaching.ts', 'SnapshotGoal', 'SnapshotGoalDto'],
+  ['coaching.ts', 'SnapshotPeriod', 'SnapshotPeriodDto'],
+  ['coaching.ts', 'SnapshotSource', 'SnapshotSourceDto'],
+  ['coaching.ts', 'SnapshotRatios', 'SnapshotRatiosDto'],
+  ['coaching.ts', 'SnapshotRatioRow', 'SnapshotRatioRowDto'],
+  ['coaching.ts', 'SnapshotActivity', 'SnapshotActivityDto'],
+  ['coaching.ts', 'SnapshotTarget', 'SnapshotTargetDto'],
+  ['coaching.ts', 'SnapshotSection', 'SnapshotSectionDto'],
+  ['coaching.ts', 'SnapshotSectionRow', 'SnapshotSectionRowDto'],
+  ['coaching.ts', 'EarlierVersion', 'EarlierVersionDto'],
+  ['coaching.ts', 'SessionPrint', 'SessionPrintDto'],
+  ['coaching.ts', 'PrintPerson', 'PrintPersonDto'],
+  ['coaching.ts', 'PrintLastWeekItem', 'PrintLastWeekItemDto'],
+  ['coaching.ts', 'PrintGoal', 'PrintGoalDto'],
+  ['coaching.ts', 'PrintPeriod', 'PrintPeriodDto'],
+  ['coaching.ts', 'PrintTip', 'PrintTipDto'],
+  ['coaching.ts', 'PrintLeadAction', 'PrintLeadActionDto'],
+  ['coaching.ts', 'PrintActionItem', 'PrintActionItemDto'],
+  ['coaching.ts', 'MySessions', 'MySessionsDto'],
+  ['coaching.ts', 'LedSession', 'LedSessionRowDto'],
+  // P11-T8: the Activity card and its drill read the 7-day window off `GET /activity/summary`.
+  ['activity.ts', 'ActivitySummary', 'ActivitySummaryDto'],
+  ['activity.ts', 'SubPeriodTarget', 'ActivityWindowTargetDto'],
+  ['activity.ts', 'ActivitySection', 'SectionChipDto'],
+  ['activity.ts', 'ActivitySectionRow', 'SectionRowDto'],
 ];
 
 describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
@@ -88,9 +152,16 @@ describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
     expect(extra).toEqual([]);
   });
 
+  it('P11 exit review: the input limits a screen repeats are the ones the API validates', () => {
+    const coachingParts = readFileSync(join(__dirname, '..', 'components', 'coaching-parts.tsx'), 'utf8');
+    const reasonMax = Number(/const REASON_MAX = (\d+);/.exec(coachingParts)?.[1]);
+    expect(doc.components.schemas.SaveLeaderNoteDto.properties?.text.maxLength).toBe(LEADER_NOTE_MAX);
+    expect(doc.components.schemas.ReopenCoachingSessionDto.properties?.reason.maxLength).toBe(reasonMax);
+  });
+
   it('every path the client calls exists in the document', () => {
     const paths = new Set(Object.keys(doc.paths).map((p) => p.replace('/api/v1', '')));
-    const sources = ['admin.ts', 'org.ts', 'join.ts', 'notifications.ts', 'session.ts', 'api.ts'];
+    const sources = ['admin.ts', 'org.ts', 'join.ts', 'notifications.ts', 'session.ts', 'api.ts', 'coaching.ts'];
     const called = new Set<string>();
     for (const file of sources) {
       for (const path of callsIn(readFileSync(join(__dirname, file), 'utf8'))) called.add(path);

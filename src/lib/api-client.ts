@@ -137,12 +137,16 @@ async function raw(path: string, options: RequestOptions = {}): Promise<Response
 }
 
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const sentWith = accessToken;
   let response = await raw(path, options);
 
   // One transparent retry: the access token lives 15 minutes, so an open tab will hit
   // this routinely and the user should never see it.
   if (response.status === 401 && !options.skipRefresh && !impersonating) {
-    const refreshed = await tryRefresh();
+    // A refresh that finished while this request was out has already replaced the token it
+    // carried: replay with that one, rather than spend the cookie it was issued with again.
+    const replaced = accessToken !== null && accessToken !== sentWith;
+    const refreshed = replaced || (await tryRefresh());
     if (refreshed) response = await raw(path, options);
   }
 
@@ -164,7 +168,26 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   return payload as T;
 }
 
-export async function tryRefresh(): Promise<boolean> {
+/**
+ * The refresh in flight, shared by everybody who asks while it is (P11-T6).
+ *
+ * **One refresh, however many 401s.** A hard load used to send two reads before the session had a
+ * token, and each 401 posted its own `/auth/refresh` beside the session's own — three posts of one
+ * cookie. The server rotates the refresh token on every use and treats a used one presented again as
+ * theft, revoking the whole family (`auth.service.ts`, *refresh token reuse*), so a race between them
+ * could sign the reader out. Concurrent callers now wait on the same request, and each replays once
+ * it has settled.
+ */
+let refreshing: Promise<boolean> | null = null;
+
+export function tryRefresh(): Promise<boolean> {
+  refreshing ??= refreshOnce().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+
+async function refreshOnce(): Promise<boolean> {
   try {
     const response = await raw('/auth/refresh', { method: 'POST', skipRefresh: true });
     if (!response.ok) return false;

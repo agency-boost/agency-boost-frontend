@@ -179,6 +179,8 @@ describe('group tree (P3-T8)', () => {
 
   it('never renders for a session without the permission', () => {
     renderInLayout(AgentLayout, <GroupTreePage />, { me: makeMe({ permissions: [] }) });
-    expect(screen.getByRole('alert')).toHaveTextContent('org_tree:read');
+    expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
+    // The gate's code is on the refusal as data, and never in its words (P11-T6).
+    expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'org_tree:read');
   });
 });

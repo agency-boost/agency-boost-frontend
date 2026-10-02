@@ -81,12 +81,13 @@ describe('accessibility', () => {
     );
   });
 
-  it('status pills have no violations in all three states', async () => {
+  it('status pills have no violations in all three states, and in the roster’s Watch closely', async () => {
     await expectNoViolations(
       <div>
         <StatusPill status="success" />
         <StatusPill status="alert" />
         <StatusPill status="neutral" />
+        <StatusPill status="watch" label="Watch closely" />
       </div>,
     );
   });
@@ -359,6 +360,36 @@ describe('accessibility', () => {
       expect(ratio(AMBER_INK, ground)).toBeGreaterThanOrEqual(4.5);
       expect(ratio(NAVY_SOFT, ground)).toBeGreaterThanOrEqual(4.5);
       expect(ratio(MUTED, ground)).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it('Watch closely puts navy words on its 15% amber tint, on every ground the roster sets it on (P11-T6)', () => {
+      /*
+       * The prototype's pill is a darker yellow on a yellow wash (`Overall.html:1445`), in no token.
+       * The roster sets it on a plain row, the row hover and a unit head's 4.5% navy-soft tint, and
+       * no amber clears 4.5:1 as small text on an amber tint on any of them (below) — so the words are
+       * navy, as the leads table's mid-stage status is (F-71), and the tint carries the colour.
+       */
+      const grounds = [CARD, over(NAVY, 0.015, CARD), over(NAVY_SOFT, 0.045, CARD), over(NAVY, 0.015, over(NAVY_SOFT, 0.045, CARD))];
+      for (const ground of grounds) {
+        expect(ratio(NAVY, over(AMBER, 0.15, ground))).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(AMBER_INK, over(AMBER, 0.15, ground))).toBeLessThan(4.5);
+      }
+    });
+
+    it('the capability ladder’s current stage puts navy on its amber, where the prototype’s white and amber-dark miss (P11-T9)', () => {
+      /*
+       * `.cap-stage.current` (`Overall.html:1354-1361`): an 8% amber card, its number white on
+       * amber-dark in a 22px disc, and *Current stage* in amber-dark on a 15% wash — 11px and 10px
+       * bold, small text. Neither clears 4.5:1, so both are navy, and the amber stays the ground. The
+       * milestones beside them are muted on the same 8% tint.
+       */
+      const current = over(AMBER, 0.08, CARD);
+      expect(ratio('#FFFFFF', AMBER_DARK)).toBeLessThan(4.5);
+      expect(ratio(AMBER_DARK, over(AMBER, 0.15, current))).toBeLessThan(4.5);
+      expect(ratio(NAVY, AMBER)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(NAVY, over(AMBER, 0.15, current))).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(MUTED, current)).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(MUTED, BASE)).toBeGreaterThanOrEqual(4.5);
     });
 
     it('amber-ink is a word on a plain ground — it misses 4.5:1 on the mid-rung’s amber tint', () => {

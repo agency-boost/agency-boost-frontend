@@ -1,8 +1,8 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useContext, type ReactNode } from 'react';
 import { PageHeader } from '@/components/app-shell';
-import { RequireSession } from '@/components/require-session';
+import { RequireSession, TitledPageContext } from '@/components/require-session';
 
 /**
  * A page inside a group layout.
@@ -30,10 +30,12 @@ export function Page({
   permission?: string;
   children: ReactNode;
 }) {
+  const titledAbove = useContext(TitledPageContext);
   const body = (
     <>
       {title !== undefined && <PageHeader title={title} subtitle={subtitle} actions={actions} />}
-      {children}
+      {/* What is inside is under a title now: a nested page's refusal is a section of this one. */}
+      <TitledPageContext.Provider value={titledAbove || title !== undefined}>{children}</TitledPageContext.Provider>
     </>
   );
 

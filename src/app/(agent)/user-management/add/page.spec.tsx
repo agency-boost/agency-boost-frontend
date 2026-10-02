@@ -166,7 +166,9 @@ describe('inviting people (P3-T4)', () => {
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: AGENT });
 
     // The URL is typeable, so hiding the tab is not gating the screen.
-    expect(screen.getByRole('alert')).toHaveTextContent('member:search_untagged_pool');
+    expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
+    // The gate's code is on the refusal as data, and never in its words (P11-T6).
+    expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'member:search_untagged_pool');
     expect(screen.queryByText('Invite someone')).toBeNull();
     expect(screen.queryByRole('link', { name: 'Add New Agents' })).toBeNull();
   });

@@ -1,7 +1,9 @@
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderToString } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { axe } from 'vitest-axe';
+import { PHONE_QUERY } from '@/lib/use-phone';
 import { AppShell, PageHeader, type NavSection } from './app-shell';
 
 vi.mock('next/navigation', () => ({
@@ -371,6 +373,240 @@ describe('AppShell', () => {
       expect(panel.className).toContain('w-48');
       expect(within(panel).getByRole('link', { name: 'Your account' })).toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * A screen of a given width, as far as the shell can ask: `matchMedia`, which jsdom does not have.
+ * `resize` moves the width afterwards and tells whoever is listening, as a phone turned on its side does.
+ */
+function atWidth(px: number) {
+  let width = px;
+  const listeners = new Set<() => void>();
+  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    media: query,
+    get matches() { return query === PHONE_QUERY && width < 768; },
+    addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+    removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+  })));
+  return {
+    resize(next: number) {
+      width = next;
+      act(() => listeners.forEach((fn) => fn()));
+    },
+  };
+}
+
+describe('below 768px, the account chip is the way round (ADR-0085, P11-T6 AC-11)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function renderPhoneShell(px = 360) {
+    window.localStorage.clear();
+    const onSignOut = vi.fn();
+    const width = atWidth(px);
+    const result = render(
+      <>
+        <p data-testid="outside">elsewhere</p>
+        <AppShell
+          sections={SECTIONS}
+          user={{ ...USER, email: 'rina@kpm0417.test' }}
+          account={{ href: '/profile', onSignOut }}
+          title="Log Activity"
+        >
+          <p>content</p>
+        </AppShell>
+      </>,
+    );
+    return { ...result, onSignOut, width };
+  }
+  const chip = () => screen.getByRole('button', { name: /Rina Wijaya/ });
+  const panel = () => document.getElementById('sidebar-user-actions');
+
+  it('P11-T6 AC-11 offers no nav on the bar until the chip opens it', () => {
+    renderPhoneShell();
+    // The prototype's phone: the nav hidden, and nothing drawn in its place (`Overall.html:1421-1428`).
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+    expect(chip()).toHaveAttribute('aria-expanded', 'false');
+    // The rail is a desktop control, and there is no sidebar here to collapse.
+    expect(screen.queryByRole('button', { name: /the sidebar/ })).not.toBeInTheDocument();
+  });
+
+  it('P11-T6 AC-11 opens the nav groups, in their order and names, then Your account and Sign out, below the bar', async () => {
+    renderPhoneShell();
+    await userEvent.click(chip());
+
+    const open = panel()!;
+    expect(chip()).toHaveAttribute('aria-expanded', 'true');
+    // Below the bar, across it, and scrolling inside itself.
+    expect(open.className).toContain('top-full');
+    expect(open.className).toContain('inset-x-0');
+    expect(open.className).not.toContain('bottom-full');
+
+    const nav = within(open).getByRole('navigation', { name: 'Main' });
+    const groups = within(nav).getAllByRole('button').map((b) => b.textContent);
+    expect(groups).toEqual(['Personal tools', 'Reporting']);
+    expect(within(nav).getByRole('link', { name: 'Leads management' })).toHaveAttribute('href', '/leads');
+    // An upcoming item keeps its pill and stays inert, as in the sidebar.
+    expect(within(nav).getByText('Advanced analytics').closest('a')).toHaveAttribute('aria-disabled');
+
+    // The account's two, after the nav.
+    const account = within(open).getByRole('link', { name: 'Your account' });
+    const signOut = within(open).getByRole('button', { name: 'Sign out' });
+    expect(nav.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(account.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(open).getByText('rina@kpm0417.test')).toBeInTheDocument();
+  });
+
+  it('P11-T6 AC-11 moves focus into the panel, and holds it there', async () => {
+    renderPhoneShell();
+    await userEvent.click(chip());
+
+    const first = screen.getByRole('button', { name: /Personal tools/ });
+    const last = screen.getByRole('button', { name: 'Sign out' });
+    expect(first).toHaveFocus();
+
+    // Shift+Tab from the first goes round to the last, and Tab from the last back to the first.
+    await userEvent.tab({ shift: true });
+    expect(last).toHaveFocus();
+    await userEvent.tab();
+    expect(first).toHaveFocus();
+    // In between, Tab walks the panel in order: a group, its live links, the next group.
+    await userEvent.tab();
+    expect(screen.getByRole('link', { name: 'Activity management' })).toHaveFocus();
+  });
+
+  it('P11-T6 AC-11 closes on Escape, and puts focus back on the chip', async () => {
+    renderPhoneShell();
+    await userEvent.click(chip());
+    await userEvent.keyboard('{Escape}');
+
+    expect(panel()).toBeNull();
+    expect(chip()).toHaveAttribute('aria-expanded', 'false');
+    expect(chip()).toHaveFocus();
+  });
+
+  it('P11-T6 AC-11 closes on a click outside it', async () => {
+    renderPhoneShell();
+    await userEvent.click(chip());
+    await userEvent.click(screen.getByTestId('outside'));
+    expect(panel()).toBeNull();
+  });
+
+  it('P11-T6 AC-11 lets a group close inside it without closing the panel', async () => {
+    renderPhoneShell();
+    await userEvent.click(chip());
+    await userEvent.click(screen.getByRole('button', { name: /Personal tools/ }));
+    expect(panel()).not.toBeNull();
+    expect(screen.queryByRole('link', { name: 'Leads management' })).not.toBeInTheDocument();
+  });
+
+  it('P11-T6 AC-11 offers Sign out, and it signs out', async () => {
+    const { onSignOut } = renderPhoneShell();
+    await userEvent.click(chip());
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(onSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('P11-T6 AC-11 follows a link and closes, so it is not left open over the next screen', async () => {
+    // jsdom cannot navigate, and the navigation is next/link's: the href is where it goes, and the
+    // click is what closes the panel.
+    const swallow = (event: Event) => event.preventDefault();
+    document.addEventListener('click', swallow);
+    try {
+      renderPhoneShell();
+      await userEvent.click(chip());
+      const leads = screen.getByRole('link', { name: 'Leads management' });
+      expect(leads).toHaveAttribute('href', '/leads');
+      await userEvent.click(leads);
+      expect(panel()).toBeNull();
+
+      await userEvent.click(chip());
+      await userEvent.click(screen.getByRole('link', { name: 'Your account' }));
+      expect(panel()).toBeNull();
+    } finally {
+      document.removeEventListener('click', swallow);
+    }
+  });
+
+  it('P11-T6 AC-11 does not open at 768px: the sidebar holds the nav, and the chip opens its account panel upward', async () => {
+    renderPhoneShell(768);
+    const sidebarNav = screen.getByRole('navigation', { name: 'Main' });
+    expect(sidebarNav).toHaveAttribute('id', 'sidebar-nav');
+
+    await userEvent.click(chip());
+    const open = panel()!;
+    expect(within(open).queryByRole('navigation')).not.toBeInTheDocument();
+    expect(open.className).toContain('bottom-full');
+    expect(open.className).not.toContain('top-full');
+    // Focus stays on the chip, as the desktop disclosure always has: Tab reaches the two items.
+    expect(chip()).toHaveFocus();
+    expect(screen.getAllByRole('navigation', { name: 'Main' })).toHaveLength(1);
+  });
+
+  it('P11-T6 AC-11 moves the nav when the width crosses 768px', async () => {
+    const { width } = renderPhoneShell(1024);
+    expect(screen.getByRole('navigation', { name: 'Main' })).toHaveAttribute('id', 'sidebar-nav');
+
+    width.resize(360);
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+    await userEvent.click(chip());
+    expect(within(panel()!).getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+  });
+
+  it('P11-T6 AC-11 shows the whole chip on a phone, whatever rail a wider window remembered', () => {
+    window.localStorage.setItem('ab.sidebar.rail', '1');
+    atWidth(360);
+    render(
+      <AppShell sections={SECTIONS} user={USER} account={{ href: '/profile', onSignOut: vi.fn() }}>
+        <p>content</p>
+      </AppShell>,
+    );
+    expect(within(chip()).getByText('Rina Wijaya')).toBeInTheDocument();
+    window.localStorage.clear();
+  });
+
+  it('P11-T6 AC-11 has no axe violations while it is open', async () => {
+    const { container } = renderPhoneShell();
+    await userEvent.click(chip());
+    const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
+    expect(results.violations ?? []).toHaveLength(0);
+  });
+
+  /*
+   * At 360×800 the Super Admin's bar ran 23px past the screen and clipped the bell: *AgencyBoost
+   * SUPERADMIN* beside a chip that would not give way, because its row was `shrink-0` (the 2026-10-02
+   * walk, `superadmin-360-panel.png`). jsdom lays nothing out, so this pins the classes that let the
+   * row take what the brand leaves and the chip's name truncate inside it, below 768px only.
+   */
+  it('P11-T6 AC-11 fits the Super Admin’s bar at 360px: the chip gives way, the bell stays whole', () => {
+    atWidth(360);
+    window.localStorage.clear();
+    render(
+      <AppShell
+        sections={SECTIONS}
+        brandTag="SUPERADMIN"
+        user={{ name: 'Platform Operator', role: 'Superadmin', initials: 'PO' }}
+        account={{ href: '/profile', onSignOut: vi.fn() }}
+        notifications={{ href: '/notifications', unread: 3 }}
+      >
+        <p>content</p>
+      </AppShell>,
+    );
+    const bell = screen.getByRole('link', { name: 'Notifications, 3 unread' });
+    const row = bell.parentElement!;
+    // The row shrinks below its contents' width on the bar, and holds in the sidebar from 768px.
+    expect(row.classList).toContain('min-w-0');
+    expect(row.classList).toContain('shrink');
+    expect(row.classList).not.toContain('shrink-0');
+    expect(row.classList).toContain('md:shrink-0');
+    // The chip takes the space and truncates its words; the bell keeps its size.
+    const chipBox = row.firstElementChild!;
+    expect(chipBox.classList).toContain('min-w-0');
+    expect(chipBox.classList).toContain('flex-1');
+    expect(within(chipBox as HTMLElement).getByText('Platform Operator').className).toContain('truncate');
+    expect(within(chipBox as HTMLElement).getByText('Superadmin').className).toContain('truncate');
+    expect(bell.className).toContain('shrink-0');
+    expect(row.lastElementChild).toBe(bell);
   });
 });
 

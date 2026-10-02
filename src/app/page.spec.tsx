@@ -62,6 +62,18 @@ describe('landing', () => {
     expect(replace).toHaveBeenCalledWith('/kpm/overview');
   });
 
+  it('P11-T6 AC-8 sends a leader to the roster of everyone they coach', () => {
+    renderWithSession(<Home />, {
+      me: makeMe({
+        membership: {
+          membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AAB', hierarchyRole: 'aab', status: 'active',
+          isKpmOwner: false, isKpmAdmin: false, directCount: 3,
+        },
+      }),
+    });
+    expect(replace).toHaveBeenCalledWith('/coaching');
+  });
+
   it('sends an agent to their own day, not to their profile', () => {
     // Landing on a profile with a sign-out button and nothing else is what this
     // replaced: it read as though the product had nothing for them.

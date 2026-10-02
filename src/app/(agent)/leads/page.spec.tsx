@@ -1670,8 +1670,10 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
     it('refuses the screen to somebody without lead:read', async () => {
       render({ '/leads': { body: page([]) } }, makeMe({ permissions: [] }));
 
-      expect(await screen.findByText(/needs the/)).toBeInTheDocument();
-      expect(screen.getByText('lead:read')).toBeInTheDocument();
+      expect(await screen.findByRole('alert')).toHaveTextContent('Not available to you');
+      // The gate's code is on the refusal as data, and never in its words (P11-T6).
+      expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'lead:read');
+      expect(screen.queryByText('lead:read')).not.toBeInTheDocument();
     });
 
     it('scrolls the table inside its own container on a phone, not the page body', async () => {

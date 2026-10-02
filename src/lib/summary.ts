@@ -119,5 +119,19 @@ export interface Summary {
   insights: Insight[];
 }
 
-/** Your own Summary. There is no `membershipId`: a leader's view of a downline's is Phase 13's. */
-export const readSummary = () => api<Summary>('/summary');
+/**
+ * `?for=<membershipId>`, or nothing. Appended with `+`, never interpolated: the API-consumer gate reads
+ * path **literals** out of each call, and an interpolation at the end of one reads as part of the path.
+ */
+const forSubject = (membershipId?: string) =>
+  (membershipId ? `?for=${encodeURIComponent(membershipId)}` : '');
+
+/**
+ * The Summary. Without a subject it is the reader's own, unaudited. **With one** it is the same
+ * Summary computed for that member (P11-T4, P11-T7): their goal, production and its source, log,
+ * leads and compliance, on their rung. The server resolves the subject by the reader's grant — a
+ * leader reaches the people they coach (ADR-0074) — answers 404 outside it, and writes one audit
+ * entry per read (roles §3.5).
+ */
+export const readSummary = (membershipId?: string) =>
+  api<Summary>('/summary' + forSubject(membershipId));

@@ -1,7 +1,8 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { makeMe, makeSession, renderWithSession, stubFetch } from '@test/harness';
+import { SessionContext } from '@/lib/session';
 import NotificationsPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -15,7 +16,7 @@ const READER = makeMe({
 
 const item = (over: Record<string, unknown> = {}) => ({
   notificationId: 'n-1', templateId: 'join_request.approved',
-  title: 'You are in', detail: 'Your request was approved. You now have a leader.',
+  title: 'You are in', detail: 'Your request was approved. You now have a leader.', href: null,
   kpmId: 'kpm-1', createdAt: '2026-09-01T00:00:00.000Z', readAt: null, ...over,
 });
 
@@ -61,6 +62,46 @@ describe('the notifications inbox (P3.5-T10)', () => {
     expect(
       await screen.findByText('Nothing yet. This is where you will hear about your unit.'),
     ).toBeInTheDocument();
+  });
+
+  it('P11-T10 AC-8 opens an item that has somewhere to go: its title is a link to the address the server composed', async () => {
+    stubFetch({
+      '/notifications': {
+        body: {
+          items: [
+            item({
+              notificationId: 'n-2', templateId: 'coaching_session.finalized', title: 'Your coaching session was finalized',
+              detail: 'Wilson Tanoto finalized your session.', href: '/coaching/me?session=s-0924',
+            }),
+            item(),
+          ],
+          unread: 2,
+        },
+      },
+    });
+    renderWithSession(<NotificationsPage />, { me: READER });
+
+    const link = await screen.findByRole('link', { name: 'Your coaching session was finalized' });
+    expect(link).toHaveAttribute('href', '/coaching/me?session=s-0924');
+    // Every other item is the record it always was.
+    expect(screen.getByText('You are in').tagName).toBe('SPAN');
+    expect(screen.queryByRole('link', { name: 'You are in' })).not.toBeInTheDocument();
+  });
+
+  it('P11-T8’s walk: asks for the inbox only once the session has settled with somebody in it', async () => {
+    const { calls } = stubFetch({ '/notifications': { body: { items: [item()], unread: 1 } } });
+    const { rerender } = renderWithSession(<NotificationsPage />, { me: null, loading: true });
+    expect(calls).toEqual([]);
+
+    rerender(
+      <SessionContext.Provider value={makeSession({ me: READER, loading: false })}>
+        <NotificationsPage />
+      </SessionContext.Provider>,
+    );
+    expect(await screen.findByText('You are in')).toBeInTheDocument();
+    // The page's read and the sidebar badge's, both once there is somebody to read for.
+    expect(calls.length).toBeGreaterThan(0);
+    expect(new Set(calls.map((c) => c.url))).toEqual(new Set(['http://api.test/api/v1/notifications']));
   });
 
   it('renders a row with no detail without leaving an empty line', async () => {

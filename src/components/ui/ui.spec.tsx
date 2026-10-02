@@ -132,6 +132,15 @@ describe('StatusPill', () => {
     expect(new Set(Object.values(STATUS_LABEL)).size).toBe(3);
   });
 
+  it('P11-T6 AC-4 paints Watch closely in its own tone, with the words its caller gives it', () => {
+    // A fourth paint, not a fourth state: `statusFor` never answers it, and it has no words of its own.
+    render(<StatusPill status="watch" label="Watch closely" />);
+    const pill = screen.getByText('Watch closely');
+    expect(pill.className).toContain('bg-amber/15');
+    expect(pill.className).toContain('text-navy');
+    expect(Object.keys(STATUS_LABEL)).not.toContain('watch');
+  });
+
   it('never renders colour alone — the label is always present', () => {
     const { container } = render(<StatusPill status="alert" />);
     expect(container.textContent?.trim().length).toBeGreaterThan(0);

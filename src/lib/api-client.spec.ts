@@ -70,6 +70,75 @@ describe('api client', () => {
     expect(getAccessToken()).toBe('fresh');
   });
 
+  describe('one refresh, however many 401s (P11-T6 AC-13)', () => {
+    /*
+     * The server rotates the refresh token on every use and revokes the whole family when a used one
+     * comes back (`auth.service.ts`), so two refreshes racing on one cookie can sign the reader out.
+     */
+    it('P11-T6 AC-13 shares one refresh between concurrent 401s, and replays each request', async () => {
+      const { calls } = stubFetch({
+        '/widgets': [{ status: 401, body: {} }, { body: { which: 'widgets' } }],
+        '/gadgets': [{ status: 401, body: {} }, { body: { which: 'gadgets' } }],
+        '/auth/refresh': { body: { accessToken: 'fresh' } },
+      });
+
+      await expect(Promise.all([api('/widgets'), api('/gadgets')])).resolves.toEqual([
+        { which: 'widgets' },
+        { which: 'gadgets' },
+      ]);
+      expect(calls.filter((c) => c.url.includes('/auth/refresh'))).toHaveLength(1);
+      // Both replays carry the token the one refresh brought.
+      const replays = calls.slice(-2).map((c) => (c.init.headers as Record<string, string>).Authorization);
+      expect(replays).toEqual(['Bearer fresh', 'Bearer fresh']);
+    });
+
+    it('P11-T6 AC-13 makes a refresh asked for while one is out wait on it', async () => {
+      // The session's own refresh on a hard load, and a 401 arriving beside it.
+      const { calls } = stubFetch({ '/auth/refresh': { body: { accessToken: 'fresh' } } });
+      const [a, b] = await Promise.all([tryRefresh(), tryRefresh()]);
+      expect([a, b]).toEqual([true, true]);
+      expect(calls).toHaveLength(1);
+    });
+
+    it('P11-T6 AC-13 refreshes again once the shared one has settled', async () => {
+      // Sharing is for the one in flight, not a memo: a token that expires later needs a new refresh.
+      const { calls } = stubFetch({ '/auth/refresh': { body: { accessToken: 'fresh' } } });
+      await tryRefresh();
+      await tryRefresh();
+      expect(calls).toHaveLength(2);
+    });
+
+    it('P11-T6 AC-13 shares a refused refresh too, and both requests then fail', async () => {
+      const { calls } = stubFetch({
+        '/widgets': { status: 401, body: {} },
+        '/gadgets': { status: 401, body: {} },
+        '/auth/refresh': { status: 401, body: {} },
+      });
+      const results = await Promise.allSettled([api('/widgets'), api('/gadgets')]);
+      expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected']);
+      expect(calls.filter((c) => c.url.includes('/auth/refresh'))).toHaveLength(1);
+    });
+
+    it('P11-T6 AC-13 replays with a token replaced while the request was out, without refreshing again', async () => {
+      setAccessToken('old');
+      const calls: { url: string; auth: string | undefined }[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+        const auth = (init.headers as Record<string, string>).Authorization;
+        calls.push({ url, auth });
+        // A refresh elsewhere lands while this request is out; the server refuses the old token.
+        if (auth === 'Bearer old') {
+          setAccessToken('new');
+          return { ok: false, status: 401, json: async () => ({}) } as Response;
+        }
+        return { ok: true, status: 200, json: async () => ({ ok: true }) } as Response;
+      }));
+
+      await expect(api('/widgets')).resolves.toEqual({ ok: true });
+      expect(calls.map((c) => c.auth)).toEqual(['Bearer old', 'Bearer new']);
+      expect(calls.some((c) => c.url.includes('/auth/refresh'))).toBe(false);
+    });
+  });
+
   it('does not recurse when the refresh itself is refused', async () => {
     const { calls } = stubFetch({
       '/widgets': { status: 401, body: {} },

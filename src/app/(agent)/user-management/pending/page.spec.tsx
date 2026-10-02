@@ -232,6 +232,8 @@ describe('the approval inbox (P3-T5)', () => {
 
   it('AC-1: never renders for somebody without the inbox permission', () => {
     renderInLayout(AgentLayout, <PendingPage />, { me: makeMe({ permissions: [] }) });
-    expect(screen.getByRole('alert')).toHaveTextContent('leader_request:read_inbox');
+    expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
+    // The gate's code is on the refusal as data, and never in its words (P11-T6).
+    expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'leader_request:read_inbox');
   });
 });

@@ -160,7 +160,9 @@ describe('manage KPM admins (P3-T10)', () => {
         permissions: ['member:read_profile', 'kpm_admin:list'],
       }),
     });
-    expect(screen.getByRole('alert')).toHaveTextContent('kpm_admin:grant');
+    expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
+    // The gate's code is on the refusal as data, and never in its words (P11-T6).
+    expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'kpm_admin:grant');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 });

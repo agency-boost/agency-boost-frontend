@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { SidebarUserMenu } from '@/components/sidebar-user-menu';
 import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
 import { cn } from '@/lib/cn';
+import { usePhone } from '@/lib/use-phone';
 
 /**
  * The layout every signed-in screen sits in: a fixed navy sidebar and a scrolling main
@@ -204,11 +205,14 @@ function SidebarFoot({
   user,
   account,
   notifications,
+  nav,
 }: {
   rail: boolean;
   user: ShellUser;
   account?: { href: string; onSignOut: () => void; signingOut?: boolean };
   notifications?: { href: string; unread: number };
+  /** The nav, on a phone only, for the chip's panel to open (ADR-0085). */
+  nav?: React.ReactNode;
 }) {
   /*
    * **The chip takes the space; the bell is pinned.** The chip sized itself to its contents,
@@ -224,6 +228,7 @@ function SidebarFoot({
       signingOut={account.signingOut}
       className={rail ? undefined : 'min-w-0 flex-1'}
       compact={rail}
+      nav={nav}
     />
   ) : (
     <div
@@ -246,10 +251,18 @@ function SidebarFoot({
   );
   const bell = notifications ? <NotificationBell {...notifications} /> : null;
 
+  /*
+   * **On a phone's bar it gives way; in the sidebar it holds.** Below 768px it sits beside the brand,
+   * and `shrink-0` kept it at its contents' full width: the Super Admin's chip, *Platform Operator* over
+   * *Superadmin*, beside *AgencyBoost SUPERADMIN*, ran 23px past a 360px screen and clipped the bell
+   * (P11-T6 AC-11). `min-w-0 shrink` lets it take what the brand leaves, so the chip's name truncates,
+   * as it already does in the sidebar, and the bell stays whole. From 768px it is the sidebar's foot,
+   * which must not shrink under a long nav.
+   */
   return (
     <div
       className={cn(
-        'ml-auto flex shrink-0 items-center gap-1 md:ml-0 md:border-t md:border-white/10 md:pt-3',
+        'ml-auto flex min-w-0 shrink items-center gap-1 md:ml-0 md:shrink-0 md:border-t md:border-white/10 md:pt-3',
         rail && 'md:flex-col md:gap-1.5',
       )}
     >
@@ -307,6 +320,109 @@ function NotificationBell({ href, unread }: { href: string; unread: number }) {
         </span>
       )}
     </Link>
+  );
+}
+
+/**
+ * The nav's groups, each a heading that opens and closes it and the items beneath — rendered by the
+ * sidebar, and on a phone by the account chip's panel (ADR-0085), so the two cannot differ in order,
+ * names or state.
+ */
+function NavGroups({
+  sections,
+  rail,
+  closed,
+  onToggle,
+  pill,
+}: {
+  sections: readonly NavSection[];
+  rail: boolean;
+  closed: ReadonlySet<string>;
+  onToggle: (label: string) => void;
+  pill: string;
+}) {
+  return (
+    <>
+      {sections.map((section, sectionIndex) => {
+        const id = section.label ?? section.items[0]?.href ?? 'root';
+        /*
+         * **An unheaded group is always shown.** It is how the prototype presents Overview
+         * — one or two destinations with nothing to call them — so there is no header to
+         * collapse and nothing gained by hiding them.
+         */
+        const collapsible = Boolean(section.label) && !rail;
+        const open = !collapsible || !closed.has(section.label ?? '');
+
+        return (
+          <div key={id}>
+            {/*
+              * **A button, not a heading.** It was an `h2` for one run of the tests, which
+              * put five sidebar entries into the document's heading outline and ahead of
+              * every page's own — `admin/page.spec.tsx` caught it by asserting that the
+              * first `h2` on the console is *Needs your attention*. The `nav` landmark is
+              * the structure here; `aria-expanded` and `aria-controls` are the semantics.
+              */}
+            {section.label && !rail && (
+              <div className="mx-1 mt-2">
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  aria-controls={`nav-group-${sectionIndex}`}
+                  onClick={() => onToggle(section.label ?? '')}
+                  /*
+                   * **Readable, not decorative.** It was `text-2xs` at 40% white — 10px of
+                   * uppercase at that contrast is a smudge, and this is the control that
+                   * decides what the whole menu shows. `xs` at 65%, semibold.
+                   */
+                  className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-white/65 hover:bg-white/[0.06] hover:text-white"
+                >
+                  {section.label}
+                  {/*
+                    * A drawn chevron, not the `▸` character. At 10px that glyph rendered as
+                    * a dot in most stacks — the one mark that says whether a group is open,
+                    * and it said nothing.
+                    */}
+                  <svg
+                    aria-hidden
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className={cn(
+                      'ml-auto h-3.5 w-3.5 shrink-0 transition-transform',
+                      open ? 'rotate-90' : 'rotate-0',
+                    )}
+                  >
+                    <path d="m9 6 6 6-6 6" />
+                  </svg>
+                </button>
+              </div>
+            )}
+            {/*
+              * Collapsed to the rail, the groups flatten. There are no headings to click,
+              * so hiding items behind one would make them unreachable.
+              */}
+            {open && (
+              <ul
+                id={`nav-group-${sectionIndex}`}
+                className={cn('flex flex-col gap-px', rail ? 'mb-1.5' : 'mb-2.5 mt-1')}
+              >
+                {section.items.map((item) => (
+                  <li key={item.href}>
+                    <NavLink item={item} pill={pill} rail={rail} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            {/* A `separator`, so the rule between groups is a thing a test and a screen reader can
+                both find, rather than a styled `div` only the eye can (parity I-144). */}
+            {section.divider && <div role="separator" className="mx-1 my-2 h-px bg-white/10" />}
+          </div>
+        );
+      })}
+    </>
   );
 }
 
@@ -427,11 +543,25 @@ export function AppShell({
     });
   };
 
+  /*
+   * **On a phone, the account chip is the way round** (ADR-0085). Below 768px the sidebar is a bar
+   * and has no room for the nav, and the prototype's phone simply hides it, with *Sign out*
+   * (`Overall.html:1421-1428`). So there the nav groups go into the chip's panel, above *Your
+   * account* and *Sign out*, and the panel drops below the bar. One nav at a time, never two: the
+   * sidebar renders it wider, the chip on a phone. The rail is a desktop control, so a collapsed one
+   * remembered from a wider window does not shrink the chip to an avatar on a phone.
+   */
+  const phone = usePhone();
+  const groups = (
+    <NavGroups sections={sections} rail={rail && !phone} closed={closed} onToggle={toggleGroup} pill={upcomingLabel} />
+  );
+
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       {/* Below the prototype's 720px breakpoint the rail becomes a horizontal navy bar
           that keeps the brand and hides the nav and footer (`Overall.html:1421-1428`).
-          It used to be `hidden md:flex`, which took the only route to sign out with it. */}
+          It used to be `hidden md:flex`, which took the only route to sign out with it;
+          the chip in it now opens the nav as well (ADR-0085). */}
       <aside
         className={cn(
           // `print:hidden`: a printed page is the page, not the app around it (`Overall.html:1022`, ADR-0061).
@@ -475,118 +605,51 @@ export function AppShell({
             * is part of the chrome, where a window control belongs. Collapsed it drops beneath
             * the mark, because 56px holds one of them at a time.
             */}
-          <button
-            type="button"
-            onClick={toggleRail}
-            aria-expanded={!rail}
-            aria-controls="sidebar-nav"
-            aria-label={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}
-            title={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}
-            className={cn(
-              'hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-white/[0.55] hover:bg-white/[0.06] hover:text-white md:flex',
-              !rail && 'md:ml-auto',
-            )}
-          >
-            <svg
-              aria-hidden
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-[18px] w-[18px] shrink-0"
+          {!phone && (
+            <button
+              type="button"
+              onClick={toggleRail}
+              aria-expanded={!rail}
+              aria-controls="sidebar-nav"
+              aria-label={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}
+              title={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}
+              className={cn(
+                'hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-white/[0.55] hover:bg-white/[0.06] hover:text-white md:flex',
+                !rail && 'md:ml-auto',
+              )}
             >
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <path d="M9 4v16" />
-              <path d={rail ? 'm13 9 3 3-3 3' : 'm17 9-3 3 3 3'} />
-            </svg>
-          </button>
+              <svg
+                aria-hidden
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-[18px] w-[18px] shrink-0"
+              >
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <path d="M9 4v16" />
+                <path d={rail ? 'm13 9 3 3-3 3' : 'm17 9-3 3 3 3'} />
+              </svg>
+            </button>
+          )}
         </div>
 
-        <nav id="sidebar-nav" className="hidden min-h-0 flex-1 overflow-y-auto pr-0.5 md:block" aria-label="Main">
-          {sections.map((section, sectionIndex) => {
-            const id = section.label ?? section.items[0]?.href ?? 'root';
-            /*
-             * **An unheaded group is always shown.** It is how the prototype presents Overview
-             * — one or two destinations with nothing to call them — so there is no header to
-             * collapse and nothing gained by hiding them.
-             */
-            const collapsible = Boolean(section.label) && !rail;
-            const open = !collapsible || !closed.has(section.label ?? '');
+        {/* Wider than a phone, the nav is the sidebar's. On a phone it is the account chip's (below). */}
+        {!phone && (
+          <nav id="sidebar-nav" className="hidden min-h-0 flex-1 overflow-y-auto pr-0.5 md:block" aria-label="Main">
+            {groups}
+          </nav>
+        )}
 
-            return (
-              <div key={id}>
-                {/*
-                  * **A button, not a heading.** It was an `h2` for one run of the tests, which
-                  * put five sidebar entries into the document's heading outline and ahead of
-                  * every page's own — `admin/page.spec.tsx` caught it by asserting that the
-                  * first `h2` on the console is *Needs your attention*. The `nav` landmark is
-                  * the structure here; `aria-expanded` and `aria-controls` are the semantics.
-                  */}
-                {section.label && !rail && (
-                  <div className="mx-1 mt-2">
-                    <button
-                      type="button"
-                      aria-expanded={open}
-                      aria-controls={`nav-group-${sectionIndex}`}
-                      onClick={() => toggleGroup(section.label ?? '')}
-                      /*
-                       * **Readable, not decorative.** It was `text-2xs` at 40% white — 10px of
-                       * uppercase at that contrast is a smudge, and this is the control that
-                       * decides what the whole menu shows. `xs` at 65%, semibold.
-                       */
-                      className="flex w-full items-center gap-2 rounded-md px-1.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-white/65 hover:bg-white/[0.06] hover:text-white"
-                    >
-                      {section.label}
-                      {/*
-                        * A drawn chevron, not the `▸` character. At 10px that glyph rendered as
-                        * a dot in most stacks — the one mark that says whether a group is open,
-                        * and it said nothing.
-                        */}
-                      <svg
-                        aria-hidden
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.4"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className={cn(
-                          'ml-auto h-3.5 w-3.5 shrink-0 transition-transform',
-                          open ? 'rotate-90' : 'rotate-0',
-                        )}
-                      >
-                        <path d="m9 6 6 6-6 6" />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-                {/*
-                  * Collapsed to the rail, the groups flatten. There are no headings to click,
-                  * so hiding items behind one would make them unreachable.
-                  */}
-                {open && (
-                  <ul
-                    id={`nav-group-${sectionIndex}`}
-                    className={cn('flex flex-col gap-px', rail ? 'mb-1.5' : 'mb-2.5 mt-1')}
-                  >
-                    {section.items.map((item) => (
-                      <li key={item.href}>
-                        <NavLink item={item} pill={upcomingLabel} rail={rail} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {/* A `separator`, so the rule between groups is a thing a test and a screen reader can
-                    both find, rather than a styled `div` only the eye can (parity I-144). */}
-                {section.divider && <div role="separator" className="mx-1 my-2 h-px bg-white/10" />}
-              </div>
-            );
-          })}
-        </nav>
-
-        <SidebarFoot rail={rail} user={user} account={account} notifications={notifications} />
+        <SidebarFoot
+          rail={rail && !phone}
+          user={user}
+          account={account}
+          notifications={notifications}
+          nav={phone ? <nav id="sidebar-nav" aria-label="Main">{groups}</nav> : undefined}
+        />
       </aside>
 
       <main className="min-w-0 flex-1 px-5 py-6 print:p-0 md:px-10 md:pb-14 md:pt-8">

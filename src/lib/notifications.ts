@@ -6,6 +6,11 @@ export interface InboxItem {
   /** Composed on the server: what a notification says is product copy (ADR-0010). */
   title: string;
   detail: string | null;
+  /**
+   * Where the item opens in the app, composed on the server beside its title: a finalized coaching
+   * session opens on that session (`/coaching/me?session=…`, P11-T10 AC-8). `null` for every other item.
+   */
+  href: string | null;
   kpmId: string | null;
   createdAt: string;
   readAt: string | null;

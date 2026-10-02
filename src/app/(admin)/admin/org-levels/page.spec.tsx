@@ -157,7 +157,9 @@ describe('org role ladder (P3.5-T7)', () => {
      * Phase 4 exit review read fifty-seven rungs across nineteen companies with a KPM
      * Owner's token. Members read their own company's ladder from `/kpm/org-levels`.
      */
-    expect(screen.getByRole('alert')).toHaveTextContent('org_level:crud');
+    expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
+    // The gate's code is on the refusal as data, and never in its words (P11-T6).
+    expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'org_level:crud');
   });
 
   it('tells a company with no ladder what to do first', async () => {

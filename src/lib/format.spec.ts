@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  formatCalendarDay, formatDay, formatDayLong, formatMonth, formatShortDay, formatWeekday, monthInZone } from './format';
+  formatCalendarDay, formatCalendarDayLong, formatDay, formatDayLong, formatMonth, formatShortDay, formatWeekday, monthInZone,
+} from './format';
 
 describe('formatDay', () => {
   it('writes a date the way the prototype does', () => {
@@ -82,5 +83,17 @@ describe('monthInZone (invariant §9)', () => {
     const at = new Date('2026-09-30T18:00:00Z');
     expect(monthInZone('Asia/Jakarta', at)).toBe('2026-10');
     expect(monthInZone('UTC', at)).toBe('2026-09');
+  });
+});
+
+describe('formatCalendarDayLong', () => {
+  it('P11-T8 AC-1 writes the session header’s date as the prototype does, weekday first', () => {
+    // `fmtToday()`, `Overall.html:10584`: en-US, weekday and month long.
+    expect(formatCalendarDayLong('2026-10-02')).toBe('Friday, October 2, 2026');
+  });
+
+  it('builds the day from its numbers, so no zone can move it', () => {
+    expect(formatCalendarDayLong('2026-01-01')).toBe('Thursday, January 1, 2026');
+    expect(formatCalendarDayLong('not a day')).toBe('');
   });
 });

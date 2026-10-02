@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LEAD_PAGE_CAP, listEveryLead, type Lead } from './leads';
+import { stubFetch } from '@test/harness';
+import { createLead, LEAD_PAGE_CAP, listEveryLead, listLeads, type Lead } from './leads';
 
 const rows = (n: number, from = 0) =>
   Array.from({ length: n }, (_, i) => ({ id: `l${from + i}` }) as Lead);
@@ -88,5 +89,21 @@ describe('listEveryLead', () => {
   it('asks for the cap the service states — two hundred', () => {
     // `LeadService.list` clamps a larger request to this; here it only sets the request count.
     expect(LEAD_PAGE_CAP).toBe(200);
+  });
+});
+
+describe('a coachee’s leads (P11-T8 AC-7, ADR-0076)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P11-T8 AC-7 reads and creates through ?owner=, and the reader’s own without it', async () => {
+    const { calls } = stubFetch({ '/leads': { body: { rows: [], total: 0, page: 1, pageSize: 200 } } });
+    await listLeads({ outcome: 'open', owner: 'mem-rina' });
+    await createLead({ name: 'Pak Joko' }, 'mem-rina');
+    await createLead({ name: 'Pak Joko' });
+    expect(calls.map((c) => [c.init.method ?? 'GET', c.url.replace('http://api.test/api/v1', '')])).toEqual([
+      ['GET', '/leads?outcome=open&owner=mem-rina'],
+      ['POST', '/leads?owner=mem-rina'],
+      ['POST', '/leads'],
+    ]);
   });
 });

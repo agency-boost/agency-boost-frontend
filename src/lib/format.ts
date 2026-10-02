@@ -55,6 +55,19 @@ export function formatCalendarDay(day: string): string {
 }
 
 /**
+ * A calendar day the server resolved in the office's zone, with its weekday: `Friday, October 2, 2026`.
+ *
+ * The coaching session's header, *Today's session — {date}* (`Overall.html:10584`, `fmtToday()`:
+ * `en-US`, weekday and month long). Built from its three numbers, for the reason `formatCalendarDay`
+ * gives: the prototype formats the browser's own clock, and that is the slip invariant §9 forbids.
+ */
+export function formatCalendarDayLong(day: string): string {
+  const [y, m, d] = day.split('-').map(Number);
+  if (!y || !m || !d) return '';
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+/**
  * An office calendar month — `2026-09` — as a sentence names it: `September 2026`. Built from its
  * numbers, for the reason `formatCalendarDay` gives.
  */

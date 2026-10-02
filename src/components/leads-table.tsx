@@ -57,6 +57,21 @@ const SHORT_NAME: ApiError = {
   requestId: 'unknown',
 };
 
+/**
+ * The coaching card's own words for a name not given at all (`Overall.html:10894`), said where the
+ * name is rather than in a toast: a refusal the reader has to act on stays beside what caused it
+ * (`components-and-patterns.md`, *Toast*).
+ */
+const NO_NAME: ApiError = {
+  code: 'VALIDATION_FAILED',
+  message: 'Enter a name first.',
+  requestId: 'unknown',
+};
+
+/** The coaching card's words for the two outcomes (`Overall.html:10867-10881`). */
+const OUTCOME_WORD: Record<LeadOutcome, string> = { won: 'Won', lost: 'Lost' };
+const TYPE_WORD: Record<LeadType, string> = { sales: 'Sales', recruitment: 'Recruitment' };
+
 /** A control on the inline row with nothing to write to yet: there, and plainly not live. */
 const INERT_CONTROL = 'cursor-not-allowed opacity-40';
 
@@ -100,6 +115,10 @@ export function LeadsTable({
   filters = false,
   offerDelete = true,
   caption = 'Your leads',
+  owner,
+  readOnly = false,
+  onNotice,
+  onWrite,
 }: {
   /**
    * The coaching card's search box and type filter in place of the count (`Overall.html:4258-4266`).
@@ -114,6 +133,25 @@ export function LeadsTable({
   offerDelete?: boolean;
   /** The table's accessible name. */
   caption?: string;
+  /**
+   * **Whose leads: the coachee's**, on the coaching session's card (ADR-0076, P11-T8 AC-7). Every
+   * read goes through `GET /leads?owner=` — the open list, its search and type filter, and both closed
+   * lists — and *+ Add lead* creates the lead in their pipeline through `POST /leads?owner=`. Every
+   * write still pins the version its row was read at, which the server requires of anybody but the
+   * owner. The words are the coaching card's where it has its own: *No leads match.*, *Enter a name
+   * first.*, *Mark as Won?*. Absent on `/leads`, which is the reader's own scope.
+   */
+  owner?: string;
+  /**
+   * A finalized session's lock (`Overall.html:1389-1417`): nothing on the card writes. The cells hold
+   * still, *+ Add lead*, the outcome glyphs and the contact glyph go, the search and the filter rest,
+   * and a closed lead cannot be moved back. The closed lists still read.
+   */
+  readOnly?: boolean;
+  /** The prototype's toast after a write lands (`Overall.html:10835-10901`): a stage, a type, an outcome, an add. */
+  onNotice?: (message: string) => void;
+  /** After any write lands — the session re-reads what it derives from the leads. */
+  onWrite?: (lead: Lead) => void;
 }) {
   const { config, loading: configLoading } = useTenantConfig();
   const { me } = useSession();
@@ -184,6 +222,7 @@ export function LeadsTable({
         dir: sort.dir,
         search: filters && search ? search : undefined,
         type: filters && typeFilter ? typeFilter : undefined,
+        owner,
       },
       (rows, total, first) => {
         delivered = true;
@@ -226,7 +265,7 @@ export function LeadsTable({
       if (isCurrent()) loadingOpen.current = false;
     });
     return () => { openLoad.current += 1; };
-  }, [sort.key, sort.dir, filters, search, typeFilter, reloads]);
+  }, [sort.key, sort.dir, filters, search, typeFilter, reloads, owner]);
 
   /**
    * The two closed cards, loaded the same way (AC-4), once — **each on its own.**
@@ -241,12 +280,12 @@ export function LeadsTable({
     let current = true;
     const isCurrent = () => current;
     for (const [outcome, set] of [['won', setWon], ['lost', setLost]] as const) {
-      loadClosed(outcome, set, isCurrent).catch((err) => {
+      loadClosed(outcome, set, isCurrent, owner).catch((err) => {
         if (current) setClosedError((e) => ({ ...e, [outcome]: toDisplayError(err) }));
       });
     }
     return () => { current = false; };
-  }, []);
+  }, [owner]);
 
   const pipelines = useMemo(() => config?.leadPipelines ?? [], [config]);
   const ladderFor = useCallback(
@@ -399,6 +438,7 @@ export function LeadsTable({
       dropDrafts(id, fields);
       forget(id, ['', ...fields]);
       if (moves.includes(sort.key)) restartIfLoading();
+      onWrite?.(saved);
       return saved;
     } catch (err) {
       const shown = toDisplayError(err);
@@ -488,7 +528,20 @@ export function LeadsTable({
       setConfirmType({ row, type });
       return;
     }
-    void run(row.id, () => updateLead(row.id, { type }, row.version), { moves: ['type', 'status'] });
+    void writeType(row, type);
+  }
+
+  /** The type, and the prototype's *"{name} moved to Sales."* once it lands (`Overall.html:10837`). */
+  async function writeType(row: Lead, type: LeadType | null) {
+    const saved = await run(row.id, () => updateLead(row.id, { type }, row.version), { moves: ['type', 'status'] });
+    if (saved?.type) onNotice?.(`${saved.name} moved to ${TYPE_WORD[saved.type]}.`);
+  }
+
+  /** The stage, and *"{name}'s status updated to "{stage}"."* once it lands (`Overall.html:10835`). */
+  async function writeStatus(row: Lead, code: string) {
+    const saved = await run(row.id, () => setLeadStatus(row.id, code, row.version), { moves: ['status'] });
+    const label = saved && ladderFor(saved.type).find((s) => s.code === saved.statusCode)?.label;
+    if (saved && label) onNotice?.(`${saved.name}'s status updated to "${label}".`);
   }
 
   /** `+ Add lead`: a row at the top, or back to the one already there. */
@@ -522,6 +575,9 @@ export function LeadsTable({
       if (how === 'blur') {
         setDraft(null);
         forget(draft.key);
+      } else if (owner) {
+        // Enter on an empty name, in the session: the coaching card's own sentence.
+        refuse(draft.key, ['name'], NO_NAME);
       }
       return;
     }
@@ -533,7 +589,7 @@ export function LeadsTable({
     const { key } = draft;
     setDraft({ ...draft, posting: true });
     try {
-      const created = await createLead({ name });
+      const created = await createLead({ name }, owner);
       setKeyFor((k) => ({ ...k, [created.id]: key }));
       setOpen((current) => current && {
         rows: [created, ...current.rows.filter((r) => r.id !== created.id)],
@@ -541,6 +597,8 @@ export function LeadsTable({
       });
       setDraft(null);
       forget(key);
+      onNotice?.(`${created.name} added.`);
+      onWrite?.(created);
     } catch (err) {
       refuse(key, [''], toDisplayError(err));
       setDraft((d) => d && { ...d, posting: false });
@@ -553,8 +611,9 @@ export function LeadsTable({
   async function reopen(row: Lead) {
     setBusy((b) => ({ ...b, [row.id]: true }));
     try {
-      await setLeadOutcome(row.id, null, row.version);
+      const reopened = await setLeadOutcome(row.id, null, row.version);
       forget(row.id);
+      onWrite?.(reopened);
       const set = row.outcome === 'won' ? setWon : setLost;
       set((list) => list && {
         rows: list.rows.filter((r) => r.id !== row.id),
@@ -616,7 +675,7 @@ export function LeadsTable({
      * in the handler for the rest — as the contact dialog does. `disabled` stays for what is a state
      * of the lead rather than a moment: no type yet, not on the final stage.
      */
-    const locked = saving || isDraft;
+    const locked = saving || isDraft || readOnly;
     const errors = refusalsOf(row.id);
     const monthAction = row.type === 'recruitment' ? 'Recruit this month' : 'Close this month';
     /*
@@ -625,7 +684,8 @@ export function LeadsTable({
      * themselves is told nothing they do not know.
      */
     const editedBy = row.lastEditedBy && row.lastEditedBy.membershipId !== myMembership
-      ? `Last changed by ${row.lastEditedBy.name ?? 'someone in your office'}`
+      // In a session, a name the payload no longer has is said without ADR-0084's *office*.
+      ? `Last changed by ${row.lastEditedBy.name ?? (owner ? 'someone else' : 'someone in your office')}`
       : null;
     /*
      * **🗑 is the owner's** (`lead:delete` is `own`, roles-and-permissions §3.7): a leader asking to
@@ -655,13 +715,18 @@ export function LeadsTable({
               className="w-full"
               value={isDraft ? row.name : draftOf(row, 'name', row.name)}
               placeholder="First Last"
-              readOnly={isDraft ? draft?.posting : saving}
-              onChange={(e) => (isDraft
-                ? changeDraftName(e.target.value)
-                : setDraftValue(row.id, 'name', e.target.value))}
-              onBlur={() => (isDraft
-                ? void submitDraft('blur')
-                : commitText(row, 'name', row.name, (name) => ({ name }), ['name']))}
+              readOnly={isDraft ? draft?.posting : saving || readOnly}
+              onChange={(e) => {
+                // A finalized session's card is inert (P11-T8 AC-10): nothing typed, nothing saved.
+                if (readOnly && !isDraft) return;
+                if (isDraft) changeDraftName(e.target.value);
+                else setDraftValue(row.id, 'name', e.target.value);
+              }}
+              onBlur={() => {
+                if (readOnly && !isDraft) return;
+                if (isDraft) void submitDraft('blur');
+                else commitText(row, 'name', row.name, (name) => ({ name }), ['name']);
+              }}
               onKeyDown={(e) => {
                 if (isDraft && e.key === 'Enter') void submitDraft('enter');
               }}
@@ -719,7 +784,7 @@ export function LeadsTable({
               onChange={(e) => {
                 if (locked || !e.target.value) return;
                 const code = e.target.value;
-                void run(row.id, () => setLeadStatus(row.id, code, row.version), { moves: ['status'] });
+                void writeStatus(row, code);
               }}
             >
               {row.type ? <option value="">Select status</option> : <option value="">Select type first</option>}
@@ -812,6 +877,7 @@ export function LeadsTable({
               * reaching for (ADR-0063 §1–2).
               */}
             <div className="flex items-center gap-px">
+              {!readOnly && (<>
               <Button
                 variant="icon"
                 tone="success"
@@ -841,6 +907,7 @@ export function LeadsTable({
                 <span aria-hidden="true">✕</span>
                 <span className="sr-only">Mark not successful</span>
               </Button>
+              </>)}
               {offerDelete && (foreign ? (
                 <TippedGlyph
                   glyph="🗑"
@@ -863,19 +930,21 @@ export function LeadsTable({
                   <span className="sr-only">Delete lead</span>
                 </Button>
               ))}
-              <Button
-                variant="icon"
-                aria-disabled={isDraft || undefined}
-                className={cn(isDraft && INERT_GLYPH)}
-                title="Contact details"
-                onClick={() => {
-                  if (isDraft) return;
-                  setContactFor(row.id);
-                }}
-              >
-                <span aria-hidden="true">☎</span>
-                <span className="sr-only">Contact details</span>
-              </Button>
+              {!readOnly && (
+                <Button
+                  variant="icon"
+                  aria-disabled={isDraft || undefined}
+                  className={cn(isDraft && INERT_GLYPH)}
+                  title="Contact details"
+                  onClick={() => {
+                    if (isDraft) return;
+                    setContactFor(row.id);
+                  }}
+                >
+                  <span aria-hidden="true">☎</span>
+                  <span className="sr-only">Contact details</span>
+                </Button>
+              )}
               {editedBy && <TippedGlyph glyph="✎" name={editedBy} tip={editedBy} />}
             </div>
           </Cell>
@@ -917,24 +986,28 @@ export function LeadsTable({
     <>
       {filters ? (
         <div className="mb-3 flex flex-wrap items-center gap-2.5">
+          {/* A finalized session rests them at 0.6, as the prototype's lock does (`Overall.html:1416-1417`). */}
           <TextInput
             type="search"
             aria-label="Search leads"
             placeholder="Search leads…"
-            className="w-56"
+            className={cn('w-56', readOnly && 'opacity-60')}
             value={term}
+            disabled={readOnly}
             onChange={(e) => setTerm(e.target.value)}
           />
           <Select
             aria-label="Filter by type"
             value={typeFilter}
+            disabled={readOnly}
+            className={cn(readOnly && 'opacity-60')}
             onChange={(e) => setTypeFilter(e.target.value as '' | LeadType)}
           >
             <option value="">All types</option>
             <option value="sales">Sales</option>
             <option value="recruitment">Recruitment</option>
           </Select>
-          <Button ref={addButton} onClick={addLead}>+ Add lead</Button>
+          {!readOnly && <Button ref={addButton} onClick={addLead}>+ Add lead</Button>}
         </div>
       ) : (
         /* The prototype's toolbar: the count, and the screen's one action (`Overall.html:2791-2794`). */
@@ -965,9 +1038,10 @@ export function LeadsTable({
           <Row>
             <Cell colSpan={columns.length}>
               {/* Inside the table card, under its headings, as `.empty-state` is (`Overall.html:2818`). */}
+              {/* The coaching card has one empty line whatever narrowed it (`Overall.html:10815`). */}
               <EmptyState
                 variant={narrowed ? 'filtered' : 'empty'}
-                title={narrowed ? 'No leads match.' : 'No leads yet — add your first one above.'}
+                title={narrowed || owner ? 'No leads match.' : 'No leads yet — add your first one above.'}
               />
             </Cell>
           </Row>
@@ -980,7 +1054,7 @@ export function LeadsTable({
         busy={busy}
         refusalsOf={refusalsOf}
         stageLabel={stageLabel}
-        onReopen={(row) => void reopen(row)}
+        onReopen={readOnly ? undefined : (row) => void reopen(row)}
       />
 
       {contactLead && (
@@ -1009,17 +1083,27 @@ export function LeadsTable({
       )}
 
       {/* The prototype's own questions (`Overall.html:5666-5675`), each naming what its button does (F-72). */}
+      {/*
+        * In a session, the coaching card's own question and sentence (`Overall.html:10867-10870`):
+        * *Mark as Won?*, and where the lead goes. Its button says what it does, as every `Dialog`'s does,
+        * where the prototype's says *Confirm*.
+        */}
       <Dialog
         open={confirmOutcome !== null}
-        message={confirmOutcome?.outcome === 'won'
-          ? `Mark ${confirmOutcome.row.name || 'this lead'} as a successful lead?`
-          : `Mark ${confirmOutcome?.row.name || 'this lead'} as not successful? This moves them to the closed list.`}
-        confirmLabel={confirmOutcome?.outcome === 'won' ? 'Mark successful' : 'Mark not successful'}
+        message={owner && confirmOutcome
+          ? `Mark as ${OUTCOME_WORD[confirmOutcome.outcome]}? ${confirmOutcome.row.name || 'This lead'} will move to Closed leads as "${OUTCOME_WORD[confirmOutcome.outcome]}". You can still find them there afterward.`
+          : confirmOutcome?.outcome === 'won'
+            ? `Mark ${confirmOutcome.row.name || 'this lead'} as a successful lead?`
+            : `Mark ${confirmOutcome?.row.name || 'this lead'} as not successful? This moves them to the closed list.`}
+        confirmLabel={owner && confirmOutcome
+          ? `Mark as ${OUTCOME_WORD[confirmOutcome.outcome]}`
+          : confirmOutcome?.outcome === 'won' ? 'Mark successful' : 'Mark not successful'}
         onCancel={() => setConfirmOutcome(null)}
-        onConfirm={() => {
+        onConfirm={async () => {
           const { row, outcome } = confirmOutcome!;
           setConfirmOutcome(null);
-          void run(row.id, () => setLeadOutcome(row.id, outcome, row.version), { done: moveToClosed });
+          const saved = await run(row.id, () => setLeadOutcome(row.id, outcome, row.version), { done: moveToClosed });
+          if (saved) onNotice?.(`${saved.name} marked as ${OUTCOME_WORD[outcome]}.`);
         }}
       />
 
@@ -1056,7 +1140,7 @@ export function LeadsTable({
         onConfirm={() => {
           const { row, type } = confirmType!;
           setConfirmType(null);
-          void run(row.id, () => updateLead(row.id, { type }, row.version), { moves: ['type', 'status'] });
+          void writeType(row, type);
         }}
       />
     </>
@@ -1068,9 +1152,10 @@ async function loadClosed(
   outcome: LeadOutcome,
   set: React.Dispatch<React.SetStateAction<List | null>>,
   isCurrent: () => boolean,
+  owner?: string,
 ) {
   await listEveryLead(
-    { outcome, sort: 'dateRegistered', dir: 'desc' },
+    { outcome, sort: 'dateRegistered', dir: 'desc', owner },
     (rows, total, first) => set((list) => (first || !list
       ? { rows, total }
       : { ...list, rows: [...list.rows, ...rows.filter((r) => !list.rows.some((c) => c.id === r.id))] })),
@@ -1113,7 +1198,8 @@ function ClosedLeads({
    * orphan the leads sitting on it (invariant §3) — so the label comes from the published snapshot.
    */
   stageLabel: (row: Lead) => string | null;
-  onReopen: (row: Lead) => void;
+  /** Absent under a finalized session's lock: the lists still read, and nothing moves back. */
+  onReopen?: (row: Lead) => void;
 }) {
   const cards = [
     { outcome: 'won' as const, title: '✓ Successful', card: won, empty: 'No successful leads yet.', waiting: 'Loading successful leads…' },
@@ -1154,7 +1240,7 @@ function ClosedLeads({
                             {stageLabel(row) ? ` · ${stageLabel(row)}` : ''}
                           </span>
                         </span>
-                        <button
+                        {onReopen && <button
                           type="button"
                           disabled={busy[row.id] === true}
                           onClick={() => onReopen(row)}
@@ -1165,7 +1251,7 @@ function ClosedLeads({
                           )}
                         >
                           ↺ Move to active
-                        </button>
+                        </button>}
                       </div>
                       {/* A refused reopen says so where it was asked for, as a row's refusal does. */}
                       {refusalsOf(row.id).map((refusal) => (

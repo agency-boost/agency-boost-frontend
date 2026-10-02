@@ -294,7 +294,9 @@ describe('Data upload — the month table (P9-T1)', () => {
     const { calls } = stubFetch(routes(month([rina()])));
     renderWithSession(<DataUploadPage />, { me: AGENT });
 
-    expect(await screen.findByText(/needs the/)).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not available to you');
+    // The gate's code is on the refusal as data, and never in its words (P11-T6).
+    expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'data_upload:read');
     expect(screen.queryByText('Rina Wijaya')).not.toBeInTheDocument();
     // Neither the month nor the template is asked for.
     expect(calls.filter((c) => c.url.includes('/kpm/data-upload/'))).toHaveLength(0);

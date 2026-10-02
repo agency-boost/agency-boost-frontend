@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { api } from './api-client';
+import { SessionContext } from './session';
 import type {
   ActivityCategoryRow, LeadPipelineRow, RatioRow, TrainingCategoryRow,
 } from './tenant-config';
@@ -45,7 +46,12 @@ export interface TenantConfig {
   } | null;
   /** What an event may be filed under (P5-T6), active rows only. */
   eventTypes: SnapshotEventType[];
-  /** The capability catalog a leader assesses against (P5-T8), active rows only. */
+  /**
+   * The capability catalog a leader assesses against (P5-T8): **the whole catalog, archived rows
+   * included, each with its `status`** — the server filters nothing here, unlike `eventTypes` above.
+   * The type names only the codes and labels; the Leader Notes tab reads the catalog with its profile
+   * instead (`GET /coaching/coachees/:membershipId/profile`, P11-T9 AC-3), where the status is typed.
+   */
   capability: {
     version: number;
     stages: { code: string; label: string }[];
@@ -116,7 +122,26 @@ export function TenantConfigProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  /*
+   * **Not before the session is** (P11-T6). The provider sits in the group layouts, outside the
+   * session gate, and a child's effect runs before its parent's: on a hard load this read went out
+   * before `SessionProvider` had refreshed, carried no token, and drew a 401 for each of its two
+   * requests — every hard load, on every screen. It now waits until the session has settled with
+   * somebody in it. A session that settles with nobody signed in has nothing to read here, so the
+   * provider stops waiting rather than leave a screen on its skeleton.
+   *
+   * Outside a `SessionProvider` there is no session to wait for, and it reads at once, as it always
+   * has: that is how the settings screens' specs mount it.
+   */
+  const session = useContext(SessionContext);
+  const settled = session === null || !session.loading;
+  const signedIn = session === null || session.me !== null;
+  const ready = settled && signedIn;
+
+  useEffect(() => {
+    if (ready) void refresh();
+    else if (settled) setLoading(false);
+  }, [ready, settled, refresh]);
 
   const value = useMemo(
     () => ({ config, ladder, loading, error, refresh }),

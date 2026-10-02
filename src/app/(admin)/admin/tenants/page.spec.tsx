@@ -108,7 +108,9 @@ describe('tenants list', () => {
 
   it('never renders for a session without the platform permission', () => {
     renderInLayout(AdminLayout, <TenantsPage />, { me: makeMe({ permissions: [] }) });
-    expect(screen.getByRole('alert')).toHaveTextContent('kpm:list_all');
+    expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
+    // The gate's code is on the refusal as data, and never in its words (P11-T6).
+    expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'kpm:list_all');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 });

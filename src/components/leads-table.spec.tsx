@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -97,5 +97,142 @@ describe('LeadsTable, with the coaching card’s toolbar (P10.1-T4 AC-12)', () =
 
     expect(screen.getByLabelText('Lead name, row 1')).toHaveFocus();
     expect(screen.getByLabelText('Lead name, row 2')).toHaveValue('Pak Budi');
+  });
+});
+
+/** Two ladders, so a stage has a label and a final stage gates ✓ (as an office configures them). */
+const PIPELINES = [
+  {
+    pipeline: 'sales',
+    statuses: [
+      { id: 's1', pipeline: 'sales', code: 'FOLLOW_UP', label: 'Follow-up', rank: 1, isTerminal: false, isLateStage: false, version: 1, status: 'active' },
+      { id: 's2', pipeline: 'sales', code: 'PAID_AND_ISSUED', label: 'Paid and issued', rank: 2, isTerminal: true, isLateStage: false, version: 1, status: 'active' },
+    ],
+  },
+  { pipeline: 'recruitment', statuses: [] },
+];
+
+const renderFor = (
+  routes: Record<string, unknown>,
+  props: Partial<Parameters<typeof LeadsTable>[0]> = {},
+) => {
+  const onNotice = vi.fn();
+  const onWrite = vi.fn();
+  const stub = stubFetch({
+    '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: PIPELINES, version: 1 } },
+    '/kpm/org-levels': { body: [] },
+    'outcome=won': { body: page([lead({ id: 'l-won', name: 'Bu Sari', outcome: 'won' })]) },
+    'outcome=lost': { body: page([]) },
+    ...routes,
+  } as Parameters<typeof stubFetch>[0]);
+  renderInLayout(
+    AgentLayout,
+    <LeadsTable filters offerDelete={false} caption="Her leads" owner="mem-rina" onNotice={onNotice} onWrite={onWrite} {...props} />,
+    { me: makeMe({ permissions: ['lead:read', 'lead:create', 'lead:update', 'lead:mark_outcome'] }) },
+  );
+  return { ...stub, onNotice, onWrite };
+};
+
+/**
+ * The coaching session's Leads card (P11-T8 AC-7, ADR-0076): the same table about **a coachee's**
+ * leads, read and written through `?owner=`, every write pinned, in the coaching card's own words.
+ */
+describe('LeadsTable, for a coachee (P11-T8 AC-7)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P11-T8 AC-7 reads her leads through ?owner= — the open list, its search, and both closed lists', async () => {
+    const { calls } = renderFor({ 'outcome=open': { body: page([lead({ ownerMembershipId: 'mem-rina' })]) } });
+    await screen.findByDisplayValue('Pak Budi');
+
+    await userEvent.type(screen.getByRole('searchbox'), 'budi');
+    await waitFor(() => expect(lastRead(calls).get('search')).toBe('budi'));
+    const owners = calls.filter((c) => c.url.includes('/leads?')).map((c) => new URL(c.url).searchParams.get('owner'));
+    expect(owners.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(owners)).toEqual(new Set(['mem-rina']));
+  });
+
+  it('P11-T8 AC-7 creates the lead in her pipeline through POST /leads?owner=, and says so', async () => {
+    const { calls, onNotice, onWrite } = renderFor({
+      'outcome=open': { body: page([]) },
+      'POST /leads': { status: 201, body: lead({ id: 'l-new', name: 'Pak Joko', ownerMembershipId: 'mem-rina' }) },
+    });
+    await screen.findByText('No leads match.');
+
+    await userEvent.click(screen.getByRole('button', { name: '+ Add lead' }));
+    await userEvent.type(screen.getByLabelText('Lead name, row 1'), 'Pak Joko{Enter}');
+
+    await waitFor(() => expect(onNotice).toHaveBeenCalledWith('Pak Joko added.'));
+    const post = calls.find((c) => c.init.method === 'POST')!;
+    expect(post.url).toBe('http://api.test/api/v1/leads?owner=mem-rina');
+    expect(JSON.parse(post.init.body as string)).toEqual({ name: 'Pak Joko' });
+    expect(onWrite).toHaveBeenCalledWith(expect.objectContaining({ id: 'l-new' }));
+  });
+
+  it('P11-T8 AC-7 says "Enter a name first." for Enter on an empty name, and posts nothing', async () => {
+    const { calls } = renderFor({ 'outcome=open': { body: page([]) } });
+    await screen.findByText('No leads match.');
+
+    await userEvent.click(screen.getByRole('button', { name: '+ Add lead' }));
+    await userEvent.type(screen.getByLabelText('Lead name, row 1'), '{Enter}');
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter a name first.');
+    expect(calls.some((c) => c.init.method === 'POST')).toBe(false);
+  });
+
+  it('P11-T8 AC-7 asks "Mark as Won?" in the coaching card’s words, pinned, and says it was marked', async () => {
+    const { calls, onNotice } = renderFor({
+      'outcome=open': { body: page([lead({ statusCode: 'PAID_AND_ISSUED', version: 7 })]) },
+      'PATCH /leads/l1/outcome': { body: lead({ statusCode: 'PAID_AND_ISSUED', outcome: 'won', version: 8 }) },
+    });
+    await screen.findByDisplayValue('Pak Budi');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Mark successful' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('Mark as Won? Pak Budi will move to Closed leads as "Won". You can still find them there afterward.');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mark as Won' }));
+
+    await waitFor(() => expect(onNotice).toHaveBeenCalledWith('Pak Budi marked as Won.'));
+    const patch = calls.find((c) => c.init.method === 'PATCH')!;
+    expect(JSON.parse(patch.init.body as string)).toEqual({ outcome: 'won', version: 7 });
+  });
+
+  it('P11-T8 AC-7 says a type move and a status move in the prototype’s words', async () => {
+    const { onNotice } = renderFor({
+      'outcome=open': { body: page([lead({ type: null, statusCode: null })]) },
+      'PATCH /leads/l1/status': { body: lead({ statusCode: 'FOLLOW_UP', version: 3 }) },
+      'PATCH /leads/l1': { body: lead({ type: 'sales', version: 2 }) },
+    });
+    await screen.findByDisplayValue('Pak Budi');
+
+    await userEvent.selectOptions(screen.getByLabelText('Type, row 1'), 'sales');
+    await waitFor(() => expect(onNotice).toHaveBeenCalledWith('Pak Budi moved to Sales.'));
+    await userEvent.selectOptions(screen.getByLabelText('Status, row 1'), 'FOLLOW_UP');
+    await waitFor(() => expect(onNotice).toHaveBeenCalledWith('Pak Budi\'s status updated to "Follow-up".'));
+  });
+
+  it('P11-T8 AC-7 names somebody else’s change without ADR-0084’s office when the name is gone', async () => {
+    renderFor({ 'outcome=open': { body: page([lead({ lastEditedBy: { membershipId: 'mem-x', name: null } })]) } });
+    await screen.findByDisplayValue('Pak Budi');
+    expect(screen.getByRole('button', { name: 'Last changed by someone else' })).toBeInTheDocument();
+  });
+
+  it('P11-T8 AC-10 under a finalized session’s lock: nothing writes, and the closed list still reads', async () => {
+    const { calls } = renderFor({ 'outcome=open': { body: page([lead({ statusCode: 'PAID_AND_ISSUED' })]) } }, { readOnly: true });
+    await screen.findByDisplayValue('Pak Budi');
+
+    for (const name of ['+ Add lead', 'Mark successful', 'Mark not successful', 'Contact details', '↺ Move to active']) {
+      expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole('searchbox', { name: 'Search leads' })).toBeDisabled();
+    expect(screen.getByLabelText('Filter by type')).toBeDisabled();
+    expect(screen.getByLabelText('Remarks, row 1')).toHaveAttribute('readonly');
+    const name = screen.getByLabelText('Lead name, row 1');
+    expect(name).toHaveAttribute('readonly');
+    await userEvent.type(name, 'x');
+    await userEvent.tab();
+    expect(name).toHaveValue('Pak Budi');
+    await userEvent.selectOptions(screen.getByLabelText('Status, row 1'), 'FOLLOW_UP');
+    expect(calls.some((c) => c.init.method === 'PATCH')).toBe(false);
+    expect(await screen.findByText('Bu Sari')).toBeInTheDocument();
   });
 });
