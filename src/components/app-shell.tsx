@@ -22,6 +22,11 @@ export interface NavItem {
   /** A live count, rendered as the prototype's alert-red pill. Hidden at zero. */
   readonly badge?: number;
   /**
+   * The prototype's amber check at the end of the row (`Overall.html:2643`, `:6624`): *Your 90-day
+   * activation* at 100%. Drawn, and said: the check is a fact, so its words join the item's name.
+   */
+  readonly done?: boolean;
+  /**
    * The glyph beside the label, and the **only** thing left once the rail is collapsed.
    *
    * Not optional in practice: `role-shell.spec.tsx` walks every item of all three shells and
@@ -65,6 +70,9 @@ function BrandMark() {
   );
 }
 
+/** What the amber check says to a screen reader, after the item's own name (WCAG 2.5.3: the words on screen first). */
+const DONE_SUFFIX = ' — complete';
+
 function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: boolean }) {
   // No hover state. There is no `.nav a:hover` rule in any of the fifteen prototype
   // files — resting, active and disabled are the only three. A hover that lightens an
@@ -99,6 +107,24 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
           {item.badge}
         </span>
       )}
+      {!rail && item.done && (
+        <>
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            width="13"
+            height="13"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            data-mark="done"
+            className="ml-auto shrink-0 text-amber"
+          >
+            <path d="M5 13l4 4L19 7" />
+          </svg>
+          <span className="sr-only">{DONE_SUFFIX}</span>
+        </>
+      )}
       {!rail && item.upcoming && (
         <span className="ml-auto rounded-pill bg-white/[0.06] px-1.5 py-0.5 text-2xs font-bold uppercase text-white/40">
           {pill}
@@ -112,12 +138,8 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
    * without this the rail is a column of links called nothing. `title` gives the same words
    * to a pointer, which is the other half of how somebody finds their way in 56px.
    */
-  const named = rail
-    ? {
-      'aria-label': item.upcoming ? `${item.label} — ${pill}` : item.label,
-      title: item.upcoming ? `${item.label} — ${pill}` : item.label,
-    }
-    : {};
+  const railName = item.upcoming ? `${item.label} — ${pill}` : `${item.label}${item.done ? DONE_SUFFIX : ''}`;
+  const named = rail ? { 'aria-label': railName, title: railName } : {};
 
   if (item.upcoming) {
     return (

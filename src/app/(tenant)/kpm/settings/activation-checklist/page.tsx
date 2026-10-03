@@ -9,12 +9,15 @@ import {
   Button, Card, CodeField, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import { OWN_COPY, PROTOTYPE_COPY } from '@/lib/activation';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import { suggestCode } from '@/lib/config-code';
 import { useCan } from '@/lib/session';
 import {
   listTraining, publishActivationChecklist, readActivationChecklist, saveActivationDraft,
-  type ActivationChecklist, type ActivationDraft, type ActivationVersion,
+  type ActivationChecklist, type ActivationDraft, type ActivationLink, type ActivationVersion,
   type TrainingCategoryRow,
 } from '@/lib/tenant-config';
 
@@ -38,6 +41,50 @@ const toDraft = (version: ActivationVersion): ActivationDraft => ({
     })),
   })),
 });
+
+/**
+ * What the server resolved each link to — its words and **whether it works** (`live`) — by kind, from
+ * every item it answered with, the published version's and the draft's. A link chosen here and not saved
+ * yet is in neither, and stays unresolved until **Save draft** answers with it.
+ */
+function resolvedLinks(server: ActivationChecklist | null): Map<string, ActivationLink> {
+  const links = new Map<string, ActivationLink>();
+  for (const version of [server?.published, server?.draft]) {
+    for (const aspect of version?.aspects ?? []) {
+      for (const item of aspect.items) if (item.link) links.set(item.link.kind, item.link);
+    }
+  }
+  return links;
+}
+
+/** `ConfigBadge`'s pill, painted on the button that carries the badge's words (ADR-0062 §2, form 2). */
+const BADGE_FACE = 'h-auto w-auto whitespace-nowrap rounded-pill px-2 py-0.5 text-2xs font-bold uppercase tracking-wide';
+
+/**
+ * The row's badge (`.checklist-auto-badge`, `KPM_Owner.html:1532-1560`), saying **whether** the link
+ * completes the item and never when (P13-T3 AC-1, ADR-0062 §3; parity I-80). *Auto* only for a link that
+ * works, with the registry's sentence as its tooltip and in its name, as on the hire's page; for one that
+ * does not, *Ticked by hand*, and its tooltip says who ticks it. A link not yet resolved claims neither.
+ */
+function LinkBadge({ link }: { link: ActivationLink }) {
+  return link.live ? (
+    <TippedGlyph
+      glyph={PROTOTYPE_COPY.auto}
+      name={OWN_COPY.autoName(link.completesWhen)}
+      tip={OWN_COPY.autoTip(link.completesWhen)}
+      align="fit"
+      face={cn(BADGE_FACE, 'bg-success/10 text-success hover:bg-success/15 hover:text-success')}
+    />
+  ) : (
+    <TippedGlyph
+      glyph={OWN_COPY.byHand}
+      name={OWN_COPY.byHandName}
+      tip={OWN_COPY.byHandTip}
+      align="fit"
+      face={cn(BADGE_FACE, 'border border-hairline bg-base text-muted hover:bg-base hover:text-navy')}
+    />
+  );
+}
 
 const move = <T,>(rows: T[], from: number, to: number): T[] => {
   if (to < 0 || to >= rows.length) return rows;
@@ -97,6 +144,8 @@ export default function ActivationChecklistPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  const links = resolvedLinks(server);
 
   /** Every module agents are offered, which is the only kind an item may wait for. */
   const offered = modules.flatMap((c) => c.skills.flatMap((s) => s.modules))
@@ -344,14 +393,16 @@ export default function ActivationChecklistPage() {
                     </div>
                   ) : (
                     /* The item and nothing under it, as the prototype draws the row
-                       (`KPM_Owner.html:1530-1560`): the AUTO badge and the select beside it say
-                       what it completes from. The sub-line that was here said when the link would
-                       start working, by phase number (P10.1-T2 AC-13). */
+                       (`KPM_Owner.html:1530-1560`): the badge says whether its link works, and the
+                       select beside it what it completes from. The sub-line that was here said when
+                       the link would start working, by phase number (P10.1-T2 AC-13). */
                     <p className="text-md text-navy">{item.label}</p>
                   )}
                 </div>
 
-                {item.autoLink !== null && <ConfigBadge tone="won">Auto</ConfigBadge>}
+                {item.autoLink !== null && links.has(item.autoLink) && (
+                  <LinkBadge link={links.get(item.autoLink)!} />
+                )}
 
                 {canWrite && editing !== item.code && (
                   /* Wraps rather than holding its width: the select alone is wider than half a

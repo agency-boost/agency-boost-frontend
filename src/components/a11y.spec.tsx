@@ -477,5 +477,40 @@ describe('accessibility', () => {
       expect(ratio(NAVY, activeWash)).toBeGreaterThanOrEqual(4.5);
       expect(ratio(NAVY, inactiveWash)).toBeGreaterThanOrEqual(4.5);
     });
+
+    describe('the 90-day activation’s marks (P13-T4 AC-8, P13-T5)', () => {
+      it('the aspect pills clear 4.5:1 on their own row’s tint; In progress puts navy where the prototype’s amber-dark misses', () => {
+        // `.aspect-progress-table tr.status-*` (`Overall.html:1516-1517`) under `.status-pill.status-*` (`:281-284`, `:1521`).
+        const doneRow = over(SUCCESS, 0.07, CARD);
+        const partialRow = over(AMBER, 0.07, CARD);
+        expect(ratio(SUCCESS, over(SUCCESS, 0.1, doneRow))).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(ALERT, over(ALERT, 0.1, CARD))).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(AMBER_DARK, over(AMBER, 0.14, partialRow))).toBeLessThan(4.5);
+        expect(ratio(NAVY, over(AMBER, 0.15, partialRow))).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it('the Auto chip’s muted words clear 4.5:1 on its 6% navy wash (`:662-667`)', () => {
+        expect(ratio(MUTED, over(NAVY, 0.06, CARD))).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it('the overdue Day — the tile’s 20px bold value and the roster’s bold cell — clears its floor', () => {
+        // `.kpi-tile.kpi-tile-overdue` (`:1550`, `:1847`): large text on an 8% alert wash, so 3:1.
+        expect(ratio(ALERT, over(ALERT, 0.08, CARD))).toBeGreaterThanOrEqual(3);
+        // `.newhire-day-overdue` (`:1549`): 14px bold — small text — on the card and under the row hover.
+        expect(ratio(ALERT, over(NAVY, 0.03, CARD))).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it('the roster’s “—” is muted, where the prototype’s hairline-coloured dash is all but invisible', () => {
+        // `.oneone.na{color:var(--hairline)}` (`:1718`): 12% navy on white.
+        expect(ratio(over(NAVY, 0.12, CARD), CARD)).toBeLessThan(3);
+        expect(ratio(MUTED, CARD)).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it('the graphics clear 3:1: the Active Agent ✓ on its wash, and the nav’s amber check on navy and on the current row', () => {
+        expect(ratio(SUCCESS, over(SUCCESS, 0.12, CARD))).toBeGreaterThanOrEqual(3);
+        expect(ratio(AMBER, NAVY)).toBeGreaterThanOrEqual(3);
+        expect(ratio(AMBER, over(AMBER, 0.15, NAVY))).toBeGreaterThanOrEqual(3);
+      });
+    });
   });
 });

@@ -35,8 +35,11 @@ export function KpiTile({
   value: ReactNode;
   /** Rendered smaller and lighter inside the value — `policies`, `/90`, `/16`. */
   unit?: ReactNode;
-  /** `insight` for the number the card is about; `complete` for a finished activation. */
-  variant?: 'plain' | 'insight' | 'complete';
+  /**
+   * `insight` for the number the card is about; `complete` for a finished activation; `overdue` for a
+   * hire's *Day* past the window below 100% (`Overall.html:1550`, `:1847`).
+   */
+  variant?: 'plain' | 'insight' | 'complete' | 'overdue';
   className?: string;
 }) {
   return (
@@ -47,6 +50,7 @@ export function KpiTile({
         variant === 'plain' && 'border-hairline bg-base',
         variant === 'insight' && 'border-amber/35 bg-amber/[0.08]',
         variant === 'complete' && 'border-success/35 bg-success/[0.08]',
+        variant === 'overdue' && 'border-alert/30 bg-alert/[0.08]',
         className,
       )}
     >
@@ -56,6 +60,7 @@ export function KpiTile({
           'font-body text-2xl font-bold leading-tight',
           variant === 'insight' && 'text-amber-deep',
           variant === 'complete' && 'text-success',
+          variant === 'overdue' && 'text-alert',
           variant === 'plain' && 'text-navy',
         )}
       >

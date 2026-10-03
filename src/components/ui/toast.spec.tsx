@@ -1,7 +1,8 @@
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
-import { Toast, TOAST_MS, useToast } from './toast';
+import { useState } from 'react';
+import { Toast, TOAST_MS, ToastHost, useHostToast, useToast } from './toast';
 
 function Harness() {
   const { toast, show } = useToast();
@@ -70,5 +71,48 @@ describe('Toast (P11-T8 AC-11)', () => {
     act(() => screen.getByRole('button', { name: 'first' }).click());
     const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false } } });
     expect(results.violations).toEqual([]);
+  });
+});
+
+/**
+ * The shell's toast (P13-T7 AC-3): raised by a page that is leaving, shown by the shell that stays.
+ */
+describe('ToastHost (P13-T7 AC-3)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  function Leaving() {
+    const raise = useHostToast();
+    const [gone, setGone] = useState(false);
+    if (gone) return <p>Somewhere else</p>;
+    return (
+      <button type="button" onClick={() => { raise?.('Marked as tenured agent — 90-Day Activation removed from menu.'); setGone(true); }}>
+        leave
+      </button>
+    );
+  }
+
+  it('draws no live region until the first toast, so a screen keeps its own one status region', () => {
+    render(<ToastHost><p>page</p></ToastHost>);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('shows a toast raised by a page that has gone, and puts it away after its time', () => {
+    render(<ToastHost><Leaving /></ToastHost>);
+    act(() => screen.getByRole('button', { name: 'leave' }).click());
+    expect(screen.getByText('Somewhere else')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Marked as tenured agent — 90-Day Activation removed from menu.');
+    act(() => { vi.advanceTimersByTime(TOAST_MS); });
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  it('is null outside a host, so a page can fall back to its own', () => {
+    let seen: unknown = 'unset';
+    function Reader() {
+      seen = useHostToast();
+      return null;
+    }
+    render(<Reader />);
+    expect(seen).toBeNull();
   });
 });

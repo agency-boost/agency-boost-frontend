@@ -23,6 +23,7 @@ import {
   type ActionItem, type Agreement, type CoachingSession, type CoachingTip, type EarlierVersion, type LastWeekItem,
   type LeadAction, type MySessions, type Pronoun, type SessionSnapshot, type SnapshotGoal,
 } from '@/lib/coaching';
+import { MY_COACHING_ACTIVATION_HREF } from '@/lib/activation';
 import { formatCalendarDayLong, formatDay, formatShortDay } from '@/lib/format';
 import { formatRupiah } from '@/lib/goals';
 import { useCan, useSession } from '@/lib/session';
@@ -489,6 +490,36 @@ function ArchiveNotFound() {
  * ── /coaching/me ────────────────────────────────────────────────────────────────────────────────
  */
 
+/** `/coaching/me`'s tabs, by key. */
+export type MyCoachingTab = 'session' | 'activation';
+
+/**
+ * `/coaching/me`'s head (`Overall.html:4384-4404`): the way back for a reader who leads somebody, the
+ * reader's initials, name and *{rung} · Your own coaching*, and the tabs — the session's page and the
+ * *Activation* tab's (P13-T9 AC-4) each marking itself current.
+ */
+export function MyCoachingHeader({ current }: { current: MyCoachingTab }) {
+  const { me } = useSession();
+  const rung = useRoleLabel(me?.membership?.orgLevelCode ?? '');
+  const name = me?.user.fullName ?? '';
+  const leads = useLeadsSomebody();
+  return (
+    <>
+      {leads && <BackLink />}
+      <PersonIdentity initials={me?.user.initials ?? coacheeInitials(name)} name={name} line={`${rung} · Your own coaching`} />
+      <CoachingTabBar
+        items={[
+          { key: 'summary', label: 'Personal Summary', href: '/summary' },
+          { key: 'goal-setting', label: 'Goal Setting', href: '/goals' },
+          { key: 'training', label: 'Training', href: null },
+          { key: 'activation', label: 'Activation', href: MY_COACHING_ACTIVATION_HREF, current: current === 'activation' },
+          { key: 'session', label: 'Coaching Session', href: myCoachingHref(), current: current === 'session' },
+        ]}
+      />
+    </>
+  );
+}
+
 /**
  * The reader's own coaching (`/coaching/me`, `Overall.html:4384-4600`; ADR-0078, P11-T10 AC-4, AC-8,
  * AC-10). **Read-only**: no *Start*, no *Finalize*, no *Edit again*, no Leads card, no Activity card,
@@ -497,8 +528,8 @@ function ArchiveNotFound() {
  * - **The header** is the reader's: their initials, their name, and *{rung} · Your own coaching*. The
  *   way back to the roster only for a reader who leads somebody: for anybody else the roster is empty.
  * - **The tabs**, without *🔒 Leader Notes*: *Personal Summary* and *Goal Setting* open the reader's own
- *   `/summary` and `/goals`; *Training* and *Activation* cannot be followed yet, as in the person shell;
- *   *Coaching Session* is this page.
+ *   `/summary` and `/goals`; *Training* cannot be followed yet, as in the person shell; *Activation*
+ *   opens the reader's own checklist (P13-T9 AC-4); *Coaching Session* is this page.
  * - **One finalized session**: the latest, or the one the address names (`?session=`, the finalize
  *   notice's address). *View past sessions ▾* lists the others, each *Coached by {leader}*
  *   (`:11373`), and opens the one chosen.
@@ -510,8 +541,6 @@ function ArchiveNotFound() {
  *   reason is written for the coachee to read, ADR-0079), and *⬇ Download as PDF*.
  */
 export function MyCoaching({ selected }: { selected?: string }) {
-  const { me } = useSession();
-  const rung = useRoleLabel(me?.membership?.orgLevelCode ?? '');
   const [mine, setMine] = useState<MySessions | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [session, setSession] = useState<CoachingSession | null>(null);
@@ -539,25 +568,13 @@ export function MyCoaching({ selected }: { selected?: string }) {
     return () => { live = false; };
   }, [chosenId]);
 
-  const name = me?.user.fullName ?? '';
-  const leads = useLeadsSomebody();
   const record = session ? agreedVersions(session) : null;
   const coachOf = (sessionId: string) => mine?.sessions.find((s) => s.sessionId === sessionId)?.coach.name ?? null;
   const hasPast = mine !== null && (mine.sessions.length > 0 || mine.ledFormerly.length > 0);
 
   return (
     <div>
-      {leads && <BackLink />}
-      <PersonIdentity initials={me?.user.initials ?? coacheeInitials(name)} name={name} line={`${rung} · Your own coaching`} />
-      <CoachingTabBar
-        items={[
-          { key: 'summary', label: 'Personal Summary', href: '/summary' },
-          { key: 'goal-setting', label: 'Goal Setting', href: '/goals' },
-          { key: 'training', label: 'Training', href: null },
-          { key: 'activation', label: 'Activation', href: null },
-          { key: 'session', label: 'Coaching Session', href: myCoachingHref(), current: true },
-        ]}
-      />
+      <MyCoachingHeader current="session" />
 
       {error && <ErrorBanner {...error} />}
       {!mine && !error && <RecordSkeleton label="Reading your coaching…" />}

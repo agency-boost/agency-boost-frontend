@@ -31,9 +31,15 @@ const goalItem = item({
   autoLink: 'feature:goals',
   link: {
     kind: 'feature:goals', label: 'Goal Settings', route: '/goals',
-    completesWhen: 'the hire has saved any goal since joining this office', live: false,
+    completesWhen: 'the hire has saved any goal since joining', live: true,
   },
 });
+
+/** A training link as the API resolves it: the module's title, and not live (P13-T3 AC-1). */
+const PROSPECT_LINK = {
+  kind: 'training:PROSPECT_LIST', label: 'Building Your Prospect List', route: '/training',
+  completesWhen: 'the hire has completed that training module', live: false,
+};
 
 const PUBLISHED = {
   id: 'v1', version: 1, status: 'published', publishedAt: '2026-09-01T00:00:00.000Z',
@@ -156,7 +162,8 @@ describe('Settings › Activation checklist (P5-T3)', () => {
       within(rowOf('Learn insurance basics')).getByLabelText('Completes from'),
       'training:PROSPECT_LIST',
     );
-    expect(within(rowOf('Learn insurance basics')).getByText('Auto')).toBeInTheDocument();
+    // Whether this link works is the server's to say, and it has not been asked yet (P13-T3 AC-1).
+    expect(within(rowOf('Learn insurance basics')).queryByText('Auto')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
 
@@ -313,7 +320,7 @@ it('removes an aspect with its items, and says how many are going', async () => 
     await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
 
     expect(await screen.findByText(/no agent is offered it/)).toBeInTheDocument();
-    expect(within(rowOf('Learn insurance basics')).getByText('Auto')).toBeInTheDocument();
+    expect(within(rowOf('Learn insurance basics')).getByLabelText('Completes from')).toHaveValue('training:PROSPECT_LIST');
     expect(calls.some((c) => c.init.method === 'PUT')).toBe(true);
   });
 
@@ -357,5 +364,92 @@ it('removes an aspect with its items, and says how many are going', async () => 
     expect(screen.queryByRole('button', { name: '+ Add aspect' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Completes from')).not.toBeInTheDocument();
+  });
+});
+
+/*
+ * P13-T3 AC-1, parity I-80: the settings screen says *whether* an item's link completes it, never when
+ * (ADR-0062 §3). The badge used to read *Auto* for any link, so an item bound to a training module — which
+ * nothing evaluates, and which the hire or a leader ticks by hand — told the Owner it ticked itself.
+ */
+describe('Phase 13 exit review — the badge says whether a link works, never when', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const trainingItem = item({
+    code: 'MANDATORY_TRAINING',
+    label: 'Mandatory training: selling skill & product knowledge',
+    displayOrder: 1,
+    autoLink: 'training:PROSPECT_LIST',
+    link: PROSPECT_LINK,
+  });
+  const WITH_TRAINING = {
+    ...CHECKLIST,
+    published: {
+      ...PUBLISHED,
+      aspects: [
+        ...PUBLISHED.aspects,
+        { code: 'TRAINING', label: '3. Training & Certification', displayOrder: 3, items: [trainingItem] },
+      ],
+    },
+  };
+  const badgeOf = (label: string) => within(rowOf(label)).queryByRole('button', { name: /^(Auto|Ticked by hand) — / });
+
+  it('Phase 13 exit review: a live link reads Auto, with the registry’s sentence as its tooltip and in its name', async () => {
+    render(OWNER, WITH_TRAINING);
+    await screen.findByText('1. Introduction');
+
+    const auto = within(rowOf('Goal setting: APE & activity targets'))
+      .getByRole('button', { name: 'Auto — completes when the hire has saved any goal since joining' });
+    expect(auto).toHaveAccessibleDescription('Completes when the hire has saved any goal since joining.');
+    await userEvent.click(auto);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Completes when the hire has saved any goal since joining.');
+  });
+
+  it('Phase 13 exit review: a link that does not work reads Ticked by hand, never Auto, and says who ticks it — not when it will work', async () => {
+    render(OWNER, WITH_TRAINING);
+    await screen.findByText('1. Introduction');
+
+    const training = within(rowOf('Mandatory training: selling skill & product knowledge'));
+    expect(training.queryByText('Auto')).not.toBeInTheDocument();
+    const hand = training.getByRole('button', {
+      name: 'Ticked by hand — this link does not complete the item on its own, so the hire or one of their leaders ticks it',
+    });
+    expect(hand).toHaveTextContent(/^Ticked by hand/);
+    expect(hand).toHaveAccessibleDescription(
+      'This link does not complete the item on its own, so the hire or one of their leaders ticks it.',
+    );
+    // Its words, its name and its tooltip together: whether, and never when.
+    expect(hand.parentElement!.textContent).not.toMatch(/phase|until|\byet\b|soon|\d/i);
+    // The select still says what it completes from, as the prototype's row does.
+    expect(training.getByLabelText('Completes from')).toHaveValue('training:PROSPECT_LIST');
+    // A manual item says nothing about completing on its own.
+    expect(badgeOf('Learn insurance basics')).toBeNull();
+  });
+
+  it('Phase 13 exit review: a link chosen and not saved claims nothing until the save answers whether it works', async () => {
+    const saved = {
+      ...CHECKLIST,
+      draft: {
+        ...PUBLISHED, id: 'v2', version: 2, status: 'draft', publishedAt: null,
+        aspects: [
+          { ...PUBLISHED.aspects[0], items: [item({ autoLink: 'training:PROSPECT_LIST', link: PROSPECT_LINK }), PUBLISHED.aspects[0].items[1]] },
+          PUBLISHED.aspects[1],
+        ],
+      },
+    };
+    render(OWNER, CHECKLIST, { body: saved });
+    await screen.findByText('1. Introduction');
+
+    // A kind the server has already resolved says whether at once: Goal Settings works.
+    await userEvent.selectOptions(within(rowOf('Learn agency career mindset')).getByLabelText('Completes from'), 'feature:goals');
+    expect(badgeOf('Learn agency career mindset')).toHaveAccessibleName(/^Auto — /);
+
+    // One it has not is unresolved, and the row claims neither.
+    await userEvent.selectOptions(within(rowOf('Learn insurance basics')).getByLabelText('Completes from'), 'training:PROSPECT_LIST');
+    expect(badgeOf('Learn insurance basics')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    expect(await within(rowOf('Learn insurance basics')).findByRole('button', { name: /^Ticked by hand — / })).toBeInTheDocument();
+    expect(within(rowOf('Learn insurance basics')).queryByText('Auto')).not.toBeInTheDocument();
   });
 });

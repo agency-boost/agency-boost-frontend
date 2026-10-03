@@ -107,19 +107,29 @@ describe('the person shell (P11-T7)', () => {
     expect(within(notes).getByText('🔒')).toHaveAttribute('aria-hidden', 'true');
   });
 
-  it('P11-T7 AC-7 draws Training and Activation disabled, named for assistive technology, with no phase', async () => {
+  it('P11-T7 AC-7 draws Training disabled, named for assistive technology, with no phase', async () => {
     show(RINA);
     const tabs = within(await screen.findByRole('navigation', { name: 'Coaching' }));
 
-    for (const name of ['Training', 'Activation']) {
-      const tab = tabs.getByRole('link', { name: `${name}, upcoming` });
-      expect(tab).toHaveAttribute('aria-disabled', 'true');
-      expect(tab).not.toHaveAttribute('href');
-      // `.nav a.disabled` (`Overall.html:63`): muted, a plain cursor, nothing else.
-      expect(tab.className).toContain('cursor-default');
-      expect(tab.className).toContain('text-muted/50');
-      expect(tab.textContent).not.toMatch(/phase|\d/i);
-    }
+    const tab = tabs.getByRole('link', { name: 'Training, upcoming' });
+    expect(tab).toHaveAttribute('aria-disabled', 'true');
+    expect(tab).not.toHaveAttribute('href');
+    // `.nav a.disabled` (`Overall.html:63`): muted, a plain cursor, nothing else.
+    expect(tab.className).toContain('cursor-default');
+    expect(tab.className).toContain('text-muted/50');
+    expect(tab.textContent).not.toMatch(/phase|\d/i);
+  });
+
+  it('P13-T9 AC-3 makes Activation a live tab, current on its own address', async () => {
+    nav.pathname = '/coaching/mem-rina/activation';
+    show(RINA);
+    const tabs = within(await screen.findByRole('navigation', { name: 'Coaching' }));
+
+    const tab = tabs.getByRole('link', { name: 'Activation' });
+    expect(tab).toHaveAttribute('href', '/coaching/mem-rina/activation');
+    expect(tab).not.toHaveAttribute('aria-disabled');
+    expect(tab).toHaveAttribute('aria-current', 'page');
+    expect(tabs.queryByRole('link', { name: 'Activation, upcoming' })).not.toBeInTheDocument();
   });
 
   it('P11-T7 AC-3 Agent view takes Leader Notes out of the bar, and Leader view brings it back', async () => {

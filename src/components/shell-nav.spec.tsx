@@ -47,6 +47,9 @@ const AGENT = makeMe({
     isKpmOwner: false, isKpmAdmin: false, directCount: 2,
   },
   permissions: [],
+  // A leader still in their own activation, with hires of their own: every section is offered.
+  activation: { open: true, complete: false },
+  newHires: true,
 });
 
 const OWNER = makeMe({
@@ -101,7 +104,8 @@ describe('the sidebar matches the prototype', () => {
       },
       permissions: [],
     });
-    const SECTIONS = ['Personal tools', 'Unit tools', 'New agent', 'Training', 'Sales tools', 'KPM', 'Campaign', 'Admin'];
+    // *New agent* follows the reader's own activation and hires (P13-T7 AC-5), which none of these has.
+    const SECTIONS = ['Personal tools', 'Unit tools', 'Training', 'Sales tools', 'KPM', 'Campaign', 'Admin'];
 
     it.each([
       ['an Agent', member('agent', 0)],
@@ -112,7 +116,7 @@ describe('the sidebar matches the prototype', () => {
       for (const label of ['Unit tools', 'Unit dashboard', 'Coaching session', 'Group tree']) {
         expect(screen.queryByText(label), `${label} is offered`).not.toBeInTheDocument();
       }
-      // The rest of Admin stays: User management is every member's. Seven sections, in order.
+      // The rest of Admin stays: User management is every member's. Six sections, in order.
       expect(screen.getByText('User management').closest('a')).toHaveAttribute('href', '/user-management/kpm');
       expect(navLabels().filter((t) => SECTIONS.includes(t))).toEqual(SECTIONS.filter((s) => s !== 'Unit tools'));
     });
@@ -141,6 +145,74 @@ describe('the sidebar matches the prototype', () => {
         expect(screen.queryByText(label), `${label} is offered`).not.toBeInTheDocument();
       }
       expect(screen.getByText('User management').closest('a')).toHaveAttribute('href', '/user-management/kpm');
+    });
+  });
+
+  describe('P13-T7 AC-5 New agent shows exactly what the reader has (`Overall.html:2638-2647`, `:6638-6642`)', () => {
+    const reader = (over: Partial<Parameters<typeof makeMe>[0]> = {}) => makeMe({
+      membership: {
+        membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent', status: 'active',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 0,
+      },
+      ...over,
+    });
+    const section = () => navLabels().filter((t) => ['Your 90-day activation', 'New hires'].includes(t) || t === 'New agent');
+
+    it('P13-T4 AC-1 a hire with an open activation sees it, live, and no New hires', () => {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader({ activation: { open: true, complete: false } }) });
+      expect(section()).toEqual(['New agent', 'Your 90-day activation']);
+      const item = screen.getByText('Your 90-day activation').closest('a')!;
+      expect(item).toHaveAttribute('href', '/activation');
+      expect(item).not.toHaveAttribute('aria-disabled');
+      expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
+      // No check below 100%.
+      expect(item.querySelector('[data-mark="done"]')).toBeNull();
+      expect(item).toHaveAccessibleName('Your 90-day activation');
+    });
+
+    it('P13-T7 AC-5 draws the amber check at 100%, and says it', () => {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader({ activation: { open: true, complete: true } }) });
+      const item = screen.getByRole('link', { name: 'Your 90-day activation — complete' });
+      const check = item.querySelector('[data-mark="done"]')!;
+      expect(check).toHaveAttribute('aria-hidden', 'true');
+      expect(check.getAttribute('class')).toContain('text-amber');
+    });
+
+    it('P13-T7 AC-5 marks the activation current on its own page', () => {
+      route.path = '/activation';
+      try {
+        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader({ activation: { open: true, complete: false } }) });
+        expect(screen.getByText('Your 90-day activation').closest('a')).toHaveAttribute('aria-current', 'page');
+      } finally {
+        route.path = '/group-tree';
+      }
+    });
+
+    it('P13-T5 AC-1 a reader with hires sees New hires, live, and current on a hire’s page', () => {
+      route.path = '/new-hires/mem-9';
+      try {
+        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader({ newHires: true }) });
+        expect(section()).toEqual(['New agent', 'New hires']);
+        const item = screen.getByText('New hires').closest('a')!;
+        expect(item).toHaveAttribute('href', '/new-hires');
+        expect(item).toHaveAttribute('aria-current', 'page');
+      } finally {
+        route.path = '/group-tree';
+      }
+    });
+
+    it.each([
+      ['no activation and no hires', {}],
+      ['a graduated or ended activation and no hires', { activation: { open: false, complete: true } }],
+    ])('P13-T7 AC-5 hides the whole section for %s', (_who, over) => {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader(over) });
+      expect(section()).toEqual([]);
+      expect(screen.queryByText('New agent')).not.toBeInTheDocument();
+    });
+
+    it('P13-T7 AC-5 both, in the prototype’s order', () => {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader({ activation: { open: true, complete: false }, newHires: true }) });
+      expect(section()).toEqual(['New agent', 'Your 90-day activation', 'New hires']);
     });
   });
 

@@ -41,6 +41,19 @@ export interface Me {
   mustChangePassword: boolean;
   /** What this person may do *right now* — resolved server-side on every request. */
   permissions: string[];
+  /**
+   * The reader's own 90-day activation, for the *New agent* section (P13-T7 AC-5): `null` when they
+   * have none, `open` false once it is graduated or expired (OD-28, OD-120), `complete` at 100% — the
+   * nav's amber check. Served with the session, so no page reads it again.
+   */
+  activation: MeActivation | null;
+  /** Whether the reader reaches at least one open activation: *New hires* in the nav (OD-122). */
+  newHires: boolean;
+}
+
+export interface MeActivation {
+  open: boolean;
+  complete: boolean;
 }
 
 export interface SessionValue {

@@ -294,6 +294,14 @@ describe('KpiTile', () => {
     expect(screen.getByText('6').className).not.toContain('font-display');
   });
 
+  it('P13-T5 AC-5 marks the overdue variant red, on the prototype’s alert wash (`Overall.html:1550`, `:1847`)', () => {
+    const { container } = render(<KpiTile label="Day" value="90+" unit="/90" variant="overdue" />);
+    const tile = container.firstElementChild!;
+    expect(tile).toHaveAttribute('data-variant', 'overdue');
+    expect(tile.className).toContain('bg-alert/[0.08]');
+    expect(screen.getByText('90+').className).toContain('text-alert');
+  });
+
   it('marks the insight variant with amber-deep, never amber-dark', () => {
     // amber-dark on this very tint is 2.82:1 and clears no floor — see a11y.spec.tsx.
     render(<KpiTile label="This month" value="Rp 42.000.000" variant="insight" />);

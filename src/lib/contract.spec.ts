@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ACTIVATION_NOTE_MAX, ITEM_NOTE_MAX, START_DATE_BACK_DAYS } from './activation';
 import { INVITEES_MAX, NOTES_MAX, PEOPLE_PAGE, TITLE_MAX, TRIP_DAYS_MAX } from './calendar';
 import { LEADER_NOTE_MAX } from './coaching';
 import { INBOX_PAGE_SIZE, POPOVER_PAGE_SIZE } from './notifications';
@@ -438,3 +439,70 @@ function matches(called: string, documented: Set<string>): boolean {
   }
   return false;
 }
+
+/**
+ * P13: the activation's shapes, held to their shape as the calendar's are: a field read as always there
+ * is one the document requires, one it marks `nullable` is typed `| null`, and a field it lists values
+ * for is typed with exactly those values.
+ */
+const ACTIVATION_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
+  ['activation.ts', 'ActivationView', 'ActivationViewDto'],
+  ['activation.ts', 'ActivationAspectProgress', 'ActivationAspectProgressDto'],
+  ['activation.ts', 'ActivationItemProgress', 'ActivationItemProgressDto'],
+  ['activation.ts', 'ActivationItemLink', 'ActivationLinkDto'],
+  ['activation.ts', 'ActivationPerson', 'ActivationPersonDto'],
+  ['activation.ts', 'ActivationCorrection', 'ActivationStartCorrectedDto'],
+  ['activation.ts', 'ActivationNote', 'ActivationNoteDto'],
+  ['activation.ts', 'ActivationNoteSaved', 'ActivationNoteSavedDto'],
+  ['activation.ts', 'NewHiresRoster', 'NewHiresRosterDto'],
+  ['activation.ts', 'NewHireGroup', 'NewHireGroupDto'],
+  ['activation.ts', 'NewHireRow', 'NewHireRowDto'],
+  ['session.ts', 'MeActivation', 'MeActivationDto'],
+];
+
+describe('the activation’s types match the API document (P13)', () => {
+  it.each(ACTIVATION_PAIRS)('%s › %s ⊆ %s', (file, ours, theirs) => {
+    const documented = new Set(propertiesOf(theirs));
+    expect(declaredFields(file, ours).filter((f) => !documented.has(f))).toEqual([]);
+  });
+
+  it.each(ACTIVATION_PAIRS)('%s › %s is shaped as %s promises: required, nullable, its values', (file, ours, theirs) => {
+    const schema = doc.components.schemas[theirs];
+    const required = new Set(schema.required ?? []);
+    const problems: string[] = [];
+    for (const field of declaredTypes(file, ours)) {
+      const prop = schema.properties?.[field.name] ?? {};
+      if (!field.optional && !required.has(field.name)) problems.push(`${field.name}: declared always there, documented optional`);
+      if (prop.nullable && !field.nullable) problems.push(`${field.name}: documented nullable, declared without | null`);
+      const theirValues = (prop.enum ?? []).filter((v): v is string => typeof v === 'string');
+      if (theirValues.length > 0) {
+        const ourValues = literalsOf(file, field.type);
+        if (ourValues === null) problems.push(`${field.name}: documented as values, declared as ${field.type}`);
+        else if ([...ourValues].sort().join() !== [...theirValues].sort().join()) {
+          problems.push(`${field.name}: ${[...ourValues].sort().join('|')} against ${[...theirValues].sort().join('|')}`);
+        }
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it('the hire’s tick sends only what TickOwnActivationItemDto takes, and a leader’s only `done`', () => {
+    const own = new Set(propertiesOf('TickOwnActivationItemDto'));
+    expect(declaredFields('activation.ts', 'MyItemInput').filter((f) => !own.has(f))).toEqual([]);
+    expect(propertiesOf('TickHireActivationItemDto')).toEqual(['done']);
+  });
+
+  it('the limits the screens repeat are the ones the API validates (invariant §7)', () => {
+    expect(doc.components.schemas.TickOwnActivationItemDto.properties?.note.maxLength).toBe(ITEM_NOTE_MAX);
+    expect(doc.components.schemas.SaveActivationNoteDto.properties?.text.maxLength).toBe(ACTIVATION_NOTE_MAX);
+    const description = doc.components.schemas.CorrectActivationStartDto.properties?.startDate?.description ?? '';
+    expect(Number(/at most (\d+) days/.exec(description)?.[1])).toBe(START_DATE_BACK_DAYS);
+  });
+
+  it('every path the activation calls exists in the document', () => {
+    const paths = new Set(Object.keys(doc.paths).map((p) => p.replace('/api/v1', '')));
+    const called = callsIn(readFileSync(join(__dirname, 'activation.ts'), 'utf8'));
+    expect(called.length).toBe(8);
+    expect(called.filter((p) => !matches(p, paths))).toEqual([]);
+  });
+});

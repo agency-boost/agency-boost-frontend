@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   clockMinutes, endMinutes, formatCalendarDay, formatCalendarDayLong, formatClock, formatDay, formatDayHeader, formatDayLong,
-  formatHour, formatMonth, formatMonthSpan, formatNoticeFull, formatNoticeShort, formatShortDay, formatTimeSpan,
+  formatHour, formatMonth, formatMonthSpan, formatNoticeFull, formatNoticeShort, formatOfficeDay, formatShortDay, formatTimeSpan,
   formatTripWhen, formatWeekday, formatWeekdayDay, formatWeekRange, formatWhen, monthInZone, OFFICE_TIME_ZONE,
 } from './format';
 
@@ -206,6 +206,25 @@ describe.each(['UTC', 'Asia/Jakarta', 'America/New_York'])('a notification’s t
   it('answers empty for something that is not an instant', () => {
     expect(formatNoticeShort('not a date', now)).toBe('');
     expect(formatNoticeFull('')).toBe('');
+  });
+});
+
+/**
+ * P13-T4 AC-5: the day an activation item was ticked, a start date corrected or a note saved — the
+ * office's, whatever zone the browser is in.
+ */
+describe.each(['UTC', 'Asia/Jakarta', 'America/New_York'])('formatOfficeDay, with the clock in %s', (zone) => {
+  const original = process.env.TZ;
+  beforeAll(() => { process.env.TZ = zone; });
+  afterAll(() => { process.env.TZ = original; });
+
+  it('P13-T4 AC-5 gives the office’s day for an instant: 23:30 UTC is the next day in Jakarta', () => {
+    expect(formatOfficeDay('2026-09-30T23:30:00Z')).toBe('Oct 1, 2026');
+    expect(formatOfficeDay('2026-10-03T03:00:00Z')).toBe('Oct 3, 2026');
+  });
+
+  it('answers empty for something that is not an instant', () => {
+    expect(formatOfficeDay('nope')).toBe('');
   });
 });
 

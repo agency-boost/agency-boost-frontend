@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 /**
  * How long a toast stays (`Overall.html:6125-6129`, `showToast`): 2600 ms, as
@@ -73,4 +73,49 @@ export function Toast({ toast }: { toast: ToastMessage | null }) {
       )}
     </div>
   );
+}
+
+const HostContext = createContext<((message: string) => void) | null>(null);
+
+/**
+ * A toast that outlives the page that raised it: held by the shell, which stays mounted while the
+ * reader moves between the routes beneath it.
+ *
+ * For a write whose answer is to **leave the page** — *Mark activation complete →* takes the hire to
+ * their landing, and says so on the way (`Overall.html:6684-6688`, P13-T7 AC-3). A page's own `Toast`
+ * goes with the page.
+ *
+ * **Its live region is drawn from the first toast on, not before.** Every `Skeleton` and `SaveStatus` is
+ * a `status` region too, and a screen's tests reach theirs with `getByRole('status')`, which a second,
+ * empty one in every shell would break. The region is mounted by the first toast and its words arrive a
+ * render later, so even that first toast is announced (`Toast`, above, says why that matters).
+ */
+export function ToastHost({ children }: { children: ReactNode }) {
+  const { toast, show } = useToast();
+  const [asked, setAsked] = useState(0);
+  const waiting = useRef<string | null>(null);
+
+  const raise = useCallback((message: string) => {
+    waiting.current = message;
+    setAsked((n) => n + 1);
+  }, []);
+
+  useEffect(() => {
+    if (waiting.current === null) return;
+    const message = waiting.current;
+    waiting.current = null;
+    show(message);
+  }, [asked, show]);
+
+  return (
+    <HostContext.Provider value={raise}>
+      {children}
+      {asked > 0 && <Toast toast={toast} />}
+    </HostContext.Provider>
+  );
+}
+
+/** The shell's toast, or `null` outside a `ToastHost`. */
+export function useHostToast(): ((message: string) => void) | null {
+  return useContext(HostContext);
 }

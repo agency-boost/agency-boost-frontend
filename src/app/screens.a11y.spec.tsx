@@ -64,6 +64,12 @@ import OrgLevelsPage from './(admin)/admin/org-levels/page';
 import TenantRosterImportPage from './(admin)/admin/tenants/[kpmId]/roster/page';
 import ChooseAPasswordPage from './choose-a-password/page';
 import CalendarPage from './(agent)/calendar/page';
+import ActivationPage from './(agent)/activation/page';
+import NewHiresPage from './(agent)/new-hires/page';
+import NewHireDetailPage from './(agent)/new-hires/[membershipId]/page';
+import CoacheeActivationTab from './(agent)/coaching/[membershipId]/activation/page';
+import MyCoachingActivationPage from './(agent)/coaching/me/activation/page';
+import { activationView, completeView, leaderView, RINA_ME, ROSTER, SARI, SARI_ME } from '@test/activation-fixtures';
 import {
   AGUS, busy, DOWNLINE, entry, monthRead, peoplePage, RINA, SHELL_STUBS, weekRead,
 } from '@test/calendar-fixtures';
@@ -2140,6 +2146,114 @@ describe('screens have no axe violations', () => {
   });
 
   /*
+   * The 90-day activation (P13): the hire's page with the leader's note and a row opened, the page a
+   * reader without one meets, the roster, one hire's detail, and the coaching tab — the person shell's
+   * and the reader's own.
+   */
+  describe('the 90-day activation (P13)', () => {
+    const SHELL = {
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+    };
+
+    it('the hire’s page, filled: a row’s note and date open, an Auto chip’s words shown, and the leader’s note (P13-T4)', async () => {
+      nav.pathname = '/activation';
+      stubFetch({ ...SHELL, '/activation/me': { body: activationView() } });
+      renderInLayout(AgentLayout, <ActivationPage />, { me: RINA_ME });
+      await screen.findByRole('heading', { level: 2, name: 'Your activation progress' });
+      await userEvent.click(within(document.querySelector('[data-code="INSURANCE_BASICS"]') as HTMLElement)
+        .getByRole('button', { name: 'Show note and date' }));
+      await userEvent.click(screen.getAllByRole('button', { name: /^Auto — / })[0]);
+      await expectClean('activation');
+    });
+
+    it('the hire’s page at 100%, with the graduation confirm open (P13-T7)', async () => {
+      nav.pathname = '/activation';
+      stubFetch({ ...SHELL, '/activation/me': { body: completeView() } });
+      renderInLayout(AgentLayout, <ActivationPage />, { me: RINA_ME });
+      await userEvent.click(await screen.findByRole('button', { name: 'Mark activation complete →' }));
+      await screen.findByRole('dialog');
+      await expectClean('activation (confirm)');
+    });
+
+    it('the hire’s page for a reader with no activation (P13-T4 AC-7)', async () => {
+      nav.pathname = '/activation';
+      stubFetch({ ...SHELL, '/activation/me': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-1' } } } });
+      renderInLayout(AgentLayout, <ActivationPage />, { me: { ...RINA_ME, activation: null } });
+      await screen.findByRole('heading', { level: 2, name: 'You have no 90-day activation.' });
+      await expectClean('activation (none)');
+    });
+
+    it('the roster, populated: three groups, an overdue day and a closed first case (P13-T5)', async () => {
+      nav.pathname = '/new-hires';
+      stubFetch({ ...SHELL, '/new-hires': { body: ROSTER } });
+      renderInLayout(AgentLayout, <NewHiresPage />, { me: SARI_ME });
+      await screen.findByRole('region', { name: 'AAB: Arief Hidayat' });
+      await expectClean('new-hires');
+    });
+
+    it('the roster with nobody on it (P13-T5)', async () => {
+      nav.pathname = '/new-hires';
+      stubFetch({ ...SHELL, '/new-hires': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-1' } } } });
+      renderInLayout(AgentLayout, <NewHiresPage />, { me: SARI_ME });
+      await screen.findByText('No one you lead is in their 90-day activation right now.');
+      await expectClean('new-hires (empty)');
+    });
+
+    it('one hire’s detail, overdue, with the start date’s correction and the coaching note (P13-T5, P13-T6)', async () => {
+      nav.pathname = '/new-hires/mem-rina';
+      stubFetch({
+        ...SHELL,
+        '/new-hires/mem-rina': { body: leaderView({ day: 95, overdue: true, startCorrected: { by: SARI, at: '2026-09-01T02:00:00.000Z' } }) },
+      });
+      renderInLayout(AgentLayout, <NewHireDetailPage params={routeParams({ membershipId: 'mem-rina' })} />, { me: SARI_ME });
+      await screen.findByRole('heading', { level: 2, name: 'Activation progress' });
+      await expectClean('new-hires/[membershipId]');
+    });
+
+    const coachee = {
+      membershipId: 'mem-rina', name: 'Rina Wijaya', pronoun: 'she', rung: { code: 'AGENT', label: 'Agent' },
+      leader: { membershipId: 'mem-sari', name: 'Sari Puspita' }, direct: true, downline: { members: 0, leaders: 0 },
+    };
+
+    it('a person’s Activation tab, populated (P13-T9)', async () => {
+      nav.pathname = '/coaching/mem-rina/activation';
+      stubFetch({ ...SHELL, '/coaching/coachees/': { body: coachee }, '/new-hires/mem-rina': { body: leaderView() } });
+      renderInLayout(
+        AgentLayout,
+        <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoacheeActivationTab /></CoachingPersonLayout>,
+        { me: SARI_ME },
+      );
+      await screen.findByRole('region', { name: '90-Day Activation' });
+      await expectClean('coaching/[membershipId]/activation');
+    });
+
+    it('a person’s Activation tab for somebody with none (P13-T9 AC-3)', async () => {
+      nav.pathname = '/coaching/mem-rina/activation';
+      stubFetch({
+        ...SHELL,
+        '/coaching/coachees/': { body: coachee },
+        '/new-hires/mem-rina': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-1' } } },
+      });
+      renderInLayout(
+        AgentLayout,
+        <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoacheeActivationTab /></CoachingPersonLayout>,
+        { me: SARI_ME },
+      );
+      await screen.findByText('Rina Wijaya has no 90-day activation.');
+      await expectClean('coaching/[membershipId]/activation (none)');
+    });
+
+    it('the reader’s own Activation tab on their coaching (P13-T9 AC-4)', async () => {
+      nav.pathname = '/coaching/me/activation';
+      stubFetch({ ...SHELL, '/activation/me': { body: activationView() } });
+      renderInLayout(AgentLayout, <MyCoachingActivationPage />, { me: RINA_ME });
+      await screen.findByRole('region', { name: '90-Day Activation' });
+      await expectClean('coaching/me/activation');
+    });
+  });
+
+  /*
    * The five Phase 4 settings screens (P4-T21).
    *
    * None of them was here, against `frontend/CLAUDE.md`'s "every screen through axe, in
@@ -2534,7 +2648,16 @@ describe('screens have no axe violations', () => {
                     autoLink: 'feature:goals',
                     link: {
                       kind: 'feature:goals', label: 'Goal Settings', route: '/goals',
-                      completesWhen: 'the hire has saved any goal', live: false,
+                      completesWhen: 'the hire has saved any goal since joining', live: true,
+                    },
+                  },
+                  // A link that does not work: its badge reads *Ticked by hand* (P13-T3 AC-1).
+                  {
+                    code: 'MANDATORY_TRAINING', label: 'Mandatory training: selling skill & product knowledge',
+                    displayOrder: 3, autoLink: 'training:PROSPECT_LIST',
+                    link: {
+                      kind: 'training:PROSPECT_LIST', label: 'Building Your Prospect List', route: '/training',
+                      completesWhen: 'the hire has completed that training module', live: false,
                     },
                   },
                 ],

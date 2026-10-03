@@ -108,16 +108,18 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
     expect(within(screen.getByRole('main')).getByText('JR')).toHaveAttribute('aria-hidden', 'true');
   });
 
-  it('P11-T10 AC-4 has the tabs without Leader Notes: the reader’s own Summary and Goal Settings, two not yet followable, this page current', async () => {
+  it('P11-T10 AC-4 has the tabs without Leader Notes: the reader’s own Summary, Goal Settings and Activation, Training not yet followable, this page current', async () => {
     show();
     const tabs = await screen.findByRole('navigation', { name: 'Coaching' });
+    // P13-T9 AC-4: *Activation* opens the reader's own checklist (D-coaching-me).
     expect(within(tabs).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href'), a.getAttribute('aria-disabled')])).toEqual([
       ['Personal Summary', '/summary', null],
       ['Goal Setting', '/goals', null],
       ['Training', null, 'true'],
-      ['Activation', null, 'true'],
+      ['Activation', '/coaching/me/activation', null],
       ['Coaching Session', '/coaching/me', null],
     ]);
+    expect(within(tabs).getByRole('link', { name: 'Activation' })).not.toHaveAttribute('aria-current');
     expect(within(tabs).getByRole('link', { name: 'Coaching Session' })).toHaveAttribute('aria-current', 'page');
     expect(within(tabs).getByRole('link', { name: 'Training, upcoming' })).toBeInTheDocument();
     expect(screen.queryByText(/Leader Notes/)).not.toBeInTheDocument();

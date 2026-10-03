@@ -237,6 +237,24 @@ describe('AppShell', () => {
       expect(screen.getByTitle('Advanced analytics — Upcoming')).toBeInTheDocument();
     });
 
+    it('P13-T7 AC-5 an item with the amber check keeps saying so in the rail', async () => {
+      window.localStorage.clear();
+      render(
+        <AppShell
+          sections={[{ label: 'New agent', items: [{ label: 'Your 90-day activation', href: '/activation', icon: 'clipboard', done: true }] }]}
+          user={USER}
+          title="x"
+        >
+          <p>content</p>
+        </AppShell>,
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
+      const item = screen.getByRole('link', { name: 'Your 90-day activation — complete' });
+      expect(item).toHaveAttribute('title', 'Your 90-day activation — complete');
+      // Only the glyph is drawn collapsed: the check has nowhere to sit.
+      expect(item.querySelector('[data-mark="done"]')).toBeNull();
+    });
+
     it('offers the way back, and remembers the choice', async () => {
       renderShell();
       await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));

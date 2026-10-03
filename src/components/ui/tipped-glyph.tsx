@@ -46,6 +46,9 @@ type Fit = { side: 'start' | 'end'; maxWidth: number };
  * `unavailable` holds the button **focusable** and inert (`aria-disabled`), at the 30% the row's
  * other unavailable glyphs wear: a disabled button cannot be focused, and a reason nobody can
  * reach is not given.
+ *
+ * `face` paints the button as something other than a 28px glyph — the activation's *Auto* chip
+ * (`Overall.html:6580`, P13-T4 AC-4), whose words are its face and whose tooltip says what it waits for.
  */
 export function TippedGlyph({
   glyph,
@@ -54,6 +57,7 @@ export function TippedGlyph({
   unavailable = false,
   align = 'end',
   className,
+  face,
 }: {
   glyph: string;
   name: string;
@@ -62,6 +66,8 @@ export function TippedGlyph({
   align?: 'end' | 'fit';
   /** Where the glyph sits in its line — the wrapper's, never the bubble's. */
   className?: string;
+  /** The button's own paint, merged over the glyph's. */
+  face?: string;
 }) {
   const [shown, setShown] = useState(false);
   const [fit, setFit] = useState<Fit | null>(null);
@@ -113,7 +119,7 @@ export function TippedGlyph({
         variant="icon"
         aria-disabled={unavailable || undefined}
         aria-describedby={describes ? tipId : undefined}
-        className={cn(unavailable && INERT_GLYPH)}
+        className={cn(face, unavailable && INERT_GLYPH)}
         onFocus={show}
         onBlur={() => setShown(false)}
         onClick={show}

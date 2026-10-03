@@ -255,6 +255,17 @@ export function formatNoticeShort(iso: string, now: Date = new Date(), timeZone:
 }
 
 /**
+ * The office's calendar day an **instant** fell on, compact: `Sep 1, 2026` (P13-T4 AC-5). For a record of
+ * *when* somebody did something — an activation item ticked, a start date corrected, a note saved —
+ * where the day is the office's (ADR-0016), never the browser's: 23:30 UTC is the next day in Jakarta.
+ */
+export function formatOfficeDay(iso: string, timeZone: string = OFFICE_TIME_ZONE): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '';
+  return formatShortDay(inZone(at, timeZone).day, { year: true });
+}
+
+/**
  * A notification's date and time in full, for its modal (P12.1-T3 AC-4): `September 1, 2026 · 2:05 PM`,
  * in the office's timezone. The middle dot is the calendar detail's, between a day and its time
  * (`formatWhen`).

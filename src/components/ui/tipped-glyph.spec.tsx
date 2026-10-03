@@ -12,6 +12,22 @@ describe('TippedGlyph', () => {
 
   const bubble = (text: string) => screen.getByText(text, { selector: '[role="tooltip"]' });
 
+  it('P13-T4 AC-4 takes a face of its own: the Auto chip, its word drawn, its sentence its description', () => {
+    render(
+      <TippedGlyph
+        glyph="Auto"
+        name="Auto — completes when the hire has added at least one prospect"
+        tip="Completes when the hire has added at least one prospect."
+        face="h-auto w-auto rounded-pill px-[7px]"
+      />,
+    );
+    const chip = screen.getByRole('button', { name: 'Auto — completes when the hire has added at least one prospect' });
+    expect(chip.className).toContain('rounded-pill');
+    expect(chip.className).toContain('w-auto');
+    expect(chip.className).not.toContain('w-7');
+    expect(chip).toHaveAccessibleDescription('Completes when the hire has added at least one prospect.');
+  });
+
   it('is a button named by its words, with the glyph hidden from a screen reader', () => {
     render(<TippedGlyph glyph="✎" name="Last changed by Ibu Sari" tip="Last changed by Ibu Sari" />);
     const glyph = screen.getByRole('button', { name: 'Last changed by Ibu Sari' });

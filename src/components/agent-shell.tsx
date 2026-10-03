@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { AppShell, type NavItem, type NavSection } from '@/components/app-shell';
 import { RequireSession } from '@/components/require-session';
+import { ToastHost } from '@/components/ui/toast';
 import { useLadder } from '@/components/ui/role-badge';
 import { useSession } from '@/lib/session';
 import { useUnreadCount } from '@/lib/use-unread-count';
@@ -53,13 +54,16 @@ export function AgentShell({
 }) {
   return (
     <RequireSession permission={permission}>
-      <Chrome
-        title={title}
-        subtitle={subtitle}
-        actions={actions}
-      >
-        {children}
-      </Chrome>
+      {/* The shell's toast, for a write that leaves its page (P13-T7 AC-3). */}
+      <ToastHost>
+        <Chrome
+          title={title}
+          subtitle={subtitle}
+          actions={actions}
+        >
+          {children}
+        </Chrome>
+      </ToastHost>
     </RequireSession>
   );
 }
@@ -118,6 +122,30 @@ function Chrome({
   const groupTree: NavItem = { label: 'Group tree', href: '/group-tree', icon: 'tree', active: on('/group-tree') };
 
   /*
+   * *New agent* (`Overall.html:2638-2647`) shows exactly what the reader has (P13-T7 AC-5), from the
+   * facts the session carries, so no page reads them again: *Your 90-day activation* while their own is
+   * open (OD-28, OD-120), with the prototype's amber check at 100% (`:6624`); *New hires* when they reach
+   * at least one open activation, an Agent with a direct report included (OD-122, `:6894-6895`); and
+   * the whole section hidden when neither applies (`:6638-6642`). Each route refuses a reader this
+   * would not offer it to — the nav decides what is offered, never what is allowed.
+   */
+  const newAgent: NavSection = {
+    label: 'New agent',
+    divider: true,
+    items: [
+      ...(me?.activation?.open
+        ? [{
+          label: 'Your 90-day activation', href: '/activation', icon: 'clipboard', active: on('/activation'),
+          done: me.activation.complete,
+        } satisfies NavItem]
+        : []),
+      ...(me?.newHires
+        ? [{ label: 'New hires', href: '/new-hires', icon: 'userPlus', active: on('/new-hires') } satisfies NavItem]
+        : []),
+    ],
+  };
+
+  /*
    * Eight sections in the prototype's order, Admin last, **with a line between every two** (client
    * feedback, 2026-09-30; parity I-144). The prototype draws two lines here, before KPM and before
    * Admin (`Overall.html:2660`, `:2672`), where the Owner's and the Super Admin's draw one before
@@ -145,16 +173,7 @@ function Chrome({
       ],
     },
     ...(leadsSomeone ? [unitTools] : []),
-    {
-      // The prototype hides this whole section when neither item applies
-      // (`Overall.html:6638-6642`). Both are Phase 11, so both are upcoming for now.
-      label: 'New agent',
-      divider: true,
-      items: [
-        { label: 'Your 90-day activation', href: '/activation', icon: 'clipboard', upcoming: true },
-        { label: 'New hires', href: '/new-hires', icon: 'userPlus', upcoming: true },
-      ],
-    },
+    ...(newAgent.items.length > 0 ? [newAgent] : []),
     {
       label: 'Training',
       divider: true,

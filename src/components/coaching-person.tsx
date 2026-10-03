@@ -100,7 +100,7 @@ const TABS: readonly ShellTab[] = [
   { tab: 'summary', label: 'Personal Summary' },
   { tab: 'goal-setting', label: 'Goal Setting' },
   { tab: 'training', label: 'Training', upcoming: true },
-  { tab: 'activation', label: 'Activation', upcoming: true },
+  { tab: 'activation', label: 'Activation' },
   { tab: 'session', label: 'Coaching Session' },
   { tab: 'leader-notes', label: 'Leader Notes', leaderOnly: true },
 ];
@@ -307,9 +307,10 @@ function ViewToggle({ view, onView }: { view: View; onView: (view: View) => void
 }
 
 /**
- * The person's six tabs (`Overall.html:3988-3995`). **Training and Activation are in the bar and cannot
- * be followed yet** (P11-T7 AC-7); a typed address still lands inside this shell, on a sign. *Agent
- * view* takes *🔒 Leader Notes* out of the bar, as the prototype's `display: none` does.
+ * The person's six tabs (`Overall.html:3988-3995`). **Training is in the bar and cannot be followed yet**
+ * (P11-T7 AC-7); a typed address still lands inside this shell, on a sign. *Activation* is live since
+ * P13-T9 (AC-3). *Agent view* takes *🔒 Leader Notes* out of the bar, as the prototype's `display: none`
+ * does.
  */
 function PersonTabs({ membershipId, current, view }: { membershipId: string; current: CoachingTab | null; view: View }) {
   return (

@@ -1,30 +1,13 @@
 'use client';
 
-import { use } from 'react';
-import { ComingInPhase } from '@/components/coming-in-phase';
+import { CoacheeActivation } from '@/components/activation-record';
 
 /**
- * A coachee's *Activation* tab (`Overall.html:4337-4342`), not built yet: it reads this person's
- * activation checklist, which nothing records yet. The bar draws the tab disabled (P11-T7 AC-7); this
- * is what a typed or remembered address lands on, inside the person shell, rather than on the
- * not-found page. Which task builds it is the route registry's to say, not this page's (ADR-0062 §3).
- *
- * A sign renders no data and calls no endpoint (`backend-then-frontend.md`). The person shell above
- * has already answered an address outside the reader's reach, so the one thing it reads from the
- * address is where this person's Summary tab is — what works for the reader here.
+ * A coachee's *Activation* tab (`Overall.html:4337-4342`, renderer `:6464-6489`; P13-T9): their whole
+ * checklist, read-only, from the read their leader's detail makes, so the coach, the hire and every
+ * leader above them read the same progress (exit criterion 2). The person shell above has already
+ * answered an address outside the reader's reach; somebody with no activation opens on an empty state.
  */
-export default function CoacheeActivationTab({ params }: { params: Promise<{ membershipId: string }> }) {
-  const { membershipId } = use(params);
-  return (
-    <ComingInPhase
-      what="This person’s first ninety days, checklist by checklist, and how much of it is done."
-      elsewhere={[
-        {
-          href: `/coaching/${encodeURIComponent(membershipId)}/summary`,
-          label: 'Personal Summary',
-          detail: 'Their goal, activity and leads on one page.',
-        },
-      ]}
-    />
-  );
+export default function CoacheeActivationTab() {
+  return <CoacheeActivation />;
 }
