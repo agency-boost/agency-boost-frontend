@@ -1,20 +1,15 @@
 'use client';
 
-import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { INBOX_EMPTY, NotificationList } from '@/components/notification-list';
 import { RoleShell } from '@/components/role-shell';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
-import { SkeletonCards } from '@/components/ui/skeleton';
-import { toDisplayError, type ApiError } from '@/lib/api-client';
-import {
-  announceInboxChanged,
-  markAllNotificationsRead,
-  markNotificationRead,
-  readInbox,
-  type Inbox,
-} from '@/lib/notifications';
+import { Pager } from '@/components/ui/pager';
+import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { INBOX_PAGE_SIZE } from '@/lib/notifications';
 import { useSession } from '@/lib/session';
+import { useCanMark, useInbox } from '@/lib/use-inbox';
 
 /**
  * Your notifications.
@@ -36,48 +31,34 @@ import { useSession } from '@/lib/session';
  * The unread count comes back with the list rather than from a second call, so the badge
  * in the sidebar and the page can never disagree with each other.
  *
- * **An item with somewhere to go is a link there** (P11-T10 AC-8): the server composes the address
- * beside the words — a finalized coaching session opens on that session — and the title is the link.
- * Every other item is the record it always was.
+ * **The rows are the bell's** (P12.1-T3): compact, so many fit; the whole row opens — its page when
+ * the server composed an address for it, its modal when not — and reads itself as it does; a toggle
+ * beside each reads or unreads it without opening it. One component, so the popover and this page
+ * cannot differ.
+ *
+ * **Twenty a page** (P12.1-T4), with *Previous*, *Page {n} of {m}* and *Next* under them once there is
+ * more than one. *Mark all read* reads the page again for the server's own times.
  *
  * **The read waits for the session** (P11-T8's browser walk). This route sits outside the group
  * layouts and their session gate, and a page's effect runs before its parents': on a hard load the
  * inbox was asked for before `SessionProvider` had refreshed, with no token, and drew a 401. It now goes
  * out once the session has settled with somebody in it, as `tenant-config-cache.tsx` does since P11-T6.
+ *
+ * **A read-only support session marks nothing** (roles-and-permissions §7.2; the Phase 12.1 exit
+ * review, N2): no *Mark all read*, no toggle, and a row opens without reading itself (`useCanMark`).
  */
 export default function NotificationsPage() {
   const { me, loading } = useSession();
   const signedIn = !loading && me !== null;
-  const [inbox, setInbox] = useState<Inbox | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const load = useCallback(async () => {
-    try {
-      setInbox(await readInbox());
-    } catch (err) {
-      setError(toDisplayError(err));
-      setInbox({ items: [], unread: 0 });
-    }
-  }, []);
+  const canMark = useCanMark();
+  const list = useInbox(INBOX_PAGE_SIZE, { listen: signedIn });
+  const { inbox, error, load } = list;
 
   useEffect(() => {
-    if (signedIn) void load();
+    if (signedIn) void load(1);
   }, [signedIn, load]);
 
-  async function act(run: () => Promise<Inbox>) {
-    setBusy(true);
-    setError(null);
-    try {
-      setInbox(await run());
-      // The shell's badge counts the same inbox: tell it to read again.
-      announceInboxChanged();
-    } catch (err) {
-      setError(toDisplayError(err));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const pages = inbox ? Math.max(1, Math.ceil(inbox.total / (inbox.pageSize || INBOX_PAGE_SIZE))) : 1;
 
   return (
     <RoleShell
@@ -85,75 +66,53 @@ export default function NotificationsPage() {
       subtitle="What has happened that you should know about."
       permission="notification:read_inbox"
       actions={
-        inbox && inbox.unread > 0 ? (
-          <Button
-            variant="secondary"
-            disabled={busy}
-            onClick={() => void act(markAllNotificationsRead)}
-          >
+        canMark && inbox && inbox.unread > 0 ? (
+          <Button variant="secondary" onClick={() => void list.readAll()}>
             Mark all read
           </Button>
         ) : undefined
       }
     >
-      {error && <ErrorBanner {...error} />}
+      {error && (
+        <div className="mb-4">
+          <ErrorBanner {...error} />
+          {inbox === null && (
+            <Button variant="secondary" className="mt-3" onClick={() => void load(1)}>Try again</Button>
+          )}
+        </div>
+      )}
 
       {inbox === null && !error && (
-        <SkeletonCards count={4} label="Loading your inbox…" />
+        <Skeleton label="Loading your inbox…">
+          <div className="space-y-4 rounded-lg border border-hairline bg-card p-4">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i}>
+                <SkeletonBar className="h-3.5 w-2/5" />
+                <SkeletonBar className="mt-1.5 w-3/5" />
+              </div>
+            ))}
+          </div>
+        </Skeleton>
       )}
 
       {inbox && inbox.items.length === 0 && (
         <Card>
-          <EmptyState title="Nothing yet. This is where you will hear about your unit." />
+          <EmptyState title={INBOX_EMPTY} />
         </Card>
       )}
 
       {inbox && inbox.items.length > 0 && (
-        <ul className="flex flex-col gap-2">
-          {inbox.items.map((item) => {
-            const unread = item.readAt === null;
-            return (
-              <li key={item.notificationId}>
-                <Card
-                  className={unread ? 'border-l-4 border-l-amber' : undefined}
-                  /* Read rows are not hidden or greyed to the point of unreadable — a
-                     week-old notification is still the record of what happened. The
-                     amber edge marks what is new; everything stays legible. */
-                >
-                  <div className="flex flex-wrap items-start gap-3">
-                    <span className="min-w-0 flex-1">
-                      {item.href ? (
-                        <Link href={item.href} className="block text-md font-semibold text-navy underline underline-offset-2">
-                          {item.title}
-                        </Link>
-                      ) : (
-                        <span className="block text-md font-semibold text-navy">{item.title}</span>
-                      )}
-                      {item.detail && (
-                        <span className="mt-0.5 block text-md text-muted">{item.detail}</span>
-                      )}
-                      <time
-                        dateTime={item.createdAt}
-                        className="mt-1 block text-sm text-muted"
-                      >
-                        {new Date(item.createdAt).toLocaleDateString('en-GB')}
-                      </time>
-                    </span>
-                    {unread && (
-                      <Button
-                        variant="secondary"
-                        disabled={busy}
-                        onClick={() => void act(() => markNotificationRead(item.notificationId))}
-                      >
-                        Mark read
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          <Card className="p-1.5" aria-busy={list.loading || undefined}>
+            <NotificationList items={inbox.items} setRead={canMark ? list.setRead : undefined} />
+          </Card>
+          <Pager
+            label="Notification pages"
+            page={inbox.page}
+            pages={pages}
+            onPage={(page) => void load(page)}
+          />
+        </>
       )}
     </RoleShell>
   );

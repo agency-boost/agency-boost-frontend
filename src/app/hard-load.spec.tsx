@@ -33,7 +33,7 @@ const ANSWERS: Record<string, unknown> = {
   '/auth/me': LEADER,
   '/kpm/config': { activity: [], ratios: [], leadPipelines: [], version: 1 },
   '/kpm/org-levels': [],
-  '/notifications': { items: [], unread: 0 },
+  '/notifications': { items: [], unread: 0, total: 0, page: 1, pageSize: 20 },
   '/coaching/coachees': {
     today: '2026-10-02',
     overdueAfterDays: 7,

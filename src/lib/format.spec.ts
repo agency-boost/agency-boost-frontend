@@ -1,8 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   clockMinutes, endMinutes, formatCalendarDay, formatCalendarDayLong, formatClock, formatDay, formatDayHeader, formatDayLong,
-  formatHour, formatMonth, formatMonthSpan, formatShortDay, formatTimeSpan, formatTripWhen, formatWeekday, formatWeekdayDay,
-  formatWeekRange, formatWhen, monthInZone,
+  formatHour, formatMonth, formatMonthSpan, formatNoticeFull, formatNoticeShort, formatShortDay, formatTimeSpan,
+  formatTripWhen, formatWeekday, formatWeekdayDay, formatWeekRange, formatWhen, monthInZone, OFFICE_TIME_ZONE,
 } from './format';
 
 describe('formatDay', () => {
@@ -168,5 +170,51 @@ describe('office times', () => {
     expect(endMinutes('00:00')).toBe(1440);
     expect(endMinutes('10:30')).toBe(630);
     expect(endMinutes('')).toBeNull();
+  });
+});
+
+/**
+ * P12.1-T3 AC-4, AC-6: a notification's time, on the office's calendar (ADR-0016) — and the same in
+ * every zone the browser could be in, which is the point of passing the zone rather than the browser's.
+ */
+describe.each(['UTC', 'Asia/Jakarta', 'America/New_York'])('a notification’s time, with the clock in %s', (zone) => {
+  const original = process.env.TZ;
+  beforeAll(() => { process.env.TZ = zone; });
+  afterAll(() => { process.env.TZ = original; });
+
+  // 10:00 on 3 October in Jakarta.
+  const now = new Date('2026-10-03T03:00:00Z');
+
+  it('P12.1-T3 AC-6 gives the time for one from the office’s today', () => {
+    // 07:05 in Jakarta: still 2 October in UTC and New York, but today in the office.
+    expect(formatNoticeShort('2026-10-03T00:05:00Z', now)).toBe('7:05 AM');
+    expect(formatNoticeShort('2026-10-03T07:30:00Z', now)).toBe('2:30 PM');
+  });
+
+  it('P12.1-T3 AC-6 gives the day and month for an earlier one, and the year only when it is not this one', () => {
+    // 23:30 on 2 October in Jakarta is yesterday there, whatever day it is in UTC.
+    expect(formatNoticeShort('2026-10-02T16:30:00Z', now)).toBe('Oct 2');
+    expect(formatNoticeShort('2026-09-01T00:00:00Z', now)).toBe('Sep 1');
+    expect(formatNoticeShort('2025-10-03T03:00:00Z', now)).toBe('Oct 3, 2025');
+  });
+
+  it('P12.1-T3 AC-4 writes the date and time in full for the modal, in the office’s zone', () => {
+    expect(formatNoticeFull('2026-09-30T18:05:00Z')).toBe('October 1, 2026 · 1:05 AM');
+    expect(formatNoticeFull('2026-10-03T07:30:00Z')).toBe('October 3, 2026 · 2:30 PM');
+  });
+
+  it('answers empty for something that is not an instant', () => {
+    expect(formatNoticeShort('not a date', now)).toBe('');
+    expect(formatNoticeFull('')).toBe('');
+  });
+});
+
+describe('OFFICE_TIME_ZONE (ADR-0016, invariant §7)', () => {
+  it('is the backend’s DEFAULT_TENANT_TIMEZONE, read from its constants module, so the two cannot drift', () => {
+    const constants = readFileSync(
+      join(__dirname, '..', '..', '..', 'backend', 'src', 'domain', 'constants', 'index.ts'), 'utf8',
+    );
+    const declared = /export const DEFAULT_TENANT_TIMEZONE = '([^']+)';/.exec(constants);
+    expect(declared?.[1]).toBe(OFFICE_TIME_ZONE);
   });
 });

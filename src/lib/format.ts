@@ -218,3 +218,50 @@ export function formatMonthSpan(start: string, end: string): string {
   };
   return `${part(clockMinutes(start))}-${part(endMinutes(end))}`;
 }
+
+/**
+ * The office's timezone, which v1 fixes for every office (ADR-0016): the backend's
+ * `DEFAULT_TENANT_TIMEZONE`, pinned to it by `format.spec.ts` reading that constant, so the two cannot
+ * drift. For an **instant** a screen must place on the office's calendar — a notification's time — and
+ * never for a computation over data, which is the server's (invariant §9).
+ */
+export const OFFICE_TIME_ZONE = 'Asia/Jakarta';
+
+/** An instant's calendar day and 24-hour clock in a zone: `{ day: '2026-10-03', clock: '14:05' }`. */
+function inZone(at: Date, timeZone: string): { day: string; clock: string } {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(at);
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return { day: `${part('year')}-${part('month')}-${part('day')}`, clock: `${part('hour')}:${part('minute')}` };
+}
+
+/**
+ * When a notification arrived, short enough for a compact row (P12.1-T3 AC-6): the time for one from
+ * today — `2:05 PM` — and the day and month otherwise — `Sep 1` — with the year only when it is not
+ * this one, `Sep 1, 2025`, so last October's notice cannot pass for this October's. *Today* is the
+ * office's (ADR-0016), not the browser's.
+ *
+ * The clock goes through `formatClock`, so it is the calendar's `9:00 AM` and the same characters on
+ * every runtime: `toLocaleTimeString` puts a narrow no-break space before *PM* on some and not others.
+ */
+export function formatNoticeShort(iso: string, now: Date = new Date(), timeZone: string = OFFICE_TIME_ZONE): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '';
+  const when = inZone(at, timeZone);
+  const today = inZone(now, timeZone).day;
+  if (when.day === today) return formatClock(when.clock);
+  return formatShortDay(when.day, { year: when.day.slice(0, 4) !== today.slice(0, 4) });
+}
+
+/**
+ * A notification's date and time in full, for its modal (P12.1-T3 AC-4): `September 1, 2026 · 2:05 PM`,
+ * in the office's timezone. The middle dot is the calendar detail's, between a day and its time
+ * (`formatWhen`).
+ */
+export function formatNoticeFull(iso: string, timeZone: string = OFFICE_TIME_ZONE): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '';
+  const when = inZone(at, timeZone);
+  return `${formatCalendarDay(when.day)} · ${formatClock(when.clock)}`;
+}

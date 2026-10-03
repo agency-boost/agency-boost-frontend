@@ -1915,30 +1915,80 @@ describe('screens have no axe violations', () => {
     await expectClean('choose-a-password');
   });
 
-  it('the notifications inbox, with one unread', async () => {
-    // Cross-family, so it wears whichever chrome its reader signed in with — this checks
-    // it inside the platform console, which is the combination that was broken.
-    stubFetch({
-      '/notifications': {
-        body: {
-          items: [{
-            notificationId: 'n-1', templateId: 'join_request.approved',
-            title: 'You are in', detail: 'Your request was approved.', href: null,
-            kpmId: 'kpm-1', createdAt: '2026-09-01T00:00:00.000Z', readAt: null,
-          }, {
-            // An item with somewhere to go: its title is the link (P11-T10 AC-8).
-            notificationId: 'n-2', templateId: 'coaching_session.finalized',
-            title: 'Your coaching session was finalized', detail: 'Wilson Tanoto finalized your session.',
-            href: '/coaching/me?session=s-0924', kpmId: 'kpm-1', createdAt: '2026-09-24T03:00:00.000Z', readAt: '2026-09-25T00:00:00.000Z',
-          }],
-          unread: 1,
-        },
-      },
+  /*
+   * The inbox (P12.1): the page, the bell's popover and the modal a row with nowhere to go opens. Each
+   * row is two controls side by side — the row and its toggle — never one inside the other, which is
+   * what `nested-interactive` would catch.
+   */
+  describe('notifications (P12.1)', () => {
+    const NOTICES = {
+      items: [{
+        notificationId: 'n-1', templateId: 'join_request.approved',
+        title: 'You are in', detail: 'Your request was approved.', href: null,
+        kpmId: 'kpm-1', createdAt: '2026-09-01T00:00:00.000Z', readAt: null,
+      }, {
+        // An item with somewhere to go: the whole row is the link (P12.1-T3 AC-1).
+        notificationId: 'n-2', templateId: 'coaching_session.finalized',
+        title: 'Your coaching session was finalized', detail: 'Wilson Tanoto finalized your session.',
+        href: '/coaching/me?session=s-0924', kpmId: 'kpm-1', createdAt: '2026-09-24T03:00:00.000Z', readAt: '2026-09-25T00:00:00.000Z',
+      }],
+      unread: 1,
+      // More than one page, so the pager is drawn too.
+      total: 45, page: 1, pageSize: 20,
+    };
+    const READ = { body: { notificationId: 'n-1', readAt: '2026-10-03T00:00:00.000Z', unread: 0 } };
+    /** No row holds a control inside another: the toggle is the row's sibling. */
+    const noNesting = () => {
+      for (const control of document.querySelectorAll('li a[href], li button')) {
+        expect(control.querySelector('a[href], button')).toBeNull();
+      }
+    };
+
+    it('the notifications inbox, with one unread, one with an address, and the pager', async () => {
+      // Cross-family, so it wears whichever chrome its reader signed in with — this checks
+      // it inside the platform console, which is the combination that was broken.
+      stubFetch({ '/notifications': { body: NOTICES } });
+      renderWithSession(<NotificationsPage />, { me: SUPER_ADMIN });
+      await screen.findByRole('button', { name: 'Unread: You are in' });
+      await screen.findByRole('link', { name: 'Your coaching session was finalized' });
+      expect(screen.getByRole('navigation', { name: 'Notification pages' })).toBeInTheDocument();
+      noNesting();
+      await expectClean('notifications');
     });
-    renderWithSession(<NotificationsPage />, { me: SUPER_ADMIN });
-    await screen.findByRole('button', { name: 'Mark read' });
-    await screen.findByRole('link', { name: 'Your coaching session was finalized' });
-    await expectClean('notifications');
+
+    it('the modal a row with nowhere to go opens', async () => {
+      stubFetch({ 'POST /notifications/n-1/read': READ, '/notifications': { body: NOTICES } });
+      renderWithSession(<NotificationsPage />, { me: SUPER_ADMIN });
+      await userEvent.click(await screen.findByRole('button', { name: 'Unread: You are in' }));
+      expect(screen.getByRole('dialog', { name: 'You are in' })).toBeInTheDocument();
+      await expectClean('notifications (modal open)');
+    });
+
+    it('the bell’s popover, open in the platform console', async () => {
+      stubFetch({ '/admin/overview': { body: OVERVIEW }, '/notifications': { body: { ...NOTICES, pageSize: 8 } } });
+      renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
+      await screen.findByText('2 offices have no Owner');
+      await userEvent.click(screen.getByRole('button', { name: 'Notifications, 1 unread' }));
+      const popover = screen.getByRole('dialog', { name: 'Notifications' });
+      await within(popover).findByRole('button', { name: 'Unread: You are in' });
+      noNesting();
+      await expectClean('the bell’s popover');
+    });
+
+    it('the bell’s popover, with a row’s modal open over it', async () => {
+      stubFetch({
+        '/admin/overview': { body: OVERVIEW },
+        'POST /notifications/n-1/read': READ,
+        '/notifications': { body: { ...NOTICES, pageSize: 8 } },
+      });
+      renderInLayout(AdminLayout, <AdminOverviewPage />, { me: SUPER_ADMIN });
+      await screen.findByText('2 offices have no Owner');
+      await userEvent.click(screen.getByRole('button', { name: 'Notifications, 1 unread' }));
+      await userEvent.click(await within(screen.getByRole('dialog', { name: 'Notifications' }))
+        .findByRole('button', { name: 'Unread: You are in' }));
+      expect(screen.getByRole('dialog', { name: 'You are in' })).toBeInTheDocument();
+      await expectClean('the bell’s popover (modal open)');
+    });
   });
 
   /*

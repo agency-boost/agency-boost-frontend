@@ -1,11 +1,13 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { RoleShell } from './role-shell';
 import { landingFor } from '@/lib/landing';
 
+const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => router,
   usePathname: () => '/notifications',
 }));
 
@@ -108,7 +110,7 @@ describe('RoleShell', () => {
       stubFetch({ '/notifications': { body: { items: [], unread: 0 } } });
       renderWithSession(<RoleShell title="Overview">body</RoleShell>, { me });
 
-      expect(await screen.findByRole('link', { name: 'Notifications' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Notifications' })).toBeInTheDocument();
       // The nav is where places to work live, and this is not one of them.
       expect(within(screen.getByRole('navigation', { name: 'Main' }))
         .queryByRole('link', { name: /Notifications/ })).toBeNull();
@@ -120,7 +122,7 @@ describe('RoleShell', () => {
       stubFetch({ '/notifications': { body: { items: [], unread: 3 } } });
       renderWithSession(<RoleShell title="Overview">body</RoleShell>, { me: member({}) });
 
-      const bell = await screen.findByRole('link', { name: 'Notifications, 3 unread' });
+      const bell = await screen.findByRole('button', { name: 'Notifications, 3 unread' });
       expect(within(bell).getByText('3')).toBeInTheDocument();
     });
 
@@ -128,7 +130,7 @@ describe('RoleShell', () => {
       stubFetch({ '/notifications': { body: { items: [], unread: 0 } } });
       renderWithSession(<RoleShell title="Overview">body</RoleShell>, { me: member({}) });
 
-      const bell = await screen.findByRole('link', { name: 'Notifications' });
+      const bell = await screen.findByRole('button', { name: 'Notifications' });
       expect(bell.textContent).toBe('');
     });
 
@@ -136,8 +138,53 @@ describe('RoleShell', () => {
       stubFetch({ '/notifications': { body: { items: [], unread: 42 } } });
       renderWithSession(<RoleShell title="Overview">body</RoleShell>, { me: member({}) });
 
-      const bell = await screen.findByRole('link', { name: 'Notifications, 42 unread' });
+      const bell = await screen.findByRole('button', { name: 'Notifications, 42 unread' });
       expect(within(bell).getByText('9+')).toBeInTheDocument();
+    });
+
+    /*
+     * P12.1-T2 AC-7, in each of the three shells: the bell is a button that opens the latest few
+     * beside it, and clicking it never navigates (the product owner, 2026-10-03).
+     */
+    const inbox = {
+      items: [{
+        notificationId: 'n-1', templateId: 'join_request.approved', title: 'You are in',
+        detail: 'Your request was approved.', href: null, kpmId: 'kpm-1',
+        createdAt: '2026-09-01T00:00:00.000Z', readAt: null,
+      }],
+      unread: 1, total: 1, page: 1, pageSize: 8,
+    };
+
+    it.each(shells)('P12.1-T2 AC-1 opens %s’s popover from the bell, without navigating', async (_who, me) => {
+      router.push.mockClear();
+      const { calls } = stubFetch({ '/notifications': { body: inbox } });
+      renderWithSession(<RoleShell title="Overview">body</RoleShell>, { me });
+
+      const bell = await screen.findByRole('button', { name: 'Notifications, 1 unread' });
+      expect(bell).toHaveAttribute('aria-expanded', 'false');
+      await userEvent.click(bell);
+
+      const popover = screen.getByRole('dialog', { name: 'Notifications' });
+      expect(bell).toHaveAttribute('aria-expanded', 'true');
+      expect(bell).toHaveAttribute('aria-controls', popover.id);
+      expect(await within(popover).findByRole('button', { name: 'Unread: You are in' })).toBeInTheDocument();
+      expect(within(popover).getByRole('link', { name: 'See all notifications' })).toHaveAttribute('href', '/notifications');
+      // The popover reads one small page; the page itself is reached only by its link.
+      expect(calls.some((c) => c.url.endsWith('/notifications?page=1&pageSize=8'))).toBe(true);
+      expect(router.push).not.toHaveBeenCalled();
+    });
+
+    it.each(shells)('P12.1-T2 AC-4 closes %s’s popover on Escape, and puts focus back on the bell', async (_who, me) => {
+      stubFetch({ '/notifications': { body: inbox } });
+      renderWithSession(<RoleShell title="Overview">body</RoleShell>, { me });
+
+      const bell = await screen.findByRole('button', { name: 'Notifications, 1 unread' });
+      await userEvent.click(bell);
+      expect(screen.getByRole('dialog', { name: 'Notifications' })).toHaveFocus();
+      await userEvent.keyboard('{Escape}');
+
+      expect(screen.queryByRole('dialog', { name: 'Notifications' })).toBeNull();
+      expect(bell).toHaveFocus();
     });
   });
 });

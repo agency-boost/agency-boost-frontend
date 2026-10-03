@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { INVITEES_MAX, NOTES_MAX, PEOPLE_PAGE, TITLE_MAX, TRIP_DAYS_MAX } from './calendar';
 import { LEADER_NOTE_MAX } from './coaching';
+import { INBOX_PAGE_SIZE, POPOVER_PAGE_SIZE } from './notifications';
 
 /**
  * P3.5-T11 AC-4. The frontend declares its own copy of every response shape, and until
@@ -37,6 +38,7 @@ interface Schema {
   maxItems?: number;
   description?: string;
   maximum?: number;
+  default?: unknown;
   nullable?: boolean;
   enum?: unknown[];
   required?: string[];
@@ -87,6 +89,11 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['join.ts', 'UntaggedMember', 'UntaggedMemberDto'],
   ['join.ts', 'MyLeaderCode', 'MyLeaderCodeDto'],
   ['notifications.ts', 'InboxItem', 'InboxItemDto'],
+  // P12.1-T4: the pager reads `total`, `page` and `pageSize` straight off the page, and every row and
+  // the badge read `readAt` and `unread` straight off a mark's answer.
+  ['notifications.ts', 'InboxPage', 'InboxDto'],
+  ['notifications.ts', 'ReadState', 'NotificationReadStateDto'],
+  ['notifications.ts', 'ReadAllState', 'UnreadCountDto'],
   // P11-T6: the roster reads every one of these straight off `GET /coaching/coachees`, and a field
   // renamed on the server would otherwise pass both suites and draw blank cells.
   ['coaching.ts', 'Roster', 'CoachingRosterDto'],
@@ -184,6 +191,50 @@ describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
   });
 });
 
+
+/**
+ * P12.1: the inbox's shapes, held to their **shape** as the calendar's are (below): a field we read as
+ * always there is one the document requires, and one it marks `nullable` we type with `| null` — a
+ * row's `readAt` is the difference between *Mark as read* and *Mark as unread*.
+ */
+const INBOX_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
+  ['notifications.ts', 'InboxItem', 'InboxItemDto'],
+  ['notifications.ts', 'InboxPage', 'InboxDto'],
+  ['notifications.ts', 'ReadState', 'NotificationReadStateDto'],
+  ['notifications.ts', 'ReadAllState', 'UnreadCountDto'],
+];
+
+describe('the inbox’s types match the API document (P12.1-T4)', () => {
+  it.each(INBOX_PAIRS)('%s › %s is shaped as %s promises: required and nullable', (file, ours, theirs) => {
+    const schema = doc.components.schemas[theirs];
+    const required = new Set(schema.required ?? []);
+    const problems: string[] = [];
+    for (const field of declaredTypes(file, ours)) {
+      const prop = schema.properties?.[field.name] ?? {};
+      if (!field.optional && !required.has(field.name)) problems.push(`${field.name}: declared always there, documented optional`);
+      if (prop.nullable && !field.nullable) problems.push(`${field.name}: documented nullable, declared without | null`);
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it('pages by the two queries the API documents, the page at the API’s default, and neither list asks for more than it serves', () => {
+    const query = (doc.paths['/api/v1/notifications'].get.parameters ?? []).filter((p) => p.in === 'query');
+    expect(query.map((p) => p.name).sort()).toEqual(['page', 'pageSize']);
+    const pageSize = query.find((p) => p.name === 'pageSize')?.schema;
+    const max = pageSize?.maximum ?? 0;
+    // `/notifications` shows the API's own default (the backend's `INBOX_PAGE.DEFAULT_SIZE`), pinned
+    // here so the two cannot drift (invariant §7).
+    expect(INBOX_PAGE_SIZE).toBe(pageSize?.default);
+    expect(INBOX_PAGE_SIZE).toBeLessThanOrEqual(max);
+    expect(POPOVER_PAGE_SIZE).toBeLessThanOrEqual(max);
+  });
+
+  it('every write the rows make is a route in the document', () => {
+    for (const path of ['/notifications/{notificationId}/read', '/notifications/{notificationId}/unread', '/notifications/read-all']) {
+      expect(doc.paths[`/api/v1${path}`]?.post, path).toBeDefined();
+    }
+  });
+});
 
 /**
  * P12: the calendar's shapes. Held until the document had the calendar's routes, and **enforced

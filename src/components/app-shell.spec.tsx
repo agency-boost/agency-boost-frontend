@@ -301,20 +301,23 @@ describe('AppShell', () => {
           <p>content</p>
         </AppShell>,
       );
-      const bell = container.querySelector('a[aria-label="Notifications"]')!;
-      const row = bell.parentElement!;
+      // The bell is a button since P12.1-T2, in a box that also holds the popover it opens.
+      const bell = container.querySelector('button[aria-label="Notifications"]')!;
+      const box = bell.parentElement!;
+      const row = box.parentElement!;
       const chip = row.firstElementChild!;
-      return { row, chip, bell, unmount };
+      return { row, chip, bell, box, unmount };
     };
 
     it.each([['a short name', 'Al'], ['a long one', 'Bambang Wijayakusuma Hartono']])(
       'gives the chip the space, so the bell is last in the row for %s',
       (_label, name) => {
-        const { row, chip, bell, unmount } = footerOf(name);
+        const { row, chip, bell, box, unmount } = footerOf(name);
 
         // The chip absorbs the width; the bell is the final child, pinned to the end.
         expect(chip.className).toContain('flex-1');
-        expect(row.lastElementChild).toBe(bell);
+        expect(row.lastElementChild).toBe(box);
+        expect(box.className).not.toContain('flex-1');
         expect(bell.className).not.toContain('flex-1');
         unmount();
       },
@@ -336,8 +339,8 @@ describe('AppShell', () => {
         </AppShell>,
       );
       await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
-      const bell = document.querySelector('a[aria-label^="Notifications"]')!;
-      return { column: bell.parentElement!, bell };
+      const bell = document.querySelector('button[aria-label^="Notifications"]')!;
+      return { column: bell.parentElement!.parentElement!, box: bell.parentElement!, bell };
     };
 
     it('shows the avatar alone — the name and the role go, they do not shrink', async () => {
@@ -360,9 +363,9 @@ describe('AppShell', () => {
     it('puts the bell above the avatar, in the DOM as well as on screen', async () => {
       // `flex-col-reverse` would leave a keyboard reaching the chip first while the eye reads
       // the bell first — a mismatch only the people who cannot see it would meet.
-      const { column, bell } = await collapse();
+      const { column, box } = await collapse();
 
-      expect(column.firstElementChild).toBe(bell);
+      expect(column.firstElementChild).toBe(box);
     });
 
     it('gives the account menu its own width, so it is not a column of one word', async () => {
@@ -592,8 +595,9 @@ describe('below 768px, the account chip is the way round (ADR-0085, P11-T6 AC-11
         <p>content</p>
       </AppShell>,
     );
-    const bell = screen.getByRole('link', { name: 'Notifications, 3 unread' });
-    const row = bell.parentElement!;
+    const bell = screen.getByRole('button', { name: 'Notifications, 3 unread' });
+    const box = bell.parentElement!;
+    const row = box.parentElement!;
     // The row shrinks below its contents' width on the bar, and holds in the sidebar from 768px.
     expect(row.classList).toContain('min-w-0');
     expect(row.classList).toContain('shrink');
@@ -606,7 +610,8 @@ describe('below 768px, the account chip is the way round (ADR-0085, P11-T6 AC-11
     expect(within(chipBox as HTMLElement).getByText('Platform Operator').className).toContain('truncate');
     expect(within(chipBox as HTMLElement).getByText('Superadmin').className).toContain('truncate');
     expect(bell.className).toContain('shrink-0');
-    expect(row.lastElementChild).toBe(bell);
+    expect(box.className).toContain('shrink-0');
+    expect(row.lastElementChild).toBe(box);
   });
 });
 
