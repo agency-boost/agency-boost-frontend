@@ -63,6 +63,10 @@ import OrgTreePage from './(tenant)/people/org-tree/page';
 import OrgLevelsPage from './(admin)/admin/org-levels/page';
 import TenantRosterImportPage from './(admin)/admin/tenants/[kpmId]/roster/page';
 import ChooseAPasswordPage from './choose-a-password/page';
+import CalendarPage from './(agent)/calendar/page';
+import {
+  AGUS, busy, DOWNLINE, entry, monthRead, peoplePage, RINA, SHELL_STUBS, weekRead,
+} from '@test/calendar-fixtures';
 
 /**
  * Where the screen is, for the one shell that reads it: the coaching person shell's archive (P11-T10),
@@ -1935,6 +1939,154 @@ describe('screens have no axe violations', () => {
     await screen.findByRole('button', { name: 'Mark read' });
     await screen.findByRole('link', { name: 'Your coaching session was finalized' });
     await expectClean('notifications');
+  });
+
+  /*
+   * The calendar (P12-T2 AC-11; H-18). Every state a reader meets it in: the week filled, empty and
+   * compared, the month, and each dialog open — the entry dialog with its people list, the detail as
+   * the organiser and as an invitee, the delete question, and *Block time*. The prototype's dialogs had
+   * no role, no focus and no Escape, its entries were `div`s and its chips' ✕ were `span`s.
+   */
+  describe('the calendar (P12)', () => {
+    const calendarRoutes = {
+      ...SHELL_STUBS,
+      '/calendar/entries?view=week': {
+        body: weekRead({
+          entries: [
+            ...weekRead().entries,
+            entry({ entryId: 'e-over', type: 'client', title: 'Client review', start: '09:15', end: '10:00' }),
+            entry({
+              entryId: 'e-invited', title: 'Goal review — Q4 planning', date: '2026-09-30', start: '09:00', end: '10:00',
+              readerIs: 'invitee', myAnswer: 'pending', organiser: { membershipId: 'mem-owner', name: 'Hendra Kusnadi' },
+              invitees: [{ membershipId: 'mem-agus', name: 'Agus Santoso', placed: false, readerCoaches: false }],
+            }),
+            entry({
+              entryId: 'e-one', type: 'coaching', title: '1:1 Coaching — Indah Permata', date: '2026-10-01', start: '11:00', end: '12:00',
+              invitees: [
+                { membershipId: 'mem-indah', name: 'Indah Permata', placed: false, answer: 'accepted', readerCoaches: true },
+                { membershipId: 'mem-rina', name: 'Rina Wijaya', placed: false, answer: 'pending', readerCoaches: false },
+                { membershipId: 'mem-arief', name: 'Arief Nugroho', placed: true, readerCoaches: false },
+              ],
+            }),
+          ],
+        }),
+      },
+      '/calendar/entries?view=month': { body: monthRead() },
+      '/calendar/people': { body: peoplePage() },
+      '/calendar/downline': { body: DOWNLINE },
+      '/calendar/entries?view=week&date=2026-09-28&for=mem-indah': {
+        body: weekRead({ entries: [busy(), entry({ entryId: 'i-1', readerIs: 'ancestor', title: 'Prospecting', type: 'task' })] }),
+      },
+    };
+    const open = async (me = AGUS) => {
+      stubFetch(calendarRoutes);
+      nav.pathname = '/calendar';
+      renderInLayout(AgentLayout, <CalendarPage />, { me });
+      return screen.findByRole('region', { name: 'Calendar, Sep 28 – Oct 4, 2026' });
+    };
+
+    it('the week, filled: overlapping entries, a trip, a pending invitation and the now-line', async () => {
+      await open();
+      await expectClean('calendar (week)');
+    });
+
+    it('the week, empty, for an Agent — the bare grid', async () => {
+      stubFetch({ ...SHELL_STUBS, '/calendar/entries?view=week': { body: weekRead({ entries: [] }) } });
+      nav.pathname = '/calendar';
+      renderInLayout(AgentLayout, <CalendarPage />, { me: RINA });
+      await screen.findByRole('region', { name: 'Calendar, Sep 28 – Oct 4, 2026' });
+      await expectClean('calendar (empty week)');
+    });
+
+    it('the month', async () => {
+      await open();
+      await userEvent.click(screen.getByRole('button', { name: 'Month' }));
+      await screen.findByText('September 2026');
+      await expectClean('calendar (month)');
+    });
+
+    it('the entry dialog with the people list open and a chip chosen', async () => {
+      await open();
+      await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
+      const dialog = screen.getByRole('dialog', { name: 'New event' });
+      await userEvent.click(within(dialog).getByLabelText('Invite (optional) — anyone in your KPM'));
+      await userEvent.click(await within(dialog).findByRole('option', { name: /^Indah Permata/ }));
+      await within(dialog).findByText('KPM leadership');
+      await expectClean('calendar (entry dialog, people list)');
+    });
+
+    it('m1 the people list as a combobox, a person reached with ↓, and its states', async () => {
+      stubFetch({
+        ...calendarRoutes,
+        '/calendar/people?limit': { body: peoplePage() },
+        '/calendar/people?q=zz': { body: peoplePage([]) },
+      });
+      nav.pathname = '/calendar';
+      renderInLayout(AgentLayout, <CalendarPage />, { me: AGUS });
+      await screen.findByRole('region', { name: 'Calendar, Sep 28 – Oct 4, 2026' });
+      await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
+      const dialog = screen.getByRole('dialog', { name: 'New event' });
+      const field = within(dialog).getByRole('combobox', { name: 'Invite (optional) — anyone in your KPM' });
+      await expectClean('calendar (people combobox, collapsed)');
+      await userEvent.click(field);
+      await within(dialog).findByRole('listbox');
+      await userEvent.keyboard('{ArrowDown}{ArrowDown}');
+      expect(field).toHaveAttribute('aria-activedescendant', within(dialog).getByRole('option', { name: /^Sari Dewi/ }).id);
+      await expectClean('calendar (people combobox, a person reached)');
+      await userEvent.type(field, 'zz');
+      await within(dialog).findByText('No matches.');
+      await expectClean('calendar (people combobox, no matches)');
+    });
+
+    it('the entry dialog with every rule broken, and Travel chosen', async () => {
+      await open();
+      await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Travel' }));
+      await userEvent.clear(screen.getByLabelText('Departure date'));
+      await userEvent.click(screen.getByRole('button', { name: 'Save event' }));
+      await screen.findByText('Choose a date.');
+      await expectClean('calendar (entry dialog, invalid)');
+    });
+
+    it('the detail as the organiser: answers on the chips, a coachee’s link, a placed member', async () => {
+      await open();
+      await userEvent.click(screen.getByRole('button', { name: /^Coaching: 1:1 Coaching — Indah Permata/ }));
+      await screen.findByRole('link', { name: 'Indah Permata' });
+      await expectClean('calendar (detail, organiser)');
+    });
+
+    it('the detail as an invitee, Accept and Decline in place, the organiser’s chip first', async () => {
+      await open();
+      await userEvent.click(screen.getByRole('button', { name: /^Meeting: Goal review — Q4 planning/ }));
+      await screen.findByRole('button', { name: 'Accept' });
+      await expectClean('calendar (detail, invitee)');
+    });
+
+    it('the delete question over the detail', async () => {
+      await open();
+      await userEvent.click(screen.getByRole('button', { name: /^Meeting: Weekly unit standup/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' });
+      await expectClean('calendar (delete question)');
+    });
+
+    it('compare: the popover open and a member’s week beside the reader’s, with a busy block', async () => {
+      await open();
+      await userEvent.click(screen.getByRole('button', { name: '+ Compare with downline' }));
+      await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
+      await screen.findByRole('region', { name: 'Calendar, Indah Permata, Sep 28 – Oct 4, 2026' });
+      await expectClean('calendar (compare)');
+    });
+
+    it('Block time, from the pill', async () => {
+      await open();
+      await userEvent.click(screen.getByRole('button', { name: '+ Compare with downline' }));
+      await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
+      await userEvent.keyboard('{Escape}');
+      await userEvent.click(await screen.findByRole('button', { name: /^Drag to block ?: Block time — Indah Permata$/ }));
+      await screen.findByRole('dialog', { name: 'Block time — Indah Permata' });
+      await expectClean('calendar (block time)');
+    });
   });
 
   /*

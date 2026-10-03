@@ -57,6 +57,19 @@
   --color-info: #2f80ed;
   --color-role-agent: rgba(27, 43, 75, 0.32);
 
+  /*
+   * Travel, on the calendar (`Calendar_Section.html:15`; H-19, P12-T2 AC-12). The prototype's
+   * `--teal` was declared in that file alone and never in the design system. As a fill and a border,
+   * and under white words on the type toggle: white on it is 5.07:1.
+   */
+  --color-teal: #2c7a73;
+  /*
+   * Teal **words** on teal's own tint — a trip's bar and its badge. The prototype put `--teal` there,
+   * 4.20:1 on its 14% wash, short of 4.5:1 at 10.5px and 11px; this darker step is 5.54:1. Pinned in
+   * `a11y.spec.tsx`, as amber-ink is.
+   */
+  --color-teal-ink: #24665f;
+
   /* Typography */
   --font-display: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;

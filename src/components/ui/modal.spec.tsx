@@ -89,4 +89,16 @@ describe('Modal (P11-T8)', () => {
     expect(onClose).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
+
+  it('draws an eyebrow above its title, outside its name — the calendar detail’s badge (P12-T2 AC-7)', () => {
+    render(
+      <Modal open title="Weekly unit standup" eyebrow={<span>Meeting</span>} onClose={() => {}}>
+        <p>When</p>
+      </Modal>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Weekly unit standup' });
+    const [badge, title] = [screen.getByText('Meeting'), screen.getByRole('heading', { name: 'Weekly unit standup' })];
+    expect(dialog).toContainElement(badge);
+    expect(badge.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

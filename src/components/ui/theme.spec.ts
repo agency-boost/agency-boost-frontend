@@ -87,6 +87,30 @@ describe('the Tailwind theme', () => {
     });
   });
 
+  describe('the calendar’s teal (H-19, P12-T2 AC-12)', () => {
+    /*
+     * The prototype declared `--teal` in its section file alone (`Calendar_Section.html:15`). It is a
+     * token now, with an ink for words on its own tint, and each class the calendar draws must compile
+     * from them — a class that reads an undefined property renders nothing and passes every jsdom test.
+     */
+    it.each([
+      ['bg-teal', '.bg-teal'],
+      ['bg-teal/[0.14]', '.bg-teal\\/\\[0\\.14\\]'],
+      ['border-teal/30', '.border-teal\\/30'],
+      ['text-teal-ink', '.text-teal-ink'],
+    ])('%s emits a rule mixed from its own token', async (cls, selector) => {
+      const css = await compile(cls);
+      expect(css).toContain(selector);
+      expect(css).toMatch(/var\(--color-teal(-ink)?\)/);
+    });
+
+    it('globals.css defines both at the values the contrast test measures', () => {
+      const globals = readFileSync(join(__dirname, '../../styles/globals.css'), 'utf8');
+      expect(globals).toMatch(/--color-teal:\s*#2c7a73;/i);
+      expect(globals).toMatch(/--color-teal-ink:\s*#24665f;/i);
+    });
+  });
+
   it('keeps base as a background and border colour', () => {
     // It is the product's warm off-white ground — removing it from `colors` would take `bg-base`
     // with it, and that is 24 call sites and the character of the whole product.

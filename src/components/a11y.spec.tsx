@@ -397,6 +397,71 @@ describe('accessibility', () => {
       expect(ratio(AMBER_INK, over(AMBER, 0.13, CARD))).toBeLessThan(4.5);
     });
 
+    describe('the calendar (H-19, P12-T2 AC-12, P12-T3 AC-6)', () => {
+      /*
+       * Every pair the calendar draws, on the grounds it draws it on: the card, today's 8% amber column
+       * and the weekend's 1.5% navy one. The prototype's own teal, its amber-dark day number and its
+       * Coaching badge each miss 4.5:1, and are pinned missing, so the fix cannot quietly come undone.
+       */
+      const TEAL = '#2C7A73';
+      const TEAL_INK = '#24665F';
+      const INFO = '#2F80ED';
+      const today = over(AMBER, 0.08, CARD);
+      const weekend = over(NAVY, 0.015, CARD);
+
+      it('white on teal clears 4.5:1 — the chosen Travel type', () => {
+        expect(ratio('#FFFFFF', TEAL)).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it('a trip’s words are teal-ink on its 14% tint, where the prototype’s teal misses', () => {
+        for (const ground of [CARD, today, weekend]) {
+          expect(ratio(TEAL_INK, over(TEAL, 0.14, ground))).toBeGreaterThanOrEqual(4.5);
+          expect(ratio(TEAL, over(TEAL, 0.14, ground))).toBeLessThan(4.5);
+        }
+      });
+
+      it('today’s number is amber-ink on today’s tint, where amber-dark misses', () => {
+        expect(ratio(AMBER_INK, today)).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(AMBER_DARK, today)).toBeLessThan(3);
+      });
+
+      it('the Coaching badge’s words are navy on its 18% tint, where amber-dark and amber-ink miss', () => {
+        const coaching = over(AMBER, 0.18, CARD);
+        expect(ratio(NAVY, coaching)).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(AMBER_DARK, coaching)).toBeLessThan(3);
+        expect(ratio(AMBER_INK, coaching)).toBeLessThan(4.5);
+      });
+
+      it('an entry’s navy words clear 4.5:1 on every type’s tint, on every column', () => {
+        const tints = [[NAVY_SOFT, 0.12], [AMBER, 0.18], [ALERT, 0.1], [SUCCESS, 0.1], [TEAL, 0.12]] as const;
+        for (const ground of [CARD, today, weekend]) {
+          for (const [colour, alpha] of tints) expect(ratio(NAVY, over(colour, alpha, ground))).toBeGreaterThanOrEqual(4.5);
+          // A compared member's busy block: navy words on a 6% navy wash.
+          expect(ratio(NAVY, over(NAVY, 0.06, ground))).toBeGreaterThanOrEqual(4.5);
+        }
+      });
+
+      it('the other badges and the pill keep the prototype’s colours, which pass', () => {
+        expect(ratio(NAVY_SOFT, over(NAVY_SOFT, 0.14, CARD))).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(ALERT, over(ALERT, 0.12, CARD))).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(SUCCESS, over(SUCCESS, 0.12, CARD))).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(SUCCESS, over(SUCCESS, 0.1, BASE))).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it('a month line’s time is navy-soft on its 10% wash, and an adjacent month’s number is muted, not 32% navy', () => {
+        expect(ratio(NAVY_SOFT, over(NAVY_SOFT, 0.1, CARD))).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(NAVY, over(NAVY_SOFT, 0.1, today))).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(MUTED, CARD)).toBeGreaterThanOrEqual(4.5);
+        expect(ratio(over(NAVY, 0.32, CARD), CARD)).toBeLessThan(3);
+      });
+
+      it('the drag selection is the palette’s info, not the prototype’s raw #2680EB', () => {
+        // A fill under nothing to read: it needs to be seen against the column, 3:1 for a graphic.
+        expect(ratio(INFO, CARD)).toBeGreaterThanOrEqual(3);
+        expect(ratio(INFO, today)).toBeGreaterThanOrEqual(3);
+      });
+    });
+
     it('the Active (MAA) marks put a navy glyph on the tint — the prototype’s coloured ones miss (ADR-0054)', () => {
       /*
        * `KPM_Owner.html:830-831`: a blue ✓ on a 12% blue wash, an amber-dark ✕ on a 16% amber one, at

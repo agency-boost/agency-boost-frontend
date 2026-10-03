@@ -137,6 +137,11 @@ function Chrome({
         { label: 'Leads management', href: '/leads', active: on('/leads'), icon: 'funnel' },
         { label: 'Goal settings', href: '/goals', active: on('/goals'), icon: 'target' },
         { label: 'Personal summary', href: '/summary', active: on('/summary'), icon: 'user' },
+        // The fifth, after *Personal summary*, in `Overall.html`'s sentence case: the section file draws it
+        // in a *Daily tools* group of its own (`Calendar_Section.html:254-260`), which is shell residue
+        // (`prototype-sources.md`, *The rule*). Every field role has a calendar (roles §4.2), so it
+        // follows no graph. Its glyph is not *Event list*'s (P12-T2 AC-1).
+        { label: 'Calendar', href: '/calendar', active: on('/calendar'), icon: 'schedule' },
       ],
     },
     ...(leadsSomeone ? [unitTools] : []),

@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  formatCalendarDay, formatCalendarDayLong, formatDay, formatDayLong, formatMonth, formatShortDay, formatWeekday, monthInZone,
+  clockMinutes, endMinutes, formatCalendarDay, formatCalendarDayLong, formatClock, formatDay, formatDayHeader, formatDayLong,
+  formatHour, formatMonth, formatMonthSpan, formatShortDay, formatTimeSpan, formatTripWhen, formatWeekday, formatWeekdayDay,
+  formatWeekRange, formatWhen, monthInZone,
 } from './format';
 
 describe('formatDay', () => {
@@ -95,5 +97,76 @@ describe('formatCalendarDayLong', () => {
   it('builds the day from its numbers, so no zone can move it', () => {
     expect(formatCalendarDayLong('2026-01-01')).toBe('Thursday, January 1, 2026');
     expect(formatCalendarDayLong('not a day')).toBe('');
+  });
+});
+
+/**
+ * P12-T2 AC-3 and P12-T3 AC-1, AC-3: the calendar's shapes, each the prototype's for its own space,
+ * and **the same in every zone the browser could be in** — run with the process clock in UTC, Jakarta
+ * and New York (exit criterion 1). They spell what the read served; none of them can move a day.
+ */
+describe.each(['UTC', 'Asia/Jakarta', 'America/New_York'])('the calendar’s formats, with the clock in %s', (zone) => {
+  const original = process.env.TZ;
+  beforeAll(() => { process.env.TZ = zone; });
+  afterAll(() => { process.env.TZ = original; });
+
+  it('labels a week `Sep 28 – Oct 4, 2026`, and one across a year with both years (`:285`)', () => {
+    expect(formatWeekRange('2026-09-28', '2026-10-04')).toBe('Sep 28 – Oct 4, 2026');
+    expect(formatWeekRange('2026-12-28', '2027-01-03')).toBe('Dec 28, 2026 – Jan 3, 2027');
+    expect(formatWeekRange('2026-08-31', '2026-09-06')).toBe('Aug 31 – Sep 6, 2026');
+    expect(formatWeekRange('nope', '2026-09-06')).toBe('');
+  });
+
+  it('heads a column with its weekday and number, `Oct 1` on the first (`:327-333`)', () => {
+    expect(formatDayHeader('2026-09-28')).toEqual({ weekday: 'Mon', number: '28' });
+    expect(formatDayHeader('2026-10-01')).toEqual({ weekday: 'Thu', number: 'Oct 1' });
+    expect(formatDayHeader('2027-01-01')).toEqual({ weekday: 'Fri', number: 'Jan 1' });
+    expect(formatDayHeader('')).toEqual({ weekday: '', number: '' });
+  });
+
+  it('labels the hours `12 AM` … `11 PM` (`:590`)', () => {
+    expect([0, 1, 11, 12, 13, 23].map(formatHour)).toEqual(['12 AM', '1 AM', '11 AM', '12 PM', '1 PM', '11 PM']);
+  });
+
+  it('writes the week’s time `9:00 AM–9:30 AM`, an en dash with no spaces (`:611`)', () => {
+    expect(formatTimeSpan('09:00', '09:30')).toBe('9:00 AM–9:30 AM');
+    expect(formatTimeSpan('12:00', '13:30')).toBe('12:00 PM–1:30 PM');
+    expect(formatTimeSpan('23:00', '00:00')).toBe('11:00 PM–12:00 AM');
+    expect(formatClock('nope')).toBe('');
+  });
+
+  it('writes the detail’s *When* `Monday, Sep 28, 2026 · 9:00 AM – 9:30 AM` (`:827`)', () => {
+    expect(formatWhen('2026-09-28', '09:00', '09:30')).toBe('Monday, Sep 28, 2026 · 9:00 AM – 9:30 AM');
+    expect(formatWeekdayDay('bad')).toBe('');
+  });
+
+  it('writes a trip’s two dates joined by an en dash, or one for a one-day trip', () => {
+    expect(formatTripWhen('2026-09-28', '2026-09-29')).toBe('Monday, Sep 28, 2026 – Tuesday, Sep 29, 2026');
+    expect(formatTripWhen('2026-10-02', '2026-10-02')).toBe('Friday, Oct 2, 2026');
+  });
+
+  it('writes the month’s time `9-9.30`, `14-15`, 24-hour with an ASCII hyphen (`:1036-1040`)', () => {
+    expect(formatMonthSpan('09:00', '09:30')).toBe('9-9.30');
+    expect(formatMonthSpan('14:00', '15:00')).toBe('14-15');
+    expect(formatMonthSpan('10:00', '11:30')).toBe('10-11.30');
+    expect(formatMonthSpan('09:05', '09:30')).toBe('9.05-9.30');
+    expect(formatMonthSpan('23:00', '00:00')).toBe('23-24');
+    expect(formatMonthSpan('x', 'y')).toBe('-');
+  });
+
+  it('labels the month `September 2026` (`:1013`)', () => {
+    expect(formatMonth('2026-09')).toBe('September 2026');
+    expect(formatMonth('2027-02')).toBe('February 2027');
+  });
+});
+
+describe('office times', () => {
+  it('reads `HH:mm` as minutes after midnight, and an end of 00:00 as the end of the day', () => {
+    expect(clockMinutes('09:45')).toBe(585);
+    expect(clockMinutes('24:00')).toBeNull();
+    expect(clockMinutes('9.45')).toBeNull();
+    expect(endMinutes('00:00')).toBe(1440);
+    expect(endMinutes('10:30')).toBe(630);
+    expect(endMinutes('')).toBeNull();
   });
 });

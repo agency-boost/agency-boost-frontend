@@ -27,6 +27,7 @@ export function Modal({
   onClose,
   initialFocus,
   focusDialog = false,
+  eyebrow,
   className,
   children,
 }: {
@@ -34,6 +35,11 @@ export function Modal({
   title: string;
   /** A line under the title, read with it. */
   description?: string;
+  /**
+   * Something drawn **above** the title, as the calendar's detail draws its type badge over the entry's
+   * title (`Calendar_Section.html:425-426`). Part of the dialog's content, not of its name.
+   */
+  eyebrow?: ReactNode;
   onClose: () => void;
   initialFocus?: RefObject<HTMLElement | null>;
   /**
@@ -99,6 +105,7 @@ export function Modal({
         onKeyDown={trap}
         className={cn('max-h-[calc(100vh-2.5rem)] w-full max-w-[26rem] overflow-y-auto rounded-lg bg-card p-6 shadow-modal', className)}
       >
+        {eyebrow}
         <h2 id={titleId} className="font-display text-lg font-bold text-navy">{title}</h2>
         {description && <p id={descriptionId} className="mt-1 text-md text-muted">{description}</p>}
         <div className="mt-4">{children}</div>

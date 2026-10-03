@@ -110,3 +110,111 @@ export function formatWeekday(day: string): string {
   return at ? at.toLocaleDateString('en-US', { weekday: 'short' }) : '';
 }
 
+
+/*
+ * ── The calendar's dates and times (P12-T2, P12-T3) ─────────────────────────────────────────────
+ *
+ * Every one of these takes what the calendar read serves — an office date `YYYY-MM-DD` and an office
+ * wall-clock time `HH:mm` — and spells it. **None reads a clock and none works out a day**: the read
+ * serves the period's dates, the office's today and its minute (invariant §9; F-01, F-89, F-93), so
+ * the browser's zone cannot move anything here. The shapes are the prototype's, each for its own
+ * space (`Calendar_Section.html:285`, `:330`, `:590`, `:611`, `:827`, `:1013`, `:1036-1040`), so the
+ * week's 12-hour times and the month's 24-hour ones are both verbatim (P12-T3 AC-3).
+ */
+
+/** Minutes after the office's midnight for `HH:mm`; `null` for anything that is not a time. */
+export function clockMinutes(hhmm: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm);
+  if (!m) return null;
+  const [h, min] = [Number(m[1]), Number(m[2])];
+  return h > 23 || min > 59 ? null : h * 60 + min;
+}
+
+/** An end time's minutes: `00:00` as an **end** is midnight at the end of the date, 1440 (P12-T2 AC-5). */
+export function endMinutes(hhmm: string): number | null {
+  const m = clockMinutes(hhmm);
+  return m === 0 ? 1440 : m;
+}
+
+/**
+ * The week's range label: `Sep 28 – Oct 4, 2026`, and `Dec 28, 2026 – Jan 3, 2027` across a year
+ * (`Calendar_Section.html:285`; P12-T2 AC-3). An en dash with a space either side.
+ */
+export function formatWeekRange(from: string, to: string): string {
+  const [a, b] = [localDate(from), localDate(to)];
+  if (!a || !b) return '';
+  if (a.getFullYear() !== b.getFullYear()) {
+    return `${formatShortDay(from, { year: true })} – ${formatShortDay(to, { year: true })}`;
+  }
+  return `${formatShortDay(from)} – ${formatShortDay(to)}, ${b.getFullYear()}`;
+}
+
+/**
+ * A week column's heading: its weekday, `Mon`, over its number — `28`, or `Oct 1` on the first of a
+ * month (`Calendar_Section.html:327-333`).
+ */
+export function formatDayHeader(day: string): { weekday: string; number: string } {
+  const at = localDate(day);
+  if (!at) return { weekday: '', number: '' };
+  return {
+    weekday: formatWeekday(day),
+    number: at.getDate() === 1 ? formatShortDay(day) : String(at.getDate()),
+  };
+}
+
+/** The hour gutter's label: `12 AM`, `1 AM` … `12 PM` … `11 PM` (`Calendar_Section.html:590`). */
+export function formatHour(hour: number): string {
+  if (hour === 0 || hour === 24) return '12 AM';
+  if (hour === 12) return '12 PM';
+  return hour > 12 ? `${hour - 12} PM` : `${hour} AM`;
+}
+
+/** An office time in the week's 12-hour form, `9:00 AM`; `00:00` is `12:00 AM` (`fmtTime`, `:673-679`). */
+export function formatClock(hhmm: string): string {
+  const minutes = clockMinutes(hhmm);
+  if (minutes === null) return '';
+  const [h, m] = [Math.floor(minutes / 60), minutes % 60];
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+
+/** An entry's time in the week: `9:00 AM–9:30 AM`, an en dash with no spaces (`Calendar_Section.html:611`). */
+export function formatTimeSpan(start: string, end: string): string {
+  return `${formatClock(start)}–${formatClock(end)}`;
+}
+
+/** A calendar day with its weekday, the detail's form: `Monday, Sep 28, 2026` (`Calendar_Section.html:562`). */
+export function formatWeekdayDay(day: string): string {
+  const at = localDate(day);
+  return at ? at.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' }) : '';
+}
+
+/**
+ * The detail's *When* for a timed entry: `Monday, Sep 28, 2026 · 9:00 AM – 9:30 AM` — a middle dot,
+ * and an en dash **with** spaces (`Calendar_Section.html:827`).
+ */
+export function formatWhen(day: string, start: string, end: string): string {
+  return `${formatWeekdayDay(day)} · ${formatClock(start)} – ${formatClock(end)}`;
+}
+
+/**
+ * The detail's *When* for a trip: its two dates joined by an en dash, or one date for a one-day trip
+ * (P12-T2 AC-7, a Fill: the prototype cannot open a trip at all, `:576`).
+ */
+export function formatTripWhen(startsOn: string, endsOn: string): string {
+  if (startsOn === endsOn) return formatWeekdayDay(startsOn);
+  return `${formatWeekdayDay(startsOn)} – ${formatWeekdayDay(endsOn)}`;
+}
+
+/**
+ * A month line's time: 24-hour, the hour unpadded, minutes only when there are some, after a dot, and
+ * an ASCII hyphen between — `9-9.30`, `14-15` (`fmtMonthTime`, `Calendar_Section.html:1036-1040`). An
+ * end at midnight reads `24`, as the prototype's own decimal hours do.
+ */
+export function formatMonthSpan(start: string, end: string): string {
+  const part = (minutes: number | null) => {
+    if (minutes === null) return '';
+    const [h, m] = [Math.floor(minutes / 60), minutes % 60];
+    return m === 0 ? `${h}` : `${h}.${String(m).padStart(2, '0')}`;
+  };
+  return `${part(clockMinutes(start))}-${part(endMinutes(end))}`;
+}

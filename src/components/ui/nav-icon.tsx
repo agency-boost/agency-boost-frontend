@@ -48,6 +48,11 @@ const PATHS: Record<string, React.ReactNode> = {
   graduation: <><path d="m2 8 10-4 10 4-10 4z" /><path d="M6 10v5c0 1.5 2.7 3 6 3s6-1.5 6-3v-5" /></>,
   /** A date. */
   calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></>,
+  /**
+   * A week with things in it — the member's own *Calendar* (P12-T2 AC-1). Not `calendar`, which is the
+   * office's *Event list*: two items in one sidebar do not wear one icon.
+   */
+  schedule: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /><path d="M7 14h4M7 17.5h7M14 14h3" /></>,
   /** Something to win. */
   trophy: <><path d="M7 4h10v5a5 5 0 0 1-10 0z" /><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3" /><path d="M12 14v3M9 21h6M10 17h4" /></>,
   /** The office's own knobs. */

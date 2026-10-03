@@ -8,7 +8,8 @@ export interface InboxItem {
   detail: string | null;
   /**
    * Where the item opens in the app, composed on the server beside its title: a finalized coaching
-   * session opens on that session (`/coaching/me?session=…`, P11-T10 AC-8). `null` for every other item.
+   * session opens on that session (`/coaching/me?session=…`, P11-T10 AC-8), and a calendar notice on
+   * its entry's week, its detail open (`/calendar?entry=…&date=…`, ADR-0095). `null` for every other item.
    */
   href: string | null;
   kpmId: string | null;

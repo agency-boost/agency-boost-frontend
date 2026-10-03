@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { INVITEES_MAX, NOTES_MAX, PEOPLE_PAGE, TITLE_MAX, TRIP_DAYS_MAX } from './calendar';
 import { LEADER_NOTE_MAX } from './coaching';
 
 /**
@@ -22,13 +23,23 @@ import { LEADER_NOTE_MAX } from './coaching';
 const OPENAPI = join(__dirname, '..', '..', '..', 'backend', 'openapi.json');
 
 interface Doc {
-  paths: Record<string, Record<string, { operationId?: string; responses: Record<string, { content?: Record<string, { schema?: Schema }> }> }>>;
+  paths: Record<string, Record<string, {
+    operationId?: string;
+    parameters?: { name: string; in: string; schema?: Schema }[];
+    responses: Record<string, { content?: Record<string, { schema?: Schema }> }>;
+  }>>;
   components: { schemas: Record<string, Schema> };
 }
 interface Schema {
   $ref?: string;
   type?: string;
   maxLength?: number;
+  maxItems?: number;
+  description?: string;
+  maximum?: number;
+  nullable?: boolean;
+  enum?: unknown[];
+  required?: string[];
   items?: Schema;
   properties?: Record<string, Schema>;
 }
@@ -173,6 +184,157 @@ describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
   });
 });
 
+
+/**
+ * P12: the calendar's shapes. Held until the document had the calendar's routes, and **enforced
+ * unconditionally now that it has**: a hold keyed on a route would skip the whole block, quietly, the
+ * day that route was renamed.
+ *
+ * Beyond the names, the calendar's pairs are held to the field's **shape**, in the same direction —
+ * nothing a screen relies on that the API does not promise:
+ *
+ * - a field we declare without `?` is one the document **requires**: a screen reads it as always there;
+ * - a field the document marks `nullable` is one we type with `| null`: `null` is not a `string`, and
+ *   a screen that trims it throws;
+ * - a field the document lists values for is typed with **exactly** those values: one the API sends
+ *   that we lack has no word on screen, and one we keep that it never sends is a branch nobody walks.
+ */
+const CALENDAR_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
+  ['calendar.ts', 'CalendarRead', 'CalendarPeriodDto'],
+  ['calendar.ts', 'CalendarDay', 'CalendarDayDto'],
+  ['calendar.ts', 'CalendarNow', 'CalendarNowDto'],
+  ['calendar.ts', 'CalendarSubject', 'CalendarSubjectDto'],
+  ['calendar.ts', 'CalendarRung', 'CalendarRungDto'],
+  ['calendar.ts', 'CalendarPerson', 'CalendarPersonDto'],
+  ['calendar.ts', 'CalendarInvitee', 'CalendarInviteeDto'],
+  ['calendar.ts', 'CalendarEntry', 'CalendarEntryDto'],
+  ['calendar.ts', 'CalendarBusy', 'CalendarBusyBlockDto'],
+  ['calendar.ts', 'CalendarEntryDeleted', 'CalendarDeletedDto'],
+  ['calendar.ts', 'CalendarPeopleItem', 'CalendarPersonRowDto'],
+  ['calendar.ts', 'CalendarPeoplePageInfo', 'CalendarPageDto'],
+  ['calendar.ts', 'CalendarPeoplePage', 'CalendarPeoplePageDto'],
+  ['calendar.ts', 'CalendarDownlinePerson', 'CalendarDownlineRowDto'],
+  ['calendar.ts', 'CalendarDownline', 'CalendarDownlineDto'],
+];
+
+/** The three writes that send an `EntryInput`, and what each call adds to it (`calendar.ts`). */
+const CALENDAR_WRITES: ReadonlyArray<[dto: string, added: string[]]> = [
+  ['CreateCalendarEntryDto', []],
+  ['UpdateCalendarEntryDto', ['version']],
+  ['CreateCalendarBlockDto', ['membershipId']],
+];
+
+describe('the calendar’s types match the API document (P12)', () => {
+  it('reads a document that has the calendar in it', () => {
+    expect(Object.keys(doc.paths)).toContain('/api/v1/calendar/entries');
+  });
+
+  it.each(CALENDAR_PAIRS)('%s › %s ⊆ %s', (file, ours, theirs) => {
+    const documented = new Set(propertiesOf(theirs));
+    expect(declaredFields(file, ours).filter((f) => !documented.has(f))).toEqual([]);
+  });
+
+  it.each(CALENDAR_PAIRS)('%s › %s is shaped as %s promises: required, nullable, its values', (file, ours, theirs) => {
+    const schema = doc.components.schemas[theirs];
+    const required = new Set(schema.required ?? []);
+    const problems: string[] = [];
+    for (const field of declaredTypes(file, ours)) {
+      const prop = schema.properties?.[field.name] ?? {};
+      if (!field.optional && !required.has(field.name)) problems.push(`${field.name}: declared always there, documented optional`);
+      if (prop.nullable && !field.nullable) problems.push(`${field.name}: documented nullable, declared without | null`);
+      const theirValues = (prop.enum ?? []).filter((v): v is string => typeof v === 'string');
+      if (theirValues.length > 0) {
+        const ourValues = literalsOf(file, field.type);
+        if (ourValues === null) problems.push(`${field.name}: documented as values, declared as ${field.type}`);
+        else if ([...ourValues].sort().join() !== [...theirValues].sort().join()) {
+          problems.push(`${field.name}: ${[...ourValues].sort().join('|')} against ${[...theirValues].sort().join('|')}`);
+        }
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it.each(CALENDAR_WRITES)('a save sends only what %s takes, and everything it requires', (dto, added) => {
+    const documented = new Set(propertiesOf(dto));
+    const sent = [...declaredFields('calendar.ts', 'EntryInput'), ...added];
+    expect(sent.filter((f) => !documented.has(f))).toEqual([]);
+    const always = new Set([...declaredTypes('calendar.ts', 'EntryInput').filter((f) => !f.optional).map((f) => f.name), ...added]);
+    expect((doc.components.schemas[dto].required ?? []).filter((f) => !always.has(f))).toEqual([]);
+  });
+
+  it('an answer sends one of the two answers the API takes', () => {
+    expect(doc.components.schemas.AnswerCalendarEntryDto.required).toEqual(['answer']);
+    const answer = (literalsOf('calendar.ts', 'Answer') ?? []).filter((a) => a !== 'pending');
+    expect([...answer].sort()).toEqual([...(doc.components.schemas.AnswerCalendarEntryDto.properties?.answer.enum ?? [])].sort());
+  });
+
+  it.each(CALENDAR_WRITES)('P12-T2 AC-5: the limits the entry dialog repeats are the ones %s validates', (dto) => {
+    const fields = doc.components.schemas[dto].properties ?? {};
+    expect(fields.title.maxLength).toBe(TITLE_MAX);
+    expect(fields.notes.maxLength).toBe(NOTES_MAX);
+    expect(fields.inviteeIds.maxItems).toBe(INVITEES_MAX);
+  });
+
+  /*
+   * A trip's length is a rule between two fields, so no `maximum` carries it: the document says it in
+   * `endsOn`'s description, written from the backend's own constant, and that sentence is read here.
+   */
+  it.each(CALENDAR_WRITES)('m3: TRIP_DAYS_MAX is the trip limit %s documents on endsOn', (dto) => {
+    const description = doc.components.schemas[dto].properties?.endsOn?.description ?? '';
+    const limit = /at most (\d+) days/.exec(description);
+    expect(limit, description).not.toBeNull();
+    expect(Number(limit![1])).toBe(TRIP_DAYS_MAX);
+  });
+
+  it('every query a calendar call sends is one the API documents, and the picker asks for no more than it serves', () => {
+    const params = (path: string, verb: string) =>
+      (doc.paths[`/api/v1${path}`][verb].parameters ?? []).filter((p) => p.in === 'query');
+    expect(params('/calendar/entries', 'get').map((p) => p.name).sort()).toEqual(['date', 'for', 'view']);
+    expect(params('/calendar/people', 'get').map((p) => p.name).sort()).toEqual(['cursor', 'limit', 'q']);
+    expect(params('/calendar/entries/{entryId}', 'delete').map((p) => p.name)).toEqual(['version']);
+    expect(params('/calendar/people', 'get').find((p) => p.name === 'limit')?.schema?.maximum).toBe(PEOPLE_PAGE);
+  });
+
+  it('every path the calendar calls exists in the document', () => {
+    const paths = new Set(Object.keys(doc.paths).map((p) => p.replace('/api/v1', '')));
+    const called = callsIn(readFileSync(join(__dirname, 'calendar.ts'), 'utf8'));
+    expect(called.length).toBeGreaterThanOrEqual(8);
+    expect(called.filter((p) => !matches(p, paths))).toEqual([]);
+  });
+});
+
+/** Each field of one of our interfaces with how it is declared: `?`, `| null`, and its type's text. */
+function declaredTypes(file: string, name: string): { name: string; optional: boolean; nullable: boolean; type: string }[] {
+  const src = readFileSync(join(__dirname, file), 'utf8');
+  const body = new RegExp(`export interface ${name} \\{([^}]*)\\}`, 's').exec(src);
+  if (!body) throw new Error(`no interface ${name} in ${file}`);
+  return [...body[1].matchAll(/^\s{2}(\w+)(\?)?:\s*([^;]+);/gm)].map((m) => {
+    const parts = m[3].split('|').map((t) => t.trim());
+    return {
+      name: m[1],
+      optional: m[2] === '?',
+      nullable: parts.includes('null'),
+      type: parts.filter((t) => t !== 'null').join(' | '),
+    };
+  });
+}
+
+/**
+ * The string values a declared type allows: its own literals, or those of the `export type` alias it
+ * names in the same file. `null` for anything else — `string`, a generic — which no list can check.
+ */
+function literalsOf(file: string, type: string): string[] | null {
+  const literals = (text: string) => {
+    const parts = text.split('|').map((t) => t.trim());
+    return parts.every((t) => /^'[^']*'$/.test(t)) ? parts.map((t) => t.slice(1, -1)) : null;
+  };
+  const own = literals(type);
+  if (own) return own;
+  if (!/^\w+$/.test(type)) return null;
+  const src = readFileSync(join(__dirname, file), 'utf8');
+  const alias = new RegExp(`export type ${type} = ([^;]+);`).exec(src);
+  return alias ? literals(alias[1]) : null;
+}
 
 /**
  * Every path passed to `api(...)`, with each interpolation reduced to `*`.

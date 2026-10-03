@@ -64,6 +64,9 @@ const config: Config = {
         alert: token('alert'),
         neutral: token('neutral'),
         info: token('info'),
+        // Travel (H-19). `DEFAULT` and `ink` merge into Tailwind's own teal scale, which no component
+        // uses: `bg-teal`, `border-teal` and `text-teal-ink` are the calendar's.
+        teal: { DEFAULT: token('teal'), ink: token('teal-ink') },
         role: {
           ab: token('role-ab'),
           aab: token('role-aab'),
