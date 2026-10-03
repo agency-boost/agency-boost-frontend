@@ -371,6 +371,9 @@ export const DOWNLINE_GROUP_LABEL: Record<DownlineGroup, string> = {
 export const OWN_COPY = {
   accept: 'Accept',
   decline: 'Decline',
+  /** The toast after an answer: the dialog closes, so the change is said rather than marked. */
+  answeredAccepted: 'Invitation accepted.',
+  answeredDeclined: 'Invitation declined. It is no longer on your calendar.',
   accepted: 'Accepted',
   declined: 'Declined',
   noAnswer: 'No answer yet',

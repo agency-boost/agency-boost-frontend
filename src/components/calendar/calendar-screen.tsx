@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Toast, useToast } from '@/components/ui/toast';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   COMPARE_MAX, entryDate, initialsOf, OWN_COPY, peopleOn, PROTOTYPE_COPY, readCalendar, readEntry,
@@ -12,6 +13,7 @@ import { HOUR_PX, nextHalfHour, OPEN_AT_HOUR } from '@/lib/calendar-layout';
 import { DEFAULT_END, DEFAULT_START, type Slot } from '@/lib/calendar-form';
 import { formatMonth, formatWeekRange } from '@/lib/format';
 import { joinInFlight } from '@/lib/in-flight';
+import { announceInboxChanged } from '@/lib/notifications';
 import { useCan, useSession } from '@/lib/session';
 import { cn } from '@/lib/cn';
 import { TypeLegend } from './calendar-parts';
@@ -97,6 +99,7 @@ export function CalendarScreen({
   const touching = useRef<string[]>([]);
   const comparedReads = useRef(new Map<string, ComparedRead>());
   const [detail, setDetail] = useState<CalendarEntry | null>(null);
+  const { toast, show } = useToast();
   const [editor, setEditor] = useState<{ key: number; state: EditorState } | null>(null);
   const opened = useRef(0);
   const scroll = useScrollGroup();
@@ -365,14 +368,22 @@ export function CalendarScreen({
             refocus.current = true;
             wrote(peopleOn(entry));
           }}
-          // An answer is the reader's own: it moves nothing on a compared calendar.
-          onAnswered={again}
+          // An answer is the reader's own: it moves nothing on a compared calendar. The detail closes and
+          // the toast says what changed, since an accepted entry looks as it did before; the server read the
+          // invitation's notice, so the badge reads its count again.
+          onAnswered={(answered) => {
+            setDetail(null);
+            show(answered.myAnswer === 'declined' ? OWN_COPY.answeredDeclined : OWN_COPY.answeredAccepted);
+            announceInboxChanged();
+            again();
+          }}
         />
       )}
 
       {editor && (
         <EntryDialog key={editor.key} state={editor.state} onClose={() => setEditor(null)} onSaved={saved} />
       )}
+      <Toast toast={toast} />
     </div>
   );
 }

@@ -49,6 +49,22 @@ describe('the notifications inbox (P3.5-T10)', () => {
     expect(screen.queryByRole('button', { name: 'Mark all read' })).toBeNull();
   });
 
+  it('tells the shell’s badge to count again after a read (the product owner’s walk, 2026-10-03)', async () => {
+    stubFetch({
+      '/notifications/n-1/read': { body: { items: [item({ readAt: '2026-09-06T00:00:00.000Z' })], unread: 0 } },
+      '/notifications': { body: { items: [item()], unread: 1 } },
+    });
+    const heard = vi.fn();
+    window.addEventListener('agencyboost:inbox-changed', heard);
+    try {
+      renderWithSession(<NotificationsPage />, { me: READER });
+      await userEvent.click(await screen.findByRole('button', { name: 'Mark read' }));
+      await vi.waitFor(() => expect(heard).toHaveBeenCalledTimes(1));
+    } finally {
+      window.removeEventListener('agencyboost:inbox-changed', heard);
+    }
+  });
+
   it('AC-2: offers Mark all read only when something is unread', async () => {
     stubFetch({ '/notifications': { body: { items: [item()], unread: 1 } } });
     renderWithSession(<NotificationsPage />, { me: READER });

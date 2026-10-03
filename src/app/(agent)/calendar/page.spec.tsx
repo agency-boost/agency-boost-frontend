@@ -538,7 +538,8 @@ describe('P12-T2 — my calendar, week view', () => {
   describe('P12-T2 AC-14 the states the prototype lacks', () => {
     it('holds a skeleton grid while the read is out', async () => {
       show();
-      expect(screen.getByRole('status')).toHaveTextContent('Loading the calendar…');
+      // The toast's live region is always in the page too, so the skeleton is found by what it says.
+      expect(screen.getAllByRole('status').some((r) => r.textContent?.includes('Loading the calendar…'))).toBe(true);
       await grid();
     });
 
@@ -599,7 +600,8 @@ describe('P12-T3 — month view', () => {
 
   it('opens on the month from the address, its frame held while the read is out', async () => {
     const stub = show({ [MONTH_READ]: { body: monthRead() } }, AGUS, { view: 'month', date: '2026-09-14' });
-    expect(screen.getByRole('status')).toHaveTextContent('Loading the calendar…');
+    // The toast's live region is always in the page too, so the skeleton is found by what it says.
+      expect(screen.getAllByRole('status').some((r) => r.textContent?.includes('Loading the calendar…'))).toBe(true);
     expect(await screen.findByText('September 2026')).toBeInTheDocument();
     expect(calls(stub, MONTH_READ)[0].url).toMatch(/\?view=month&date=2026-09-14$/);
   });
@@ -1009,10 +1011,7 @@ describe('P12-T4 — invitations and the people picker', () => {
     });
 
     it('puts Decline in Delete’s place and Accept in Edit’s, and the organiser’s chip first', async () => {
-      const stub = show({
-        [WEEK_READ]: { body: weekRead({ entries: [invited] }) },
-        'POST /calendar/entries/e-standup/answer': ({ body }) => ({ body: { ...invited, myAnswer: (body as { answer: string }).answer } }),
-      });
+      show({ [WEEK_READ]: { body: weekRead({ entries: [invited] }) } });
       await grid();
       await userEvent.click(screen.getByRole('button', { name: /^Meeting: Weekly unit standup/ }));
       const dialog = screen.getByRole('dialog', { name: 'Weekly unit standup' });
@@ -1022,12 +1021,37 @@ describe('P12-T4 — invitations and the people picker', () => {
       expect(within(first).getByRole('button', { name: 'Organiser' })).toBeInTheDocument();
       expect(second).toHaveTextContent('Agus Santoso');
       expect(within(dialog).getByRole('button', { name: 'Accept' })).toHaveAttribute('aria-pressed', 'false');
-      await userEvent.click(within(dialog).getByRole('button', { name: 'Accept' }));
-      await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Accept' })).toHaveAttribute('aria-pressed', 'true'));
-      expect(bodyOf(calls(stub, '/answer', 'POST')[0])).toEqual({ answer: 'accepted' });
-      await userEvent.click(within(dialog).getByRole('button', { name: 'Decline' }));
-      await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Decline' })).toHaveAttribute('aria-pressed', 'true'));
-      expect(bodyOf(calls(stub, '/answer', 'POST')[1])).toEqual({ answer: 'declined' });
+    });
+
+    it('after an answer the detail closes, a toast says what changed, the grid reads again and the badge is told (the product owner’s walk, 2026-10-03)', async () => {
+      const stub = show({
+        [WEEK_READ]: { body: weekRead({ entries: [invited] }) },
+        'POST /calendar/entries/e-standup/answer': ({ body }) => ({ body: { ...invited, myAnswer: (body as { answer: string }).answer } }),
+      });
+      const heard = vi.fn();
+      window.addEventListener('agencyboost:inbox-changed', heard);
+      try {
+        await grid();
+        const reads = () => calls(stub, '/calendar/entries?', 'GET').length;
+        const before = reads();
+
+        await userEvent.click(screen.getByRole('button', { name: /^Meeting: Weekly unit standup/ }));
+        await userEvent.click(within(screen.getByRole('dialog', { name: 'Weekly unit standup' })).getByRole('button', { name: 'Accept' }));
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Weekly unit standup' })).not.toBeInTheDocument());
+        expect(bodyOf(calls(stub, '/answer', 'POST')[0])).toEqual({ answer: 'accepted' });
+        expect(await screen.findByText('Invitation accepted.')).toBeInTheDocument();
+        expect(heard).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(reads()).toBeGreaterThan(before));
+
+        await userEvent.click(screen.getByRole('button', { name: /^Meeting: Weekly unit standup/ }));
+        await userEvent.click(within(screen.getByRole('dialog', { name: 'Weekly unit standup' })).getByRole('button', { name: 'Decline' }));
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Weekly unit standup' })).not.toBeInTheDocument());
+        expect(bodyOf(calls(stub, '/answer', 'POST')[1])).toEqual({ answer: 'declined' });
+        expect(await screen.findByText('Invitation declined. It is no longer on your calendar.')).toBeInTheDocument();
+        expect(heard).toHaveBeenCalledTimes(2);
+      } finally {
+        window.removeEventListener('agencyboost:inbox-changed', heard);
+      }
     });
 
     it('shows a refused answer in the dialog', async () => {

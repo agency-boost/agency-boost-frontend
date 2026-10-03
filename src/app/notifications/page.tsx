@@ -8,6 +8,7 @@ import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
+  announceInboxChanged,
   markAllNotificationsRead,
   markNotificationRead,
   readInbox,
@@ -69,6 +70,8 @@ export default function NotificationsPage() {
     setError(null);
     try {
       setInbox(await run());
+      // The shell's badge counts the same inbox: tell it to read again.
+      announceInboxChanged();
     } catch (err) {
       setError(toDisplayError(err));
     } finally {

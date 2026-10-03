@@ -30,3 +30,14 @@ export const markNotificationRead = (notificationId: string) =>
 
 export const markAllNotificationsRead = () =>
   api<Inbox>('/notifications/read-all', { method: 'POST' });
+
+/**
+ * **The inbox changed on this screen**: an answer read the notice that announced it, or the reader marked
+ * something read. The shell's badge reads the count again when it hears this, so it never keeps counting
+ * a notice that has been dealt with. A window event, so no screen has to know where the badge lives.
+ */
+export const INBOX_CHANGED = 'agencyboost:inbox-changed';
+
+export function announceInboxChanged(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(INBOX_CHANGED));
+}
