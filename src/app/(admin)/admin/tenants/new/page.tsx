@@ -7,10 +7,25 @@ import { Page } from '@/components/page';
 import {
   Button, ButtonLink, Card, ErrorBanner, Field, ReadOnlyField, Select, TextInput,
 } from '@/components/ui/field';
-import { createTenant, listCompanies, type Company } from '@/lib/admin';
-import { toDisplayError } from '@/lib/api-client';
+import {
+  createTenant, listCompanies, listTemplates, type Company, type NamedTemplate, type StartFrom,
+} from '@/lib/admin';
+import { toDisplayError, type ApiError } from '@/lib/api-client';
 
 const CODE = /^[A-Za-z0-9-]{2,16}$/;
+
+/** What each *Start from* choice gives the office, said under the field. */
+const START_HINT = {
+  template: 'Its settings are copied from this template’s published sections; a section it has not published starts empty.',
+  defaults: 'Every section as AgencyBoost ships it.',
+  empty: 'Nothing but the three activity types the goal plan counts. The Owner builds the rest.',
+} as const;
+
+/** `template:<id>`, `defaults` or `empty`: one select's value for the three kinds of source. */
+function startFromOf(value: string): StartFrom {
+  if (value === 'defaults' || value === 'empty') return { kind: value };
+  return { kind: 'template', templateId: value.slice('template:'.length) };
+}
 
 export default function NewTenantPage() {
   const router = useRouter();
@@ -24,6 +39,41 @@ export default function NewTenantPage() {
   });
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * **Start from** (ADR-0115 §4): the company's active templates, the default first and chosen, then
+   * the AgencyBoost defaults and *Empty*. Read again whenever the company changes; `null` while it is.
+   */
+  const [templates, setTemplates] = useState<NamedTemplate[] | null>(null);
+  const [startFrom, setStartFrom] = useState('');
+  /**
+   * **The templates could not be read** (P13.2's exit review, finding 7). Nothing is chosen and the form
+   * cannot be sent until they are: choosing the AgencyBoost defaults for the reader — what this did — made
+   * an office from something they were never shown, when the company's default was what they expected.
+   * Leaving `startFrom` out instead would have had the API pick a template this page could not name.
+   */
+  const [templatesError, setTemplatesError] = useState<ApiError | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!form.companyId) return;
+    let current = true;
+    setTemplates(null);
+    setStartFrom('');
+    setTemplatesError(null);
+    void listTemplates(form.companyId)
+      .then((rows) => {
+        if (!current) return;
+        // Archived templates are kept to be read, never offered.
+        const offered = rows.filter((t) => t.status === 'active')
+          .sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
+        setTemplates(offered);
+        setStartFrom(offered[0] ? `template:${offered[0].id}` : 'defaults');
+      })
+      .catch((err) => {
+        if (current) setTemplatesError(toDisplayError(err));
+      });
+    return () => { current = false; };
+  }, [form.companyId, attempt]);
 
   useEffect(() => {
     void listCompanies()
@@ -49,6 +99,7 @@ export default function NewTenantPage() {
         branchName: form.branchName,
         ...(form.address ? { address: form.address } : {}),
         ...(form.contactPhone ? { contactPhone: form.contactPhone } : {}),
+        startFrom: startFromOf(startFrom),
       });
       router.push(`/admin/tenants/${kpm._id}`);
     } catch (err) {
@@ -60,7 +111,7 @@ export default function NewTenantPage() {
   return (
     <Page
       title="New office"
-      subtitle="Provisioning seeds the office's settings from the platform defaults; the office owns them afterwards."
+      subtitle="Its settings are copied from what it starts from; the office owns them afterwards."
     >
       <Card className="max-w-2xl">
         {companies.length === 0 ? (
@@ -84,10 +135,42 @@ export default function NewTenantPage() {
               </Select>
             </Field>
 
+            <div className="flex flex-col gap-1">
+              <Field
+                label="Start from"
+                htmlFor="startFrom"
+                hint={templatesError ? undefined : START_HINT[startFrom.startsWith('template:') ? 'template' : (startFrom || 'template') as 'defaults' | 'empty']}
+                error={templatesError ? `This company’s templates could not be read, so there is nothing to start from yet. ${templatesError.message}` : undefined}
+              >
+                <Select
+                  id="startFrom"
+                  value={startFrom}
+                  disabled={templates === null}
+                  invalid={Boolean(templatesError)}
+                  onChange={(e) => setStartFrom(e.target.value)}
+                >
+                  {templates === null && <option value="">{templatesError ? 'Not loaded' : 'Loading…'}</option>}
+                  {templates?.map((t) => (
+                    <option key={t.id} value={`template:${t.id}`}>
+                      {t.isDefault ? `${t.name} · Default` : t.name}
+                    </option>
+                  ))}
+                  {templates !== null && <option value="defaults">AgencyBoost defaults</option>}
+                  {templates !== null && <option value="empty">Empty</option>}
+                </Select>
+              </Field>
+              {/* Outside the field, which links its hint and error to one control only. */}
+              {templatesError && (
+                <Button variant="inline" className="self-start" onClick={() => setAttempt((n) => n + 1)}>
+                  Try again
+                </Button>
+              )}
+            </div>
+
             <Field
               label="Office code"
               htmlFor="code"
-              hint="Unique within the company, and the prefix on every agent code it issues. Effectively permanent."
+              hint="Unique within the company. Effectively permanent."
               error={badCode ? '2–16 characters: letters, digits and hyphens.' : undefined}
             >
               <TextInput id="code" required value={form.code} onChange={set('code')} invalid={badCode} />
@@ -116,7 +199,7 @@ export default function NewTenantPage() {
             />
 
             <div className="flex gap-2">
-              <Button type="submit" disabled={busy || badCode || !form.code || !form.branchName}>
+              <Button type="submit" disabled={busy || badCode || !form.code || !form.branchName || !startFrom}>
                 {busy ? 'Creating…' : 'Create office'}
               </Button>
               <ButtonLink href="/admin/tenants" variant="secondary">

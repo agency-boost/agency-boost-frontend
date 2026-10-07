@@ -160,6 +160,15 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
   );
 }
 
+/** What the identity chip opens: the account, signing out, and for an Owner or an Admin the view switch. */
+export interface AppShellAccount {
+  href: string;
+  onSignOut: () => void;
+  signingOut?: boolean;
+  /** The link to the reader's other view (ADR-0114), above *Your account*; absent for one view. */
+  viewSwitch?: { href: string; label: string };
+}
+
 export interface ShellUser {
   readonly name: string;
   readonly role: string;
@@ -231,7 +240,7 @@ function SidebarFoot({
 }: {
   rail: boolean;
   user: ShellUser;
-  account?: { href: string; onSignOut: () => void; signingOut?: boolean };
+  account?: AppShellAccount;
   notifications?: { href: string; unread: number };
   /** The nav, on a phone only, for the chip's panel to open (ADR-0085). */
   nav?: React.ReactNode;
@@ -248,6 +257,7 @@ function SidebarFoot({
       accountHref={account.href}
       onSignOut={account.onSignOut}
       signingOut={account.signingOut}
+      viewSwitch={account.viewSwitch}
       className={rail ? undefined : 'min-w-0 flex-1'}
       compact={rail}
       nav={nav}
@@ -425,11 +435,7 @@ export function AppShell({
    * label — a shell rendered outside a session has no account to reach and nothing to
    * sign out of, and offering a dead control would be worse than offering none.
    */
-  account?: {
-    href: string;
-    onSignOut: () => void;
-    signingOut?: boolean;
-  };
+  account?: AppShellAccount;
   /**
    * The bell, beside the identity chip at the foot of the sidebar.
    *

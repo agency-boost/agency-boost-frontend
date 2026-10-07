@@ -18,14 +18,15 @@ function focusables(root: HTMLElement | null): HTMLElement[] {
  * navigation and a roving tabstop; claiming it without implementing them leaves screen
  * reader users pressing keys that do nothing. A button with `aria-expanded` revealing
  * ordinary links and buttons is navigable with Tab, which is what people actually do
- * with two items.
+ * with two items, or three for an Owner or an Admin (the view switch, ADR-0114).
  *
  * It opens upward because it sits at the bottom of the viewport.
  *
  * **Below 768px it is the way round the app** (ADR-0085). The sidebar is a bar across the top there,
  * and its nav is hidden: the prototype's phone shows nothing where the nav was, and no way to sign
  * out (`Overall.html:1421-1428`). So on a phone the shell passes its own nav groups in, and the chip
- * opens them — in their order and with their names — then *Your account* and *Sign out*, in a panel
+ * opens them — in their order and with their names — then, for an Owner or an Admin, the view switch
+ * (ADR-0114), then *Your account* and *Sign out*, in a panel
  * **below** the bar, where it is on the screen. The panel covers the page, so focus moves into it and
  * stays there until it closes: on Escape, which puts focus back on the chip, on a click outside it,
  * or on following any link in it. Nothing new is drawn in the bar.
@@ -38,6 +39,7 @@ export function SidebarUserMenu({
   className,
   compact,
   nav,
+  viewSwitch,
 }: {
   user: { name: string; role: string; initials: string; email?: string };
   accountHref: string;
@@ -63,6 +65,13 @@ export function SidebarUserMenu({
    * nav, and never wider, where the panel is the account's alone and opens upward as it always has.
    */
   nav?: React.ReactNode;
+  /**
+   * **The view switch** (ADR-0114): for an Owner or an Admin, the one link to their other view —
+   * *Open agent view* in the office console, *Open Owner view* or *Open Admin view* in the field view.
+   * Above *Your account* at every width, so on a phone it falls after the nav groups and before the
+   * account's two. Omitted for everyone else, who has one view.
+   */
+  viewSwitch?: { href: string; label: string };
 }) {
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
@@ -189,6 +198,11 @@ export function SidebarUserMenu({
             <p className="truncate px-2 pb-1.5 pt-1 text-xs text-white/55" title={user.email}>
               {user.email}
             </p>
+          )}
+          {viewSwitch && (
+            <Link href={viewSwitch.href} className={item} onClick={() => setOpen(false)}>
+              {viewSwitch.label}
+            </Link>
           )}
           <Link href={accountHref} className={item} onClick={() => setOpen(false)}>
             Your account

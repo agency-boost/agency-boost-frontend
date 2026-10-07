@@ -3,24 +3,40 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Page } from '@/components/page';
-import { Cell, DataTable, Row } from '@/components/ui/data-table';
+import { SubscriptionDialog } from '@/components/subscription-dialog';
+import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
-import { ButtonLink, ErrorBanner } from '@/components/ui/field';
+import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
-import { listTenants, TENANT_STATUS_LABEL, type Kpm } from '@/lib/admin';
+import {
+  leadersWord, listTenants, tenantStatusTone, tenantStatusWord, type TenantRow,
+} from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
+import { formatShortDay } from '@/lib/format';
 
 /**
  * The skeleton and the table read the same array, so a column added to one cannot
  * be missing from the other — which is what keeps the placeholder the same width as
  * the thing it stands in for.
  */
-const COLUMNS = ['Code', 'Branch', 'Company', 'Owner', 'Status'] as const;
+/*
+ * *End date* and *Leaders*, and a last column of one action, are the client's (ADR-0112 §2, P13.2-T3
+ * AC-7): the subscription is entered *"directly from here"*. The action column has a name nobody sees,
+ * so a screen reader moving by column is told what is in it.
+ */
+const COLUMNS: readonly Column[] = [
+  'Code', 'Branch', 'Company', 'Owner', 'Status', 'End date', 'Leaders',
+  { label: 'Subscription', visuallyHidden: true },
+];
 
 export default function TenantsPage() {
-  const [tenants, setTenants] = useState<Kpm[] | null>(null);
+  const [tenants, setTenants] = useState<TenantRow[] | null>(null);
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
+  /** The office whose subscription is open in the dialog. */
+  const [editing, setEditing] = useState<TenantRow | null>(null);
+  /** What the dialog said it saved, for the row's own live region. */
+  const [saved, setSaved] = useState<string>('');
 
   // One request. The company name used to be joined here from a second call, which meant
   // a KPM whose company was missing from that list rendered a raw ObjectId in the column
@@ -90,14 +106,41 @@ export default function TenantsPage() {
                 )}
               </Cell>
               <Cell>
-                <StatusPill
-                  status={t.status === 'active' ? 'success' : t.status === 'suspended' ? 'alert' : 'neutral'}
-                  label={TENANT_STATUS_LABEL[t.status]}
-                />
+                <StatusPill status={tenantStatusTone(t)} label={tenantStatusWord(t)} />
+              </Cell>
+              <Cell className="whitespace-nowrap">
+                {t.subscription?.endDate ? formatShortDay(t.subscription.endDate, { year: true }) : '—'}
+              </Cell>
+              <Cell className="whitespace-nowrap">{leadersWord(t)}</Cell>
+              <Cell>
+                <Button
+                  variant="secondary"
+                  className="whitespace-nowrap"
+                  aria-label={`Edit subscription for KPM ${t.code} · ${t.branchName}`}
+                  onClick={() => setEditing(t)}
+                >
+                  Edit subscription
+                </Button>
               </Cell>
             </Row>
           ))}
         </DataTable>
+      )}
+
+      <p role="status" className="sr-only">{saved}</p>
+
+      {editing && (
+        <SubscriptionDialog
+          row={editing}
+          open
+          onClose={() => setEditing(null)}
+          onSaved={(row) => {
+            // The answer is the row as this list reads it, so it is drawn from that, not re-read.
+            setTenants((rows) => rows?.map((r) => (r._id === row._id ? row : r)) ?? rows);
+            setSaved(`Subscription saved for KPM ${row.code}.`);
+            setEditing(null);
+          }}
+        />
       )}
     </Page>
   );

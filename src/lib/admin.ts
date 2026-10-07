@@ -1,6 +1,7 @@
 'use client';
 
 import { api } from './api-client';
+import { formatCalendarDay } from './format';
 
 /**
  * The Super Admin console's API surface.
@@ -195,9 +196,58 @@ export const updateCompany = (id: string, body: { name?: string; slug?: string }
 export const setCompanyStatus = (id: string, status: 'active' | 'suspended') =>
   api<Company>(`/admin/companies/${id}/status`, { method: 'PATCH', body: { status } });
 
-export const listTenants = () => api<Kpm[]>('/admin/tenants');
+/**
+ * Where an office stands against its subscription's end date, computed by the API from **the office's**
+ * today (ADR-0112, P13.2-T3): `none` — no end date; `active` — the end is today or later; `ended` — past
+ * it, every member refused; `ended_kept_active` — past it, and kept open.
+ */
+export type SubscriptionState = 'none' | 'active' | 'ended' | 'ended_kept_active';
 
-export const readTenant = (id: string) => api<Kpm>(`/admin/tenants/${id}`);
+/** An office's subscription (ADR-0112 §1). Dates are office dates; money integer IDR sen. */
+export interface TenantSubscription {
+  startDate: string | null;
+  /** The last day the office can be used. */
+  endDate: string | null;
+  /** Per leader per month, in sen, whole rupiah. Informational: nothing is charged from it. */
+  pricePerLeaderMinor: number | null;
+  currency: 'IDR';
+  /** Null: no leader limit. */
+  maxLeaders: number | null;
+  keepActiveAfterEnd: boolean;
+}
+
+/**
+ * What the Super Admin's offices list and detail read beyond the office itself (P13.2-T3 AC-3).
+ * `leadersUsed` is ADR-0113's count: active members at AB or AAB, the Owner and an Admin included.
+ */
+export interface TenantAdminFields {
+  subscription: TenantSubscription | null;
+  leadersUsed: number;
+  subscriptionState: SubscriptionState;
+}
+
+/** An office as `/admin/tenants` lists it. */
+export type TenantRow = Kpm & TenantAdminFields;
+
+export const listTenants = () => api<TenantRow[]>('/admin/tenants');
+
+export const readTenant = (id: string) => api<TenantRow>(`/admin/tenants/${id}`);
+
+/** The five fields, every time: the API takes the whole subscription, never a part of it. */
+export type SubscriptionInput = Omit<TenantSubscription, 'currency'>;
+
+/** Set an office's subscription. The Super Admin's alone; answered with the row as the list reads it. */
+export const updateSubscription = (kpmId: string, body: SubscriptionInput) =>
+  api<TenantRow>(`/admin/tenants/${kpmId}/subscription`, { method: 'PATCH', body });
+
+/**
+ * **Start from** (ADR-0115 §4): one of the company's active templates, the AgencyBoost defaults, or
+ * *Empty*. Left out, the company's default template — what approving a KPM request uses.
+ */
+export type StartFrom =
+  | { kind: 'template'; templateId: string }
+  | { kind: 'defaults' }
+  | { kind: 'empty' };
 
 export interface CreateKpmInput {
   companyId: string;
@@ -205,6 +255,7 @@ export interface CreateKpmInput {
   branchName: string;
   address?: string;
   contactPhone?: string;
+  startFrom?: StartFrom;
 }
 
 export const createTenant = (body: CreateKpmInput) =>
@@ -242,6 +293,48 @@ export const TENANT_STATUS_LABEL: Record<TenantStatus, string> = {
   suspended: 'Suspended',
   archived: 'Archived',
 };
+
+/**
+ * **What the Status column reads** (ADR-0112 §2, P13.2-T3 AC-7): *Ended* or *Ended — kept active* in
+ * place of *Active* when the subscription's end has passed. A suspended or archived office keeps its own
+ * word, which says more: its members meet that refusal first.
+ */
+export function tenantStatusWord(row: Pick<TenantRow, 'status' | 'subscriptionState'>): string {
+  if (row.status === 'active' && row.subscriptionState === 'ended') return 'Ended';
+  if (row.status === 'active' && row.subscriptionState === 'ended_kept_active') return 'Ended — kept active';
+  return TENANT_STATUS_LABEL[row.status];
+}
+
+/** The pill's tone for the same: an office its members cannot use reads as alert. */
+export function tenantStatusTone(
+  row: Pick<TenantRow, 'status' | 'subscriptionState'>,
+): 'success' | 'alert' | 'watch' | 'neutral' {
+  if (row.status === 'suspended') return 'alert';
+  if (row.status === 'archived') return 'neutral';
+  if (row.subscriptionState === 'ended') return 'alert';
+  // Open, and past its end: the amber `watch` paint, navy words — somebody should look.
+  if (row.subscriptionState === 'ended_kept_active') return 'watch';
+  return 'success';
+}
+
+/**
+ * The subscription in one line, for the detail page's *Lifecycle* card (P13.2-T3 AC-8): *No end date*,
+ * *Active until January 5, 2027*, *Ended September 25, 2026*, or *Ended October 2, 2026 — kept active*.
+ */
+export function subscriptionLine(row: Pick<TenantRow, 'subscription' | 'subscriptionState'>): string {
+  const end = row.subscription?.endDate;
+  if (!end || row.subscriptionState === 'none') return 'No end date';
+  const day = formatCalendarDay(end);
+  if (row.subscriptionState === 'ended') return `Ended ${day}`;
+  if (row.subscriptionState === 'ended_kept_active') return `Ended ${day} — kept active`;
+  return `Active until ${day}`;
+}
+
+/** *Leaders* (ADR-0112 §2): `"{used} / {max}"`, or the count alone when the office has no limit. */
+export function leadersWord(row: Pick<TenantRow, 'leadersUsed' | 'subscription'>): string {
+  const max = row.subscription?.maxLeaders ?? null;
+  return max === null ? String(row.leadersUsed) : `${row.leadersUsed} / ${max}`;
+}
 
 /** Filling a new office from a spreadsheet (P3.6-T4). */
 export interface RosterIssue {
@@ -317,6 +410,8 @@ export type TemplateKind =
 export interface CompanyTemplate {
   id: string;
   companyId: string;
+  /** The named template this kind belongs to; `null` for `campaign_kinds`, the company's own. */
+  templateId: string | null;
   kind: TemplateKind;
   /** The version this is, or will be once published. */
   version: number;
@@ -338,13 +433,21 @@ export interface CompanyTemplate {
 }
 
 /**
- * A company's Company template (P4-T8, ADR-0018).
- *
- * The draft if there is one, else the newest published, else a starting point built from
- * the platform defaults.
+ * The query of a kind route: `templateId=` the template named, or nothing — the company's default. The
+ * `?` stays in the path whichever, so a reader and the API-consumers gate both see where the path ends.
  */
-export const readTemplate = (companyId: string, kind: TemplateKind) =>
-  api<CompanyTemplate>(`/admin/companies/${companyId}/template/${kind}`);
+const ofTemplate = (templateId?: string | null) =>
+  (templateId ? new URLSearchParams({ templateId }).toString() : '');
+
+/**
+ * One kind of one of a company's templates (P4-T8, ADR-0018, ADR-0115).
+ *
+ * The draft if there is one, else the newest published, else nothing — version 0 and an empty
+ * payload, which is what an office made from the template gets of the kind. `templateId` absent:
+ * the company's default.
+ */
+export const readTemplate = (companyId: string, kind: TemplateKind, templateId?: string | null) =>
+  api<CompanyTemplate>(`/admin/companies/${companyId}/template/${kind}?${ofTemplate(templateId)}`);
 
 
 /** The whole payload, not a patch — see the DTO for why. */
@@ -352,15 +455,99 @@ export const saveTemplateDraft = (
   companyId: string,
   kind: TemplateKind,
   payload: Record<string, unknown>,
-) => api<CompanyTemplate>(`/admin/companies/${companyId}/template/${kind}`, {
+  templateId?: string | null,
+) => api<CompanyTemplate>(`/admin/companies/${companyId}/template/${kind}?${ofTemplate(templateId)}`, {
   method: 'PUT', body: { payload },
 });
 
-/** Becomes what the **next** office is seeded from. Reaches nothing that already exists. */
-export const publishTemplate = (companyId: string, kind: TemplateKind) =>
-  api<CompanyTemplate>(`/admin/companies/${companyId}/template/${kind}/publish`, {
+/** Becomes what the **next** office made from the template gets. Reaches nothing that already exists. */
+export const publishTemplate = (companyId: string, kind: TemplateKind, templateId?: string | null) =>
+  api<CompanyTemplate>(`/admin/companies/${companyId}/template/${kind}/publish?${ofTemplate(templateId)}`, {
     method: 'POST',
   });
+
+/** The seven kinds a named template holds; `campaign_kinds` is the company's (ADR-0115 §3). */
+export type OfficeTemplateKind = Exclude<TemplateKind, 'campaign_kinds'>;
+
+/** Where a template came from: a record for the list and the audit, never a link. */
+export interface TemplateOrigin {
+  kind: 'migration' | 'empty' | 'defaults' | 'copy' | 'office' | 'import';
+  templateId?: string | null;
+  kpmId?: string | null;
+  companyId?: string | null;
+}
+
+/** One of a company's named templates (ADR-0115 §3). */
+export interface NamedTemplate {
+  id: string;
+  companyId: string;
+  name: string;
+  /** The company's default: exactly one, and what a KPM request's approval starts an office from. */
+  isDefault: boolean;
+  status: 'active' | 'archived';
+  archivedAt: string | null;
+  origin: TemplateOrigin;
+  /** Each kind's newest published version; `null` where none is, which its offices get empty. */
+  publishedVersions: Record<OfficeTemplateKind, number | null>;
+  /** The live offices it answers for. */
+  officeCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Every template of a company, archived ones too, the default first. */
+export const listTemplates = (companyId: string) =>
+  api<NamedTemplate[]>(`/admin/companies/${companyId}/templates`);
+
+/**
+ * *New template*: empty, each kind a published version 1 of the AgencyBoost defaults, or **a copy** of one
+ * of the company's templates — each kind's newest published version as the copy's version 1 (P13.2-T7).
+ */
+export const createTemplate = (
+  companyId: string,
+  body: { name: string; from: 'empty' | 'defaults' | { templateId: string } },
+) => api<NamedTemplate>(`/admin/companies/${companyId}/templates`, { method: 'POST', body });
+
+/**
+ * *Import from another company* (ADR-0115 §5, P13.2-T7): one of `fromCompanyId`'s templates becomes a new
+ * template of this company. Refused `409 TEMPLATE_RUNG_UNKNOWN` when it names a role this company's ladder
+ * lacks.
+ */
+export const importTemplate = (
+  companyId: string,
+  body: { fromCompanyId: string; templateId: string; name: string },
+) => api<NamedTemplate>(`/admin/companies/${companyId}/templates/import`, { method: 'POST', body });
+
+/**
+ * Something the office held that *Save as template* left out or changed because it names something
+ * archived — a ratio's archived activity type, a stage's archived milestones, a checklist link to a module
+ * no longer offered (P13.2's exit review). `reason` is the API's sentence, shown as it is.
+ */
+export interface DroppedSetting {
+  kind: OfficeTemplateKind;
+  /** The ratio, stage, grid or checklist item; `null` when the whole kind was left out. */
+  code: string | null;
+  reason: string;
+}
+
+/** *Save as template*'s answer: the template, and what it left out. Empty `dropped` when nothing was. */
+export type SavedOfficeTemplate = NamedTemplate & { dropped: DroppedSetting[] };
+
+/**
+ * *Save as template* (ADR-0115 §5, P13.2-T7): what an office's agents read becomes a new template of
+ * `companyId` — the office's own company, or another.
+ */
+export const saveOfficeAsTemplate = (kpmId: string, body: { name: string; companyId: string }) =>
+  api<SavedOfficeTemplate>(`/admin/tenants/${kpmId}/template`, { method: 'POST', body });
+
+/** *Rename*, or *Make default* — which moves the default here. */
+export const updateTemplate = (
+  companyId: string, templateId: string, body: { name?: string; isDefault?: boolean },
+) => api<NamedTemplate>(`/admin/companies/${companyId}/templates/${templateId}`, { method: 'PATCH', body });
+
+/** *Archive*: kept and readable, no longer offered. Refused for the default. */
+export const archiveTemplate = (companyId: string, templateId: string) =>
+  api<NamedTemplate>(`/admin/companies/${companyId}/templates/${templateId}/archive`, { method: 'POST' });
 
 
 /**

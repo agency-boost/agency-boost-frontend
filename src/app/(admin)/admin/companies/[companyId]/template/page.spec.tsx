@@ -1,13 +1,34 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, routeParams, stubFetch } from '@test/harness';
+import { axe } from 'vitest-axe';
+import { makeMe, renderWithSession, routeParams, stubFetch as stubRoutes } from '@test/harness';
 import CompanyTemplatePage from './page';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/admin/companies/c1/template',
 }));
+
+/**
+ * **The company's templates** (ADR-0115 §3): the picker's list, stubbed beneath every spec here so each
+ * reads its kinds as the default template's — which is what the screen opens on.
+ */
+const TEMPLATES = [
+  {
+    id: 't-default', companyId: 'c1', name: 'Prudential template', isDefault: true, status: 'active',
+    archivedAt: null, origin: { kind: 'migration' }, officeCount: 3,
+    publishedVersions: {
+      activity_taxonomy: 1, lead_pipeline: 1, ratio_set: 1, activation_checklist: 1,
+      training_taxonomy: 1, capability_ladder: 1, event_types: 1,
+    },
+    createdAt: '2026-10-07T03:00:00.000Z', updatedAt: '2026-10-07T03:00:00.000Z',
+  },
+];
+const stubFetch: typeof stubRoutes = (routes) => stubRoutes({
+  '/admin/companies/c1/templates': { body: TEMPLATES },
+  ...routes,
+});
 
 const SUPER_ADMIN = makeMe({
   user: {
@@ -112,9 +133,10 @@ describe('a company’s Company template (P4-T8)', () => {
      * The normal state of a new insurer. Saying so is what stops a Super Admin wondering
      * whether the defaults on screen are already live.
      */
+    // ADR-0115 §1: no fallback — an office made from the template gets none of a kind it never published.
     render();
     expect(await screen.findByText(/Nothing is published yet/)).toBeInTheDocument();
-    expect(screen.getByText(/start from the\s+AgencyBoost defaults/)).toBeInTheDocument();
+    expect(screen.getByText(/an office made from Prudential template starts with none of it/)).toBeInTheDocument();
   });
 
   it('says publishing does not reach offices that already exist', async () => {
@@ -480,12 +502,13 @@ describe('a company’s Company template (P4-T8)', () => {
     const slow = new Promise<void>((resolve) => { releaseSlow = resolve; });
 
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const list = String(url).includes('/templates');
       const pipeline = String(url).includes('lead_pipeline');
-      if (!pipeline) await slow;
+      if (!pipeline && !list) await slow;
       return {
         ok: true,
         status: 200,
-        json: async () => (pipeline ? PIPELINE : TAXONOMY),
+        json: async () => (list ? TEMPLATES : pipeline ? PIPELINE : TAXONOMY),
       } as Response;
     }));
 
@@ -743,7 +766,8 @@ describe('a company’s Company template (P4-T8)', () => {
 
       expect(within(subtabs).getAllByRole('link').map((l) => l.textContent))
         .toEqual(['Sales', 'Recruitment']);
-      expect(subtabs.compareDocumentPosition(screen.getByRole('button', { name: 'Save draft' })))
+      // The kind loads once the company's templates are in, so the Save card arrives a moment later.
+      expect(subtabs.compareDocumentPosition(await screen.findByRole('button', { name: 'Save draft' })))
         // 4 = DOCUMENT_POSITION_FOLLOWING: the Save button comes after the subtab row.
         .toBe(4);
     });
@@ -767,8 +791,391 @@ describe('a company’s Company template (P4-T8)', () => {
 
       expect(within(subtabs).getAllByRole('link').map((l) => l.textContent))
         .toEqual(['Ladder', 'Skills']);
-      expect(screen.getByRole('heading', { name: 'Milestones' })).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'Milestones' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Stages' })).toBeInTheDocument();
+    });
+  });
+
+  /*
+   * **P13.2-T6 AC-6: the company's named templates** (ADR-0115 §3, §7). The picker at the screen's head,
+   * New template, Rename, Make default and Archive, each kind read and written for the template shown,
+   * and the two tabs every template shares saying so.
+   */
+  describe('named templates (P13.2-T6)', () => {
+    const SECOND = {
+      ...TEMPLATES[0], id: 't-second', name: 'Jakarta branches', isDefault: false, officeCount: 1,
+      origin: { kind: 'empty' },
+    };
+    const ARCHIVED = { ...SECOND, id: 't-old', name: 'Old settings', status: 'archived', archivedAt: '2026-10-01T00:00:00.000Z' };
+
+    const mount = (routes: Parameters<typeof stubRoutes>[0] = {}) => {
+      const stub = stubRoutes({
+        '/admin/companies/c1/templates': { body: [TEMPLATES[0], SECOND, ARCHIVED] },
+        '/admin/companies/c1/template': { body: TAXONOMY },
+        ...routes,
+      });
+      renderWithSession(<CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />, { me: SUPER_ADMIN });
+      return stub;
+    };
+    const picker = () => screen.findByRole('combobox', { name: 'Template' });
+
+    it('opens on the default, marked, with the offices it answers for, and the archived ones apart', async () => {
+      const { calls } = mount();
+      const select = await picker();
+      expect(select).toHaveDisplayValue('Prudential template · Default');
+      expect(within(select).getAllByRole('option').map((o) => o.textContent))
+        .toEqual(['Prudential template · Default', 'Jakarta branches', 'Old settings']);
+      expect(within(select).getByRole('group', { name: 'Archived' })).toBeInTheDocument();
+      expect(await screen.findByText('3 offices')).toBeInTheDocument();
+      await screen.findByText('Submission polis');
+      expect(calls.map((c) => c.url)).toContainEqual(expect.stringContaining('/template/activity_taxonomy?templateId=t-default'));
+    });
+
+    it('reads and writes the template picked', async () => {
+      const { calls } = mount();
+      await screen.findByText('Submission polis');
+      await userEvent.selectOptions(await picker(), 't-second');
+      expect(await screen.findByText('1 office')).toBeInTheDocument();
+      await screen.findByText('Submission polis');
+      expect(calls.at(-1)!.url).toContain('/template/activity_taxonomy?templateId=t-second');
+      expect(screen.getByText(/an office made from Jakarta branches starts with none of it/)).toBeInTheDocument();
+    });
+
+    it('keeps an archived template readable and not editable', async () => {
+      mount();
+      await userEvent.selectOptions(await picker(), 't-old');
+      expect(await screen.findByText('Archived · 1 office')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Save draft' })).toBeDisabled();
+    });
+
+    it('makes a new template, empty or from the defaults, and shows it', async () => {
+      const made = { ...SECOND, id: 't-new', name: 'Surabaya', origin: { kind: 'defaults' }, officeCount: 0 };
+      const { calls } = mount({
+        'POST /admin/companies/c1/templates': { status: 201, body: made },
+      });
+      await userEvent.click(await screen.findByRole('button', { name: 'New template' }));
+      const dialog = screen.getByRole('dialog', { name: 'New template' });
+      await userEvent.type(within(dialog).getByLabelText('Name'), 'Surabaya');
+      await userEvent.click(within(dialog).getByRole('radio', { name: /AgencyBoost defaults/ }));
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Create template' }));
+
+      const post = calls.find((c) => c.init.method === 'POST')!;
+      expect(JSON.parse(post.init.body as string)).toEqual({ name: 'Surabaya', from: 'defaults' });
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('says a taken name under the name, and keeps the dialog open', async () => {
+      mount({
+        'POST /admin/companies/c1/templates': {
+          status: 409,
+          body: { error: { code: 'TEMPLATE_NAME_TAKEN', message: 'This company already has a template called Jakarta branches. Choose another name.', requestId: 'r-1', details: { name: 'Jakarta branches' } } },
+        },
+      });
+      await userEvent.click(await screen.findByRole('button', { name: 'New template' }));
+      const dialog = screen.getByRole('dialog', { name: 'New template' });
+      await userEvent.type(within(dialog).getByLabelText('Name'), 'Jakarta branches');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Create template' }));
+
+      expect(await within(dialog).findByText(/already has a template called Jakarta branches/)).toBeInTheDocument();
+      expect(within(dialog).getByLabelText('Name')).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('asks before Make default, then moves it', async () => {
+      const { calls } = mount({
+        'PATCH /admin/companies/c1/templates/t-second': { body: { ...SECOND, isDefault: true } },
+      });
+      await userEvent.selectOptions(await picker(), 't-second');
+      await userEvent.click(screen.getByRole('button', { name: 'Actions for Jakarta branches' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: /Make default/ }));
+      const question = screen.getByRole('dialog', { name: /Make Jakarta branches the default\?/ });
+      await userEvent.click(within(question).getByRole('button', { name: 'Make default' }));
+
+      const patch = calls.find((c) => c.init.method === 'PATCH')!;
+      expect(patch.url).toContain('/admin/companies/c1/templates/t-second');
+      expect(JSON.parse(patch.init.body as string)).toEqual({ isDefault: true });
+    });
+
+    it('never offers to archive the default, and says why; archives another after asking', async () => {
+      const { calls } = mount({
+        'POST /admin/companies/c1/templates/t-second/archive': { body: { ...SECOND, status: 'archived' } },
+      });
+      await userEvent.click(await screen.findByRole('button', { name: 'Actions for Prudential template' }));
+      const archive = screen.getByRole('menuitem', { name: /Archive/ });
+      expect(archive).toHaveAttribute('aria-disabled', 'true');
+      expect(archive).toHaveTextContent('The default cannot be archived. Make another template the default first.');
+      await userEvent.keyboard('{Escape}');
+
+      await userEvent.selectOptions(await picker(), 't-second');
+      await userEvent.click(screen.getByRole('button', { name: 'Actions for Jakarta branches' }));
+      await userEvent.click(screen.getByRole('menuitem', { name: /Archive/ }));
+      await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Archive template' }));
+      expect(calls.some((c) => c.url.endsWith('/templates/t-second/archive') && c.init.method === 'POST')).toBe(true);
+    });
+
+    it('asks before another template discards unsaved edits', async () => {
+      mount();
+      await screen.findByText('Submission polis');
+      await userEvent.type(await openRow('Submission polis'), ' baru');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await userEvent.selectOptions(await picker(), 't-second');
+      expect(await screen.findByText(/Opening Jakarta branches discards them/)).toBeInTheDocument();
+      expect(await picker()).toHaveDisplayValue('Prudential template · Default');
+    });
+
+    it('exit review, finding 6: a template just made asks before it discards unsaved edits — Stay keeps them', async () => {
+      const made = { ...SECOND, id: 't-new', name: 'Surabaya', officeCount: 0 };
+      const { calls } = mount({ 'POST /admin/companies/c1/templates': { status: 201, body: made } });
+      await screen.findByText('Submission polis');
+      await userEvent.type(await openRow('Submission polis'), ' baru');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+      await userEvent.click(screen.getByRole('button', { name: 'New template' }));
+      const dialog = screen.getByRole('dialog', { name: 'New template' });
+      await userEvent.type(within(dialog).getByLabelText('Name'), 'Surabaya');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Create template' }));
+
+      // Made, but not opened over the draft: the same question a pick asks.
+      expect(await screen.findByText(/Opening Surabaya discards them/)).toBeInTheDocument();
+      expect(await picker()).toHaveDisplayValue('Prudential template · Default');
+      await userEvent.click(screen.getByRole('button', { name: 'Stay here' }));
+      expect(screen.getByText('Submission polis baru')).toBeInTheDocument();
+      expect(calls.some((c) => c.url.includes('templateId=t-new'))).toBe(false);
+    });
+
+    it('exit review, finding 6: Discard and open opens the template just made', async () => {
+      const made = { ...SECOND, id: 't-new', name: 'Surabaya', officeCount: 0 };
+      const { calls } = mount({ 'POST /admin/companies/c1/templates': { status: 201, body: made } });
+      await screen.findByText('Submission polis');
+      await userEvent.type(await openRow('Submission polis'), ' baru');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await userEvent.click(screen.getByRole('button', { name: 'New template' }));
+      const dialog = screen.getByRole('dialog', { name: 'New template' });
+      await userEvent.type(within(dialog).getByLabelText('Name'), 'Surabaya');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Create template' }));
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Discard and open Surabaya' }));
+      await vi.waitFor(() => expect(calls.some((c) => c.url.includes('/template/activity_taxonomy?templateId=t-new'))).toBe(true));
+    });
+
+    it('exit review, finding 6: an archived template cannot be published, as it cannot be saved', async () => {
+      mount({ '/admin/companies/c1/template': { body: { ...TAXONOMY, status: 'draft', version: 2, publishedVersion: 1 } } });
+      await userEvent.selectOptions(await picker(), 't-old');
+      const publish = await screen.findByRole('button', { name: 'Publish version 2' });
+      expect(publish).toBeDisabled();
+      expect(publish).toHaveAttribute('title', 'An archived template is kept as it is.');
+      expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    });
+
+    it('has no axe violations: the picker, and the New template dialog open', async () => {
+      mount();
+      await screen.findByText('Submission polis');
+      // The page is rendered without its layout here, so `region` — content outside a landmark — is the harness's.
+      const rules = { 'color-contrast': { enabled: false }, region: { enabled: false } };
+      expect((await axe(document.body, { rules })).violations ?? []).toHaveLength(0);
+      await userEvent.click(screen.getByRole('button', { name: 'New template' }));
+      const dialog = screen.getByRole('dialog', { name: 'New template' });
+      expect((await axe(dialog, { rules: { 'color-contrast': { enabled: false } } })).violations ?? []).toHaveLength(0);
+    });
+
+    it('says, on the Campaigns and Products tabs, that they are the company’s, shared by every template', async () => {
+      mount();
+      await screen.findByText('Submission polis');
+      expect(sections().getByRole('link', { name: 'Campaigns' }))
+        .toHaveAccessibleDescription('Campaigns are the company’s, shared by every template.');
+      expect(sections().getByRole('link', { name: 'Products' }))
+        .toHaveAttribute('title', 'Products are the company’s, shared by every template.');
+      expect(sections().getByRole('link', { name: 'Events' })).not.toHaveAttribute('title');
+    });
+  });
+
+  /**
+   * **P13.2-T7 AC-7: the copies** (ADR-0115 §5, §6) — *New template*'s *Copy of* the template shown, and
+   * *Import from another company*: its fields, states and refusals.
+   */
+  describe('copies (P13.2-T7)', () => {
+    const COMPANIES = [
+      { _id: 'c1', name: 'Prudential', slug: 'prudential', status: 'active', usesPlatformDefaults: true },
+      { _id: 'c2', name: 'Allianz Life', slug: 'allianz-life', status: 'active', usesPlatformDefaults: true },
+    ];
+    const THEIRS = [
+      { ...TEMPLATES[0], id: 'a-default', companyId: 'c2', name: 'Allianz Life template' },
+      { ...TEMPLATES[0], id: 'a-second', companyId: 'c2', name: 'Allianz Jakarta', isDefault: false },
+      { ...TEMPLATES[0], id: 'a-old', companyId: 'c2', name: 'Allianz old', isDefault: false, status: 'archived' },
+    ];
+    const IMPORTED = {
+      ...TEMPLATES[0], id: 't-imported', name: 'Allianz Life template', isDefault: false,
+      origin: { kind: 'import', templateId: 'a-default', companyId: 'c2' }, officeCount: 0,
+    };
+
+    const mount = (routes: Parameters<typeof stubRoutes>[0] = {}) => {
+      const stub = stubRoutes({
+        '/admin/companies/c1/templates': { body: TEMPLATES },
+        '/admin/companies/c1/template': { body: TAXONOMY },
+        '/admin/companies/c2/templates': { body: THEIRS },
+        '/admin/companies': { body: COMPANIES },
+        ...routes,
+      });
+      renderWithSession(<CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />, { me: SUPER_ADMIN });
+      return stub;
+    };
+    const openImport = async () => {
+      await userEvent.click(await screen.findByRole('button', { name: 'Import from another company' }));
+      return screen.getByRole('dialog', { name: 'Import from another company' });
+    };
+
+    it('AC-1: New template copies the template shown, as Copy of {name}', async () => {
+      const made = { ...IMPORTED, id: 't-copy', name: 'Jakarta copy', origin: { kind: 'copy', templateId: 't-default' } };
+      const { calls } = mount({ 'POST /admin/companies/c1/templates': { status: 201, body: made } });
+      await userEvent.click(await screen.findByRole('button', { name: 'New template' }));
+      const dialog = screen.getByRole('dialog', { name: 'New template' });
+      const copy = within(dialog).getByRole('radio', { name: /Copy of Prudential template/ });
+      expect(copy).toHaveAccessibleDescription(/Unpublished drafts are not copied/);
+      await userEvent.type(within(dialog).getByLabelText('Name'), 'Jakarta copy');
+      await userEvent.click(copy);
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Create template' }));
+
+      const post = calls.find((c) => c.init.method === 'POST')!;
+      expect(JSON.parse(post.init.body as string)).toEqual({ name: 'Jakarta copy', from: { templateId: 't-default' } });
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('AC-4: imports one of another company’s active templates, its default chosen and its name offered', async () => {
+      const { calls } = mount({ 'POST /admin/companies/c1/templates/import': { status: 201, body: IMPORTED } });
+      const dialog = await openImport();
+      const company = await within(dialog).findByRole('combobox', { name: 'Company' });
+      // Never this company itself.
+      expect(within(company).getAllByRole('option').map((o) => o.textContent)).toEqual(['Choose a company', 'Allianz Life']);
+      await userEvent.selectOptions(company, 'c2');
+
+      const template = await within(dialog).findByRole('combobox', { name: 'Template' });
+      // Active ones only, the default first and chosen.
+      expect(within(template).getAllByRole('option').map((o) => o.textContent))
+        .toEqual(['Allianz Life template · Default', 'Allianz Jakarta']);
+      expect(template).toHaveDisplayValue('Allianz Life template · Default');
+      expect(within(dialog).getByLabelText('Name')).toHaveValue('Allianz Life template');
+      // The name follows the source until it is typed.
+      await userEvent.selectOptions(template, 'a-second');
+      expect(within(dialog).getByLabelText('Name')).toHaveValue('Allianz Jakarta');
+      await userEvent.clear(within(dialog).getByLabelText('Name'));
+      await userEvent.type(within(dialog).getByLabelText('Name'), 'Dari Allianz');
+      await userEvent.selectOptions(template, 'a-default');
+      expect(within(dialog).getByLabelText('Name')).toHaveValue('Dari Allianz');
+
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Import template' }));
+      const post = calls.find((c) => c.init.method === 'POST')!;
+      expect(post.url).toContain('/admin/companies/c1/templates/import');
+      expect(JSON.parse(post.init.body as string)).toEqual({ fromCompanyId: 'c2', templateId: 'a-default', name: 'Dari Allianz' });
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('AC-4: says, in its words, that this company’s ladder lacks a role — and stays open', async () => {
+      mount({
+        'POST /admin/companies/c1/templates/import': {
+          status: 409,
+          body: { error: {
+            code: 'TEMPLATE_RUNG_UNKNOWN', requestId: 'r-2', details: { codes: ['SM'] },
+            message: 'This company’s role ladder has no SM, and the settings being copied show ratios or activity sections to that role. Add it to the company’s ladder first, or copy other settings.',
+          } },
+        },
+      });
+      const dialog = await openImport();
+      await userEvent.selectOptions(await within(dialog).findByRole('combobox', { name: 'Company' }), 'c2');
+      await within(dialog).findByRole('combobox', { name: 'Template' });
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Import template' }));
+      expect(await within(dialog).findByText(/role ladder has no SM/)).toBeInTheDocument();
+      expect(screen.getByRole('dialog', { name: 'Import from another company' })).toBeInTheDocument();
+    });
+
+    it('says a taken name under the name', async () => {
+      mount({
+        'POST /admin/companies/c1/templates/import': {
+          status: 409,
+          body: { error: { code: 'TEMPLATE_NAME_TAKEN', message: 'This company already has a template called Allianz Life template. Choose another name.', requestId: 'r-3', details: { name: 'Allianz Life template' } } },
+        },
+      });
+      const dialog = await openImport();
+      await userEvent.selectOptions(await within(dialog).findByRole('combobox', { name: 'Company' }), 'c2');
+      await within(dialog).findByRole('combobox', { name: 'Template' });
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Import template' }));
+      expect(await within(dialog).findByText(/already has a template called Allianz Life template/)).toBeInTheDocument();
+      expect(within(dialog).getByLabelText('Name')).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('waits for the companies with a skeleton, and says when there is no other company', async () => {
+      let release: () => void = () => undefined;
+      const pending = new Promise<void>((resolve) => { release = resolve; });
+      mount({
+        '/admin/companies': () => ({ body: [COMPANIES[0]] }),
+      });
+      const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+      const real = fetchMock.getMockImplementation()! as (url: string, init?: RequestInit) => Promise<Response>;
+      fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url.endsWith('/admin/companies')) await pending;
+        return real(url, init);
+      });
+      const dialog = await openImport();
+      expect(within(dialog).getByRole('status')).toHaveTextContent('Loading companies…');
+      release();
+      expect(await within(dialog).findByText('There is no other company to import from.')).toBeInTheDocument();
+      expect(within(dialog).queryByRole('button', { name: 'Import template' })).not.toBeInTheDocument();
+    });
+
+    it('exit review, finding 6: Import asks before a draft is discarded for the template it made', async () => {
+      mount({ 'POST /admin/companies/c1/templates/import': { status: 201, body: IMPORTED } });
+      await screen.findByText('Submission polis');
+      await userEvent.type(await openRow('Submission polis'), ' baru');
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+      const dialog = await openImport();
+      await userEvent.selectOptions(await within(dialog).findByRole('combobox', { name: 'Company' }), 'c2');
+      await within(dialog).findByRole('combobox', { name: 'Template' });
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Import template' }));
+      expect(await screen.findByText(/Opening Allianz Life template discards them/)).toBeInTheDocument();
+      expect(screen.getByText('Submission polis baru')).toBeInTheDocument();
+    });
+
+    it('exit review, finding 8: a company with no active template says so, and offers nothing to import', async () => {
+      mount({
+        '/admin/companies': { body: [...COMPANIES, { _id: 'c3', name: 'Blank Co', slug: 'blank-co', status: 'active', usesPlatformDefaults: false }] },
+        '/admin/companies/c3/templates': { body: [{ ...THEIRS[2], companyId: 'c3' }] },
+      });
+      const dialog = await openImport();
+      await userEvent.selectOptions(await within(dialog).findByRole('combobox', { name: 'Company' }), 'c3');
+      expect(await within(dialog).findByText('Blank Co has no active template to import.')).toBeInTheDocument();
+      expect(within(dialog).queryByRole('combobox', { name: 'Template' })).not.toBeInTheDocument();
+      expect(within(dialog).getByRole('button', { name: 'Import template' })).toBeDisabled();
+    });
+
+    it('exit review, finding 8: what was said of one company is cleared when another is chosen', async () => {
+      mount({
+        '/admin/companies': { body: [...COMPANIES, { _id: 'c3', name: 'Blank Co', slug: 'blank-co', status: 'active', usesPlatformDefaults: false }] },
+        '/admin/companies/c3/templates': {
+          status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Their templates could not be read.', requestId: 'r-5' } },
+        },
+      });
+      const dialog = await openImport();
+      const company = await within(dialog).findByRole('combobox', { name: 'Company' });
+      await userEvent.selectOptions(company, 'c3');
+      expect(await within(dialog).findByText('Their templates could not be read.')).toBeInTheDocument();
+
+      await userEvent.selectOptions(company, 'c2');
+      await within(dialog).findByRole('combobox', { name: 'Template' });
+      expect(within(dialog).queryByText('Their templates could not be read.')).not.toBeInTheDocument();
+    });
+
+    it('shows a failed read of the companies as the API said it', async () => {
+      mount({
+        '/admin/companies': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong on our side.', requestId: 'r-4' } } },
+      });
+      const dialog = await openImport();
+      expect(await within(dialog).findByText('Something went wrong on our side.')).toBeInTheDocument();
+    });
+
+    it('has no axe violations with the Import dialog open and filled', async () => {
+      mount();
+      const dialog = await openImport();
+      await userEvent.selectOptions(await within(dialog).findByRole('combobox', { name: 'Company' }), 'c2');
+      await within(dialog).findByRole('combobox', { name: 'Template' });
+      expect((await axe(dialog, { rules: { 'color-contrast': { enabled: false } } })).violations ?? []).toHaveLength(0);
     });
   });
 });

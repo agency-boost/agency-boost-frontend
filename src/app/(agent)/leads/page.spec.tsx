@@ -314,6 +314,23 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.getByText('0 active leads')).toBeInTheDocument();
     });
 
+    it('P13.2-T6 AC-8: an office with no stages at all lists its leads, a stage-less one included, and never errors', async () => {
+      // An office started Empty (ADR-0115 §1): both pipelines, each with no stage, until the Owner adds one.
+      render({
+        '/kpm/config': {
+          body: { activity: [], ratios: [], version: 1, leadPipelines: [
+            { pipeline: 'sales', statuses: [] }, { pipeline: 'recruitment', statuses: [] },
+          ] },
+        },
+        '/leads': { body: page([lead({ statusCode: null })]) },
+      });
+
+      expect(await screen.findByDisplayValue('Pak Budi')).toBeInTheDocument();
+      const status = screen.getByLabelText('Status, row 1');
+      expect(within(status).getAllByRole('option').map((o) => o.textContent)).toEqual(['Select status']);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
     it('AC-2: lists each closed lead under its card, as {type} · {stage}', async () => {
       render({
         '/leads': { body: page([lead()]) },

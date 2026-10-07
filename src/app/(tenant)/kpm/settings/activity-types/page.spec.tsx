@@ -325,6 +325,36 @@ describe('the office activity taxonomy (P4-T1)', () => {
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
   });
 
+  it('P13.2-T6 AC-3: says plainly that a cascade type cannot be archived, without the batch’s bookkeeping', async () => {
+    render();
+    await screen.findByText('Submission polis');
+    stubFetch({
+      '/kpm/settings/activity-types': { body: TAXONOMY },
+      '/kpm/settings/publish-state': {
+        body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+      },
+      '/kpm/settings/changes': {
+        status: 409,
+        body: {
+          error: {
+            code: 'ACTIVITY_TYPE_RESERVED',
+            message: 'Change 1 (type.archive): “Submission polis” cannot be archived: the goal plan and the summary count it. You can rename it, describe it, reorder it or move it to another section.',
+            requestId: 'r-2',
+            details: { codes: ['SELL_SUBMISSION'] },
+          },
+        },
+      },
+    });
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Archive' }))[1]);
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    const alerts = await screen.findAllByRole('alert');
+    const shown = alerts.find((a) => a.textContent?.includes('cannot be archived'))!;
+    expect(shown).toHaveTextContent(/^“Submission polis” cannot be archived: the goal plan and the summary count it/);
+    expect(shown.textContent).not.toContain('Change 1');
+    expect(shown.textContent).not.toContain('type.archive');
+  });
+
   it('surfaces a refusal rather than appearing to succeed', async () => {
     const { calls } = render();
     await screen.findByText('Submission polis');

@@ -18,9 +18,20 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useHashTab } from '@/lib/use-hash-tab';
 import { tileRefusal } from '@/lib/summary-tiles';
 import {
-  publishTemplate, readTemplate, saveTemplateDraft,
-  type CompanyTemplate, type TemplateKind,
+  listTemplates, publishTemplate, readTemplate, saveTemplateDraft,
+  type CompanyTemplate, type NamedTemplate, type TemplateKind,
 } from '@/lib/admin';
+import { TemplatePicker } from '@/components/template-picker';
+
+/**
+ * **The two tabs every template shares** (ADR-0115 §3, §7): carrier rules and products are the
+ * company's, read live by its offices (ADR-0026, ADR-0033), one per company whichever template is shown.
+ * Said in a tooltip on the tab, the smallest form that says it (ADR-0062 §2).
+ */
+const SHARED_HINT: Record<string, string> = {
+  campaigns: 'Campaigns are the company’s, shared by every template.',
+  products: 'Products are the company’s, shared by every template.',
+};
 
 /**
  * Each item of the Owner's Settings group, as ADR-0018 lays them out — one row per **leaf**.
@@ -128,8 +139,19 @@ export default function CompanyTemplatePage({
    */
   const [tabHref, selectTabHref] = useHashTab(TABS.map((x) => ({ href: `#${x.key}` })));
   const tab = TABS.find((x) => `#${x.key}` === tabHref) ?? TABS[0];
-  /** A tab the reader asked for while holding unsaved edits. `null` the rest of the time. */
-  const [pendingTab, setPendingTab] = useState<typeof TABS[number] | null>(null);
+  /**
+   * Where the reader asked to go while holding unsaved edits — another tab, or another template.
+   * `null` the rest of the time.
+   */
+  const [pendingTab, setPendingTab] = useState<{ label: string; go: () => void } | null>(null);
+
+  /**
+   * **The company's templates, and the one shown** (ADR-0115 §3). Every kind tab reads and writes the
+   * template picked here; the company's default until the reader picks another.
+   */
+  const [templates, setTemplates] = useState<NamedTemplate[] | null>(null);
+  const [templateId, setTemplateId] = useState<string | null>(null);
+  const shown = templates?.find((t) => t.id === templateId) ?? null;
 
   /** One entry per Owner Settings **item** — the top row, first leaf wins. */
   const GROUPS = TABS.filter((x, i) => TABS.findIndex((y) => y.group === x.group) === i);
@@ -166,8 +188,50 @@ export default function CompanyTemplatePage({
    */
   const go = (next: typeof TABS[number]) => {
     if (next.key === tab.key) return;
-    if (dirty && next.kind !== tab.kind) { setPendingTab(next); return; }
+    if (dirty && next.kind !== tab.kind) {
+      setPendingTab({ label: next.label, go: () => selectTabHref(`#${next.key}`) });
+      return;
+    }
     selectTabHref(`#${next.key}`);
+  };
+
+  /**
+   * Show another template, asking first when unsaved edits would go with the one shown — whether the
+   * reader picked it, or just made it with *New template* or *Import from another company* (P13.2's exit
+   * review: those two opened it straight away, and the draft went with no question asked).
+   */
+  const openTemplate = (nextId: string, name: string) => {
+    if (nextId === templateId) return;
+    if (dirty) {
+      setPendingTab({ label: name, go: () => setTemplateId(nextId) });
+      return;
+    }
+    setTemplateId(nextId);
+  };
+  const pickTemplate = (nextId: string) => {
+    const next = templates?.find((t) => t.id === nextId);
+    if (next) openTemplate(nextId, next.name);
+  };
+
+  useEffect(() => {
+    void listTemplates(companyId)
+      .then((rows) => {
+        setTemplates(rows);
+        setTemplateId((was) => (rows.some((t) => t.id === was) ? was : (rows.find((t) => t.isDefault) ?? rows[0])?.id ?? null));
+      })
+      .catch((err) => setError(toDisplayError(err)));
+  }, [companyId]);
+
+  /**
+   * A template was made, renamed, made the default or archived: the list as the API now has it. One just
+   * made is opened through the same question a pick asks — "Stay here" keeps the draft, and the new
+   * template waits in the picker.
+   */
+  const templateChanged = (saved: NamedTemplate, select: boolean) => {
+    void listTemplates(companyId).then(setTemplates).catch(() => {
+      setTemplates((list) => (list ? [...list.filter((t) => t.id !== saved.id), saved] : [saved]));
+    });
+    if (select) openTemplate(saved.id, saved.name);
   };
   /*
    * The activity codes a ratio may be built from, read from this company's own taxonomy
@@ -203,22 +267,23 @@ export default function CompanyTemplatePage({
    * value at *that* moment, not the one captured when the request went out. `fetch` has no
    * cancellation here, so dropping the answer is the cancellation.
    */
-  const wanted = useRef<TemplateKind | null>(null);
+  const wanted = useRef<string | null>(null);
 
-  const load = useCallback(async (kind: TemplateKind) => {
-    wanted.current = kind;
+  const load = useCallback(async (kind: TemplateKind, template: string) => {
+    const key = `${template}:${kind}`;
+    wanted.current = key;
     setLoaded(null);
     try {
-      const row = await readTemplate(companyId, kind);
+      const row = await readTemplate(companyId, kind, template);
       // **Dropped if the reader has moved on.** Tagging the state with its kind stops a
       // late answer being *drawn* under the wrong tab; this stops it clobbering the right
       // one, which would blank the screen back to a skeleton for no reason a reader could
       // see. On a slow connection that is the ordinary case, not the rare one.
-      if (wanted.current !== kind) return;
+      if (wanted.current !== key) return;
       setLoaded({ kind, template: row, payload: row.payload });
       setDirty(false);
     } catch (err) {
-      if (wanted.current !== kind) return;
+      if (wanted.current !== key) return;
       setError(toDisplayError(err));
     }
   }, [companyId]);
@@ -229,19 +294,19 @@ export default function CompanyTemplatePage({
    * the screen back to a skeleton for a change that touched no data.
    */
   useEffect(() => {
-    if (tab.kind) void load(tab.kind);
-  }, [tab.kind, load]);
+    if (tab.kind && templateId) void load(tab.kind, templateId);
+  }, [tab.kind, templateId, load]);
 
   useEffect(() => {
-    if (tab.kind !== 'activation_checklist') return;
-    void readTemplate(companyId, 'training_taxonomy')
+    if (tab.kind !== 'activation_checklist' || !templateId) return;
+    void readTemplate(companyId, 'training_taxonomy', templateId)
       .then((row) => {
         const { modules } = row.payload as { modules?: { code: string; title: string }[] };
         setCompanyModules(modules ?? []);
       })
       // A checklist editor with no module list still works: it offers the three feature links.
       .catch(() => setCompanyModules([]));
-  }, [companyId, tab.kind]);
+  }, [companyId, tab.kind, templateId]);
 
   useEffect(() => {
     if (tab.kind !== 'campaign_kinds') return;
@@ -251,8 +316,8 @@ export default function CompanyTemplatePage({
   }, [tab.kind]);
 
   useEffect(() => {
-    if (tab.kind !== 'ratio_set') return;
-    void readTemplate(companyId, 'activity_taxonomy')
+    if (tab.kind !== 'ratio_set' || !templateId) return;
+    void readTemplate(companyId, 'activity_taxonomy', templateId)
       .then((row) => {
         const { types } = row.payload as { types?: { code: string; label: string }[] };
         setAvailable(types ?? []);
@@ -260,7 +325,7 @@ export default function CompanyTemplatePage({
       // A ratio editor with no code list is still usable — it just cannot offer names.
       // Failing the whole tab over it would be worse than showing codes alone.
       .catch(() => setAvailable([]));
-  }, [companyId, tab.kind]);
+  }, [companyId, tab.kind, templateId]);
 
   async function run(action: () => Promise<CompanyTemplate>) {
     setBusy(true);
@@ -291,9 +356,21 @@ export default function CompanyTemplatePage({
       subtitle="What every new office of this company starts life with."
       permission="company_template:read"
       actions={(
-        <Link href="/admin/companies" className="text-md font-semibold text-navy underline">
-          Back to companies
-        </Link>
+        <div className="flex flex-col items-end gap-3">
+          <Link href="/admin/companies" className="text-md font-semibold text-navy underline">
+            Back to companies
+          </Link>
+          {templates && templateId && (
+            <TemplatePicker
+              companyId={companyId}
+              templates={templates}
+              selectedId={templateId}
+              onSelect={pickTemplate}
+              onChanged={templateChanged}
+              disabled={busy}
+            />
+          )}
+        </div>
       )}
       /*
        * Two rows, because an Owner Settings **item** split across routes is one item with
@@ -303,7 +380,7 @@ export default function CompanyTemplatePage({
        * the same word sat in two identically-underlined rows.
        */
       tabsLabel="Template sections"
-      tabs={GROUPS.map((g) => ({ label: g.groupLabel, href: `#${g.group}` }))}
+      tabs={GROUPS.map((g) => ({ label: g.groupLabel, href: `#${g.group}`, hint: SHARED_HINT[g.group] }))}
       activeHref={`#${tab.group}`}
       /*
        * Unsaved edits are named before they are lost.
@@ -337,7 +414,7 @@ export default function CompanyTemplatePage({
               onClick={() => {
                 const next = pendingTab;
                 setPendingTab(null);
-                selectTabHref(`#${next.key}`);
+                next.go();
               }}
             >
               Discard and open {pendingTab.label}
@@ -355,20 +432,26 @@ export default function CompanyTemplatePage({
         */}
       {tab.key === 'products' ? (
         <ProductsTab companyId={companyId} />
-      ) : current === null ? (
+      ) : current === null || !shown ? (
         <SkeletonCards count={3} />
       ) : (
         <>
           <Card className="mb-4">
             <p className="text-md text-navy">
               {current.template.publishedVersion === null ? (
-                <>
-                  Nothing is published yet. New offices of this company start from the
-                  AgencyBoost defaults — which is what you are looking at, ready to edit.
-                </>
+                /*
+                 * ADR-0115 §1: there is no fallback any more. An office made from this template gets
+                 * none of a kind it never published — the three cascade activity types excepted.
+                 */
+                current.kind === 'campaign_kinds' ? (
+                  <>Nothing is published yet. Publishing applies these rules to every office of the company.</>
+                ) : (
+                  <>Nothing is published yet, so an office made from {shown.name} starts with none of it.</>
+                )
               ) : (
                 <>
-                  New offices start from <strong>version {current.template.publishedVersion}</strong>.
+                  New offices made from {current.kind === 'campaign_kinds' ? 'any template' : shown.name} start
+                  from <strong>version {current.template.publishedVersion}</strong>.
                   {current.template.status === 'draft' && (
                     <> You have unpublished changes, which will become version {current.template.version}.</>
                   )}
@@ -408,16 +491,21 @@ export default function CompanyTemplatePage({
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <Button
-                disabled={busy || !dirty}
-                onClick={() => void run(() => saveTemplateDraft(companyId, tab.kind!, current.payload))}
+                disabled={busy || !dirty || (shown.status === 'archived' && current.kind !== 'campaign_kinds')}
+                title={shown.status === 'archived' ? 'An archived template is kept as it is.' : undefined}
+                onClick={() => void run(() => saveTemplateDraft(companyId, tab.kind!, current.payload, templateId))}
               >
                 {busy ? 'Saving…' : 'Save draft'}
               </Button>
+              {/* Kept as it is when archived, as Save draft is — but for the company's own campaign kinds. */}
               <Button
                 variant="secondary"
-                disabled={busy || dirty || current.template.status !== 'draft'}
-                title={dirty ? 'Save the draft first.' : undefined}
-                onClick={() => void run(() => publishTemplate(companyId, tab.kind!))}
+                disabled={busy || dirty || current.template.status !== 'draft'
+                  || (shown.status === 'archived' && current.kind !== 'campaign_kinds')}
+                title={shown.status === 'archived' && current.kind !== 'campaign_kinds'
+                  ? 'An archived template is kept as it is.'
+                  : dirty ? 'Save the draft first.' : undefined}
+                onClick={() => void run(() => publishTemplate(companyId, tab.kind!, templateId))}
               >
                 Publish version {current.template.version}
               </Button>

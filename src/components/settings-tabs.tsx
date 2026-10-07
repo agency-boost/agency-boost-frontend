@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useId } from 'react';
 import { usePathname } from 'next/navigation';
 
 /**
@@ -23,7 +24,12 @@ export function SettingsTabs({
   label = 'Activity settings',
   variant = 'tabs',
 }: {
-  tabs: { label: string; href: string }[];
+  /**
+   * `hint`, where a tab has one, is its tooltip: shown on hover and given to a screen reader as the
+   * link's description — the Super Admin's template screen says that *Campaigns* and *Products* are the
+   * company's, shared by every template (ADR-0115 §7).
+   */
+  tabs: { label: string; href: string; hint?: string }[];
   /**
    * When the tabs switch a panel rather than a route.
    *
@@ -57,6 +63,7 @@ export function SettingsTabs({
 }) {
   const pathname = usePathname();
   const subtabs = variant === 'subtabs';
+  const hintId = useId();
 
   return (
     <nav
@@ -72,6 +79,8 @@ export function SettingsTabs({
             key={tab.href}
             href={tab.href}
             aria-current={active ? 'page' : undefined}
+            title={tab.hint}
+            aria-describedby={tab.hint ? `${hintId}${tab.href}` : undefined}
             onClick={onSelect && ((event) => {
               event.preventDefault();
               onSelect(tab.href);
@@ -85,6 +94,7 @@ export function SettingsTabs({
             ].filter(Boolean).join(' ')}
           >
             {tab.label}
+            {tab.hint && <span id={`${hintId}${tab.href}`} hidden>{tab.hint}</span>}
           </Link>
         );
       })}

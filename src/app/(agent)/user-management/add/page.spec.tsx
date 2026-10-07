@@ -384,6 +384,28 @@ describe('inviting people (P3-T4)', () => {
       expect(screen.queryByRole('button', { name: 'Confirm change' })).not.toBeInTheDocument();
     });
 
+    it('P13.2-T4 AC-5: a promotion past the office’s leader limit is refused in plain words, with no code', async () => {
+      stub([teamMember()], {
+        '/members/mem-t1/role': {
+          status: 409,
+          body: {
+            error: {
+              code: 'LEADER_LIMIT_REACHED', message: 'x', details: { maxLeaders: 10, leadersUsed: 10 }, requestId: 'r-1',
+            },
+          },
+        },
+      });
+      renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+      await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
+      await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('This office has reached its limit of 10 leaders, so nobody else can be made an AB or an AAB.');
+      expect(alert).toHaveTextContent('AgencyBoost can raise it.');
+      expect(alert).not.toHaveTextContent('LEADER_LIMIT_REACHED');
+    });
+
     it('says how many somebody leads, so a demotion is not a surprise', async () => {
       stub([teamMember({ role: 'aab', directCount: 3 })]);
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });

@@ -216,6 +216,29 @@ describe('one member', () => {
       );
     });
 
+    it('P13.2-T4 AC-5: a promotion past the office’s leader limit is refused in plain words, announced, in the role card', async () => {
+      stub({ role: 'agent' }, {
+        'PATCH /members/mem-1/role': {
+          status: 409,
+          body: { error: { code: 'LEADER_LIMIT_REACHED', message: 'x', details: { maxLeaders: 2, leadersUsed: 2 }, requestId: 'r' } },
+        },
+      });
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+
+      await screen.findByText('Rina Wijaya');
+      await userEvent.selectOptions(screen.getByLabelText('New role'), 'aab');
+      await userEvent.click(screen.getByRole('button', { name: 'Change role' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('This office has reached its limit of 2 leaders, so nobody else can be made an AB or an AAB.');
+      expect(alert).toHaveTextContent('AgencyBoost can raise it.');
+      expect(alert).not.toHaveTextContent('LEADER_LIMIT_REACHED');
+      // The person is still on the page: the refusal is of one change, not of the screen.
+      expect(screen.getByText('Rina Wijaya')).toBeInTheDocument();
+      expect(within(screen.getByRole('heading', { name: 'Change their role' }).parentElement!)
+        .getByRole('alert')).toBe(alert);
+    });
+
     it('AC-1: says what the change means before it is made', async () => {
       stub();
       renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });

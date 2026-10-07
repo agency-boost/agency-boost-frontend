@@ -163,9 +163,47 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
       message: 'Something went wrong. Please try again.',
       requestId: 'unknown',
     };
+    // The office cannot be used at all (ADR-0112 §4): the app is replaced, whichever request met it.
+    if (response.status === 403 && isOfficeUnavailable(error)) officeUnavailableListener?.(error);
     throw new ApiRequestError(response.status, error);
   }
   return payload as T;
+}
+
+/**
+ * **The three refusals that mean the reader's office cannot be used at all** (ADR-0112 §4, P13.2-T3
+ * AC-9): its subscription ended, it is suspended, or it is archived. `ContextResolver` answers every
+ * request of a member of such an office with one of them — `/auth/me` first, or any request after it
+ * when the office changes under an open tab.
+ *
+ * Nothing a screen can do helps, and every link would meet the same refusal, so the whole app is
+ * replaced with a page saying which office and what happened (`OfficeUnavailable`). It used to be
+ * swallowed: `/auth/me`'s 403 left no session, and the reader was sent to sign in again, and again.
+ *
+ * The listener is told of every such refusal; **the session decides who sees the page** (P13.2 exit
+ * review): a member, or a Super Admin inside a support session — never a Super Admin in their console.
+ */
+export const OFFICE_UNAVAILABLE_CODES = [
+  'TENANT_SUBSCRIPTION_ENDED', 'TENANT_SUSPENDED', 'TENANT_ARCHIVED',
+] as const;
+export type OfficeUnavailableCode = (typeof OFFICE_UNAVAILABLE_CODES)[number];
+
+export function isOfficeUnavailable(error: { code: string } | null | undefined): boolean {
+  return (OFFICE_UNAVAILABLE_CODES as readonly string[]).includes(error?.code ?? '');
+}
+
+let officeUnavailableListener: ((error: ApiError) => void) | null = null;
+
+/**
+ * Be told when any request meets one of those refusals. One listener, the session's; the returned
+ * function removes it. Told before the request's own caller is, so the page replaces the app before a
+ * screen draws an error banner of its own.
+ */
+export function onOfficeUnavailable(listener: (error: ApiError) => void): () => void {
+  officeUnavailableListener = listener;
+  return () => {
+    if (officeUnavailableListener === listener) officeUnavailableListener = null;
+  };
 }
 
 /**

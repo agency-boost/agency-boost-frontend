@@ -9,6 +9,7 @@ import {
   Button, Card, Field, FieldRow, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useHashTab } from '@/lib/use-hash-tab';
 import { suggestCode } from '@/lib/config-code';
@@ -34,8 +35,8 @@ const move = <T,>(rows: T[], from: number, to: number): T[] => {
  *
  * **Every item has a code, and renaming never moves one.** Two of the prototype's four grids have
  * no codes at all: a tick is bound to the label text, so correcting a typo would orphan every
- * assessment that used it. The codes are shown beside each row so that rule is visible rather than
- * merely true.
+ * assessment that used it. Each row's code is shown in its *Rename* dialog, under the name box, so that
+ * rule is visible rather than merely true; the rows themselves carry the name alone.
  *
  * **Reordering is presentation.** A stage's seniority is its own number, so tidying the ladder
  * cannot move anybody's stage — which is exactly what the prototype's array index does.
@@ -291,12 +292,16 @@ export default function CapabilityMappingPage() {
         <Card className="p-0">
           <div className="border-b border-hairline px-4 py-3 sm:px-5">
             <h2 className="font-display text-lg font-bold text-navy">The ladder</h2>
-            <p className="mt-1 text-sm text-muted">
-              Four stages. Somebody is at the highest stage whose milestones are all ticked — so
-              reordering these changes where they sit on the page and <strong>nobody&rsquo;s
-              stage</strong>.
-            </p>
+            {catalog.stages.length > 0 && (
+              <p className="mt-1 text-sm text-muted">
+                Four stages. Somebody is at the highest stage whose milestones are all ticked — so
+                reordering these changes where they sit on the page and <strong>nobody&rsquo;s
+                stage</strong>.
+              </p>
+            )}
           </div>
+          {/* An office started from a source with no capability ladder has none (ADR-0115 §1). */}
+          {catalog.stages.length === 0 && <EmptyState title="No stages yet." />}
           <ul className="flex flex-col divide-y divide-hairline">
             {visible(catalog.stages).map((stage, index) => row(
               stage, 'stage', undefined,
@@ -323,6 +328,9 @@ export default function CapabilityMappingPage() {
               </Button>
             )}
           </div>
+          {catalog.milestones.length === 0 && addingTo !== 'milestone' && (
+            <EmptyState title="No milestones yet." />
+          )}
           <ul className="flex flex-col divide-y divide-hairline">
             {visible(catalog.milestones).map((milestone, index) => row(
               milestone, 'milestone', undefined,
@@ -334,6 +342,9 @@ export default function CapabilityMappingPage() {
         </>
         )}
 
+        {tab === '#skills' && catalog.grids.length === 0 && (
+          <Card><EmptyState title="No skill grids yet." /></Card>
+        )}
         {tab === '#skills' && catalog.grids.map((grid) => (
           <Card key={grid.code} className="p-0">
             <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">

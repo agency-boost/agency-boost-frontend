@@ -273,6 +273,18 @@ describe('the Leader Notes tab (P11-T9)', () => {
       expect(within(mapping).queryAllByRole('listitem')).toHaveLength(0);
     });
 
+    it('P13.2-T6 AC-8: says an empty catalog is empty — an office started Empty — on both cards', async () => {
+      show({
+        'GET /coaching/coachees/mem-rina/profile': {
+          body: profile({ catalog: { ...CATALOG, stages: [], milestones: [], grids: [] }, milestoneCodes: [], skillCodes: [], stageCode: null }),
+        },
+      });
+      expect(within(await card('Capability mapping')).getByText('Your office has not set up its capability stages yet.'))
+        .toBeInTheDocument();
+      expect(within(await card('Skill tracker')).getByText('Your office has not set up its skill grids yet.'))
+        .toBeInTheDocument();
+    });
+
     it('shows any other refused save above the cards, and puts the boxes back as the server holds them', async () => {
       show({ 'PUT /coaching/coachees/mem-rina/profile': refused(400, 'VALIDATION_FAILED', 'A code the catalog does not hold.') });
       const mapping = await card('Capability mapping');

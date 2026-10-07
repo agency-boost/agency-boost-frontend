@@ -348,11 +348,35 @@ it('removes an aspect with its items, and says how many are going', async () => 
     expect(screen.getByRole('button', { name: 'Publish version 1' })).toBeDisabled();
   });
 
-  it('says so plainly when a server answers with no checklist at all', async () => {
+  it('says so plainly when the office has no checklist at all', async () => {
     render(OWNER, { published: null, draft: null, windowDays: 90 });
 
     expect(await screen.findByText('This office has no activation checklist yet.')).toBeInTheDocument();
     expect(screen.queryByText(/Could not reach the server/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/standard checklist/)).not.toBeInTheDocument();
+  });
+
+  it('P13.2-T6 AC-8: an office started Empty authors its first aspect from nothing, and saves it', async () => {
+    // ADR-0115 §8: its source held no checklist, so its Owner builds the first one.
+    const saved = {
+      published: null, windowDays: 90,
+      draft: { id: 'd-1', version: 1, status: 'draft', publishedAt: null, aspects: [] },
+    };
+    const { calls } = render(OWNER, { published: null, draft: null, windowDays: 90 }, { body: saved });
+
+    expect(await screen.findByText(/Add its first aspect/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: '+ Add aspect' }));
+    await userEvent.type(screen.getByLabelText('Aspect'), 'First steps');
+    await userEvent.type(screen.getByLabelText('Its first item'), 'Meet your leader');
+    await userEvent.click(screen.getByRole('button', { name: 'Add the aspect' }));
+    expect(screen.queryByText('This office has no activation checklist yet.')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    const body = sent(calls, 'PUT');
+    expect(body.aspects).toEqual([expect.objectContaining({
+      code: 'FIRST_STEPS', label: 'First steps', items: [expect.objectContaining({ label: 'Meet your leader' })],
+    })]);
   });
 
   it('gives a reader without write permission the checklist and none of the controls', async () => {

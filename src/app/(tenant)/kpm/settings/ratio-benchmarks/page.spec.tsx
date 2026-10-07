@@ -97,6 +97,14 @@ function render(me = OWNER, ratios = RATIOS, taxonomy = TAXONOMY) {
 describe('the office ratio benchmarks (P4-T2)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('P13.2-T6 AC-8: an office with no ratio at all says so, and offers the first one — not "every ratio is archived"', async () => {
+    render(OWNER, []);
+    expect(await screen.findByText('No ratios yet')).toBeInTheDocument();
+    expect(screen.queryByText('Every ratio is archived')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show archived' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add a ratio' })).toBeInTheDocument();
+  });
+
   it('renders a formula as the activity types it counts, not as numbers', async () => {
     /*
      * The prototype writes these as `6 / (4+5)` — item numbers, which are unreadable and break

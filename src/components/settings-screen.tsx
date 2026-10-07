@@ -50,8 +50,8 @@ export function SettingsScreen({
   subtitle?: string;
   permission?: string;
   actions?: ReactNode;
-  /** The settings group. Every screen in the group passes the same list. */
-  tabs?: { label: string; href: string }[];
+  /** The settings group. Every screen in the group passes the same list. `hint` is a tab's tooltip. */
+  tabs?: { label: string; href: string; hint?: string }[];
   activeHref?: string;
   onSelectTab?: (href: string) => void;
   tabsLabel?: string;

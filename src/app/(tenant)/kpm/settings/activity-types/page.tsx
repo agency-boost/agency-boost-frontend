@@ -14,6 +14,7 @@ import { cn } from '@/lib/cn';
 import { useCan } from '@/lib/session';
 import { projectStaged, unstageRow, STAGED_LABEL } from '@/lib/staged-projection';
 import { planSummaryTile, summaryGroups, summaryTileName, tileRefusal } from '@/lib/summary-tiles';
+import { reservedRefusal } from '@/lib/reserved-types';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import {
   applyConfigChanges,
@@ -124,7 +125,8 @@ export default function ActivityTypesPage() {
       setPublished((n) => n + 1);
     } catch (err) {
       const shown = toDisplayError(err);
-      setError(tileRefusal(shown) ?? shown);
+      // One of the three cascade types, or its section, refused archiving (ADR-0115 §2): said plainly.
+      setError(tileRefusal(shown) ?? reservedRefusal(shown) ?? shown);
     } finally {
       setBusy(null);
     }

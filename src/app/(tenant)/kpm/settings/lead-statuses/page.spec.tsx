@@ -49,6 +49,14 @@ const handleFor = (label: string) =>
 describe('the office lead pipelines (P4-T3)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('P13.2-T6 AC-8: an empty pipeline says so, and offers its first stage', async () => {
+    // An office started Empty (ADR-0115 §1): both pipelines, each with no stage.
+    render(OWNER, [{ pipeline: 'sales', statuses: [] }, { pipeline: 'recruitment', statuses: [] }]);
+    expect(await screen.findByText('No stages yet.')).toBeInTheDocument();
+    expect(screen.getByText(/^0 statuses/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Add a .* stage$/ })).toBeEnabled();
+  });
+
   it('shows one ladder at a time, and both are reachable', async () => {
     /*
      * Subtabs since the prototype alignment pass (`KPM_Owner.html:1492-1495`). Stacked,

@@ -109,6 +109,45 @@ describe('Log activity (P6-T2)', () => {
     expect(screen.getByLabelText('Count for Menghubungi prospek yang sudah ada')).toHaveValue(2);
   });
 
+  it('P13.2-T6 AC-8: an office started Empty logs against the three cascade types, and nothing else', async () => {
+    // ADR-0115 §2: every office has them, in their platform sections, whatever it started from.
+    const three = [
+      {
+        id: 'c1', code: 'LEADS_GENERATION', label: 'Leads Generation', description: null,
+        appliesToOrgLevelCodes: [], displayOrder: 1, version: 1, status: 'active',
+        types: [{
+          id: 't1', code: 'LEADS_CONTACTED', label: 'Menghubungi prospek yang sudah ada',
+          categoryCode: 'LEADS_GENERATION', description: null, displayOrder: 1, version: 1, status: 'active',
+        }],
+      },
+      {
+        id: 'c2', code: 'SELLING', label: 'Selling', description: null,
+        appliesToOrgLevelCodes: [], displayOrder: 2, version: 1, status: 'active',
+        types: [
+          {
+            id: 't2', code: 'SELL_PRESENTATION', label: 'Melakukan presentasi penjualan untuk calon atau existing nasabah',
+            categoryCode: 'SELLING', description: null, displayOrder: 2, version: 1, status: 'active',
+          },
+          {
+            id: 't3', code: 'SELL_SUBMISSION', label: 'Submission polis',
+            categoryCode: 'SELLING', description: null, displayOrder: 3, version: 1, status: 'active',
+          },
+        ],
+      },
+    ];
+    stubFetch({
+      '/kpm/config': { body: { activity: three, ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/activity/log': { body: day({ entries: [], totalCount: 0 }) },
+    });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+    expect(await screen.findByRole('heading', { name: 'Leads Generation' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Selling' })).toBeInTheDocument();
+    expect(screen.getAllByLabelText(/^Count for /)).toHaveLength(3);
+    expect(screen.queryByText(/has not set up its activity types/)).not.toBeInTheDocument();
+  });
+
   it('takes the day from the server, never from the browser’s clock', async () => {
     // The prototype derives every date key with `toISOString()`, which for a Jakarta agent
     // before 07:00 is yesterday. The date input shows what the office says today is.

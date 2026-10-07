@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { use, useCallback, useEffect, useState } from 'react';
+import { LeaderLimitNotice, isLeaderLimit } from '@/components/leader-limit-notice';
 import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -54,6 +55,8 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
   const [removeReason, setRemoveReason] = useState('');
   const [disposition, setDisposition] = useState<'reassign' | 'orphan'>('orphan');
   const [error, setError] = useState<ApiError | null>(null);
+  /** The office's leader limit refused the role change (P13.2-T4): said in the role card, not over the page. */
+  const [limit, setLimit] = useState<ApiError | null>(null);
 
   /** P3.5-T13. A role change and a removal both alter this page, so both re-read it. */
   const load = useCallback(async () => {
@@ -82,13 +85,17 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
     if (!member || !toRole || toRole === member.role) return;
     setBusy(true);
     setError(null);
+    setLimit(null);
     try {
       await changeRole(member.membershipId, toRole, roleReason.trim() || undefined);
       setToRole('');
       setRoleReason('');
       await load();
     } catch (err) {
-      setError(toDisplayError(err));
+      const shown = toDisplayError(err);
+      // The limit is a refusal of this one change, and the page behind it is still true.
+      if (isLeaderLimit(shown)) setLimit(shown);
+      else setError(shown);
     } finally {
       setBusy(false);
     }
@@ -327,6 +334,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
             <Card>
               <h2 className="font-display text-lg font-bold text-navy">Change their role</h2>
               <form onSubmit={submitRoleChange} className="mt-3 flex flex-col gap-4" noValidate>
+                {limit && <LeaderLimitNotice error={limit} audience="office" action="role" />}
                 <Field
                   label="New role"
                   htmlFor="to-role"

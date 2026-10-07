@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
@@ -229,6 +229,43 @@ describe('importing a roster (P3.6-T4)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('1 row would not import');
     expect(screen.getByText('Already registered.')).toBeInTheDocument();
+  });
+
+  describe('the leader limit (P13.2-T4 AC-4, AC-5)', () => {
+    const LIMIT = {
+      '/admin/tenants/kpm-1/roster/preview': { body: { issues: [], willCreate: 1, rows: [] } },
+      '/admin/tenants/kpm-1/roster': {
+        status: 409,
+        body: { error: { code: 'LEADER_LIMIT_REACHED', message: 'x', details: { maxLeaders: 10, leadersUsed: 10 }, requestId: 'r-5' } },
+      },
+    };
+
+    async function importOne() {
+      await upload(`${HEADER}\nRina,rina@k.test,PRU-1,aab,\n`);
+      await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Import 1' }));
+    }
+
+    it('tells the Super Admin, in plain words, to raise the limit on the offices list', async () => {
+      render(LIMIT);
+      await importOne();
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('This office has reached its limit of 10 leaders, so the ABs and AABs in this file cannot be added.');
+      expect(alert).toHaveTextContent('Raise it with Edit subscription on the offices list first, or import them as Agents.');
+      expect(within(alert).getByRole('link', { name: 'offices list' })).toHaveAttribute('href', '/admin/tenants');
+      expect(alert).not.toHaveTextContent('LEADER_LIMIT_REACHED');
+    });
+
+    it('tells an Owner to import them as Agents, or ask AgencyBoost', async () => {
+      stubFetch({ ...TEMPLATE, ...LIMIT });
+      renderWithSession(<RosterImport kpmId="kpm-1" backHref="/people/members" />, {
+        me: makeMe({ permissions: ['kpm:import_roster'] }),
+      });
+      await importOne();
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Import them as Agents, or ask AgencyBoost to raise the limit.');
+      expect(within(alert).queryByRole('link')).not.toBeInTheDocument();
+    });
   });
 
 

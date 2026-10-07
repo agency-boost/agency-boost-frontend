@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { LeaderLimitNotice, isLeaderLimit } from '@/components/leader-limit-notice';
 import { Page } from '@/components/page';
 import { UserManagementTabs } from '@/components/user-management-tabs';
 import { CopyableValue } from '@/components/ui/copyable-value';
@@ -179,7 +180,9 @@ export default function AddAgentsPage() {
       permission="member:search_untagged_pool"
     >
       <UserManagementTabs />
-      {error && <ErrorBanner {...error} />}
+      {error && (isLeaderLimit(error)
+        ? <LeaderLimitNotice error={error} audience="office" action="role" />
+        : <ErrorBanner {...error} />)}
 
       <Card className="mb-4">
         <h2 className="font-display text-lg font-bold text-navy">Invite someone</h2>

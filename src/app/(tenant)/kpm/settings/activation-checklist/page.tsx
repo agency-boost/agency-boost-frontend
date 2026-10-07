@@ -530,13 +530,6 @@ export default function ActivationChecklistPage() {
     >
       {server === null || draft === null ? (
         error ? null : <SkeletonCards count={3} />
-      ) : server.draft === null && server.published === null ? (
-        /* Neither a version nor a starting point. Our own API never answers this — it sends the
-           standard checklist — so this is an older server, and it says so rather than drawing an
-           editor over nothing. */
-        <Card>
-          <EmptyState title="This office has no activation checklist yet." />
-        </Card>
       ) : (
         <div className="flex flex-col gap-4">
           <Card>
@@ -551,6 +544,16 @@ export default function ActivationChecklistPage() {
                 <>
                   Nothing is published yet, so no hire has been given a checklist. Your draft will
                   become <strong>version {version}</strong>.
+                </>
+              ) : server.draft === null ? (
+                /*
+                 * Neither a version nor a starting point: an office started from a source that held
+                 * no checklist (ADR-0115 §8). Its Owner authors the first aspect from nothing; until
+                 * a version is published nobody has an activation.
+                 */
+                <>
+                  Nothing is published yet, so no hire has been given a checklist. Add its first
+                  aspect, save it, then publish <strong>version 1</strong>.
                 </>
               ) : (
                 <>
@@ -577,7 +580,8 @@ export default function ActivationChecklistPage() {
                 {/* The starting point is savable as it stands: saving it is what makes the office
                     have a checklist at all. */}
                 <Button
-                  disabled={busy || (!dirty && (hasDraft || server.published !== null))}
+                  disabled={busy || draft.aspects.length === 0
+                    || (!dirty && (hasDraft || server.published !== null))}
                   onClick={() => void run(() => saveActivationDraft(draft))}
                 >
                   {busy ? 'Saving…' : 'Save draft'}
@@ -676,6 +680,11 @@ export default function ActivationChecklistPage() {
             </Card>
           )}
 
+          {draft.aspects.length === 0 && !addingAspect && (
+            <Card>
+              <EmptyState title="This office has no activation checklist yet." />
+            </Card>
+          )}
           {draft.aspects.map((aspect, at) => aspectCard(aspect, at))}
         </div>
       )}

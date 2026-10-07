@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
+import { LeaderLimitNotice, isLeaderLimit } from '@/components/leader-limit-notice';
 import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -325,7 +326,10 @@ export default function MembersPage() {
       </FieldRow>
       )}
 
-      {error && <ErrorBanner {...error} />}
+      {/* An approval at the leader limit (P13.2 exit review): in the limit's words, never the code. */}
+      {error && (isLeaderLimit(error)
+        ? <LeaderLimitNotice error={error} audience="office" action="role" />
+        : <ErrorBanner {...error} />)}
 
       {tab === 'rolelog' && (
         <>

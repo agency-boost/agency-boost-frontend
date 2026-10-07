@@ -6,6 +6,8 @@ import {
   ApiRequestError,
   getAccessToken,
   isImpersonating,
+  isOfficeUnavailable,
+  onOfficeUnavailable,
   setAccessToken,
   setImpersonating,
   toDisplayError,
@@ -244,6 +246,44 @@ describe('api client', () => {
       // The stack goes where somebody can act on it, and not to the reader.
       expect(broken).toHaveBeenCalled();
       broken.mockRestore();
+    });
+  });
+
+  describe('an office that cannot be used (P13.2-T3 AC-9)', () => {
+    const refusal = (code: string, status = 403) => ({
+      status, body: { error: { code, message: 'm', details: { kpmCode: '0601' }, requestId: 'r' } },
+    });
+
+    it.each(['TENANT_SUBSCRIPTION_ENDED', 'TENANT_SUSPENDED', 'TENANT_ARCHIVED'])(
+      'tells the listener about a 403 %s, and still throws it to the caller',
+      async (code) => {
+        const heard = vi.fn();
+        const stop = onOfficeUnavailable(heard);
+        stubFetch({ '/kpm/config': refusal(code) });
+        await expect(api('/kpm/config')).rejects.toBeInstanceOf(ApiRequestError);
+        expect(heard).toHaveBeenCalledWith(expect.objectContaining({ code, details: { kpmCode: '0601' } }));
+        stop();
+      },
+    );
+
+    it('tells it nothing about any other refusal', async () => {
+      const heard = vi.fn();
+      const stop = onOfficeUnavailable(heard);
+      stubFetch({ '/a': refusal('PERM_DENIED'), '/b': refusal('TENANT_SUSPENDED', 409) });
+      await expect(api('/a')).rejects.toBeInstanceOf(ApiRequestError);
+      await expect(api('/b')).rejects.toBeInstanceOf(ApiRequestError);
+      expect(heard).not.toHaveBeenCalled();
+      stop();
+    });
+
+    it('stops telling a listener once it has unsubscribed', async () => {
+      const heard = vi.fn();
+      onOfficeUnavailable(heard)();
+      stubFetch({ '/kpm/config': refusal('TENANT_ARCHIVED') });
+      await expect(api('/kpm/config')).rejects.toBeInstanceOf(ApiRequestError);
+      expect(heard).not.toHaveBeenCalled();
+      expect(isOfficeUnavailable({ code: 'TENANT_ARCHIVED' })).toBe(true);
+      expect(isOfficeUnavailable(null)).toBe(false);
     });
   });
 });

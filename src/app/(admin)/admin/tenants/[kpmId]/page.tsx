@@ -2,22 +2,33 @@
 
 import { use, useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
+import { SaveAsTemplateDialog } from '@/components/save-as-template-dialog';
 import { Button, ButtonLink, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import {
   readTenant,
   setTenantStatus,
+  subscriptionLine,
   TENANT_STATUS_LABEL,
-  type Kpm,
+  tenantStatusTone,
+  tenantStatusWord,
+  type TenantRow,
   type TenantStatus,
 } from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
+import { savedTemplateSentence } from '@/lib/templates';
+import { useCan } from '@/lib/session';
 
 export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: string }> }) {
   const { kpmId } = use(params);
-  const [kpm, setKpm] = useState<Kpm | null>(null);
+  const [kpm, setKpm] = useState<TenantRow | null>(null);
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
+  /** *Save as template* (P13.2-T7): the dialog, and what the last save made, said once it is made. */
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
+  // Convenience: the API refuses anybody without it (`company_template:write`, the Super Admin's).
+  const canSaveTemplate = useCan('company_template:write');
 
   const load = useCallback(async () => {
     try {
@@ -51,13 +62,31 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
     <Page
       title={`${kpm.code} · ${kpm.branchName}`}
       subtitle="Provisioning and lifecycle. This console never reads the office's business data."
-      actions={
-        <StatusPill
-          status={kpm.status === 'active' ? 'success' : kpm.status === 'suspended' ? 'alert' : 'neutral'}
-          label={TENANT_STATUS_LABEL[kpm.status]}
-        />
-      }
+      actions={(
+        <div className="flex flex-wrap items-center gap-3">
+          {/* The list's word, so an ended office reads the same on both (P13.2-T3 AC-8). */}
+          <StatusPill status={tenantStatusTone(kpm)} label={tenantStatusWord(kpm)} />
+          {/* P13.2-T7 (ADR-0115 §5): this office's published settings, as a company's template. */}
+          {canSaveTemplate && (
+            <Button variant="secondary" onClick={() => { setSaved(null); setSaving(true); }}>
+              Save as template
+            </Button>
+          )}
+        </div>
+      )}
     >
+      <SaveAsTemplateDialog
+        open={saving}
+        kpm={kpm}
+        onClose={() => setSaving(false)}
+        onSaved={(template, company) => {
+          setSaving(false);
+          // With what it left out because it names something archived, in the API's words (exit review, finding 2).
+          setSaved(savedTemplateSentence(template, company?.name ?? kpm.companyName));
+        }}
+      />
+      {/* Polite, and only once there is something to say: the dialog has closed on it. */}
+      <p role="status" className={saved ? 'mb-4 text-md text-navy' : 'sr-only'}>{saved ?? ''}</p>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <h2 className="font-display text-lg font-bold text-navy">Profile</h2>
@@ -135,7 +164,7 @@ function Detail({ term, detail }: { term: string; detail: React.ReactNode }) {
   );
 }
 
-function StatusCard({ kpm, onChanged }: { kpm: Kpm; onChanged: () => Promise<void> }) {
+function StatusCard({ kpm, onChanged }: { kpm: TenantRow; onChanged: () => Promise<void> }) {
   const [status, setStatus] = useState<TenantStatus>(kpm.status);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
@@ -166,6 +195,12 @@ function StatusCard({ kpm, onChanged }: { kpm: Kpm; onChanged: () => Promise<voi
       {kpm.suspendedReason && (
         <p className="mt-2 text-md text-alert">Suspended: {kpm.suspendedReason}</p>
       )}
+      {/* P13.2-T3 AC-8: where the subscription stands, beside the office's own status. It is edited
+          on the offices list, where the client asked for it. */}
+      <p className="mt-2 text-md text-navy">
+        <span className="text-muted">Subscription: </span>
+        {subscriptionLine(kpm)}
+      </p>
       <form onSubmit={submit} className="mt-3 flex flex-col gap-3" noValidate>
         {error && <ErrorBanner {...error} />}
         <Field label="Status" htmlFor="status">

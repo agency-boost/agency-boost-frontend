@@ -165,6 +165,68 @@ describe('SidebarUserMenu', () => {
     });
   });
 
+  describe('with a view switch, for an Owner or an Admin (ADR-0114, P13.2-T5)', () => {
+    const SWITCH = { href: '/coaching', label: 'Open agent view' };
+
+    it('P13.2-T5 AC-1 puts the switch above Your account, a link like it, and shows nothing more until opened', async () => {
+      setup({ viewSwitch: SWITCH });
+      expect(screen.queryByRole('link', { name: 'Open agent view' })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
+
+      expect(screen.getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/coaching');
+      // The disclosure's own vocabulary: links and a button, no `menuitem` it does not implement.
+      expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual(['Open agent view', 'Your account']);
+    });
+
+    it('P13.2-T5 AC-1 is in the tab order, before the account’s two', async () => {
+      setup({ viewSwitch: SWITCH });
+      screen.getByRole('button', { name: /Platform Operator/ }).focus();
+      await userEvent.keyboard('{Enter}');
+
+      await userEvent.tab();
+      expect(screen.getByRole('link', { name: 'Open agent view' })).toHaveFocus();
+      await userEvent.tab();
+      expect(screen.getByRole('link', { name: 'Your account' })).toHaveFocus();
+      await userEvent.tab();
+      expect(screen.getByRole('button', { name: 'Sign out' })).toHaveFocus();
+    });
+
+    it('P13.2-T5 AC-1 closes when followed, so the panel is not left open over the other view', async () => {
+      const swallow = (event: Event) => event.preventDefault();
+      document.addEventListener('click', swallow);
+      try {
+        setup({ viewSwitch: SWITCH });
+        await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
+        await userEvent.click(screen.getByRole('link', { name: 'Open agent view' }));
+        expect(screen.queryByRole('link', { name: 'Your account' })).not.toBeInTheDocument();
+      } finally {
+        document.removeEventListener('click', swallow);
+      }
+    });
+
+    it('P13.2-T5 AC-3 on a phone sits after the nav groups and before Your account', async () => {
+      setup({
+        viewSwitch: { href: '/kpm/overview', label: 'Open Owner view' },
+        nav: <nav aria-label="Main"><a href="/leads">Leads management</a></nav>,
+      });
+      await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
+      expect(screen.getAllByRole('link').map((a) => a.textContent))
+        .toEqual(['Leads management', 'Open Owner view', 'Your account']);
+      // Focus still starts on the nav's first link, and Tab from it reaches the switch next.
+      expect(screen.getByRole('link', { name: 'Leads management' })).toHaveFocus();
+      await userEvent.tab();
+      expect(screen.getByRole('link', { name: 'Open Owner view' })).toHaveFocus();
+    });
+
+    it('P13.2-T5 AC-1 has no axe violations with the switch open', async () => {
+      const { container } = setup({ viewSwitch: SWITCH });
+      await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
+      const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
+      expect(results.violations ?? []).toHaveLength(0);
+    });
+  });
+
   it('has no axe violations, open or closed', async () => {
     const { container } = setup();
     const clean = async () =>

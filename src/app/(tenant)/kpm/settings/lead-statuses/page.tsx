@@ -8,6 +8,7 @@ import {
   Button, Card, CodeField, Field, FieldRow, Switch, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-state';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
 import {
@@ -208,6 +209,11 @@ export default function LeadStatusesPage() {
                 </p>
               )}
 
+              {/*
+                * A pipeline with no stage — an office started Empty (ADR-0115 §1). Its Owner adds the
+                * first below, and makes one of them close the pipeline.
+                */}
+              {pipeline.statuses.length === 0 && <EmptyState title="No stages yet." className="py-6" />}
               <ol className="mt-3 flex flex-col divide-y divide-hairline">
                 {pipeline.statuses.map((stage) => (
                   <li

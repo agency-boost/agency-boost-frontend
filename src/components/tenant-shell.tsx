@@ -5,6 +5,7 @@ import { AppShell, type NavSection } from '@/components/app-shell';
 import { type NavIconName } from '@/components/ui/nav-icon';
 import { RequireSession } from '@/components/require-session';
 import { useLadder } from '@/components/ui/role-badge';
+import { viewSwitchFor } from '@/lib/landing';
 import { useSession } from '@/lib/session';
 import { useUnreadCount } from '@/lib/use-unread-count';
 import { useSignOut } from '@/lib/use-sign-out';
@@ -184,7 +185,15 @@ function TenantChrome({
         email: me?.user.email,
       }}
       brandTag="KPM OWNER"
-      account={{ href: '/profile', onSignOut: () => void signOut(), signingOut: busy }}
+      account={{
+        href: '/profile',
+        onSignOut: () => void signOut(),
+        signingOut: busy,
+        // *Open agent view* (ADR-0114): an Owner or an Admin to their field landing, the screen a member
+        // of their rung would have signed in to. No nav item: `KPM_Owner.html`'s nav has none of the
+        // field's, and the chip's panel is a control that already exists (ADR-0062 §2).
+        viewSwitch: viewSwitchFor(me, 'office') ?? undefined,
+      }}
       notifications={{ href: '/notifications', unread }}
       title={title}
       subtitle={subtitle}

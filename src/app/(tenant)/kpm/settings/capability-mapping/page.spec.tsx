@@ -74,6 +74,20 @@ function render(body: unknown = catalog(), me = OWNER, tab: '#ladder' | '#skills
 describe('the capability catalog screen', () => {
   afterEach(() => { vi.unstubAllGlobals(); window.location.hash = ''; });
 
+  it('P13.2-T6 AC-8: an empty catalog says so on both halves, and offers the first milestone', async () => {
+    // An office started Empty (ADR-0115 §1): an empty catalog, never the platform's ladder.
+    const empty = { stages: [], milestones: [], grids: [], version: 1 };
+    render(empty, OWNER, '#ladder');
+    expect(await screen.findByText('No stages yet.')).toBeInTheDocument();
+    expect(screen.getByText('No milestones yet.')).toBeInTheDocument();
+    expect(screen.queryByText(/Four stages/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add a milestone' })).toBeEnabled();
+    vi.unstubAllGlobals();
+
+    render(empty, OWNER, '#skills');
+    expect(await screen.findAllByText('No skill grids yet.')).not.toHaveLength(0);
+  });
+
   it('is called Capability Mapping, with the template’s own two halves', async () => {
     // One name on both sides: an office had to learn that its *Skills & stages* was the Super
     // Admin's *Capability Mapping*, which is a thing nobody should have to be told.

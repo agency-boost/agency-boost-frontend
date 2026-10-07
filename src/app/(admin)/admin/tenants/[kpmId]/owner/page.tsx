@@ -5,15 +5,16 @@ import { useRouter } from 'next/navigation';
 import { use, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
-import { assignOwner, readTenant, type Kpm } from '@/lib/admin';
-import { toDisplayError } from '@/lib/api-client';
+import { assignOwner, readTenant, type TenantRow } from '@/lib/admin';
+import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { LeaderLimitNotice, isLeaderLimit } from '@/components/leader-limit-notice';
 
 export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: string }> }) {
   const { kpmId } = use(params);
   const router = useRouter();
-  const [kpm, setKpm] = useState<Kpm | null>(null);
+  const [kpm, setKpm] = useState<TenantRow | null>(null);
   const [email, setEmail] = useState('');
-  const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -48,7 +49,10 @@ export default function AssignOwnerPage({ params }: { params: Promise<{ kpmId: s
             the same failure a second time — a screen reader reads both. The banner is
             for failures that belong to no single field.
           */}
-          {error && !unknownAddress && <ErrorBanner {...error} />}
+          {error && !unknownAddress && (isLeaderLimit(error)
+            // P13.2-T4 AC-5: a new Owner is made the office's root AB, which its limit counts.
+            ? <LeaderLimitNotice error={error} audience="platform" action="owner" />
+            : <ErrorBanner {...error} />)}
 
           {transferring && (
             <p className="rounded-md border border-hairline bg-base p-3 text-md text-navy">

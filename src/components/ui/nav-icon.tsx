@@ -83,6 +83,8 @@ const PATHS: Record<string, React.ReactNode> = {
   trend: <><path d="M3 17l6-6 4 4 8-8" /><path d="M15 7h6v6" /></>,
   /** Somebody to go and see — *Leads that need you* (`Overall.html:3213`). */
   pin: <><path d="M12 21s7-6.4 7-11.5A7 7 0 0 0 5 9.5C5 14.6 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.3" /></>,
+  /** A torn-off slip with lines on it — *Billing & subscription*, the quote tool (ADR-0111). */
+  receipt: <><path d="M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5-2 1.5z" /><path d="M9 8h6M9 12h6M9 16h3" /></>,
 };
 
 export type NavIconName = keyof typeof PATHS;

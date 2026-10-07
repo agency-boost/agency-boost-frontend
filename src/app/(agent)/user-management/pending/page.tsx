@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { LeaderLimitNotice, isLeaderLimit } from '@/components/leader-limit-notice';
 import { Page } from '@/components/page';
 import { UserManagementTabs } from '@/components/user-management-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -98,7 +99,10 @@ export default function PendingPage() {
       permission="leader_request:read_inbox"
     >
       <UserManagementTabs />
-      {error && <ErrorBanner {...error} />}
+      {/* An approval at the leader limit (P13.2 exit review): in the limit's words, never the code. */}
+      {error && (isLeaderLimit(error)
+        ? <LeaderLimitNotice error={error} audience="office" action="role" />
+        : <ErrorBanner {...error} />)}
 
       <Card>
         <h2 className="font-display text-lg font-bold text-navy">Incoming requests</h2>

@@ -230,6 +230,36 @@ describe('the approval inbox (P3-T5)', () => {
     expect(calls.filter((c) => c.url.endsWith('/join/requests')).length).toBeGreaterThan(1);
   });
 
+  it('P13.2 exit review: an approval at the leader limit is said in the limit’s words, never the code', async () => {
+    stubFetch({
+      '/join/requests/routing': { body: [] },
+      '/join/requests/req-1/approve': {
+        status: 409,
+        body: {
+          error: {
+            code: 'LEADER_LIMIT_REACHED',
+            message: 'This office has reached its limit of 10 leaders.',
+            details: { maxLeaders: 10, leadersUsed: 10 },
+            requestId: 'r-2',
+          },
+        },
+      },
+      '/join/requests': { body: [request({ role: 'ab' })] },
+    });
+    renderInLayout(AgentLayout, <PendingPage />, { me: AB });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      'This office has reached its limit of 10 leaders, so nobody else can be made an AB or an AAB.',
+    );
+    expect(alert).toHaveTextContent('AgencyBoost can raise it.');
+    expect(alert).not.toHaveTextContent('LEADER_LIMIT_REACHED');
+    // The request stays, to be approved once there is room.
+    expect(screen.getByText('Putri Anggraini')).toBeInTheDocument();
+  });
+
   it('AC-1: never renders for somebody without the inbox permission', () => {
     renderInLayout(AgentLayout, <PendingPage />, { me: makeMe({ permissions: [] }) });
     expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');

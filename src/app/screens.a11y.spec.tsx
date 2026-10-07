@@ -2677,8 +2677,21 @@ describe('screens have no axe violations', () => {
       await expectClean('kpm/settings/activation-checklist');
     });
 
+    /** P13.2-T6: the company's one template, its default — what the picker opens on. */
+    const COMPANY_TEMPLATES = [{
+      id: 't-default', companyId: 'c1', name: 'Prudential template', isDefault: true, status: 'active',
+      archivedAt: null, origin: { kind: 'migration' }, officeCount: 1,
+      publishedVersions: {
+        activity_taxonomy: 1, lead_pipeline: 1, ratio_set: 1, activation_checklist: 1,
+        training_taxonomy: 1, capability_ladder: 1, event_types: 1,
+      },
+      createdAt: '2026-10-07T03:00:00.000Z', updatedAt: '2026-10-07T03:00:00.000Z',
+    }];
+
     it('the company template’s Training tab', async () => {
       stubFetch({
+        // P13.2-T6: the picker reads the company’s templates before any tab.
+        '/admin/companies/c1/templates': { body: COMPANY_TEMPLATES },
         '/admin/companies/c1/template': {
           body: {
             id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1,
@@ -2711,6 +2724,8 @@ describe('screens have no axe violations', () => {
 
     it('the Company template’s Events, Campaigns and Capability tabs (P5-T9)', async () => {
       stubFetch({
+        // P13.2-T6: the picker reads the company’s templates before any tab.
+        '/admin/companies/c1/templates': { body: COMPANY_TEMPLATES },
         ...configStubs,
         '/admin/companies/c1/template/event_types': {
           body: {
@@ -2798,6 +2813,8 @@ describe('screens have no axe violations', () => {
 
     it('the company template’s Products tab, with a product open', async () => {
       stubFetch({
+        // P13.2-T6: the picker reads the company’s templates before any tab.
+        '/admin/companies/c1/templates': { body: COMPANY_TEMPLATES },
         '/admin/companies/c1/template': {
           body: {
             id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1,
@@ -2838,6 +2855,8 @@ describe('screens have no axe violations', () => {
 
     it('the company template, with an editor open', async () => {
       stubFetch({
+        // P13.2-T6: the picker reads the company’s templates before any tab.
+        '/admin/companies/c1/templates': { body: COMPANY_TEMPLATES },
         '/admin/companies/c1/template': {
           body: {
             id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1,

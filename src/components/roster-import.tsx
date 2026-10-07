@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { Button, Card, ErrorBanner, Field, Textarea } from '@/components/ui/field';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { useSession } from '@/lib/session';
+import { LeaderLimitNotice, isLeaderLimit } from './leader-limit-notice';
 import {
   importRoster,
   previewRoster,
@@ -34,6 +36,9 @@ import {
  * says so plainly, and offers them as text to copy in one go rather than one at a time.
  */
 export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: string }) {
+  // The leader limit's words differ by reader (P13.2-T4 AC-5): the Super Admin can raise it.
+  const { me } = useSession();
+  const audience = me?.user.platformRole === 'super_admin' ? 'platform' : 'office';
   const [rows, setRows] = useState('');
   const [how, setHow] = useState<'paste' | 'file'>('paste');
   const [fileName, setFileName] = useState<string | null>(null);
@@ -134,7 +139,11 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
 
   return (
     <>
-      {error && <ErrorBanner {...error} />}
+      {/* The office filled up between the preview and the import (P13.2-T4 AC-4): said in the
+          limit's words, which name it and who can raise it, never its code. */}
+      {error && (isLeaderLimit(error)
+        ? <LeaderLimitNotice error={error} audience={audience} action="roster" />
+        : <ErrorBanner {...error} />)}
 
       {created ? (
         <Card>

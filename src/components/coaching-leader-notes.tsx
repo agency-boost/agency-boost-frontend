@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { useCoacheeNotFound } from '@/components/coaching-person';
 import { SummaryCard } from '@/components/personal-summary';
 import { ConfigBadge } from '@/components/ui/config-badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Textarea } from '@/components/ui/field';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
@@ -209,6 +210,10 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
       {saveError && <ErrorBanner {...saveError} />}
 
       <SummaryCard id="capability-mapping" title="Capability mapping" tag={tag ?? undefined} className="min-w-0">
+        {/* An office whose ladder has no stage yet — one started Empty (ADR-0115 §1). */}
+        {profile.catalog.stages.length === 0 && (
+          <EmptyState title="Your office has not set up its capability stages yet." className="py-6" />
+        )}
         <ol className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
           {ladderStages(profile.catalog, stageCode).map((stage, i) => (
             <Stage
@@ -226,6 +231,9 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
       </SummaryCard>
 
       <SummaryCard id="skill-tracker" title="Skill tracker" className="min-w-0">
+        {profile.catalog.grids.length === 0 && (
+          <EmptyState title="Your office has not set up its skill grids yet." className="py-6" />
+        )}
         <div className="grid grid-cols-1 items-start gap-x-[22px] gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
           {trackerGrids(profile.catalog, skillTicks).map((grid) => (
             <SkillSection

@@ -65,6 +65,13 @@ const SECTIONS: readonly { label: string | null; divider?: boolean; items: Admin
       // on, and `upcoming` renders an anchor with **no href** — so a shipped surface was
       // reachable from nowhere, while `12-kpm-requests.md` told the reader to click it.
       { label: 'Pending KPM requests', href: '/admin/kpm-requests', icon: 'inbox' },
+      /*
+       * The quote tool (P13.2-T2). `Billing_Subscription.html` draws it as the only item of its own
+       * sidebar (`:214`, *"Billing & Subscription"*); **last in this group, in the console's sentence
+       * case** (ADR-0111 §8): a quote is for an office that does not exist yet, and an existing group
+       * is a smaller footprint than a new one.
+       */
+      { label: 'Billing & subscription', href: '/admin/billing', icon: 'receipt' },
     ],
     divider: true,
   },

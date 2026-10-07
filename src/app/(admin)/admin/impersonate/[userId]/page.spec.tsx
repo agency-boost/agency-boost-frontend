@@ -103,4 +103,34 @@ describe('start impersonation', () => {
     expect(isImpersonating()).toBe(false);
     expect(push).not.toHaveBeenCalled();
   });
+
+  it('P13.2 exit review: an office nobody can use is refused here, as this screen’s error', async () => {
+    // Its own code, so the console shows it on the support screen: the member's codes replaced the
+    // console with the member's *office unavailable* page.
+    stubFetch({
+      '/admin/impersonate/u-owner': {
+        status: 409,
+        body: {
+          error: {
+            code: 'IMPERSONATION_OFFICE_UNAVAILABLE',
+            message: 'KPM 0601 · Cikarang Branch is suspended, so nobody can act as its members until it is reactivated.',
+            details: { kpmCode: '0601', branch: 'Cikarang Branch', reason: 'suspended' },
+            requestId: 'req-12',
+          },
+        },
+      },
+    });
+    renderInLayout(AdminLayout, <ImpersonatePage params={params} />, { me: SUPER_ADMIN });
+
+    await userEvent.type(screen.getByLabelText('Reason'), 'support ticket 42');
+    await userEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'KPM 0601 · Cikarang Branch is suspended, so nobody can act as its members until it is reactivated.',
+    );
+    expect(screen.getByRole('heading', { name: 'Act as another user' })).toBeInTheDocument();
+    expect(getAccessToken()).toBeNull();
+    expect(isImpersonating()).toBe(false);
+    expect(push).not.toHaveBeenCalled();
+  });
 });

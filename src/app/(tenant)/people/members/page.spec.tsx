@@ -404,6 +404,26 @@ describe('members directory (P3-T1 AC-3)', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
       expect(await screen.findByRole('alert')).toHaveTextContent('already approved');
     });
+
+    it('P13.2 exit review: an approval at the leader limit is said in the limit’s words, never the code', async () => {
+      await openTab([asked], [request()], {
+        '/join/requests/req-1/approve': {
+          status: 409,
+          body: {
+            error: {
+              code: 'LEADER_LIMIT_REACHED',
+              message: 'This office has reached its limit of 3 leaders.',
+              details: { maxLeaders: 3, leadersUsed: 3 },
+              requestId: 'r-2',
+            },
+          },
+        },
+      });
+      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('This office has reached its limit of 3 leaders, so nobody else can be made an AB or an AAB.');
+      expect(alert).not.toHaveTextContent('LEADER_LIMIT_REACHED');
+    });
   });
 
   it('P3.5: carries the population in the tab label, as the prototype does', async () => {

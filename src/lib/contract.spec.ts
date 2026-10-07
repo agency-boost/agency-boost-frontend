@@ -70,12 +70,21 @@ function declaredFields(file: string, name: string): string[] {
  */
 const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['admin.ts', 'Kpm', 'KpmViewDto'],
+  // P13.2-T3: the offices list and its dialog read the subscription, Leaders used and the state off
+  // the row; one renamed on the server would draw a blank column.
+  ['admin.ts', 'TenantSubscription', 'KpmSubscriptionDto'],
+  ['admin.ts', 'TenantAdminFields', 'KpmAdminViewDto'],
   // P4-T25: `displayUnit` is read by every benchmark on screen, and a missing one renders
   // a success rate as `0.15` rather than as a blank.
   ['tenant-config.ts', 'RatioRow', 'RatioDefinitionDto'],
   ['admin.ts', 'Company', 'CompanyResponseDto'],
   // P5-T12: the template screen reads `officesUnrecorded` straight off this response.
   ['admin.ts', 'CompanyTemplate', 'CompanyTemplateDto'],
+  // P13.2-T6: the template picker and *Start from* read every template's name, default, status and
+  // office count off this row (ADR-0115 §3).
+  ['admin.ts', 'NamedTemplate', 'NamedTemplateDto'],
+  ['admin.ts', 'DroppedSetting', 'DroppedSettingDto'],
+  ['admin.ts', 'TemplateOrigin', 'TemplateOriginDto'],
   ['admin.ts', 'CompanyCard', 'CompanyCardDto'],
   ['admin.ts', 'OrgLevel', 'OrgLevelRowDto'],
   ['admin.ts', 'KpmRequestRow', 'KpmRequestRowDto'],
@@ -534,5 +543,45 @@ describe('the activation’s types match the API document (P13)', () => {
     const called = callsIn(readFileSync(join(__dirname, 'activation.ts'), 'utf8'));
     expect(called.length).toBe(8);
     expect(called.filter((p) => !matches(p, paths))).toEqual([]);
+  });
+});
+
+/**
+ * P13.2-T2: the quote tool's one read, held to its shape as the activation's are. The screen prices
+ * every figure from these fields, so one renamed on the server would price nothing in the browser.
+ */
+const BILLING_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
+  ['billing.ts', 'BillingPrices', 'BillingPricesDto'],
+  ['billing.ts', 'BillingTier', 'BillingTierDto'],
+];
+
+describe('the quote tool’s types match the API document (P13.2-T2)', () => {
+  it.each(BILLING_PAIRS)('%s › %s ⊆ %s', (file, ours, theirs) => {
+    const documented = new Set(propertiesOf(theirs));
+    expect(declaredFields(file, ours).filter((f) => !documented.has(f))).toEqual([]);
+  });
+
+  it.each(BILLING_PAIRS)('%s › %s is shaped as %s promises: required, nullable, its values', (file, ours, theirs) => {
+    const schema = doc.components.schemas[theirs];
+    const required = new Set(schema.required ?? []);
+    const problems: string[] = [];
+    for (const field of declaredTypes(file, ours)) {
+      const prop = schema.properties?.[field.name] ?? {};
+      if (!field.optional && !required.has(field.name)) problems.push(`${field.name}: declared always there, documented optional`);
+      if (prop.nullable && !field.nullable) problems.push(`${field.name}: documented nullable, declared without | null`);
+      const theirValues = (prop.enum ?? []).filter((v): v is string => typeof v === 'string');
+      if (theirValues.length > 0 && [...(literalsOf(file, field.type) ?? [])].sort().join() !== [...theirValues].sort().join()) {
+        problems.push(`${field.name}: ${field.type} against ${theirValues.join('|')}`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it('the screen’s only call is the prices read, and it exists in the document (ADR-0111 §2)', () => {
+    const paths = new Set(Object.keys(doc.paths).map((p) => p.replace('/api/v1', '')));
+    const called = callsIn(readFileSync(join(__dirname, 'billing.ts'), 'utf8'));
+    expect(called).toEqual(['/admin/billing/prices']);
+    expect(called.filter((p) => !matches(p, paths))).toEqual([]);
+    expect(Object.keys(doc.paths['/api/v1/admin/billing/prices'])).toEqual(['get']);
   });
 });

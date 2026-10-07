@@ -513,11 +513,16 @@ export default function RatioBenchmarksPage() {
         <SkeletonCards count={5} />
       ) : (
         <div className="flex flex-col gap-4">
+          {/*
+            * "Every ratio is archived" only when there are archived ones to show. An office with no
+            * ratio at all — one started Empty (ADR-0115 §1) — has none archived either, and was told
+            * otherwise.
+            */}
           {visible.length === 0 && (
             <EmptyState
-              title={showArchived ? 'No ratios yet' : 'Every ratio is archived'}
-              variant={showArchived ? 'empty' : 'filtered'}
-              action={canWrite && !showArchived ? (
+              title={showArchived || ratios.length === 0 ? 'No ratios yet' : 'Every ratio is archived'}
+              variant={showArchived || ratios.length === 0 ? 'empty' : 'filtered'}
+              action={canWrite && !showArchived && ratios.length > 0 ? (
                 <Button variant="secondary" onClick={() => setShowArchived(true)}>
                   Show archived
                 </Button>

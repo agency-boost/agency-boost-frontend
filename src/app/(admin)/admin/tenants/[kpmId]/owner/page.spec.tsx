@@ -92,6 +92,26 @@ describe('assign owner', () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  it('P13.2-T4 AC-5: says an office at its leader limit cannot take a new Owner, and where to raise it', async () => {
+    stubFetch({
+      '/admin/tenants/kpm-1/owner': {
+        status: 409,
+        body: { error: { code: 'LEADER_LIMIT_REACHED', message: 'x', details: { maxLeaders: 2, leadersUsed: 2 }, requestId: 'r' } },
+      },
+      '/admin/tenants/kpm-1': { body: KPM },
+    });
+    renderInLayout(AdminLayout, <AssignOwnerPage params={params} />, { me: SUPER_ADMIN });
+
+    await userEvent.type(await screen.findByLabelText('Email'), 'new@kpm0602.test');
+    await userEvent.click(screen.getByRole('button', { name: 'Assign' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('This office has reached its limit of 2 leaders, so its new Owner cannot be added as an AB.');
+    expect(alert).toHaveTextContent('Raise it with Edit subscription on the offices list first, then try again.');
+    expect(alert).not.toHaveTextContent('LEADER_LIMIT_REACHED');
+    expect(push).not.toHaveBeenCalled();
+  });
+
   it('offers the way to create the account it needs', async () => {
     stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
     renderInLayout(AdminLayout, <AssignOwnerPage params={params} />, { me: SUPER_ADMIN });

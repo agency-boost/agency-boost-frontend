@@ -5,6 +5,7 @@ import { AppShell, type NavItem, type NavSection } from '@/components/app-shell'
 import { RequireSession } from '@/components/require-session';
 import { ToastHost } from '@/components/ui/toast';
 import { useLadder } from '@/components/ui/role-badge';
+import { viewSwitchFor } from '@/lib/landing';
 import { useSession } from '@/lib/session';
 import { useUnreadCount } from '@/lib/use-unread-count';
 import { useSignOut } from '@/lib/use-sign-out';
@@ -237,7 +238,14 @@ function Chrome({
         initials: me?.user.initials ?? '??',
         email: me?.user.email,
       }}
-      account={{ href: '/profile', onSignOut: () => void signOut(), signingOut: busy }}
+      account={{
+        href: '/profile',
+        onSignOut: () => void signOut(),
+        signingOut: busy,
+        // *Open Owner view* or *Open Admin view* (ADR-0114): back to the office console, for an Owner or an
+        // Admin who opened their field view. A field member has one view, and is offered nothing.
+        viewSwitch: viewSwitchFor(me, 'field') ?? undefined,
+      }}
       notifications={{ href: '/notifications', unread }}
       title={title}
       subtitle={subtitle}

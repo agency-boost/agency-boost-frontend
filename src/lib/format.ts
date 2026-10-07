@@ -88,6 +88,17 @@ export function monthInZone(timeZone: string, at: Date): string {
   return `${part('year')}-${part('month')}`;
 }
 
+/**
+ * The calendar day an instant falls on **in the office's zone** — `2026-10-08` at 01:00 on 8 October in
+ * Jakarta, which is still the 7th in UTC (invariant §9). As `monthInZone`: for a default a screen offers
+ * or a date it prints, never for a computation over data. The quote tool's *today* (P13.2-T2).
+ */
+export function dayInZone(timeZone: string, at: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(at);
+  const part = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
 /** A calendar day's three numbers, as a local `Date` — never parsed as an instant. */
 function localDate(day: string): Date | null {
   const [y, m, d] = day.split('-').map(Number);
