@@ -329,7 +329,7 @@ function ProducedMarker({ words }: { words: string }) {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** *The gap* (`Overall.html:3117-3136`, `:4037-4052`), and the pace sentence for this month (ADR-0057). */
+/** *The gap* (`Overall.html:3117-3136`, `:4037-4052`), and the pace sentence for this month (ADR-0109). */
 function GapCard({ figures, period, pace, voice }: { figures: PeriodFigures; period: string; pace: Pace | null; voice: Voice }) {
   return (
     <SummaryCard id="summary-gap" title="The gap" icon="chart">
@@ -362,44 +362,40 @@ function GapTile({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * The pace sentence. **A projection, and said as one** — the prototype printed the closings already
- * logged as where the month is heading (F-24). Before the 7th it only counts; once the target is
- * reached it says so and asks for nothing more. About a coachee it is the prototype's own coaching
- * sentence, *"At her current pace, she's tracking to close …"* (`Overall.html:4050-4051`).
+ * The pace sentence, **the prototype's, verbatim** (ADR-0109; `Overall.html:3132-3135`, `:6340-6347`): on
+ * its danger box with ⚠️ (`.pace-note`, `:1143`) until this month's APE target — or the year's — is
+ * reached, and on its green box with ✅ (`.pace-note.on-track`, `:1144`) from then on. Every day of the
+ * month, with no grey first week.
+ *
+ * The numbers are the server's: *N* the closings of the last 30 days, *M* the closings chip's target, *W*
+ * the office's weeks left (the prototype's *2 weeks*, F-24), *K* the APE gap in policies over *W*. One of
+ * anything is singular, as the prototype's own *1 policy* (`:4045`) is. About a coachee it is the
+ * prototype's coaching sentence, *"At her current pace, she's tracking to close …"* (`:4050-4051`).
  */
 function PaceNote({ pace, voice }: { pace: Pace; voice: Voice }) {
-  const tone = pace.targetMet || (pace.projected !== null && pace.projected >= pace.closingTarget)
-    ? 'good' : pace.projected === null ? 'plain' : 'behind';
+  const met = pace.targetMet;
   const policies = (n: number) => plural(n, 'policy', 'policies');
-
-  let text: ReactNode;
-  if (pace.targetMet) {
-    text = `${capitalized(voice.hasShort)} already reached this month’s target — nice work. Keep the pace to stay ahead.`;
-  } else if (pace.projected === null) {
-    text = <>{capitalized(voice.hasShort)} closed <strong>{policies(pace.closingsLogged)}</strong> of <strong>{pace.closingTarget}</strong> this month.</>;
-  } else if (tone === 'good') {
-    text = <>At {voice.possessive} current pace, {voice.isShort} tracking to close <strong>{policies(pace.projected)}</strong> this month against a target of <strong>{pace.closingTarget}</strong>.</>;
-  } else {
-    text = (
-      <>
-        At {voice.possessive} current pace, {voice.isShort} tracking to close <strong>{policies(pace.projected)}</strong> this month against
-        a target of <strong>{pace.closingTarget}</strong>. With {plural(pace.weeksLeft, 'week', 'weeks')} left, {voice.pronoun}’d
-        need to close roughly <strong>{pace.neededPerWeek} {pace.neededPerWeek === 1 ? 'policy' : 'policies'}/week</strong> to catch up.
-      </>
-    );
-  }
 
   return (
     <p
       className={cn(
         'mt-3 flex items-start gap-2 rounded-md border px-3.5 py-3 text-sm leading-relaxed text-navy',
-        tone === 'good' && 'border-success/20 bg-success/[0.06]',
-        tone === 'behind' && 'border-alert/20 bg-alert/[0.06]',
-        tone === 'plain' && 'border-hairline bg-base',
+        met ? 'border-success/20 bg-success/[0.06]' : 'border-alert/20 bg-alert/[0.06]',
       )}
     >
-      <span aria-hidden="true">{tone === 'good' ? '✅' : tone === 'behind' ? '⚠️' : '•'}</span>
-      <span>{text}</span>
+      <span aria-hidden="true">{met ? '✅' : '⚠️'}</span>
+      <span>
+        {met
+          ? `${capitalized(voice.hasShort)} already reached this month’s target — nice work. Keep the pace to stay ahead.`
+          : (
+            <>
+              At {voice.possessive} current pace, {voice.isShort} tracking to close <strong>{policies(pace.closingsLast30Days)}</strong> this
+              month against a target of <strong>{pace.closingTarget}</strong>. With {plural(pace.weeksLeft, 'week', 'weeks')} left,{' '}
+              {voice.pronoun}’d need to close roughly <strong>{pace.neededPerWeek} {pace.neededPerWeek === 1 ? 'policy' : 'policies'}/week</strong> to
+              catch up.
+            </>
+          )}
+      </span>
     </p>
   );
 }
@@ -627,7 +623,7 @@ function insightText(card: Insight, voice: Voice): ReactNode {
     case 'BEHIND_PACE':
       return (
         <>
-          {capitalized(voice.isShort)} behind pace — at this rate {voice.pronoun}’ll close <strong>{card.facts.projected}</strong> of <strong>{card.facts.closingTarget}</strong> this
+          {capitalized(voice.isShort)} behind pace — at this rate {voice.pronoun}’ll close <strong>{card.facts.closingsLast30Days}</strong> of <strong>{card.facts.closingTarget}</strong> this
           month.{' '}
           {card.facts.weeksLeft === 1
             ? <>About <strong>{plural(card.facts.neededPerWeek, 'policy', 'policies')}</strong> in the week left would catch up.</>

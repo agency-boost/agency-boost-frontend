@@ -1,0 +1,76 @@
+import { describe, expect, it } from 'vitest';
+import {
+  balanceBand, balanceSideNames, formatBalanceBand, formatBalanceSplit,
+} from '@/lib/ratio-balance';
+
+/** A balance read as each side's share of the two (P13.1-T6). */
+describe('the balance as two shares (P13.1-T6)', () => {
+  describe('AC-1: the split sums to 100', () => {
+    it('writes two selling and three recruiting as 40% and 60%', () => {
+      expect(formatBalanceSplit(40, 30, 'success')).toEqual({ first: '40%', second: '60%' });
+    });
+
+    it('writes an even split as 50% and 50%, even when the last entry tipped it a little', () => {
+      expect(formatBalanceSplit(50, 30, 'success')).toEqual({ first: '50%', second: '50%' });
+      expect(formatBalanceSplit(50.25, 30, 'success')).toEqual({ first: '50%', second: '50%' });
+    });
+
+    it('rounds the first side and writes the second as what is left, never 99 or 101 between them', () => {
+      // 62.5 and 37.5 would each round up, and read 63% · 38%.
+      expect(formatBalanceSplit(62.5, 30, 'success')).toEqual({ first: '63%', second: '37%' });
+      expect(formatBalanceSplit(100 / 3, 40, 'success')).toEqual({ first: '33%', second: '67%' });
+    });
+  });
+
+  describe('AC-5: a split never reads as the other side of its status', () => {
+    it('writes a miss just past the band’s edge with the decimal that shows it is past', () => {
+      // 65.2% is outside 35–65%; `65% · 35%` would read as inside it.
+      expect(formatBalanceSplit(65.2, 30, 'alert')).toEqual({ first: '65.2%', second: '34.8%' });
+      expect(formatBalanceSplit(34.96, 30, 'alert')).toEqual({ first: '34.96%', second: '65.04%' });
+    });
+
+    it('keeps an on-track split inside an odd band’s half-percent edges', () => {
+      // ±25 points is 37.5%–62.5%; a 62.5% share is on track and must not read as 63%.
+      expect(formatBalanceSplit(62.5, 25, 'success')).toEqual({ first: '62.5%', second: '37.5%' });
+    });
+
+    it('never writes a side with activity on it as 0%, and keeps a real zero', () => {
+      expect(formatBalanceSplit(99.6, 30, 'alert')).toEqual({ first: '99.6%', second: '0.4%' });
+      expect(formatBalanceSplit(100, 30, 'alert')).toEqual({ first: '100%', second: '0%' });
+      expect(formatBalanceSplit(0, 30, 'alert')).toEqual({ first: '0%', second: '100%' });
+    });
+  });
+
+  describe('AC-2: the band, as the shares it allows', () => {
+    it('reads ±30 points as each side between 35% and 65%', () => {
+      expect(balanceBand(30)).toEqual({ low: 35, high: 65 });
+      expect(formatBalanceBand(30)).toEqual({ low: '35%', high: '65%' });
+    });
+
+    it('keeps a half percent where the band has one, and stays within 0–100%', () => {
+      expect(formatBalanceBand(25)).toEqual({ low: '37.5%', high: '62.5%' });
+      expect(formatBalanceBand(0)).toEqual({ low: '50%', high: '50%' });
+      expect(formatBalanceBand(250)).toEqual({ low: '0%', high: '100%' });
+    });
+  });
+
+  describe('AC-6: what the ends are called', () => {
+    it('takes the section each side counts, as the API names it', () => {
+      expect(balanceSideNames({ numerator: 'Selling', denominator: 'Recruitment' }))
+        .toEqual({ first: 'Selling', second: 'Recruitment' });
+      expect(balanceSideNames({ numerator: 'Leads Generation', denominator: 'Selling' }))
+        .toEqual({ first: 'Leads Generation', second: 'Selling' });
+    });
+
+    it('calls a side with no one section Side A or Side B, as the form does', () => {
+      expect(balanceSideNames({ numerator: 'Selling', denominator: null }))
+        .toEqual({ first: 'Selling', second: 'Side B' });
+      expect(balanceSideNames(null)).toEqual({ first: 'Side A', second: 'Side B' });
+    });
+
+    it('calls both Side A and Side B when both count the same section', () => {
+      expect(balanceSideNames({ numerator: 'Selling', denominator: 'selling' }))
+        .toEqual({ first: 'Side A', second: 'Side B' });
+    });
+  });
+});

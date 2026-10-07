@@ -211,7 +211,7 @@ describe('Data upload — the month table (P9-T1)', () => {
     expect(await screen.findByText('Rina Wijaya')).toBeInTheDocument();
     expect(screen.getByText('Budi Santoso')).toBeInTheDocument();
     expect(screen.getByText('PRU-001')).toBeInTheDocument();
-    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toContain('APE — month');
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toContain('This Month');
   });
 
   it('AC-4: shows a dash for nothing reported and a number for a reported zero', async () => {
@@ -249,7 +249,7 @@ describe('Data upload — the month table (P9-T1)', () => {
     // on the first match. The two never coexist, which is why a screen has exactly one `status`.
     await screen.findByText('Rina Wijaya');
     expect(screen.getByRole('status')).toHaveTextContent('Nothing has been uploaded for September 2026 yet');
-    expect(screen.getAllByRole('row')).toHaveLength(3); // header + two members
+    expect(screen.getAllByRole('row')).toHaveLength(4); // two heading rows + two members
   });
 
   it('counts the rows that hold a figure once something has', async () => {
@@ -440,11 +440,12 @@ describe('Data upload — reading a filled file (P9-T3)', () => {
     const table = await screen.findByRole('table', { name: 'What “filled.csv” would change' });
     const rinaRow = within(table).getAllByRole('row').find((r) => within(r).queryByText('Rina Wijaya'))!;
     const cellsOf = within(rinaRow).getAllByRole('cell');
+    // The month table's order (P13.1-T7): name, code, this month's six from [2], the year's from [8].
     expect(cellsOf[2]).toHaveTextContent('Rp 1.500.000');
-    expect(cellsOf[3]).toHaveTextContent('Rp 6.000.000');
-    expect(cellsOf[3]).toHaveTextContent('was Rp 1.000.000');
-    expect(cellsOf[4]).toHaveTextContent('✕ 140 — not taken');
-    expect(within(cellsOf[5]).getByLabelText('left blank')).toHaveTextContent('—');
+    expect(cellsOf[8]).toHaveTextContent('Rp 6.000.000');
+    expect(cellsOf[8]).toHaveTextContent('was Rp 1.000.000');
+    expect(cellsOf[3]).toHaveTextContent('✕ 140 — not taken');
+    expect(within(cellsOf[9]).getByLabelText('left blank')).toHaveTextContent('—');
     // The row the file could not attribute is in the list, not the table.
     expect(within(table).queryByText('PRU-999')).not.toBeInTheDocument();
   });
@@ -1003,8 +1004,8 @@ describe('Data upload — whose each figure is (P9-T6)', () => {
     expect(cells[2]).toHaveTextContent('Rp 2.000.000✎, corrected by hand by Maya Halim on September 26, 2026 — “Carrier restated it”');
     expect(within(cells[2]).getByTitle('corrected by hand by Maya Halim on September 26, 2026 — “Carrier restated it”')).toBeInTheDocument();
     // A carrier figure is plain.
-    expect(cells[3]).toHaveTextContent('Rp 9.000.000');
-    expect(cells[3]).not.toHaveTextContent('✎');
+    expect(cells[8]).toHaveTextContent('Rp 9.000.000');
+    expect(cells[8]).not.toHaveTextContent('✎');
   });
 
   it('marks a figure emptied by hand apart from one nothing was ever reported for', async () => {
@@ -1012,8 +1013,8 @@ describe('Data upload — whose each figure is (P9-T6)', () => {
     renderWithSession(<DataUploadPage />, { me: OWNER });
     const row = (await screen.findByText('Rina Wijaya')).closest('tr')!;
     const cells = within(row).getAllByRole('cell');
-    expect(cells[10]).toHaveTextContent('—✎, emptied by hand by Maya Halim on September 26, 2026 — “Belongs to October”');
-    expect(within(cells[11]).getByLabelText('nothing reported')).toBeInTheDocument();
+    expect(cells[6]).toHaveTextContent('—✎, emptied by hand by Maya Halim on September 26, 2026 — “Belongs to October”');
+    expect(within(cells[12]).getByLabelText('nothing reported')).toBeInTheDocument();
   });
 
   it('carries the same note on a correctable figure’s name, and in the form it opens', async () => {
@@ -1054,7 +1055,9 @@ describe('Data upload — the Active (MAA) column (OD-21, ADR-0054)', () => {
     expect(within(await mark('Rina Wijaya')).getByRole('img', { name: 'Active' })).toHaveTextContent('✓');
     expect(within(await mark('Budi Santoso')).getByRole('img', { name: 'Not active' })).toHaveTextContent('✕');
     expect(within(await mark('Sari Dewi')).getByRole('img', { name: 'Not reported' })).toHaveTextContent('—');
-    expect(screen.getAllByRole('columnheader').at(-1)).toHaveTextContent('Active (MAA)');
+    // The last heading of the first row, spanning both: the prototype's place for it (`:4843`).
+    const [groups] = within(screen.getByRole('table', { name: 'Data for September 2026' })).getAllByRole('row');
+    expect(within(groups).getAllByRole('columnheader').at(-1)).toHaveTextContent('Active (MAA)');
   });
 
   it('draws the server’s answer and never works it out itself — one definition (invariant §8)', async () => {
@@ -1086,5 +1089,106 @@ describe('Data upload — the Active (MAA) column (OD-21, ADR-0054)', () => {
     expect(within(preview).queryByRole('columnheader', { name: 'Active (MAA)' })).not.toBeInTheDocument();
     expect(within(screen.getByRole('table', { name: 'Data for September 2026' }))
       .getByRole('columnheader', { name: 'Active (MAA)' })).toBeInTheDocument();
+  });
+});
+
+describe('Data upload — the prototype’s order (P13.1-T7)', () => {
+  // The page offers this month as its default: pinned, so a run on another day reads the same month.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T03:00:00Z')); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  const SIX = ['APE', 'Rolling Persistency (%)', 'Recruitment', 'New Active Agents', 'FYP', '# of Policy'];
+  const monthTable = () => screen.findByRole('table', { name: 'Data for September 2026' });
+  const texts = (els: HTMLElement[]) => els.map((el) => el.textContent);
+  /** What a cell's `headers` attribute names, in order — what a screen reader says before the figure. */
+  const headingsOf = (cell: HTMLElement) =>
+    (cell.getAttribute('headers') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent);
+
+  it('AC-1: draws the head in two rows — Agent, Agent code, This Month over six, YTD over the same six, Active (MAA)', async () => {
+    stubFetch(routes(month([rina(), budi()])));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+
+    const [groups, metrics] = within(await monthTable()).getAllByRole('row');
+    const top = within(groups).getAllByRole('columnheader');
+    expect(texts(top)).toEqual(['Agent', 'Agent code', 'This Month', 'YTD', 'Active (MAA)']);
+    expect(top.map((th) => [th.getAttribute('rowspan'), th.getAttribute('colspan')])).toEqual([
+      ['2', null], ['2', null], [null, '6'], [null, '6'], ['2', null],
+    ]);
+    expect(texts(within(metrics).getAllByRole('columnheader'))).toEqual([...SIX, ...SIX]);
+  });
+
+  it('AC-1: marks the groups as groups, over a real column group each', async () => {
+    stubFetch(routes(month([rina()])));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+
+    const table = await monthTable();
+    const [groups] = within(table).getAllByRole('row');
+    expect(within(groups).getByRole('columnheader', { name: 'This Month' })).toHaveAttribute('scope', 'colgroup');
+    expect(within(groups).getByRole('columnheader', { name: 'YTD' })).toHaveAttribute('scope', 'colgroup');
+    // Agent and code, this month's six, the year's six, and Active (MAA).
+    expect([...table.querySelectorAll('colgroup')].map((g) => g.querySelectorAll('col').length)).toEqual([2, 6, 6, 1]);
+  });
+
+  it('AC-1: puts the name before the code, and names both headings on every figure — “This Month, APE”', async () => {
+    stubFetch(routes(month([rina({
+      metrics: { ...blank(), ape: { monthly: cell(150_000_000_00), ytd: cell(900_000_000_00) } },
+    })], 1)));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+
+    const row = (await screen.findByText('Rina Wijaya')).closest('tr')!;
+    const cells = within(row).getAllByRole('cell');
+    expect(texts(cells.slice(0, 2))).toEqual(['Rina Wijaya', 'PRU-001']);
+    expect(cells[2]).toHaveTextContent('Rp 150.000.000');
+    expect(headingsOf(cells[2])).toEqual(['This Month', 'APE']);
+    expect(cells[8]).toHaveTextContent('Rp 900.000.000');
+    expect(headingsOf(cells[8])).toEqual(['YTD', 'APE']);
+    expect(cells.slice(2, 14).map(headingsOf)).toEqual([
+      ...SIX.map((m) => ['This Month', m]), ...SIX.map((m) => ['YTD', m]),
+    ]);
+  });
+
+  it('AC-1: gives the preview the month table’s head and order, without Active (MAA)', async () => {
+    stubFetch({ ...routes(month([rina(), budi()])), '/kpm/data-upload/preview': { body: PREVIEW } });
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+
+    const preview = await screen.findByRole('table', { name: 'What “filled.csv” would change' });
+    const [groups, metrics] = within(preview).getAllByRole('row');
+    expect(texts(within(groups).getAllByRole('columnheader'))).toEqual(['Agent', 'Agent code', 'This Month', 'YTD']);
+    expect(texts(within(metrics).getAllByRole('columnheader'))).toEqual([...SIX, ...SIX]);
+    const rinaRow = within(preview).getByText('Rina Wijaya').closest('tr')!;
+    expect(headingsOf(within(rinaRow).getAllByRole('cell')[8])).toEqual(['YTD', 'APE']);
+  });
+
+  it('AC-1: keeps two tables’ headings apart — each figure names its own table’s', async () => {
+    stubFetch({ ...routes(month([rina()])), '/kpm/data-upload/preview': { body: PREVIEW } });
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    await choose();
+
+    const preview = await screen.findByRole('table', { name: 'What “filled.csv” would change' });
+    const table = await monthTable();
+    const ids = (t: HTMLElement) => within(t).getAllByRole('cell').flatMap((c) => (c.getAttribute('headers') ?? '').split(' ').filter(Boolean));
+    for (const id of ids(table)) expect(table.contains(document.getElementById(id))).toBe(true);
+    for (const id of ids(preview)) expect(preview.contains(document.getElementById(id))).toBe(true);
+  });
+
+  it('AC-2: draws the rows in the server’s order — the org tree’s — and never re-sorts them', async () => {
+    // Budi before Rina, and PRU-002 before PRU-001: neither by name nor by code, and kept.
+    stubFetch(routes(month([budi(), rina()])));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+
+    const [, , ...rows] = within(await monthTable()).getAllByRole('row');
+    expect(rows.map((r) => within(r).getAllByRole('cell')[0].textContent)).toEqual(['Budi Santoso', 'Rina Wijaya']);
+  });
+
+  it('AC-3: runs the figures in the template’s order — each heading is the file’s, without its Rp M', async () => {
+    stubFetch(routes(month([rina()])));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+
+    const row = (await screen.findByText('Rina Wijaya')).closest('tr')!;
+    const screenOrder = within(row).getAllByRole('cell').slice(2, 14).map(headingsOf)
+      .map(([group, metric]) => `${metric} — ${group}`);
+    // `HEADER` is the backend's pinned version-1 header (`production-template.spec.ts`).
+    expect(screenOrder).toEqual(HEADER.split(',').slice(2).map((h) => h.replace(' (Rp M)', '')));
   });
 });

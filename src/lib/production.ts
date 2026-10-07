@@ -21,12 +21,21 @@ export interface MetricCell {
   correction: { by: string | null; at: string | null; reason: string | null } | null;
 }
 
+/**
+ * The six metrics, **in the prototype's order** (`METRIC_KEYS`, `KPM_Owner.html:4679`) — the order of
+ * the table's columns within each group, and of the template's within each cadence. The backend's
+ * `PRODUCTION_METRICS` is the same list; `production.spec.ts` reads it to hold the two together.
+ */
 export const PRODUCTION_METRICS = [
   'ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount',
 ] as const;
 export type ProductionMetric = (typeof PRODUCTION_METRICS)[number];
 
-/** The prototype's own column labels (`KPM_Owner.html:1293`), minus its unit suffix. */
+/**
+ * A metric as a sentence names it — *Correct APE this month for Rina Wijaya* — after the prototype's
+ * own subtitle (`KPM_Owner.html:1293`), minus its unit suffix. The table's headings are
+ * `METRIC_COLUMN_LABEL`.
+ */
 export const METRIC_LABEL: Record<ProductionMetric, string> = {
   ape: 'APE',
   persistency: 'Rolling persistency',
@@ -35,6 +44,34 @@ export const METRIC_LABEL: Record<ProductionMetric, string> = {
   fyp: 'FYP',
   policyCount: '# of policy',
 };
+
+/**
+ * The table's column headings: the prototype's `METRIC_LABELS` (`KPM_Owner.html:4680`), verbatim but
+ * for APE's and FYP's *(Rp M)*. The table shows rupiah in full (I-111), and a heading that said
+ * millions over a figure in rupiah would misstate it; the file keeps *(Rp M)*, because it is in
+ * millions (`production-template.ts`). Persistency keeps its *(%)*, which is true of both.
+ */
+export const METRIC_COLUMN_LABEL: Record<ProductionMetric, string> = {
+  ape: 'APE',
+  persistency: 'Rolling Persistency (%)',
+  recruitment: 'Recruitment',
+  newActiveAgents: 'New Active Agents',
+  fyp: 'FYP',
+  policyCount: '# of Policy',
+};
+
+/**
+ * **This month's six, then the same six for the year** — the prototype's two groups, in its order and
+ * its words (`KPM_Owner.html:4840-4842`), and the template's (`:4683`, *"Monthly columns come first,
+ * then the same 6 metrics again as annual (YTD) figures"*).
+ */
+export const CADENCES = ['monthly', 'ytd'] as const;
+export const CADENCE_GROUP_LABEL: Record<Cadence, string> = { monthly: 'This Month', ytd: 'YTD' };
+
+/** The twelve figures in the order the table draws them and the template lists them (P13.1-T7). */
+export const FIGURE_COLUMNS: readonly { cadence: Cadence; metric: ProductionMetric }[] = CADENCES.flatMap(
+  (cadence) => PRODUCTION_METRICS.map((metric) => ({ cadence, metric })),
+);
 
 /** Money among them — stored in minor units, shown as rupiah in full. */
 export const MONEY_METRICS: readonly ProductionMetric[] = ['ape', 'fyp'];

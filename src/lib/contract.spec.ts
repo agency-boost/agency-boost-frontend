@@ -157,6 +157,18 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['activity.ts', 'SubPeriodTarget', 'ActivityWindowTargetDto'],
   ['activity.ts', 'ActivitySection', 'SectionChipDto'],
   ['activity.ts', 'ActivitySectionRow', 'SectionRowDto'],
+  // P13.1-T9: the Activity Dashboard, the reader's own and coaching's *Activity* tab's, one body.
+  ['activity.ts', 'ActivityDashboard', 'ActivityDashboardDto'],
+  ['activity.ts', 'DashboardBucket', 'DashboardBucketDto'],
+  ['activity.ts', 'DashboardSection', 'DashboardSectionDto'],
+  ['activity.ts', 'DashboardType', 'DashboardTypeDto'],
+  // P13.1-T5: *The gap*'s sentence reads its four numbers straight off `GET /summary`'s pace (ADR-0109).
+  ['summary.ts', 'Pace', 'PaceDto'],
+  ['summary.ts', 'PeriodFigures', 'MonthlyFiguresDto'],
+  // P13.1-T4: `/leads` and the coaching session's *Leads* card read a lead straight off `/leads`.
+  ['leads.ts', 'Lead', 'LeadResponseDto'],
+  ['leads.ts', 'LeadContact', 'LeadContactDto'],
+  ['leads.ts', 'LeadPage', 'LeadPageDto'],
 ];
 
 describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
@@ -169,6 +181,15 @@ describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
     const extra = declaredFields(file, ours).filter((f) => !documented.has(f));
     // Anything listed here is a field a screen reads and the API never sends.
     expect(extra).toEqual([]);
+  });
+
+  it('P13.1-T4 AC-1: a lead carries no lawful basis, in or out (ADR-0108 §1)', () => {
+    // The screen sends none and reads none; the document must not offer one to anybody else either.
+    expect(propertiesOf('LeadResponseDto')).not.toContain('lawfulBasis');
+    expect(propertiesOf('LeadResponseDto')).not.toContain('consentAt');
+    expect(propertiesOf('CreateLeadDto')).not.toContain('lawfulBasis');
+    expect(propertiesOf('UpdateLeadDto')).not.toContain('lawfulBasis');
+    expect(declaredFields('leads.ts', 'Lead')).not.toContain('lawfulBasis');
   });
 
   it('P11 exit review: the input limits a screen repeats are the ones the API validates', () => {
@@ -267,6 +288,9 @@ const CALENDAR_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]
   ['calendar.ts', 'CalendarPeoplePage', 'CalendarPeoplePageDto'],
   ['calendar.ts', 'CalendarDownlinePerson', 'CalendarDownlineRowDto'],
   ['calendar.ts', 'CalendarDownline', 'CalendarDownlineDto'],
+  // P13.1-T8: *Hide my personal activities* (ADR-0110), read and sent whole.
+  ['calendar.ts', 'CalendarSettings', 'CalendarSettingsDto'],
+  ['calendar.ts', 'CalendarSettings', 'SaveCalendarSettingsDto'],
 ];
 
 /** The three writes that send an `EntryInput`, and what each call adds to it (`calendar.ts`). */
@@ -336,6 +360,12 @@ describe('the calendar’s types match the API document (P12)', () => {
     const limit = /at most (\d+) days/.exec(description);
     expect(limit, description).not.toBeNull();
     expect(Number(limit![1])).toBe(TRIP_DAYS_MAX);
+  });
+
+  it('P13.1-T9: the Dashboard names its subject as the API does — `for`, never `membershipId`', () => {
+    const params = (doc.paths['/api/v1/activity/dashboard'].get.parameters ?? []).filter((p) => p.in === 'query');
+    expect(params.map((p) => p.name).sort()).toEqual(['for', 'from', 'range', 'to']);
+    expect(params.find((p) => p.name === 'for')?.schema?.maxLength).toBe(64);
   });
 
   it('every query a calendar call sends is one the API documents, and the picker asks for no more than it serves', () => {

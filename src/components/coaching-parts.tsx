@@ -11,6 +11,7 @@ import { cn } from '@/lib/cn';
 import { reopenSession, type CoachingSession } from '@/lib/coaching';
 import { formatCalendarDayLong, formatShortDay } from '@/lib/format';
 import { formatRupiah } from '@/lib/goals';
+import { balanceSideNames, formatBalanceBand, formatBalanceSplit } from '@/lib/ratio-balance';
 import { formatBenchmark, formatRatioForStatus, type RatioDisplayUnit } from '@/lib/ratio-format';
 import type { PeriodFigures } from '@/lib/summary';
 
@@ -134,6 +135,8 @@ export interface RatioLineData {
   displayUnit: RatioDisplayUnit;
   benchmark: number | null;
   value: number | null;
+  /** A balance's first side's percent of both; `null` on a rate and when there is nothing on either side. */
+  share?: number | null;
   status: 'success' | 'alert' | 'neutral';
   sides?: { numerator: string | null; denominator: string | null } | null;
 }
@@ -144,18 +147,31 @@ const RATIO_VALUE: Record<RatioLineData['status'], string> = {
   neutral: 'text-muted',
 };
 
+/**
+ * One ratio, its value over its benchmark.
+ *
+ * **A balance is each side's share of the two** (P13.1-T6), as the coachee's own *Activity Ratios* card
+ * writes it — *40% Selling · 60% Recruitment* over *Benchmark: 35%–65% each side* — where it read *{n}
+ * points toward {side}*. **A snapshot frozen before rows carried `sides`** never held the names, so it
+ * still says how far it leaned, in points, and not which way: naming the sides from today's
+ * configuration would print today's words on a past record.
+ */
 export function RatioLine({ ratio }: { ratio: RatioLineData }) {
   const band = ratio.comparison === 'band';
   const benchmark = ratio.benchmark ?? 0;
+  const shares = band && !!ratio.sides && ratio.share !== undefined;
   let value: string;
   if (ratio.value === null) value = '–';
-  else if (band) {
-    const lean = formatRatioForStatus(ratio.value, 'points', benchmark, ratio.status);
-    const side = ratio.value > 0 ? ratio.sides?.numerator : ratio.sides?.denominator;
-    value = lean === '0 points' || !side ? lean : `${lean} toward ${side}`;
+  else if (shares && ratio.share != null) {
+    const names = balanceSideNames(ratio.sides);
+    const split = formatBalanceSplit(ratio.share, benchmark, ratio.status);
+    value = `${split.first} ${names.first} · ${split.second} ${names.second}`;
+  } else if (band) {
+    value = formatRatioForStatus(ratio.value, 'points', benchmark, ratio.status);
   } else {
     value = formatRatioForStatus(ratio.value, ratio.displayUnit, benchmark, ratio.status);
   }
+  const edges = formatBalanceBand(benchmark);
   return (
     <li className="flex items-center justify-between gap-3 text-base">
       <span className="min-w-0 flex-1 text-navy">{ratio.label}</span>
@@ -163,7 +179,9 @@ export function RatioLine({ ratio }: { ratio: RatioLineData }) {
         <span className={cn('font-bold', RATIO_VALUE[ratio.status])}>{value}</span>
         {ratio.benchmark !== null && (
           <span className="whitespace-nowrap text-2xs font-medium text-muted">
-            Benchmark: {formatBenchmark(ratio.benchmark, band ? 'points' : ratio.displayUnit)}
+            Benchmark: {shares
+              ? `${edges.low}–${edges.high} each side`
+              : formatBenchmark(ratio.benchmark, band ? 'points' : ratio.displayUnit)}
           </span>
         )}
       </span>

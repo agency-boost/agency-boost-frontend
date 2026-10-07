@@ -141,9 +141,13 @@ export const correctActivityDay = (
   body: { date: string; counts: Record<string, number>; reason: string },
 ) => api<ActivityDay>('/activity/log/correction', { method: 'POST', body });
 
-/** Your own days over a range. There is no `membershipId`: the Dashboard is first-person (P10-T1). */
+/**
+ * Your own days over a range (P10-T1) — or, with `for`, a coachee's, on coaching's *Activity* tab
+ * (P13.1-T9): answered only for somebody you coach, on their rung, and audited (roles §3.5). The subject
+ * is `for`, as the ratios' is; the API refuses `membershipId` here by name.
+ */
 export const readActivityDashboard = (
-  params: { range?: DashboardRange; from?: string; to?: string } = {},
+  params: { range?: DashboardRange; from?: string; to?: string; for?: string } = {},
 ) => api<ActivityDashboard>('/activity/dashboard' + query(params));
 
 /**

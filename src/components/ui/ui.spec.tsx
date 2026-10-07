@@ -470,6 +470,15 @@ describe('CascadeRow', () => {
     expect(screen.getByText('67').className).toContain('text-amber-deep');
   });
 
+  it('P13.1-T5 AC-5 draws the weekly line larger and blue, in a blue that passes AA at its size', () => {
+    render(<CascadeRow columns={COLUMNS} links={['30%', '30%']} />);
+    const week = screen.getByText('≈ 16/week');
+    // 14px semibold navy-soft: 8.8:1 on the hero tint. Not the prototype's 11px grey caption (`:724`), and
+    // not `--color-info`, which passes only as large text (tokens.md, *Status*).
+    expect(week.className.split(' ')).toEqual(expect.arrayContaining(['text-md', 'font-semibold', 'text-navy-soft']));
+    expect(week.className).not.toMatch(/text-(muted|info|xs)\b/);
+  });
+
   it('spells the conversion out for a screen reader, since the arrow is decorative', () => {
     render(<CascadeRow columns={COLUMNS} links={['30%', '30%']} />);
     expect(

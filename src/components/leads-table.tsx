@@ -1,31 +1,85 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { LeadContactDialog, type ContactField } from '@/components/lead-contact-dialog';
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { LeadDetailsDialog, type DetailsField } from '@/components/lead-details-dialog';
+import { ActionMenu, type ActionMenuItem } from '@/components/ui/action-menu';
 import { AutoGrowTextarea } from '@/components/ui/auto-grow-textarea';
 import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
 import { Dialog } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Select, TextInput } from '@/components/ui/field';
-import { Skeleton, SkeletonTable, SkeletonText } from '@/components/ui/skeleton';
-import { INERT_GLYPH, TippedGlyph } from '@/components/ui/tipped-glyph';
+import { NavIcon } from '@/components/ui/nav-icon';
+import { Skeleton, SkeletonCards, SkeletonTable, SkeletonText } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { formatDay } from '@/lib/format';
 import {
   createLead, deleteLead, listEveryLead, readLead, setLeadOutcome, setLeadStatus, updateLead,
-  LEAD_NAME_MIN, type LawfulBasis, type Lead, type LeadOutcome, type LeadQuery, type LeadType,
+  LEAD_NAME_MIN, LEAD_ROWS_FIRST_SHOWN, type Lead, type LeadOutcome, type LeadQuery, type LeadType,
 } from '@/lib/leads';
 import { useSession } from '@/lib/session';
 import type { LeadStatusRow } from '@/lib/tenant-config';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { useDebounced } from '@/lib/use-debounced';
 
-/** The four headings the prototype sorts on (`Overall.html:2805-2813`), as `GET /leads` names them. */
+/**
+ * The order the table can be in, as `GET /leads` names it: the three headings that sort
+ * (`Overall.html:2805-2813`), and registration, which the table opens on.
+ */
 type SortKey = Extract<NonNullable<LeadQuery['sort']>, 'name' | 'type' | 'status' | 'dateRegistered'>;
+type Sort = { key: SortKey; dir: 'asc' | 'desc' };
 
-/** Most recently registered on top, which is where the prototype opens (`Overall.html:5432`). */
-const DEFAULT_SORT = { key: 'dateRegistered' as const, dir: 'desc' as const };
+/**
+ * Most recently registered on top, which is where the prototype opens (`Overall.html:5432`).
+ *
+ * **No heading says it since P13.1-T4** — the *Registered* column went into the lead's details
+ * (ADR-0108 §4) — so a heading's third press comes back here, and the card layout's sort offers it by
+ * name. Without one or the other, the first sort a reader chose would be the last.
+ */
+const DEFAULT_SORT: Sort = { key: 'dateRegistered', dir: 'desc' };
+
+/**
+ * The narrowest the table is drawn, in rem: below it, each lead is a card (P13.1-T4 AC-7, ADR-0108 §6).
+ *
+ * The six fixed columns (`WIDTHS`, 42.5rem) and the two that share what is left, at no less than
+ * 7.75rem each — the date box with its icon, and a remark of two or three words a line. **Measured
+ * against the table's own box, not the window**, so the sidebar counts: at 1280px with the sidebar
+ * open the box is 59rem and the table stands; at 1024px it is 43rem, or 55.5rem with the sidebar
+ * folded, and the leads are cards. In rem, so a reader who has turned their browser's text up gets the
+ * cards sooner rather than a table crushed under larger letters.
+ */
+const TABLE_MIN_REM = 58;
+
+/**
+ * Eight widths and a fixed layout (`Overall.html:412`, `:426-435`). Without them a long remark
+ * widens its own column and every other cell moves. *Remarks* and *Next action* take what the other
+ * six leave, so the table fills its box at every width it is drawn at and never asks for more — the
+ * horizontal scroll the client asked to be rid of (2026-10-07).
+ */
+// *Widened 2026-10-07, after the walk:* at 9rem and 7rem a name such as *Ibu Wiwik Setyaningsih* and the
+// word *Recruitment* were cut off, and the *Actions* heading overflowed its 3rem by 8px — a sideways scroll
+// of its own. 11rem holds a three-word name, 7.5rem *Recruitment* with its chevron, 4.5rem the heading.
+const WIDTHS = ['2rem', '11rem', '7.5rem', '11rem', '6.5rem', 'auto', 'auto', '4.5rem'] as const;
+
+/** The card layout's sort: each order the headings give, said in words, since a card has no heading. */
+const SORT_CHOICES: readonly { sort: Sort; label: string }[] = [
+  { sort: DEFAULT_SORT, label: 'Newest first' },
+  { sort: { key: 'name', dir: 'asc' }, label: 'Lead name, A–Z' },
+  { sort: { key: 'name', dir: 'desc' }, label: 'Lead name, Z–A' },
+  { sort: { key: 'type', dir: 'asc' }, label: 'Type, ascending' },
+  { sort: { key: 'type', dir: 'desc' }, label: 'Type, descending' },
+  { sort: { key: 'status', dir: 'asc' }, label: 'Status, ascending' },
+  { sort: { key: 'status', dir: 'desc' }, label: 'Status, descending' },
+];
+const sortValue = (sort: Sort) => `${sort.key}:${sort.dir}`;
+
+/** The table heading's look, on the card's two labels (`Overall.html:413-418`). */
+const CARD_LABEL = 'text-2xs font-semibold uppercase tracking-[0.03em] text-muted';
+
+/**
+ * The date box's own calendar button is hidden, so the one on its left is the only one (P13.1-T4
+ * AC-5). WebKit and Blink draw theirs on the right; Firefox's cannot be styled and stays.
+ */
+const NO_NATIVE_PICKER = '[&::-webkit-calendar-picker-indicator]:hidden';
 
 interface List {
   rows: Lead[];
@@ -78,7 +132,7 @@ const INERT_CONTROL = 'cursor-not-allowed opacity-40';
 /** Every field a lead starts with, so the inline row renders through the same cells as a real one. */
 const blankLead = (id: string, name: string): Lead => ({
   id, name, ownerMembershipId: '', type: null, contact: { phone: null, email: null },
-  lawfulBasis: null, consentAt: null, statusCode: null, thisMonth: false, committedMonths: [],
+  statusCode: null, thisMonth: false, committedMonths: [],
   lastEditedBy: null, remarks: null, nextActionDate: null, nextActionNote: null, outcome: null,
   source: null, dateRegistered: null, version: 0, flags: [], overdueDays: null,
 });
@@ -96,20 +150,28 @@ const byRegisteredDesc = (a: Lead, b: Lead) =>
 /**
  * The leads table — `/leads`, and the coaching session's *Leads* card (P10.1-T4, P11-T8).
  *
- * **The prototype's table and nothing it lacks, except two glyphs** (`Overall.html:2787-2846`,
- * ADR-0063). The client asked for the screen back as the prototype draws it (ADR-0062): no counts
- * strip, no filter card, no pager and nothing under a lead's name. What a hard requirement keeps is
- * in the Actions column — a glyph that opens the contact details and their lawful basis (PDP), and,
- * on a row somebody else changed last, a glyph naming who (ADR-0044).
+ * **The prototype's table, as the client revised it on 2026-10-07** (`Overall.html:2787-2846`,
+ * ADR-0108). No counts strip, no filter card and nothing under a lead's name (ADR-0062). What used to
+ * be four glyphs and a *Registered* column is one ⋮ per lead, opening a menu: *Lead details*, the two
+ * outcomes, and *Delete*. The details — phone, email, where they came from, when the lead was
+ * registered, who last changed it (ADR-0044) and a WhatsApp button — are a dialog.
  *
- * **One table, two toolbars** (AC-12). `/leads` has the prototype's count and *+ Add lead*
+ * **A table where it fits, and a card per lead where it does not** (P13.1-T4 AC-7). The page body
+ * never scrolls sideways, and nor does the table any more: below `TABLE_MIN_REM` of its own box, each
+ * lead is a card holding the same controls, under the same names. One is drawn, never both, so a
+ * screen reader meets each control once.
+ *
+ * **The first 30, then *Show more*** (AC-8). Every lead still loads, page after page, so the count is
+ * the whole list; only what is drawn first stops at 30, and *Show more* draws the rest at once.
+ *
+ * **One table, two toolbars** (P10.1-T4 AC-12). `/leads` has the prototype's count and *+ Add lead*
  * (`:2791-2794`). The coaching card has a search box and a type filter instead of the count
  * (`:4258-4266`), which is `filters`. It is off unless asked for, and `/leads` never asks: the
  * client chose a leads screen that cannot be searched (ADR-0062), and a test pins it.
  *
  * **Every write is one field, and the server is its only judge.** Which ladder a stage belongs to,
- * whether a lead may be won here, whether contact details may be held at all — the row shows exactly
- * what the server said, in a row of its own beneath the lead, for as long as it stands (F-65).
+ * whether a lead may be won here — the row shows exactly what the server said, beneath the lead, for
+ * as long as it stands (F-65).
  */
 export function LeadsTable({
   filters = false,
@@ -126,12 +188,12 @@ export function LeadsTable({
    */
   filters?: boolean;
   /**
-   * Whether 🗑 is in the Actions column at all. The coaching card has none — its rows end in Won and
+   * Whether *Delete* is in the ⋮ menu at all. The coaching card has none — its rows end in Won and
    * Lost (`Overall.html:10809-10812`) — and `lead:delete` is the owner's alone, never the coach's
    * (roles-and-permissions §3.7), so P11-T8 turns it off. `/leads` keeps it.
    */
   offerDelete?: boolean;
-  /** The table's accessible name. */
+  /** The table's accessible name, and the card list's. */
   caption?: string;
   /**
    * **Whose leads: the coachee's**, on the coaching session's card (ADR-0076, P11-T8 AC-7). Every
@@ -144,8 +206,8 @@ export function LeadsTable({
   owner?: string;
   /**
    * A finalized session's lock (`Overall.html:1389-1417`): nothing on the card writes. The cells hold
-   * still, *+ Add lead*, the outcome glyphs and the contact glyph go, the search and the filter rest,
-   * and a closed lead cannot be moved back. The closed lists still read.
+   * still, *+ Add lead* goes, the ⋮ menu offers *Lead details* alone and the dialog reads, the search
+   * and the filter rest, and a closed lead cannot be moved back. The closed lists still read.
    */
   readOnly?: boolean;
   /** The prototype's toast after a write lands (`Overall.html:10835-10901`): a stage, a type, an outcome, an add. */
@@ -157,13 +219,35 @@ export function LeadsTable({
   const { me } = useSession();
   const myMembership = me?.membership?.membershipId;
   const uid = useId();
+  const [frame, cards] = useCardLayout();
 
-  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>(DEFAULT_SORT);
+  const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
   const [term, setTerm] = useState('');
   const search = useDebounced(term.trim());
   const [typeFilter, setTypeFilter] = useState<'' | LeadType>('');
   /** Bumped to load the open leads again from page 1 — after a reopen, or a write that shifts the pages. */
   const [reloads, setReloads] = useState(0);
+  /**
+   * **Which list *Show more* was pressed on.** A new order or a new filter is a new list, and shows its
+   * first 30 again (AC-8) — so the press is remembered against the list it was made on, rather than
+   * cleared by an effect after the new list has already drawn in full for a frame.
+   */
+  const listKey = [sort.key, sort.dir, search, typeFilter, owner ?? ''].join('\n');
+  const [expandedFor, setExpandedFor] = useState<string | null>(null);
+  /*
+   * **And forgotten once the list changes**, so coming back to the list it was pressed on — a header
+   * pressed round to the default order, a search typed and cleared — shows its first 30 again too (the
+   * exit review's finding 2). Adjusted while rendering, React's own pattern for state that follows a
+   * value, so no frame draws the old press against the new list.
+   */
+  const [seenKey, setSeenKey] = useState(listKey);
+  if (seenKey !== listKey) {
+    setSeenKey(listKey);
+    if (expandedFor !== null) setExpandedFor(null);
+  }
+  const expanded = expandedFor === listKey;
+  /** The first lead *Show more* drew, which takes the focus from the button that has just gone. */
+  const revealed = useRef<string | null>(null);
 
   const [open, setOpen] = useState<List | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
@@ -187,7 +271,7 @@ export function LeadsTable({
    */
   const [keyFor, setKeyFor] = useState<Record<string, string>>({});
 
-  const [contactFor, setContactFor] = useState<string | null>(null);
+  const [detailsFor, setDetailsFor] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Lead | null>(null);
   const [confirmType, setConfirmType] = useState<{ row: Lead; type: LeadType | null } | null>(null);
   const [confirmOutcome, setConfirmOutcome] = useState<{ row: Lead; outcome: LeadOutcome } | null>(null);
@@ -306,8 +390,9 @@ export function LeadsTable({
   }, [draft?.key]);
 
   /*
-   * **A row that leaves takes the reader's place with it** — ✓, ✕ and 🗑 each end with the row gone,
-   * and the button that had the focus gone with it, which drops the focus to the top of the page.
+   * **A row that leaves takes the reader's place with it** — *Mark successful*, *Mark not successful*
+   * and *Delete* each end with the row gone, and its ⋮ — where the focus went back to — gone with it,
+   * which drops the focus to the top of the page.
    * It goes to the next lead's name instead, or the one before, or *+ Add lead* when none is left.
    * Only a focus the removal took: a reader who has moved on is left where they are.
    */
@@ -358,7 +443,7 @@ export function LeadsTable({
     setDrafts((d) => without(d, id));
     forget(id);
     // Its dialog goes with it, rather than reappearing if the lead is ever reopened.
-    setContactFor((shown) => (shown === id ? null : shown));
+    setDetailsFor((shown) => (shown === id ? null : shown));
     restartIfLoading();
   }
 
@@ -488,33 +573,6 @@ export function LeadsTable({
   }
 
   /**
-   * The lawful basis, and then **the details it was holding up.**
-   *
-   * The dialog's main path is a phone number typed before the ground for it: the server refuses it
-   * (`LEAD_CONSENT_REQUIRED`) and the number stays in its box. Recording the basis is the answer to
-   * that refusal, so once it lands the number goes again — at the version the basis left behind — and
-   * the refusal leaves only when the number is stored. Leaving it for the reader to retype would put
-   * a number on screen that looked saved and was not.
-   *
-   * **A number still in its box always differs from what is stored**, so there is nothing to compare
-   * before sending it. A box put back as stored is cleared as it is left (`commitText`). The stored
-   * number changes only by that box's own save, which clears the box, or by somebody else's write —
-   * and a row that comes back at a new version drops its typing, while the basis write, pinned at
-   * the row's version, is refused rather than landed on details that changed underneath it.
-   */
-  async function recordLawfulBasis(lead: Lead, value: LawfulBasis | null) {
-    // What is in the two boxes now, before the basis is written.
-    const typed = { phone: drafts[lead.id]?.phone, email: drafts[lead.id]?.email };
-    const saved = await run(lead.id, () => updateLead(lead.id, { lawfulBasis: value }, lead.version));
-    if (!saved?.lawfulBasis || (typed.phone === undefined && typed.email === undefined)) return;
-    const contact = {
-      phone: typed.phone === undefined ? saved.contact.phone : typed.phone.trim() || null,
-      email: typed.email === undefined ? saved.contact.email : typed.email.trim() || null,
-    };
-    await run(lead.id, () => updateLead(lead.id, { contact }, saved.version), { fields: ['phone', 'email'] });
-  }
-
-  /**
    * Changing the ladder clears the rung and the commitment, so it asks first (I-105).
    *
    * The two pipelines share no stage and the server clears both — the prototype does the same
@@ -627,12 +685,18 @@ export function LeadsTable({
     }
   }
 
+  /**
+   * A heading sorts ascending, then descending, then **back to the newest first** — the order the
+   * table opens on, which no heading names now that *Registered* is not a column (ADR-0108 §4).
+   * A new column starts ascending, as the prototype does (`Overall.html:5694-5707`).
+   */
   const sortable = (label: string, key: SortKey): Column => ({
     label,
     sort: sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none',
-    // A new column starts ascending, as the prototype does (`Overall.html:5694-5707`); the same
-    // column reverses.
-    onSort: () => setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' })),
+    onSort: () => setSort((s) => {
+      if (s.key !== key) return { key, dir: 'asc' };
+      return s.dir === 'asc' ? { key, dir: 'desc' } : DEFAULT_SORT;
+    }),
   });
 
   const columns: readonly Column[] = [
@@ -644,15 +708,32 @@ export function LeadsTable({
     'Remarks',
     'Next action',
     'Actions',
-    sortable('Registered', 'dateRegistered'),
   ];
 
   const narrowed = filters && (search !== '' || typeFilter !== '');
+  const held = open?.rows ?? [];
+  const shown = expanded ? held : held.slice(0, LEAD_ROWS_FIRST_SHOWN);
+  const unshown = held.length - shown.length;
   const rows: { lead: Lead; isDraft: boolean }[] = [
     ...(draft ? [{ lead: blankLead(draft.key, draft.name), isDraft: true }] : []),
-    ...(open?.rows ?? []).map((lead) => ({ lead, isDraft: false })),
+    ...shown.map((lead) => ({ lead, isDraft: false })),
   ];
-  const contactLead = open?.rows.find((r) => r.id === contactFor) ?? null;
+  const detailsLead = open?.rows.find((r) => r.id === detailsFor) ?? null;
+
+  /** *Show more*: every other lead at once, and the focus on the first of them (AC-8). */
+  function showMore() {
+    revealed.current = held[shown.length]?.id ?? null;
+    setExpandedFor(listKey);
+  }
+
+  useEffect(() => {
+    const id = revealed.current;
+    if (!id) return;
+    revealed.current = null;
+    document.getElementById(nameId(id))?.focus();
+    // `nameId` is fixed for the life of the table.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedFor]);
 
   /** Enter finishes a remark or a note rather than starting a second line (`Overall.html:5642-5650`). */
   const finishOnEnter = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -662,8 +743,82 @@ export function LeadsTable({
     }
   };
 
-  function renderLead({ lead: row, isDraft }: { lead: Lead; isDraft: boolean }, index: number) {
-    const n = index + 1;
+  /**
+   * **The reader's own change needs no name** (ADR-0044, as ADR-0063 §1 places it). The payload
+   * names a change that was not the owner's; a leader reading a downline's lead they changed
+   * themselves is told nothing they do not know. Said in the lead's details since P13.1-T4.
+   */
+  const editedByOf = (row: Lead) => (row.lastEditedBy && row.lastEditedBy.membershipId !== myMembership
+    // In a session, a name the payload no longer has is said without ADR-0084's *office*.
+    ? `Last changed by ${row.lastEditedBy.name ?? (owner ? 'someone else' : 'someone in your office')}`
+    : null);
+
+  /**
+   * The calendar icon left of the date opens the browser's own picker (P13.1-T4 AC-5).
+   *
+   * **A pointer's shortcut, and nothing a keyboard needs**: the date box is the control — its label,
+   * its typing, its own keys — and the icon is taken out of the tab order and hidden from assistive
+   * technology, so a row is not one stop longer and nothing is announced twice. `showPicker` is refused
+   * by a browser that lacks it or a box that is read-only; the focus is then the whole answer.
+   */
+  function openPicker(id: string, locked: boolean) {
+    if (locked) return;
+    const input = document.getElementById(id) as HTMLInputElement | null;
+    input?.focus();
+    try {
+      input?.showPicker();
+    } catch { /* The date can be typed; the focus is in the box. */ }
+  }
+
+  /** The row's ⋮ menu: what can be done to this lead, each disabled with its reason where it is (AC-3). */
+  function menuFor(row: Lead, locked: boolean, foreign: boolean): ActionMenuItem[] {
+    const details: ActionMenuItem = { label: 'Lead details', glyph: '☎', onSelect: () => setDetailsFor(row.id) };
+    // A finalized session's lock: the details still read, and nothing else is offered.
+    if (readOnly) return [details];
+    const terminal = isTerminal(row);
+    const items: ActionMenuItem[] = [
+      details,
+      {
+        label: 'Mark successful',
+        glyph: '✓',
+        tone: 'success',
+        disabled: locked || !terminal,
+        reason: terminal ? undefined : 'Available once status reaches the final stage',
+        onSelect: () => setConfirmOutcome({ row, outcome: 'won' }),
+      },
+      // Lost is allowed at any stage (§3.7); only won is gated.
+      {
+        label: 'Mark not successful',
+        glyph: '✕',
+        tone: 'alert',
+        disabled: locked,
+        onSelect: () => setConfirmOutcome({ row, outcome: 'lost' }),
+      },
+    ];
+    /*
+     * **Delete is the owner's** (`lead:delete` is `own`, roles-and-permissions §3.7): a leader asking to
+     * delete a downline's lead is answered *Lead not found* beneath a lead that is plainly there. On
+     * their rows it stays in the menu and says whose it is. The payload carries the owner's
+     * membership, not their name — hence *the person who owns*.
+     */
+    if (offerDelete) {
+      items.push({
+        label: 'Delete',
+        glyph: '🗑',
+        disabled: locked || foreign,
+        reason: foreign ? 'Only the person who owns this lead can delete it.' : undefined,
+        onSelect: () => setConfirmDelete(row),
+      });
+    }
+    return items;
+  }
+
+  /**
+   * One lead's controls, once — **the table's cells and the card's lines draw the same ones**, under
+   * the same accessible names, so a lead reads the same to a screen reader at any width and every
+   * behaviour below holds in both.
+   */
+  function controlsFor({ lead: row, isDraft }: { lead: Lead; isDraft: boolean }, n: number) {
     const ladder = ladderFor(row.type);
     const retired = row.statusCode && !ladder.some((s) => s.code === row.statusCode);
     const saving = busy[row.id] === true;
@@ -672,303 +827,254 @@ export function LeadsTable({
      * nothing but its name until it is a lead. A disabled control drops the focus it holds and is
      * skipped by Tab, so a field left with Tab would send the reader past the next one, or out of the
      * row, while its own save went through. `readOnly` for what is typed, `aria-disabled` and a guard
-     * in the handler for the rest — as the contact dialog does. `disabled` stays for what is a state
+     * in the handler for the rest — as the details dialog does. `disabled` stays for what is a state
      * of the lead rather than a moment: no type yet, not on the final stage.
      */
     const locked = saving || isDraft || readOnly;
-    const errors = refusalsOf(row.id);
     const monthAction = row.type === 'recruitment' ? 'Recruit this month' : 'Close this month';
-    /*
-     * **The reader's own change needs no name** (ADR-0044, as ADR-0063 §1 places it). The payload
-     * names a change that was not the owner's; a leader reading a downline's lead they changed
-     * themselves is told nothing they do not know.
-     */
-    const editedBy = row.lastEditedBy && row.lastEditedBy.membershipId !== myMembership
-      // In a session, a name the payload no longer has is said without ADR-0084's *office*.
-      ? `Last changed by ${row.lastEditedBy.name ?? (owner ? 'someone else' : 'someone in your office')}`
-      : null;
-    /*
-     * **🗑 is the owner's** (`lead:delete` is `own`, roles-and-permissions §3.7): a leader asking to
-     * delete a downline's lead is answered *Lead not found* beneath a lead that is plainly there.
-     * On their rows it stays in its place, so the glyphs keep the column's rhythm, and says whose it
-     * is. The payload carries the owner's membership, not their name — hence *the person who owns*.
-     */
     const foreign = !isDraft && row.ownerMembershipId !== myMembership;
+    const dateId = `${uid}-date-${keyFor[row.id] ?? row.id}`;
 
+    return {
+      /*
+       * **The name, and nothing else** (P10.1-T4 AC-1, `Overall.html:5510-5512`). The prototype gives
+       * the box no label; it gets a name a screen reader can say and nothing a reader can see.
+       */
+      name: (heading = false) => (
+        <TextInput
+          id={isDraft ? draftInputId : nameId(row.id)}
+          aria-label={`Lead name, row ${n}`}
+          density="cell"
+          className={cn('w-full', heading && 'text-md font-semibold')}
+          value={isDraft ? row.name : draftOf(row, 'name', row.name)}
+          placeholder="First Last"
+          readOnly={isDraft ? draft?.posting : saving || readOnly}
+          onChange={(e) => {
+            // A finalized session's card is inert (P11-T8 AC-10): nothing typed, nothing saved.
+            if (readOnly && !isDraft) return;
+            if (isDraft) changeDraftName(e.target.value);
+            else setDraftValue(row.id, 'name', e.target.value);
+          }}
+          onBlur={() => {
+            if (readOnly && !isDraft) return;
+            if (isDraft) void submitDraft('blur');
+            else commitText(row, 'name', row.name, (name) => ({ name }), ['name']);
+          }}
+          onKeyDown={(e) => {
+            if (isDraft && e.key === 'Enter') void submitDraft('enter');
+          }}
+        />
+      ),
+
+      /*
+       * **The word is coloured and the cell is not** (F-73). `.type-badge-select` colours the words on
+       * the cell's transparent ground (`Overall.html:476-477`), and an unchosen type is the grey,
+       * normal-weight placeholder (`:473`) — so Type reads as a word and Status, beside it, as a box.
+       * Client, 2026-10-01: Type must not look like Status.
+       *
+       * Sales is **amber-ink**, not the prototype's amber-dark: at this size amber-dark is 2.99:1 on
+       * white and amber-deep 4.34:1, both under the 4.5:1 small text needs. Recruitment is the
+       * prototype's navy-soft exactly.
+       */
+      type: (
+        <Select
+          aria-label={`Type, row ${n}`}
+          density="cell"
+          className={cn(
+            row.type === 'sales' && 'font-semibold text-amber-ink',
+            row.type === 'recruitment' && 'font-semibold text-navy-soft',
+            row.type === null && 'text-muted',
+            isDraft && INERT_CONTROL,
+          )}
+          value={row.type ?? ''}
+          aria-disabled={locked || undefined}
+          onChange={(e) => {
+            if (locked) return;
+            changeType(row, e.target.value as '' | LeadType);
+          }}
+        >
+          <option value="">Select type</option>
+          <option value="sales">Sales</option>
+          <option value="recruitment">Recruitment</option>
+        </Select>
+      ),
+
+      /*
+       * **Tinted by where the stage sits on its own ladder** (`statusStyle()`,
+       * `Overall.html:5463-5478`), with navy words: not even amber-ink clears 4.5:1 on the mid-rung's
+       * 13% amber tint (F-71). Until there is a ladder there is nothing to choose from, and the one
+       * option says why (`Overall.html:5447-5455`); the server refuses a stage without one either way.
+       */
+      status: (
+        <Select
+          aria-label={`Status, row ${n}`}
+          density="cell"
+          className={cn('font-semibold', stageTint(row, ladder))}
+          value={row.statusCode ?? ''}
+          disabled={!row.type}
+          aria-disabled={locked || undefined}
+          onChange={(e) => {
+            if (locked || !e.target.value) return;
+            const code = e.target.value;
+            void writeStatus(row, code);
+          }}
+        >
+          {row.type ? <option value="">Select status</option> : <option value="">Select type first</option>}
+          {/*
+            * A stage the office has since retired. The snapshot carries **active** stages only, so the
+            * code is the truthful fallback — it is what the lead holds (invariant §3).
+            */}
+          {retired && <option value={row.statusCode!}>{row.statusCode} (retired)</option>}
+          {ladder.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
+        </Select>
+      ),
+
+      /*
+       * **Written out beside the box** (`.month-check-wrap`, `Overall.html:479-487`) — a close and a
+       * recruitment are different promises. **Not until there is a type** (`:5505-5506`, P10.1-T4
+       * AC-7): a promise has to say which of the two it is.
+       */
+      month: (
+        <label
+          className={cn(
+            'flex items-start gap-1.5 text-xs leading-tight',
+            row.type ? 'text-muted' : 'text-muted/40',
+          )}
+        >
+          <input
+            type="checkbox"
+            className="mt-px h-[13px] w-[13px] shrink-0 accent-success disabled:cursor-not-allowed"
+            checked={row.thisMonth}
+            disabled={!row.type}
+            aria-disabled={locked || undefined}
+            onChange={(e) => {
+              if (locked) return;
+              const thisMonth = e.target.checked;
+              void run(row.id, () => updateLead(row.id, { thisMonth }, row.version));
+            }}
+          />
+          {monthAction}
+        </label>
+      ),
+
+      /*
+       * **Bordered at rest, not only under the pointer** (P13.1-T4 AC-5): the client could not tell
+       * where a remark could be written until they hovered it (2026-10-07). The table's other cells
+       * keep the prototype's transparent rest; these two are the boxes a reader writes sentences in.
+       */
+      remarks: (
+        <AutoGrowTextarea
+          aria-label={`Remarks, row ${n}`}
+          className={cn('w-full border-hairline', isDraft && INERT_CONTROL)}
+          value={draftOf(row, 'remarks', row.remarks)}
+          placeholder="Notes, hot buttons, life events…"
+          readOnly={locked}
+          onChange={(e) => setDraftValue(row.id, 'remarks', e.target.value)}
+          onKeyDown={finishOnEnter}
+          onBlur={() => commitText(row, 'remarks', row.remarks, (remarks) => ({ remarks }))}
+        />
+      ),
+
+      date: (
+        <div className="relative">
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-hidden="true"
+            className={cn(
+              'absolute inset-y-0 left-0 flex w-6 items-center justify-center text-muted hover:text-navy',
+              locked && 'cursor-not-allowed hover:text-muted',
+            )}
+            onClick={() => openPicker(dateId, locked)}
+          >
+            <NavIcon name="calendar" className="h-3.5 w-3.5" />
+          </button>
+          <TextInput
+            id={dateId}
+            type="date"
+            aria-label={`Next action date, row ${n}`}
+            density="cell"
+            className={cn('w-full pl-6', NO_NATIVE_PICKER, isDraft && INERT_CONTROL)}
+            value={draftOf(row, 'nextActionDate', row.nextActionDate)}
+            readOnly={locked}
+            onChange={(e) => {
+              if (locked) return;
+              setDraftValue(row.id, 'nextActionDate', e.target.value);
+              const value = e.target.value || null;
+              void run(row.id, () => updateLead(row.id, { nextActionDate: value }, row.version), {
+                fields: ['nextActionDate'],
+              });
+            }}
+          />
+        </div>
+      ),
+
+      note: (
+        <AutoGrowTextarea
+          aria-label={`Next action note, row ${n}`}
+          className={cn('w-full border-hairline', isDraft && INERT_CONTROL)}
+          value={draftOf(row, 'nextActionNote', row.nextActionNote)}
+          placeholder="e.g. Meet at Starbucks"
+          readOnly={locked}
+          onChange={(e) => setDraftValue(row.id, 'nextActionNote', e.target.value)}
+          onKeyDown={finishOnEnter}
+          onBlur={() => commitText(row, 'nextActionNote', row.nextActionNote, (nextActionNote) => ({ nextActionNote }))}
+        />
+      ),
+
+      /*
+       * **One ⋮ where there were four glyphs and an attribution** (P13.1-T4 AC-3, ADR-0108 §3). The
+       * inline row has nothing to act on until it is a lead, so its ⋮ is there and opens nothing.
+       */
+      actions: (
+        <ActionMenu
+          label={`Actions for ${row.name || (isDraft ? 'the new lead' : 'this lead')}`}
+          items={menuFor(row, locked, foreign)}
+          inert={isDraft}
+        />
+      ),
+
+      /*
+       * **A refusal is said beneath the lead, and only while it stands** (P10.1-T4 AC-10, F-65). Each
+       * leaves when what it refused does — see `run`.
+       */
+      errors: refusalsOf(row.id).map((error) => (
+        <ErrorBanner key={`${error.code} ${error.message}`} {...error} />
+      )),
+    };
+  }
+
+  function renderRow(entry: { lead: Lead; isDraft: boolean }, index: number) {
+    const n = index + 1;
+    const c = controlsFor(entry, n);
     return (
-      <Fragment key={keyFor[row.id] ?? row.id}>
+      <Fragment key={keyFor[entry.lead.id] ?? entry.lead.id}>
         <Row>
           {/* `.row-num` is grey and semibold (`Overall.html:451`) — a quiet ordinal. */}
           <Cell className="font-semibold text-muted">{n}</Cell>
-
-          {/*
-            * **The name, and nothing else** (AC-1, `Overall.html:5510-5512`). Everything that was
-            * under it went — the attribution to a glyph, the details to a dialog, the flags to the
-            * Summary, the refusal to a row of its own. The prototype gives the box no label; it gets
-            * a name a screen reader can say and nothing a reader can see.
-            */}
-          <Cell>
-            <TextInput
-              id={isDraft ? draftInputId : nameId(row.id)}
-              aria-label={`Lead name, row ${n}`}
-              density="cell"
-              className="w-full"
-              value={isDraft ? row.name : draftOf(row, 'name', row.name)}
-              placeholder="First Last"
-              readOnly={isDraft ? draft?.posting : saving || readOnly}
-              onChange={(e) => {
-                // A finalized session's card is inert (P11-T8 AC-10): nothing typed, nothing saved.
-                if (readOnly && !isDraft) return;
-                if (isDraft) changeDraftName(e.target.value);
-                else setDraftValue(row.id, 'name', e.target.value);
-              }}
-              onBlur={() => {
-                if (readOnly && !isDraft) return;
-                if (isDraft) void submitDraft('blur');
-                else commitText(row, 'name', row.name, (name) => ({ name }), ['name']);
-              }}
-              onKeyDown={(e) => {
-                if (isDraft && e.key === 'Enter') void submitDraft('enter');
-              }}
-            />
-          </Cell>
-
-          <Cell>
-            {/*
-              * **The word is coloured and the cell is not** (F-73). `.type-badge-select` colours the
-              * words on the cell's transparent ground (`Overall.html:476-477`), and an unchosen type is
-              * the grey, normal-weight placeholder (`:473`) — so Type reads as a word and Status, beside
-              * it, as a box. Client, 2026-10-01: Type must not look like Status.
-              *
-              * Sales is **amber-ink**, not the prototype's amber-dark: at this size amber-dark is
-              * 2.99:1 on white and amber-deep 4.34:1, both under the 4.5:1 small text needs.
-              * Recruitment is the prototype's navy-soft exactly.
-              */}
-            <Select
-              aria-label={`Type, row ${n}`}
-              density="cell"
-              className={cn(
-                row.type === 'sales' && 'font-semibold text-amber-ink',
-                row.type === 'recruitment' && 'font-semibold text-navy-soft',
-                row.type === null && 'text-muted',
-                isDraft && INERT_CONTROL,
-              )}
-              value={row.type ?? ''}
-              aria-disabled={locked || undefined}
-              onChange={(e) => {
-                if (locked) return;
-                changeType(row, e.target.value as '' | LeadType);
-              }}
-            >
-              <option value="">Select type</option>
-              <option value="sales">Sales</option>
-              <option value="recruitment">Recruitment</option>
-            </Select>
-          </Cell>
-
-          <Cell>
-            {/*
-              * **Tinted by where the stage sits on its own ladder** (`statusStyle()`,
-              * `Overall.html:5463-5478`), with navy words: not even amber-ink clears 4.5:1 on the
-              * mid-rung's 13% amber tint (F-71). Until there is a ladder there is nothing to choose
-              * from, and the one option says why (`Overall.html:5447-5455`); the server refuses a
-              * stage without one either way.
-              */}
-            <Select
-              aria-label={`Status, row ${n}`}
-              density="cell"
-              className={cn('font-semibold', stageTint(row, ladder))}
-              value={row.statusCode ?? ''}
-              disabled={!row.type}
-              aria-disabled={locked || undefined}
-              onChange={(e) => {
-                if (locked || !e.target.value) return;
-                const code = e.target.value;
-                void writeStatus(row, code);
-              }}
-            >
-              {row.type ? <option value="">Select status</option> : <option value="">Select type first</option>}
-              {/*
-                * A stage the office has since retired. The snapshot carries **active** stages only,
-                * so the code is the truthful fallback — it is what the lead holds (invariant §3).
-                */}
-              {retired && <option value={row.statusCode!}>{row.statusCode} (retired)</option>}
-              {ladder.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
-            </Select>
-          </Cell>
-
-          <Cell>
-            {/*
-              * **Written out beside the box** (`.month-check-wrap`, `Overall.html:479-487`) — a close
-              * and a recruitment are different promises. **Not until there is a type**
-              * (`:5505-5506`, AC-7): a promise has to say which of the two it is.
-              */}
-            <label
-              className={cn(
-                'flex items-start gap-1.5 text-xs leading-tight',
-                row.type ? 'text-muted' : 'text-muted/40',
-              )}
-            >
-              <input
-                type="checkbox"
-                className="mt-px h-[13px] w-[13px] shrink-0 accent-success disabled:cursor-not-allowed"
-                checked={row.thisMonth}
-                disabled={!row.type}
-                aria-disabled={locked || undefined}
-                onChange={(e) => {
-                  if (locked) return;
-                  const thisMonth = e.target.checked;
-                  void run(row.id, () => updateLead(row.id, { thisMonth }, row.version));
-                }}
-              />
-              {monthAction}
-            </label>
-          </Cell>
-
-          <Cell>
-            <AutoGrowTextarea
-              aria-label={`Remarks, row ${n}`}
-              className={cn('w-full', isDraft && INERT_CONTROL)}
-              value={draftOf(row, 'remarks', row.remarks)}
-              placeholder="Notes, hot buttons, life events…"
-              readOnly={locked}
-              onChange={(e) => setDraftValue(row.id, 'remarks', e.target.value)}
-              onKeyDown={finishOnEnter}
-              onBlur={() => commitText(row, 'remarks', row.remarks, (remarks) => ({ remarks }))}
-            />
-          </Cell>
-
+          <Cell>{c.name()}</Cell>
+          <Cell>{c.type}</Cell>
+          <Cell>{c.status}</Cell>
+          <Cell>{c.month}</Cell>
+          <Cell>{c.remarks}</Cell>
           <Cell>
             <div className="flex flex-col gap-0.5">
-              <TextInput
-                type="date"
-                aria-label={`Next action date, row ${n}`}
-                density="cell"
-                className={cn('w-full', isDraft && INERT_CONTROL)}
-                value={draftOf(row, 'nextActionDate', row.nextActionDate)}
-                readOnly={locked}
-                onChange={(e) => {
-                  if (locked) return;
-                  setDraftValue(row.id, 'nextActionDate', e.target.value);
-                  const value = e.target.value || null;
-                  void run(row.id, () => updateLead(row.id, { nextActionDate: value }, row.version), {
-                    fields: ['nextActionDate'],
-                  });
-                }}
-              />
-              <AutoGrowTextarea
-                aria-label={`Next action note, row ${n}`}
-                className={cn('w-full', isDraft && INERT_CONTROL)}
-                value={draftOf(row, 'nextActionNote', row.nextActionNote)}
-                placeholder="e.g. Meet at Starbucks"
-                readOnly={locked}
-                onChange={(e) => setDraftValue(row.id, 'nextActionNote', e.target.value)}
-                onKeyDown={finishOnEnter}
-                onBlur={() => commitText(row, 'nextActionNote', row.nextActionNote, (nextActionNote) => ({ nextActionNote }))}
-              />
+              {c.date}
+              {c.note}
             </div>
           </Cell>
-
-          <Cell>
-            {/*
-              * **The prototype's three glyphs, then ours** (`.row-actions`, `Overall.html:489-498`,
-              * `:5540-5546`). ✓ ✕ 🗑 keep their places on every row; the contact glyph and the
-              * attribution follow them, so a row that has an attribution shifts nothing a hand is
-              * reaching for (ADR-0063 §1–2).
-              */}
-            <div className="flex items-center gap-px">
-              {!readOnly && (<>
-              <Button
-                variant="icon"
-                tone="success"
-                disabled={!isTerminal(row)}
-                aria-disabled={locked || undefined}
-                title={isTerminal(row) ? 'Mark successful' : 'Available once status reaches the final stage'}
-                onClick={() => {
-                  if (locked) return;
-                  setConfirmOutcome({ row, outcome: 'won' });
-                }}
-              >
-                <span aria-hidden="true">✓</span>
-                <span className="sr-only">Mark successful</span>
-              </Button>
-              {/* Lost is allowed at any stage (§3.7); only won is gated. */}
-              <Button
-                variant="icon"
-                tone="alert"
-                aria-disabled={locked || undefined}
-                className={cn(isDraft && INERT_GLYPH)}
-                title="Mark not successful"
-                onClick={() => {
-                  if (locked) return;
-                  setConfirmOutcome({ row, outcome: 'lost' });
-                }}
-              >
-                <span aria-hidden="true">✕</span>
-                <span className="sr-only">Mark not successful</span>
-              </Button>
-              </>)}
-              {offerDelete && (foreign ? (
-                <TippedGlyph
-                  glyph="🗑"
-                  name="Delete lead"
-                  tip="Only the person who owns this lead can delete it."
-                  unavailable
-                />
-              ) : (
-                <Button
-                  variant="icon"
-                  aria-disabled={locked || undefined}
-                  className={cn(isDraft && INERT_GLYPH)}
-                  title="Delete lead"
-                  onClick={() => {
-                    if (locked) return;
-                    setConfirmDelete(row);
-                  }}
-                >
-                  <span aria-hidden="true">🗑</span>
-                  <span className="sr-only">Delete lead</span>
-                </Button>
-              ))}
-              {!readOnly && (
-                <Button
-                  variant="icon"
-                  aria-disabled={isDraft || undefined}
-                  className={cn(isDraft && INERT_GLYPH)}
-                  title="Contact details"
-                  onClick={() => {
-                    if (isDraft) return;
-                    setContactFor(row.id);
-                  }}
-                >
-                  <span aria-hidden="true">☎</span>
-                  <span className="sr-only">Contact details</span>
-                </Button>
-              )}
-              {editedBy && <TippedGlyph glyph="✎" name={editedBy} tip={editedBy} />}
-            </div>
-          </Cell>
-
-          {/* Grey, as `.registered-cell` has it (`Overall.html:501`). */}
-          <Cell className="whitespace-nowrap text-muted">
-            {row.dateRegistered
-              ? <time dateTime={row.dateRegistered}>{formatDay(row.dateRegistered)}</time>
-              : '—'}
-          </Cell>
+          <Cell>{c.actions}</Cell>
         </Row>
 
         {/*
-          * **A refusal gets a row of its own, and only while it stands** (AC-10, F-65). It was a
-          * banner inside the 9rem name cell, which squeezed the words and pushed the row open; here
-          * it spans the table under the lead it belongs to. Each refusal leaves when what it refused
-          * does — see `run`.
+          * **A refusal gets a row of its own** (P10.1-T4 AC-10, F-65). It was a banner inside the 9rem
+          * name cell, which squeezed the words and pushed the row open; here it spans the table under
+          * the lead it belongs to.
           */}
-        {errors.length > 0 && (
+        {c.errors.length > 0 && (
           <Row>
             <Cell colSpan={columns.length}>
-              <div className="flex flex-col gap-2">
-                {errors.map((error) => <ErrorBanner key={`${error.code} ${error.message}`} {...error} />)}
-              </div>
+              <div className="flex flex-col gap-2">{c.errors}</div>
             </Cell>
           </Row>
         )}
@@ -976,175 +1082,285 @@ export function LeadsTable({
     );
   }
 
-  if (loadError && !open) return <ErrorBanner {...loadError} />;
-
-  if (!open || configLoading) {
-    return <SkeletonTable caption={caption} columns={columns} rows={5} />;
+  /**
+   * One lead as a card, where the table does not fit (P13.1-T4 AC-7, ADR-0108 §6).
+   *
+   * **The table's row, stacked, in the prototype's own idiom**: the closed card's row padding and
+   * hairline (`Overall.html:516-519`), the name as its title, the two pipeline words side by side, and
+   * the table's own heading style over the two boxes a reader writes in. Those two labels are the
+   * column headings the card has no row for; each control's accessible name already carries them, so
+   * they are hidden from a screen reader rather than said twice.
+   */
+  function renderCard(entry: { lead: Lead; isDraft: boolean }, index: number) {
+    const n = index + 1;
+    const c = controlsFor(entry, n);
+    return (
+      <li
+        key={keyFor[entry.lead.id] ?? entry.lead.id}
+        className="flex flex-col gap-2 border-b border-hairline px-3 py-3 last:border-b-0"
+      >
+        <div className="flex items-center gap-1">
+          <span className="w-5 shrink-0 text-base font-semibold text-muted">{n}</span>
+          <div className="min-w-0 flex-1">{c.name(true)}</div>
+          {c.actions}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          {c.type}
+          {c.status}
+        </div>
+        <div className="px-1.5">{c.month}</div>
+        <div className="flex flex-col gap-1">
+          <span aria-hidden="true" className={cn(CARD_LABEL, 'px-1.5')}>Remarks</span>
+          {c.remarks}
+        </div>
+        <div className="flex flex-col gap-1">
+          <span aria-hidden="true" className={cn(CARD_LABEL, 'px-1.5')}>Next action</span>
+          {c.date}
+          {c.note}
+        </div>
+        {c.errors.length > 0 && <div className="flex flex-col gap-2">{c.errors}</div>}
+      </li>
+    );
   }
 
-  return (
-    <>
-      {filters ? (
-        <div className="mb-3 flex flex-wrap items-center gap-2.5">
-          {/* A finalized session rests them at 0.6, as the prototype's lock does (`Overall.html:1416-1417`). */}
-          <TextInput
-            type="search"
-            aria-label="Search leads"
-            placeholder="Search leads…"
-            className={cn('w-56', readOnly && 'opacity-60')}
-            value={term}
-            disabled={readOnly}
-            onChange={(e) => setTerm(e.target.value)}
-          />
-          <Select
-            aria-label="Filter by type"
-            value={typeFilter}
-            disabled={readOnly}
-            className={cn(readOnly && 'opacity-60')}
-            onChange={(e) => setTypeFilter(e.target.value as '' | LeadType)}
-          >
-            <option value="">All types</option>
-            <option value="sales">Sales</option>
-            <option value="recruitment">Recruitment</option>
-          </Select>
-          {!readOnly && <Button ref={addButton} onClick={addLead}>+ Add lead</Button>}
-        </div>
-      ) : (
-        /* The prototype's toolbar: the count, and the screen's one action (`Overall.html:2791-2794`). */
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <p className="text-sm text-muted">
-            {open.total} active lead{open.total === 1 ? '' : 's'}
-          </p>
-          <Button ref={addButton} onClick={addLead}>+ Add lead</Button>
-        </div>
-      )}
-
-      {loadError && <div className="mb-3"><ErrorBanner {...loadError} /></div>}
-
-      {/*
-        * **Nine explicit widths and a fixed layout** (`Overall.html:412`, `:426-435`). Without them a
-        * long remark widens its own column and every other cell moves. Actions is wider than the
-        * prototype's 80px: five 28px glyphs where it has three at 19px, because 19px is not a tap
-        * target on a phone.
-        */}
-      <DataTable
-        caption={caption}
-        columns={columns}
-        density="compact"
-        widths={['2rem', '9rem', '7rem', '12rem', '7rem', '12rem', '12rem', '10rem', '6.5rem']}
-        tableClassName="min-w-[64rem]"
-      >
-        {rows.length === 0 ? (
-          <Row>
-            <Cell colSpan={columns.length}>
-              {/* Inside the table card, under its headings, as `.empty-state` is (`Overall.html:2818`). */}
-              {/* The coaching card has one empty line whatever narrowed it (`Overall.html:10815`). */}
-              <EmptyState
-                variant={narrowed ? 'filtered' : 'empty'}
-                title={narrowed || owner ? 'No leads match.' : 'No leads yet — add your first one above.'}
-              />
-            </Cell>
-          </Row>
-        ) : rows.map(renderLead)}
-      </DataTable>
-
-      <ClosedLeads
-        won={{ list: won, error: closedError.won }}
-        lost={{ list: lost, error: closedError.lost }}
-        busy={busy}
-        refusalsOf={refusalsOf}
-        stageLabel={stageLabel}
-        onReopen={readOnly ? undefined : (row) => void reopen(row)}
-      />
-
-      {contactLead && (
-        <LeadContactDialog
-          lead={contactLead}
-          saving={busy[contactLead.id] === true}
-          errors={refusalsOf(contactLead.id)}
-          editor={{
-            value: (field, stored) => draftOf(contactLead, field, stored),
-            change: (field, value) => setDraftValue(contactLead.id, field, value),
-            commit: (field: ContactField) => {
-              const { contact } = contactLead;
-              if (field === 'source') {
-                commitText(contactLead, 'source', contactLead.source, (source) => ({ source }));
-                return;
-              }
-              // The pair travels together, so saving one never erases the other.
-              commitText(contactLead, field, contact[field], (value) => ({
-                contact: { phone: contact.phone, email: contact.email, [field]: value },
-              }));
-            },
-          }}
-          onLawfulBasis={(value) => void recordLawfulBasis(contactLead, value)}
-          onClose={() => setContactFor(null)}
-        />
-      )}
-
-      {/* The prototype's own questions (`Overall.html:5666-5675`), each naming what its button does (F-72). */}
-      {/*
-        * In a session, the coaching card's own question and sentence (`Overall.html:10867-10870`):
-        * *Mark as Won?*, and where the lead goes. Its button says what it does, as every `Dialog`'s does,
-        * where the prototype's says *Confirm*.
-        */}
-      <Dialog
-        open={confirmOutcome !== null}
-        message={owner && confirmOutcome
-          ? `Mark as ${OUTCOME_WORD[confirmOutcome.outcome]}? ${confirmOutcome.row.name || 'This lead'} will move to Closed leads as "${OUTCOME_WORD[confirmOutcome.outcome]}". You can still find them there afterward.`
-          : confirmOutcome?.outcome === 'won'
-            ? `Mark ${confirmOutcome.row.name || 'this lead'} as a successful lead?`
-            : `Mark ${confirmOutcome?.row.name || 'this lead'} as not successful? This moves them to the closed list.`}
-        confirmLabel={owner && confirmOutcome
-          ? `Mark as ${OUTCOME_WORD[confirmOutcome.outcome]}`
-          : confirmOutcome?.outcome === 'won' ? 'Mark successful' : 'Mark not successful'}
-        onCancel={() => setConfirmOutcome(null)}
-        onConfirm={async () => {
-          const { row, outcome } = confirmOutcome!;
-          setConfirmOutcome(null);
-          const saved = await run(row.id, () => setLeadOutcome(row.id, outcome, row.version), { done: moveToClosed });
-          if (saved) onNotice?.(`${saved.name} marked as ${OUTCOME_WORD[outcome]}.`);
-        }}
-      />
-
-      {/*
-        * *Delete {name}?* — the prototype's question without *permanently* and *can't be undone*
-        * (`Overall.html:5661`), which would both be false: deleting is soft and audited (I-101).
-        */}
-      <Dialog
-        open={confirmDelete !== null}
-        message={`Delete ${confirmDelete?.name || 'this lead'}?`}
-        confirmLabel="Delete lead"
-        tone="danger"
-        onCancel={() => setConfirmDelete(null)}
-        onConfirm={async () => {
-          const row = confirmDelete!;
-          setConfirmDelete(null);
-          setBusy((b) => ({ ...b, [row.id]: true }));
-          try {
-            await deleteLead(row.id);
-            dropOpen(row.id);
-          } catch (err) {
-            refuse(row.id, [''], toDisplayError(err));
-          } finally {
-            setBusy((b) => ({ ...b, [row.id]: false }));
-          }
-        }}
-      />
-
-      <Dialog
-        open={confirmType !== null}
-        message="Changing the type clears this lead’s stage and its commitment for this month. The two ladders share no stage. Continue?"
-        confirmLabel="Change the type"
-        onCancel={() => setConfirmType(null)}
-        onConfirm={() => {
-          const { row, type } = confirmType!;
-          setConfirmType(null);
-          void writeType(row, type);
-        }}
-      />
-    </>
+  const empty = (
+    /* The coaching card has one empty line whatever narrowed it (`Overall.html:10815`). */
+    <EmptyState
+      variant={narrowed ? 'filtered' : 'empty'}
+      title={narrowed || owner ? 'No leads match.' : 'No leads yet — add your first one above.'}
+    />
   );
+
+  /** A card has no heading to sort from, so the card layout's toolbar says the order in words. */
+  const sortChoice = cards && (
+    <Select
+      aria-label="Sort leads"
+      value={sortValue(sort)}
+      onChange={(e) => setSort(SORT_CHOICES.find((c) => sortValue(c.sort) === e.target.value)?.sort ?? DEFAULT_SORT)}
+    >
+      {SORT_CHOICES.map((c) => <option key={sortValue(c.sort)} value={sortValue(c.sort)}>{c.label}</option>)}
+    </Select>
+  );
+
+  let body: React.ReactNode;
+  if (loadError && !open) {
+    body = <ErrorBanner {...loadError} />;
+  } else if (!open || configLoading) {
+    body = cards
+      ? <SkeletonCards count={3} label={`Loading ${caption.toLowerCase()}…`} />
+      : <SkeletonTable caption={caption} columns={columns} rows={5} />;
+  } else {
+    body = (
+      <>
+        {filters ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2.5">
+            {/* A finalized session rests them at 0.6, as the prototype's lock does (`Overall.html:1416-1417`). */}
+            <TextInput
+              type="search"
+              aria-label="Search leads"
+              placeholder="Search leads…"
+              className={cn('w-56 max-w-full', readOnly && 'opacity-60')}
+              value={term}
+              disabled={readOnly}
+              onChange={(e) => setTerm(e.target.value)}
+            />
+            <Select
+              aria-label="Filter by type"
+              value={typeFilter}
+              disabled={readOnly}
+              className={cn(readOnly && 'opacity-60')}
+              onChange={(e) => setTypeFilter(e.target.value as '' | LeadType)}
+            >
+              <option value="">All types</option>
+              <option value="sales">Sales</option>
+              <option value="recruitment">Recruitment</option>
+            </Select>
+            {sortChoice}
+            {!readOnly && <Button ref={addButton} onClick={addLead}>+ Add lead</Button>}
+          </div>
+        ) : (
+          /* The prototype's toolbar: the count, and the screen's one action (`Overall.html:2791-2794`). */
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            <p className="text-sm text-muted">
+              {open.total} active lead{open.total === 1 ? '' : 's'}
+            </p>
+            <div className="flex flex-wrap items-center gap-2.5">
+              {sortChoice}
+              <Button ref={addButton} onClick={addLead}>+ Add lead</Button>
+            </div>
+          </div>
+        )}
+
+        {loadError && <div className="mb-3"><ErrorBanner {...loadError} /></div>}
+
+        {cards ? (
+          rows.length === 0 ? (
+            <div className="rounded-lg border border-hairline bg-card">{empty}</div>
+          ) : (
+            <ul role="list" aria-label={caption} className="rounded-lg border border-hairline bg-card">
+              {rows.map(renderCard)}
+            </ul>
+          )
+        ) : (
+          /*
+           * **Eight widths, no minimum width** (`WIDTHS`). The table fills its box and asks for no more,
+           * so there is nothing to scroll sideways; below `TABLE_MIN_REM` the cards take over instead.
+           */
+          <DataTable caption={caption} columns={columns} density="compact" widths={WIDTHS}>
+            {rows.length === 0 ? (
+              <Row>
+                {/* Inside the table card, under its headings, as `.empty-state` is (`Overall.html:2818`). */}
+                <Cell colSpan={columns.length}>{empty}</Cell>
+              </Row>
+            ) : rows.map(renderRow)}
+          </DataTable>
+        )}
+
+        {/*
+          * **The first 30, then the rest at once** (P13.1-T4 AC-8, ADR-0108 §7) — the client's words,
+          * *Show more*, and no pager after it. It goes once there is nothing left to show.
+          */}
+        {unshown > 0 && (
+          <div className="mt-3 flex justify-center">
+            <Button variant="secondary" onClick={showMore}>Show more</Button>
+          </div>
+        )}
+
+        <ClosedLeads
+          won={{ list: won, error: closedError.won }}
+          lost={{ list: lost, error: closedError.lost }}
+          busy={busy}
+          refusalsOf={refusalsOf}
+          stageLabel={stageLabel}
+          onReopen={readOnly ? undefined : (row) => void reopen(row)}
+        />
+
+        {detailsLead && (
+          <LeadDetailsDialog
+            lead={detailsLead}
+            saving={busy[detailsLead.id] === true}
+            errors={refusalsOf(detailsLead.id)}
+            editedBy={editedByOf(detailsLead)}
+            readOnly={readOnly}
+            editor={{
+              value: (field, stored) => draftOf(detailsLead, field, stored),
+              change: (field, value) => setDraftValue(detailsLead.id, field, value),
+              commit: (field: DetailsField) => {
+                const { contact } = detailsLead;
+                if (field === 'source') {
+                  commitText(detailsLead, 'source', detailsLead.source, (source) => ({ source }));
+                  return;
+                }
+                // The pair travels together, so saving one never erases the other.
+                commitText(detailsLead, field, contact[field], (value) => ({
+                  contact: { phone: contact.phone, email: contact.email, [field]: value },
+                }));
+              },
+            }}
+            onClose={() => setDetailsFor(null)}
+          />
+        )}
+
+        {/* The prototype's own questions (`Overall.html:5666-5675`), each naming what its button does (F-72). */}
+        {/*
+          * In a session, the coaching card's own question and sentence (`Overall.html:10867-10870`):
+          * *Mark as Won?*, and where the lead goes. Its button says what it does, as every `Dialog`'s does,
+          * where the prototype's says *Confirm*.
+          */}
+        <Dialog
+          open={confirmOutcome !== null}
+          message={owner && confirmOutcome
+            ? `Mark as ${OUTCOME_WORD[confirmOutcome.outcome]}? ${confirmOutcome.row.name || 'This lead'} will move to Closed leads as "${OUTCOME_WORD[confirmOutcome.outcome]}". You can still find them there afterward.`
+            : confirmOutcome?.outcome === 'won'
+              ? `Mark ${confirmOutcome.row.name || 'this lead'} as a successful lead?`
+              : `Mark ${confirmOutcome?.row.name || 'this lead'} as not successful? This moves them to the closed list.`}
+          confirmLabel={owner && confirmOutcome
+            ? `Mark as ${OUTCOME_WORD[confirmOutcome.outcome]}`
+            : confirmOutcome?.outcome === 'won' ? 'Mark successful' : 'Mark not successful'}
+          onCancel={() => setConfirmOutcome(null)}
+          onConfirm={async () => {
+            const { row, outcome } = confirmOutcome!;
+            setConfirmOutcome(null);
+            const saved = await run(row.id, () => setLeadOutcome(row.id, outcome, row.version), { done: moveToClosed });
+            if (saved) onNotice?.(`${saved.name} marked as ${OUTCOME_WORD[outcome]}.`);
+          }}
+        />
+
+        {/*
+          * *Delete {name}?* — the prototype's question without *permanently* and *can't be undone*
+          * (`Overall.html:5661`), which would both be false: deleting is soft and audited (I-101).
+          */}
+        <Dialog
+          open={confirmDelete !== null}
+          message={`Delete ${confirmDelete?.name || 'this lead'}?`}
+          confirmLabel="Delete lead"
+          tone="danger"
+          onCancel={() => setConfirmDelete(null)}
+          onConfirm={async () => {
+            const row = confirmDelete!;
+            setConfirmDelete(null);
+            setBusy((b) => ({ ...b, [row.id]: true }));
+            try {
+              await deleteLead(row.id);
+              dropOpen(row.id);
+            } catch (err) {
+              refuse(row.id, [''], toDisplayError(err));
+            } finally {
+              setBusy((b) => ({ ...b, [row.id]: false }));
+            }
+          }}
+        />
+
+        <Dialog
+          open={confirmType !== null}
+          message="Changing the type clears this lead’s stage and its commitment for this month. The two ladders share no stage. Continue?"
+          confirmLabel="Change the type"
+          onCancel={() => setConfirmType(null)}
+          onConfirm={() => {
+            const { row, type } = confirmType!;
+            setConfirmType(null);
+            void writeType(row, type);
+          }}
+        />
+      </>
+    );
+  }
+
+  // One box whatever is in it, so the width it is measured by is the same from the first frame.
+  return <div ref={frame} className="min-w-0">{body}</div>;
+}
+
+/**
+ * **Cards, when the table's box is narrower than `TABLE_MIN_REM`** (P13.1-T4 AC-7).
+ *
+ * Measured on the box rather than asked of the window, because the box is what the table has to fit:
+ * the sidebar open or folded, and the coaching session's card around it, all change it without the
+ * window changing. Decided before the first paint and again on every change of width.
+ *
+ * **A width of zero is no answer** — a box not laid out, which is jsdom, or a tab that is hidden — and
+ * leaves the table, which is what every spec written before the cards was written against.
+ */
+function useCardLayout(): [React.RefObject<HTMLDivElement | null>, boolean] {
+  const frame = useRef<HTMLDivElement>(null);
+  const [cards, setCards] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = frame.current;
+    if (!el) return;
+    const decide = (width: number) => {
+      const rem = parseFloat(window.getComputedStyle(document.documentElement).fontSize) || 16;
+      setCards(width > 0 && width < TABLE_MIN_REM * rem);
+    };
+    decide(el.getBoundingClientRect().width);
+    if (typeof ResizeObserver !== 'function') return;
+    const observer = new ResizeObserver((entries) => {
+      decide(entries[entries.length - 1]?.contentRect.width ?? 0);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return [frame, cards];
 }
 
 /** Both closed lists, page after page, into state as each lands. */

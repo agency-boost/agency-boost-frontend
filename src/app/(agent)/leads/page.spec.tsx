@@ -2,6 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
+import { axe } from 'vitest-axe';
 import { makeMe, renderInLayout, stubFetch } from '@test/harness';
 import LeadsPage from './page';
 
@@ -39,8 +40,6 @@ const lead = (over: Record<string, unknown> = {}) => ({
   type: 'sales',
   name: 'Pak Budi',
   contact: { phone: null, email: null },
-  lawfulBasis: null,
-  consentAt: null,
   statusCode: 'FOLLOW_UP',
   thisMonth: false,
   remarks: 'Hobi golf',
@@ -99,6 +98,37 @@ const lastBody = (calls: Call[], method = 'PATCH') => JSON.parse(String(writes(c
 /** The `<tr>` a control sits in. */
 const rowOf = (el: HTMLElement) => el.closest('tr')!;
 
+/** A lead's ⋮ (P13.1-T4 AC-3) — the `index`th of that name, for a list where names repeat. */
+const actionsOf = (name = 'Pak Budi', index = 0) => screen.getAllByRole('button', { name: `Actions for ${name}` })[index];
+
+/** Open a lead's ⋮ and choose one of its items. */
+async function choose(item: string, name = 'Pak Budi', index = 0) {
+  await userEvent.click(actionsOf(name, index));
+  await userEvent.click(screen.getByRole('menuitem', { name: item }));
+}
+
+/** Open a lead's ⋮ and hand back one of its items, to look at rather than choose. */
+async function menuItem(item: string, name = 'Pak Budi', index = 0) {
+  await userEvent.click(actionsOf(name, index));
+  return screen.getByRole('menuitem', { name: item });
+}
+
+/**
+ * A box of a given width, as far as the table can ask (P13.1-T4 AC-7): the `ResizeObserver` jsdom does
+ * not have, answering at once as a browser's does when it starts observing. Every observer answers with
+ * the same width — the table's box and each remark box alike.
+ */
+function boxWidth(width: number) {
+  vi.stubGlobal('ResizeObserver', class {
+    constructor(private readonly callback: ResizeObserverCallback) {}
+    observe(target: Element) {
+      this.callback([{ target, contentRect: { width } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+    }
+    unobserve() {}
+    disconnect() {}
+  });
+}
+
 /**
  * A `fetch` the table's own reads can be steered through, page by page — and held, for the stale-page
  * test. Everything else goes to the ordinary stub.
@@ -137,7 +167,8 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
     const status = screen.getByLabelText('Status, row 1');
     expect(status).toHaveValue('FOLLOW_UP');
     expect(within(status).getByRole('option', { name: 'Follow-up' })).toBeInTheDocument();
-    expect(screen.getByText('Sep 4, 2026')).toBeInTheDocument();
+    // P13.1-T4 AC-4: the registration date is in the lead's details now, not on the row.
+    expect(screen.queryByText('Sep 4, 2026')).not.toBeInTheDocument();
   });
 
   describe('AC-1 — what went', () => {
@@ -214,20 +245,39 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.queryByText(/shown/)).not.toBeInTheDocument();
     });
 
-    it('AC-2: sorts on the prototype’s four headings, Registered newest first', async () => {
+    it('P13.1-T4 AC-4: sorts on three headings, with no Registered column, and opens newest registered first', async () => {
       const { calls } = render({ '/leads': { body: page([lead()]) } });
       await screen.findByDisplayValue('Pak Budi');
 
-      for (const name of ['Lead name', 'Type', 'Status', 'Registered']) {
+      for (const name of ['Lead name', 'Type', 'Status']) {
         expect(screen.getByRole('button', { name: new RegExp(name) })).toBeInTheDocument();
       }
+      expect(screen.queryByRole('columnheader', { name: /Registered/ })).not.toBeInTheDocument();
+      expect(screen.getAllByRole('columnheader').map((th) => th.textContent?.replace(/[▲▼⇅]/g, '').trim()))
+        .toEqual(['Row', 'Lead name', 'Type', 'Status', 'This month', 'Remarks', 'Next action', 'Actions']);
+      // The default order is no heading's: none of them claims it.
       const sorted = screen.getAllByRole('columnheader')
         .filter((th) => ['ascending', 'descending'].includes(th.getAttribute('aria-sort') ?? ''));
-      expect(sorted).toHaveLength(1);
-      expect(sorted[0]).toHaveTextContent('Registered');
-      expect(sorted[0]).toHaveAttribute('aria-sort', 'descending');
+      expect(sorted).toHaveLength(0);
       expect(lastRead(calls).get('sort')).toBe('dateRegistered');
       expect(lastRead(calls).get('dir')).toBe('desc');
+    });
+
+    it('P13.1-T4 AC-4: comes back to newest first on a heading’s third press', async () => {
+      const { calls } = render({ '/leads': { body: page([lead()]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      const heading = () => screen.getByRole('button', { name: /Lead name/ });
+      await userEvent.click(heading());
+      await waitFor(() => expect(lastRead(calls).get('dir')).toBe('asc'));
+      await userEvent.click(heading());
+      await waitFor(() => expect(lastRead(calls).get('dir')).toBe('desc'));
+      expect(lastRead(calls).get('sort')).toBe('name');
+      await userEvent.click(heading());
+
+      await waitFor(() => expect(lastRead(calls).get('sort')).toBe('dateRegistered'));
+      expect(lastRead(calls).get('dir')).toBe('desc');
+      expect(screen.getByRole('columnheader', { name: /Lead name/ })).toHaveAttribute('aria-sort', 'none');
     });
 
     it('AC-2: shows the Actions heading, as the prototype does', async () => {
@@ -308,15 +358,15 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await userEvent.click(screen.getByRole('button', { name: /^Status/ }));
       await waitFor(() => expect(lastRead(calls).get('sort')).toBe('status'));
       expect(screen.getByRole('columnheader', { name: /^Status/ })).toHaveAttribute('aria-sort', 'ascending');
-      expect(screen.getByRole('columnheader', { name: /Registered/ })).toHaveAttribute('aria-sort', 'none');
+      expect(screen.getByRole('columnheader', { name: /^Type/ })).toHaveAttribute('aria-sort', 'none');
 
       await userEvent.click(screen.getByRole('button', { name: /Lead name/ }));
       await waitFor(() => expect(lastRead(calls).get('sort')).toBe('name'));
     });
   });
 
-  describe('AC-4 — every lead, with no pager', () => {
-    it('AC-4: lists 450 open leads in three requests of 200, and counts the total from the first', async () => {
+  describe('AC-4 — every lead loads, with no pager', () => {
+    it('AC-4, P13.1-T4 AC-8: loads 450 open leads in three requests of 200, draws 30, and the rest on Show more', async () => {
       const all = many(1, 450);
       const reads = stubPaged((q) => {
         const n = Number(q.get('page'));
@@ -325,14 +375,19 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
 
       // Four hundred and fifty rows of controls is a heavy page for jsdom; the queries stay on the DOM.
       const names = () => document.querySelectorAll<HTMLInputElement>('tbody input[aria-label^="Lead name"]');
+      await waitFor(() => expect(reads).toHaveLength(3));
+      await waitFor(() => expect(names()).toHaveLength(30));
+      // The count is the first page's total — the whole list — not the rows drawn.
+      expect(document.body).toHaveTextContent('450 active leads');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show more' }));
       await waitFor(() => expect(names()).toHaveLength(450), { timeout: 20_000 });
 
       expect(reads.map((q) => q.get('page'))).toEqual(['1', '2', '3']);
       expect(reads.every((q) => q.get('pageSize') === '200')).toBe(true);
       expect(names()[449]).toHaveValue('Lead 450');
       expect(names()[449]).toHaveAttribute('aria-label', 'Lead name, row 450');
-      // The count is the first page's total, not the rows that had arrived when it was drawn.
-      expect(document.body).toHaveTextContent('450 active leads');
+      expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
     }, 30_000);
 
     it('AC-4: starts again from page one on a header sort, and drops the old order’s late page', async () => {
@@ -403,7 +458,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await screen.findByText('5 active leads');
       await waitFor(() => expect(reads).toHaveLength(2));
 
-      await userEvent.click(screen.getAllByRole('button', { name: 'Delete lead' })[0]);
+      await choose('Delete', 'Lead 1');
       deleted = true;
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete lead' }));
       // The page the old offsets asked for lands late, answered as the server now would: one past Lead 4.
@@ -431,7 +486,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await screen.findByText('5 active leads');
       await waitFor(() => expect(reads).toHaveLength(2));
 
-      await userEvent.click(screen.getAllByRole('button', { name: 'Delete lead' })[0]);
+      await choose('Delete', 'Lead 1');
       deleted = true;
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete lead' }));
       await waitFor(() => expect(reads).toHaveLength(3));
@@ -477,7 +532,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       });
       await waitFor(() => expect(screen.getByDisplayValue('Lead 4')).toBeInTheDocument());
       await waitFor(() => expect(reads).toHaveLength(3));
-      await userEvent.click(screen.getAllByRole('button', { name: 'Delete lead' })[0]);
+      await choose('Delete', 'Lead 1');
       deleted = true;
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete lead' }));
       await waitFor(() => expect(reads).toHaveLength(4));
@@ -667,7 +722,10 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.getByLabelText('Lead name, row 1')).toHaveValue('B');
       // Nothing to write to until it is a lead.
       expect(screen.getByLabelText('Type, row 1')).toHaveAttribute('aria-disabled', 'true');
-      await userEvent.click(screen.getAllByRole('button', { name: 'Contact details' })[0]);
+      // Its ⋮ is there, and opens nothing until the row is a lead (P13.1-T4 AC-3).
+      expect(actionsOf('B')).toHaveAttribute('aria-disabled', 'true');
+      await userEvent.click(actionsOf('B'));
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(writes(calls, 'POST')).toHaveLength(0);
 
@@ -729,7 +787,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       const { calls } = render({ '/leads': { body: page([lead()]) } });
       await screen.findByDisplayValue('Pak Budi');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Mark not successful' }));
+      await choose('Mark not successful');
 
       const dialog = await screen.findByRole('dialog');
       expect(dialog).toHaveTextContent('Mark Pak Budi as not successful? This moves them to the closed list.');
@@ -742,7 +800,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       const { calls } = render({ '/leads': { body: page([lead({ statusCode: 'PAID_AND_ISSUED' })]) } });
       await screen.findByDisplayValue('Pak Budi');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Mark successful' }));
+      await choose('Mark successful');
       expect(await screen.findByRole('dialog')).toHaveTextContent('Mark Pak Budi as a successful lead?');
       await userEvent.keyboard('{Escape}');
 
@@ -757,7 +815,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       });
       await screen.findByDisplayValue('Pak Budi');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Mark successful' }));
+      await choose('Mark successful');
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark successful' }));
 
       await waitFor(() => expect(lastBody(calls)).toEqual({ outcome: 'won', version: 2 }));
@@ -778,7 +836,8 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await userEvent.tab();
       await screen.findByText('name must be 2–120 characters.');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Mark not successful' }));
+      // The ⋮ is named for the lead as it is stored — the refused *B* is only typing.
+      await choose('Mark not successful');
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark not successful' }));
 
       const card = () => screen.getByRole('heading', { name: '✕ Not successful' }).parentElement!.parentElement!;
@@ -787,13 +846,20 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.queryByText('name must be 2–120 characters.')).not.toBeInTheDocument();
     });
 
-    it('AC-6: gates ✓ below the stage that closes the pipeline, and never gates ✕', async () => {
-      render({ '/leads': { body: page([lead({ statusCode: 'FOLLOW_UP' })]) } });
+    it('AC-6, P13.1-T4 AC-3: gates ✓ below the stage that closes the pipeline, saying why, and never gates ✕', async () => {
+      const { calls } = render({ '/leads': { body: page([lead({ statusCode: 'FOLLOW_UP' })]) } });
+      await screen.findByDisplayValue('Pak Budi');
 
-      const won = await screen.findByRole('button', { name: 'Mark successful' });
-      expect(won).toBeDisabled();
-      expect(won).toHaveAttribute('title', 'Available once status reaches the final stage');
-      expect(screen.getByRole('button', { name: 'Mark not successful' })).toBeEnabled();
+      const won = await menuItem('Mark successful');
+      expect(won).toHaveAttribute('aria-disabled', 'true');
+      expect(won).toHaveAccessibleDescription('Available once status reaches the final stage');
+      // On the screen too, beneath it — a tap has no hover to bring up a tooltip.
+      expect(within(screen.getByRole('menu')).getByText('Available once status reaches the final stage')).toBeVisible();
+      expect(screen.getByRole('menuitem', { name: 'Mark not successful' })).not.toHaveAttribute('aria-disabled');
+
+      await userEvent.click(won);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(writes(calls)).toHaveLength(0);
     });
   });
 
@@ -828,111 +894,88 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
     });
   });
 
-  describe('AC-8 — contact details and the lawful basis, in a dialog', () => {
-    const openContact = async () => {
-      await userEvent.click(await screen.findByRole('button', { name: 'Contact details' }));
-      return screen.findByRole('dialog', { name: 'Contact details for Pak Budi' });
+  describe('P13.1-T4 AC-1, AC-2 — the lead’s details, in a dialog', () => {
+    const openDetails = async (name = 'Pak Budi') => {
+      await screen.findByDisplayValue(name);
+      await choose('Lead details', name);
+      return screen.findByRole('dialog', { name: `Lead details for ${name}` });
     };
 
-    it('AC-8: opens from the Actions column, named, with the lawful basis first and focused', async () => {
+    it('P13.1-T4 AC-2: opens from the ⋮ menu as Lead details, the phone first and focused', async () => {
       render({ '/leads': { body: page([lead()]) } });
+      const dialog = await openDetails();
 
-      const glyph = await screen.findByRole('button', { name: 'Contact details' });
-      expect(glyph.closest('td')).toBe(screen.getByRole('button', { name: 'Delete lead' }).closest('td'));
-      const dialog = await openContact();
-
-      const fields = within(dialog).getAllByRole('combobox').concat(within(dialog).getAllByRole('textbox'));
-      expect(fields[0]).toBe(within(dialog).getByLabelText('Why you may hold these'));
-      expect(within(dialog).getByLabelText('Why you may hold these')).toHaveFocus();
+      expect(within(dialog).getByLabelText('Phone')).toHaveFocus();
       const order = [...dialog.querySelectorAll('label')].map((l) => l.textContent);
-      expect(order).toEqual(['Why you may hold these', 'Phone', 'Email', 'Where they came from']);
+      expect(order).toEqual(['Phone', 'Email', 'Where they came from']);
+      expect(screen.queryByRole('dialog', { name: /Contact details/ })).not.toBeInTheDocument();
     });
 
-    it('AC-8: records the lawful basis as one write', async () => {
+    it('P13.1-T4 AC-1: asks no lawful basis — the field and its words are gone', async () => {
+      render({ '/leads': { body: page([lead()]) } });
+      const dialog = await openDetails();
+
+      expect(within(dialog).queryByLabelText('Why you may hold these')).not.toBeInTheDocument();
+      expect(within(dialog).queryByRole('combobox')).not.toBeInTheDocument();
+      expect(dialog).not.toHaveTextContent(/Required before a phone number/);
+    });
+
+    it('P13.1-T4 AC-1: saves a phone number on its own, with no ground beside it', async () => {
       const { calls } = render({
         '/leads': { body: page([lead()]) },
-        '/leads/l1': { body: lead({ lawfulBasis: 'consent', version: 3 }) },
+        '/leads/l1': { body: lead({ contact: { phone: '0811', email: null }, version: 3 }) },
       });
-      const dialog = await openContact();
+      const dialog = await openDetails();
 
-      await userEvent.selectOptions(within(dialog).getByLabelText('Why you may hold these'), 'consent');
+      await userEvent.type(within(dialog).getByLabelText('Phone'), '0811');
+      await userEvent.tab();
 
-      await waitFor(() => expect(lastBody(calls)).toEqual({ lawfulBasis: 'consent', version: 2 }));
-      expect(within(dialog).getByLabelText('Why you may hold these')).toHaveValue('consent');
+      await waitFor(() => expect(writes(calls)).toHaveLength(1));
+      expect(lastBody(calls)).toEqual({ contact: { phone: '0811', email: null }, version: 2 });
+      expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
     });
 
-    it('AC-8: shows the server’s gate in the dialog, and beneath the lead once it closes', async () => {
+    it('P13.1-T4 AC-2: says when the lead was registered, and who last changed it', async () => {
+      render({ '/leads': { body: page([lead({ lastEditedBy: { membershipId: 'mem-aab', name: 'Ibu Sari' } })]) } });
+      const dialog = await openDetails();
+
+      expect(within(dialog).getByText('Registered', { exact: false })).toHaveTextContent('Registered Sep 4, 2026');
+      expect(within(dialog).getByText('Sep 4, 2026').closest('time')).toHaveAttribute('dateTime', '2026-09-04T03:00:00.000Z');
+      expect(within(dialog).getByText('Last changed by Ibu Sari')).toBeInTheDocument();
+      // ADR-0044's ✎ moved here: the row carries no attribution of its own.
+      expect(screen.queryByRole('button', { name: /Last changed by/ })).not.toBeInTheDocument();
+    });
+
+    it('P13.1-T4 AC-2: links to WhatsApp, in a new tab, with the number as wa.me takes it', async () => {
+      render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) } });
+      const dialog = await openDetails();
+
+      const chat = within(dialog).getByRole('link', { name: 'Chat with Pak Budi on WhatsApp (opens in a new tab)' });
+      expect(chat).toHaveTextContent('WhatsApp');
+      expect(chat).toHaveAttribute('href', 'https://wa.me/6281211002200');
+      expect(chat).toHaveAttribute('target', '_blank');
+      expect(chat).toHaveAttribute('rel', 'noopener noreferrer');
+    });
+
+    it('P13.1-T4 AC-2: offers no WhatsApp without a number it could open, and follows what is typed', async () => {
       render({
-        '/leads': { body: page([lead()]) },
-        '/leads/l1': error(422, 'LEAD_CONSENT_REQUIRED', 'Record why you may hold these details first.'),
+        '/leads': { body: page([lead({ contact: { phone: '123', email: null } })]) },
+        '/leads/l1': { body: lead({ contact: { phone: '+62 812 1100 2200', email: null }, version: 3 }) },
       });
-      const dialog = await openContact();
+      const dialog = await openDetails();
+      expect(within(dialog).queryByRole('link', { name: /WhatsApp/ })).not.toBeInTheDocument();
 
-      await userEvent.type(within(dialog).getByLabelText('Phone'), '0811');
-      await userEvent.tab();
-
-      expect(await within(dialog).findByText('Record why you may hold these details first.')).toBeInTheDocument();
-      await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
-
-      const refusal = screen.getByText('Record why you may hold these details first.');
-      expect(rowOf(refusal).previousElementSibling).toBe(rowOf(screen.getByDisplayValue('Pak Budi')));
-    });
-
-    it('AC-8: sends a refused phone number again once the lawful basis is recorded', async () => {
-      const { calls } = render({
-        '/leads': { body: page([lead()]) },
-        '/leads/l1': [
-          error(422, 'LEAD_CONSENT_REQUIRED', 'Record why you may hold these details first.'),
-          { body: lead({ lawfulBasis: 'consent', version: 3 }) },
-          { body: lead({ lawfulBasis: 'consent', contact: { phone: '0811', email: null }, version: 4 }) },
-        ],
-      });
-      const dialog = await openContact();
-      await userEvent.type(within(dialog).getByLabelText('Phone'), '0811');
-      await userEvent.tab();
-      await within(dialog).findByText('Record why you may hold these details first.');
-
-      await userEvent.selectOptions(within(dialog).getByLabelText('Why you may hold these'), 'consent');
-
-      // The number goes again, at the version the basis left behind — not left looking saved.
-      await waitFor(() => expect(writes(calls)).toHaveLength(3));
-      expect(writes(calls).map((c) => JSON.parse(String(c.init.body)))).toEqual([
-        { contact: { phone: '0811', email: null }, version: 2 },
-        { lawfulBasis: 'consent', version: 2 },
-        { contact: { phone: '0811', email: null }, version: 3 },
-      ]);
-      await waitFor(() => expect(screen.queryByText('Record why you may hold these details first.')).not.toBeInTheDocument());
-      expect(within(dialog).getByLabelText('Phone')).toHaveValue('0811');
-    });
-
-    it('AC-8: keeps the refusal beside a phone number the basis did not unblock', async () => {
-      const { calls } = render({
-        '/leads': { body: page([lead()]) },
-        '/leads/l1': [
-          error(422, 'LEAD_CONSENT_REQUIRED', 'Record why you may hold these details first.'),
-          { body: lead({ source: 'Referral', version: 3 }) },
-        ],
-      });
-      const dialog = await openContact();
-      await userEvent.type(within(dialog).getByLabelText('Phone'), '0811');
-      await userEvent.tab();
-      await within(dialog).findByText('Record why you may hold these details first.');
-
-      // A different field saves; the refused number is still in its box, so its refusal stays.
-      await userEvent.type(within(dialog).getByLabelText('Where they came from'), 'Referral');
-      await userEvent.tab();
-
-      await waitFor(() => expect(lastBody(calls)).toEqual({ source: 'Referral', version: 2 }));
-      expect(within(dialog).getByText('Record why you may hold these details first.')).toBeInTheDocument();
-      expect(within(dialog).getByLabelText('Phone')).toHaveValue('0811');
+      await userEvent.clear(within(dialog).getByLabelText('Phone'));
+      await userEvent.type(within(dialog).getByLabelText('Phone'), '+62 812 1100 2200');
+      expect(within(dialog).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', 'https://wa.me/6281211002200');
     });
 
     it('AC-8: corrects one detail and keeps the other', async () => {
       const { calls } = render({
-        '/leads': { body: page([lead({ lawfulBasis: 'consent', contact: { phone: '0812-1100-2200', email: null } })]) },
-        '/leads/l1': { body: lead({ lawfulBasis: 'consent', contact: { phone: '0812-1100-2200', email: 'budi@example.com' }, version: 3 }) },
+        '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) },
+        '/leads/l1': { body: lead({ contact: { phone: '0812-1100-2200', email: 'budi@example.com' }, version: 3 }) },
       });
-      const dialog = await openContact();
+      const dialog = await openDetails();
 
       expect(within(dialog).getByLabelText('Phone')).toHaveValue('0812-1100-2200');
       await userEvent.type(within(dialog).getByLabelText('Email'), 'budi@example.com');
@@ -944,13 +987,13 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
 
     it('AC-8: clears a detail the seed stored, to nothing rather than an empty string', async () => {
       const { calls } = render({
-        '/leads': { body: page([lead({ lawfulBasis: 'consent', contact: { phone: '0812', email: 'a@b.id' }, source: 'Referral' })]) },
+        '/leads': { body: page([lead({ contact: { phone: '0812', email: 'a@b.id' }, source: 'Referral' })]) },
         '/leads/l1': [
-          { body: lead({ lawfulBasis: 'consent', contact: { phone: '0812', email: null }, source: 'Referral', version: 3 }) },
-          { body: lead({ lawfulBasis: 'consent', contact: { phone: '0812', email: null }, source: null, version: 4 }) },
+          { body: lead({ contact: { phone: '0812', email: null }, source: 'Referral', version: 3 }) },
+          { body: lead({ contact: { phone: '0812', email: null }, source: null, version: 4 }) },
         ],
       });
-      const dialog = await openContact();
+      const dialog = await openDetails();
 
       await userEvent.clear(within(dialog).getByLabelText('Email'));
       await userEvent.tab();
@@ -962,27 +1005,48 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await waitFor(() => expect(lastBody(calls)).toEqual({ source: null, version: 3 }));
     });
 
-    it('AC-8: keeps Tab inside, and Escape takes the reader back to the glyph', async () => {
-      render({ '/leads': { body: page([lead()]) } });
-      const dialog = await openContact();
+    it('AC-8: shows a refused detail in the dialog, and beneath the lead once it closes', async () => {
+      render({
+        '/leads': { body: page([lead()]) },
+        '/leads/l1': error(422, 'VALIDATION_FAILED', 'contact.email must be an email address.'),
+      });
+      const dialog = await openDetails();
+
+      await userEvent.type(within(dialog).getByLabelText('Email'), 'budi');
+      await userEvent.tab();
+
+      expect(await within(dialog).findByText('contact.email must be an email address.')).toBeInTheDocument();
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+
+      const refusal = screen.getByText('contact.email must be an email address.');
+      expect(rowOf(refusal).previousElementSibling).toBe(rowOf(screen.getByDisplayValue('Pak Budi')));
+    });
+
+    it('AC-8: keeps Tab inside, and Escape takes the reader back to the ⋮', async () => {
+      render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) } });
+      const dialog = await openDetails();
 
       within(dialog).getByRole('button', { name: 'Close' }).focus();
       await userEvent.tab();
-      expect(within(dialog).getByLabelText('Why you may hold these')).toHaveFocus();
+      expect(within(dialog).getByLabelText('Phone')).toHaveFocus();
+      await userEvent.tab();
+      // The WhatsApp link is a stop of its own, beside the number it opens.
+      expect(within(dialog).getByRole('link', { name: /WhatsApp/ })).toHaveFocus();
+      await userEvent.tab({ shift: true });
       await userEvent.tab({ shift: true });
       expect(within(dialog).getByRole('button', { name: 'Close' })).toHaveFocus();
 
       await userEvent.keyboard('{Escape}');
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Contact details' })).toHaveFocus();
+      expect(actionsOf()).toHaveFocus();
     });
 
     it('AC-8: saves the field still being typed in when Escape closes it', async () => {
       const { calls } = render({
-        '/leads': { body: page([lead({ lawfulBasis: 'consent' })]) },
-        '/leads/l1': { body: lead({ lawfulBasis: 'consent', source: 'Referral — Desi' }) },
+        '/leads': { body: page([lead()]) },
+        '/leads/l1': { body: lead({ source: 'Referral — Desi' }) },
       });
-      const dialog = await openContact();
+      const dialog = await openDetails();
 
       await userEvent.type(within(dialog).getByLabelText('Where they came from'), 'Referral — Desi');
       await userEvent.keyboard('{Escape}');
@@ -992,7 +1056,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
 
     it('AC-8: closes from the backdrop, but not from a click inside', async () => {
       render({ '/leads': { body: page([lead()]) } });
-      const dialog = await openContact();
+      const dialog = await openDetails();
 
       await userEvent.click(within(dialog).getByRole('heading'));
       expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -1001,111 +1065,27 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
     });
   });
 
-  describe('AC-9 — the attribution, as a glyph', () => {
-    it('AC-9: names whoever last changed a lead, when it was not the reader', async () => {
-      render({ '/leads': { body: page([lead({ lastEditedBy: { membershipId: 'mem-aab', name: 'Ibu Sari' } })]) } });
-
-      const glyph = await screen.findByRole('button', { name: 'Last changed by Ibu Sari' });
-      expect(glyph.closest('td')).toBe(screen.getByRole('button', { name: 'Contact details' }).closest('td'));
-      // Named like the row's other glyph buttons: the glyph hidden, the words for a screen reader.
-      expect(glyph.querySelector('[aria-hidden="true"]')).toHaveTextContent('✎');
-    });
-
-    it('AC-9: shows who to a keyboard, on focus, and Escape puts it away', async () => {
-      render({ '/leads': { body: page([lead({ lastEditedBy: { membershipId: 'mem-aab', name: 'Ibu Sari' } })]) } });
-      const glyph = await screen.findByRole('button', { name: 'Last changed by Ibu Sari' });
-      const tip = screen.getByText('Last changed by Ibu Sari', { selector: '[role="tooltip"]' });
-      expect(tip).not.toBeVisible();
-
-      act(() => glyph.focus());
-      expect(glyph).toHaveFocus();
-      expect(tip).toBeVisible();
-
-      await userEvent.keyboard('{Escape}');
-      expect(tip).not.toBeVisible();
-
-      await userEvent.hover(glyph);
-      expect(tip).toBeVisible();
-      await userEvent.unhover(glyph);
-      expect(tip).not.toBeVisible();
-      fireEvent.click(glyph);
-      await userEvent.tab();
-      expect(tip).not.toBeVisible();
-    });
-
-    it('AC-9: keeps the words up while the pointer moves onto them, and Escape puts them away with the focus elsewhere', async () => {
-      render({ '/leads': { body: page([lead({ lastEditedBy: { membershipId: 'mem-aab', name: 'Ibu Sari' } })]) } });
-      const glyph = await screen.findByRole('button', { name: 'Last changed by Ibu Sari' });
-      const tip = screen.getByText('Last changed by Ibu Sari', { selector: '[role="tooltip"]' });
-
-      // WCAG 1.4.13: a reader magnifying the screen moves onto the words to bring them into view.
-      await userEvent.hover(glyph);
-      await userEvent.hover(tip);
-      expect(tip).toBeVisible();
-      expect(tip.className).not.toContain('pointer-events-none');
-      await userEvent.unhover(tip);
-      expect(tip).not.toBeVisible();
-
-      // Brought up by the pointer alone, so there is no focus on the glyph to hear the key.
-      await userEvent.hover(glyph);
-      expect(tip).toBeVisible();
-      expect(glyph).not.toHaveFocus();
-      await userEvent.keyboard('{Escape}');
-      expect(tip).not.toBeVisible();
-    });
-
-    it('AC-9: puts the words above the glyph, off the row’s other controls, and a press on them puts them away', async () => {
-      /*
-       * Drawn to the left, the bubble covered ✓, ✕, 🗑 and ☎ and took the next tap meant for them
-       * (found 2026-09-30). jsdom cannot hit-test, so the placement is asserted as the classes that
-       * decide it, and the escape hatch — a press on the bubble — as behaviour.
-       */
-      render({ '/leads': { body: page([lead({ lastEditedBy: { membershipId: 'mem-aab', name: 'Ibu Sari' } })]) } });
-      const glyph = await screen.findByRole('button', { name: 'Last changed by Ibu Sari' });
-      const tip = screen.getByText('Last changed by Ibu Sari', { selector: '[role="tooltip"]' });
-
-      expect(tip.className).toContain('bottom-full');
-      expect(tip.className).not.toContain('right-full');
-
-      await userEvent.click(glyph);
-      expect(tip).toBeVisible();
-      fireEvent.pointerDown(tip);
-      expect(tip).not.toBeVisible();
-    });
-
-    it('AC-9: shows who on a tap, where there is no hover and no focus to ask for it', async () => {
-      render({ '/leads': { body: page([lead({ lastEditedBy: { membershipId: 'mem-aab', name: 'Ibu Sari' } })]) } });
-      const glyph = await screen.findByRole('button', { name: 'Last changed by Ibu Sari' });
-      const tip = screen.getByText('Last changed by Ibu Sari', { selector: '[role="tooltip"]' });
-      act(() => glyph.focus());
-      await userEvent.keyboard('{Escape}');
-
-      // Already focused, and no pointer moved onto it — so only the tap itself can bring it back.
-      fireEvent.click(glyph);
-      expect(tip).toBeVisible();
-      // Said once to a screen reader, by the button's name — the bubble is not read a second time.
-      expect(tip).toHaveAttribute('aria-hidden', 'true');
-    });
+  describe('AC-9 — who last changed it, in the lead’s details (ADR-0044, P13.1-T4 AC-2)', () => {
+    const detailsText = async () => {
+      await screen.findByDisplayValue('Pak Budi');
+      await choose('Lead details');
+      return (await screen.findByRole('dialog')).textContent;
+    };
 
     it('AC-9: says nothing when the last change was the owner’s own', async () => {
       render({ '/leads': { body: page([lead({ lastEditedBy: null })]) } });
-      await screen.findByDisplayValue('Pak Budi');
-
-      expect(screen.queryByRole('button', { name: /Last changed by/ })).not.toBeInTheDocument();
+      expect(await detailsText()).not.toMatch(/Last changed by/);
     });
 
     it('AC-9: says nothing to a leader about a change they made themselves', async () => {
       // A leader's screen shows their downline's leads; their own edit is not news to them.
       render({ '/leads': { body: page([lead({ ownerMembershipId: 'mem-7', lastEditedBy: { membershipId: 'mem-1', name: 'Rina' } })]) } });
-      await screen.findByDisplayValue('Pak Budi');
-
-      expect(screen.queryByRole('button', { name: /Last changed by/ })).not.toBeInTheDocument();
+      expect(await detailsText()).not.toMatch(/Last changed by/);
     });
 
     it('AC-9: names the office rather than a blank when the membership resolves to nobody', async () => {
       render({ '/leads': { body: page([lead({ lastEditedBy: { membershipId: 'mem-gone', name: null } })]) } });
-
-      expect(await screen.findByRole('button', { name: 'Last changed by someone in your office' })).toBeInTheDocument();
+      expect(await detailsText()).toMatch('Last changed by someone in your office');
     });
   });
 
@@ -1125,7 +1105,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       const below = rowOf(refusal);
       expect(below).not.toBe(rowOf(name));
       expect(below.previousElementSibling).toBe(rowOf(name));
-      expect(refusal.closest('td')).toHaveAttribute('colspan', '9');
+      expect(refusal.closest('td')).toHaveAttribute('colspan', '8');
       expect(name).toHaveValue('B');
     });
 
@@ -1192,22 +1172,24 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
     });
 
     it('AC-10: says a refusal once when both halves of the pair were refused for it', async () => {
+      const refused = 'The contact details could not be saved.';
       render({
         '/leads': { body: page([lead()]) },
-        '/leads/l1': error(422, 'LEAD_CONSENT_REQUIRED', 'Record why you may hold these details first.'),
+        '/leads/l1': error(422, 'VALIDATION_FAILED', refused),
       });
-      await userEvent.click(await screen.findByRole('button', { name: 'Contact details' }));
-      const dialog = await screen.findByRole('dialog', { name: 'Contact details for Pak Budi' });
+      await screen.findByDisplayValue('Pak Budi');
+      await choose('Lead details');
+      const dialog = await screen.findByRole('dialog', { name: 'Lead details for Pak Budi' });
 
       await userEvent.type(within(dialog).getByLabelText('Phone'), '0811');
       await userEvent.tab();
-      await within(dialog).findByText('Record why you may hold these details first.');
+      await within(dialog).findByText(refused);
       await userEvent.type(within(dialog).getByLabelText('Email'), 'budi@example.com');
       await userEvent.tab();
 
       await waitFor(() => expect(within(dialog).getAllByRole('alert')).toHaveLength(1));
       await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
-      expect(screen.getAllByText('Record why you may hold these details first.')).toHaveLength(1);
+      expect(screen.getAllByText(refused)).toHaveLength(1);
     });
 
     it('AC-10: holds the row still while a write is in flight, so Tab lands on the next field', async () => {
@@ -1233,10 +1215,6 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       for (const label of ['Type', 'Status', 'Remarks', 'Next action date', 'Next action note']) {
         expect(screen.getByLabelText(`${label}, row 1`)).not.toBeDisabled();
       }
-      for (const glyph of ['Mark not successful', 'Delete lead']) {
-        expect(screen.getByRole('button', { name: glyph })).not.toBeDisabled();
-        expect(screen.getByRole('button', { name: glyph })).toHaveAttribute('aria-disabled', 'true');
-      }
       expect(type).toHaveAttribute('aria-disabled', 'true');
       expect(name).toHaveAttribute('readonly');
       expect(screen.getByLabelText('Remarks, row 1')).toHaveAttribute('readonly');
@@ -1246,8 +1224,14 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await userEvent.selectOptions(screen.getByLabelText('Status, row 1'), 'PAID_AND_ISSUED');
       await userEvent.click(screen.getByLabelText('Close this month'));
       fireEvent.change(screen.getByLabelText('Next action date, row 1'), { target: { value: '2026-11-01' } });
-      await userEvent.click(screen.getByRole('button', { name: 'Delete lead' }));
-      await userEvent.click(screen.getByRole('button', { name: 'Mark not successful' }));
+      // The menu's writes are held too; its details are not, since they write nothing by opening.
+      await userEvent.click(actionsOf());
+      for (const item of ['Mark not successful', 'Delete']) {
+        expect(screen.getByRole('menuitem', { name: item })).toHaveAttribute('aria-disabled', 'true');
+        await userEvent.click(screen.getByRole('menuitem', { name: item }));
+      }
+      expect(screen.getByRole('menuitem', { name: 'Lead details' })).not.toHaveAttribute('aria-disabled');
+      await userEvent.keyboard('{Escape}');
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(patches).toHaveLength(1);
       expect(screen.getByLabelText('Close this month')).not.toBeChecked();
@@ -1264,7 +1248,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       });
       await screen.findByDisplayValue('Bu Rina');
 
-      await userEvent.click(screen.getAllByRole('button', { name: 'Delete lead' })[0]);
+      await choose('Delete');
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete lead' }));
 
       await waitFor(() => expect(screen.queryByDisplayValue('Pak Budi')).not.toBeInTheDocument());
@@ -1286,7 +1270,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       renderInLayout(AgentLayout, <LeadsPage />, { me: AGENT });
       await screen.findByDisplayValue('Bu Rina');
 
-      await userEvent.click(screen.getAllByRole('button', { name: 'Delete lead' })[0]);
+      await choose('Delete');
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete lead' }));
       await userEvent.click(screen.getByLabelText('Remarks, row 2'));
       await act(async () => { release(); });
@@ -1302,7 +1286,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       });
       await screen.findByDisplayValue('Bu Rina');
 
-      await userEvent.click(screen.getAllByRole('button', { name: 'Mark not successful' })[1]);
+      await choose('Mark not successful', 'Bu Rina');
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark not successful' }));
 
       await waitFor(() => expect(screen.queryByDisplayValue('Bu Rina')).not.toBeInTheDocument());
@@ -1317,7 +1301,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       });
       await screen.findByDisplayValue('Pak Budi');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Delete lead' }));
+      await choose('Delete');
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete lead' }));
 
       await screen.findByText('0 active leads');
@@ -1328,7 +1312,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       const { calls } = render({ '/leads': { body: page([lead()]) } });
       await screen.findByDisplayValue('Pak Budi');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Delete lead' }));
+      await choose('Delete');
       const dialog = await screen.findByRole('dialog');
       // Not *permanently*, not *can't be undone*: deleting is soft (I-101).
       expect(dialog).toHaveTextContent(/^Delete Pak Budi\?/);
@@ -1345,7 +1329,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       });
       await screen.findByDisplayValue('Pak Budi');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Delete lead' }));
+      await choose('Delete');
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete lead' }));
 
       await waitFor(() => expect(writes(calls, 'DELETE')).toHaveLength(1));
@@ -1360,7 +1344,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       });
       await screen.findByDisplayValue('Pak Budi');
 
-      await userEvent.click(screen.getByRole('button', { name: 'Delete lead' }));
+      await choose('Delete');
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete lead' }));
 
       expect(await screen.findByText('Lead not found.')).toBeInTheDocument();
@@ -1392,24 +1376,255 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
     });
   });
 
-  describe('the page body never scrolls sideways', () => {
-    it('keeps every glyph’s screen-reader name inside a positioned box, so the table’s scroll box clips it', async () => {
-      /*
-       * `sr-only` is `position: absolute`. Placed against an ancestor outside the table's scroll box,
-       * the Actions glyphs' names ran past a 1280px window and widened the page to 1379px (found
-       * walking /leads, 2026-09-30). jsdom has no layout, so the rule that prevents it is asserted:
-       * every such name has a positioned ancestor inside the scroll box.
-       */
+  describe('P13.1-T4 AC-7 — no sideways scroll: a table where it fits, a card per lead where it does not', () => {
+    /** The root's font size, which jsdom leaves unset: the threshold is read in rem. */
+    const ROOT_PX = 16;
+
+    it('P13.1-T4 AC-7: draws a table that asks for no minimum width, its two text columns taking what is left', async () => {
       render({ '/leads': { body: page([lead()]) } });
-      await screen.findByRole('button', { name: 'Contact details' });
-      const scroller = screen.getByRole('table').closest('.overflow-x-auto')!;
-      const names = Array.from(scroller.querySelectorAll('.sr-only'));
-      expect(names.length).toBeGreaterThan(0);
-      for (const name of names) {
-        let at = name.parentElement;
-        while (at && at !== scroller && !/(^|\s)(relative|absolute|fixed|sticky)(\s|$)/.test(at.className)) at = at.parentElement;
-        expect(at, name.textContent ?? '').not.toBe(scroller);
+      await screen.findByDisplayValue('Pak Budi');
+
+      const table = screen.getByRole('table');
+      expect(table.className).not.toMatch(/min-w-/);
+      expect([...table.querySelectorAll('colgroup col')].map((c) => (c as HTMLElement).style.width))
+        .toEqual(['2rem', '11rem', '7.5rem', '11rem', '6.5rem', 'auto', 'auto', '4.5rem']);
+    });
+
+    it.each([360, 768, 1024 - 252 - 80])('P13.1-T4 AC-7: draws each lead as a card in a box %ipx wide', async (width) => {
+      boxWidth(width);
+      render({ '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Bu Rina' })]) } });
+
+      const list = await screen.findByRole('list', { name: 'Your leads' });
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+      expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    });
+
+    it.each([1280 - 252 - 80, 1440 - 252 - 80])('P13.1-T4 AC-7: draws the table in a box %ipx wide — 1280 and 1440 with the sidebar open', async (width) => {
+      boxWidth(width);
+      render({ '/leads': { body: page([lead()]) } });
+
+      expect(await screen.findByRole('table', { name: 'Your leads' })).toBeInTheDocument();
+      expect(screen.queryByRole('list', { name: 'Your leads' })).not.toBeInTheDocument();
+    });
+
+    it('P13.1-T4 AC-7: turns at 58rem of its own box, so the sidebar and the reader’s text size both count', async () => {
+      boxWidth(58 * ROOT_PX - 1);
+      render({ '/leads': { body: page([lead()]) } });
+      expect(await screen.findByRole('list', { name: 'Your leads' })).toBeInTheDocument();
+    });
+
+    it('P13.1-T4 AC-7: puts the same controls in a card, under the same names, and the ⋮ beside the name', async () => {
+      boxWidth(360);
+      render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) } });
+
+      const card = within(within(await screen.findByRole('list', { name: 'Your leads' })).getByRole('listitem'));
+      for (const label of ['Lead name', 'Type', 'Status', 'Remarks', 'Next action date', 'Next action note']) {
+        expect(card.getByLabelText(`${label}, row 1`)).toBeInTheDocument();
       }
+      expect(card.getByLabelText('Close this month')).toBeInTheDocument();
+      expect(card.getByLabelText('Lead name, row 1').className).toContain('font-semibold');
+      expect(card.getByRole('button', { name: 'Actions for Pak Budi' }).parentElement)
+        .toBe(card.getByLabelText('Lead name, row 1').parentElement!.parentElement);
+
+      await choose('Lead details');
+      expect(await screen.findByRole('dialog', { name: 'Lead details for Pak Budi' })).toBeInTheDocument();
+    });
+
+    it('P13.1-T4 AC-7: writes from a card exactly as from a row', async () => {
+      boxWidth(360);
+      const { calls } = render({
+        '/leads': { body: page([lead()]) },
+        '/leads/l1': { body: lead({ remarks: 'Hobi tenis', version: 3 }) },
+      });
+      const remarks = await screen.findByLabelText('Remarks, row 1');
+
+      await userEvent.clear(remarks);
+      await userEvent.type(remarks, 'Hobi tenis{Enter}');
+
+      await waitFor(() => expect(lastBody(calls)).toEqual({ remarks: 'Hobi tenis', version: 2 }));
+    });
+
+    it('P13.1-T4 AC-7: says a refusal inside the card it belongs to', async () => {
+      boxWidth(360);
+      render({
+        '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Bu Rina' })]) },
+        '/leads/l1': error(422, 'VALIDATION_FAILED', 'A lead needs a name of at least 2 characters.'),
+      });
+      const name = await screen.findByLabelText('Lead name, row 1');
+      await userEvent.clear(name);
+      await userEvent.type(name, 'B');
+      await userEvent.tab();
+
+      const refusal = await screen.findByText('A lead needs a name of at least 2 characters.');
+      expect(refusal.closest('li')).toBe(name.closest('li'));
+    });
+
+    it('P13.1-T4 AC-7: sorts the cards from the toolbar, since a card has no heading', async () => {
+      boxWidth(360);
+      const { calls } = render({ '/leads': { body: page([lead()]) } });
+      await screen.findByRole('list', { name: 'Your leads' });
+
+      const order = screen.getByLabelText('Sort leads');
+      expect(order).toHaveDisplayValue('Newest first');
+      expect(within(order).getAllByRole('option').map((o) => o.textContent)).toEqual([
+        'Newest first', 'Lead name, A–Z', 'Lead name, Z–A', 'Type, ascending', 'Type, descending',
+        'Status, ascending', 'Status, descending',
+      ]);
+      await userEvent.selectOptions(order, 'Lead name, Z–A');
+
+      await waitFor(() => expect(lastRead(calls).get('sort')).toBe('name'));
+      expect(lastRead(calls).get('dir')).toBe('desc');
+    });
+
+    it('P13.1-T4 AC-7: offers no sort control above the table, whose headings sort', async () => {
+      render({ '/leads': { body: page([lead()]) } });
+      await screen.findByDisplayValue('Pak Budi');
+      expect(screen.queryByLabelText('Sort leads')).not.toBeInTheDocument();
+    });
+
+    it('P13.1-T4 AC-7: says there are none inside the card list’s own box', async () => {
+      boxWidth(360);
+      render({ '/leads': { body: page([]) } });
+      expect(await screen.findByText('No leads yet — add your first one above.')).toBeInTheDocument();
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    });
+
+    it('P13.1-T4 AC-7: has no axe violations as cards, with a lead’s menu open', async () => {
+      boxWidth(360);
+      render({ '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Bu Rina', ownerMembershipId: 'mem-7' })]) } });
+      await screen.findByRole('list', { name: 'Your leads' });
+      await userEvent.click(actionsOf('Bu Rina'));
+
+      // Contrast needs a stylesheet jsdom does not apply; `a11y.spec.tsx` checks the tokens themselves.
+      const { violations } = await axe(document.body, { rules: { 'color-contrast': { enabled: false } } });
+      expect(violations.map((v) => v.id)).toEqual([]);
+    });
+
+    it('P13.1-T4 AC-7: waits in card-shaped placeholders where the cards will be', () => {
+      boxWidth(360);
+      render({ '/leads': { body: page([lead()]) } });
+      expect(screen.getByRole('status')).toHaveTextContent('Loading your leads…');
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('P13.1-T4 AC-5 — the note boxes bordered, and the calendar on the left', () => {
+    it('P13.1-T4 AC-5: borders Remarks and the next-action note at rest, and leaves the other cells as text', async () => {
+      render({ '/leads': { body: page([lead()]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      for (const label of ['Remarks', 'Next action note']) {
+        const box = screen.getByLabelText(`${label}, row 1`).className;
+        expect(box).toContain('border-hairline');
+        expect(box).not.toContain('border-transparent');
+      }
+      expect(screen.getByLabelText('Lead name, row 1').className).toContain('border-transparent');
+    });
+
+    it('P13.1-T4 AC-5: puts the calendar on the date’s left, hides the browser’s own, and opens the picker', async () => {
+      const showPicker = vi.fn();
+      HTMLInputElement.prototype.showPicker = showPicker;
+      render({ '/leads': { body: page([lead()]) } });
+      const date = await screen.findByLabelText('Next action date, row 1');
+
+      const icon = date.previousElementSibling as HTMLElement;
+      expect(icon.tagName).toBe('BUTTON');
+      // A pointer's shortcut: out of the tab order and unannounced, so a row is not one stop longer.
+      expect(icon).toHaveAttribute('tabindex', '-1');
+      expect(icon).toHaveAttribute('aria-hidden', 'true');
+      expect(date.className).toContain('[&::-webkit-calendar-picker-indicator]:hidden');
+      expect(date.className).toContain('pl-6');
+
+      await userEvent.click(icon);
+      expect(showPicker).toHaveBeenCalledTimes(1);
+      expect(date).toHaveFocus();
+      delete (HTMLInputElement.prototype as { showPicker?: unknown }).showPicker;
+    });
+
+    it('P13.1-T4 AC-5: falls back to the box’s focus where there is no picker to show', async () => {
+      const { calls } = render({ '/leads': { body: page([lead()]) } });
+      const date = await screen.findByLabelText('Next action date, row 1');
+      await userEvent.click(date.previousElementSibling as HTMLElement);
+      // jsdom has no `showPicker`: the refusal is caught, and the date can be typed.
+      expect(date).toHaveFocus();
+      expect(writes(calls)).toHaveLength(0);
+    });
+  });
+
+  describe('P13.1-T4 AC-8 — the first 30, then Show more', () => {
+    it('P13.1-T4 AC-8: draws the first 30 of 35, and Show more draws the other 5 at once and goes', async () => {
+      render({ '/leads': { body: page(many(1, 35)) } });
+      await screen.findByDisplayValue('Lead 30');
+
+      expect(screen.queryByDisplayValue('Lead 31')).not.toBeInTheDocument();
+      expect(screen.getByText('35 active leads')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Show more' }));
+
+      expect(screen.getByLabelText('Lead name, row 35')).toHaveValue('Lead 35');
+      expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
+      // The button has gone; the focus goes to the first lead it brought, not to the top of the page.
+      expect(screen.getByLabelText('Lead name, row 31')).toHaveFocus();
+      expect(screen.queryByRole('button', { name: 'Previous' })).not.toBeInTheDocument();
+    });
+
+    it('P13.1-T4 AC-8: offers no Show more when 30 is all there is', async () => {
+      render({ '/leads': { body: page(many(1, 30)) } });
+      await screen.findByDisplayValue('Lead 30');
+      expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
+    });
+
+    it('P13.1-T4 AC-8: shows the first 30 of a new order again after a sort', async () => {
+      render({
+        '/leads': { body: page(many(1, 35)) },
+        'sort=name': { body: page(many(1, 35, 'Andi')) },
+      });
+      await screen.findByDisplayValue('Lead 30');
+      await userEvent.click(screen.getByRole('button', { name: 'Show more' }));
+      await screen.findByDisplayValue('Lead 35');
+
+      await userEvent.click(screen.getByRole('button', { name: /Lead name/ }));
+
+      await screen.findByDisplayValue('Andi 30');
+      expect(screen.queryByDisplayValue('Andi 31')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Show more' })).toBeInTheDocument();
+    });
+
+    it('P13.1-T4 AC-8: shows the first 30 again when a sort comes back round to the list Show more was pressed on', async () => {
+      render({
+        '/leads': { body: page(many(1, 35)) },
+        'sort=name': { body: page(many(1, 35, 'Andi')) },
+      });
+      await screen.findByDisplayValue('Lead 30');
+      await userEvent.click(screen.getByRole('button', { name: 'Show more' }));
+      await screen.findByDisplayValue('Lead 35');
+
+      // Ascending, descending, and the third press back to newest first: the list it was pressed on.
+      for (let i = 0; i < 3; i += 1) await userEvent.click(screen.getByRole('button', { name: /Lead name/ }));
+
+      await screen.findByDisplayValue('Lead 30');
+      expect(screen.queryByDisplayValue('Lead 31')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Show more' })).toBeInTheDocument();
+    });
+
+    it('P13.1-T4 AC-8: keeps the inline row on top of the 30', async () => {
+      render({ '/leads': { body: page(many(1, 35)) } });
+      await screen.findByDisplayValue('Lead 30');
+
+      await userEvent.click(screen.getByRole('button', { name: '+ Add lead' }));
+
+      expect(screen.getByLabelText('Lead name, row 1')).toHaveValue('');
+      expect(screen.getByLabelText('Lead name, row 31')).toHaveValue('Lead 30');
+      expect(screen.queryByLabelText('Lead name, row 32')).not.toBeInTheDocument();
+    });
+
+    it('P13.1-T4 AC-8: shows more in the card layout too', async () => {
+      boxWidth(360);
+      render({ '/leads': { body: page(many(1, 31)) } });
+      const list = await screen.findByRole('list', { name: 'Your leads' });
+      await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(30));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show more' }));
+      expect(within(list).getAllByRole('listitem')).toHaveLength(31);
     });
   });
 
@@ -1450,32 +1665,33 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
     });
   });
 
-  describe('leader scope — 🗑 is the owner’s alone', () => {
-    it('holds 🗑 in its place on a downline’s lead, focusable, saying why, and asking nothing', async () => {
+  describe('leader scope — Delete is the owner’s alone', () => {
+    it('P13.1-T4 AC-3: keeps Delete in a downline’s lead’s menu, saying why, and asking nothing', async () => {
       const { calls } = render({ '/leads': { body: page([lead({ ownerMembershipId: 'mem-7' })]) } });
+      await screen.findByDisplayValue('Pak Budi');
 
-      const del = await screen.findByRole('button', { name: 'Delete lead' });
+      const del = await menuItem('Delete');
       expect(del).toHaveAttribute('aria-disabled', 'true');
       expect(del).toHaveAccessibleDescription('Only the person who owns this lead can delete it.');
-      // Focusable — a reason nobody can reach is not given — and it shows the words when reached.
-      act(() => del.focus());
+      // Reached by the arrows like any other item — a reason nobody can reach is not given.
+      await userEvent.keyboard('{End}');
       expect(del).toHaveFocus();
-      expect(screen.getByRole('tooltip')).toHaveTextContent('Only the person who owns this lead can delete it.');
 
       await userEvent.click(del);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(writes(calls, 'DELETE')).toHaveLength(0);
-      // The column keeps its rhythm: ✓ ✕ 🗑 ☎ in their places.
-      expect([...del.closest('td')!.querySelectorAll('button')].map((b) => b.textContent))
-        .toEqual(['✓Mark successful', '✕Mark not successful', '🗑Delete lead', '☎Contact details']);
+      // The menu keeps its order: details, the two outcomes, Delete.
+      expect(screen.getAllByRole('menuitem').map((m) => m.getAttribute('aria-labelledby') && document.getElementById(m.getAttribute('aria-labelledby')!)?.textContent))
+        .toEqual(['Lead details', 'Mark successful', 'Mark not successful', 'Delete']);
     });
 
-    it('offers 🗑 on the reader’s own lead, with no reason to give', async () => {
+    it('P13.1-T4 AC-3: offers Delete on the reader’s own lead, with no reason to give', async () => {
       render({ '/leads': { body: page([lead({ ownerMembershipId: 'mem-1' })]) } });
+      await screen.findByDisplayValue('Pak Budi');
 
-      const del = await screen.findByRole('button', { name: 'Delete lead' });
+      const del = await menuItem('Delete');
       expect(del).not.toHaveAttribute('aria-disabled');
-      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+      expect(del).not.toHaveAttribute('aria-describedby');
     });
   });
 
@@ -1501,7 +1717,8 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(JSON.parse(String(sent?.init.body))).toEqual({ statusCode: 'PAID_AND_ISSUED', version: 2 });
       });
       // And ✓ opens once the lead stands on the stage that closes its ladder.
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Mark successful' })).toBeEnabled());
+      await waitFor(() => expect(writes(calls)).toHaveLength(1));
+      expect(await menuItem('Mark successful')).not.toHaveAttribute('aria-disabled');
     });
 
     it('shows the server’s pipeline refusal beneath the lead', async () => {
@@ -1554,8 +1771,9 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       });
 
       await userEvent.selectOptions(await screen.findByLabelText('Status, row 1'), 'PAID_AND_ISSUED');
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Mark successful' })).toBeEnabled());
-      await userEvent.click(screen.getByRole('button', { name: 'Mark successful' }));
+      await waitFor(() => expect(screen.getByLabelText('Status, row 1')).toHaveValue('PAID_AND_ISSUED'));
+      await waitFor(() => expect(screen.getByLabelText('Status, row 1')).not.toHaveAttribute('aria-disabled'));
+      await choose('Mark successful');
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Mark successful' }));
 
       await waitFor(() => {
@@ -1676,24 +1894,16 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.queryByText('lead:read')).not.toBeInTheDocument();
     });
 
-    it('scrolls the table inside its own container on a phone, not the page body', async () => {
-      render({ '/leads': { body: page([lead()]) } });
-      await screen.findByDisplayValue('Pak Budi');
-
-      const table = screen.getByRole('table');
-      expect(table.className).toMatch(/min-w-/);
-      expect(table.parentElement?.className).toContain('overflow-x-auto');
-    });
   });
 
   describe('the prototype’s own shape', () => {
-    it('packs the table to the prototype’s density, with nine fixed columns', async () => {
+    it('packs the table to the prototype’s density, with eight fixed columns', async () => {
       render({ '/leads': { body: page([lead()]) } });
       await screen.findByDisplayValue('Pak Budi');
 
       const table = document.querySelector('table')!;
       expect(table.className).toContain('table-fixed');
-      expect(table.querySelectorAll('colgroup col')).toHaveLength(9);
+      expect(table.querySelectorAll('colgroup col')).toHaveLength(8);
     });
 
     it('reads as a list, not a form — every cell is text until you touch it', async () => {
@@ -1761,17 +1971,31 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       }
     });
 
-    it('gives the row its glyph buttons, each still saying what it does', async () => {
-      render({ '/leads': { body: page([lead()]) } });
+    it('P13.1-T4 AC-3: ends each row in one ⋮, in the Actions column, and nothing else', async () => {
+      render({ '/leads': { body: page([lead({ lastEditedBy: { membershipId: 'mem-aab', name: 'Ibu Sari' } })]) } });
       await screen.findByDisplayValue('Pak Budi');
 
-      for (const name of ['Mark successful', 'Mark not successful', 'Delete lead', 'Contact details']) {
-        const button = screen.getByRole('button', { name });
-        expect(button.className).toContain('h-7');
-        expect(button).toHaveAttribute('title', expect.any(String));
+      const more = actionsOf();
+      expect(more.className).toContain('h-7');
+      expect(more).toHaveAttribute('aria-haspopup', 'menu');
+      const cell = more.closest('td')!;
+      expect(cell.querySelectorAll('button')).toHaveLength(1);
+      for (const glyph of ['Mark successful', 'Mark not successful', 'Delete lead', 'Contact details', 'Last changed by Ibu Sari']) {
+        expect(screen.queryByRole('button', { name: glyph })).not.toBeInTheDocument();
       }
-      expect(screen.getByRole('button', { name: 'Mark successful' }).className).toContain('hover:text-success');
-      expect(screen.getByRole('button', { name: 'Mark not successful' }).className).toContain('hover:text-alert');
+      // The ⋮'s name is its own `aria-label`; no `sr-only` text is left to escape the table's box.
+      expect(cell.querySelector('.sr-only')).toBeNull();
+    });
+
+    it('P13.1-T4 AC-3: colours the menu’s two outcomes as the prototype’s glyphs were', async () => {
+      render({ '/leads': { body: page([lead({ statusCode: 'PAID_AND_ISSUED' })]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      const won = await menuItem('Mark successful');
+      expect(won.querySelector('[aria-hidden="true"]')).toHaveTextContent('✓');
+      expect(won.querySelector('[aria-hidden="true"]')!.className).toContain('text-success');
+      expect(screen.getByRole('menuitem', { name: 'Mark not successful' }).querySelector('[aria-hidden="true"]')!.className)
+        .toContain('text-alert');
     });
   });
 });

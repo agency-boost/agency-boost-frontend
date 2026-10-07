@@ -20,6 +20,7 @@ import { TypeLegend } from './calendar-parts';
 import { CompareBar } from './compare-bar';
 import { DetailDialog } from './detail-dialog';
 import { EntryDialog, type EditorState } from './entry-dialog';
+import { HideDetailsSwitch, useHideDetails } from './hide-details-switch';
 import { MonthGrid, MonthSkeleton } from './month-grid';
 import { WeekPane, WeekSkeleton, type ScrollGroup } from './week-pane';
 
@@ -53,6 +54,10 @@ const TILE = 'overflow-hidden rounded-lg border border-hairline';
  * arrives: the entry that opened the detail, where the focus would have gone back, is gone with it.
  * In Month, where there is no pane, it lands on *+ New event*.
  *
+ * ***Hide my personal activities*** (ADR-0110; P13.1-T8) is a switch in the toolbar's right-hand group,
+ * before *Week* and *Month*: the reader's own setting, switched at once and put back if the save is
+ * refused (`useHideDetails`). Drawn for a reader who may save it — never in a read-only support session.
+ *
  * **A compared pane is read when what it shows changes, and at no other time** (D-audit): every read
  * of somebody else's calendar writes an audit entry on the server. Its week changes (‹, ›, *Today*,
  * a save that moves the grid), its person changes, or a write of the reader's touches that person's
@@ -77,6 +82,8 @@ export function CalendarScreen({
     answer: useCan('calendar_entry:answer') && !readOnly,
   };
   const canBlock = useCan('calendar_entry:block') && !readOnly;
+  // The setting is saved under the edit grant (`PUT /calendar/settings`), so it is drawn where that is held.
+  const hiding = useHideDetails(may.edit);
   // A leader is anybody with a direct report (ADR-0087), on a rung whose role reaches a downline: an
   // Agent coaches nobody, so compares nobody. The server decides who is listed; this decides the button.
   const membership = me?.membership;
@@ -248,7 +255,8 @@ export function CalendarScreen({
           </div>
           <span aria-live="polite" className="whitespace-nowrap font-display text-xl font-bold text-navy">{label}</span>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center justify-end gap-2.5">
+          {hiding.on !== null && <HideDetailsSwitch on={hiding.on} onChange={hiding.change} />}
           <div role="group" aria-label={OWN_COPY.view} className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
             {(['week', 'month'] as const).map((v) => (
               <button
@@ -292,6 +300,11 @@ export function CalendarScreen({
 
       {gone && <p role="status" className="mb-3 text-md font-semibold text-navy">{OWN_COPY.gone}</p>}
       {entryError && <div className="mb-3"><ErrorBanner {...entryError} /></div>}
+      {hiding.error && (
+        <div className="mb-3">
+          <ErrorBanner code={hiding.error.code} message={OWN_COPY.hideDetailsFailed} requestId={hiding.error.requestId} />
+        </div>
+      )}
 
       {error ? (
         <div className="rounded-lg border border-hairline bg-card p-4">

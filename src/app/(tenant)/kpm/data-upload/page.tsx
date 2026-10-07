@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Page } from '@/components/page';
-import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
+import { Cell, Row, type Column } from '@/components/ui/data-table';
 import { Button, buttonClass, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { SkeletonBar, SkeletonTable } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -11,12 +11,13 @@ import { formatDayLong, monthInZone } from '@/lib/format';
 import { formatRupiah } from '@/lib/goals';
 import { useCan } from '@/lib/session';
 import {
-  commitUpload, figureLabel, METRIC_LABEL, MONEY_METRICS, PRODUCTION_METRICS, previewUpload, readMonth,
-  readTemplate, templateHref, type CorrectionResult, type ImportResult, type MetricCell, type MonthState,
+  CADENCE_GROUP_LABEL, commitUpload, FIGURE_COLUMNS, figureLabel, METRIC_COLUMN_LABEL, MONEY_METRICS, previewUpload,
+  readMonth, readTemplate, templateHref, type CorrectionResult, type ImportResult, type MetricCell, type MonthState,
   type MonthView, type PreviewCell, type ProductionMetric, type TemplateFile, type UploadPreview,
 } from '@/lib/production';
 import { readBranchInfo } from '@/lib/tenant-config';
 import { CorrectionPanel, type Editing, showFigure } from './correction-panel';
+import { FigureCell, FigureTable, GROUP_DIVIDER, opensGroup } from './figure-table';
 import { ImportHistory } from './import-history';
 import { monthLabel, plural } from './month-label';
 import { MonthLock } from './month-lock';
@@ -217,17 +218,19 @@ function MonthTable() {
     setUpload({ kind: 'idle' });
   };
 
-  const columns: readonly Column[] = [
-    'Agent code',
-    'Name',
-    ...PRODUCTION_METRICS.flatMap((m) => [`${METRIC_LABEL[m]} — month`, `${METRIC_LABEL[m]} — YTD`]),
-  ];
   /**
-   * The month table's own, one wider: **Active (MAA)** closes the row, as in the prototype
-   * (`KPM_Owner.html:4843`). The preview does not carry it — a file's rows are figures to write, and
-   * whether somebody is active is read from what was written, not from what might be.
+   * The month table's columns, flat, for the skeleton that stands in for it while it loads — in the
+   * table's own order (P13.1-T7): *Agent*, *Agent code*, this month's six, the year's six, and
+   * **Active (MAA)** to close the row (`KPM_Owner.html:4836-4848`). The table draws them under its two
+   * group headings (`FigureTable`); a placeholder has one row of headings, so each says its group as the
+   * file's heading does.
    */
-  const tableColumns: readonly Column[] = [...columns, 'Active (MAA)'];
+  const tableColumns: readonly Column[] = [
+    'Agent',
+    'Agent code',
+    ...FIGURE_COLUMNS.map((f) => `${METRIC_COLUMN_LABEL[f.metric]} — ${CADENCE_GROUP_LABEL[f.cadence]}`),
+    'Active (MAA)',
+  ];
 
   return (
     <>
@@ -281,7 +284,6 @@ function MonthTable() {
           state={upload}
           month={view.month}
           monthState={view.state}
-          columns={columns}
           onCancel={dismiss}
           onImported={imported}
         />
@@ -316,21 +318,19 @@ function MonthTable() {
             month if Monthly APE &gt; 0 or Monthly # of Policy &gt; 0. A dash until that is known.
           </p>
 
-          <DataTable
-            caption={`Data for ${monthLabel(view.month)}`}
-            columns={tableColumns}
-            density="compact"
-            widths={['6rem', '11rem', ...PRODUCTION_METRICS.flatMap(() => ['7.5rem', '7.5rem']), '6.5rem']}
-            tableClassName="min-w-[102.5rem]"
-          >
-            {view.rows.map((row) => (
+          {/*
+            * **The prototype's order** (P13.1-T7): the name, the code, this month's six, the year's six,
+            * then *Active (MAA)* — and the rows in the order the org tree reads, which is the server's.
+            */}
+          <FigureTable caption={`Data for ${monthLabel(view.month)}`} active tableClassName="min-w-[102.5rem]">
+            {(headersOf) => view.rows.map((row) => (
               <Row key={row.membershipId}>
-                <Cell className="whitespace-nowrap font-semibold text-muted">{row.agentCode}</Cell>
                 <Cell className="whitespace-nowrap">{row.name}</Cell>
-                {PRODUCTION_METRICS.flatMap((m) => (['monthly', 'ytd'] as const).map((cadence) => {
+                <Cell className="whitespace-nowrap font-semibold text-muted">{row.agentCode}</Cell>
+                {FIGURE_COLUMNS.map(({ metric: m, cadence }, i) => {
                   const cell = row.metrics[m][cadence];
                   return (
-                    <Cell key={`${m}-${cadence}`} className="whitespace-nowrap text-right">
+                    <FigureCell key={`${m}-${cadence}`} headers={headersOf({ metric: m, cadence })} divider={opensGroup(i)}>
                       {correctable ? (
                         <button
                           type="button"
@@ -346,13 +346,13 @@ function MonthTable() {
                       ) : (
                         <Figure metric={m} cell={cell} />
                       )}
-                    </Cell>
+                    </FigureCell>
                   );
-                }))}
-                <Cell className="text-center"><ActiveMark active={row.monthlyActiveAgent} /></Cell>
+                })}
+                <Cell className={cn('text-center', GROUP_DIVIDER)}><ActiveMark active={row.monthlyActiveAgent} /></Cell>
               </Row>
             ))}
-          </DataTable>
+          </FigureTable>
 
           <ImportHistory month={view.month} state={view.state} generation={generation} onReverted={reverted} />
         </>
@@ -493,12 +493,11 @@ function UploadButton({ busy, onFile }: { busy: boolean; onFile: (file: File) =>
  * cannot be read is an alert.
  */
 function UploadResult({
-  state, month, monthState, columns, onCancel, onImported,
+  state, month, monthState, onCancel, onImported,
 }: {
   state: UploadState;
   month: string;
   monthState: MonthState;
-  columns: readonly Column[];
   onCancel: () => void;
   onImported: (result: ImportResult) => void;
 }) {
@@ -535,7 +534,6 @@ function UploadResult({
       file={state.file}
       month={month}
       monthState={monthState}
-      columns={columns}
       onCancel={onCancel}
       onImported={onImported}
     />
@@ -552,13 +550,12 @@ function UploadResult({
  * rows that are, cell by cell against the month table's own columns.
  */
 function PreviewCard({
-  preview, file, month, monthState, columns, onCancel, onImported,
+  preview, file, month, monthState, onCancel, onImported,
 }: {
   preview: UploadPreview;
   file: File;
   month: string;
   monthState: MonthState;
-  columns: readonly Column[];
   onCancel: () => void;
   onImported: (result: ImportResult) => void;
 }) {
@@ -674,38 +671,33 @@ function PreviewCard({
 
       {ready.length > 0 && (
         <div className="mt-4">
-          <DataTable
-            caption={`What “${preview.filename}” would change`}
-            columns={columns}
-            density="compact"
-            widths={['6rem', '11rem', ...PRODUCTION_METRICS.flatMap(() => ['7.5rem', '7.5rem'])]}
-            tableClassName="min-w-[96rem]"
-          >
-            {ready.map((row) => (
+          {/* The month table's columns and order, without *Active (MAA)* (P13.1-T7, I-128). */}
+          <FigureTable caption={`What “${preview.filename}” would change`} tableClassName="min-w-[96rem]">
+            {(headersOf) => ready.map((row) => (
               <Row key={row.line}>
-                <Cell className="whitespace-nowrap font-semibold text-muted">
-                  {row.resolvedAgentCode}
-                  {row.codeRecovered && (
-                    <span className="block text-2xs font-normal">read from “{row.agentCode}”</span>
-                  )}
-                </Cell>
                 <Cell className="whitespace-nowrap">
                   {row.name}
                   {row.nameDiffers && (
                     <span className="block text-2xs text-muted">the file says “{row.fileName}”</span>
                   )}
                 </Cell>
-                {PRODUCTION_METRICS.flatMap((m) => (['monthly', 'ytd'] as const).map((cadence) => (
-                  <Cell key={`${m}-${cadence}`} className="whitespace-nowrap text-right">
+                <Cell className="whitespace-nowrap font-semibold text-muted">
+                  {row.resolvedAgentCode}
+                  {row.codeRecovered && (
+                    <span className="block text-2xs font-normal">read from “{row.agentCode}”</span>
+                  )}
+                </Cell>
+                {FIGURE_COLUMNS.map(({ metric: m, cadence }, i) => (
+                  <FigureCell key={`${m}-${cadence}`} headers={headersOf({ metric: m, cadence })} divider={opensGroup(i)}>
                     <Change
                       cell={row.cells.find((c) => c.metric === m && c.cadence === cadence)!}
                       replacing={ticked.has(`${row.membershipId}:${m}${cadence === 'monthly' ? 'Monthly' : 'Ytd'}`)}
                     />
-                  </Cell>
-                )))}
+                  </FigureCell>
+                ))}
               </Row>
             ))}
-          </DataTable>
+          </FigureTable>
         </div>
       )}
 

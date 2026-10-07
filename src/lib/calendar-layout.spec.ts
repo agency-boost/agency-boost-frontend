@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { busy, entry, trip, WEEK } from '@test/calendar-fixtures';
 import {
-  allDayHeight, columnSpan, DAY_PX, HOUR_PX, itemsOnDay, layoutDay, MIN_ENTRY_PX, minutesOf, nextHalfHour,
-  slotFromSelection, snapMinutes, stackBars, timedOn,
+  allDayHeight, columnSpan, DAY_PX, ENTRY_LEADING, ENTRY_PAD_Y_PX, ENTRY_TIME_PX, ENTRY_TITLE_PX, ENTRY_WITH_TIME_PX,
+  HOUR_PX, itemsOnDay, layoutDay, MIN_ENTRY_PX, minutesOf, nextHalfHour, showsTime, slotFromSelection, snapMinutes,
+  stackBars, timedOn,
 } from './calendar-layout';
 
 const at = (h: number, m = 0) => ((h * 60 + m) / 60) * HOUR_PX;
@@ -43,6 +44,34 @@ describe('the pill’s slot (D-block-key)', () => {
   it('is 23:30 to midnight once that has passed', () => {
     expect(nextHalfHour(1405)).toEqual({ start: '23:30', end: '00:00' });
     expect(nextHalfHour(1439)).toEqual({ start: '23:30', end: '00:00' });
+  });
+});
+
+describe('what an entry has room for (P13.1-T8 AC-1)', () => {
+  const heightOf = (start: string, end: string) => layoutDay([entry({ start, end })])[0].height;
+
+  it('is the prototype’s padding and its two lines at 1.25: 4 + 13.75 + 12.5 + 4', () => {
+    expect([ENTRY_PAD_Y_PX, ENTRY_LEADING, ENTRY_TITLE_PX, ENTRY_TIME_PX]).toEqual([4, 1.25, 11, 10]);
+    expect(ENTRY_WITH_TIME_PX).toBe(34.25);
+  });
+
+  it('draws a half-hour entry’s title alone — the case the client saw cut — and an hour’s title and time', () => {
+    expect(heightOf('09:00', '09:30')).toBe(26);
+    expect(showsTime(heightOf('09:00', '09:30'))).toBe(false);
+    expect(showsTime(heightOf('09:00', '09:45'))).toBe(true);
+    expect(showsTime(heightOf('09:00', '10:00'))).toBe(true);
+  });
+
+  it('turns at 39 minutes, the first length both lines fit in whole', () => {
+    expect(showsTime(heightOf('09:00', '09:38'))).toBe(false);
+    expect(showsTime(heightOf('09:00', '09:39'))).toBe(true);
+    expect(showsTime(ENTRY_WITH_TIME_PX)).toBe(true);
+    expect(showsTime(ENTRY_WITH_TIME_PX - 0.01)).toBe(false);
+  });
+
+  it('never cuts the title: at the shortest an entry is drawn, its title still ends inside it', () => {
+    expect(ENTRY_PAD_Y_PX + ENTRY_TITLE_PX * ENTRY_LEADING).toBeLessThanOrEqual(MIN_ENTRY_PX);
+    expect(showsTime(MIN_ENTRY_PX)).toBe(false);
   });
 });
 

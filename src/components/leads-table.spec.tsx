@@ -12,7 +12,7 @@ vi.mock('next/navigation', () => ({
 
 const lead = (over: Record<string, unknown> = {}) => ({
   id: 'l1', ownerMembershipId: 'mem-7', type: 'sales', name: 'Pak Budi',
-  contact: { phone: null, email: null }, lawfulBasis: null, consentAt: null, statusCode: null,
+  contact: { phone: null, email: null }, statusCode: null,
   thisMonth: false, remarks: null, nextActionDate: null, nextActionNote: null, outcome: null,
   source: null, dateRegistered: '2026-09-04T03:00:00.000Z', version: 1, flags: [],
   overdueDays: null, committedMonths: [], lastEditedBy: null, ...over,
@@ -33,6 +33,12 @@ const render = (routes: Record<string, unknown>) => {
   });
   return stub;
 };
+
+/** Open a lead's ⋮ and hand back the names of what it offers (P13.1-T4 AC-3). */
+async function menuOf(name: string, index = 0) {
+  await userEvent.click(screen.getAllByRole('button', { name: `Actions for ${name}` })[index]);
+  return screen.getAllByRole('menuitem').map((m) => document.getElementById(m.getAttribute('aria-labelledby')!)?.textContent);
+}
 
 const lastRead = (calls: { url: string }[]) => new URL(calls
   .filter((c) => c.url.includes('outcome=open'))
@@ -81,12 +87,12 @@ describe('LeadsTable, with the coaching card’s toolbar (P10.1-T4 AC-12)', () =
     expect(await screen.findByText('No leads match.')).toBeInTheDocument();
   });
 
-  it('offers no delete at all — the coaching card’s rows end in the outcome, and delete is the owner’s', async () => {
+  it('P13.1-T4 AC-9 offers no delete at all — the coaching card’s rows end in the outcome, and delete is the owner’s', async () => {
     render({ '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Bu Rina', ownerMembershipId: 'mem-1' })]) } });
     await screen.findByDisplayValue('Bu Rina');
 
-    expect(screen.queryByRole('button', { name: 'Delete lead' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Contact details' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /^Actions for / })).toHaveLength(2);
+    expect(await menuOf('Bu Rina')).toEqual(['Lead details', 'Mark successful', 'Mark not successful']);
   });
 
   it('adds through the same inline row', async () => {
@@ -186,7 +192,8 @@ describe('LeadsTable, for a coachee (P11-T8 AC-7)', () => {
     });
     await screen.findByDisplayValue('Pak Budi');
 
-    await userEvent.click(screen.getByRole('button', { name: 'Mark successful' }));
+    await menuOf('Pak Budi');
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Mark successful' }));
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveTextContent('Mark as Won? Pak Budi will move to Closed leads as "Won". You can still find them there afterward.');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Mark as Won' }));
@@ -210,17 +217,20 @@ describe('LeadsTable, for a coachee (P11-T8 AC-7)', () => {
     await waitFor(() => expect(onNotice).toHaveBeenCalledWith('Pak Budi\'s status updated to "Follow-up".'));
   });
 
-  it('P11-T8 AC-7 names somebody else’s change without ADR-0084’s office when the name is gone', async () => {
+  it('P11-T8 AC-7, P13.1-T4 AC-9 names somebody else’s change in the lead’s details, without ADR-0084’s office when the name is gone', async () => {
     renderFor({ 'outcome=open': { body: page([lead({ lastEditedBy: { membershipId: 'mem-x', name: null } })]) } });
     await screen.findByDisplayValue('Pak Budi');
-    expect(screen.getByRole('button', { name: 'Last changed by someone else' })).toBeInTheDocument();
+    await menuOf('Pak Budi');
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Lead details' }));
+    expect(within(await screen.findByRole('dialog', { name: 'Lead details for Pak Budi' })).getByText('Last changed by someone else'))
+      .toBeInTheDocument();
   });
 
   it('P11-T8 AC-10 under a finalized session’s lock: nothing writes, and the closed list still reads', async () => {
     const { calls } = renderFor({ 'outcome=open': { body: page([lead({ statusCode: 'PAID_AND_ISSUED' })]) } }, { readOnly: true });
     await screen.findByDisplayValue('Pak Budi');
 
-    for (const name of ['+ Add lead', 'Mark successful', 'Mark not successful', 'Contact details', '↺ Move to active']) {
+    for (const name of ['+ Add lead', '↺ Move to active']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
     }
     expect(screen.getByRole('searchbox', { name: 'Search leads' })).toBeDisabled();
@@ -234,5 +244,72 @@ describe('LeadsTable, for a coachee (P11-T8 AC-7)', () => {
     await userEvent.selectOptions(screen.getByLabelText('Status, row 1'), 'FOLLOW_UP');
     expect(calls.some((c) => c.init.method === 'PATCH')).toBe(false);
     expect(await screen.findByText('Bu Sari')).toBeInTheDocument();
+  });
+});
+
+/**
+ * The lock, on what P13.1-T4 changed (AC-9): the ⋮ still opens the lead's details, and the details only
+ * read. The WhatsApp button stays — opening a chat writes nothing.
+ */
+describe('LeadsTable, read-only, as P13.1-T4 left it', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete (HTMLInputElement.prototype as { showPicker?: unknown }).showPicker;
+  });
+
+  it('P13.1-T4 AC-9 offers the lead’s details alone in the ⋮ menu', async () => {
+    renderFor({ 'outcome=open': { body: page([lead({ statusCode: 'PAID_AND_ISSUED' })]) } }, { readOnly: true });
+    await screen.findByDisplayValue('Pak Budi');
+    expect(await menuOf('Pak Budi')).toEqual(['Lead details']);
+  });
+
+  it('P13.1-T4 AC-9 shows the details read-only, saves nothing, and still opens WhatsApp', async () => {
+    const { calls } = renderFor(
+      { 'outcome=open': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null }, source: 'Referral' })]) } },
+      { readOnly: true },
+    );
+    await screen.findByDisplayValue('Pak Budi');
+    await menuOf('Pak Budi');
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Lead details' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Lead details for Pak Budi' });
+
+    const phone = within(dialog).getByLabelText('Phone');
+    expect(phone).toHaveAttribute('readonly');
+    expect(phone).toHaveValue('0812-1100-2200');
+    await userEvent.type(phone, '9');
+    await userEvent.tab();
+    expect(phone).toHaveValue('0812-1100-2200');
+    expect(within(dialog).getByLabelText('Where they came from')).toHaveAttribute('readonly');
+    expect(within(dialog).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', 'https://wa.me/6281211002200');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(calls.some((c) => c.init.method === 'PATCH')).toBe(false);
+  });
+
+  it('P13.1-T4 AC-9 opens no date picker on a locked row', async () => {
+    const showPicker = vi.fn();
+    HTMLInputElement.prototype.showPicker = showPicker;
+    renderFor({ 'outcome=open': { body: page([lead()]) } }, { readOnly: true });
+    const date = await screen.findByLabelText('Next action date, row 1');
+
+    await userEvent.click(date.previousElementSibling as HTMLElement);
+    expect(showPicker).not.toHaveBeenCalled();
+  });
+
+  it('P13.1-T4 AC-9 lays the coachee’s leads out as cards in a narrow card, with her own toolbar', async () => {
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        this.callback([{ target, contentRect: { width: 500 } } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+      }
+      unobserve() {}
+      disconnect() {}
+    });
+    const { calls } = renderFor({ 'outcome=open': { body: page([lead()]) } });
+
+    expect(await screen.findByRole('list', { name: 'Her leads' })).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search leads' })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText('Sort leads'), 'Status, ascending');
+    await waitFor(() => expect(lastRead(calls).get('sort')).toBe('status'));
+    expect(lastRead(calls).get('owner')).toBe('mem-rina');
   });
 });

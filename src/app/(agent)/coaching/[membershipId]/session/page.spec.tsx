@@ -139,7 +139,7 @@ const WEEK = {
 
 const lead = (over: Record<string, unknown> = {}) => ({
   id: 'l-desi', ownerMembershipId: 'mem-rina', type: 'sales', name: 'Desi Pratama',
-  contact: { phone: null, email: null }, lawfulBasis: null, consentAt: null, statusCode: 'FOLLOW_UP',
+  contact: { phone: null, email: null }, statusCode: 'FOLLOW_UP',
   thisMonth: true, remarks: 'Hot button: family', nextActionDate: '2026-10-05', nextActionNote: 'Confirm submission paperwork',
   outcome: null, source: null, dateRegistered: '2026-09-04T03:00:00.000Z', version: 3, flags: [], overdueDays: null,
   committedMonths: ['2026-10'], lastEditedBy: null, ...over,
@@ -484,7 +484,8 @@ describe('the session workspace (P11-T8)', () => {
         'Selling success rate18.0%Benchmark: 15.0%',
         'Leads per activity0.35Benchmark: 0.30',
         'Recruitment success rate–Benchmark: 15.0%',
-        'Sales vs. Recruitment40 points toward SellingBenchmark: ±30 points',
+        // Each side's share of the two, as her own Activity Ratios card writes it (P13.1-T6 AC-7).
+        'Sales vs. Recruitment70% Selling · 30% RecruitmentBenchmark: 35%–65% each side',
       ]);
       expect(within(ratios).getByText('18.0%')).toHaveClass('text-success');
       expect(within(ratios).getByText('–')).toHaveClass('text-muted');

@@ -55,7 +55,7 @@ const summary = (over: Record<string, unknown> = {}) => ({
   monthly: { ...figures(), source: { provenance: 'imported', month: '2026-09' } },
   yearly: { ...figures({ targetMinor: 500 * M }), source: { provenance: 'imported', month: '2026-09' } },
   pace: {
-    closingTarget: 5, closingsLogged: 2, dayOfMonth: 14, daysInMonth: 30, projected: 4, weeksLeft: 3,
+    closingTarget: 5, closingsLast30Days: 4, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 3,
     neededPerWeek: 1, targetMet: false,
   },
   activity: { monthly: activity, yearly: activity },
@@ -131,6 +131,20 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     );
     expect(await card('How she can improve')).toBeInTheDocument();
     expect(screen.getByRole('main').textContent).not.toMatch(/\byou\b|\byour\b/i);
+  });
+
+  it('P13.1-T5 AC-1 her gap is the same box as her own page: the danger box until her APE target is met, then green', async () => {
+    show(summary());
+    const behind = within(await card('The gap')).getByText(/tracking to close/).closest('p')!;
+    expect(behind.className).toContain('bg-alert/[0.06]');
+    expect(behind).toHaveTextContent('⚠️');
+    vi.unstubAllGlobals();
+    document.body.innerHTML = '';
+
+    show(summary({ pace: { closingTarget: 5, closingsLast30Days: 2, dayOfMonth: 20, daysInMonth: 30, weeksLeft: 2, policiesNeeded: 0, neededPerWeek: 0, targetMet: true } }));
+    const met = within(await card('The gap')).getByText(/already reached/).closest('p')!;
+    expect(met).toHaveTextContent('She’s already reached this month’s target — nice work. Keep the pace to stay ahead.');
+    expect(met.className).toContain('bg-success/[0.06]');
   });
 
   it('P11-T7 AC-4 says him and his for a man, and them and their for somebody who chose neither', async () => {

@@ -23,15 +23,24 @@ export interface PeriodFigures {
   targetMet: boolean;
 }
 
+/**
+ * The pace sentence's figures (ADR-0109): *"tracking to close **N** … against a target of **M**. With **W**
+ * weeks left, you'd need to close roughly **K** policies/week"*.
+ */
 export interface Pace {
+  /** *M*: this month's closing target — the closings chip's. */
   closingTarget: number;
-  closingsLogged: number;
+  /** *N*: the closings logged over the last 30 days, today included — last month's too, early in a month. */
+  closingsLast30Days: number;
   dayOfMonth: number;
   daysInMonth: number;
-  /** `null` before the 7th of the month: too early to project (ADR-0057). */
-  projected: number | null;
+  /** *W*: never zero. */
   weeksLeft: number;
+  /** This month's APE gap in policies; the whole target's until the month's file lands. */
+  policiesNeeded: number;
+  /** *K*. */
   neededPerWeek: number;
+  /** This month's APE target, or the year's, is reached: the green sentence instead of the danger box. */
   targetMet: boolean;
 }
 
@@ -97,7 +106,7 @@ export interface RatioFacts {
  */
 export type Insight =
   | { rule: 'NOTHING_LOGGED'; kind: 'action'; facts: { windowDays: number; lastLoggedOn: string | null } }
-  | { rule: 'BEHIND_PACE'; kind: 'action'; facts: { projected: number; closingTarget: number; neededPerWeek: number; weeksLeft: number } }
+  | { rule: 'BEHIND_PACE'; kind: 'action'; facts: { closingsLast30Days: number; closingTarget: number; neededPerWeek: number; weeksLeft: number } }
   | { rule: 'LEAD_OVERDUE'; kind: 'action'; facts: { leadId: string; name: string; overdueDays: number; others: number } }
   | { rule: 'LEAD_NEGLECTED'; kind: 'action'; facts: { leadId: string; name: string; others: number } }
   | { rule: 'RATIO_BELOW'; kind: 'improve'; facts: RatioFacts }

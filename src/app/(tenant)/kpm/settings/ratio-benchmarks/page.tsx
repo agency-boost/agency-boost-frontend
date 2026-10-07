@@ -14,6 +14,7 @@ import {
   benchmarkFromInput, benchmarkToInput, DISPLAY_UNIT_LABEL, formatBenchmark, reexpress, unitFor,
   type RatioDisplayUnit,
 } from '@/lib/ratio-format';
+import { balanceSideNames, formatBalanceBand } from '@/lib/ratio-balance';
 import { projectStaged, unstageRow, STAGED_LABEL } from '@/lib/staged-projection';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import {
@@ -68,6 +69,73 @@ function Chip({ code, label }: { code: string; label: string | null }) {
       {label && <span className="text-md leading-tight text-navy">{label}</span>}
       {!label && <code className="text-sm leading-tight text-muted">{code}</code>}
     </span>
+  );
+}
+
+/** The two kinds a ratio can be, as the Add-a-ratio form offers them (P13.1-T6). */
+const RATIO_KINDS: readonly (readonly [RatioComparison, string])[] = [
+  ['gte', 'Ratio (A ÷ B)'],
+  ['band', 'Balance (A vs B)'],
+];
+
+/** What a formula's two code lists are headed: a division's *Counts* and *Out of*, a balance's two sides. */
+const sideHeadings = (comparison: RatioComparison) => (comparison === 'band'
+  ? ([['Side A', 'numerator'], ['Side B', 'denominator']] as const)
+  : ([['Counts', 'numerator'], ['Out of', 'denominator']] as const));
+
+/**
+ * A balance benchmark's hint, live: the points typed, read as the shares they allow — *each side
+ * between 35% and 65%* for 30 — because that is how agents now read the band (P13.1-T6).
+ */
+function bandHint(typed: string): string {
+  const points = benchmarkFromInput(typed, 'points');
+  if (Number.isNaN(points) || points < 0) return 'Percentage points either side of an even split.';
+  const { low, high } = formatBalanceBand(points);
+  return `Percentage points either side of an even split: each side between ${low} and ${high}.`;
+}
+
+/**
+ * The one section a side's activity types come from, or `null` when they span more than one — the
+ * rule `GET /activity/ratios` names a balance's `sides` by, read here from the taxonomy this screen
+ * already holds, archived types included.
+ */
+function sectionOf(taxonomy: readonly ActivityCategoryRow[], codes: readonly string[]): string | null {
+  const sections = new Set(
+    codes.map((code) => taxonomy.find((c) => c.types.some((t) => t.code === code))?.label ?? null),
+  );
+  return sections.size === 1 ? [...sections][0] : null;
+}
+
+/**
+ * A balance's formula: its two sides, each named by what it counts, and how agents read it.
+ *
+ * The prototype's *Selling side* / *Recruitment side* and its *−100% to +100%* sentence
+ * (`KPM_Owner.html:4190-4192`) were right for the one balance it had. An office's own counts
+ * something else, and agents now read every balance as two shares, so the names come from the
+ * ratio's codes and the sentence says what agents see (P13.1-T6).
+ */
+function BalanceFormula({
+  ratio, taxonomy, labelFor,
+}: { ratio: RatioRow; taxonomy: readonly ActivityCategoryRow[]; labelFor: (code: string) => string | null }) {
+  const names = balanceSideNames({
+    numerator: sectionOf(taxonomy, ratio.numerator),
+    denominator: sectionOf(taxonomy, ratio.denominator),
+  });
+  const band = formatBalanceBand(ratio.benchmark);
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      {([['first', names.first, ratio.numerator], ['second', names.second, ratio.denominator]] as const)
+        .map(([key, side, codes]) => (
+          <div key={key} className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-navy">{side}</span>
+            {codes.map((code) => <Chip key={code} code={code} label={labelFor(code)} />)}
+          </div>
+        ))}
+      <p className="text-sm text-muted">
+        Agents see each side’s share of the two — on track while each side is between{' '}
+        {band.low} and {band.high}.
+      </p>
+    </div>
   );
 }
 
@@ -302,6 +370,29 @@ export default function RatioBenchmarksPage() {
                 office knows what it measures.
               </p>
 
+              {/* The kind first, by name (P13.1-T6). It was the *Rule* select at the foot of
+                  the form, its balance option worded *"Within the benchmark either side of an
+                  even split"* — and the client could not find a way to make a ratio like
+                  *Selling vs Recruitment*. Two radios, because both kinds have to be seen to
+                  be chosen between; everything below follows the one chosen. */}
+              <fieldset>
+                <legend className="text-sm font-semibold text-navy">Kind</legend>
+                <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1">
+                  {RATIO_KINDS.map(([kind, label]) => (
+                    <label key={kind} className="flex items-center gap-1.5 text-md text-navy">
+                      <input
+                        type="radio"
+                        name="new-ratio-kind"
+                        value={kind}
+                        checked={form.comparison === kind}
+                        onChange={() => setForm((f) => ({ ...f, comparison: kind }))}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
               <div className="flex flex-wrap gap-3">
                 <Field label="Code" htmlFor="new-ratio-code" hint="Never changes once saved.">
                   <TextInput
@@ -321,8 +412,9 @@ export default function RatioBenchmarksPage() {
 
               {/* Two pickers over the office's own taxonomy, because a formula is a pair of
                   code lists and never a typed expression — the prototype's `6 / (4+5)`
-                  rebinds itself the moment somebody reorders the activity types. */}
-              {([['Counts', 'numerator'], ['Out of', 'denominator']] as const).map(([heading, side]) => (
+                  rebinds itself the moment somebody reorders the activity types. A balance
+                  is not a division, so its lists are its two sides, not *Counts* and *Out of*. */}
+              {sideHeadings(form.comparison).map(([heading, side]) => (
                 <fieldset key={side}>
                   <legend className="text-sm font-semibold text-navy">{heading}</legend>
                   <ul className="mt-1 flex flex-wrap gap-3">
@@ -355,7 +447,7 @@ export default function RatioBenchmarksPage() {
                   label={form.comparison === 'band' ? 'Within, either side' : 'On track at or above'}
                   htmlFor="new-ratio-benchmark"
                   hint={form.comparison === 'band'
-                    ? 'Percentage points either side of an even split.'
+                    ? bandHint(form.benchmark)
                     : form.displayUnit === 'percent'
                       ? 'As a percentage — type 15 for 15.0%.'
                       : undefined}
@@ -391,18 +483,6 @@ export default function RatioBenchmarksPage() {
                     </Select>
                   </Field>
                 )}
-                <Field label="Rule" htmlFor="new-ratio-comparison" className="min-w-40">
-                  <Select
-                    id="new-ratio-comparison"
-                    value={form.comparison}
-                    onChange={(e) => setForm((f) => ({
-                      ...f, comparison: e.target.value as typeof f.comparison,
-                    }))}
-                  >
-                    <option value="gte">At or above the benchmark</option>
-                    <option value="band">Within the benchmark either side of an even split</option>
-                  </Select>
-                </Field>
                 <FieldRow.Actions>
                   <Button
                     type="submit"
@@ -513,24 +593,17 @@ export default function RatioBenchmarksPage() {
                 * what a ratio *is*, and the prototype is right about it.
                 *
                 * The balance ratio is not a fraction — it is a difference over a sum — so
-                * it renders as two labelled sides with the sentence explaining which way
-                * the result leans, exactly as the prototype does and for the reason its
-                * own comment gives.
+                * it renders as two labelled sides with a sentence saying how it reads, as the
+                * prototype does and for the reason its own comment gives.
+                *
+                * **Each side is named by what it counts** (P13.1-T6): the section its
+                * activity types share, or *Side A* / *Side B* where they span sections or both
+                * sides share one. The prototype's *Selling side* and *Recruitment side* were
+                * right for the one balance it had and wrong for any other an office builds;
+                * its *−100% to +100%* sentence described a scale agents no longer see.
                 */}
               {ratio.comparison === 'band' ? (
-                <div className="mt-3 flex flex-col gap-2">
-                  {([['Selling side', ratio.numerator], ['Recruitment side', ratio.denominator]] as const)
-                    .map(([side, codes]) => (
-                      <div key={side} className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold text-navy">{side}</span>
-                        {codes.map((code) => <Chip key={code} code={code} label={labelFor(code)} />)}
-                      </div>
-                    ))}
-                  <p className="text-sm text-muted">
-                    Result leans Recruitment when its total is higher, Selling when the reverse
-                    is true — shown as a −100% to +100% balance.
-                  </p>
-                </div>
+                <BalanceFormula ratio={ratio} taxonomy={taxonomy} labelFor={labelFor} />
               ) : (
                 <div className="mt-3 inline-flex flex-col items-start">
                   <div className="flex flex-wrap items-center gap-1.5 py-0.5">
@@ -619,11 +692,10 @@ export default function RatioBenchmarksPage() {
                     {/* Every ratio, not only the office's own (ADR-0024). */}
                     <div className="flex w-full flex-wrap gap-4">
                         {/* The balance ratio is not a division — it is a difference over a
-                            sum — so its two sides are named the way the card above names
-                            them, rather than as a numerator and a denominator. */}
-                        {(ratio.comparison === 'band'
-                          ? ([['Selling side', 'numerator'], ['Recruitment side', 'denominator']] as const)
-                          : ([['Counts', 'numerator'], ['Out of', 'denominator']] as const))
+                            sum — so its two sides are *Side A* and *Side B*, as the Add-a-ratio
+                            form calls them, rather than a numerator and a denominator. Not the
+                            card's section names: ticking a box here can change them. */}
+                        {sideHeadings(ratio.comparison)
                           .map(([heading, side]) => (
                             <fieldset key={side} className="min-w-0 flex-1">
                               <legend className="text-sm font-semibold text-navy">{heading}</legend>
@@ -668,7 +740,7 @@ export default function RatioBenchmarksPage() {
                       label="Benchmark"
                       htmlFor={`benchmark-${ratio.id}`}
                       hint={ratio.comparison === 'band'
-                        ? 'Percentage points either side of an even split.'
+                        ? bandHint(draft)
                         : draftUnit === 'percent'
                           ? 'On track at or above this, as a percentage — 15 means 15.0%.'
                           : 'On track at or above this.'}

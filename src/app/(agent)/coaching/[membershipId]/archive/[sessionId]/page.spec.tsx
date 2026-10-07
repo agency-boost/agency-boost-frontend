@@ -214,8 +214,8 @@ describe('a past session’s archive (P11-T10)', () => {
       const ratios = await card('Ratios');
       expect(within(ratios).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
         'Selling success rate18.0%Benchmark: 15.0%',
-        // The snapshot keeps the sides as the live read named them that day.
-        'Sales vs. Recruitment40 points toward SalesBenchmark: ±30 points',
+        // The snapshot keeps the sides as the live read named them that day, and reads as two shares (P13.1-T6 AC-7).
+        'Sales vs. Recruitment70% Sales · 30% RecruitmentBenchmark: 35%–65% each side',
       ]);
 
       const week = await card(/^Activity/);
@@ -226,6 +226,20 @@ describe('a past session’s archive (P11-T10)', () => {
       expect(calls.some((c) => /\/summary|\/activity\/|\/leads|\/goals\//.test(c.url))).toBe(false);
       expect(calls.filter((c) => c.url.includes('/coaching/sessions/')).map((c) => c.url))
         .toEqual(['http://api.test/api/v1/coaching/sessions/s-0924']);
+    });
+
+    it('P13.1-T6 AC-7 reads a snapshot frozen before it named the sides in points, how far and not which way', async () => {
+      const balance = {
+        code: 'BALANCE', label: 'Sales vs. Recruitment', comparison: 'band', displayUnit: 'points', benchmark: 30,
+        value: 40, share: 70, status: 'alert',
+      };
+      show({
+        'GET /coaching/sessions/s-0924': { body: archived({ snapshot: { ...SNAPSHOT, ratios: { ...SNAPSHOT.ratios, rows: [balance] } } }) },
+      });
+      const ratios = await card('Ratios');
+      expect(within(ratios).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+        'Sales vs. Recruitment40 pointsBenchmark: ±30 points',
+      ]);
     });
 
     it('P11-T10 AC-1 opens the frozen week’s drill, as the finalized state still does', async () => {

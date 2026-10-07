@@ -147,10 +147,15 @@ export const readCoachee = (membershipId: string) =>
   joinInFlight(`GET /coaching/coachees/${membershipId}`, () =>
     api<Coachee>(`/coaching/coachees/${encodeURIComponent(membershipId)}`));
 
-/** The person shell's six tabs, by their place in the address (`Overall.html:3988-3995`). */
-export type CoachingTab = 'summary' | 'goal-setting' | 'training' | 'activation' | 'session' | 'leader-notes';
+/**
+ * The person shell's tabs, by their place in the address (`Overall.html:3988-3995`): the prototype's six,
+ * and *Activity* after *Goal Setting* at the client's request (P13.1-T9).
+ */
+export type CoachingTab = 'summary' | 'goal-setting' | 'activity' | 'training' | 'activation' | 'session' | 'leader-notes';
 
-const COACHING_TABS: readonly CoachingTab[] = ['summary', 'goal-setting', 'training', 'activation', 'session', 'leader-notes'];
+const COACHING_TABS: readonly CoachingTab[] = [
+  'summary', 'goal-setting', 'activity', 'training', 'activation', 'session', 'leader-notes',
+];
 
 export const coachingTabHref = (membershipId: string, tab: CoachingTab) =>
   `/coaching/${encodeURIComponent(membershipId)}/${tab}`;

@@ -728,7 +728,7 @@ describe('screens have no axe violations', () => {
             year: '2026', month: '2026-09', today: '2026-09-14', goal: { set: true, savedAt: '2026-09-01T02:00:00.000Z' }, caseSizeMinor: 18 * M,
             monthly: { ...figures, source: { provenance: 'imported', month: '2026-09' } },
             yearly: { ...figures, source: { provenance: 'imported', month: '2026-09' } },
-            pace: { closingTarget: 5, closingsLogged: 2, dayOfMonth: 14, daysInMonth: 30, projected: 4, weeksLeft: 3, neededPerWeek: 1, targetMet: false },
+            pace: { closingTarget: 5, closingsLast30Days: 4, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 3, neededPerWeek: 1, targetMet: false },
             activity: { monthly: activity, yearly: activity },
             leads: {
               rows: [{ id: 'l-1', name: 'Desi Pratama', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Follow-up', thisMonth: true, flags: ['overdue'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Confirm paperwork' }],
@@ -857,7 +857,7 @@ describe('screens have no axe violations', () => {
       const none = { from: '2026-10-01', to: '2026-10-02', targets: [], total: 0, sections: [] };
       const sessionLead = {
         id: 'l-1', ownerMembershipId: 'mem-rina', type: 'sales', name: 'Desi Pratama', contact: { phone: null, email: null },
-        lawfulBasis: null, consentAt: null, statusCode: null, thisMonth: false, remarks: null, nextActionDate: '2026-10-05',
+        statusCode: null, thisMonth: false, remarks: null, nextActionDate: '2026-10-05',
         nextActionNote: null, outcome: null, source: null, dateRegistered: '2026-09-04T03:00:00.000Z', version: 1, flags: [],
         overdueDays: null, committedMonths: [], lastEditedBy: null,
       };
@@ -1075,7 +1075,7 @@ describe('screens have no axe violations', () => {
       targets: [target('leads', 20, 57), target('appointments', 6, null), { ...target('closings', 2, 0), targetMet: true }],
       // The seed's two summary tiles (ADR-0064): a section of its own, and a group of two.
       sections: [
-        { code: 'RECRUITMENT', label: 'Recruitment', total: 3, rows: [{ code: 'RECRUIT_PRESENTATION', label: 'Presentasi NBO', count: 3 }] },
+        { code: 'RECRUITMENT', label: 'Recruitment', total: 3, rows: [{ code: 'RECRUIT_PRESENTATION', label: 'Proses pendaftaran kode agen', count: 3 }] },
         {
           code: 'DEVELOPMENT', label: 'Development', total: 5,
           rows: [
@@ -1101,7 +1101,7 @@ describe('screens have no axe violations', () => {
           caseSizeMinor: 18 * M,
           monthly: { ...figures, source: { provenance: 'imported', month: '2026-09' } },
           yearly: { ...figures, targetMinor: 500 * M, source: { provenance: 'self_reported', month: null } },
-          pace: { closingTarget: 6, closingsLogged: 2, dayOfMonth: 14, daysInMonth: 30, projected: 4, weeksLeft: 3, neededPerWeek: 2, targetMet: false },
+          pace: { closingTarget: 6, closingsLast30Days: 4, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 5, neededPerWeek: 2, targetMet: false },
           activity: { monthly: activity, yearly: activity },
           leads: {
             total: 12,
@@ -1232,7 +1232,7 @@ describe('screens have no axe violations', () => {
         body: {
           rows: [{
             id: 'l1', ownerMembershipId: 'mem-1', type: 'sales', name: 'Pak Budi',
-            contact: { phone: null, email: null }, lawfulBasis: null, consentAt: null,
+            contact: { phone: null, email: null },
             statusCode: 'FOLLOW_UP', thisMonth: true, remarks: 'Hobi golf',
             nextActionDate: '2026-10-02', nextActionNote: null, outcome: null, source: null,
             dateRegistered: '2026-09-04T03:00:00.000Z', version: 2, flags: ['overdue'],
@@ -1241,7 +1241,7 @@ describe('screens have no axe violations', () => {
           }, {
             // A downline's lead, as a leader's screen lists it: 🗑 held in place, and saying why.
             id: 'l2', ownerMembershipId: 'mem-7', type: 'sales', name: 'Bu Rina',
-            contact: { phone: null, email: null }, lawfulBasis: null, consentAt: null,
+            contact: { phone: null, email: null },
             statusCode: 'FOLLOW_UP', thisMonth: false, remarks: null,
             nextActionDate: null, nextActionNote: null, outcome: null, source: null,
             dateRegistered: '2026-09-03T03:00:00.000Z', version: 1, flags: [],
@@ -1256,7 +1256,7 @@ describe('screens have no axe violations', () => {
         body: {
           rows: [{
             id: 'w1', ownerMembershipId: 'mem-1', type: 'sales', name: 'Ibu Wulan Sari',
-            contact: { phone: null, email: null }, lawfulBasis: null, consentAt: null,
+            contact: { phone: null, email: null },
             statusCode: 'PAID_AND_ISSUED', thisMonth: false, remarks: null,
             nextActionDate: null, nextActionNote: null, outcome: 'won', source: null,
             dateRegistered: '2026-08-01T03:00:00.000Z', version: 3, flags: [],
@@ -1271,12 +1271,15 @@ describe('screens have no axe violations', () => {
       me: makeMe({ permissions: ['lead:read', 'lead:update', 'lead:mark_outcome'] }),
     });
 
-    // The contact dialog is part of the row, so it is walked open rather than left closed — over a
-    // row whose last change was a leader's, so the attribution glyph is on the page too.
+    // The ⋮ menu and the details dialog are part of the row (P13.1-T4), so each is walked open rather
+    // than left closed — over a row whose last change was a leader's, so the attribution is in it too.
     await screen.findByText('Ibu Wulan Sari');
-    await screen.findByRole('button', { name: 'Last changed by Ibu Sari' });
-    await userEvent.click(screen.getAllByRole('button', { name: 'Contact details' })[0]);
-    await screen.findByRole('dialog', { name: 'Contact details for Pak Budi' });
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for Pak Budi' }));
+    await screen.findByRole('menu', { name: 'Actions for Pak Budi' });
+    await expectClean('leads (the ⋮ menu open)');
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Lead details' }));
+    const details = await screen.findByRole('dialog', { name: 'Lead details for Pak Budi' });
+    await within(details).findByText('Last changed by Ibu Sari');
     await expectClean('leads');
   });
 
@@ -2006,6 +2009,8 @@ describe('screens have no axe violations', () => {
   describe('the calendar (P12)', () => {
     const calendarRoutes = {
       ...SHELL_STUBS,
+      // P13.1-T8: the toolbar's *Hide my personal activities* switch reads its state, so axe meets it too.
+      '/calendar/settings': { body: { hideDetails: false } },
       '/calendar/entries?view=week': {
         body: weekRead({
           entries: [

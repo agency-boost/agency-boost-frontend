@@ -89,17 +89,19 @@ describe('the person shell (P11-T7)', () => {
     expect(document.body.textContent).not.toMatch(SIX_WORDS);
   });
 
-  it('P11-T7 AC-2 lists the six tabs in the prototype’s order and words, the current one marked', async () => {
+  it('P11-T7 AC-2, P13.1-T9 AC-3 lists the prototype’s six tabs in its order and words, Activity after Goal Setting, the current one marked', async () => {
     show(RINA);
     const tabs = within(await screen.findByRole('navigation', { name: 'Coaching' }));
 
     expect(tabs.getAllByRole('link').map((t) => t.textContent)).toEqual([
-      'Personal Summary', 'Goal Setting', 'Training', 'Activation', 'Coaching Session', '🔒Leader Notes',
+      'Personal Summary', 'Goal Setting', 'Activity', 'Training', 'Activation', 'Coaching Session', '🔒Leader Notes',
     ]);
     expect(tabs.getByRole('link', { name: 'Personal Summary' })).toHaveAttribute('href', '/coaching/mem-rina/summary');
     expect(tabs.getByRole('link', { name: 'Personal Summary' })).toHaveAttribute('aria-current', 'page');
     expect(tabs.getByRole('link', { name: 'Goal Setting' })).toHaveAttribute('href', '/coaching/mem-rina/goal-setting');
     expect(tabs.getByRole('link', { name: 'Goal Setting' })).not.toHaveAttribute('aria-current');
+    expect(tabs.getByRole('link', { name: 'Activity' })).toHaveAttribute('href', '/coaching/mem-rina/activity');
+    expect(tabs.getByRole('link', { name: 'Activity' })).not.toHaveAttribute('aria-current');
     expect(tabs.getByRole('link', { name: 'Coaching Session' })).toHaveAttribute('href', '/coaching/mem-rina/session');
     // The lock is the prototype's, drawn and not read out.
     const notes = tabs.getByRole('link', { name: 'Leader Notes' });
@@ -118,6 +120,18 @@ describe('the person shell (P11-T7)', () => {
     expect(tab.className).toContain('cursor-default');
     expect(tab.className).toContain('text-muted/50');
     expect(tab.textContent).not.toMatch(/phase|\d/i);
+  });
+
+  it('P13.1-T9 AC-3 makes Activity a live tab, current on its own address', async () => {
+    nav.pathname = '/coaching/mem-rina/activity';
+    show(RINA);
+    const tabs = within(await screen.findByRole('navigation', { name: 'Coaching' }));
+
+    const tab = tabs.getByRole('link', { name: 'Activity' });
+    expect(tab).toHaveAttribute('href', '/coaching/mem-rina/activity');
+    expect(tab).not.toHaveAttribute('aria-disabled');
+    expect(tab).toHaveAttribute('aria-current', 'page');
+    expect(tabs.getByRole('link', { name: 'Personal Summary' })).not.toHaveAttribute('aria-current');
   });
 
   it('P13-T9 AC-3 makes Activation a live tab, current on its own address', async () => {
@@ -143,8 +157,9 @@ describe('the person shell (P11-T7)', () => {
     await userEvent.click(agentView);
     expect(agentView).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByRole('link', { name: 'Leader Notes' })).not.toBeInTheDocument();
-    // Nothing else changes, as in the prototype: the other five are still there, and so is the tab.
-    expect(within(screen.getByRole('navigation', { name: 'Coaching' })).getAllByRole('link')).toHaveLength(5);
+    // Nothing else changes, as in the prototype: the other five are still there, *Activity* with them
+    // (P13.1-T9), and so is the tab.
+    expect(within(screen.getByRole('navigation', { name: 'Coaching' })).getAllByRole('link')).toHaveLength(6);
     expect(screen.getByText('Tab for Rina Wijaya')).toBeInTheDocument();
     expect(nav.replace).not.toHaveBeenCalled();
 

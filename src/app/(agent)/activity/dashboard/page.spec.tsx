@@ -103,6 +103,8 @@ describe('the Activity Dashboard (P10-T1)', () => {
     await screen.findByText('Menghubungi prospek');
     expect(screen.getByRole('status')).toHaveTextContent('7 days · Sep 22 – Sep 28, 2026');
     expect(dashboardCalls(calls)[0].url).toContain('range=ROLLING_7D');
+    // The reader's own days: no subject is named (P13.1-T9 — `for` is coaching's Activity tab's).
+    expect(dashboardCalls(calls)[0].url).not.toContain('for=');
     expect(screen.getByRole('tab', { name: 'Last 7 days' })).toHaveAttribute('aria-selected', 'true');
   });
 

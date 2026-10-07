@@ -208,6 +208,15 @@ export interface CalendarDownline {
   people: CalendarDownlinePerson[];
 }
 
+/**
+ * `GET` and `PUT /calendar/settings`: the reader's own (ADR-0110). *Hide my personal activities*: on, a
+ * leader comparing the reader's week is answered each entry the reader organised as a busy block, unless
+ * that leader is on it. Off until the reader turns it on.
+ */
+export interface CalendarSettings {
+  hideDetails: boolean;
+}
+
 /** What a save sends, for either kind of timing. */
 export interface EntryInput {
   type: EntryType;
@@ -274,6 +283,13 @@ export const readDownline = () => api<CalendarDownline>('/calendar/downline');
 /** *Block time* on a member the reader coaches: the reader's entry, the member placed on it (ADR-0098). */
 export const placeBlock = (input: EntryInput & { membershipId: string }) =>
   api<CalendarEntry>('/calendar/blocks', { method: 'POST', body: input });
+
+/** The reader's own calendar settings. Nobody reads anybody else's. */
+export const readCalendarSettings = () => api<CalendarSettings>('/calendar/settings');
+
+/** *Hide my personal activities*, sent whole; the answer is the setting as it is now stored. */
+export const saveCalendarSettings = (settings: CalendarSettings) =>
+  api<CalendarSettings>('/calendar/settings', { method: 'PUT', body: settings });
 
 /*
  * ── Limits ───────────────────────────────────────────────────────────────────────────────────────
@@ -417,6 +433,12 @@ export const OWN_COPY = {
   searching: 'Searching…',
   listFailed: 'The list couldn\'t be loaded.',
   loading: 'Loading the calendar…',
+  /** The toolbar's switch, in the client's words (ADR-0110). It names the control, never its state. */
+  hideDetails: 'Hide my personal activities',
+  /** What the switch does: its ⓘ's words, and the switch's description. */
+  hideDetailsTip: 'Leaders who view your calendar see only "Busy" and the time. People you invite still see the details.',
+  /** A save of the switch refused: it is back where it was, and this says so. */
+  hideDetailsFailed: 'Your setting couldn\'t be saved, so it has been put back.',
 } as const;
 
 /*

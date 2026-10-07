@@ -25,7 +25,7 @@ const summary = (over: Record<string, unknown> = {}) => ({
     source: { provenance: 'imported', month: '2026-09' },
   },
   pace: {
-    closingTarget: 5, closingsLogged: 2, dayOfMonth: 14, daysInMonth: 30, projected: 4, weeksLeft: 3,
+    closingTarget: 5, closingsLast30Days: 4, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 3,
     neededPerWeek: 1, targetMet: false,
   },
   activity: { monthly: activity(), yearly: activity(YEAR) },
@@ -64,7 +64,7 @@ function activity(over: Record<string, unknown> = {}) {
       {
         code: 'RECRUITMENT', label: 'Recruitment', total: 6,
         rows: [
-          { code: 'RECRUIT_PRESENTATION', label: 'Presentasi NBO', count: 3 },
+          { code: 'RECRUIT_PRESENTATION', label: 'Proses pendaftaran kode agen', count: 3 },
           { code: 'RECRUIT_FOLLOWUP', label: 'Follow up NBO', count: 2 },
           { code: 'RECRUIT_AGENT_CODE', label: 'NPA', count: 1 },
         ],
@@ -173,26 +173,61 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
   it('AC-3: a target reached says so, and asks for nothing (ADR-0047)', async () => {
     show(summary({
       monthly: { ...figures({ actualMinor: 95 * M, attainmentPct: 127, gapMinor: 0, overMinor: 20 * M, policiesNeeded: 0, targetMet: true }), source: null },
-      pace: { closingTarget: 5, closingsLogged: 6, dayOfMonth: 20, daysInMonth: 30, projected: 9, weeksLeft: 2, neededPerWeek: 0, targetMet: true },
+      pace: { closingTarget: 5, closingsLast30Days: 6, dayOfMonth: 20, daysInMonth: 30, weeksLeft: 2, policiesNeeded: 0, neededPerWeek: 0, targetMet: true },
     }));
     const gap = await card('The gap');
     expect(gap).toHaveTextContent('Reached — Rp 20.000.000 over');
     expect(gap).toHaveTextContent('≈ Policies still neededNone');
     expect(gap).toHaveTextContent('You’ve already reached this month’s target — nice work. Keep the pace to stay ahead.');
+    // P13.1-T5 AC-1: the prototype's `.pace-note.on-track` (`Overall.html:1144`), with its ✅.
+    const note = within(gap).getByText(/already reached/).closest('p')!;
+    expect(note.className).toContain('bg-success/[0.06]');
+    expect(note).toHaveTextContent('✅');
+    expect(gap).not.toHaveTextContent('current pace');
   });
 
-  it('AC-4: a projection, and what each week left needs to catch up', async () => {
-    show(summary({ pace: { closingTarget: 6, closingsLogged: 2, dayOfMonth: 14, daysInMonth: 30, projected: 4, weeksLeft: 3, neededPerWeek: 2, targetMet: false } }));
+  /*
+   * **P13.1-T5 (ADR-0109): the prototype's sentence, verbatim, on its danger box** (`Overall.html:3132-3135`,
+   * `.pace-note` at `:1143`), every day of the month until the APE target is met. The server's four numbers
+   * go in as they are: N the last 30 days' closings, M the closings target, W the weeks left, K a week.
+   */
+  it('P13.1-T5 AC-1 the client’s sentence: 21 closed against 10, two weeks left, 4 a week — on the danger box with ⚠️', async () => {
+    show(summary({ pace: { closingTarget: 10, closingsLast30Days: 21, dayOfMonth: 17, daysInMonth: 30, weeksLeft: 2, policiesNeeded: 8, neededPerWeek: 4, targetMet: false } }));
+    const gap = await card('The gap');
+    expect(gap).toHaveTextContent(
+      'At your current pace, you’re tracking to close 21 policies this month against a target of 10. With 2 weeks left, you’d need to close roughly 4 policies/week to catch up.',
+    );
+    const note = within(gap).getByText(/tracking to close/).closest('p')!;
+    expect(note.className).toContain('bg-alert/[0.06]');
+    expect(note.className).toContain('border-alert/20');
+    expect(note).toHaveTextContent('⚠️');
+    // The numbers are bold, as the prototype's `<strong>`s are.
+    expect([...note.querySelectorAll('strong')].map((b) => b.textContent)).toEqual(['21 policies', '10', '4 policies/week']);
+  });
+
+  it('P13.1-T5 AC-1 on the 1st it is the same sentence and box: no grey first week, no count of the month so far', async () => {
+    show(summary({ pace: { closingTarget: 5, closingsLast30Days: 3, dayOfMonth: 1, daysInMonth: 30, weeksLeft: 5, policiesNeeded: 5, neededPerWeek: 1, targetMet: false } }));
+    const gap = await card('The gap');
+    expect(gap).toHaveTextContent(
+      'At your current pace, you’re tracking to close 3 policies this month against a target of 5. With 5 weeks left, you’d need to close roughly 1 policy/week to catch up.',
+    );
+    expect(gap).not.toHaveTextContent('You’ve closed');
+    expect(within(gap).getByText(/tracking to close/).closest('p')!.className).not.toContain('bg-base');
+  });
+
+  it('P13.1-T5 AC-1 one is singular, as the prototype’s own *1 policy* is: the last week, one closing', async () => {
+    show(summary({ pace: { closingTarget: 5, closingsLast30Days: 1, dayOfMonth: 30, daysInMonth: 30, weeksLeft: 1, policiesNeeded: 1, neededPerWeek: 1, targetMet: false } }));
     expect(await card('The gap')).toHaveTextContent(
-      'At your current pace, you’re tracking to close 4 policies this month against a target of 6. With 3 weeks left, you’d need to close roughly 2 policies/week to catch up.',
+      'At your current pace, you’re tracking to close 1 policy this month against a target of 5. With 1 week left, you’d need to close roughly 1 policy/week to catch up.',
     );
   });
 
-  it('AC-4: before the 7th it only counts, and on pace it says so without a warning', async () => {
-    show(summary({ pace: { closingTarget: 6, closingsLogged: 1, dayOfMonth: 3, daysInMonth: 30, projected: null, weeksLeft: 4, neededPerWeek: 2, targetMet: false } }));
-    const gap = await card('The gap');
-    expect(gap).toHaveTextContent('You’ve closed 1 policy of 6 this month.');
-    expect(gap).not.toHaveTextContent('current pace');
+  it('P13.1-T5 AC-1 closings at or past the target are still the danger box while the APE is short', async () => {
+    show(summary({ pace: { closingTarget: 5, closingsLast30Days: 7, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 1, neededPerWeek: 1, targetMet: false } }));
+    const note = within(await card('The gap')).getByText(/tracking to close/).closest('p')!;
+    expect(note).toHaveTextContent('With 3 weeks left, you’d need to close roughly 1 policy/week to catch up.');
+    expect(note.className).toContain('bg-alert/[0.06]');
+    expect(note.className).not.toContain('bg-success');
   });
 
   it('AC-4: the pace is this month’s, so the year shows none', async () => {
@@ -205,7 +240,7 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
   it('AC-3: a year made before this month began leaves the month met and says so (ADR-0047)', async () => {
     show(summary({
       monthly: { targetMinor: 0, actualMinor: 30 * M, attainmentPct: null, gapMinor: 0, overMinor: 30 * M, policiesNeeded: 0, targetMet: true, source: { provenance: 'imported', month: '2026-09' } },
-      pace: { closingTarget: 0, closingsLogged: 2, dayOfMonth: 14, daysInMonth: 30, projected: 4, weeksLeft: 3, neededPerWeek: 0, targetMet: true },
+      pace: { closingTarget: 0, closingsLast30Days: 4, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 0, neededPerWeek: 0, targetMet: true },
     }));
     const goal = await card('Goal vs. actual (APE)');
     expect(goal).toHaveTextContent('Your year’s target was made before this month began — this month needs nothing more.');
@@ -299,7 +334,8 @@ describe('the Personal Summary — activity targets, chips and the pulse (P10-T5
 
     expect(recruitment).toHaveTextContent('Recruitment activities6');
     expect(within(recruitment).getAllByRole('listitem').map((li) => li.textContent))
-      .toEqual(['Presentasi NBO3', 'Follow up NBO2', 'NPA1']);
+      // Item 7 under its default label since P13.1-T3 (the client's item 7, 2026-10-07).
+      .toEqual(['Proses pendaftaran kode agen3', 'Follow up NBO2', 'NPA1']);
     expect(screen.getByRole('region', { name: 'Development activities' })).toHaveTextContent('Development activities7');
   });
 
@@ -390,7 +426,7 @@ describe('the Personal Summary — insight cards, named rules over your own numb
   afterEach(() => vi.unstubAllGlobals());
 
   const INSIGHTS = [
-    { rule: 'BEHIND_PACE', kind: 'action', facts: { projected: 2, closingTarget: 5, neededPerWeek: 1, weeksLeft: 3 } },
+    { rule: 'BEHIND_PACE', kind: 'action', facts: { closingsLast30Days: 2, closingTarget: 5, neededPerWeek: 1, weeksLeft: 3 } },
     { rule: 'LEAD_OVERDUE', kind: 'action', facts: { leadId: 'l-1', name: 'Pak Heri', overdueDays: 8, others: 2 } },
     { rule: 'LEAD_NEGLECTED', kind: 'action', facts: { leadId: 'l-2', name: 'Pak Alvin', others: 0 } },
     {
@@ -442,7 +478,7 @@ describe('the Personal Summary — insight cards, named rules over your own numb
   });
 
   it('AC-1: the month’s last week is the week left, not “the 1 week left”', async () => {
-    show(summary({ insights: [{ rule: 'BEHIND_PACE', kind: 'action', facts: { projected: 0, closingTarget: 3, neededPerWeek: 3, weeksLeft: 1 } }] }));
+    show(summary({ insights: [{ rule: 'BEHIND_PACE', kind: 'action', facts: { closingsLast30Days: 0, closingTarget: 3, neededPerWeek: 3, weeksLeft: 1 } }] }));
     expect(await card('What to do next')).toHaveTextContent('About 3 policies in the week left would catch up.');
   });
 
@@ -666,7 +702,7 @@ describe('the Personal Summary, trimmed to the prototype (P10.1-T6, ADR-0063)', 
   it('AC-3: one AI-powered per card, in the badge — no Rule line under an item, and no footnote', async () => {
     show(summary({
       insights: [
-        { rule: 'BEHIND_PACE', kind: 'action', facts: { projected: 2, closingTarget: 5, neededPerWeek: 1, weeksLeft: 3 } },
+        { rule: 'BEHIND_PACE', kind: 'action', facts: { closingsLast30Days: 2, closingTarget: 5, neededPerWeek: 1, weeksLeft: 3 } },
         { rule: 'LEAD_NEGLECTED', kind: 'action', facts: { leadId: 'l-2', name: 'Pak Alvin', others: 0 } },
         {
           rule: 'RATIO_STRENGTH', kind: 'improve',

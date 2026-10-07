@@ -6,8 +6,8 @@ import { AAB_RUNG, AB_RUNG, AGENT_RUNG, busy, entry } from '@test/calendar-fixtu
 import {
   addDays, answerEntry, createEntry, daysInclusive, deleteEntry, DOWNLINE_GROUP_LABEL, entryDate, entryNameSuffix,
   hhmm, initialsOf, INVITEES_MAX, isBusy, NOTES_MAX, OWN_COPY, PEOPLE_GROUP_LABEL, peopleOn, personTag, placeBlock,
-  PROTOTYPE_COPY, readableDate, readCalendar, readDownline, readEntry, searchPeople, TITLE_MAX, titleOf, TRIP_DAYS_MAX,
-  TYPE_BADGE, TYPE_LABEL, updateEntry,
+  PROTOTYPE_COPY, readableDate, readCalendar, readCalendarSettings, readDownline, readEntry, saveCalendarSettings,
+  searchPeople, TITLE_MAX, titleOf, TRIP_DAYS_MAX, TYPE_BADGE, TYPE_LABEL, updateEntry,
 } from './calendar';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -63,6 +63,19 @@ describe('the calendar’s calls (functional/calendar.md, Data contract)', () =>
     expect(calls[2].url).toMatch(/\/calendar\/downline$/);
     expect(calls[3].init.method).toBe('POST');
     expect(JSON.parse(String(calls[3].init.body)).membershipId).toBe('mem-indah');
+  });
+});
+
+describe('Hide my personal activities (P13.1-T8, ADR-0110)', () => {
+  it('P13.1-T8 AC-2 reads the reader’s own setting, and saves it whole, naming nobody', async () => {
+    const { calls } = stubFetch({ '/calendar/settings': { body: { hideDetails: true } } });
+    expect(await readCalendarSettings()).toEqual({ hideDetails: true });
+    await saveCalendarSettings({ hideDetails: false });
+    expect(calls[0].url).toMatch(/\/calendar\/settings$/);
+    expect(calls[0].init.method ?? 'GET').toBe('GET');
+    expect(calls[1].url).toMatch(/\/calendar\/settings$/);
+    expect(calls[1].init.method).toBe('PUT');
+    expect(JSON.parse(String(calls[1].init.body))).toEqual({ hideDetails: false });
   });
 });
 

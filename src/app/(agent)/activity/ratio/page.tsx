@@ -11,6 +11,7 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readActivityRatios, type ActivityRatio, type ActivityRatios, type RatioTerm } from '@/lib/activity';
 import { cn } from '@/lib/cn';
 import { formatShortDay } from '@/lib/format';
+import { balanceSideNames, formatBalanceBand, formatBalanceSplit } from '@/lib/ratio-balance';
 import { formatBenchmark, formatRatioForStatus } from '@/lib/ratio-format';
 
 /**
@@ -118,19 +119,24 @@ function RateCard({ ratio }: { ratio: ActivityRatio }) {
  * The balance (`Overall.html:5300-5328`): which way the last 30 days leaned, on a track from one side
  * to the other.
  *
- * **In points, and said so.** The prototype writes the lean as `24%`, which reads as a share of
- * something; it is percentage points either side of an even split, and the band it is judged against
- * is in the same points. **The ends are named by what each side counts** — *Selling* and *Recruitment*
- * on the seed — so an office that rebuilds the ratio is not told it leans toward selling.
+ * **As each side's share of the two** (P13.1-T6). The prototype wrote the lean as `24%` over a
+ * `100% / 0% / 100%` tick row, and P10-T2 rewrote it in points; the client read both as ambiguous
+ * (2026-10-07). Two selling and three recruiting is *40% Selling · 60% Recruitment*, the marker 60% of
+ * the way toward Recruitment's end, and the band the same benchmark read as shares — ±30 points is each
+ * side between 35% and 65%. No ticks, and no figure on the marker: the sentence beneath is the reading,
+ * and it is what a screen reader hears, the track being a picture of it.
+ *
+ * **The ends are named by what each side counts** — *Selling* and *Recruitment* on the seed, *Side A* and
+ * *Side B* where a side has no one section — so an office that builds its own is not told it leans
+ * toward selling.
  */
 function BalanceCard({ ratio }: { ratio: ActivityRatio }) {
   const id = `ratio-${ratio.code}`;
-  const first = ratio.sides?.numerator ?? 'the first side';
-  const second = ratio.sides?.denominator ?? 'the second side';
-  const lean = ratio.value;
-  const leanText = formatRatioForStatus(lean, 'points', ratio.benchmark, ratio.status);
-  // A lean that rounds to nothing is an even split, whichever side the last activity tipped it to.
-  const even = lean !== null && leanText === '0 points';
+  const { first, second } = balanceSideNames(ratio.sides);
+  const split = ratio.value === null || ratio.share === null
+    ? null
+    : formatBalanceSplit(ratio.share, ratio.benchmark, ratio.status);
+  const band = formatBalanceBand(ratio.benchmark);
   // The marker sits at the second side's share, from the first side's end — the prototype's `recruitmentPct`.
   const position = ratio.share === null ? null : 100 - ratio.share;
 
@@ -142,33 +148,29 @@ function BalanceCard({ ratio }: { ratio: ActivityRatio }) {
           <span>More {first}</span>
           <span>More {second}</span>
         </div>
-        <div className="relative mx-2 mb-2 h-2 rounded-md bg-gradient-to-r from-amber-dark via-hairline to-navy-soft" aria-hidden="true">
+        <div className="relative mx-2 mb-4 h-2 rounded-md bg-gradient-to-r from-amber-dark via-hairline to-navy-soft" aria-hidden="true">
           <span className="absolute -top-1 left-1/2 h-4 w-px -translate-x-1/2 bg-muted" />
           {position !== null && (
             <span
+              data-testid="balance-marker"
               className="absolute top-1/2 h-[18px] w-[18px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-card bg-navy shadow-sm"
               style={{ left: `${position}%` }}
             />
           )}
         </div>
-        <div className="mb-4 flex justify-between text-2xs text-muted" aria-hidden="true">
-          <span>100%</span>
-          <span>0%</span>
-          <span>100%</span>
-        </div>
         <p className="text-center text-sm text-muted">
-          {lean === null ? 'Not enough data yet.' : (
+          {split === null ? 'Not enough data yet.' : (
             <>
-              <strong className="text-navy">{leanText}</strong>
-              {' '}
-              {even ? '— evenly balanced' : `leaning ${lean > 0 ? first : second}`}
+              <strong className="text-navy">{split.first}</strong> {first}
+              {' · '}
+              <strong className="text-navy">{split.second}</strong> {second}
               {' · '}
               {STATUS_LABEL[ratio.status]}
             </>
           )}
         </p>
         <p className="mt-1 text-center text-xs text-muted">
-          On track within {formatBenchmark(ratio.benchmark, 'points')} of an even split.
+          On track while each side is between {band.low} and {band.high}.
         </p>
       </div>
       <Explain ratio={ratio} />

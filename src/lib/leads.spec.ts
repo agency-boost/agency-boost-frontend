@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
-import { createLead, LEAD_PAGE_CAP, listEveryLead, listLeads, type Lead } from './leads';
+import {
+  createLead, LEAD_PAGE_CAP, LEAD_ROWS_FIRST_SHOWN, listEveryLead, listLeads, whatsAppLink, whatsAppNumber,
+  WHATSAPP_DIGITS, type Lead,
+} from './leads';
 
 const rows = (n: number, from = 0) =>
   Array.from({ length: n }, (_, i) => ({ id: `l${from + i}` }) as Lead);
@@ -105,5 +108,58 @@ describe('a coachee’s leads (P11-T8 AC-7, ADR-0076)', () => {
       ['POST', '/leads?owner=mem-rina'],
       ['POST', '/leads'],
     ]);
+  });
+});
+
+/**
+ * The WhatsApp number, as the client gave the rule on 2026-10-07 (P13.1-T4 AC-2, ADR-0108 §2): no `+`,
+ * and a leading `0` becomes `62`. Pinned here because the dialog offers the button only when this says
+ * there is a number, and a rule that drifted would offer a link that opens nobody's chat.
+ */
+describe('whatsAppNumber (P13.1-T4 AC-2)', () => {
+  it.each([
+    ['0812-1100-2200', '6281211002200'],
+    ['+62 812 1100 2200', '6281211002200'],
+    ['812 1100 2200', '6281211002200'],
+    ['6281211002200', '6281211002200'],
+    ['(0812) 1100.2200', '6281211002200'],
+    ['0811-9090-3030', '6281190903030'],
+    ['+62 0812-1100-2200', '6281211002200'],
+    ['0062 812 1100 2200', '6281211002200'],
+    ['0062 0812 1100 2200', '6281211002200'],
+  ])('P13.1-T4 AC-2 reads %s as %s', (phone, number) => {
+    expect(whatsAppNumber(phone)).toBe(number);
+  });
+
+  it.each([
+    ['nothing', ''],
+    ['null', null],
+    ['undefined', undefined],
+    ['three digits', '123'],
+    ['no digits at all', 'n/a'],
+    ['a number too short once 62 is in front', '0812345'],
+    ['a number longer than E.164 allows', '0812 1100 2200 3300'],
+  ])('P13.1-T4 AC-2 answers null for %s', (_what, phone) => {
+    expect(whatsAppNumber(phone)).toBeNull();
+  });
+
+  it('P13.1-T4 AC-2 holds a number to 10–15 digits, the 62 counted', () => {
+    expect(WHATSAPP_DIGITS).toEqual({ min: 10, max: 15 });
+    expect(whatsAppNumber('0812345678')).toBe('62812345678');
+    expect(whatsAppNumber('62812345')).toBeNull();
+    expect(whatsAppNumber('6281234567')).toBe('6281234567');
+    expect(whatsAppNumber('628123456789012')).toBe('628123456789012');
+    expect(whatsAppNumber('6281234567890123')).toBeNull();
+  });
+
+  it('P13.1-T4 AC-2 links to wa.me, or to nothing', () => {
+    expect(whatsAppLink('0812-1100-2200')).toBe('https://wa.me/6281211002200');
+    expect(whatsAppLink('123')).toBeNull();
+  });
+});
+
+describe('LEAD_ROWS_FIRST_SHOWN (P13.1-T4 AC-8)', () => {
+  it('P13.1-T4 AC-8 is the client’s 30', () => {
+    expect(LEAD_ROWS_FIRST_SHOWN).toBe(30);
   });
 });

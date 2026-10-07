@@ -2,19 +2,36 @@ import { api } from '@/lib/api-client';
 
 export type LeadType = 'sales' | 'recruitment';
 export type LeadOutcome = 'won' | 'lost';
-export type LawfulBasis = 'consent' | 'contract' | 'legitimate_interest';
 
 /** Derived on read, never stored — a stored flag is one that is wrong at midnight. */
 export type LeadFlag = 'overdue' | 'no-next-action' | 'no-remarks';
 
+/** Whatever contact detail the agent has. Both optional, both clearable, sent as a pair. */
+export interface LeadContact {
+  phone: string | null;
+  email: string | null;
+}
+
+/** Who last changed a lead, when it was not its owner (ADR-0044). */
+export interface LeadEditor {
+  membershipId: string;
+  name: string | null;
+}
+
+/**
+ * One lead, as `GET /leads` answers it.
+ *
+ * **No inline object types**, so `contract.spec.ts` reads every field of it against the API document:
+ * its reader stops at the first closing brace, and an inline `contact: { … }` hid every field after
+ * it from the check.
+ */
 export interface Lead {
   id: string;
   ownerMembershipId: string;
   type: LeadType | null;
   name: string;
-  contact: { phone: string | null; email: string | null };
-  lawfulBasis: LawfulBasis | null;
-  consentAt: string | null;
+  /** No lawful basis beside it since 2026-10-07: the field and its server rule went (ADR-0108 §1). */
+  contact: LeadContact;
   /** The code, never the label: renaming a stage must not orphan the leads sitting on it. */
   statusCode: string | null;
   /** Derived from `committedMonths`, never stored — so nothing has to clear it (P7-T5). */
@@ -25,7 +42,7 @@ export interface Lead {
    * Who last changed it, when that was not the agent whose lead it is (ADR-0044) — `null`
    * otherwise. A leader's edit carries their name; the agent's own does not need one.
    */
-  lastEditedBy: { membershipId: string; name: string | null } | null;
+  lastEditedBy: LeadEditor | null;
   remarks: string | null;
   nextActionDate: string | null;
   nextActionNote: string | null;
@@ -92,11 +109,49 @@ export const flagLabel = (flag: LeadFlag, overdueDays: number | null): string =>
   return `Overdue ${overdueDays} ${overdueDays === 1 ? 'day' : 'days'}`;
 };
 
-export const LAWFUL_BASIS_LABEL: Record<LawfulBasis, string> = {
-  consent: 'They agreed',
-  contract: 'An application is already under way',
-  legitimate_interest: 'A referral I have not yet spoken to',
-};
+/**
+ * How many open leads the table draws before *Show more* (P13.1-T4 AC-8, ADR-0108 §7).
+ *
+ * **The client's number, 2026-10-07**: *150 leads → 30, then the other 120.* A display rule and
+ * nothing else: every lead still loads (`listEveryLead`), so the count in the toolbar is the whole
+ * list, and *Show more* draws the rest at once rather than paging through them.
+ */
+export const LEAD_ROWS_FIRST_SHOWN = 30;
+
+/** The digits a WhatsApp number may have, country code included: E.164's ceiling, and Indonesia's floor. */
+export const WHATSAPP_DIGITS = { min: 10, max: 15 } as const;
+
+/**
+ * A phone number as `wa.me` takes it — digits only, Indonesia's `62` in front — or `null` when it does
+ * not read as one (P13.1-T4 AC-2, ADR-0108 §2).
+ *
+ * The client's rule: no `+`, and a leading `0` becomes `62` (`0812…` → `62812…`). **Every other
+ * character goes**, so the dashes and spaces the seed and the agents type (`0812-1100-2200`,
+ * `+62 812 1100 2200`, `+62 0812…`, `0062 812…`) all read alike. A number typed without its trunk zero (`812…`) is an Indonesian
+ * mobile too, and gets the same `62`. `62` is kept as it is. Anything that is then not 10 to 15 digits
+ * is not a number WhatsApp can open, and the dialog offers no button rather than a link that fails.
+ */
+export function whatsAppNumber(phone: string | null | undefined): string | null {
+  /*
+   * Two ways of writing the country code are read first (the exit review's finding 4): the international
+   * prefix `00` (`0062 812…`) is a `+`, and a trunk zero kept after the country code (`+62 0812…`, which
+   * people often type) is dropped — either would otherwise pass the length check as a number nobody has.
+   */
+  const digits = (phone ?? '').replace(/\D/g, '').replace(/^00/, '').replace(/^620/, '62');
+  if (!digits) return null;
+  const national = digits.startsWith('62')
+    ? digits
+    : digits.startsWith('0')
+      ? `62${digits.slice(1)}`
+      : digits.startsWith('8') ? `62${digits}` : digits;
+  return national.length >= WHATSAPP_DIGITS.min && national.length <= WHATSAPP_DIGITS.max ? national : null;
+}
+
+/** The chat link for a phone number, or `null` when there is no number WhatsApp could open. */
+export function whatsAppLink(phone: string | null | undefined): string | null {
+  const number = whatsAppNumber(phone);
+  return number ? `https://wa.me/${number}` : null;
+}
 
 /**
  * `?a=b`, or nothing — and appended with `+`, never interpolated.

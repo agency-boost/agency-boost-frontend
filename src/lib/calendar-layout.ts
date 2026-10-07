@@ -20,6 +20,32 @@ export const DAY_PX = 24 * HOUR_PX;
 export const OPEN_AT_HOUR = 7;
 /** An entry is never drawn shorter than this (`:610`). */
 export const MIN_ENTRY_PX = 20;
+
+/*
+ * **What an entry has room for** (P13.1-T8 AC-1). The prototype's `.event` (`:136-138`) is top-aligned,
+ * padded 4px above and below, its two lines at a leading of 1.25: the title at 11px, the time below it.
+ * Each number is the class `EntryBlock` draws with (`week-pane.tsx`), so the threshold below is the
+ * height those two lines and their padding take, worked out rather than guessed.
+ */
+/** `py-1`: the prototype's `padding:4px 6px`. */
+export const ENTRY_PAD_Y_PX = 4;
+/** `leading-tight`: the prototype's `line-height:1.25`, on both lines. */
+export const ENTRY_LEADING = 1.25;
+/** `text-xs`: the title, at the prototype's 11px. */
+export const ENTRY_TITLE_PX = 11;
+/** `text-2xs`: the time, the prototype's 9.5px raised to the product's smallest (H-19). */
+export const ENTRY_TIME_PX = 10;
+/**
+ * **The shortest entry that shows its title and its time whole**, 34.25px: about 39 minutes. Anything
+ * shorter — a 30-minute entry is 26px — draws its title alone, so no line is cut through; the time stays
+ * in its name and its tooltip.
+ */
+export const ENTRY_WITH_TIME_PX = 2 * ENTRY_PAD_Y_PX + (ENTRY_TITLE_PX + ENTRY_TIME_PX) * ENTRY_LEADING;
+
+/** Whether an entry this tall draws its time under its title. */
+export function showsTime(height: number): boolean {
+  return height >= ENTRY_WITH_TIME_PX;
+}
 /** A drag snaps to a quarter hour (`snap`, `:623`). */
 export const SNAP_MINUTES = 15;
 /** A click or a tap is half an hour (`:660-661`). */

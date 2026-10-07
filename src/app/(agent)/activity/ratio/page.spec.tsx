@@ -25,7 +25,7 @@ const balance = (over: Record<string, unknown> = {}) => rate({
   code: 'SELLING_VS_RECRUITMENT', label: 'Selling vs Recruitment', comparison: 'band', displayUnit: 'points',
   benchmark: 30, tag: { code: null, label: 'Balance' }, sides: { numerator: 'Selling', denominator: 'Recruitment' },
   numerator: [term('SELL_PRESENTATION', 'Presentasi penjualan', 4)],
-  denominator: [term('RECRUIT_PRESENTATION', 'Presentasi NBO', 7)],
+  denominator: [term('RECRUIT_PRESENTATION', 'Proses pendaftaran kode agen', 7)],
   purpose: 'Memantau keseimbangan fokus antara aktivitas selling dan recruitment',
   value: 24.4, share: 62.2, status: 'success', ...over,
 });
@@ -94,42 +94,72 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
     expect(screen.queryByRole('article', { name: 'Selling vs Recruitment' })).not.toBeInTheDocument();
   });
 
-  it('AC-4: draws the balance as a lean in points toward a named side, and the band it is judged by', async () => {
-    stubFetch({ '/activity/ratios': { body: view([balance()]) } });
+  it('P13.1-T6 AC-1, AC-2: draws two selling and three recruiting as 40% · 60%, the marker nearer Recruitment', async () => {
+    stubFetch({ '/activity/ratios': { body: view([balance({ value: -20, share: 40, numeratorCount: 2, denominatorCount: 3 })]) } });
     renderWithSession(<ActivityRatioPage />, { me: AGENT });
 
     const scale = await card('Selling vs Recruitment');
     expect(scale).toHaveTextContent('More Selling');
     expect(scale).toHaveTextContent('More Recruitment');
-    expect(scale).toHaveTextContent('24 points leaning Selling · On track');
-    expect(scale).toHaveTextContent('On track within ±30 points of an even split.');
+    expect(scale).toHaveTextContent('40% Selling · 60% Recruitment · On track');
+    expect(scale).toHaveTextContent('On track while each side is between 35% and 65%.');
+    // 60% of the way from Selling's end: past the middle, toward Recruitment.
+    expect(within(scale).getByTestId('balance-marker').style.left).toBe('60%');
+    // The client's request: no 100% / 0% / 100% ticks, and no figure on the marker.
+    expect(within(scale).getByTestId('balance-marker')).toBeEmptyDOMElement();
+    expect(within(scale).queryByText('0%')).not.toBeInTheDocument();
+    expect(within(scale).queryByText('100%')).not.toBeInTheDocument();
+    expect(scale).not.toHaveTextContent(/points/);
   });
 
-  it('AC-4: leans the other way, and says not enough data rather than drawing a marker', async () => {
-    const { mock } = stubFetch({ '/activity/ratios': { body: view([balance({ value: -50, share: 25, status: 'alert' })]) } });
+  it('P13.1-T6 AC-1: leans the other way, and an even split reads 50% · 50%', async () => {
+    const { mock } = stubFetch({ '/activity/ratios': { body: view([balance({ value: 24.4, share: 62.2 })]) } });
     const { unmount } = renderWithSession(<ActivityRatioPage />, { me: AGENT });
-    expect(await card('Selling vs Recruitment')).toHaveTextContent('50 points leaning Recruitment · Below benchmark');
+    const leaning = await card('Selling vs Recruitment');
+    expect(leaning).toHaveTextContent('62% Selling · 38% Recruitment · On track');
+    expect(within(leaning).getByTestId('balance-marker').style.left).toBe('37.8%');
     unmount();
     mock.mockClear();
 
-    stubFetch({ '/activity/ratios': { body: view([balance({ value: null, share: null, status: 'neutral' })]) } });
+    stubFetch({ '/activity/ratios': { body: view([balance({ value: 0.4975, share: 50.25, status: 'success' })]) } });
     renderWithSession(<ActivityRatioPage />, { me: AGENT });
-    expect(await card('Selling vs Recruitment')).toHaveTextContent('Not enough data yet.');
+    expect(await card('Selling vs Recruitment')).toHaveTextContent('50% Selling · 50% Recruitment · On track');
   });
 
-  it('never writes a miss as a number that reads as on track, nor a near-even lean as leaning', async () => {
+  it('P13.1-T6 AC-3: says not enough data for nothing on either side, and draws no marker', async () => {
+    stubFetch({ '/activity/ratios': { body: view([balance({ value: null, share: null, status: 'neutral', numeratorCount: 0, denominatorCount: 0 })]) } });
+    renderWithSession(<ActivityRatioPage />, { me: AGENT });
+    const scale = await card('Selling vs Recruitment');
+    expect(scale).toHaveTextContent('Not enough data yet.');
+    expect(scale).toHaveTextContent('On track while each side is between 35% and 65%.');
+    expect(within(scale).queryByTestId('balance-marker')).not.toBeInTheDocument();
+  });
+
+  it('P13.1-T6 AC-5: never writes a miss as a split that reads as on track, nor a rate that does', async () => {
     stubFetch({ '/activity/ratios': { body: view([
       balance({ value: 30.43, share: 65.2, status: 'alert' }),
       rate({ code: 'LEADS_PER_ACTIVITY', label: 'Leads per activity', displayUnit: 'decimal', benchmark: 0.3, value: 8 / 27, status: 'alert' }),
     ]) } });
-    const { unmount } = renderWithSession(<ActivityRatioPage />, { me: AGENT });
-    expect(await card('Selling vs Recruitment')).toHaveTextContent('30.4 points leaning Selling · Below benchmark');
-    expect(await card('Leads per activity')).toHaveTextContent('0.296');
-    unmount();
-
-    stubFetch({ '/activity/ratios': { body: view([balance({ value: 0.4975, share: 50.25, status: 'success' })]) } });
     renderWithSession(<ActivityRatioPage />, { me: AGENT });
-    expect(await card('Selling vs Recruitment')).toHaveTextContent('0 points — evenly balanced · On track');
+    expect(await card('Selling vs Recruitment')).toHaveTextContent('65.2% Selling · 34.8% Recruitment · Below benchmark');
+    expect(await card('Leads per activity')).toHaveTextContent('0.296');
+  });
+
+  it('P13.1-T6 AC-6: names an office’s own balance by its sections, and a side with none as Side A or B', async () => {
+    const { mock } = stubFetch({ '/activity/ratios': { body: view([balance({
+      code: 'LEADS_VS_SELLING', label: 'Prospecting vs Selling', sides: { numerator: 'Leads Generation', denominator: 'Selling' },
+      value: 50, share: 75, status: 'alert',
+    })]) } });
+    const { unmount } = renderWithSession(<ActivityRatioPage />, { me: AGENT });
+    const own = await card('Prospecting vs Selling');
+    expect(own).toHaveTextContent('More Leads Generation');
+    expect(own).toHaveTextContent('75% Leads Generation · 25% Selling · Below benchmark');
+    unmount();
+    mock.mockClear();
+
+    stubFetch({ '/activity/ratios': { body: view([balance({ sides: { numerator: 'Selling', denominator: null } })]) } });
+    renderWithSession(<ActivityRatioPage />, { me: AGENT });
+    expect(await card('Selling vs Recruitment')).toHaveTextContent('62% Selling · 38% Side B · On track');
   });
 
   it('AC-5: explains a ratio on request — the office’s formula by number and name, and what it measures', async () => {

@@ -511,6 +511,8 @@ export function MyCoachingHeader({ current }: { current: MyCoachingTab }) {
         items={[
           { key: 'summary', label: 'Personal Summary', href: '/summary' },
           { key: 'goal-setting', label: 'Goal Setting', href: '/goals' },
+          // P13.1-T9: the person shell's *Activity* tab, mirrored as the two before it are — the reader's own screen.
+          { key: 'activity', label: 'Activity', href: '/activity/dashboard' },
           { key: 'training', label: 'Training', href: null },
           { key: 'activation', label: 'Activation', href: MY_COACHING_ACTIVATION_HREF, current: current === 'activation' },
           { key: 'session', label: 'Coaching Session', href: myCoachingHref(), current: current === 'session' },
@@ -528,7 +530,8 @@ export function MyCoachingHeader({ current }: { current: MyCoachingTab }) {
  * - **The header** is the reader's: their initials, their name, and *{rung} · Your own coaching*. The
  *   way back to the roster only for a reader who leads somebody: for anybody else the roster is empty.
  * - **The tabs**, without *🔒 Leader Notes*: *Personal Summary* and *Goal Setting* open the reader's own
- *   `/summary` and `/goals`; *Training* cannot be followed yet, as in the person shell; *Activation*
+ *   `/summary` and `/goals`, and *Activity* their own `/activity/dashboard` (P13.1-T9); *Training* cannot
+ *   be followed yet, as in the person shell; *Activation*
  *   opens the reader's own checklist (P13-T9 AC-4); *Coaching Session* is this page.
  * - **One finalized session**: the latest, or the one the address names (`?session=`, the finalize
  *   notice's address). *View past sessions ▾* lists the others, each *Coached by {leader}*

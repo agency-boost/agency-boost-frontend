@@ -13,7 +13,7 @@ export interface CascadeColumn {
   readonly chip?: string;
   readonly icon: NavIconName;
   readonly month: string;
-  /** The `≈ 19/week` line. */
+  /** The `≈ 19/week` line — larger than the prototype's grey caption, and blue, at the client's request. */
   readonly week?: string;
   /** The column the card is about. Exactly one, and it is the last. */
   readonly hero?: boolean;
@@ -37,6 +37,11 @@ export interface CascadeColumn {
  *
  * **Below 640px it stacks and the arrows rotate**, as the prototype's own media query does
  * (`:731-735`) — a `→` between vertically stacked panels points at nothing.
+ *
+ * **The weekly line is larger and blue** (P13.1-T5 AC-5, the client's request of 2026-10-07): the
+ * prototype's `.cascade-sub` is an 11px grey caption (`:724`). Blue is `--color-navy-soft`, which passes AA
+ * as small text on this tint; the prototype's `--blue`, `--color-info`, passes only as large text, ≈19px
+ * bold, which would outweigh the monthly figure above it (`tokens.md`, *Status*).
  */
 export function CascadeRow({
   columns,
@@ -73,7 +78,7 @@ export function CascadeRow({
             <span className="block font-body text-2xl font-bold leading-none text-amber-deep">
               {col.month}
             </span>
-            {col.week ? <span className="mt-0.5 block text-xs text-muted">{col.week}</span> : null}
+            {col.week ? <span className="mt-1 block text-md font-semibold text-navy-soft">{col.week}</span> : null}
           </div>
 
           {i < links.length ? (

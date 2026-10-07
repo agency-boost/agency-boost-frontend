@@ -15,7 +15,7 @@ import { useSession } from '@/lib/session';
 
 /**
  * The person shell (`Overall.html:3969-3995`, P11-T7): one coachee's page — *← Back to Coaching
- * Session*, who they are, *Leader view* / *Agent view*, and the six tabs.
+ * Session*, who they are, *Leader view* / *Agent view*, and the tabs.
  *
  * **One component for every person** (contradiction #12, I-05): the prototype draws its shell twice,
  * once with `-j` ids. This is mounted once, by the route's layout, so it stays mounted while the
@@ -95,10 +95,14 @@ interface ShellTab {
   leaderOnly?: boolean;
 }
 
-/** The prototype's tabs, in its order and words (`Overall.html:3988-3995`). */
+/**
+ * The prototype's tabs, in its order and words (`Overall.html:3988-3995`), and *Activity* between *Goal
+ * Setting* and *Training*: the client's request of 2026-10-07 (P13.1-T9), a coachee's Activity Dashboard.
+ */
 const TABS: readonly ShellTab[] = [
   { tab: 'summary', label: 'Personal Summary' },
   { tab: 'goal-setting', label: 'Goal Setting' },
+  { tab: 'activity', label: 'Activity' },
   { tab: 'training', label: 'Training', upcoming: true },
   { tab: 'activation', label: 'Activation' },
   { tab: 'session', label: 'Coaching Session' },
@@ -307,10 +311,10 @@ function ViewToggle({ view, onView }: { view: View; onView: (view: View) => void
 }
 
 /**
- * The person's six tabs (`Overall.html:3988-3995`). **Training is in the bar and cannot be followed yet**
- * (P11-T7 AC-7); a typed address still lands inside this shell, on a sign. *Activation* is live since
- * P13-T9 (AC-3). *Agent view* takes *🔒 Leader Notes* out of the bar, as the prototype's `display: none`
- * does.
+ * The person's tabs (`Overall.html:3988-3995`, and *Activity*, P13.1-T9). **Training is in the bar and
+ * cannot be followed yet** (P11-T7 AC-7); a typed address still lands inside this shell, on a sign.
+ * *Activation* is live since P13-T9 (AC-3). *Agent view* takes *🔒 Leader Notes* out of the bar, as the
+ * prototype's `display: none` does; *Activity* stays, the coachee's own screen as Personal Summary is.
  */
 function PersonTabs({ membershipId, current, view }: { membershipId: string; current: CoachingTab | null; view: View }) {
   return (

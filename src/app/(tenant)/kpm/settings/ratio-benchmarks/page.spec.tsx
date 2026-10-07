@@ -70,13 +70,21 @@ const TAXONOMY = [{
   ],
 }];
 
-function render(me = OWNER, ratios = RATIOS) {
+/** The seed's two sides of the balance, each its own section — what names them on the card (P13.1-T6). */
+const TWO_SECTIONS = [...TAXONOMY, {
+  id: 'c2', code: 'RECRUITMENT', label: 'Recruitment', displayOrder: 2, version: 1, status: 'active',
+  types: [
+    { id: 't3', code: 'RECRUIT_AGENT_CODE', categoryCode: 'RECRUITMENT', label: 'Proses NPA', description: null, displayOrder: 3, version: 1, status: 'active' },
+  ],
+}];
+
+function render(me = OWNER, ratios = RATIOS, taxonomy = TAXONOMY) {
   const stub = stubFetch({
     '/kpm/settings/ratio-benchmarks': { body: ratios },
-    '/kpm/settings/activity-types': { body: TAXONOMY },
+    '/kpm/settings/activity-types': { body: taxonomy },
     // The provider's two reads. The ladder is the company's (ADR-0012) and this screen
     // reads it rather than owning a copy — so the test supplies it the same way.
-    '/kpm/config': { body: { activity: TAXONOMY, ratios, leadPipelines: [], version: 1 } },
+    '/kpm/config': { body: { activity: taxonomy, ratios, leadPipelines: [], version: 1 } },
     '/kpm/org-levels': { body: LADDER },
   });
   renderWithSession(
@@ -476,6 +484,115 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       const outOf = within(own).getByRole('group', { name: 'Out of' });
       await userEvent.click(within(outOf).getByLabelText('Presentasi penjualan'));
       expect(within(own).getByRole('button', { name: 'Save' })).toBeDisabled();
+    });
+  });
+
+  describe('a balance, offered plainly and named by what it counts (P13.1-T6)', () => {
+    const cardOf = async (name: string) => (await screen.findByRole('heading', { name }))
+      .closest('div')!.parentElement!;
+
+    it('AC-8: asks for the kind first, a ratio unless a balance is chosen', async () => {
+      render();
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a ratio' }));
+
+      const kind = screen.getByRole('group', { name: 'Kind' });
+      const radios = within(kind).getAllByRole('radio');
+      expect(radios.map((r) => r.closest('label')!.textContent)).toEqual(['Ratio (A ÷ B)', 'Balance (A vs B)']);
+      expect(within(kind).getByLabelText('Ratio (A ÷ B)')).toBeChecked();
+      // First in the form, ahead of the code and both lists.
+      const form = kind.closest('form')!;
+      const fields = [...form.querySelectorAll('fieldset, input[type="text"], input:not([type])')];
+      expect(fields[0]).toBe(kind);
+      expect(screen.queryByLabelText('Rule')).not.toBeInTheDocument();
+      expect(screen.getByRole('group', { name: 'Counts' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Shown as')).toBeInTheDocument();
+    });
+
+    it('AC-8: turns the form into a balance — two sides, no unit, and the band read as shares as it is typed', async () => {
+      const { calls } = render();
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a ratio' }));
+      await userEvent.click(screen.getByLabelText('Balance (A vs B)'));
+
+      expect(screen.queryByRole('group', { name: 'Counts' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('group', { name: 'Out of' })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Shown as')).not.toBeInTheDocument();
+
+      await userEvent.type(screen.getByLabelText('Code'), 'PRESENT_VS_SUBMIT');
+      await userEvent.type(screen.getByLabelText('Name'), 'Presenting vs submitting');
+      await userEvent.click(within(screen.getByRole('group', { name: 'Side A' })).getByLabelText('Presentasi penjualan'));
+      await userEvent.click(within(screen.getByRole('group', { name: 'Side B' })).getByLabelText('Submission polis'));
+
+      const benchmark = screen.getByLabelText('Within, either side');
+      expect(benchmark).toHaveAccessibleDescription('Percentage points either side of an even split.');
+      await userEvent.type(benchmark, '30');
+      expect(benchmark).toHaveAccessibleDescription(
+        'Percentage points either side of an even split: each side between 35% and 65%.',
+      );
+      await userEvent.clear(benchmark);
+      await userEvent.type(benchmark, '25');
+      expect(benchmark).toHaveAccessibleDescription(/each side between 37\.5% and 62\.5%\.$/);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Add the ratio' }));
+      const post = calls.find((c) => c.init.method === 'POST')!;
+      expect(JSON.parse(post.init.body as string)).toMatchObject({
+        code: 'PRESENT_VS_SUBMIT', label: 'Presenting vs submitting',
+        numerator: ['SELL_PRESENTATION'], denominator: ['SELL_SUBMISSION'],
+        benchmark: 25, comparison: 'band', displayUnit: 'points',
+      });
+    });
+
+    it('AC-8: switches back to a ratio with its own lists', async () => {
+      render();
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a ratio' }));
+      await userEvent.click(screen.getByLabelText('Balance (A vs B)'));
+      await userEvent.click(screen.getByLabelText('Ratio (A ÷ B)'));
+      expect(screen.getByRole('group', { name: 'Counts' })).toBeInTheDocument();
+      expect(screen.queryByRole('group', { name: 'Side A' })).not.toBeInTheDocument();
+      expect(screen.getByLabelText('On track at or above')).toBeInTheDocument();
+    });
+
+    it('AC-9: names the balance’s sides by the sections its codes come from, and says how agents read it', async () => {
+      render(OWNER, RATIOS, TWO_SECTIONS);
+      const balance = await cardOf('Selling vs Recruitment');
+      expect(within(balance).getByText('Selling')).toBeInTheDocument();
+      expect(within(balance).getByText('Recruitment')).toBeInTheDocument();
+      expect(within(balance).queryByText(/Selling side|Recruitment side/)).not.toBeInTheDocument();
+      expect(balance).toHaveTextContent(
+        'Agents see each side’s share of the two — on track while each side is between 35% and 65%.',
+      );
+      expect(balance).not.toHaveTextContent(/−100%/);
+    });
+
+    it('AC-9: calls an office’s own balance’s sides Side A and Side B when both count one section', async () => {
+      const own = {
+        ...RATIOS[2], id: 'r4', code: 'PRESENT_VS_SUBMIT', label: 'Presenting vs submitting',
+        numerator: ['SELL_PRESENTATION'], denominator: ['SELL_SUBMISSION'],
+        benchmark: 20, comparison: 'band', displayUnit: 'points', displayOrder: 4,
+      };
+      render(OWNER, [...RATIOS, own], TWO_SECTIONS);
+      const balance = await cardOf('Presenting vs submitting');
+      expect(within(balance).getByText('Side A')).toBeInTheDocument();
+      expect(within(balance).getByText('Side B')).toBeInTheDocument();
+      expect(balance).toHaveTextContent('between 40% and 60%');
+    });
+
+    it('AC-9: calls a side whose section this office no longer has Side B, never Recruitment by default', async () => {
+      // RECRUIT_AGENT_CODE is in no section of the default fixture's taxonomy.
+      render();
+      const balance = await cardOf('Selling vs Recruitment');
+      expect(within(balance).getByText('Selling')).toBeInTheDocument();
+      expect(within(balance).getByText('Side B')).toBeInTheDocument();
+    });
+
+    it('AC-8: heads a balance’s sides Side A and Side B in Edit, and reads its band live there too', async () => {
+      render(OWNER, RATIOS, TWO_SECTIONS);
+      const balance = await cardOf('Selling vs Recruitment');
+      await userEvent.click(within(balance).getByRole('button', { name: 'Edit' }));
+      expect(within(balance).getByRole('group', { name: 'Side A' })).toBeInTheDocument();
+      expect(within(balance).getByRole('group', { name: 'Side B' })).toBeInTheDocument();
+      expect(within(balance).getByLabelText('Benchmark')).toHaveAccessibleDescription(
+        'Percentage points either side of an even split: each side between 35% and 65%.',
+      );
     });
   });
 });

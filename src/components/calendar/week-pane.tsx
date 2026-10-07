@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  allDayHeight, BAR_GAP_PX, BAR_PX, DAY_PX, HOUR_PX, layoutDay, OPEN_AT_HOUR, slotFromSelection, stackBars, timedOn,
+  allDayHeight, BAR_GAP_PX, BAR_PX, DAY_PX, HOUR_PX, layoutDay, OPEN_AT_HOUR, showsTime, slotFromSelection, stackBars,
+  timedOn,
 } from '@/lib/calendar-layout';
 import {
   entryNameSuffix, isBusy, OWN_COPY, titleOf, TYPE_BADGE, type CalendarEntry, type CalendarItem, type CalendarRead,
@@ -313,6 +314,7 @@ function DayColumn({
             left: `calc(${(lane / lanes) * 100}% + 3px)`,
             width: `calc(${100 / lanes}% - 6px)`,
           }}
+          withTime={showsTime(height)}
           onOpen={onOpen}
         />
       ))}
@@ -342,16 +344,28 @@ function DayColumn({
  * An entry on the grid: its title and its time, `9:00 AM–9:30 AM` (`:611`). **A button**, named by its
  * type, title and time, so colour is never the only thing that says what it is (H-18; P12-T2 AC-11).
  * A compared member's busy block reads *Busy* and its time, and opens nothing.
+ *
+ * **Its words start at the top, as the prototype's `.event` does** (`:136-138`; P13.1-T8 AC-1): a button
+ * centres what it holds, so this one lays its lines out as a column from its top edge. **The title is one
+ * line**, cut with an ellipsis when it runs long, and **the time is drawn under it only where both lines
+ * fit whole** (`withTime`, `showsTime`) — a 30-minute entry draws its title alone rather than half
+ * a time. Nothing cut or left out is lost: the name holds the whole title and the time, and so does the
+ * title's tooltip, for a pointer.
  */
-function EntryBlock({ item, style, onOpen }: { item: CalendarItem; style: React.CSSProperties; onOpen: (e: CalendarEntry) => void }) {
+function EntryBlock({
+  item, style, withTime, onOpen,
+}: { item: CalendarItem; style: React.CSSProperties; withTime: boolean; onOpen: (e: CalendarEntry) => void }) {
   const time = formatTimeSpan(item.start ?? '', item.end ?? '');
-  const shape = 'absolute overflow-hidden rounded-[6px] border-l-[3px] px-1.5 py-1 text-left text-xs leading-tight text-navy';
+  const shape = 'absolute flex flex-col justify-start overflow-hidden rounded-[6px] border-l-[3px] px-1.5 py-1 text-left text-xs leading-tight text-navy';
+  // `shrink-0`: a line in a column that is too short keeps its height and is never squeezed into itself.
+  const line = 'block w-full shrink-0 truncate';
+  const timeLine = cn(line, 'text-2xs leading-tight');
   if (isBusy(item)) {
     return (
       <div data-busy="" style={style} className={cn(shape, 'cursor-default border-muted bg-navy/[0.06]')}>
-        <span className="block font-bold">{OWN_COPY.busy}</span>
+        <span title={`${OWN_COPY.busy}, ${time}`} className={cn(line, 'font-bold')}>{OWN_COPY.busy}</span>
         <span className="sr-only">, </span>
-        <span className="block text-2xs">{time}</span>
+        <span className={withTime ? timeLine : 'sr-only'}>{time}</span>
       </div>
     );
   }
@@ -366,8 +380,8 @@ function EntryBlock({ item, style, onOpen }: { item: CalendarItem; style: React.
       onClick={() => onOpen(item)}
       className={cn(shape, 'z-[1] hover:brightness-[0.96]', ENTRY_TONE[item.type])}
     >
-      <span className="block font-bold">{titleOf(item)}</span>
-      <span className="block text-2xs">{time}</span>
+      <span title={`${titleOf(item)}, ${time}`} className={cn(line, 'font-bold')}>{titleOf(item)}</span>
+      {withTime && <span className={timeLine}>{time}</span>}
     </button>
   );
 }

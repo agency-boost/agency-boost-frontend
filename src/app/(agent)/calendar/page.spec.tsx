@@ -1,6 +1,7 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { axe } from 'vitest-axe';
 import { makeMe, renderInLayout, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
 import {
   AAB_RUNG, AGUS, busy, DOWNLINE, entry, monthRead, peoplePage, person, RINA, SHELL_STUBS, trip, weekRead,
@@ -42,11 +43,13 @@ afterEach(() => {
 const RANGE = 'Sep 28 – Oct 4, 2026';
 const WEEK_READ = '/calendar/entries?view=week';
 const MONTH_READ = '/calendar/entries?view=month';
+/** The reader's own setting, *Hide my personal activities* (ADR-0110): off, as a new member's is. */
+const SETTINGS = '/calendar/settings';
 
 type Query = { view?: string; date?: string; entry?: string };
 
 function show(routes: Record<string, StubReply | StubReply[]> = {}, me = AGUS, query?: Query) {
-  const stub = stubFetch({ [WEEK_READ]: { body: weekRead() }, ...routes });
+  const stub = stubFetch({ [WEEK_READ]: { body: weekRead() }, [SETTINGS]: { body: { hideDetails: false } }, ...routes });
   renderWithSession(<CalendarPage searchParams={query ? routeParams(query) : undefined} />, { me });
   return stub;
 }
@@ -117,7 +120,10 @@ describe('P12-T2 — my calendar, week view', () => {
       expect(within(pane).getByText(number).parentElement).toHaveTextContent(`${weekday}${number}`);
     }
     for (const hour of ['12 AM', '7 AM', '12 PM', '11 PM']) expect(within(region).getByText(hour)).toBeInTheDocument();
-    expect(standup()).toHaveTextContent('Weekly unit standup9:00 AM–9:30 AM');
+    // A half-hour entry has room for its title alone (P13.1-T8 AC-1): the time is in its name.
+    expect(standup()).toHaveTextContent(/^Weekly unit standup$/);
+    expect(screen.getByRole('button', { name: 'Task: Prospecting call block, 10:00 AM–11:30 AM' }))
+      .toHaveTextContent('Prospecting call block10:00 AM–11:30 AM');
     // Opened scrolled to 7 AM (`DEFAULT_SCROLL_HOUR`, `:455`).
     expect(region.scrollTop).toBe(7 * HOUR_PX);
   });
@@ -1745,5 +1751,141 @@ describe('P12-T6 — 1:1 coaching entries (ADR-0099)', () => {
     expect(own(document.body.textContent ?? '')).not.toMatch(/\boffice\b|\bKPM\b|reports to|tagged to|untagged|unassigned|\bphase\b/i);
     await userEvent.click(screen.getByRole('button', { name: /^Coaching:/ }));
     expect(own(document.body.textContent ?? '')).not.toMatch(/\boffice\b|\bKPM\b|\bphase\b/i);
+  });
+});
+
+describe('P13.1-T8 — an entry’s words, and Hide my personal activities (ADR-0110)', () => {
+  const HIDE = 'Hide my personal activities';
+  const TIP = 'Leaders who view your calendar see only "Busy" and the time. People you invite still see the details.';
+  const LONG = 'Quarterly review with the Hartono family on their two children’s education plans';
+
+  it('P13.1-T8 AC-1 lays an entry’s words out from its top, the title on one line cut with an ellipsis, whole in its name and tooltip', async () => {
+    show({ [WEEK_READ]: { body: weekRead({ entries: [entry({ title: LONG, start: '09:00', end: '10:00' })] }) } });
+    await grid();
+    const block = screen.getByRole('button', { name: `Meeting: ${LONG}, 9:00 AM–10:00 AM` });
+    // A button centres what it holds; this one is a column from its top edge, as the prototype's `.event`.
+    expect(block.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'flex-col', 'justify-start']));
+    const title = within(block).getByText(LONG);
+    expect(title.className.split(' ')).toEqual(expect.arrayContaining(['truncate', 'shrink-0']));
+    expect(title).toHaveAttribute('title', `${LONG}, 9:00 AM–10:00 AM`);
+    expect(within(block).getByText('9:00 AM–10:00 AM')).toBeInTheDocument();
+  });
+
+  it('P13.1-T8 AC-1 draws the time only where the title and the time both fit whole: not on a half hour, on 45 minutes', async () => {
+    show({
+      [WEEK_READ]: {
+        body: weekRead({
+          entries: [
+            entry(),
+            entry({ entryId: 'e-quick', type: 'task', title: 'Quick call', date: '2026-09-29', start: '08:00', end: '08:15' }),
+            entry({ entryId: 'e-call', type: 'client', title: 'Client call', date: '2026-09-29', start: '11:00', end: '11:45' }),
+          ],
+        }),
+      },
+    });
+    await grid();
+    for (const [name, title] of [
+      ['Meeting: Weekly unit standup, 9:00 AM–9:30 AM', 'Weekly unit standup'],
+      ['Task: Quick call, 8:00 AM–8:15 AM', 'Quick call'],
+    ]) {
+      const block = screen.getByRole('button', { name });
+      expect([name, block.textContent]).toEqual([name, title]);
+      // What is not drawn is still said, and still shown to a pointer.
+      expect(within(block).getByText(title)).toHaveAttribute('title', `${title}, ${name.split(', ').pop()}`);
+    }
+    expect(screen.getByRole('button', { name: 'Client: Client call, 11:00 AM–11:45 AM' })).toHaveTextContent('Client call11:00 AM–11:45 AM');
+  });
+
+  it('P13.1-T8 AC-1 a short busy block on a compared pane reads Busy, its time said and not drawn', async () => {
+    const COMPARED = `${WEEK_READ}&date=2026-09-28&for=`;
+    show({
+      '/calendar/downline': { body: DOWNLINE },
+      [`${COMPARED}mem-indah`]: {
+        body: weekRead({
+          subject: { membershipId: 'mem-indah', name: 'Indah Permata', rung: { code: 'AGENT', label: 'Agent' } },
+          entries: [busy({ start: '13:00', end: '13:30' }), busy({ date: '2026-10-01', start: '09:00', end: '10:00' })],
+        }),
+      },
+    });
+    await grid();
+    await userEvent.click(screen.getByRole('button', { name: '+ Compare with downline' }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
+    const theirs = await screen.findByRole('region', { name: `Calendar, Indah Permata, ${RANGE}` });
+    const [short, long] = within(theirs).getAllByText('Busy').map((b) => b.parentElement!);
+    expect(short).toHaveTextContent('Busy, 1:00 PM–1:30 PM');
+    expect(within(short).getByText('1:00 PM–1:30 PM')).toHaveClass('sr-only');
+    expect(within(short).getByText('Busy')).toHaveAttribute('title', 'Busy, 1:00 PM–1:30 PM');
+    expect(within(long).getByText('9:00 AM–10:00 AM')).not.toHaveClass('sr-only');
+  });
+
+  it('P13.1-T8 AC-2 draws the switch in the toolbar, as read, with what it does as its description and in its ⓘ', async () => {
+    show();
+    const toggle = await screen.findByRole('switch', { name: HIDE });
+    expect(toggle).not.toBeChecked();
+    expect(toggle).toHaveAccessibleDescription(TIP);
+    expect(screen.getByRole('button', { name: TIP })).toHaveTextContent('ⓘ');
+    // In the toolbar's right-hand group, before *Week* and *Month*.
+    const group = screen.getByRole('group', { name: 'View' }).parentElement!;
+    expect(group).toContainElement(toggle);
+  });
+
+  it('P13.1-T8 AC-2 reads it on for a member who turned it on, an Agent included', async () => {
+    show({ [SETTINGS]: { body: { hideDetails: true } } }, RINA);
+    expect(await screen.findByRole('switch', { name: HIDE })).toBeChecked();
+  });
+
+  it('P13.1-T8 AC-2 switches at once and saves the whole setting', async () => {
+    const stub = show({ [`PUT ${SETTINGS}`]: { body: { hideDetails: true } } });
+    const toggle = await screen.findByRole('switch', { name: HIDE });
+    fireEvent.click(toggle);
+    // On before the server has answered.
+    expect(toggle).toBeChecked();
+    await waitFor(() => expect(calls(stub, SETTINGS, 'PUT')).toHaveLength(1));
+    expect(bodyOf(calls(stub, SETTINGS, 'PUT')[0])).toEqual({ hideDetails: true });
+    expect(toggle).toBeChecked();
+    expect(screen.queryByText(/couldn't be saved/)).not.toBeInTheDocument();
+  });
+
+  it('P13.1-T8 AC-2 puts it back when the save is refused, and says so with the code and the request id', async () => {
+    show({ [`PUT ${SETTINGS}`]: refusal(500, 'INTERNAL_ERROR') });
+    const toggle = await screen.findByRole('switch', { name: HIDE });
+    fireEvent.click(toggle);
+    expect(toggle).toBeChecked();
+    await waitFor(() => expect(toggle).not.toBeChecked());
+    const banner = screen.getByText('Your setting couldn\'t be saved, so it has been put back.').closest('[role="alert"]')!;
+    expect(banner).toHaveTextContent('INTERNAL_ERROR · req-1');
+  });
+
+  it('P13.1-T8 AC-2 is not drawn, and not asked for, in a read-only support session or without the edit grant', async () => {
+    const support = makeMe({ ...AGUS, isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'u-admin' });
+    const readsOnly = makeMe({ ...AGUS, permissions: ['calendar_entry:read', 'calendar_invitee:search'] });
+    for (const me of [support, readsOnly]) {
+      const stub = show({}, me);
+      await grid();
+      expect(screen.queryByRole('switch', { name: HIDE })).not.toBeInTheDocument();
+      expect(calls(stub, SETTINGS)).toHaveLength(0);
+      cleanup();
+    }
+  });
+
+  it('P13.1-T8 AC-1, AC-2 the switch, its ⓘ, a short entry and a long title pass axe (WCAG 2.1 AA)', async () => {
+    show({
+      [WEEK_READ]: {
+        body: weekRead({ entries: [entry(), entry({ entryId: 'e-long', title: LONG, date: '2026-09-29', start: '10:00', end: '11:00' })] }),
+      },
+    });
+    await screen.findByRole('switch', { name: HIDE });
+    // jsdom samples no pixels: contrast is held by the tokens, as the screens' axe suite does. The page is
+    // drawn here without its shell, whose landmarks hold it, so `region` is the screens' suite's to read.
+    const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
+    expect((results.violations ?? []).map((v) => v.id)).toEqual([]);
+  });
+
+  it('P13.1-T8 AC-2 is not drawn when the setting cannot be read: there is no state to show', async () => {
+    const stub = show({ [SETTINGS]: refusal(500, 'INTERNAL_ERROR') });
+    await grid();
+    await waitFor(() => expect(calls(stub, SETTINGS)).toHaveLength(1));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByRole('switch', { name: HIDE })).not.toBeInTheDocument();
   });
 });
