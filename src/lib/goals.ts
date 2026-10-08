@@ -220,7 +220,12 @@ export const parseDigits = (typed: string) => Number(typed.replace(/\D/g, '')) |
  * lists them since P10.1-T6 retired the history card and its route.
  */
 export function producedFrom(
-  source: { provenance: GoalAchieved['provenance']; month: string | null },
+  source: {
+    provenance: GoalAchieved['provenance'];
+    month: string | null;
+    /** Who corrected it by hand, when the payload says (the Summary's, since ADR-0121). */
+    correctedBy?: { name: string } | null;
+  },
   span: 'month' | 'year',
   /** The coachee's pronoun, on a coaching tab; absent on the reader's own screen. */
   subject?: Pronoun,
@@ -229,11 +234,16 @@ export function producedFrom(
     const whose = subject ? capitalized(PRONOUN_FORMS[subject].possessive) : 'Your';
     return `${whose} own figure, entered in Goal Settings`;
   }
+  // **Who corrected it** (ADR-0121, F-156): since a leader's *Update production* writes corrections too,
+  // *by your office* stopped being true of every one. The name when the payload carries it; *by hand*,
+  // which is true whoever it was, when it does not.
+  const by = source.provenance === 'corrected' ? (source.correctedBy?.name ?? null) : null;
   const words = subject
     ? (source.provenance === 'corrected' ? 'Corrected after the production upload' : 'From the production upload')
-    : (source.provenance === 'corrected' ? 'Corrected by your office' : 'From your office’s upload');
-  if (!source.month) return words;
+    : (source.provenance === 'corrected' ? `Corrected by ${by ?? 'hand'}` : 'From your office’s upload');
+  const named = subject && by ? `, by ${by}` : '';
+  if (!source.month) return `${words}${named}`;
   return span === 'year'
-    ? `${words}, year to date as of ${formatMonth(source.month)}`
-    : `${words}, ${formatMonth(source.month)}`;
+    ? `${words}, year to date as of ${formatMonth(source.month)}${named}`
+    : `${words}, ${formatMonth(source.month)}${named}`;
 }

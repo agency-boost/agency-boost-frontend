@@ -60,8 +60,11 @@ export function OrgTree({
   personHref,
 }: {
   tree: OrgTreeData;
-  /** Where a card goes when clicked. Omitted where the reader cannot open a person. */
-  personHref?: (membershipId: string) => string;
+  /**
+   * Where a card goes when clicked. Omitted where the reader cannot open a person; `undefined` for
+   * one card leaves that card inert (the Group tree's reader and their leader, P15-T4 AC-3).
+   */
+  personHref?: (membershipId: string) => string | undefined;
 }) {
   // The company's ladder: labels and colours come from it, not from a map here (P4-T9).
   const ladder = useLadder();

@@ -10,6 +10,13 @@ import type { RatioDisplayUnit } from './ratio-format';
 export interface FigureSource {
   provenance: 'imported' | 'corrected' | 'self_reported';
   month: string | null;
+  /**
+   * Who corrected the figure by hand, and when — an Owner or an Admin at the month table, or a leader on
+   * the Unit Dashboard (ADR-0121). `null` for the file's own figure, the agent's own, or a corrector who
+   * can no longer be named. Optional so a source read before Phase 15 still reads.
+   */
+  correctedBy?: { membershipId: string; name: string } | null;
+  correctedAt?: string | null;
 }
 
 export interface PeriodFigures {

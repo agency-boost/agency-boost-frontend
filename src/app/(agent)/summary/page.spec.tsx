@@ -663,7 +663,25 @@ describe('the Personal Summary, trimmed to the prototype (P10.1-T6, ADR-0063)', 
       await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
 
       const goal = await card('Goal vs. actual (APE)');
-      expect(within(goal).getByRole('button', { name: 'Corrected by your office, year to date as of August 2026' }))
+      expect(within(goal).getByRole('button', { name: 'Corrected by hand, year to date as of August 2026' }))
+        .toBeInTheDocument();
+    });
+
+    it('P15-T3 AC-1 (F-156): names who corrected the figure — a leader on the Unit Dashboard, or the office', async () => {
+      show(summary({
+        yearly: {
+          ...figures({ targetMinor: 500 * M, actualMinor: 230 * M, attainmentPct: 46 }),
+          source: {
+            provenance: 'corrected', month: '2026-10',
+            correctedBy: { membershipId: 'mem-sari', name: 'Sari Puspita' }, correctedAt: '2026-10-08T03:00:00.000Z',
+          },
+        },
+      }));
+      await card('Goal vs. actual (APE)');
+      await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
+
+      const goal = await card('Goal vs. actual (APE)');
+      expect(within(goal).getByRole('button', { name: 'Corrected by Sari Puspita, year to date as of October 2026' }))
         .toBeInTheDocument();
     });
 

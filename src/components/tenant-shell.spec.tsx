@@ -89,13 +89,14 @@ describe('Open agent view, in the identity menu (P13.2-T5, ADR-0114)', () => {
   /** The panel's links, in order, by their text. */
   const links = () => within(panel()).getAllByRole('link').map((a) => a.textContent);
 
-  it('P13.2-T5 AC-1 takes an Owner who leads people to the roster, above Your account', async () => {
+  it('P13.2-T5 AC-1, P15-T4 AC-4 takes an Owner who leads people to their Unit Dashboard, above Your account', async () => {
     renderWithSession(<TenantShell title="All members">body</TenantShell>, { me: tenantAdmin(true, 3) });
     // Not a nav item: the console's nav is `KPM_Owner.html`'s, and has none of the field's.
     expect(screen.queryByRole('link', { name: 'Open agent view' })).not.toBeInTheDocument();
     await userEvent.click(chip());
 
-    expect(within(panel()).getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/coaching');
+    // Their field landing, the one function the sign-in uses (ADR-0114, D-landing).
+    expect(within(panel()).getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/unit/dashboard');
     expect(links()).toEqual(['Open agent view', 'Your account']);
   });
 
@@ -109,7 +110,7 @@ describe('Open agent view, in the identity menu (P13.2-T5, ADR-0114)', () => {
     const me = { ...tenantAdmin(true, 3), isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'u-support' };
     renderWithSession(<TenantShell title="All members">body</TenantShell>, { me });
     await userEvent.click(chip());
-    expect(within(panel()).getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/coaching');
+    expect(within(panel()).getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/unit/dashboard');
   });
 
   it('P13.2-T5 AC-2 offers nothing to a reader of the console who neither owns nor administers the office', async () => {

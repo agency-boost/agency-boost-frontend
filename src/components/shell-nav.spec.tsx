@@ -126,9 +126,10 @@ describe('the sidebar matches the prototype', () => {
       ['an AAB with reports', member('aab', 1)],
     ])('%s sees both', (_who, me) => {
       renderWithSession(<AgentShell title="x">body</AgentShell>, { me });
-      // Both items under *Unit tools*: *Unit dashboard* still Upcoming, *Coaching session* a live link
-      // since the roster was built (P11-T6 AC-7); *Group tree* a live link, first in Admin.
-      expect(within(screen.getByText('Unit dashboard').closest('a')!).getByText('Upcoming')).toBeInTheDocument();
+      // Both items under *Unit tools*, each a live link: *Unit dashboard* since the dashboard was built
+      // (P15-T2 AC-1), *Coaching session* since the roster was (P11-T6 AC-7); *Group tree* a live link,
+      // first in Admin.
+      expect(screen.getByText('Unit dashboard').closest('a')).toHaveAttribute('href', '/unit/dashboard');
       expect(screen.getByText('Coaching session').closest('a')).toHaveAttribute('href', '/coaching');
       expect(screen.getByText('Group tree').closest('a')).toHaveAttribute('href', '/group-tree');
       const labels = navLabels();
@@ -243,23 +244,47 @@ describe('the sidebar matches the prototype', () => {
     expect(within(training).getByText('Upcoming')).toBeInTheDocument();
   });
 
-  it('agent app: Unit dashboard is Upcoming — its page is a sign (P10.1-T2)', async () => {
-    // The client, 2026-10-01: a page that is not ready says so like the others. It was a live link
-    // to the sign with no pill, beside a Coaching session that had one (live since P11-T6). On its own
-    // typed URL it is still not the current item: an upcoming item is never where the reader is.
-    route.path = '/unit/dashboard';
-    try {
+  describe('P15-T2 AC-1 Unit dashboard is live for a member who leads somebody (`Overall.html:2634`)', () => {
+    /*
+     * *Upcoming* from P10.1-T2 while its page was a sign (the client, 2026-10-01: a page that is not
+     * ready says so like the others). The dashboard is built, so the item is a link with no pill, and
+     * the current one on the reader's own unit and on every unit below them.
+     */
+    it('is a link to the reader’s own unit, with no pill', () => {
       renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
       const unit = screen.getByText('Unit dashboard').closest('a')!;
-      expect(unit).toHaveAttribute('aria-disabled');
-      expect(unit).not.toHaveAttribute('href');
-      expect(unit).not.toHaveAttribute('aria-current');
-      // An inert anchor never carries `aria-current`, so the tint is what would show it as here.
-      expect(unit.className).not.toContain('bg-amber/15');
-      expect(within(unit).getByText('Upcoming')).toBeInTheDocument();
-    } finally {
-      route.path = '/group-tree';
-    }
+      expect(unit).toHaveAttribute('href', '/unit/dashboard');
+      expect(unit).not.toHaveAttribute('aria-disabled');
+      expect(within(unit).queryByText('Upcoming')).not.toBeInTheDocument();
+      expect(unit).toHaveAccessibleName('Unit dashboard');
+    });
+
+    it.each(['/unit/dashboard', '/unit/dashboard/mem-9'])('is the current item on %s, and Coaching session is not', (path) => {
+      // A unit below the reader is the same screen over another head (P15-T4 AC-2), so the item that
+      // opened it stays current there.
+      route.path = path;
+      try {
+        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+        const unit = screen.getByText('Unit dashboard').closest('a')!;
+        expect(unit).toHaveAttribute('aria-current', 'page');
+        expect(unit.className).toContain('bg-amber/15');
+        expect(screen.getByText('Coaching session').closest('a')).not.toHaveAttribute('aria-current');
+      } finally {
+        route.path = '/group-tree';
+      }
+    });
+
+    it.each(['/unit', '/unit/dashboards', '/coaching/mem-9/summary', '/group-tree'])('is not current on %s', (path) => {
+      // A prefix is not a parent: `/unit/dashboards` is not beneath `/unit/dashboard`. And a drill from
+      // a row into a person's coaching tabs is coaching's, not the dashboard's.
+      route.path = path;
+      try {
+        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+        expect(screen.getByText('Unit dashboard').closest('a')).not.toHaveAttribute('aria-current');
+      } finally {
+        route.path = '/group-tree';
+      }
+    });
   });
 
   describe('P11-T6 AC-7 Coaching session is live for a member who leads somebody', () => {
@@ -283,10 +308,10 @@ describe('the sidebar matches the prototype', () => {
       }
     });
 
-    it('is not current anywhere else, and Unit dashboard beside it stays a sign', () => {
+    it('is not current anywhere else', () => {
+      // The Unit Dashboard's own addresses included: P15-T2 AC-1's cases above assert it there.
       renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
       expect(screen.getByText('Coaching session').closest('a')).not.toHaveAttribute('aria-current');
-      expect(screen.getByText('Unit dashboard').closest('a')).toHaveAttribute('aria-disabled');
     });
   });
 

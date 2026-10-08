@@ -665,7 +665,7 @@ describe('Goal settings — the APE already produced, once the office holds prod
   it('says so when the office corrected it by hand', async () => {
     render({ '/goals': { body: imported({ achieved: { minor: 120_000_000_00, provenance: 'corrected', month: '2026-08' } }) } });
     await screen.findByText('APE already produced this year');
-    expect(screen.getByRole('button', { name: 'Corrected by your office, year to date as of August 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Corrected by hand, year to date as of August 2026' })).toBeInTheDocument();
   });
 
   it('keeps the typed figure on save, untouched — it is the agent’s own', async () => {

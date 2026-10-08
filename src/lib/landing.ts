@@ -7,19 +7,21 @@ import type { Me } from './session';
 export const OFFICE_LANDING = '/kpm/overview';
 
 /**
- * A member's **field landing**: the roster of everyone they coach when they lead somebody, their own
- * day when they lead nobody.
+ * A member's **field landing**: their unit's dashboard when they lead somebody, their own day when they
+ * lead nobody.
  *
  * Leading is the graph, not the rung (OD-23, ADR-0087): a direct report is what makes a leader. A
- * leader lands on the roster (P11-T6 AC-8), the leader screen that is built; the Unit Dashboard is
- * still a sign. An AAB with no reports has nobody to coach, and lands where their own work is instead.
+ * leader lands on the Unit Dashboard (P15-T4 AC-4, D-landing), the roster of their whole unit, which is
+ * built now; until it was, they landed on the coaching roster (P11-T6 AC-8). An AAB with no reports has
+ * no unit to look at, and lands where their own work is instead.
  *
  * One function for two callers (ADR-0114): `landingFor`'s last branch, and the office console's *Open
  * agent view*, which takes an Owner or an Admin to the field screen a member of their rung would have
- * signed in to. Two copies of the rule are how the link and the sign-in would come to disagree.
+ * signed in to. So both moved to the Unit Dashboard together: two copies of the rule are how the link
+ * and the sign-in would come to disagree. The Owner and the Admin still sign in to the console.
  */
 export function fieldLandingFor(membership: Pick<NonNullable<Me['membership']>, 'directCount'>): string {
-  return membership.directCount > 0 ? '/coaching' : '/activity/log';
+  return membership.directCount > 0 ? '/unit/dashboard' : '/activity/log';
 }
 
 /** A link from one view of the app to the other (ADR-0114): where it goes, and what it says. */
@@ -97,7 +99,7 @@ export function landingFor(me: Me | null): string {
   // console's identity menu; signing in still brings them here.
   if (membership.isKpmOwner || membership.isKpmAdmin) return OFFICE_LANDING;
 
-  // Everyone else: leading people, by the graph and not the role, lands on the roster; leading
-  // nobody, on their own day. The same function answers the console's *Open agent view*.
+  // Everyone else: leading people, by the graph and not the role, lands on the Unit Dashboard;
+  // leading nobody, on their own day. The same function answers the console's *Open agent view*.
   return fieldLandingFor(membership);
 }

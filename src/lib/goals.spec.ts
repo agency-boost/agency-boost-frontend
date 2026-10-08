@@ -11,15 +11,22 @@ describe('producedFrom', () => {
     expect(producedFrom({ provenance: 'imported', month: '2026-09' }, 'month')).toBe('From your office’s upload, September 2026');
   });
 
-  it('names a correction by the office', () => {
-    expect(producedFrom({ provenance: 'corrected', month: '2026-09' }, 'month')).toBe('Corrected by your office, September 2026');
+  it('names a correction by hand, and who made it when the payload says (ADR-0121, F-156)', () => {
+    expect(producedFrom({ provenance: 'corrected', month: '2026-09' }, 'month')).toBe('Corrected by hand, September 2026');
+    expect(producedFrom({ provenance: 'corrected', month: '2026-09', correctedBy: { name: 'Sari Puspita' } }, 'month'))
+      .toBe('Corrected by Sari Puspita, September 2026');
+    expect(producedFrom({ provenance: 'corrected', month: '2026-09', correctedBy: null }, 'month'))
+      .toBe('Corrected by hand, September 2026');
+    // A name rides on a correction only: the file's own figure names nobody.
+    expect(producedFrom({ provenance: 'imported', month: '2026-09', correctedBy: { name: 'Sari Puspita' } }, 'month'))
+      .toBe('From your office’s upload, September 2026');
   });
 
   it('says a year’s figure is the year to date as of its month', () => {
     expect(producedFrom({ provenance: 'imported', month: '2026-08' }, 'year'))
       .toBe('From your office’s upload, year to date as of August 2026');
     expect(producedFrom({ provenance: 'corrected', month: '2026-08' }, 'year'))
-      .toBe('Corrected by your office, year to date as of August 2026');
+      .toBe('Corrected by hand, year to date as of August 2026');
   });
 
   it('names the agent’s own figure, which has no month — and whose it is when a leader reads it', () => {
@@ -57,6 +64,8 @@ describe('producedFrom, about a coachee', () => {
       'Corrected after the production upload, year to date as of August 2026',
       'From the production upload',
     ]);
+    expect(producedFrom({ provenance: 'corrected', month: '2026-08', correctedBy: { name: 'Sari Puspita' } }, 'year', 'they'))
+      .toBe('Corrected after the production upload, year to date as of August 2026, by Sari Puspita');
     for (const w of words) expect(w).not.toMatch(/office|KPM|reports to|tagged to|untagged|unassigned/i);
   });
 });

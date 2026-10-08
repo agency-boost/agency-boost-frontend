@@ -11,7 +11,8 @@ import { readRoster, type Roster } from '@/lib/coaching';
 
 /**
  * Coaching Session (`Overall.html:3955-3967`, `:10596-10664`) — the roster, a leader's way into
- * coaching, and where a leader lands (P11-T6).
+ * coaching. A leader landed here from P11-T6 until the Unit Dashboard was built; they land there now
+ * (P15-T4, `fieldLandingFor`).
  *
  * Everyone the reader coaches, which is their whole downline (ADR-0074): the server decides who, and
  * this screen never asks for a scope. Each row is a verdict and a date, never a count (AC-6), and

@@ -39,6 +39,7 @@ import RegisterKpmPage from './(agent)/user-management/kpm/page';
 import KpmOverviewPage from './(tenant)/kpm/overview/page';
 import DataUploadPage from './(tenant)/kpm/data-upload/page';
 import UnitDashboardPage from './(agent)/unit/dashboard/page';
+import UnitBelowPage from './(agent)/unit/dashboard/[membershipId]/page';
 import CoachingRosterPage from './(agent)/coaching/page';
 import MyCoachingPage from './(agent)/coaching/me/page';
 import CoachingPersonLayout from './(agent)/coaching/[membershipId]/layout';
@@ -80,6 +81,9 @@ import {
 import {
   AGUS, busy, DOWNLINE, entry, monthRead, peoplePage, RINA, SHELL_STUBS, weekRead,
 } from '@test/calendar-fixtures';
+import {
+  AGUS_ME as UNIT_READER, dashboard as unitDashboard, EMPTY as UNIT_EMPTY, RATIOS as UNIT_RATIOS, SARI_UNIT,
+} from '@test/unit-dashboard-fixtures';
 
 /**
  * Where the screen is, for the one shell that reads it: the coaching person shell's archive (P11-T10),
@@ -544,18 +548,83 @@ describe('screens have no axe violations', () => {
     await expectClean('kpm/overview');
   });
 
-  it('the Unit Dashboard sign, which a leader reaches by its address', async () => {
-    const leader = makeMe({
-      membership: {
-        membershipId: 'mem-aab', kpmId: 'kpm-1', orgLevelCode: 'AAB', hierarchyRole: 'aab', status: 'active',
-        isKpmOwner: false, isKpmAdmin: false, directCount: 2,
-      },
+  describe('the Unit Dashboard (P15-T2 AC-9)', () => {
+    const shell = {
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/notifications': { body: { items: [], unread: 0 } },
+    };
+    const page = () => <UnitDashboardPage searchParams={routeParams({})} />;
+
+    it('filled: the tiles, every group and total, a unit nested two deep, every status and mark', async () => {
+      // Row groups headed by `rowgroup` headers, each person their row's header, the ⌄ column named for a
+      // screen reader, and every tooltip on a button: the ✓, the pills, the marks and the Status rules.
+      stubFetch({ ...shell, 'GET /unit/dashboard': { body: unitDashboard() } });
+      renderInLayout(AgentLayout, page(), { me: UNIT_READER });
+      await screen.findByRole('table', { name: 'Your team’s roster' });
+      await expectClean('unit/dashboard');
     });
-    renderInLayout(AgentLayout, <UnitDashboardPage />, { me: leader });
-    // *Upcoming*, and no phase (P10.1-T2 AC-1): the sign is a region named by the pill and by what
-    // will be there, so the state is heard first.
-    await screen.findByRole('region', { name: /^Upcoming Everyone in your unit in one table/ });
-    await expectClean('unit/dashboard');
+
+    it('expanded: two rows’ details open, with their ratios', async () => {
+      stubFetch({ ...shell, 'GET /unit/dashboard': { body: unitDashboard() }, '/activity/ratios': { body: UNIT_RATIOS } });
+      renderInLayout(AgentLayout, page(), { me: UNIT_READER });
+      await screen.findByRole('table', { name: 'Your team’s roster' });
+      await userEvent.click(screen.getByRole('button', { name: 'View details for Dimas Pratama' }));
+      await userEvent.click(screen.getByRole('button', { name: 'View details for Indah Lestari' }));
+      await screen.findAllByText('Selling success rate');
+      await expectClean('unit/dashboard expanded');
+    });
+
+    it('with Update production open', async () => {
+      stubFetch({ ...shell, 'GET /unit/dashboard': { body: unitDashboard() } });
+      renderInLayout(AgentLayout, page(), { me: UNIT_READER });
+      await screen.findByRole('table', { name: 'Your team’s roster' });
+      await userEvent.click(screen.getByRole('button', { name: 'Update production' }));
+      await screen.findByRole('dialog', { name: 'Update production' });
+      await expectClean('unit/dashboard with Update production');
+    });
+
+    it('locked: Update production held, its reason a description', async () => {
+      stubFetch({
+        ...shell,
+        'GET /unit/dashboard': { body: unitDashboard({ production: { month: '2026-10', revision: 7, locked: true, canUpdate: true } }) },
+      });
+      renderInLayout(AgentLayout, page(), { me: UNIT_READER });
+      await screen.findByRole('table', { name: 'Your team’s roster' });
+      await expectClean('unit/dashboard locked');
+    });
+
+    it('empty: somebody who leads nobody', async () => {
+      stubFetch({ ...shell, 'GET /unit/dashboard': { body: UNIT_EMPTY } });
+      renderInLayout(AgentLayout, page(), { me: UNIT_READER });
+      await screen.findByText('Nobody is in your unit yet.');
+      await expectClean('unit/dashboard (empty)');
+    });
+
+    it('a unit below the reader, and one they cannot open (P15-T4 AC-2)', async () => {
+      stubFetch({ ...shell, 'GET /unit/dashboard': { body: SARI_UNIT } });
+      renderInLayout(
+        AgentLayout,
+        <UnitBelowPage params={routeParams({ membershipId: 'mem-sari' })} searchParams={routeParams({})} />,
+        { me: UNIT_READER },
+      );
+      await screen.findByRole('heading', { level: 1, name: 'Sari Wulandari’s Unit Dashboard' });
+      await expectClean('unit/dashboard/[membershipId]');
+
+      cleanup();
+      vi.unstubAllGlobals();
+      stubFetch({
+        ...shell,
+        'GET /unit/dashboard': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found.', requestId: 'r-1' } } },
+      });
+      renderInLayout(
+        AgentLayout,
+        <UnitBelowPage params={routeParams({ membershipId: 'mem-x' })} searchParams={routeParams({})} />,
+        { me: UNIT_READER },
+      );
+      await screen.findByText('This isn’t a unit you can open.');
+      await expectClean('unit/dashboard/[membershipId] (not found)');
+    });
   });
 
   describe('coaching (P11-T6)', () => {

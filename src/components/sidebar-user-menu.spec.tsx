@@ -166,14 +166,15 @@ describe('SidebarUserMenu', () => {
   });
 
   describe('with a view switch, for an Owner or an Admin (ADR-0114, P13.2-T5)', () => {
-    const SWITCH = { href: '/coaching', label: 'Open agent view' };
+    // A leader's field landing, as `viewSwitchFor` answers it (P15-T4 AC-4); the menu draws whatever it is given.
+    const SWITCH = { href: '/unit/dashboard', label: 'Open agent view' };
 
     it('P13.2-T5 AC-1 puts the switch above Your account, a link like it, and shows nothing more until opened', async () => {
       setup({ viewSwitch: SWITCH });
       expect(screen.queryByRole('link', { name: 'Open agent view' })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
 
-      expect(screen.getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/coaching');
+      expect(screen.getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/unit/dashboard');
       // The disclosure's own vocabulary: links and a button, no `menuitem` it does not implement.
       expect(screen.queryByRole('menuitem')).not.toBeInTheDocument();
       expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual(['Open agent view', 'Your account']);

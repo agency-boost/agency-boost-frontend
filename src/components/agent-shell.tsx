@@ -107,15 +107,15 @@ function Chrome({
     label: 'Unit tools',
     divider: true,
     items: [
-      // *Upcoming* (P10.1-T2, the client's 2026-10-01 request): the page is a sign, and the
-      // prototypes draw a destination not built yet as a disabled item with the pill
-      // (`KPM_Owner.html:882`), not as a link to a sign. Never `active`: like the other two shells,
-      // an upcoming item is not where the reader is, even on a typed URL.
-      { label: 'Unit dashboard', href: '/unit/dashboard', icon: 'gauge', upcoming: true },
-      // Live since the roster was built (P11-T6 AC-7), and where a leader lands (`landing.ts`). Every
-      // route under it is coaching — the reader's own notes and each person they coach — so the item
-      // stays current on all of them, as the prototype's returns to the roster from any of them
-      // (`Overall.html:10596`).
+      // Live since the Unit Dashboard was built (P15-T2 AC-1; it was *Upcoming* from P10.1-T2 while
+      // the page was a sign), and where a leader lands (`landing.ts`, P15-T4 AC-4). Current on the
+      // reader's own unit and on every unit below them, `/unit/dashboard/{membershipId}`: one screen
+      // over another head. Nothing under `/coaching` matches it, nor it `/coaching`.
+      { label: 'Unit dashboard', href: '/unit/dashboard', icon: 'gauge', active: on('/unit/dashboard') },
+      // Live since the roster was built (P11-T6 AC-7). Every route under it is coaching — the reader's
+      // own notes and each person they coach — so the item stays current on all of them, as the
+      // prototype's returns to the roster from any of them (`Overall.html:10596`). A drill from the
+      // Unit Dashboard into a person's coaching tabs lands here, and this item is the current one.
       { label: 'Coaching session', href: '/coaching', icon: 'chat', active: on('/coaching') },
     ],
   };

@@ -144,11 +144,117 @@ describe('group tree (P3-T8)', () => {
     expect(screen.queryByRole('button', { name: /Dewi Lestari/ })).not.toBeInTheDocument();
   });
 
-  it('does not link a card anywhere — the person page is not this reader\'s route', async () => {
-    open();
-    await screen.findByText('Layer 1');
-    const card = document.querySelector('[data-node="mem-sari"]')!;
-    expect(within(card as HTMLElement).queryByRole('link')).toBeNull();
+  describe('P15-T4 AC-3 a card opens the person (D-drill, `Overall.html:8408-8411`, `KPM_Owner.html:2228-2230`)', () => {
+    const card = (id: string) => document.querySelector(`[data-node="${id}"]`) as HTMLElement;
+
+    it('says so under the title, verbatim (`:10412`)', async () => {
+      open();
+      await screen.findByText('Layer 1');
+      expect(
+        screen.getByText('Your leader, you, and your full downline, laid out by layer. Click anyone to open their Unit Dashboard.'),
+      ).toBeInTheDocument();
+    });
+
+    it('opens the Unit Dashboard of somebody who leads, through a real link named for them', async () => {
+      open();
+      await screen.findByText('Layer 1');
+      const link = within(card('mem-sari')).getByRole('link', { name: 'Sari Puspita' });
+      expect(link.tagName).toBe('A');
+      expect(link).toHaveAttribute('href', '/unit/dashboard/mem-sari');
+    });
+
+    it('opens the Personal Summary of somebody who leads nobody, whatever the rung (OD-23)', async () => {
+      // Dewi is an AAB with no reports: the graph, not the rung, decides she has no unit to open.
+      open();
+      await screen.findByText('Layer 1');
+      expect(within(card('mem-dewi')).getByRole('link', { name: 'Dewi Lestari' }))
+        .toHaveAttribute('href', '/coaching/mem-dewi/summary');
+    });
+
+    it('opens the Personal Summary of an agent inside a unit, once the unit is open', async () => {
+      open();
+      await userEvent.click(await screen.findByRole('button', { name: 'Show who reports to Sari Puspita' }));
+      expect(within(card('mem-rina')).getByRole('link', { name: 'Rina Wijaya' }))
+        .toHaveAttribute('href', '/coaching/mem-rina/summary');
+    });
+
+    it('leaves the reader’s own card and their leader inert', async () => {
+      open();
+      await screen.findByText('Layer 1');
+      expect(within(card('mem-ab')).queryByRole('link')).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Wilson Tanoto' })).not.toBeInTheDocument();
+      // Nothing on the canvas links to either of them, by any name.
+      const hrefs = Array.from(screen.getByTestId('tree-canvas').querySelectorAll('a')).map((a) => a.getAttribute('href'));
+      expect(hrefs.some((href) => href?.includes('mem-ab') || href?.includes('mem-owner'))).toBe(false);
+    });
+
+    it('keeps the toggle a button beside the link, so opening a unit never navigates', async () => {
+      open();
+      const toggle = await screen.findByRole('button', { name: 'Show who reports to Sari Puspita' });
+      expect(toggle.closest('a')).toBeNull();
+    });
+
+    it('P15-T4 AC-3: a leader on the agent rung opens leaders’ units, but no Personal Summary (ADR-0087)', async () => {
+      const AGENT_LEADER = makeMe({
+        membership: {
+          membershipId: 'mem-ab', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent', status: 'active',
+          isKpmOwner: false, isKpmAdmin: false, directCount: 2,
+        },
+        permissions: ['org_tree:read'],
+      });
+      stubFetch({ '/members/tree': { body: TREE } });
+      renderInLayout(AgentLayout, <GroupTreePage />, { me: AGENT_LEADER });
+      await screen.findByText('Layer 1');
+      expect(within(card('mem-sari')).getByRole('link', { name: 'Sari Puspita' }))
+        .toHaveAttribute('href', '/unit/dashboard/mem-sari');
+      // Their coaching reads are their own: a summary link would only say *not found*.
+      expect(within(card('mem-dewi')).queryByRole('link')).toBeNull();
+    });
+
+    it('applies the same rule to an Owner or an Admin in their field view, their own leader inert as a node', async () => {
+      // A tenant admin reads the whole office as one tree, so their own leader comes back as an
+      // ordinary node rather than beside the tree; it is inert all the same.
+      const ADMIN = makeMe({
+        membership: {
+          membershipId: 'mem-admin', kpmId: 'kpm-1', orgLevelCode: 'AAB', hierarchyRole: 'aab', status: 'active',
+          isKpmOwner: false, isKpmAdmin: true, directCount: 1,
+        },
+        permissions: ['org_tree:read'],
+      });
+      stubFetch({
+        '/members/tree': {
+          body: {
+            nodes: [
+              node({ membershipId: 'mem-owner', fullName: 'Wilson Tanoto', initials: 'WT', role: 'ab',
+                     layer: 1, isLeader: true, directCount: 2 }),
+              node({ membershipId: 'mem-admin', fullName: 'Arief Nugroho', initials: 'AN', role: 'aab',
+                     layer: 2, leaderId: 'mem-owner', isLeader: true, directCount: 1, isSelf: true }),
+              node({ membershipId: 'mem-ab2', fullName: 'Budi Santoso', initials: 'BS', role: 'ab',
+                     layer: 2, leaderId: 'mem-owner', isLeader: true, directCount: 1 }),
+              node({ membershipId: 'mem-ag', fullName: 'Citra Ayu', initials: 'CA', layer: 2, leaderId: 'mem-owner' }),
+              node({ membershipId: 'mem-own-ag', fullName: 'Dina Lestari', initials: 'DL', layer: 3, leaderId: 'mem-admin' }),
+            ],
+            leader: null,
+            rootIds: ['mem-owner'],
+            selfId: 'mem-admin',
+            counts: { ab: 2, aab: 1, agent: 2, total: 5 },
+          },
+        },
+      });
+      renderInLayout(AgentLayout, <GroupTreePage />, { me: ADMIN });
+      await screen.findByText('Layer 1');
+
+      expect(within(card('mem-owner')).queryByRole('link')).toBeNull();
+      expect(within(card('mem-admin')).queryByRole('link')).toBeNull();
+      expect(within(card('mem-ab2')).getByRole('link', { name: 'Budi Santoso' }))
+        .toHaveAttribute('href', '/unit/dashboard/mem-ab2');
+      // Somebody outside the Admin's own downline is not somebody they coach: no Personal Summary to open.
+      expect(within(card('mem-ag')).queryByRole('link')).toBeNull();
+      const show = screen.queryByRole('button', { name: 'Show who reports to Arief Nugroho' });
+      if (show) await userEvent.click(show);
+      expect(within(card('mem-own-ag')).getByRole('link', { name: 'Dina Lestari' }))
+        .toHaveAttribute('href', '/coaching/mem-own-ag/summary');
+    });
   });
 
   it('tells a leader with nobody under them, rather than drawing a tree of one', async () => {

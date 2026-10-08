@@ -62,7 +62,7 @@ describe('landing', () => {
     expect(replace).toHaveBeenCalledWith('/kpm/overview');
   });
 
-  it('P11-T6 AC-8 sends a leader to the roster of everyone they coach', () => {
+  it('P15-T4 AC-4 sends a leader to their Unit Dashboard', () => {
     renderWithSession(<Home />, {
       me: makeMe({
         membership: {
@@ -71,7 +71,7 @@ describe('landing', () => {
         },
       }),
     });
-    expect(replace).toHaveBeenCalledWith('/coaching');
+    expect(replace).toHaveBeenCalledWith('/unit/dashboard');
   });
 
   it('sends an agent to their own day, not to their profile', () => {
