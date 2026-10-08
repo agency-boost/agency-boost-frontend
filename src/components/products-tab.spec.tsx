@@ -193,12 +193,138 @@ describe('the Products tab', () => {
     expect(within(row).queryByText('40.0%')).not.toBeInTheDocument();
   });
 
-  it('shows the schedule when the company has stated one', async () => {
-    render([product({ commissionSchedule: [{ year: 1, rate: 0.4 }, { year: 2, rate: 0.2 }] })]);
-    const row = await open('PRUMapan');
+  describe('the commission schedule editor (OD-135)', () => {
+    it('lays the schedule out as the drawer reads it, Y1 first, as percentages', async () => {
+      // `0.07 * 100` is `7.000000000000001`: what was typed as 7 reads back as 7.
+      render([product({ commissionSchedule: [{ year: 1, rate: 0.4 }, { year: 2, rate: 0.07 }] })]);
+      const row = await open('PRUMapan');
 
-    expect(within(row).getByText('40.0%')).toBeInTheDocument();
-    expect(within(row).getByText('20.0%')).toBeInTheDocument();
+      const table = within(row).getByRole('table', { name: 'Commission rate' });
+      expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Year', 'Rate (%)']);
+      expect(within(table).getAllByRole('rowheader').map((h) => h.textContent)).toEqual(['Y1', 'Y2']);
+      expect(within(row).getByLabelText('Rate for year 1')).toHaveValue(40);
+      expect(within(row).getByLabelText('Rate for year 2')).toHaveValue(7);
+    });
+
+    it('adds a year at the end and sends the whole schedule as proportions with the product', async () => {
+      const stub = render(undefined, {
+        '/admin/companies/c1/products/p1': { body: product() },
+      });
+      const row = await open('PRUMapan');
+
+      await userEvent.click(within(row).getByRole('button', { name: '+ Add year' }));
+      await userEvent.type(within(row).getByLabelText('Rate for year 1'), '30');
+      await userEvent.click(within(row).getByRole('button', { name: '+ Add year' }));
+      await userEvent.type(within(row).getByLabelText('Rate for year 2'), '12.5');
+      await userEvent.click(within(row).getByRole('button', { name: 'Save product' }));
+
+      await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+      expect(JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body)).commissionSchedule)
+        .toEqual([{ year: 1, rate: 0.3 }, { year: 2, rate: 0.125 }]);
+    });
+
+    it('removes only the last year, so the years never skip one', async () => {
+      const stub = render([product({
+        commissionSchedule: [{ year: 1, rate: 0.4 }, { year: 2, rate: 0.2 }, { year: 3, rate: 0.1 }],
+      })], { '/admin/companies/c1/products/p1': { body: product() } });
+      const row = await open('PRUMapan');
+
+      expect(within(row).queryByRole('button', { name: 'Remove year 1' })).not.toBeInTheDocument();
+      await userEvent.click(within(row).getByRole('button', { name: 'Remove year 3' }));
+      await userEvent.click(within(row).getByRole('button', { name: 'Remove year 2' }));
+      await userEvent.click(within(row).getByRole('button', { name: 'Remove year 1' }));
+      // Empty again is *not set*, and saving says so to the API with an empty list.
+      expect(within(row).getByText(/Not set\./)).toBeInTheDocument();
+      await userEvent.click(within(row).getByRole('button', { name: 'Save product' }));
+
+      await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+      expect(JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body)).commissionSchedule)
+        .toEqual([]);
+    });
+
+    it('refuses a rate outside 0–100% at the field, and saves nothing', async () => {
+      const stub = render([product({ commissionSchedule: [{ year: 1, rate: 0.4 }] })]);
+      const row = await open('PRUMapan');
+
+      await userEvent.clear(within(row).getByLabelText('Rate for year 1'));
+      await userEvent.type(within(row).getByLabelText('Rate for year 1'), '120');
+
+      expect(within(row).getByText('Enter a rate from 0 to 100.')).toBeInTheDocument();
+      expect(within(row).getByLabelText('Rate for year 1')).toHaveAttribute('aria-invalid', 'true');
+      await userEvent.click(within(row).getByRole('button', { name: 'Save product' }));
+      expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(false);
+    });
+
+    it('P14 exit review: refuses more than two decimal places — what the drawer prints is what is stored', async () => {
+      const stub = render([product({ commissionSchedule: [{ year: 1, rate: 0.4 }] })], {
+        '/admin/companies/c1/products/p1': { body: product() },
+      });
+      const row = await open('PRUMapan');
+      const field = within(row).getByLabelText('Rate for year 1');
+
+      await userEvent.clear(field);
+      await userEvent.type(field, '12.345');
+      expect(within(row).getByText('Use at most two decimal places.')).toBeInTheDocument();
+      expect(field).toHaveAttribute('aria-invalid', 'true');
+      await userEvent.click(within(row).getByRole('button', { name: 'Save product' }));
+      expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(false);
+
+      // Two places are the drawer's own precision (`formatRate`): saved, as 0.1234.
+      await userEvent.clear(field);
+      await userEvent.type(field, '12.34');
+      expect(within(row).queryByText('Use at most two decimal places.')).not.toBeInTheDocument();
+      await userEvent.click(within(row).getByRole('button', { name: 'Save product' }));
+      await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+      const sent = JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body)).commissionSchedule;
+      expect(sent).toHaveLength(1);
+      expect(sent[0].rate).toBeCloseTo(0.1234, 10);
+    });
+
+    it('P14 exit review: stops adding years at the API’s fiftieth, and says why', async () => {
+      const fifty = Array.from({ length: 50 }, (_, i) => ({ year: i + 1, rate: 0.01 }));
+      render([product({ commissionSchedule: fifty.slice(0, 49) })]);
+      const row = await open('PRUMapan');
+
+      const add = within(row).getByRole('button', { name: '+ Add year' });
+      expect(add).toBeEnabled();
+      expect(within(row).queryByText('A schedule covers at most 50 years.')).not.toBeInTheDocument();
+
+      await userEvent.click(add);
+      expect(within(row).getByLabelText('Rate for year 50')).toBeInTheDocument();
+      expect(add).toBeDisabled();
+      expect(add).toHaveAccessibleDescription('A schedule covers at most 50 years.');
+
+      // Removing the last year opens it again.
+      await userEvent.click(within(row).getByRole('button', { name: 'Remove year 50' }));
+      expect(add).toBeEnabled();
+      expect(within(row).queryByText('A schedule covers at most 50 years.')).not.toBeInTheDocument();
+    });
+
+    it('waits for a save before calling a new, empty year unfinished', async () => {
+      const stub = render();
+      const row = await open('PRUMapan');
+
+      await userEvent.click(within(row).getByRole('button', { name: '+ Add year' }));
+      expect(within(row).queryByRole('alert')).not.toBeInTheDocument();
+
+      await userEvent.click(within(row).getByRole('button', { name: 'Save product' }));
+      expect(within(row).getByText('Enter a rate from 0 to 100.')).toBeInTheDocument();
+      expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(false);
+    });
+
+    it('shows the API’s refusal in its own words', async () => {
+      render([product({ commissionSchedule: [{ year: 1, rate: 0.4 }] })], {
+        '/admin/companies/c1/products/p1': {
+          status: 400,
+          body: { error: { code: 'VALIDATION_FAILED', message: 'A commission schedule is a rate for each policy year from year 1, with no year missing and none twice. This one has year 2.' } },
+        },
+      });
+      const row = await open('PRUMapan');
+
+      await userEvent.click(within(row).getByRole('button', { name: 'Save product' }));
+
+      expect(await screen.findByText(/with no year missing and none twice/)).toBeInTheDocument();
+    });
   });
 
   it('says nothing about commission at all to a reader who is not shown rates', async () => {

@@ -11,7 +11,7 @@ import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { suggestCode } from '@/lib/config-code';
 import {
-  closeProductToNewBusiness, createProduct, readProducts, reopenProduct, reorderProducts,
+  closeProductToNewBusiness, COMMISSION_MAX_YEARS, createProduct, readProducts, reopenProduct, reorderProducts,
   updateProduct, withdrawProduct,
   type Product, type ProductFields, type ProductLifecycle,
 } from '@/lib/admin';
@@ -82,6 +82,30 @@ const move = <T,>(rows: T[], from: number, to: number): T[] => {
 
 /** Lines a reader types, one per line, as the array the API takes. */
 const linesToList = (value: string) => value.split('\n').map((l) => l.trim()).filter(Boolean);
+
+/**
+ * A stored proportion as the percentage typed and read on screen: `0.125` is `12.5`.
+ *
+ * Through `toFixed`, because `0.07 * 100` is `7.000000000000001` and a Super Admin who typed 7
+ * should read 7 back.
+ */
+const percentOf = (rate: number) => String(Number((rate * 100).toFixed(4)));
+
+/** A typed percentage as the proportion the API stores (`commissionSchedule`, parity F-15). */
+const proportionOf = (percent: string) => Number(percent) / 100;
+
+/**
+ * Why a typed rate cannot be saved, or `null` when it can: a number from 0 to 100, **to at most two
+ * decimal places** — what the drawer prints (`formatRate`, `toFixed(2)`), so the rate an agent reads is
+ * the rate stored rather than a rounding of it (the Phase 14 exit review).
+ */
+function rateError(percent: string): string | null {
+  const typed = percent.trim();
+  const value = Number(typed);
+  if (typed === '' || !Number.isFinite(value) || value < 0 || value > 100) return 'Enter a rate from 0 to 100.';
+  const [, decimals = ''] = typed.split('.');
+  return decimals.length > 2 ? 'Use at most two decimal places.' : null;
+}
 
 /**
  * The Company template's **Products** tab (P5-T4, ADR-0033, parity I-62).
@@ -304,7 +328,7 @@ export function ProductsTab({ companyId }: { companyId: string }) {
  * A product opened for editing.
  *
  * Its identity is read-only — a code is typed once and never changes, because a policy, a lead and
- * an attack-plan telemetry row all point at it (ADR-0006). Everything else is editable, and the
+ * a plan's address (`/attack-plan?product=…`) all point at it (ADR-0006). Everything else is editable, and the
  * lifecycle moves through named controls rather than a dropdown, because each of them reaches
  * every office of the company.
  */
@@ -337,6 +361,13 @@ function ProductEditor({
     plan: { ...product.defaultAttackPlan, benefits: product.defaultAttackPlan.benefits.join('\n') },
   });
   const [successor, setSuccessor] = useState(product.replacedByProductId ?? '');
+  /** One typed percentage per policy year, Y1 first (OD-135). Absent for a reader not sent it. */
+  const [rates, setRates] = useState<string[]>(
+    (product.commissionSchedule ?? []).map((row) => percentOf(row.rate)),
+  );
+  /** Errors wait for a save attempt, so a year just added is not shouted at for being empty. */
+  const [triedSave, setTriedSave] = useState(false);
+  const scheduleInvalid = rates.some((rate) => rateError(rate) !== null);
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((now) => ({ ...now, [key]: value }));
@@ -558,48 +589,55 @@ function ProductEditor({
       ))}
 
       <h3 className="mt-5 font-display text-md font-bold text-navy">Commission</h3>
-      {(product.commissionSchedule ?? []).length === 0 ? (
-        <p className="text-sm text-muted">
-          {product.commissionSchedule === undefined
-            ? 'You are not shown commission rates.'
-            : 'Not set. Nothing is shown to an agent until this company states its schedule — '
-              + 'a figure somebody reads as their pay is never one this product invents.'}
-        </p>
+      {product.commissionSchedule === undefined ? (
+        <p className="text-sm text-muted">You are not shown commission rates.</p>
       ) : (
-        <ul className="mt-1 flex flex-wrap gap-3">
-          {product.commissionSchedule!.map((year) => (
-            <li key={year.year} className="text-md text-navy">
-              Year {year.year}: <strong>{(year.rate * 100).toFixed(1)}%</strong>
-            </li>
-          ))}
-        </ul>
+        <CommissionEditor
+          productId={product.id}
+          rates={rates}
+          onChange={setRates}
+          showErrors={triedSave}
+          disabled={disabled}
+        />
       )}
 
       <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-hairline pt-4">
         <Button
           disabled={disabled}
-          onClick={() => void onSave({
-            name: form.name.trim(),
-            tagline: form.tagline.trim(),
-            channel: form.channel as Product['channel'],
-            category: form.category as Product['category'],
-            primaryNeeds: form.primaryNeeds,
-            eligibleAgeBands: form.eligibleAgeBands,
-            eligibleBudgetBands: form.eligibleBudgetBands,
-            benefits: linesToList(form.benefits),
-            differentiator: form.differentiator.trim(),
-            bestFor: form.bestFor.trim(),
-            activeByDefault: form.activeByDefault,
-            defaultAttackPlan: {
-              goodFit: form.plan.goodFit.trim(),
-              opening: form.plan.opening.trim(),
-              benefits: linesToList(form.plan.benefits),
-              fullScript: form.plan.fullScript.trim(),
-              objectionTheySay: form.plan.objectionTheySay.trim(),
-              objectionYouSay: form.plan.objectionYouSay.trim(),
-              nextAction: form.plan.nextAction.trim(),
-            },
-          })}
+          onClick={() => {
+            if (scheduleInvalid) {
+              setTriedSave(true);
+              return;
+            }
+            void onSave({
+              name: form.name.trim(),
+              tagline: form.tagline.trim(),
+              channel: form.channel as Product['channel'],
+              category: form.category as Product['category'],
+              primaryNeeds: form.primaryNeeds,
+              eligibleAgeBands: form.eligibleAgeBands,
+              eligibleBudgetBands: form.eligibleBudgetBands,
+              benefits: linesToList(form.benefits),
+              differentiator: form.differentiator.trim(),
+              bestFor: form.bestFor.trim(),
+              activeByDefault: form.activeByDefault,
+              defaultAttackPlan: {
+                goodFit: form.plan.goodFit.trim(),
+                opening: form.plan.opening.trim(),
+                benefits: linesToList(form.plan.benefits),
+                fullScript: form.plan.fullScript.trim(),
+                objectionTheySay: form.plan.objectionTheySay.trim(),
+                objectionYouSay: form.plan.objectionYouSay.trim(),
+                nextAction: form.plan.nextAction.trim(),
+              },
+              // The whole schedule, Y1 first, as a proportion. Left out for a reader not sent one.
+              ...(product.commissionSchedule === undefined ? {} : {
+                commissionSchedule: rates.map((rate, index) => ({
+                  year: index + 1, rate: proportionOf(rate),
+                })),
+              }),
+            });
+          }}
         >
           Save product
         </Button>
@@ -665,6 +703,118 @@ function ProductEditor({
             </Button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+const TH = 'border-b border-hairline py-1.5 pr-6 text-left text-xs font-semibold uppercase tracking-wide text-muted';
+const TD = 'border-b border-hairline py-1.5 pr-6 align-top text-md text-navy';
+
+/**
+ * The company's commission schedule for one product (OD-135, ADR-0119).
+ *
+ * **The drawer's own table** (`Overall.html:10244-10253`): *Year · Rate*, a row per year, *Y1*
+ * first — so what the Super Admin types is laid out as every agent of the company reads it. A rate
+ * is typed as a percentage and stored as a proportion. Years run from 1 with none missing, so a
+ * year is added at the end and **only the last is removed**: removing a middle year would move every
+ * later rate to the year before it, a silently wrong number. The server refuses a gap as well.
+ *
+ * Empty is *not set*, and says so: nothing here offers a default (parity F-15).
+ */
+function CommissionEditor({
+  productId, rates, onChange, showErrors, disabled,
+}: {
+  productId: string;
+  rates: string[];
+  onChange: (rates: string[]) => void;
+  /** Whether a save was tried: until then an empty row is unfinished, not wrong. */
+  showErrors: boolean;
+  disabled?: boolean;
+}) {
+  const setRate = (index: number, value: string) =>
+    onChange(rates.map((rate, i) => (i === index ? value : rate)));
+  /** The API's last policy year reached: no year is added past it. */
+  const full = rates.length >= COMMISSION_MAX_YEARS;
+  const fullId = `commission-${productId}-full`;
+
+  return (
+    <div className="mt-1">
+      {rates.length === 0 ? (
+        <p className="text-sm text-muted">
+          Not set. Nothing is shown to an agent until this company states its schedule — a figure
+          somebody reads as their pay is never one this product invents.
+        </p>
+      ) : (
+        <table className="border-collapse">
+          <caption className="sr-only">Commission rate</caption>
+          <thead>
+            <tr>
+              <th scope="col" className={TH}>Year</th>
+              <th scope="col" className={TH}>Rate (%)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rates.map((rate, index) => {
+              const year = index + 1;
+              const id = `commission-${productId}-y${year}`;
+              const error = rateError(rate);
+              const shown = error && (showErrors || rate.trim() !== '') ? error : null;
+              return (
+                <tr key={year}>
+                  <th scope="row" className={TD}>Y{year}</th>
+                  <td className={TD}>
+                    <TextInput
+                      id={id}
+                      aria-label={`Rate for year ${year}`}
+                      aria-describedby={shown ? `${id}-error` : undefined}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      suffix="%"
+                      className="w-28"
+                      value={rate}
+                      invalid={shown !== null}
+                      disabled={disabled}
+                      onChange={(e) => setRate(index, e.target.value)}
+                    />
+                    {shown && (
+                      <p id={`${id}-error`} role="alert" className="mt-1 text-xs font-semibold text-alert">
+                        {shown}
+                      </p>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {/* At the API's last year the button says why it stopped, rather than failing on save. */}
+        <Button
+          variant="inline"
+          disabled={disabled || full}
+          aria-describedby={full ? fullId : undefined}
+          onClick={() => onChange([...rates, ''])}
+        >
+          + Add year
+        </Button>
+        {rates.length > 0 && (
+          <Button
+            variant="inline"
+            disabled={disabled}
+            onClick={() => onChange(rates.slice(0, -1))}
+          >
+            Remove year {rates.length}
+          </Button>
+        )}
+        {full && (
+          <p id={fullId} className="m-0 text-xs text-muted">
+            A schedule covers at most {COMMISSION_MAX_YEARS} years.
+          </p>
+        )}
       </div>
     </div>
   );

@@ -15,7 +15,7 @@ import { useHashTab } from '@/lib/use-hash-tab';
 import {
   approveScript, kpmProductDocumentUrl, listKpmProducts, listScriptReviews, readBranchInfo,
   readEffectiveScript, rejectScript, resetKpmProductDocument, resetKpmProductOverride,
-  saveKpmProductOverrides, setKpmProductActive,
+  saveKpmProductOverrides, setKpmProductActive, PRODUCT_DESCRIPTION_MAX,
   type KpmProductRow,
 } from '@/lib/tenant-config';
 
@@ -29,6 +29,12 @@ const SCRIPT_FIELDS: { key: string; label: string; lines?: number; list?: true }
   { key: 'objectionYouSay', label: '4b · If they push back — you say', lines: 3 },
   { key: 'nextAction', label: '5 · Next action', lines: 2 },
 ];
+
+/**
+ * The prototype's own label, guidance folded into it (`KPM_Owner.html:1781`; parity L-20). The
+ * field replaces the company's tagline wherever agents read one, once approved (OD-136).
+ */
+const DESCRIPTION_LABEL = 'Short description (shown to agents)';
 
 const REVIEW: Record<string, { tone: 'won' | 'open'; text: string }> = {
   pending: { tone: 'open', text: 'Waiting for your approval' },
@@ -58,6 +64,8 @@ const TABS = [
 
 export default function KpmProductsPage() {
   const canWrite = useCan('tenant_config:write');
+  /** The screen's own read: without it the gate refuses, and nothing here asks the API for the drafts. */
+  const canRead = useCan('product_settings:read');
   /**
    * Approving is its **own** permission (ADR-0037), and the one deliberate exception to
    * ADR-0027's single settings permission — so somebody may be able to edit a script and not to
@@ -102,7 +110,7 @@ export default function KpmProductsPage() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (canRead) void load(); }, [load, canRead]);
 
   const loadQueue = useCallback(async () => {
     try {
@@ -121,7 +129,7 @@ export default function KpmProductsPage() {
     }
   }, []);
 
-  useEffect(() => { if (tab === '#approvals') void loadQueue(); }, [tab, loadQueue]);
+  useEffect(() => { if (canRead && tab === '#approvals') void loadQueue(); }, [tab, loadQueue, canRead]);
 
   const run = async (action: () => Promise<KpmProductRow>) => {
     setBusy(true);
@@ -318,6 +326,13 @@ export default function KpmProductsPage() {
                           : `Your agents are reading ${company}’s words until this is approved.`}
                       </p>
                       <ul className="mt-2 flex flex-col gap-1">
+                        {/* Held with the script since OD-136, so it is decided with it. */}
+                        {product.description?.overridden && (
+                          <li className="text-md text-navy">
+                            <span className="text-sm font-semibold text-muted">{DESCRIPTION_LABEL}: </span>
+                            {product.description.value}
+                          </li>
+                        )}
                         {SCRIPT_FIELDS.filter((f) => product.script[f.key]?.overridden).map((f) => (
                           <li key={f.key} className="text-md text-navy">
                             <span className="text-sm font-semibold text-muted">{f.label}: </span>
@@ -392,18 +407,27 @@ export default function KpmProductsPage() {
 
   const draftOf = (product: KpmProductRow): Record<string, string> => ({
     displayName: product.displayName.value,
+    description: product.description?.value ?? '',
     ...Object.fromEntries(
       SCRIPT_FIELDS.map((f) => [f.key, asText(product.script[f.key]?.value ?? '')]),
     ),
   });
 
-  /** One product opened: the name, the seven script fields, and the three document slots. */
+  /**
+   * One product opened: the name, the description, the seven script fields, and the three
+   * document slots.
+   */
   function panel(product: KpmProductRow) {
-    const save = (key: string) => {
+    const save = async (key: string) => {
       const value = key === 'benefits'
         ? draft.benefits.split('\n').map((l) => l.trim()).filter(Boolean)
         : draft[key];
-      return run(() => saveKpmProductOverrides(product.productId, { [key]: value }));
+      const row = await run(() => saveKpmProductOverrides(product.productId, { [key]: value }));
+      // A blank description is given back to the company, so the box shows the company's again.
+      if (row && key === 'description') {
+        setDraft((n) => ({ ...n, description: row.description?.value ?? '' }));
+      }
+      return row;
     };
 
     return (
@@ -448,6 +472,48 @@ export default function KpmProductsPage() {
             )}
           </div>
         )}
+
+        {/*
+          * The Details tab's one field (`KPM_Owner.html:1781`), which nothing built until OD-136.
+          * Held for approval with the script (ADR-0120): a tagline is a sentence an agent may repeat
+          * to a customer, so agents read the company's until the office approves its own.
+          */}
+        <div className="mt-3">
+          <Field
+            label={DESCRIPTION_LABEL}
+            htmlFor={`description-${product.productId}`}
+            hint={product.description?.overridden ? 'Yours.' : `Following ${company}.`}
+          >
+            <Textarea
+              id={`description-${product.productId}`}
+              rows={2}
+              maxLength={PRODUCT_DESCRIPTION_MAX}
+              value={draft.description ?? ''}
+              disabled={!canWrite || busy}
+              onChange={(e) => setDraft((n) => ({ ...n, description: e.target.value }))}
+            />
+          </Field>
+          {canWrite && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button variant="secondary" disabled={busy} onClick={() => void save('description')}>
+                Save
+              </Button>
+              {product.description?.overridden && (
+                <Button
+                  variant="inline"
+                  disabled={busy}
+                  onClick={() => void run(async () => {
+                    const row = await resetKpmProductOverride(product.productId, 'description');
+                    setDraft(draftOf(row));
+                    return row;
+                  })}
+                >
+                  Use {company}’s
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
 
         <h3 className="mt-5 font-display text-md font-bold text-navy">The attack plan</h3>
         <p className="text-sm text-muted">
@@ -548,7 +614,12 @@ export default function KpmProductsPage() {
     <SettingsScreen
       title="Products"
       subtitle={`What your office sells from ${company}’s catalog, and the words you sell it with.`}
-      permission="tenant_config:read"
+      /*
+       * The office's drafts and review state live here (ADR-0037), so its read is the Owner's and the
+       * Admin's alone — `product_settings:read`, not `tenant_config:read`, which every member holds
+       * (the Phase 14 exit review). A field member reads the approved words on `/product-catalog`.
+       */
+      permission="product_settings:read"
       tabs={TABS}
       tabsLabel="Product sections"
       activeHref={tab}

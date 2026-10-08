@@ -577,6 +577,12 @@ export interface CommissionYear {
   rate: number;
 }
 
+/**
+ * The most policy years a commission schedule holds: the API refuses a year past it
+ * (`CommissionYearDto.year`, `@Max(50)`). Held to the API document by `contract.spec.ts`.
+ */
+export const COMMISSION_MAX_YEARS = 50;
+
 export type ProductLifecycle = 'active' | 'closed_to_new_business' | 'withdrawn';
 
 export interface Product {

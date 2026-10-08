@@ -70,6 +70,13 @@ import NewHireDetailPage from './(agent)/new-hires/[membershipId]/page';
 import CoacheeActivationTab from './(agent)/coaching/[membershipId]/activation/page';
 import MyCoachingActivationPage from './(agent)/coaching/me/activation/page';
 import { activationView, completeView, leaderView, RINA_ME, ROSTER, SARI, SARI_ME } from '@test/activation-fixtures';
+import ProductCatalogLayout from './(agent)/product-catalog/layout';
+import ProductCatalogPage from './(agent)/product-catalog/page';
+import ProductDrawerPage from './(agent)/product-catalog/[productCode]/page';
+import AttackPlanPage from './(agent)/attack-plan/page';
+import {
+  PGB, plan as salesPlan, product as salesProduct, RINA_ME as SALES_ME, SHELF,
+} from '@test/sales-tools-fixtures';
 import {
   AGUS, busy, DOWNLINE, entry, monthRead, peoplePage, RINA, SHELL_STUBS, weekRead,
 } from '@test/calendar-fixtures';
@@ -80,9 +87,11 @@ import {
  */
 const nav = vi.hoisted(() => ({ pathname: '/admin', params: {} as Record<string, string> }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
   usePathname: () => nav.pathname,
   useParams: () => nav.params,
+  // The Product Catalog reads its filters from the address (Phase 14, D-urls).
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 /**
@@ -2266,6 +2275,98 @@ describe('screens have no axe violations', () => {
    * exactly what this suite exists to find without reading: a hint rendered beside a
    * field rather than linked to it, and a raw code used as a field's label.
    */
+  /*
+   * Sales tools (Phase 14): the catalog filled and empty, its drawer open on each tab, and the Sales Attack
+   * Plan's two steps — a plan with its alternatives, a Check fit, and the catalog's run-off deep link.
+   */
+  describe('sales tools (Phase 14)', () => {
+    const SHELL = {
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+    };
+    const query = (q: Record<string, string>) => Object.assign(Promise.resolve(q), { status: 'fulfilled', value: q });
+
+    it('the Product Catalog, filled (P14-T7)', async () => {
+      nav.pathname = '/product-catalog';
+      stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } } });
+      renderInLayout(AgentLayout, <ProductCatalogLayout><ProductCatalogPage /></ProductCatalogLayout>, { me: SALES_ME });
+      await screen.findByRole('heading', { level: 2, name: 'Life' });
+      await expectClean('product-catalog');
+    });
+
+    it('the Product Catalog, its shelf empty (P14-T7 AC-10)', async () => {
+      nav.pathname = '/product-catalog';
+      stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: [] } } });
+      renderInLayout(AgentLayout, <ProductCatalogLayout><ProductCatalogPage /></ProductCatalogLayout>, { me: SALES_ME });
+      await screen.findByText('There are no products on your shelf yet.');
+      await expectClean('product-catalog (empty)');
+    });
+
+    it.each(['Details', 'Attack Plan', 'Documents'])('the drawer open on %s (P14-T7 AC-11)', async (tab) => {
+      nav.pathname = '/product-catalog/PRUMAPAN';
+      stubFetch({
+        ...SHELL, 'GET /product-catalog': { body: { products: SHELF } }, 'GET /product-catalog/PRUMAPAN': { body: salesProduct() },
+      });
+      renderInLayout(
+        AgentLayout,
+        <ProductCatalogLayout><ProductDrawerPage params={routeParams({ productCode: 'PRUMAPAN' })} /></ProductCatalogLayout>,
+        { me: SALES_ME },
+      );
+      const box = await screen.findByRole('dialog', { name: 'PRUMapan (nama kami)' });
+      await userEvent.click(within(box).getByRole('tab', { name: tab }));
+      await expectClean(`product-catalog/[productCode] (${tab})`);
+    });
+
+    it('the drawer of a run-off product (P14-T7 AC-5)', async () => {
+      nav.pathname = '/product-catalog/PRULINK_GENERASI_BARU_PGB';
+      stubFetch({
+        ...SHELL, 'GET /product-catalog': { body: { products: SHELF } },
+        'GET /product-catalog/PRULINK_GENERASI_BARU_PGB': { body: PGB },
+      });
+      renderInLayout(
+        AgentLayout,
+        <ProductCatalogLayout><ProductDrawerPage params={routeParams({ productCode: 'PRULINK_GENERASI_BARU_PGB' })} /></ProductCatalogLayout>,
+        { me: SALES_ME },
+      );
+      await screen.findByRole('dialog', { name: 'PRULink Generasi Baru (PGB)' });
+      await expectClean('product-catalog/[productCode] (run-off)');
+    });
+
+    it('the Sales Attack Plan’s brief, part chosen (P14-T8)', async () => {
+      nav.pathname = '/attack-plan';
+      stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } } });
+      renderInLayout(AgentLayout, <AttackPlanPage searchParams={query({})} />, { me: SALES_ME });
+      await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
+      await userEvent.click(within(screen.getByRole('group', { name: 'Primary need' })).getByRole('button', { name: 'Health' }));
+      await expectClean('attack-plan (brief)');
+    });
+
+    it('the Sales Attack Plan’s plan, with four chips and the more line (P14-T8)', async () => {
+      nav.pathname = '/attack-plan';
+      const alternatives = ['A', 'B', 'C', 'D'].map((c) => ({ code: c, name: `Product ${c}` }));
+      stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } }, 'GET /attack-plan': { body: salesPlan({ alternatives, moreCount: 3 }) } });
+      renderInLayout(AgentLayout, <AttackPlanPage searchParams={query({ need: 'health', age: '2', budget: '2' })} />, { me: SALES_ME });
+      await screen.findByRole('heading', { level: 2, name: 'PRUMapan (nama kami)' });
+      await expectClean('attack-plan (plan)');
+    });
+
+    it('the Sales Attack Plan’s Check fit, with its note (P14-T8)', async () => {
+      nav.pathname = '/attack-plan';
+      stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } }, 'GET /attack-plan': { body: salesPlan({ verdict: 'check_fit', outside: ['age', 'budget'] }) } });
+      renderInLayout(AgentLayout, <AttackPlanPage searchParams={query({ need: 'retirement', age: '5', budget: '6' })} />, { me: SALES_ME });
+      await screen.findByText(/Outside the typical age band and budget band/);
+      await expectClean('attack-plan (check fit)');
+    });
+
+    it('the catalog’s deep link to a run-off product (P14-T8 AC-6)', async () => {
+      nav.pathname = '/attack-plan';
+      stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } }, 'GET /product-catalog/PRULINK_GENERASI_BARU_PGB': { body: PGB } });
+      renderInLayout(AgentLayout, <AttackPlanPage searchParams={query({ product: 'PRULINK_GENERASI_BARU_PGB' })} />, { me: SALES_ME });
+      await screen.findByRole('heading', { level: 2, name: 'PRULink Generasi Baru (PGB)' });
+      await expectClean('attack-plan (from catalog, run-off)');
+    });
+  });
+
   describe('the settings screens', () => {
     const settingsOwner = makeMe({
       membership: {
@@ -2277,8 +2378,10 @@ describe('screens have no axe violations', () => {
       // `kpm:read_profile` instead, because it is the office's identity rather than its
       // configuration — and writes under `tenant_config:write` like the rest (ADR-0027), so
       // its form is checked here with Save on screen.
+      // `product_settings:read` is the Products screen's own (the Phase 14 exit review).
       permissions: [
         'member:read_profile', 'tenant_config:read', 'tenant_config:write', 'kpm:read_profile',
+        'product_settings:read',
       ],
     });
 
@@ -2290,7 +2393,7 @@ describe('screens have no axe violations', () => {
       },
       permissions: [
         'member:read_profile', 'tenant_config:read', 'tenant_config:write', 'kpm:read_profile',
-        'sales_script:approve',
+        'product_settings:read', 'sales_script:approve',
       ],
     });
 
@@ -2539,6 +2642,8 @@ describe('screens have no axe violations', () => {
             productId: 'p1', code: 'PRUMAPAN', companyName: 'PRUMapan', channel: 'conventional',
             category: 'life', lifecycle: 'active', sellable: true,
             active: f(true), displayName: f('PRUMapan'),
+            // OD-136: the description field, open in the panel walked below.
+            description: f('Endowment-style life with guaranteed retirement payouts.'),
             script: {
               goodFit: f('Young families'), opening: f('Halo?'), benefits: f(['Proteksi']),
               fullScript: f('Halo.'), objectionTheySay: f('Mahal.'),
@@ -2573,6 +2678,8 @@ describe('screens have no axe violations', () => {
             productId: 'p1', code: 'PRUMAPAN', companyName: 'PRUMapan', channel: 'conventional',
             category: 'life', lifecycle: 'active', sellable: true,
             active: f(true), displayName: f('PRUMapan'),
+            // OD-136: a pending description is a line the queue shows with the script's.
+            description: f('Pensiun tenang dari usia 55.', true),
             script: {
               goodFit: f('Young families'), opening: f('Halo dari kami!', true),
               benefits: f(['Proteksi']), fullScript: f('Halo.'), objectionTheySay: f('Mahal.'),

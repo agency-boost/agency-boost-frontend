@@ -565,6 +565,11 @@ export interface KpmProductRow {
   sellable: boolean;
   active: EffectiveField<boolean>;
   displayName: EffectiveField<string>;
+  /**
+   * *Short description (shown to agents)* (OD-136): this office's **draft**, else the company's
+   * tagline. Held for approval with the script, so agents read the effective read's instead.
+   */
+  description: EffectiveField<string>;
   script: Record<string, EffectiveField<string | string[]>>;
   reviewState: ScriptReviewState;
   rejectionReason: string | null;
@@ -579,6 +584,13 @@ export const setKpmProductActive = (productId: string, active: boolean | null) =
     method: 'PUT', body: { active },
   });
 
+/**
+ * The longest *Short description (shown to agents)* the API takes: the company tagline's own bound
+ * (OD-136). Held to the API document by `contract.spec.ts`, so the two cannot drift.
+ */
+export const PRODUCT_DESCRIPTION_MAX = 300;
+
+/** One field or a few; `description: null` gives the description back to the company. */
 export const saveKpmProductOverrides = (
   productId: string, overrides: Record<string, unknown>,
 ) => api<KpmProductRow>(`/kpm/settings/products/${productId}/overrides`, {
@@ -808,6 +820,8 @@ export const rejectScript = (productId: string, reason: string) =>
 export interface EffectiveScript {
   source: 'kpm' | 'company';
   script: Record<string, string | string[]>;
+  /** The office's approved description (OD-136), else the company's tagline. */
+  description: string;
 }
 
 /**

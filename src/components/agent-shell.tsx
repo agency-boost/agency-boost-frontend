@@ -183,8 +183,10 @@ function Chrome({
     {
       label: 'Sales tools',
       items: [
-        { label: 'Sales Attack Plan', href: '/attack-plan', icon: 'compass', upcoming: true },
-        { label: 'Product Catalog', href: '/product-catalog', icon: 'box', upcoming: true },
+        // Live for every field role (Phase 14; roles §4.2): the prototype gates neither (`Overall.html:2656-2657`).
+        // The catalog stays current over its drawer's address, `/product-catalog/{code}`.
+        { label: 'Sales Attack Plan', href: '/attack-plan', icon: 'compass', active: on('/attack-plan') },
+        { label: 'Product Catalog', href: '/product-catalog', icon: 'box', active: on('/product-catalog') },
       ],
       divider: true,
     },

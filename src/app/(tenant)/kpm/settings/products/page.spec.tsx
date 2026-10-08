@@ -15,13 +15,18 @@ const member = {
 };
 const OWNER = makeMe({
   membership: member,
-  permissions: ['tenant_config:read', 'tenant_config:write', 'sales_script:approve'],
+  permissions: ['tenant_config:read', 'product_settings:read', 'tenant_config:write', 'sales_script:approve'],
 });
 /** Someone who may edit a script and not approve one — the grant ADR-0037 kept separate. */
 const WRITER = makeMe({
-  membership: member, permissions: ['tenant_config:read', 'tenant_config:write'],
+  membership: member, permissions: ['tenant_config:read', 'product_settings:read', 'tenant_config:write'],
 });
-const READER = makeMe({ membership: member, permissions: ['tenant_config:read'] });
+const READER = makeMe({ membership: member, permissions: ['tenant_config:read', 'product_settings:read'] });
+/** A field member: the office's taxonomy is theirs to read, its product settings are not. */
+const FIELD_MEMBER = makeMe({
+  membership: { ...member, isKpmOwner: false, orgLevelCode: 'AGENT', hierarchyRole: 'agent' as const },
+  permissions: ['tenant_config:read', 'product_catalog:read'],
+});
 
 const BRANCH = { _id: 'k1', companyId: 'c1', companyName: 'Allianz Life', code: '0417' };
 
@@ -48,6 +53,7 @@ const product = (over: Record<string, unknown> = {}) => ({
   sellable: true,
   active: field(true),
   displayName: field('PRUMapan'),
+  description: field('Endowment-style life with guaranteed retirement payouts.'),
   script: script(),
   reviewState: 'none',
   rejectionReason: null,
@@ -223,6 +229,79 @@ describe('the office’s Products screen', () => {
     expect(screen.getByText(/Claim about returns is too strong/)).toBeInTheDocument();
   });
 
+  describe('the office’s description, held for approval (OD-136)', () => {
+    const LABEL = 'Short description (shown to agents)';
+    /** The field and its own two controls, as each script field has. */
+    const block = () => screen.getByLabelText(LABEL).closest('div')!.parentElement!;
+
+    it('shows the prototype’s field, following the company until the office writes its own', async () => {
+      render();
+      await open();
+
+      // The label is the prototype's own, guidance folded in (`KPM_Owner.html:1781`).
+      const box = screen.getByLabelText(LABEL);
+      expect(box).toHaveValue('Endowment-style life with guaranteed retirement payouts.');
+      expect(box).toHaveAttribute('maxLength', '300');
+      expect(within(block()).getByText('Following Allianz Life.')).toBeInTheDocument();
+      expect(within(block()).queryByRole('button', { name: 'Use Allianz Life’s' }))
+        .not.toBeInTheDocument();
+    });
+
+    it('sends the description alone, and the row waits for approval', async () => {
+      const ours = 'Dana pensiun yang cair rutin dari usia 55.';
+      const stub = render([product()], OWNER, {
+        '/kpm/settings/products/p1/overrides': {
+          body: product({ description: field(ours, true), reviewState: 'pending' }),
+        },
+      });
+      await open();
+
+      await userEvent.clear(screen.getByLabelText(LABEL));
+      await userEvent.type(screen.getByLabelText(LABEL), ours);
+      await userEvent.click(within(block()).getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+      expect(JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body)))
+        .toEqual({ description: ours });
+      expect(await screen.findByText('Waiting for your approval')).toBeInTheDocument();
+      expect(within(block()).getByText('Yours.')).toBeInTheDocument();
+    });
+
+    it('gives it back to the company with an unset, offered only once it is the office’s', async () => {
+      const stub = render([product({ description: field('Kalimat kami.', true) })], OWNER, {
+        '/kpm/settings/products/p1/overrides/description': { body: product() },
+      });
+      await open();
+
+      expect(screen.getByLabelText(LABEL)).toHaveValue('Kalimat kami.');
+      await userEvent.click(within(block()).getByRole('button', { name: 'Use Allianz Life’s' }));
+
+      await waitFor(() => expect(
+        stub.calls.some((c) => c.init.method === 'DELETE' && c.url.includes('/overrides/description')),
+      ).toBe(true));
+      await waitFor(() => expect(screen.getByLabelText(LABEL))
+        .toHaveValue('Endowment-style life with guaranteed retirement payouts.'));
+    });
+
+    it('puts a pending description on the approvals queue, as the line to decide', async () => {
+      render([product({ reviewState: 'pending', description: field('Kalimat kami.', true) })]);
+      await screen.findByText('PRUMapan');
+      await userEvent.click(screen.getByRole('link', { name: 'Script approvals' }));
+
+      expect(await screen.findByText('Waiting for your approval')).toBeInTheDocument();
+      expect(screen.getByText(/Short description \(shown to agents\):/)).toBeInTheDocument();
+      expect(screen.getByText('Kalimat kami.')).toBeInTheDocument();
+    });
+
+    it('lets a reader see it and not change it', async () => {
+      render([product()], READER);
+      await open();
+
+      expect(screen.getByLabelText(LABEL)).toBeDisabled();
+      expect(within(block()).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    });
+  });
+
   describe('the script approval gate (P5-T10)', () => {
     const openApprovals = async () => {
       await screen.findByText('PRUMapan');
@@ -335,6 +414,14 @@ describe('the office’s Products screen', () => {
 
       expect(await screen.findByText(/Nothing is waiting on you/)).toBeInTheDocument();
     });
+  });
+
+  it('P14 exit review: refuses a field member, who holds tenant_config:read but not product_settings:read, and asks for nothing', async () => {
+    const { calls } = render([product({ reviewState: 'pending' })], FIELD_MEMBER);
+
+    expect(await screen.findByRole('alert')).toHaveAttribute('data-permission', 'product_settings:read');
+    expect(screen.getByText('Not available to you')).toBeInTheDocument();
+    expect(calls.filter((c) => c.url.includes('/kpm/settings/products'))).toEqual([]);
   });
 
   it('shows a reader who cannot write the shelf without a control to change it', async () => {

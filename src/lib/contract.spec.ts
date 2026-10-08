@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { ACTIVATION_NOTE_MAX, ITEM_NOTE_MAX, START_DATE_BACK_DAYS } from './activation';
 import { INVITEES_MAX, NOTES_MAX, PEOPLE_PAGE, TITLE_MAX, TRIP_DAYS_MAX } from './calendar';
 import { LEADER_NOTE_MAX } from './coaching';
+import { PRODUCT_DESCRIPTION_MAX } from './tenant-config';
+import { COMMISSION_MAX_YEARS } from './admin';
 import { INBOX_PAGE_SIZE, POPOVER_PAGE_SIZE } from './notifications';
 
 /**
@@ -77,6 +79,10 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   // P4-T25: `displayUnit` is read by every benchmark on screen, and a missing one renders
   // a success rate as `0.15` rather than as a blank.
   ['tenant-config.ts', 'RatioRow', 'RatioDefinitionDto'],
+  // Phase 14 (OD-136): the office's Products screen reads the description's draft off the shelf, and
+  // the approvals queue reads what agents are served — the description among it — off the effective read.
+  ['tenant-config.ts', 'KpmProductRow', 'KpmProductDto'],
+  ['tenant-config.ts', 'EffectiveScript', 'EffectiveScriptDto'],
   ['admin.ts', 'Company', 'CompanyResponseDto'],
   // P5-T12: the template screen reads `officesUnrecorded` straight off this response.
   ['admin.ts', 'CompanyTemplate', 'CompanyTemplateDto'],
@@ -178,6 +184,19 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['leads.ts', 'Lead', 'LeadResponseDto'],
   ['leads.ts', 'LeadContact', 'LeadContactDto'],
   ['leads.ts', 'LeadPage', 'LeadPageDto'],
+  // Phase 14: the Product Catalog, its drawer and the Sales Attack Plan read every one of these straight
+  // off the field reads; a field renamed on the server would draw a blank card, block or verdict.
+  ['product-catalog.ts', 'CatalogList', 'CatalogListDto'],
+  ['product-catalog.ts', 'CatalogCard', 'CatalogCardDto'],
+  ['product-catalog.ts', 'CatalogCategory', 'CatalogCategoryDto'],
+  ['product-catalog.ts', 'CatalogProduct', 'CatalogProductDto'],
+  ['product-catalog.ts', 'CatalogScript', 'CatalogScriptDto'],
+  ['product-catalog.ts', 'CatalogDocument', 'CatalogDocumentDto'],
+  ['product-catalog.ts', 'CommissionRate', 'CommissionRateDto'],
+  ['product-catalog.ts', 'DocumentLink', 'CatalogDocumentUrlDto'],
+  ['product-catalog.ts', 'AttackPlan', 'AttackPlanDto'],
+  ['product-catalog.ts', 'AttackPlanBrief', 'AttackPlanBriefDto'],
+  ['product-catalog.ts', 'AttackPlanAlternative', 'AttackPlanAlternativeDto'],
 ];
 
 describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
@@ -199,6 +218,15 @@ describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
     expect(propertiesOf('CreateLeadDto')).not.toContain('lawfulBasis');
     expect(propertiesOf('UpdateLeadDto')).not.toContain('lawfulBasis');
     expect(declaredFields('leads.ts', 'Lead')).not.toContain('lawfulBasis');
+  });
+
+  it('Phase 14: the description’s bound on screen is the one the API validates (OD-136)', () => {
+    expect(doc.components.schemas.SaveProductOverridesDto.properties?.description.maxLength)
+      .toBe(PRODUCT_DESCRIPTION_MAX);
+  });
+
+  it('P14 exit review: the commission editor stops adding years where the API stops taking them (ADR-0119)', () => {
+    expect(doc.components.schemas.CommissionYearDto.properties?.year.maximum).toBe(COMMISSION_MAX_YEARS);
   });
 
   it('P11 exit review: the input limits a screen repeats are the ones the API validates', () => {
