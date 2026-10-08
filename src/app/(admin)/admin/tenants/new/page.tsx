@@ -16,9 +16,9 @@ const CODE = /^[A-Za-z0-9-]{2,16}$/;
 
 /** What each *Start from* choice gives the office, said under the field. */
 const START_HINT = {
-  template: 'Its settings are copied from this template’s published sections; a section it has not published starts empty.',
+  template: 'Its settings are copied from this template’s published sections; a section it has not published starts empty, except Capability Mapping, which starts with AgencyBoost’s standard capability ladder.',
   defaults: 'Every section as AgencyBoost ships it.',
-  empty: 'Nothing but the three activity types the goal plan counts. The Owner builds the rest.',
+  empty: 'Nothing but the three activity types the goal plan counts and AgencyBoost’s standard capability ladder. The Owner builds the rest.',
 } as const;
 
 /** `template:<id>`, `defaults` or `empty`: one select's value for the three kinds of source. */

@@ -189,9 +189,10 @@ describe('new tenant', () => {
     });
 
     it.each([
-      ['Empty', { kind: 'empty' }, /Nothing but the three activity types/],
+      // ADR-0116: the capability ladder is the platform's wherever the source has none, Empty included.
+      ['Empty', { kind: 'empty' }, /Nothing but the three activity types the goal plan counts and AgencyBoost’s standard capability ladder\./],
       ['AgencyBoost defaults', { kind: 'defaults' }, /Every section as AgencyBoost ships it/],
-      ['Jakarta branches', { kind: 'template', templateId: 't-jkt' }, /copied from this template/],
+      ['Jakarta branches', { kind: 'template', templateId: 't-jkt' }, /copied from this template.*except Capability Mapping, which starts with AgencyBoost’s standard capability ladder/],
     ] as const)('sends %s, and says what it gives the office', async (label, startFrom, hint) => {
       const { calls } = stubFetch({
         '/admin/companies': { body: COMPANIES },

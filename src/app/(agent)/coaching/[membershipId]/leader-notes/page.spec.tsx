@@ -273,7 +273,8 @@ describe('the Leader Notes tab (P11-T9)', () => {
       expect(within(mapping).queryAllByRole('listitem')).toHaveLength(0);
     });
 
-    it('P13.2-T6 AC-8: says an empty catalog is empty — an office started Empty — on both cards', async () => {
+    // An office started Empty had one until ADR-0116 (2026-10-08) gave it the platform ladder; kept for one made before.
+    it('P13.2-T6 AC-8: says an empty catalog is empty on both cards', async () => {
       show({
         'GET /coaching/coachees/mem-rina/profile': {
           body: profile({ catalog: { ...CATALOG, stages: [], milestones: [], grids: [] }, milestoneCodes: [], skillCodes: [], stageCode: null }),

@@ -75,7 +75,11 @@ describe('the capability catalog screen', () => {
   afterEach(() => { vi.unstubAllGlobals(); window.location.hash = ''; });
 
   it('P13.2-T6 AC-8: an empty catalog says so on both halves, and offers the first milestone', async () => {
-    // An office started Empty (ADR-0115 §1): an empty catalog, never the platform's ladder.
+    /*
+     * A catalog with no stage at all. An office started Empty had one under ADR-0115 §1; since ADR-0116
+     * (2026-10-08) it is given the platform ladder, so a new office never does — the state is kept for
+     * one made before.
+     */
     const empty = { stages: [], milestones: [], grids: [], version: 1 };
     render(empty, OWNER, '#ladder');
     expect(await screen.findByText('No stages yet.')).toBeInTheDocument();

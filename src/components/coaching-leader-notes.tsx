@@ -210,7 +210,10 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
       {saveError && <ErrorBanner {...saveError} />}
 
       <SummaryCard id="capability-mapping" title="Capability mapping" tag={tag ?? undefined} className="min-w-0">
-        {/* An office whose ladder has no stage yet — one started Empty (ADR-0115 §1). */}
+        {/*
+          * A catalog with no stage at all. Since ADR-0116 (2026-10-08) an office started Empty is given
+          * the platform ladder, so this is no longer reachable from a new office.
+          */}
         {profile.catalog.stages.length === 0 && (
           <EmptyState title="Your office has not set up its capability stages yet." className="py-6" />
         )}

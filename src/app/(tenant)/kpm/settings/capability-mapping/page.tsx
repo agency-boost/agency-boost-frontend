@@ -300,7 +300,11 @@ export default function CapabilityMappingPage() {
               </p>
             )}
           </div>
-          {/* An office started from a source with no capability ladder has none (ADR-0115 §1). */}
+          {/*
+            * A catalog with no stage at all. Since ADR-0116 (2026-10-08) every new office is given the
+            * platform ladder where its source has none, so provisioning no longer makes one; an office
+            * started Empty before then still could be.
+            */}
           {catalog.stages.length === 0 && <EmptyState title="No stages yet." />}
           <ul className="flex flex-col divide-y divide-hairline">
             {visible(catalog.stages).map((stage, index) => row(

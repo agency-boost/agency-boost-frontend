@@ -794,6 +794,14 @@ describe('a company’s Company template (P4-T8)', () => {
       expect(await screen.findByRole('heading', { name: 'Milestones' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Stages' })).toBeInTheDocument();
     });
+
+    it('ADR-0116: says an office made from it gets the standard ladder while none is published, not none of it', async () => {
+      // The capability ladder is structural: provisioning supplies the platform's where a template has none.
+      open(LADDER, '#capability-ladder');
+      expect(await screen.findByText(/an office made from Prudential template starts with AgencyBoost’s standard capability ladder/))
+        .toBeInTheDocument();
+      expect(screen.queryByText(/starts with none of it/)).not.toBeInTheDocument();
+    });
   });
 
   /*
@@ -855,6 +863,9 @@ describe('a company’s Company template (P4-T8)', () => {
       });
       await userEvent.click(await screen.findByRole('button', { name: 'New template' }));
       const dialog = screen.getByRole('dialog', { name: 'New template' });
+      // ADR-0116: Empty still gives an office made from it the standard capability ladder, and says so.
+      expect(within(dialog).getByText(/starts with the three activity types the goal plan counts and AgencyBoost’s standard capability ladder, and nothing else\./))
+        .toBeInTheDocument();
       await userEvent.type(within(dialog).getByLabelText('Name'), 'Surabaya');
       await userEvent.click(within(dialog).getByRole('radio', { name: /AgencyBoost defaults/ }));
       await userEvent.click(within(dialog).getByRole('button', { name: 'Create template' }));

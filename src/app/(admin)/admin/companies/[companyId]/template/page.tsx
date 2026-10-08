@@ -441,10 +441,16 @@ export default function CompanyTemplatePage({
               {current.template.publishedVersion === null ? (
                 /*
                  * ADR-0115 §1: there is no fallback any more. An office made from this template gets
-                 * none of a kind it never published — the three cascade activity types excepted.
+                 * none of a kind it never published — the three cascade activity types excepted, and the
+                 * capability ladder, which is the platform's where a template has none (ADR-0116).
                  */
                 current.kind === 'campaign_kinds' ? (
                   <>Nothing is published yet. Publishing applies these rules to every office of the company.</>
+                ) : current.kind === 'capability_ladder' ? (
+                  <>
+                    Nothing is published yet, so an office made from {shown.name} starts with
+                    AgencyBoost&rsquo;s standard capability ladder.
+                  </>
                 ) : (
                   <>Nothing is published yet, so an office made from {shown.name} starts with none of it.</>
                 )

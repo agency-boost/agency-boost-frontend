@@ -267,7 +267,7 @@ function NameDialog({
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-1 text-sm font-semibold text-navy">Start with</legend>
             {([
-              ['empty', 'Empty', 'Nothing in any section. An office made from it starts with the three activity types the goal plan counts, and nothing else.'],
+              ['empty', 'Empty', 'Nothing in any section. An office made from it starts with the three activity types the goal plan counts and AgencyBoost’s standard capability ladder, and nothing else.'],
               ['defaults', 'AgencyBoost defaults', 'Every section as AgencyBoost ships it, each published as version 1.'],
               ...(copyOf ? [[
                 'copy', `Copy of ${copyOf}`,
