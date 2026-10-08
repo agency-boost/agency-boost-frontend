@@ -78,10 +78,11 @@ function render(
           key: 'SELLING_SUCCESS_RATE', name: 'Selling success rate', unit: 'percentage',
           phase: 9, computed: true,
         },
-        // Not measured by the time campaigns are evaluated: it must not be offered. One of the
-        // seven the registry still refuses (P10.1-T2 AC-7) — Coaching coverage stood here until
-        // coaching moved ahead of campaigns and it became computable.
-        { key: 'EVENT_NPS', name: 'Event NPS', unit: 'score', phase: 18, computed: false },
+        // Not measured by the time campaigns are evaluated: it must not be offered. A stand-in:
+        // since the 2026-10-08 re-plan campaigns are evaluated after every metric registered
+        // today, so the server answers `computed: false` for none. Coaching coverage stood here
+        // until coaching moved ahead of campaigns, and Event NPS until that re-plan.
+        { key: 'LATER_METRIC', name: 'A metric measured later', unit: 'count', phase: 19, computed: false },
       ],
     },
     '/kpm/settings/publish-state': {
@@ -224,7 +225,7 @@ describe('the office’s Campaigns screen', () => {
 
     const select = screen.getByLabelText('What has to be reached');
     expect(within(select).getByRole('option', { name: 'APE achieved' })).toBeInTheDocument();
-    expect(within(select).queryByRole('option', { name: 'Event NPS' })).not.toBeInTheDocument();
+    expect(within(select).queryByRole('option', { name: 'A metric measured later' })).not.toBeInTheDocument();
   });
 
   it('shows a reader who cannot write without a control to change anything', async () => {

@@ -213,7 +213,7 @@ export interface BranchInfo {
   timezone: string;
   locale: string;
   currency: string;
-  /** 1–12. Stored and shown now; read by the period computations in Phase 14. */
+  /** 1–12. Stored and shown now; read by the period computations in Phase 18 (the old plan's 14). */
   fiscalYearStartMonth: number;
 }
 
