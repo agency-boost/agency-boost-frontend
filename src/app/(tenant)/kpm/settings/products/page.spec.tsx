@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
@@ -431,5 +431,137 @@ describe('the office’s Products screen', () => {
     expect(screen.queryByRole('button', { name: 'Stop selling' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save the name' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('1 · Opening line')).toBeDisabled();
+  });
+
+  /**
+   * The upload the office's product documents lacked since Phase 5 (P17-T9, D-productdocs), with the
+   * recruitment pitch's control, in the prototype's words and place (`KPM_Owner.html:2404`).
+   */
+  describe('the office’s own document upload (P17-T9)', () => {
+    const SIGNED = {
+      uploadUrl: 'https://storage.test/upload', storageKey: 'dev/kpm-1/products/01DOC',
+      signature: 'sig', expiresAt: '2026-10-09T03:10:00.000Z',
+    };
+    const DOCS = [
+      { slot: 'brochure', label: 'Brochure', storageKey: 'k1', filename: 'ours.pdf', source: 'kpm' },
+      { slot: 'illustration', label: 'Illustration / Simulation', storageKey: 'k2', filename: 'theirs.pdf', source: 'company' },
+      { slot: 'productDoc', label: 'Product Document', storageKey: null, filename: null, source: 'none' },
+    ];
+    const withDoc = (slot: string, filename: string) => product({
+      documents: DOCS.map((d) => (d.slot === slot
+        ? { ...d, storageKey: SIGNED.storageKey, filename, source: 'kpm' }
+        : d)),
+    });
+    const row = (label: string) => screen.getByText(label).closest('li') as HTMLElement;
+    const pick = (label: string) => row(label).querySelector('input[type=file]') as HTMLInputElement;
+    const pdf = (name: string) => new File(['%PDF-1.4'], name, { type: 'application/pdf' });
+
+    it('offers + Upload on an empty slot and Replace on a filled one, the company’s file included', async () => {
+      render([product({ documents: DOCS })]);
+      await open();
+
+      expect(screen.getByRole('button', { name: 'Replace Brochure' })).toHaveTextContent('Replace');
+      expect(screen.getByRole('button', { name: 'Replace Illustration / Simulation' })).toHaveTextContent('Replace');
+      expect(screen.getByRole('button', { name: 'Upload Product Document' })).toHaveTextContent('+ Upload');
+      // Beside the two the row already had.
+      expect(within(row('Brochure')).getByRole('button', { name: 'Open' })).toBeInTheDocument();
+      expect(within(row('Brochure')).getByRole('button', { name: 'Use Allianz Life’s' })).toBeInTheDocument();
+    });
+
+    it('signs a PDF into the office’s folder, sends it, and attaches it under its own name', async () => {
+      const stub = render([product({ documents: DOCS })], OWNER, {
+        'POST /kpm/settings/products/uploads': { body: SIGNED },
+        'https://storage.test/upload': { body: {} },
+        'PUT /kpm/settings/products/p1/documents/productDoc': { body: withDoc('productDoc', 'pd.pdf') },
+      });
+      await open();
+      await userEvent.upload(pick('Product Document'), pdf('pd.pdf'));
+
+      expect(await screen.findByText(/Uploaded by your office — pd\.pdf/)).toBeInTheDocument();
+      const sign = stub.calls.find((c) => c.url.includes('/kpm/settings/products/uploads'))!;
+      expect(sign.init.method).toBe('POST');
+      expect(JSON.parse(sign.init.body as string)).toEqual({ filename: 'pd.pdf', mimeType: 'application/pdf', bytes: 8 });
+      const put = stub.calls.find((c) => c.url.includes('/documents/productDoc'))!;
+      expect(put.init.method).toBe('PUT');
+      expect(JSON.parse(put.init.body as string)).toEqual({ storageKey: SIGNED.storageKey, label: 'pd.pdf' });
+    });
+
+    it('replaces an office file through the same route', async () => {
+      const stub = render([product({ documents: DOCS })], OWNER, {
+        'POST /kpm/settings/products/uploads': { body: SIGNED },
+        'https://storage.test/upload': { body: {} },
+        'PUT /kpm/settings/products/p1/documents/brochure': { body: withDoc('brochure', 'ours-v2.pdf') },
+      });
+      await open();
+      await userEvent.upload(pick('Brochure'), pdf('ours-v2.pdf'));
+
+      expect(await screen.findByText(/Uploaded by your office — ours-v2\.pdf/)).toBeInTheDocument();
+      expect(stub.calls.filter((c) => c.url.includes('/documents/brochure') && c.init.method === 'PUT')).toHaveLength(1);
+    });
+
+    it('refuses a file that is not a PDF in the row, before anything is sent', async () => {
+      const stub = render([product({ documents: DOCS })]);
+      await open();
+      fireEvent.change(pick('Product Document'), { target: { files: [new File(['x'], 'sheet.xlsx', { type: 'application/vnd.ms-excel' })] } });
+
+      expect(await within(row('Product Document')).findByText('“sheet.xlsx” is not a PDF. Only a PDF can be uploaded here.')).toBeInTheDocument();
+      expect(stub.calls.filter((c) => c.url.includes('/uploads'))).toEqual([]);
+    });
+
+    it('says what the server refused, under the row', async () => {
+      render([product({ documents: DOCS })], OWNER, {
+        'POST /kpm/settings/products/uploads': {
+          status: 400, body: { error: { code: 'ASSET_TOO_LARGE', message: 'Files must be 25 MB or smaller.', requestId: 'r-1' } },
+        },
+      });
+      await open();
+      await userEvent.upload(pick('Product Document'), pdf('pd.pdf'));
+      expect(await within(row('Product Document')).findByText('Files must be 25 MB or smaller.')).toBeInTheDocument();
+    });
+
+    it.each([
+      ['the office has switched off', { active: field(false) }],
+      ['the company has withdrawn', { sellable: false, lifecycle: 'withdrawn' }],
+    ])('offers no upload on a product %s (AC-1: a product the office keeps on)', async (_why, over) => {
+      render([product({ documents: DOCS, ...over })]);
+      await open();
+      expect(screen.queryByRole('button', { name: /^(Upload|Replace) / })).not.toBeInTheDocument();
+      expect(document.querySelector('input[type=file]')).toBeNull();
+    });
+
+    it('keeps the row’s two other actions: Open signs a link, Use the company’s gives the slot back', async () => {
+      const open = vi.fn();
+      vi.stubGlobal('open', open);
+      const stub = render([product({ documents: DOCS })], OWNER, {
+        '/kpm/settings/products/p1/documents/brochure/url': { body: { url: 'https://cdn.test/b?sig=1' } },
+        'DELETE /kpm/settings/products/p1/documents/brochure': { body: product({ documents: DOCS.slice(1) }) },
+      });
+      await screen.findByRole('button', { name: 'Customize' });
+      await userEvent.click(screen.getByRole('button', { name: 'Customize' }));
+      await userEvent.click(within(row('Brochure')).getByRole('button', { name: 'Open' }));
+      await waitFor(() => expect(open).toHaveBeenCalledWith('https://cdn.test/b?sig=1', '_blank', 'noopener,noreferrer'));
+
+      await userEvent.click(within(row('Brochure')).getByRole('button', { name: 'Use Allianz Life’s' }));
+      await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'DELETE' && c.url.includes('/documents/brochure'))).toBe(true));
+    });
+
+    it('says so when a document’s link is refused', async () => {
+      render([product({ documents: DOCS })], OWNER, {
+        '/kpm/settings/products/p1/documents/brochure/url': {
+          status: 404, body: { error: { code: 'NOT_FOUND', message: 'Document not found.', requestId: 'r-1' } },
+        },
+      });
+      await open();
+      await userEvent.click(within(row('Brochure')).getByRole('button', { name: 'Open' }));
+      expect(await screen.findByText('Document not found.')).toBeInTheDocument();
+    });
+
+    it('offers no upload to a reader who cannot write — a read-only support session among them', async () => {
+      const readOnly = makeMe({ ...READER, isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'u-support' });
+      render([product({ documents: DOCS })], readOnly);
+      await open();
+      expect(screen.queryByRole('button', { name: /^(Upload|Replace) / })).not.toBeInTheDocument();
+      expect(within(row('Brochure')).getByRole('button', { name: 'Open' })).toBeInTheDocument();
+    });
   });
 });

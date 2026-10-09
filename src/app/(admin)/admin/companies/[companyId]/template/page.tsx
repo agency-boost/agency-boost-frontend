@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, use } from 'react';
 import { ProductsTab } from '@/components/products-tab';
+import { RecruitmentPlaybookTab } from '@/components/recruitment-playbook-tab';
 import { SettingsScreen } from '@/components/settings-screen';
 import { listMetrics, type MetricDefinition } from '@/lib/tenant-config';
 import {
@@ -24,13 +25,14 @@ import {
 import { TemplatePicker } from '@/components/template-picker';
 
 /**
- * **The two tabs every template shares** (ADR-0115 §3, §7): carrier rules and products are the
- * company's, read live by its offices (ADR-0026, ADR-0033), one per company whichever template is shown.
- * Said in a tooltip on the tab, the smallest form that says it (ADR-0062 §2).
+ * **The tabs every template shares** (ADR-0115 §3, §7): carrier rules, products and the recruitment
+ * playbook are the company's, read live by its offices (ADR-0026, ADR-0033, ADR-0125), one per company
+ * whichever template is shown. Said in a tooltip on the tab, the smallest form that says it (ADR-0062 §2).
  */
 const SHARED_HINT: Record<string, string> = {
   campaigns: 'Campaigns are the company’s, shared by every template.',
   products: 'Products are the company’s, shared by every template.',
+  recruitment: 'The recruitment playbook is the company’s, shared by every template.',
 };
 
 /**
@@ -109,6 +111,14 @@ const TABS: {
   { key: 'campaign-promotion', group: 'campaigns', groupLabel: 'Campaigns', label: 'Promotion paths', kind: 'campaign_kinds', section: 'promotion_path' },
 
   { key: 'products', group: 'products', groupLabel: 'Products', label: 'Products', kind: null },
+
+  /*
+   * **The company's recruitment playbook** (P17-T8, OD-88 → 5, ADR-0125): *Products*' kind of tab —
+   * the company's own, read live by every agent's Attack Plan, no template kind and no draft bar.
+   * Not under *Lead statuses › Recruitment*, which is a preset ladder copied into an office; this is
+   * the words a plan is built from.
+   */
+  { key: 'recruitment', group: 'recruitment', groupLabel: 'Recruitment', label: 'Recruitment', kind: null },
 ];
 
 /**
@@ -178,17 +188,23 @@ export default function CompanyTemplatePage({
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  /**
+   * Unsaved edits on the *Recruitment* tab, which holds its own form: the playbook is not a template
+   * kind, so `dirty` never sees it, and leaving the tab discards it all the same.
+   */
+  const [playbookDirty, setPlaybookDirty] = useState(false);
 
   /**
    * Move to a leaf, asking first only when something could actually be lost.
    *
    * **A section change cannot lose anything** — it draws a different part of the payload
    * already in hand, so warning about unsaved edits there would be a false alarm on every
-   * `Sales` ↔ `Recruitment` click. Only a change of `kind` reloads, and only that discards.
+   * `Sales` ↔ `Recruitment` click. Only a change of `kind` reloads, and only that discards —
+   * that, and leaving the *Recruitment* tab, whose playbook form goes with it.
    */
   const go = (next: typeof TABS[number]) => {
     if (next.key === tab.key) return;
-    if (dirty && next.kind !== tab.kind) {
+    if ((dirty && next.kind !== tab.kind) || (tab.key === 'recruitment' && playbookDirty)) {
       setPendingTab({ label: next.label, go: () => selectTabHref(`#${next.key}`) });
       return;
     }
@@ -432,6 +448,9 @@ export default function CompanyTemplatePage({
         */}
       {tab.key === 'products' ? (
         <ProductsTab companyId={companyId} />
+      ) : tab.key === 'recruitment' ? (
+        // The playbook is the company's, not the template's: switching template leaves it as it is.
+        <RecruitmentPlaybookTab companyId={companyId} onDirtyChange={setPlaybookDirty} />
       ) : current === null || !shown ? (
         <SkeletonCards count={3} />
       ) : (

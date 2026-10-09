@@ -57,7 +57,7 @@ const SECTIONS: readonly {
   },
   {
     label: 'Settings',
-    // Nine items, in the prototype's order. Ratio benchmarks is deliberately absent:
+    // Ten items, in the prototype's order. Ratio benchmarks is deliberately absent:
     // the prototype has it as a sub-tab of Activity types (`KPM_Owner.html:1330`), not
     // as a sidebar destination.
     items: [
@@ -77,6 +77,12 @@ const SECTIONS: readonly {
       { label: 'Events', href: '/kpm/settings/events', icon: 'calendar' },
       { label: 'Campaigns', href: '/kpm/settings/campaigns', icon: 'trophy' },
       { label: 'Products', href: '/kpm/settings/products', icon: 'box' },
+      /*
+       * The recruitment section file's *Viewing as KPM* view (P17-T5, D-settings): after Products, the
+       * other set of documents the office keeps for its agents to show. The prototype has no settings
+       * item for it — its toggle is a demo device the permissions replace (route registry, H-22).
+       */
+      { label: 'Recruitment pitch', href: '/kpm/settings/recruitment-pitch', icon: 'chat' },
       // The Admin's as well as the Owner's since ADR-0027, like every page under Settings.
       { label: 'Branch info', href: '/kpm/settings/branch-info', icon: 'sliders' },
     ],

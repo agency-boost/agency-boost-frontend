@@ -84,6 +84,13 @@ import {
 import {
   AGUS_ME as UNIT_READER, dashboard as unitDashboard, EMPTY as UNIT_EMPTY, RATIOS as UNIT_RATIOS, SARI_UNIT,
 } from '@test/unit-dashboard-fixtures';
+import RecruitmentLayout from './(agent)/recruitment/layout';
+import RecruitmentAttackPlanPage from './(agent)/recruitment/attack-plan/page';
+import {
+  BRIEF as RECRUITMENT_BRIEF, plan as recruitmentPlan, RINA_ME as RECRUITMENT_ME, view as recruitmentView,
+} from '@test/recruitment-plan-fixtures';
+import RecruitmentPitchPage from './(tenant)/kpm/settings/recruitment-pitch/page';
+import PitchMaterialsPage from './(agent)/recruitment/pitch-materials/page';
 
 /**
  * Where the screen is, for the one shell that reads it: the coaching person shell's archive (P11-T10),
@@ -2436,6 +2443,163 @@ describe('screens have no axe violations', () => {
     });
   });
 
+  describe('Recruitment › Attack Plan (P17-T3 AC-8)', () => {
+    const SHELL = {
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+    };
+    const query = (q: Record<string, string>) => Object.assign(Promise.resolve(q), { status: 'fulfilled', value: q });
+    const attackPlan = (q: Record<string, string>) => (
+      <RecruitmentLayout><RecruitmentAttackPlanPage searchParams={query(q)} /></RecruitmentLayout>
+    );
+
+    it('the brief, part chosen', async () => {
+      nav.pathname = '/recruitment/attack-plan';
+      stubFetch({ ...SHELL, 'GET /recruitment/attack-plan': { body: recruitmentView() } });
+      renderInLayout(AgentLayout, attackPlan({}), { me: RECRUITMENT_ME });
+      await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
+      await userEvent.click(within(screen.getByRole('group', { name: 'Candidate type' })).getByRole('button', { name: 'Retiree' }));
+      await userEvent.click(
+        within(screen.getByRole('group', { name: 'What\'s driving them' })).getByRole('button', { name: 'Full career change' }),
+      );
+      await expectClean('recruitment/attack-plan (brief)');
+    });
+
+    it('the plan, with two opening lines under their tags and two push-backs', async () => {
+      nav.pathname = '/recruitment/attack-plan';
+      stubFetch({ ...SHELL, 'GET /recruitment/attack-plan': { body: recruitmentView(recruitmentPlan()) } });
+      renderInLayout(AgentLayout, attackPlan(RECRUITMENT_BRIEF), { me: RECRUITMENT_ME });
+      await screen.findByRole('heading', { level: 2, name: 'Fresh graduate' });
+      await expectClean('recruitment/attack-plan (plan)');
+    });
+
+    it('a company with no playbook (AC-7)', async () => {
+      nav.pathname = '/recruitment/attack-plan';
+      stubFetch({ ...SHELL, 'GET /recruitment/attack-plan': { body: recruitmentView(null, false) } });
+      renderInLayout(AgentLayout, attackPlan({}), { me: RECRUITMENT_ME });
+      await screen.findByText('No recruitment plan can be built yet.');
+      await expectClean('recruitment/attack-plan (no playbook)');
+    });
+  });
+
+  describe('the recruitment pitch (P17-T5 AC-7, P17-T6 AC-6)', () => {
+    const PITCH_SHELL = {
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+    };
+    const ITEMS = [
+      ['career-path', 'Career Path Ladder (Agent → AAB → AB)'],
+      ['income', 'Income Potential / compensation illustration'],
+      ['support', 'Support provided (training, coaching, tools)'],
+      ['commitment', 'Commitment needed — contract maintenance and required activity'],
+    ];
+    const pdfFile = (name: string) => ({ name, bytes: 2.4 * 1024 * 1024, uploadedOn: '2026-09-12' });
+    const pitchSlot = (slot: string, title: string, state: string, ticked: string[] | null, fileName: string | null) => ({
+      slot, title, line: `${title}'s line`, state, file: fileName ? pdfFile(fileName) : null, version: fileName ? 1 : 0,
+      checklist: ticked === null ? [] : ITEMS.map(([code, label]) => ({ code, label, ticked: ticked.includes(code) })),
+    });
+    const PITCH = {
+      empty: {
+        slots: [
+          pitchSlot('opportunity', 'Opportunity Overview', 'missing', [], null),
+          pitchSlot('proof', 'Proof & Credibility', 'missing', null, null),
+          pitchSlot('faq', 'FAQ', 'missing', null, null),
+          pitchSlot('howtojoin', 'How to Join', 'missing', null, null),
+        ],
+        summary: { done: 0, total: 4, missing: 4, unconfirmed: 0 },
+      },
+      'partly confirmed': {
+        slots: [
+          pitchSlot('opportunity', 'Opportunity Overview', 'partial', ['career-path', 'support'], 'Opportunity_Overview_v3.pdf'),
+          pitchSlot('proof', 'Proof & Credibility', 'uploaded', null, 'Proof_and_Credibility_2026.pdf'),
+          pitchSlot('faq', 'FAQ', 'missing', null, null),
+          pitchSlot('howtojoin', 'How to Join', 'missing', null, null),
+        ],
+        summary: { done: 1, total: 4, missing: 2, unconfirmed: 1 },
+      },
+      complete: {
+        slots: [
+          pitchSlot('opportunity', 'Opportunity Overview', 'complete', ITEMS.map(([c]) => c), 'Opportunity_Overview_v3.pdf'),
+          pitchSlot('proof', 'Proof & Credibility', 'uploaded', null, 'Proof_and_Credibility_2026.pdf'),
+          pitchSlot('faq', 'FAQ', 'uploaded', null, 'FAQ.pdf'),
+          pitchSlot('howtojoin', 'How to Join', 'uploaded', null, 'How_to_Join.pdf'),
+        ],
+        summary: { done: 4, total: 4, missing: 0, unconfirmed: 0 },
+      },
+    } as const;
+    const officeMember = {
+      membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab' as const,
+      isKpmOwner: true, isKpmAdmin: false, status: 'active' as const, directCount: 0,
+    };
+    const PITCH_OWNER = makeMe({
+      membership: officeMember,
+      permissions: ['member:read_profile', 'tenant_config:read', 'tenant_config:write', 'kpm:read_profile', 'recruitment:read'],
+    });
+    const PITCH_SUPPORT = makeMe({
+      membership: officeMember,
+      permissions: ['member:read_profile', 'tenant_config:read', 'kpm:read_profile', 'recruitment:read'],
+      isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'u-root',
+    });
+
+    it.each(Object.keys(PITCH) as (keyof typeof PITCH)[])('Settings › Recruitment pitch, %s (P17-T5)', async (state) => {
+      nav.pathname = '/kpm/settings/recruitment-pitch';
+      stubFetch({ ...PITCH_SHELL, 'GET /recruitment/pitch-materials': { body: PITCH[state] } });
+      renderInLayout(TenantLayout, <RecruitmentPitchPage />, { me: PITCH_OWNER });
+      await screen.findByRole('article', { name: 'How to Join' });
+      await expectClean(`kpm/settings/recruitment-pitch (${state})`);
+    });
+
+    it('Settings › Recruitment pitch in a read-only support session, the boxes disabled', async () => {
+      nav.pathname = '/kpm/settings/recruitment-pitch';
+      stubFetch({ ...PITCH_SHELL, 'GET /recruitment/pitch-materials': { body: PITCH['partly confirmed'] } });
+      renderInLayout(TenantLayout, <RecruitmentPitchPage />, { me: PITCH_SUPPORT });
+      await screen.findByRole('article', { name: 'How to Join' });
+      expect(screen.getAllByRole('checkbox')[0]).toBeDisabled();
+      await expectClean('kpm/settings/recruitment-pitch (read-only support session)');
+    });
+
+    it('Settings › Recruitment pitch with a refusal and a stale tick said in their cards', async () => {
+      nav.pathname = '/kpm/settings/recruitment-pitch';
+      stubFetch({
+        ...PITCH_SHELL,
+        'GET /recruitment/pitch-materials': { body: PITCH['partly confirmed'] },
+        'PUT /confirmations/income': {
+          status: 409, body: { error: { code: 'VERSION_CONFLICT', message: 'Changed.', requestId: 'r-1' } },
+        },
+      });
+      renderInLayout(TenantLayout, <RecruitmentPitchPage />, { me: PITCH_OWNER });
+      const opportunity = await screen.findByRole('article', { name: 'Opportunity Overview' });
+      await userEvent.click(within(opportunity).getByRole('checkbox', { name: ITEMS[1][1] }));
+      await within(opportunity).findByText(/This PDF was replaced while the page was open/);
+      // Named like a PDF, so the picker's own filter lets it through to the card's check.
+      await userEvent.upload(
+        screen.getByRole('article', { name: 'FAQ' }).querySelector('input[type=file]') as HTMLInputElement,
+        new File(['x'], 'scan.pdf', { type: 'image/png' }),
+      );
+      await screen.findByText(/is not a PDF/);
+      await expectClean('kpm/settings/recruitment-pitch (refusals)');
+    });
+
+    it.each(Object.keys(PITCH) as (keyof typeof PITCH)[])('Recruitment › Pitch Materials, %s (P17-T6)', async (state) => {
+      nav.pathname = '/recruitment/pitch-materials';
+      stubFetch({ ...PITCH_SHELL, 'GET /recruitment/pitch-materials': { body: PITCH[state] } });
+      renderInLayout(AgentLayout, <RecruitmentLayout><PitchMaterialsPage /></RecruitmentLayout>, { me: RECRUITMENT_ME });
+      await screen.findByRole('article', { name: 'How to Join' });
+      await expectClean(`recruitment/pitch-materials (${state})`);
+    });
+
+    it('Recruitment › Pitch Materials, its read failed', async () => {
+      nav.pathname = '/recruitment/pitch-materials';
+      stubFetch({
+        ...PITCH_SHELL,
+        'GET /recruitment/pitch-materials': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Broke.', requestId: 'r-2' } } },
+      });
+      renderInLayout(AgentLayout, <RecruitmentLayout><PitchMaterialsPage /></RecruitmentLayout>, { me: RECRUITMENT_ME });
+      await screen.findByRole('button', { name: 'Try again' });
+      await expectClean('recruitment/pitch-materials (error)');
+    });
+  });
+
   describe('the settings screens', () => {
     const settingsOwner = makeMe({
       membership: {
@@ -3048,6 +3212,66 @@ describe('screens have no axe violations', () => {
       );
       await screen.findByText('Submission polis');
       await expectClean('admin/companies/[companyId]/template');
+    });
+  });
+
+  /** P17-T8: the Company template's *Recruitment* tab — the company's playbook, a card open. */
+  describe('the Company template’s Recruitment tab (P17-T8)', () => {
+    const PLAYBOOK_TEMPLATES = [{
+      id: 't-default', companyId: 'c1', name: 'Prudential template', isDefault: true, status: 'active',
+      archivedAt: null, origin: { kind: 'migration' }, officeCount: 1, publishedVersions: { activity_taxonomy: 1 },
+      createdAt: '2026-10-07T03:00:00.000Z', updatedAt: '2026-10-07T03:00:00.000Z',
+    }];
+    const words = { theySay: 'I’m not sure I have much time to give this right now.', youSay: 'Activity is tracked, not hours.' };
+    const body = {
+      profiles: {
+        retiree: {
+          label: 'Retiree', tagline: 'Re-entering the workforce after time away.',
+          goodFitFor: 'Someone who needs flexibility more than a fixed schedule.',
+          benefits: ['Flexible schedule.', 'No resume-gap penalty.'],
+          openings: { flexibility: 'What’s the actual time you have available in a normal week right now?' },
+        },
+      },
+      objections: { time: words },
+      profileObjections: { retiree: { time: words } },
+      nextAction: 'Send them the Opportunity Overview from Pitch Materials.',
+    };
+
+    it('the playbook, with a candidate type and the objections open', async () => {
+      stubFetch({
+        '/admin/companies/c1/templates': { body: PLAYBOOK_TEMPLATES },
+        '/admin/companies/c1/template': {
+          body: {
+            id: 'tpl-1', companyId: 'c1', kind: 'activity_taxonomy', version: 1, status: 'draft',
+            payload: { categories: [], types: [] },
+            publishedAt: null, publishedVersion: 0, officesBehind: 0, officesUnrecorded: 0,
+          },
+        },
+        '/admin/companies/c1/recruitment-playbook': {
+          body: {
+            playbook: { companyId: 'c1', version: 2, body, updatedAt: '2026-10-09T07:05:00.000Z', updatedBy: { name: 'Root' } },
+            defaults: body,
+            vocabulary: {
+              types: [{ code: 'retiree', label: 'Retiree' }],
+              motivations: [{ code: 'flexibility', label: 'Flexibility / time freedom' }],
+              hesitations: [{ code: 'time', label: 'Worried about time commitment' }],
+            },
+            limits: { textMax: 600, benefitsMax: 6 },
+          },
+        },
+      });
+      renderInLayout(
+        AdminLayout,
+        <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
+        { me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'company_template:read'] }) },
+      );
+      const sections = within(await screen.findByRole('navigation', { name: 'Template sections' }));
+      await userEvent.click(sections.getByRole('link', { name: 'Recruitment' }));
+      await screen.findByText('This playbook is live.');
+      for (const name of ['Retiree', 'Objections']) {
+        await userEvent.click(within(screen.getByRole('group', { name })).getByRole('button', { name: 'Edit' }));
+      }
+      await expectClean('admin/companies/[companyId]/template#recruitment');
     });
   });
 });

@@ -79,6 +79,20 @@ describe('the tenant shell (P3-T10 AC-4)', () => {
 
     expect(screen.getByRole('link', { name: 'Training' })).toHaveAttribute('href', '/kpm/settings/training');
   });
+
+  it.each([['the Owner', true], ['the Admin', false]])(
+    'P17-T5 AC-1 gives %s Settings › Recruitment pitch, right after Products',
+    (_who, isOwner) => {
+      renderWithSession(<TenantShell title="Recruitment pitch">body</TenantShell>, { me: tenantAdmin(isOwner) });
+      openGroup(/^Settings/);
+
+      const item = screen.getByRole('link', { name: 'Recruitment pitch' });
+      expect(item).toHaveAttribute('href', '/kpm/settings/recruitment-pitch');
+      const settings = within(item.closest('ul') as HTMLElement).getAllByRole('link').map((a) => a.textContent?.trim());
+      expect(settings.indexOf('Recruitment pitch')).toBe(settings.indexOf('Products') + 1);
+      expect(item.querySelector('svg')).not.toBeNull();
+    },
+  );
 });
 
 describe('Open agent view, in the identity menu (P13.2-T5, ADR-0114)', () => {

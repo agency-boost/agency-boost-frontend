@@ -8,7 +8,7 @@ import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   confirmTrainingUpload, moduleContentUrl, readModuleContent, requestTrainingUpload,
-  resetModuleContent, saveModuleContent,
+  resetModuleContent, saveModuleContent, signedUploadForm,
   type ContentFile, type ContentLink, type ModuleContent, type ModuleContentView,
 } from '@/lib/tenant-config';
 
@@ -152,11 +152,7 @@ export function ModuleContentEditor({
       const signed = await requestTrainingUpload({
         filename: file.name, mimeType: file.type, bytes: file.size,
       });
-      const form = new FormData();
-      form.append('file', file);
-      form.append('public_id', signed.storageKey);
-      form.append('signature', signed.signature);
-      const sent = await fetch(signed.uploadUrl, { method: 'POST', body: form });
+      const sent = await fetch(signed.uploadUrl, { method: 'POST', body: signedUploadForm(signed, file) });
       if (!sent.ok) throw new Error('upload failed');
 
       const confirmed = await confirmTrainingUpload(signed.storageKey);

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { PublishBar } from '@/components/publish-bar';
+import { PdfUploadNotice, usePdfUpload } from '@/components/recruitment/pdf-upload';
 import { SettingsScreen } from '@/components/settings-screen';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -14,9 +15,9 @@ import { useCan } from '@/lib/session';
 import { useHashTab } from '@/lib/use-hash-tab';
 import {
   approveScript, kpmProductDocumentUrl, listKpmProducts, listScriptReviews, readBranchInfo,
-  readEffectiveScript, rejectScript, resetKpmProductDocument, resetKpmProductOverride,
-  saveKpmProductOverrides, setKpmProductActive, PRODUCT_DESCRIPTION_MAX,
-  type KpmProductRow,
+  readEffectiveScript, rejectScript, requestProductUpload, resetKpmProductDocument,
+  resetKpmProductOverride, saveKpmProductOverrides, setKpmProductActive, setKpmProductDocument,
+  PRODUCT_DESCRIPTION_MAX, type KpmProductRow,
 } from '@/lib/tenant-config';
 
 /** The seven the override modal names, in its order (`KPM_Owner.html:1785-1791`). */
@@ -43,6 +44,60 @@ const REVIEW: Record<string, { tone: 'won' | 'open'; text: string }> = {
 };
 
 const asText = (value: string | string[]) => (Array.isArray(value) ? value.join('\n') : value);
+
+/**
+ * A product document's upload (P17-T9, D-productdocs): the office's own PDF for one slot, through the
+ * control the recruitment pitch uses — refused here when it is not a PDF or larger than the bound,
+ * signed into the office's own folder, sent straight to storage, then attached by
+ * `PUT /kpm/settings/products/:productId/documents/:slot`, which confirms what landed.
+ *
+ * The prototype's words and place (`KPM_Owner.html:2404`): a row action beside *Open link →*, *Replace*
+ * when the slot holds a file — the company's or the office's — and *+ Upload* when it holds none.
+ * Offered on a product the office keeps on only (AC-1), and never without `tenant_config:write`, which
+ * a read-only support session does not hold. The name says which document, since every row has one.
+ */
+function DocumentUpload({
+  productId,
+  slot,
+  label,
+  hasFile,
+  disabled,
+  onAttached,
+}: {
+  productId: string;
+  slot: string;
+  label: string;
+  hasFile: boolean;
+  disabled: boolean;
+  onAttached: (row: KpmProductRow) => void;
+}) {
+  const upload = usePdfUpload<KpmProductRow>({
+    sign: requestProductUpload,
+    // The label is the file's own name, cut to the 200 characters the attach takes, so a long name that
+    // signed and uploaded is never refused afterwards.
+    attach: (storageKey, file) => setKpmProductDocument(productId, slot, { storageKey, label: file.name.slice(0, 200) }),
+    onAttached,
+  });
+  const blocked = disabled || upload.busy;
+
+  return (
+    <>
+      <Button
+        variant="inline"
+        aria-label={hasFile ? `Replace ${label}` : `Upload ${label}`}
+        // Not `disabled`, which would drop the focus while the file is on its way.
+        aria-disabled={blocked || undefined}
+        className="aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
+        onClick={() => { if (!blocked) upload.choose(); }}
+      >
+        {hasFile ? 'Replace' : '+ Upload'}
+      </Button>
+      {upload.picker}
+      {/* Under the row, whichever of its actions comes after: the row wraps it onto its own line. */}
+      <PdfUploadNotice state={upload} className="order-last flex basis-full flex-col gap-2" />
+    </>
+  );
+}
 
 /**
  * What this office sells, and the words it sells it with (P5-T5, ADR-0033).
@@ -592,6 +647,19 @@ export default function KpmProductsPage() {
                 >
                   Open
                 </Button>
+              )}
+              {canWrite && product.sellable && product.active.value && (
+                <DocumentUpload
+                  productId={product.productId}
+                  slot={doc.slot}
+                  label={doc.label}
+                  hasFile={doc.storageKey !== null}
+                  disabled={busy}
+                  onAttached={(row) => {
+                    setError(null);
+                    setRows((now) => now?.map((p) => (p.productId === row.productId ? row : p)) ?? now);
+                  }}
+                />
               )}
               {canWrite && doc.source === 'kpm' && (
                 <Button

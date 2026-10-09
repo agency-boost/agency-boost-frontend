@@ -13,10 +13,11 @@ import { useSignOut } from '@/lib/use-sign-out';
 /**
  * The chrome around every agent and leader screen (`Overall.html:2610-2691`).
  *
- * The eight sections, their order and their labels are the prototype's, verbatim. They
+ * The nine sections, their order and their labels are the prototype's, verbatim — `Overall.html`'s eight,
+ * and *Recruitment tools*, which `Recruitment_Section.html` adds after *Sales tools* (P17-T3). They
  * were previously two invented ones — `Your office` and `Your work` — which appear in no
  * prototype file, and which put Admin first when the prototype puts it last. A member who
- * leads nobody sees seven: *Unit tools* and *Group tree* follow the graph (`leadsSomeone`,
+ * leads nobody sees eight: *Unit tools* and *Group tree* follow the graph (`leadsSomeone`,
  * below), which is the one place this nav departs from the prototype's static markup.
  *
  * Unbuilt items keep an `Upcoming` pill rather than disappearing, because the client asked on
@@ -147,7 +148,7 @@ function Chrome({
   };
 
   /*
-   * Eight sections in the prototype's order, Admin last, **with a line between every two** (client
+   * Nine sections in the prototype's order, Admin last, **with a line between every two** (client
    * feedback, 2026-09-30; parity I-144). The prototype draws two lines here, before KPM and before
    * Admin (`Overall.html:2660`, `:2672`), where the Owner's and the Super Admin's draw one before
    * every group. Once every group became a toggle of its own (P10.1-T3), a heading with no line
@@ -189,6 +190,18 @@ function Chrome({
         { label: 'Product Catalog', href: '/product-catalog', icon: 'box', active: on('/product-catalog') },
       ],
       divider: true,
+    },
+    {
+      /*
+       * The section file's one addition to the shell (`Recruitment_Section.html:251-254`): a group of its own
+       * after *Sales tools* and before the line above *KPM*, in `Overall.html`'s sentence case
+       * (`prototype-sources.md`, *What each file adds*; P17-T3 AC-1). Every field role's, and the Owner's
+       * and the Admin's in their field view, so it follows no graph. It opens the first tab and stays
+       * current on both (`/recruitment/*`). Its glyph, *People*, is no other item's here.
+       */
+      label: 'Recruitment tools',
+      divider: true,
+      items: [{ label: 'Recruitment', href: '/recruitment/attack-plan', icon: 'users', active: on('/recruitment') }],
     },
     {
       label: 'KPM',

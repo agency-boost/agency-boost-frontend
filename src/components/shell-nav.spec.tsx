@@ -72,13 +72,15 @@ describe('the sidebar matches the prototype', () => {
     expect(screen.getByText('AgencyBoost')).toBeInTheDocument();
   });
 
-  it('agent app: the prototype eight sections, in order, with Admin last', () => {
+  it('agent app: the prototype nine sections, in order, with Admin last', () => {
+    // `Overall.html`'s eight, and *Recruitment tools* after *Sales tools* (`Recruitment_Section.html:251-254`, P17-T3 AC-1).
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
     const sections = navLabels().filter((t) =>
-      ['Personal tools', 'Unit tools', 'New agent', 'Training', 'Sales tools', 'KPM', 'Campaign', 'Admin'].includes(t),
+      ['Personal tools', 'Unit tools', 'New agent', 'Training', 'Sales tools', 'Recruitment tools', 'KPM', 'Campaign', 'Admin']
+        .includes(t),
     );
     expect(sections).toEqual([
-      'Personal tools', 'Unit tools', 'New agent', 'Training', 'Sales tools', 'KPM', 'Campaign', 'Admin',
+      'Personal tools', 'Unit tools', 'New agent', 'Training', 'Sales tools', 'Recruitment tools', 'KPM', 'Campaign', 'Admin',
     ]);
   });
 
@@ -105,7 +107,7 @@ describe('the sidebar matches the prototype', () => {
       permissions: [],
     });
     // *New agent* follows the reader's own activation and hires (P13-T7 AC-5), which none of these has.
-    const SECTIONS = ['Personal tools', 'Unit tools', 'Training', 'Sales tools', 'KPM', 'Campaign', 'Admin'];
+    const SECTIONS = ['Personal tools', 'Unit tools', 'Training', 'Sales tools', 'Recruitment tools', 'KPM', 'Campaign', 'Admin'];
 
     it.each([
       ['an Agent', member('agent', 0)],
@@ -116,7 +118,7 @@ describe('the sidebar matches the prototype', () => {
       for (const label of ['Unit tools', 'Unit dashboard', 'Coaching session', 'Group tree']) {
         expect(screen.queryByText(label), `${label} is offered`).not.toBeInTheDocument();
       }
-      // The rest of Admin stays: User management is every member's. Six sections, in order.
+      // The rest of Admin stays: User management is every member's. Seven sections, in order.
       expect(screen.getByText('User management').closest('a')).toHaveAttribute('href', '/user-management/kpm');
       expect(navLabels().filter((t) => SECTIONS.includes(t))).toEqual(SECTIONS.filter((s) => s !== 'Unit tools'));
     });

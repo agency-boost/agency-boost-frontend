@@ -495,6 +495,25 @@ export interface SignedUpload {
   storageKey: string;
   signature: string;
   expiresAt: string;
+  /**
+   * Every multipart field storage needs beside the file — for Cloudinary the API key, the timestamp,
+   * the public id, the delivery type and the signature over them. Storage refuses an upload that
+   * carries the signature alone, which is what was sent before this field existed.
+   */
+  fields?: Record<string, string>;
+}
+
+/**
+ * **The one form a signed upload is sent as**, for every upload in the app: the file, then every field
+ * the server signed, as the server named them. An older server's answer, with no `fields`, gets the
+ * two it used to.
+ */
+export function signedUploadForm(signed: SignedUpload, file: Blob): FormData {
+  const form = new FormData();
+  const fields = signed.fields ?? { public_id: signed.storageKey, signature: signed.signature };
+  for (const [name, value] of Object.entries(fields)) form.append(name, value);
+  form.append('file', file);
+  return form;
 }
 
 export const readModuleContent = (code: string) =>
@@ -602,6 +621,13 @@ export const resetKpmProductOverride = (productId: string, field: string) =>
   api<KpmProductRow>(`/kpm/settings/products/${productId}/overrides/${field}`, {
     method: 'DELETE',
   });
+
+/**
+ * A signature for one product document, a PDF into the office's own `products` folder the server
+ * picks (P17-T9, D-productdocs). `setKpmProductDocument` then attaches the stored key.
+ */
+export const requestProductUpload = (body: { filename: string; mimeType: string; bytes: number }) =>
+  api<SignedUpload>('/kpm/settings/products/uploads', { method: 'POST', body });
 
 export const setKpmProductDocument = (
   productId: string, slot: string, body: { storageKey: string; label: string },

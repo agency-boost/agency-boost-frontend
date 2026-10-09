@@ -6,9 +6,11 @@ import type { Me } from '@/lib/session';
 import { PHONE_QUERY } from '@/lib/use-phone';
 import { AgentShell } from './agent-shell';
 
+// Mutable so the nav's cases can stand on a recruitment address; every other test reads `/coaching`.
+const route = vi.hoisted(() => ({ path: '/coaching' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  usePathname: () => '/coaching',
+  usePathname: () => route.path,
 }));
 
 /** A member of the office, with only what a given case is about spelled out. */
@@ -97,5 +99,75 @@ describe('Open Owner view and Open Admin view, in the field view’s identity me
     expect(nav.contains(viewSwitch)).toBe(false);
     expect(nav.compareDocumentPosition(viewSwitch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(links().slice(-2)).toEqual(['Open Admin view', 'Your account']);
+  });
+});
+
+/**
+ * **The *Recruitment tools* group** (P17-T3 AC-1): *Recruitment*, the section file's one addition to the
+ * shell (`Recruitment_Section.html:251-254`), after *Sales tools* and before the line above *KPM*, for
+ * every field role and in the Owner's and the Admin's field view.
+ */
+describe('Recruitment tools, after Sales tools (P17-T3 AC-1)', () => {
+  afterEach(() => { route.path = '/coaching'; });
+
+  /** The nav's group headings and items, in order, by their text. */
+  const navOrder = () => Array.from(screen.getByRole('navigation', { name: 'Main' })
+    .querySelectorAll('[aria-controls^="nav-group"], a'))
+    .map((el) => (el.textContent ?? '').replace('\u25b8', '').trim());
+
+  it.each([
+    ['an Agent', reader({ orgLevelCode: 'AGENT', hierarchyRole: 'agent', directCount: 0 })],
+    ['an AAB', reader({ orgLevelCode: 'AAB', hierarchyRole: 'aab', directCount: 1 })],
+    ['an AB', reader({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 4 })],
+    ['an Owner in their field view', reader({ isKpmOwner: true, directCount: 3 })],
+    ['an Admin in their field view', reader({ isKpmAdmin: true })],
+  ])('P17-T3 AC-1 offers %s Recruitment, a live link to the first tab, in its own group after Sales tools', (_who, me) => {
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me });
+    const order = navOrder();
+    const at = order.indexOf('Recruitment tools');
+    expect(order.slice(at - 3, at + 3)).toEqual([
+      'Sales tools', 'Sales Attack Plan', 'Product Catalog', 'Recruitment tools', 'Recruitment', 'KPM',
+    ]);
+    const item = screen.getByRole('link', { name: 'Recruitment' });
+    expect(item).toHaveAttribute('href', '/recruitment/attack-plan');
+    expect(item).not.toHaveAttribute('aria-disabled');
+    expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
+  });
+
+  it('P17-T3 AC-1 ends its group with the line every group but the last has (parity I-144)', () => {
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
+    const group = screen.getByRole('link', { name: 'Recruitment' }).closest('nav > *')!;
+    expect(group.lastElementChild).toHaveAttribute('role', 'separator');
+  });
+
+  it.each(['/recruitment', '/recruitment/attack-plan', '/recruitment/pitch-materials'])(
+    'P17-T3 AC-1 is the current item on %s, and Sales Attack Plan is not',
+    (path) => {
+      route.path = path;
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
+      expect(screen.getByRole('link', { name: 'Recruitment' })).toHaveAttribute('aria-current', 'page');
+      expect(screen.getByRole('link', { name: 'Sales Attack Plan' })).not.toHaveAttribute('aria-current');
+    },
+  );
+
+  it.each(['/attack-plan', '/recruitments', '/kpm/settings/recruitment-pitch'])('P17-T3 AC-1 is not current on %s', (path) => {
+    // A prefix is not a parent: `/recruitments` is not beneath `/recruitment`, and the Sales Attack Plan's
+    // `/attack-plan` is its own.
+    route.path = path;
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
+    expect(screen.getByRole('link', { name: 'Recruitment' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('P17-T3 AC-1 wears a glyph no other item in the sidebar uses', () => {
+    renderWithSession(<AgentShell title="x">body</AgentShell>, {
+      me: { ...reader({ directCount: 2, isKpmOwner: true }), activation: { open: true, complete: false }, newHires: true },
+    });
+    const items = Array.from(screen.getByRole('navigation', { name: 'Main' }).querySelectorAll('a'));
+    const glyph = (a: Element) => a.querySelector('svg')?.innerHTML ?? '';
+    const recruitment = items.find((a) => a.textContent?.trim() === 'Recruitment')!;
+    expect(glyph(recruitment)).not.toBe('');
+    const others = items.filter((a) => a !== recruitment).map(glyph);
+    expect(others.length).toBeGreaterThan(10);
+    expect(others).not.toContain(glyph(recruitment));
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sequenceVersions, stageChange, type ConfigChange } from '@/lib/tenant-config';
+import { sequenceVersions, signedUploadForm, stageChange, type ConfigChange } from '@/lib/tenant-config';
 
 describe('sequenceVersions — the version a batch finds each row at', () => {
   it('leaves one op per row exactly as the screen read it', () => {
@@ -45,5 +45,26 @@ describe('sequenceVersions — the version a batch finds each row at', () => {
     sequenceVersions(ops);
 
     expect(ops[1].expectedVersion).toBe(3);
+  });
+});
+
+describe('signedUploadForm — the form a signed upload is sent as', () => {
+  const file = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
+  const base = { uploadUrl: 'https://store.test/upload', storageKey: 'k/1', signature: 'sig', expiresAt: '2026-10-09T00:00:00Z' };
+
+  it('sends every field the server signed, then the file', () => {
+    const form = signedUploadForm(
+      { ...base, fields: { api_key: '123', timestamp: '1760000000', public_id: 'k/1', type: 'authenticated', signature: 'sig' } },
+      file,
+    );
+    expect([...form.keys()]).toEqual(['api_key', 'timestamp', 'public_id', 'type', 'signature', 'file']);
+    expect(form.get('api_key')).toBe('123');
+    expect(form.get('type')).toBe('authenticated');
+  });
+
+  it('falls back to the public id and the signature when the server sends no fields', () => {
+    const form = signedUploadForm(base, file);
+    expect([...form.keys()]).toEqual(['public_id', 'signature', 'file']);
+    expect(form.get('public_id')).toBe('k/1');
   });
 });

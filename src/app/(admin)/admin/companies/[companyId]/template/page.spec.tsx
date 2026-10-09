@@ -36,7 +36,7 @@ const SUPER_ADMIN = makeMe({
     pronoun: 'they', initials: 'R', platformRole: 'super_admin',
   },
   membership: null,
-  permissions: ['company_template:read', 'company_template:write'],
+  permissions: ['company_template:read', 'company_template:write', 'recruitment_playbook:write'],
 });
 
 const TAXONOMY = {
@@ -115,7 +115,7 @@ describe('a company’s Company template (P4-T8)', () => {
     await screen.findByText('Submission polis');
     for (const label of [
       'Activity types', 'Lead statuses', 'Activation checklist',
-      'Training', 'Events', 'Campaigns', 'Products',
+      'Training', 'Events', 'Campaigns', 'Products', 'Recruitment',
     ]) {
       expect(sections().getByRole('link', { name: label })).toBeInTheDocument();
     }
@@ -779,7 +779,9 @@ describe('a company’s Company template (P4-T8)', () => {
       await screen.findByText('Not yet approached');
       const before = stub.calls.filter((c) => String(c.url).includes('/template')).length;
 
-      await userEvent.click(screen.getByRole('link', { name: 'Recruitment' }));
+      // The subtab, not the company's *Recruitment* tab beside *Products* (P17-T8).
+      const subtabs = screen.getByRole('navigation', { name: 'Lead statuses sections' });
+      await userEvent.click(within(subtabs).getByRole('link', { name: 'Recruitment' }));
 
       expect(await screen.findByText('Not approached')).toBeInTheDocument();
       expect(stub.calls.filter((c) => String(c.url).includes('/template'))).toHaveLength(before);
@@ -1188,5 +1190,105 @@ describe('a company’s Company template (P4-T8)', () => {
       await within(dialog).findByRole('combobox', { name: 'Template' });
       expect((await axe(dialog, { rules: { 'color-contrast': { enabled: false } } })).violations ?? []).toHaveLength(0);
     });
+  });
+});
+
+/**
+ * **P17-T8: the company's *Recruitment* tab** (OD-88 → 5, ADR-0125) — the recruitment playbook, the
+ * company's own as *Products* is. What the editor does is `recruitment-playbook-tab.spec.tsx`'s; here,
+ * where the tab sits, what it says of itself, and that leaving it with edits asks first.
+ */
+describe('the Recruitment tab (P17-T8)', () => {
+  /** The smallest vocabulary the editor draws: one answer to each of the brief's three questions. */
+  const VOCABULARY = {
+    types: [{ code: 'fresh-grad', label: 'Fresh grad' }],
+    motivations: [{ code: 'side-income', label: 'Extra income on the side' }],
+    hesitations: [{ code: 'time', label: 'Worried about time commitment' }],
+  };
+  const BODY = {
+    profiles: {
+      'fresh-grad': {
+        label: 'Fresh graduate', tagline: 'New to the workforce.', goodFitFor: 'Someone weighing a first job.',
+        benefits: ['No prior experience required.'], openings: { 'side-income': 'On the side for now?' },
+      },
+    },
+    objections: { time: { theySay: 'How much time?', youSay: 'Activity is tracked, not hours.' } },
+    profileObjections: {},
+    nextAction: 'Send them the Opportunity Overview.',
+  };
+  const PLAYBOOK = {
+    companyId: 'c1', version: 2, body: BODY, updatedAt: '2026-10-09T07:05:00.000Z', updatedBy: { name: 'Root' },
+  };
+
+  const open = (playbook: unknown = PLAYBOOK, hash = '#recruitment') => {
+    window.location.hash = hash;
+    const stub = stubFetch({
+      '/admin/companies/c1/template': { body: TAXONOMY },
+      '/admin/companies/c1/recruitment-playbook': { body: { playbook, defaults: BODY, vocabulary: VOCABULARY, limits: { textMax: 600, benefitsMax: 6 } } },
+      '/admin/companies/c1/products': { body: [] },
+    });
+    renderWithSession(
+      <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />,
+      { me: SUPER_ADMIN },
+    );
+    return stub;
+  };
+
+  afterEach(() => {
+    window.location.hash = '';
+    vi.unstubAllGlobals();
+  });
+
+  it('sits after Products, saying in its tooltip that it is the company’s, shared by every template', async () => {
+    open(PLAYBOOK, '');
+    await screen.findByText('Submission polis');
+    // By address: a tab's text carries its hidden tooltip, which is how a screen reader is given it.
+    const order = sections().getAllByRole('link').map((l) => l.getAttribute('href'));
+    expect(order.slice(-2)).toEqual(['#products', '#recruitment']);
+    const tab = sections().getByRole('link', { name: 'Recruitment' });
+    expect(tab).toHaveAttribute('title', 'The recruitment playbook is the company’s, shared by every template.');
+    expect(tab).toHaveAccessibleDescription('The recruitment playbook is the company’s, shared by every template.');
+  });
+
+  it('opens the company’s playbook where the address bar says, with no draft bar and no Publish', async () => {
+    const stub = open();
+    expect(await screen.findByText('This playbook is live.')).toBeInTheDocument();
+    expect(screen.getByText('Version 2 · saved by Root on October 9, 2026 · 2:05 PM')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Fresh grad' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Save draft' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Publish/ })).toBeNull();
+    expect(stub.calls.some((c) => c.url.endsWith('/admin/companies/c1/recruitment-playbook'))).toBe(true);
+  });
+
+  it('reached by its tab, from another', async () => {
+    open(PLAYBOOK, '');
+    await screen.findByText('Submission polis');
+    await userEvent.click(sections().getByRole('link', { name: 'Recruitment' }));
+    expect(await screen.findByText('This playbook is live.')).toBeInTheDocument();
+    expect(window.location.hash).toBe('#recruitment');
+  });
+
+  it('asks before another tab discards a playbook that is not saved', async () => {
+    open(null);
+    await userEvent.click(await screen.findByRole('button', { name: 'Start from nothing' }));
+    await userEvent.click(sections().getByRole('link', { name: 'Products' }));
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('You have edits here that are not saved.');
+    await userEvent.click(within(alert).getByRole('button', { name: 'Stay here' }));
+    expect(screen.getByText('Not saved yet.')).toBeInTheDocument();
+    expect(window.location.hash).toBe('#recruitment');
+
+    await userEvent.click(sections().getByRole('link', { name: 'Products' }));
+    await userEvent.click(within(screen.getByRole('alert')).getByRole('button', { name: 'Discard and open Products' }));
+    expect(window.location.hash).toBe('#products');
+  });
+
+  it('leaves without asking when nothing is unsaved', async () => {
+    open();
+    await screen.findByText('This playbook is live.');
+    await userEvent.click(sections().getByRole('link', { name: 'Products' }));
+    expect(screen.queryByText('You have edits here that are not saved.')).toBeNull();
+    expect(window.location.hash).toBe('#products');
   });
 });

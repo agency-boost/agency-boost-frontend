@@ -5,6 +5,7 @@ import { ACTIVATION_NOTE_MAX, ITEM_NOTE_MAX, START_DATE_BACK_DAYS } from './acti
 import { INVITEES_MAX, NOTES_MAX, PEOPLE_PAGE, TITLE_MAX, TRIP_DAYS_MAX } from './calendar';
 import { LEADER_NOTE_MAX } from './coaching';
 import { PRODUCT_DESCRIPTION_MAX } from './tenant-config';
+import { PDF_MAX_BYTES } from './recruitment-pitch';
 import { COMMISSION_MAX_YEARS } from './admin';
 import { INBOX_PAGE_SIZE, POPOVER_PAGE_SIZE } from './notifications';
 
@@ -197,6 +198,24 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['product-catalog.ts', 'AttackPlan', 'AttackPlanDto'],
   ['product-catalog.ts', 'AttackPlanBrief', 'AttackPlanBriefDto'],
   ['product-catalog.ts', 'AttackPlanAlternative', 'AttackPlanAlternativeDto'],
+  // Phase 17: the recruitment plan, the office's pitch slots, and the company's playbook on the console.
+  ['recruitment.ts', 'Choice', 'RecruitmentChoiceDto'],
+  ['recruitment.ts', 'RecruitmentVocabulary', 'RecruitmentVocabularyDto'],
+  ['recruitment.ts', 'RecruitmentBrief', 'RecruitmentBriefDto'],
+  ['recruitment.ts', 'RecruitmentProfile', 'RecruitmentProfileDto'],
+  ['recruitment.ts', 'RecruitmentOpening', 'RecruitmentOpeningDto'],
+  ['recruitment.ts', 'RecruitmentObjection', 'RecruitmentObjectionDto'],
+  ['recruitment.ts', 'RecruitmentPlan', 'RecruitmentPlanDto'],
+  ['recruitment.ts', 'RecruitmentAttackPlanView', 'RecruitmentAttackPlanDto'],
+  ['recruitment-pitch.ts', 'PitchFile', 'PitchFileDto'],
+  ['recruitment-pitch.ts', 'PitchChecklistItem', 'PitchChecklistItemDto'],
+  ['recruitment-pitch.ts', 'PitchSlot', 'PitchSlotDto'],
+  ['recruitment-pitch.ts', 'PitchSummary', 'PitchSummaryDto'],
+  ['recruitment-pitch.ts', 'PitchMaterialsView', 'PitchMaterialsDto'],
+  ['recruitment-pitch.ts', 'PitchDocumentLink', 'PitchDocumentUrlDto'],
+  ['recruitment-playbook.ts', 'PlaybookDto', 'RecruitmentPlaybookDto'],
+  ['recruitment-playbook.ts', 'PlaybookRead', 'RecruitmentPlaybookAdminDto'],
+  ['tenant-config.ts', 'SignedUpload', 'SignedUploadDto'],
 ];
 
 describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
@@ -223,6 +242,10 @@ describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
   it('Phase 14: the description’s bound on screen is the one the API validates (OD-136)', () => {
     expect(doc.components.schemas.SaveProductOverridesDto.properties?.description.maxLength)
       .toBe(PRODUCT_DESCRIPTION_MAX);
+  });
+
+  it('Phase 17: a PDF the screens refuse as too large is the one the API refuses (ASSET_MAX_BYTES)', () => {
+    expect(doc.components.schemas.RequestDocumentUploadDto.properties?.bytes.maximum).toBe(PDF_MAX_BYTES);
   });
 
   it('P14 exit review: the commission editor stops adding years where the API stops taking them (ADR-0119)', () => {
