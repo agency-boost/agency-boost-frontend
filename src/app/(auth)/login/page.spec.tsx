@@ -29,6 +29,19 @@ describe('login', () => {
     expect(push).toHaveBeenCalledWith('/');
   });
 
+  it('P18.1-T3 AC-2 returns to the page that sent the reader to sign in, such as a shared meeting', async () => {
+    window.history.pushState({}, '', '/login?next=%2Fleader-meetings%2Fshared%2Fabc');
+    try {
+      renderWithSession(<LoginPage />);
+      await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
+      await userEvent.type(screen.getByLabelText('Password'), 'demo password rina');
+      await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+      expect(push).toHaveBeenCalledWith('/leader-meetings/shared/abc');
+    } finally {
+      window.history.pushState({}, '', '/');
+    }
+  });
+
   it('shows the server message and the request id, and marks both fields invalid', async () => {
     // Which of the two was wrong is deliberately not said — the API returns one error
     // for a bad address and a bad password alike, and the screen must not undo that.

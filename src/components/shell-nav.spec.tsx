@@ -359,6 +359,27 @@ describe('the sidebar matches the prototype', () => {
     expect(screen.getByRole('link', { name: 'Overview' })).toHaveAttribute('href', '/kpm/overview');
   });
 
+  it('P18.1-T2: Leader Meetings › Strategic Leader Forum is live, with no pill (`KPM_Owner.html:887-890`)', async () => {
+    route.path = '/leader-meetings/m-14';
+    try {
+      renderWithSession(<TenantShell title="x">body</TenantShell>, { me: OWNER });
+      const item = (await everyItem()).find((a) => a.textContent?.trim() === 'Strategic Leader Forum');
+      expect(item).toHaveAttribute('href', '/leader-meetings');
+      expect(item).not.toHaveAttribute('aria-disabled');
+      expect(item).toHaveAttribute('aria-current', 'page');
+      expect(within(item!).queryByText('Upcoming')).not.toBeInTheDocument();
+    } finally {
+      route.path = '/group-tree';
+    }
+  });
+
+  it('P18.1-T2: the field shell gains no forum item — a Core Leader arrives by the address or a link (D-coeditors)', async () => {
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+    const items = await everyItem();
+    expect(items.some((a) => /Strategic Leader Forum|Leader Meetings/.test(a.textContent ?? ''))).toBe(false);
+    expect(items.some((a) => a.getAttribute('href')?.startsWith('/leader-meetings'))).toBe(false);
+  });
+
   it('KPM Owner: Ratio benchmarks is not a sidebar item — it is a sub-tab', () => {
     renderWithSession(<TenantShell title="x">body</TenantShell>, { me: OWNER });
     expect(screen.queryByText('Ratio benchmarks')).not.toBeInTheDocument();

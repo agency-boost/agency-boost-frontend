@@ -23,6 +23,16 @@ describe('RequireSession', () => {
     expect(screen.queryByText('secret')).not.toBeInTheDocument();
   });
 
+  it('P18.1-T3 AC-2 carries the page the visitor was on, so signing in brings them back to it', () => {
+    window.history.pushState({}, '', '/leader-meetings/shared/abc?x=1');
+    try {
+      renderWithSession(<RequireSession>secret</RequireSession>, { me: null, loading: false });
+      expect(replace).toHaveBeenCalledWith('/login?next=%2Fleader-meetings%2Fshared%2Fabc%3Fx%3D1');
+    } finally {
+      window.history.pushState({}, '', '/');
+    }
+  });
+
   it('renders for a session that holds the permission', () => {
     renderWithSession(<RequireSession permission="kpm:list_all">secret</RequireSession>, {
       me: makeMe({ permissions: ['kpm:list_all'] }),

@@ -130,9 +130,8 @@ describe('one member', () => {
     it('AC-2: says what Core Leader actually decides, and what it does not', async () => {
       open();
       await userEvent.click(await screen.findByRole('button', { name: 'Edit tags' }));
-      expect(screen.getByText(/co-edit a Strategic Leader Forum minute, and nothing/))
-        .toBeInTheDocument();
-      expect(screen.getByText(/It is not a role, and it grants no access/)).toBeInTheDocument();
+      const hint = screen.getByText(/besides the Owner and the Admins, may open and write in the Strategic Leader Forum's meetings, and nothing else/);
+      expect(hint).toHaveTextContent(/It is not a role, and it grants no hierarchy, no unit and no access to anybody's data/);
     });
 
     it('shows the tags somebody carries as chips', async () => {

@@ -261,6 +261,19 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['admin-analytics.ts', 'PlatformCompanyFields', 'PlatformCompanyAdoptionDto'],
   ['admin-analytics.ts', 'PlatformTotalFields', 'PlatformAdoptionDto'],
   ['admin-analytics.ts', 'PlatformAnalyticsView', 'PlatformAnalyticsDto'],
+  // Phase 18.1: the Strategic Leader Forum — the list, a meeting's card, its editors, its scorecard, its agenda
+  // and tracker, and a share link. `MeetingView` extends `MeetingCard`, which `declaredFields` cannot follow:
+  // its own fields are held in *the forum's routes*, below.
+  ['leader-meetings.ts', 'ForumPerson', 'ForumPersonDto'],
+  ['leader-meetings.ts', 'MeetingEditors', 'MeetingEditorsDto'],
+  ['leader-meetings.ts', 'ForumLimits', 'ForumLimitsDto'],
+  ['leader-meetings.ts', 'MeetingCard', 'MeetingCardDto'],
+  ['leader-meetings.ts', 'MeetingListView', 'MeetingListViewDto'],
+  ['leader-meetings.ts', 'Scorecard', 'ScorecardDto'],
+  ['leader-meetings.ts', 'ScorecardRow', 'ScorecardRowDto'],
+  ['leader-meetings.ts', 'AgendaItem', 'AgendaItemDto'],
+  ['leader-meetings.ts', 'ActionItem', 'LeaderActionItemDto'],
+  ['leader-meetings.ts', 'ShareLink', 'ShareLinkDto'],
 ];
 
 describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
@@ -679,5 +692,60 @@ describe('the quote tool’s types match the API document (P13.2-T2)', () => {
     expect(called).toEqual(['/admin/billing/prices']);
     expect(called.filter((p) => !matches(p, paths))).toEqual([]);
     expect(Object.keys(doc.paths['/api/v1/admin/billing/prices'])).toEqual(['get']);
+  });
+});
+
+/**
+ * P18.1-T2, P18.1-T3: **the forum's routes**, read off the client as it calls them — each call made against a
+ * stubbed `fetch`, its method and path recorded — so the path is the one the browser sends, with its ids and
+ * its query filled in, which reading the source for string literals would not show. Each must be a route of
+ * the document with that method. And `MeetingView`'s own fields, which the pairs above cannot reach through `extends`.
+ */
+describe('the forum’s routes match the API document (P18.1-T2, P18.1-T3)', () => {
+  it('every route the forum’s client calls is in the document, with its method', async () => {
+    const { vi } = await import('vitest');
+    const forum = await import('./leader-meetings');
+    const sent: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+      sent.push(`${(init.method ?? 'GET').toLowerCase()} ${new URL(url).pathname.replace('/api/v1', '')}`);
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    }));
+    try {
+      await forum.readMeetings();
+      await forum.createMeeting({ title: 't', date: '2026-10-13' });
+      await forum.readMeeting('m1');
+      await forum.rescheduleMeeting('m1', { date: '2026-10-20', version: 1 });
+      await forum.deleteMeeting('m1', 1);
+      await forum.addAgendaItem('m1', 'during');
+      await forum.saveAgendaItem('m1', 'a1', { text: 'x', version: 1 });
+      await forum.addActionItem('m1');
+      await forum.saveActionItem('m1', 'x1', { status: 'planned', version: 1 });
+      await forum.removeActionItem('m1', 'x1', 1);
+      await forum.reorderActionItems('m1', ['x1']);
+      await forum.saveMonthlyTarget('m1', 'ape', { value: 'TBD', version: 0 });
+      await forum.createShareLink('m1');
+      await forum.revokeShareLinks('m1');
+      await forum.readSharedMeeting('tok');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(sent).toHaveLength(15);
+    const routes = Object.entries(doc.paths).flatMap(([path, ops]) =>
+      Object.keys(ops).map((method) => ({ method, path: path.replace('/api/v1', '') })));
+    const unknown = sent.filter((call) => {
+      const [method, path] = call.split(' ');
+      const asCalled = path.split('/').map((seg) => (['m1', 'a1', 'x1', 'tok', 'ape'].includes(seg) ? '*' : seg)).join('/');
+      return !routes.some((r) => r.method === method && matches(asCalled, new Set([r.path])));
+    });
+    expect(unknown).toEqual([]);
+  });
+
+  it('MeetingView’s own fields are documented on MeetingViewDto', () => {
+    const own = ['version', 'branch', 'scorecard', 'agenda', 'actionItems', 'writtenIn', 'via', 'accessNote', 'can', 'limits'];
+    const documented = new Set(propertiesOf('MeetingViewDto'));
+    expect(own.filter((f) => !documented.has(f))).toEqual([]);
+    // And the card's, which it extends.
+    expect(declaredFields('leader-meetings.ts', 'MeetingCard').filter((f) => !documented.has(f))).toEqual([]);
   });
 });

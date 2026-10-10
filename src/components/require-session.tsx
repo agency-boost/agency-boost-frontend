@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { createContext, useContext, useEffect } from 'react';
 import { useSession } from '@/lib/session';
+import { signInPathFrom } from '@/lib/return-path';
 import { PageSkeleton } from '@/components/ui/skeleton';
 
 /**
@@ -39,7 +40,8 @@ export function RequireSession({
   const Heading = (headingLevel ?? (titled ? 2 : 1)) === 1 ? 'h1' : 'h2';
 
   useEffect(() => {
-    if (!loading && !me) router.replace('/login');
+    // Back to this page once signed in (`?next=`, `lib/return-path.ts`): a link opened signed out lands on it.
+    if (!loading && !me) router.replace(signInPathFrom(window.location));
     // Every route but three answers 403 while this is set, so rendering the screen would
     // put a shell around a page of failed requests (P3.6-T4). One redirect here covers
     // every screen, rather than each one inferring it from a 403 of its own.

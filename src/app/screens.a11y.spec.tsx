@@ -101,6 +101,13 @@ import KpmAnalyticsCompliancePage from './(tenant)/kpm/analytics/compliance/page
 import {
   analyticsView, NO_AB as ANALYTICS_NO_AB, OWNER_ME as ANALYTICS_OWNER, SHELL_STUBS as ANALYTICS_SHELL,
 } from '@test/kpm-analytics-fixtures';
+import LeaderMeetingsPage from './leader-meetings/page';
+import LeaderMeetingPage from './leader-meetings/[meetingId]/page';
+import SharedLeaderMeetingPage from './leader-meetings/shared/[token]/page';
+import {
+  FIELD_ME as FORUM_FIELD, LINK_CAN as FORUM_LINK_CAN, listView as forumList, meetingView as forumMeeting,
+  notFound as FORUM_NOT_FOUND, OWNER_ME as FORUM_OWNER, SHELL_STUBS as FORUM_SHELL,
+} from './leader-meetings/forum-fixtures';
 
 /**
  * Where the screen is, for the one shell that reads it: the coaching person shell's archive (P11-T10),
@@ -3446,6 +3453,96 @@ describe('screens have no axe violations', () => {
       renderInLayout(TenantLayout, <KpmAnalyticsLayout><KpmAnalyticsCompliancePage /></KpmAnalyticsLayout>, { me: ANALYTICS_OWNER });
       await within(screen.getByRole('main')).findByText('Upcoming');
       await expectClean('kpm/analytics/compliance');
+    });
+  });
+
+  describe('the Strategic Leader Forum (P18.1-T2 AC-8, P18.1-T3)', () => {
+    const meetingPage = <LeaderMeetingPage params={routeParams({ meetingId: 'm-14' })} />;
+    const meetingTitle = () => screen.findByRole('heading', { level: 2, name: 'Strategic Check-in — #14' });
+
+    it('the list, populated and filtered to nothing, and empty', async () => {
+      nav.pathname = '/leader-meetings';
+      stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings': { body: forumList() } });
+      renderWithSession(<LeaderMeetingsPage />, { me: FORUM_OWNER });
+      await screen.findByText('Strategic Check-in — #14');
+      await expectClean('leader-meetings');
+
+      cleanup();
+      vi.unstubAllGlobals();
+      stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings': { body: forumList({ meetings: [] }) } });
+      renderWithSession(<LeaderMeetingsPage />, { me: FORUM_OWNER });
+      await screen.findByText('No meetings yet.');
+      await expectClean('leader-meetings (empty)');
+    });
+
+    it('New meeting, with a refusal under its field', async () => {
+      nav.pathname = '/leader-meetings';
+      stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings': { body: forumList() } });
+      renderWithSession(<LeaderMeetingsPage />, { me: FORUM_OWNER });
+      await userEvent.click(await screen.findByRole('button', { name: '+ New meeting' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Create meeting' }));
+      await screen.findByText('Pick a date.');
+      await expectClean('leader-meetings (New meeting)');
+    });
+
+    it('a meeting on each of its three tabs', async () => {
+      nav.pathname = '/leader-meetings/m-14';
+      stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/m-14': { body: forumMeeting() } });
+      renderWithSession(meetingPage, { me: FORUM_OWNER });
+      await meetingTitle();
+      await expectClean('leader-meetings/[meetingId] (Overview & Stats)');
+      await userEvent.click(screen.getByRole('tab', { name: 'Agenda' }));
+      await expectClean('leader-meetings/[meetingId] (Agenda)');
+      await userEvent.click(screen.getByRole('tab', { name: 'Action Items' }));
+      await expectClean('leader-meetings/[meetingId] (Action Items)');
+    });
+
+    it('Meeting details, asking before a delete', async () => {
+      nav.pathname = '/leader-meetings/m-14';
+      const fresh = forumMeeting({ writtenIn: false, can: { ...forumMeeting().can, delete: true } });
+      stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/m-14': { body: fresh } });
+      renderWithSession(meetingPage, { me: FORUM_OWNER });
+      await userEvent.click(await screen.findByRole('button', { name: /^Change the date of/ }));
+      await screen.findByRole('dialog', { name: 'Meeting details' });
+      await expectClean('leader-meetings/[meetingId] (Meeting details)');
+      await userEvent.click(screen.getByRole('button', { name: 'Delete meeting' }));
+      await expectClean('leader-meetings/[meetingId] (Delete meeting?)');
+    });
+
+    it('Share this MOM, with its link', async () => {
+      nav.pathname = '/leader-meetings/m-14';
+      stubFetch({
+        ...FORUM_SHELL,
+        'GET /leader-meetings/m-14': { body: forumMeeting() },
+        'POST /leader-meetings/m-14/share-links': { status: 201, body: { token: 'tok_abc', expiresAt: '2026-10-24T03:00:00.000Z' } },
+      });
+      renderWithSession(meetingPage, { me: FORUM_OWNER });
+      await userEvent.click(await screen.findByRole('button', { name: 'Share' }));
+      await screen.findByRole('button', { name: 'Copy link' });
+      await expectClean('leader-meetings/[meetingId] (Share this MOM)');
+    });
+
+    it('the shared view, read-only, and the not-found states', async () => {
+      nav.pathname = '/leader-meetings/shared/tok_abc';
+      stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/shared/tok_abc': { body: forumMeeting({ via: 'link', can: FORUM_LINK_CAN }) } });
+      renderWithSession(<SharedLeaderMeetingPage params={routeParams({ token: 'tok_abc' })} />, { me: FORUM_FIELD });
+      await meetingTitle();
+      await expectClean('leader-meetings/shared/[token]');
+
+      cleanup();
+      vi.unstubAllGlobals();
+      stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/shared/': FORUM_NOT_FOUND });
+      renderWithSession(<SharedLeaderMeetingPage params={routeParams({ token: 'gone' })} />, { me: FORUM_FIELD });
+      await screen.findByText("This link doesn't open anything.");
+      await expectClean('leader-meetings/shared/[token] (not found)');
+
+      cleanup();
+      vi.unstubAllGlobals();
+      nav.pathname = '/leader-meetings/m-14';
+      stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/m-14': FORUM_NOT_FOUND });
+      renderWithSession(meetingPage, { me: FORUM_OWNER });
+      await screen.findByText("This meeting can't be found.");
+      await expectClean('leader-meetings/[meetingId] (not found)');
     });
   });
 });

@@ -9,6 +9,7 @@ import { type DemoAccount } from '@/lib/demo-accounts';
 import { DemoAccountsPanel } from '@/components/demo-accounts-panel';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { resendVerification } from '@/lib/sessions';
+import { returnPathFrom } from '@/lib/return-path';
 import { PasswordInput } from '@/components/ui/password-input';
 
 export default function LoginPage() {
@@ -26,9 +27,10 @@ export default function LoginPage() {
       setError(null);
       try {
         await signIn(withEmail, withPassword);
-        // `/` forwards by role: a Super Admin to the console, a tenant admin to their
-        // office, everyone else to their account.
-        router.push('/');
+        // Back to the page that sent the reader here, when one did (`?next=`); otherwise `/`, which
+        // forwards by role: a Super Admin to the console, a tenant admin to their office, everyone
+        // else to their account.
+        router.push(returnPathFrom(window.location.search));
       } catch (err) {
         setError(toDisplayError(err));
       } finally {

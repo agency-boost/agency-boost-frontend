@@ -55,7 +55,9 @@ const SECTIONS: readonly {
   },
   {
     label: 'Leader Meetings',
-    items: [{ label: 'Strategic Leader Forum', href: '/leader-meetings', icon: 'megaphone', upcoming: true }],
+    // Live since P18.1-T2 (`KPM_Owner.html:887-890`, no pill). The field shell gains no item: a Core Leader
+    // reaches the forum by its address or a shared link (D-coeditors).
+    items: [{ label: 'Strategic Leader Forum', href: '/leader-meetings', icon: 'megaphone' }],
     divider: true,
   },
   {

@@ -94,6 +94,19 @@ describe('the tenant shell (P3-T10 AC-4)', () => {
   );
 
   it.each([['the Owner', true], ['the Admin', false]])(
+    'P18.1-T2 gives %s Leader Meetings › Strategic Leader Forum, live',
+    (_who, isOwner) => {
+      // An `upcoming` item renders an anchor with no href: no link role, so a flag left on would fail this.
+      renderWithSession(<TenantShell title="Strategic Leader Forum">body</TenantShell>, { me: tenantAdmin(isOwner) });
+      openGroup(/^Leader Meetings/);
+
+      const item = screen.getByRole('link', { name: 'Strategic Leader Forum' });
+      expect(item).toHaveAttribute('href', '/leader-meetings');
+      expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([['the Owner', true], ['the Admin', false]])(
     'P17-T5 AC-1 gives %s Settings › Recruitment pitch, right after Products',
     (_who, isOwner) => {
       renderWithSession(<TenantShell title="Recruitment pitch">body</TenantShell>, { me: tenantAdmin(isOwner) });

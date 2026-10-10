@@ -299,8 +299,9 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
               Core Leader
             </label>
             <p id="core-leader-hint" className="mt-1 text-sm text-muted">
-              Core Leader decides who may co-edit a Strategic Leader Forum minute, and nothing
-              else. It is not a role, and it grants no access.
+              Core Leader decides who, besides the Owner and the Admins, may open and write in the
+              Strategic Leader Forum&apos;s meetings, and nothing else. It is not a role, and it grants no
+              hierarchy, no unit and no access to anybody&apos;s data.
             </p>
 
             <div className="mt-3 flex flex-wrap gap-2">
