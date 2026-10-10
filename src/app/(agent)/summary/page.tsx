@@ -42,8 +42,9 @@ import { readSummary, type Summary } from '@/lib/summary';
  * **What to do next, and how to improve** (P10-T7, ADR-0060): fixed rules over your own numbers, at most
  * four, under the prototype's *AI-powered* badge (ADR-0069, at the client's request).
  *
- * **Campaigns you're chasing** (P10.1-T2, ADR-0070): the one prototype card with nothing to read yet,
- * shown in its slot as an *Upcoming* section rather than left out, at the client's request.
+ * **Campaigns you're chasing** (P18.5-T7 AC-6, replacing the sign of ADR-0070): the campaigns you chase
+ * from the Campaign list that have not ended, each opening its dialog in place. Its own read, failing in
+ * its own card.
  *
  * **The cards are `SummaryCards`** (P11-T7): the same cards draw a coachee's *Personal Summary* tab in
  * that person's pronoun. This page is the reader's own: its title, its Download, and its two reads.

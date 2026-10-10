@@ -1,7 +1,8 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { makeMe, renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import { detail, NONE_CHASED, RINA_CHASING, serverError, SPRINT } from '@test/campaigns-fixtures';
 import PersonalSummaryPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -104,7 +105,7 @@ const AGENT_RATIOS = ratios([
 ]);
 
 const show = (body: unknown, pulse: { status?: number; body: unknown } = { body: AGENT_RATIOS }) => {
-  const stub = stubFetch({ '/summary': { body }, '/activity/ratios': pulse });
+  const stub = stubFetch({ '/summary': { body }, '/activity/ratios': pulse, 'GET /campaigns/chasing': { body: NONE_CHASED } });
   renderWithSession(<PersonalSummaryPage />, { me: AGENT });
   return stub;
 };
@@ -791,66 +792,94 @@ describe('the Personal Summary, trimmed to the prototype (P10.1-T6, ADR-0063)', 
 });
 
 /*
- * The client, 2026-10-01: on a page that is partly ready, show the sections that are and mark the ones
- * that are not. *Campaigns you're chasing* is the Summary's one prototype card with nothing to read yet —
- * a chase is made on the Campaign list, which is not built — so it is a sign in its slot (ADR-0070).
+ * *Campaigns you're chasing* (`Overall.html:3225-3232`, `:6221-6253`; P18.5-T7 AC-6): the card the sign of
+ * P10.1-T2 stood in for, now that a chase is made on the Campaign list.
  */
-describe('Campaigns you’re chasing — an Upcoming section in the prototype’s slot (P10.1-T2)', () => {
+describe('Campaigns you’re chasing (P18.5-T7 AC-6)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  const campaigns = () => card("Campaigns you're chasing Upcoming");
+  const campaigns = () => card("Campaigns you're chasing");
+  const showWith = (routes: Record<string, StubReply | StubReply[]>) => {
+    const stub = stubFetch({ '/summary': { body: summary() }, '/activity/ratios': { body: AGENT_RATIOS }, ...routes });
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
+    return stub;
+  };
 
-  it('is drawn where the prototype draws it, between Leads that need you and What to do next, titled verbatim with the pill', async () => {
-    show(summary());
+  it('P18.5-T7 AC-6 is drawn where the prototype draws it, titled verbatim with the bolt and From the Campaign list', async () => {
+    showWith({ 'GET /campaigns/chasing': { body: RINA_CHASING } });
     const section = await campaigns();
     const heading = within(section).getByRole('heading', { level: 2 });
-
-    expect(heading).toHaveTextContent("Campaigns you're chasing");
-    expect(within(heading).getByText('Upcoming')).toBeInTheDocument();
-    expect(section).toHaveTextContent('The campaigns you choose to chase from the Campaign list, and how close you are to each.');
-    // `Overall.html:3225-3232`: card 6 of the prototype's order, after the leads and before the insights.
+    expect(heading).toHaveTextContent(/^Campaigns you're chasing$/);
+    expect(heading.firstElementChild?.tagName.toLowerCase()).toBe('svg');
+    expect(within(section).getByText('From the Campaign list')).toBeInTheDocument();
+    expect(within(section).queryByText('Upcoming')).not.toBeInTheDocument();
+    // Card 6 of the prototype's order, after the leads and before the insights.
     const leads = await card('Leads that need you');
     const next = await card('What to do next');
     expect(leads.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(section.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('renders no campaign and asks the server for none — a sign, not a card with its rows missing', async () => {
-    const { calls } = show(summary());
+  it('P18.5-T7 AC-6 a row per chase: its emoji, its title, "{kindLabel} · {duration}" and View →, read with no for', async () => {
+    const { calls } = showWith({ 'GET /campaigns/chasing': { body: RINA_CHASING } });
     const section = await campaigns();
-    await within(await card('Activity pulse')).findByText('Selling success rate');
-
-    expect(calls.some((c) => /campaign/i.test(c.url))).toBe(false);
-    expect(within(section).queryByRole('listitem')).not.toBeInTheDocument();
-    expect(within(section).queryByRole('link')).not.toBeInTheDocument();
-    expect(within(section).queryByRole('button')).not.toBeInTheDocument();
-    // No number of any kind: not a phase, and not a sample figure.
-    expect(section.textContent).not.toMatch(/\d/);
+    const rows = await within(section).findAllByRole('listitem');
+    expect(rows.map((r) => r.textContent)).toEqual([
+      '🚀Q4 APE SprintRunning · Oct 1 – Dec 31, 2026View →',
+      '🏆MDRT QualificationOngoing incentive · Standing — evaluated per calendar year (Jan 1 – Dec 31)View →',
+    ]);
+    expect(calls.filter((c) => c.url.includes('/campaigns')).map((c) => c.url))
+      .toEqual(['http://api.test/api/v1/campaigns/chasing']);
   });
 
-  it('is there whatever the period, and whether or not a goal is set — it reads nothing either depends on', async () => {
-    show(summary({ goal: { set: false, savedAt: null } }));
-    await campaigns();
+  it('P18.5-T7 AC-6 says the prototype’s sentence when nothing is chased', async () => {
+    showWith({ 'GET /campaigns/chasing': { body: NONE_CHASED } });
+    const section = await campaigns();
+    expect(await within(section).findByText("You're not chasing any campaigns yet — check the Campaign list to opt in.")).toBeInTheDocument();
+  });
+
+  it('P18.5-T7 AC-6 its own read fails on its own card, with a retry, and the Summary stands', async () => {
+    showWith({ 'GET /campaigns/chasing': [serverError, { body: RINA_CHASING }] });
+    const section = await campaigns();
+    expect(await within(section).findByRole('alert')).toHaveTextContent('Something went wrong.');
+    expect(await card('Goal vs. actual (APE)')).toBeInTheDocument();
+    await userEvent.click(within(section).getByRole('button', { name: 'Try again' }));
+    expect(await within(section).findByText('Q4 APE Sprint')).toBeInTheDocument();
+  });
+
+  it('P18.5-T7 AC-6 View → opens the campaign’s dialog in place, and a chase there updates the card', async () => {
+    const { calls } = showWith({
+      'GET /campaigns/chasing': [{ body: RINA_CHASING }, { body: { membershipId: 'mem-rina', campaigns: [RINA_CHASING.campaigns[1]] } }],
+      'GET /campaigns/APE_SPRINT': { body: detail() },
+      'DELETE /campaigns/APE_SPRINT/chase': { body: { ...SPRINT, chasing: false } },
+    });
+    const section = await campaigns();
+    await userEvent.click(await within(section).findByRole('button', { name: /Q4 APE Sprint/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Q4 APE Sprint' });
+    expect(window.location.pathname).not.toBe('/campaigns/APE_SPRINT');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Chasing' }));
+    expect(await screen.findByText('Removed "Q4 APE Sprint" from your chase list')).toBeInTheDocument();
+    // The card's own rows: the dialog, drawn over it, keeps its requirement rows inside the same section.
+    await waitFor(() => expect([...section.querySelectorAll(':scope > ul > li')].map((li) => li.textContent))
+      .toEqual(['🏆MDRT QualificationOngoing incentive · Standing — evaluated per calendar year (Jan 1 – Dec 31)View →']));
+    expect(calls.filter((c) => c.init.method === 'DELETE')).toHaveLength(1);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('P18.5-T7 AC-6 is on paper with the rest, its View → cue off it', async () => {
+    showWith({ 'GET /campaigns/chasing': { body: RINA_CHASING } });
+    const section = await campaigns();
+    expect(section).not.toHaveClass('print:hidden');
+    expect(await within(section).findAllByText('View →')).toHaveLength(2);
+    for (const cue of within(section).getAllByText('View →')) expect(cue).toHaveClass('print:hidden');
+  });
+
+  it('P18.5-T7 AC-6 is there whatever the period, read once', async () => {
+    const { calls } = showWith({ 'GET /campaigns/chasing': { body: RINA_CHASING } });
+    await within(await campaigns()).findByText('Q4 APE Sprint');
     await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
-    expect(await campaigns()).toBeInTheDocument();
-  });
-
-  it('stays off the paper: a sign on the PDF says nothing about the period', async () => {
-    show(summary());
-    expect(await campaigns()).toHaveClass('print:hidden');
-  });
-
-  it('is a card like its neighbours: their padding, their heading size, and an icon before the title', async () => {
-    show(summary());
-    const section = await campaigns();
-    const leads = await card('Leads that need you');
-    // `Overall.html:3227-3231` draws it as a `.summary-card` with a card icon, so it takes SummaryCard's
-    // measure; the dashed border is all that sets it apart as a sign.
-    expect(section).toHaveClass('px-[22px]', 'py-[18px]', 'border-dashed');
-    expect(leads).toHaveClass('px-[22px]', 'py-[18px]');
-    const heading = within(section).getByRole('heading', { level: 2 });
-    expect(heading).toHaveClass('text-md');
-    expect(heading.firstElementChild?.tagName.toLowerCase()).toBe('svg');
-    expect(heading.firstElementChild).toHaveClass('h-[17px]', 'w-[17px]', 'text-navy-soft');
+    expect(await within(await campaigns()).findByText('Q4 APE Sprint')).toBeInTheDocument();
+    expect(calls.filter((c) => c.url.includes('/campaigns/chasing'))).toHaveLength(1);
   });
 });

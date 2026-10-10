@@ -238,6 +238,21 @@ export function formatMonthSpan(start: string, end: string): string {
  */
 export const OFFICE_TIME_ZONE = 'Asia/Jakarta';
 
+/**
+ * How far a zone's wall clock is ahead of UTC at an instant, in milliseconds — the one place the office's
+ * wall clock is turned into an instant and back (invariant §9, ADR-0016). Campaign dates (`officeDayEdge`) and
+ * the events panel's times (`officeInstant`) both read it, whatever zone the browser is in.
+ */
+export function zoneOffsetMs(at: Date, timeZone: string): number {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric',
+    }).formatToParts(at).map((p) => [p.type, p.value]),
+  );
+  const wall = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+  return wall - Math.floor(at.getTime() / 1000) * 1000;
+}
+
 /** An instant's calendar day and 24-hour clock in a zone: `{ day: '2026-10-03', clock: '14:05' }`. */
 function inZone(at: Date, timeZone: string): { day: string; clock: string } {
   const parts = new Intl.DateTimeFormat('en-CA', {

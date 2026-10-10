@@ -200,8 +200,28 @@ export function AutoBadge({ link }: { link: ActivationItemLink }) {
   );
 }
 
+/**
+ * *Ticked by hand* (D-orphan, P18.5-T3 AC-4): a linked item whose link does not complete it now — its training
+ * module is not offered — so the hire or a leader ticks it. The office's Settings badge, its words and its
+ * tooltip (`OWN_COPY.byHand*`), in this row's pill.
+ */
+export function ByHandBadge() {
+  return (
+    <TippedGlyph
+      glyph={OWN_COPY.byHand}
+      name={OWN_COPY.byHandName}
+      tip={OWN_COPY.byHandTip}
+      align="fit"
+      className="-my-1"
+      face="h-auto w-auto whitespace-nowrap rounded-pill border border-hairline bg-base px-[7px] py-0.5 text-2xs font-bold uppercase tracking-wide text-muted hover:bg-base hover:text-navy"
+    />
+  );
+}
+
 /** *"Go to {label} →"* (`:6584`), the prototype's `.reopen-btn` pill, as the link it is. */
 export function GoToLink({ link }: { link: ActivationItemLink }) {
+  // A module no longer offered has no page to open (D-orphan): the item keeps its words, and no link.
+  if (!link.route) return null;
   return (
     <Link
       href={link.route}

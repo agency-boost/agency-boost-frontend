@@ -572,6 +572,7 @@ export default function CompanyTemplatePage({
                   <ActivationChecklistEditor
                     payload={current.payload as unknown as ActivationChecklistPayload}
                     modules={companyModules}
+                    linkKinds={current.template.linkKinds ?? null}
                     disabled={busy}
                     onChange={(next) => change(next as unknown as Record<string, unknown>)}
                   />

@@ -32,6 +32,14 @@
    * tint read 6.03:1, so it is drawn as the prototype draws it, as a token (Phase 18, parity).
    */
   --color-club-chairman: #5b3cc4;
+  /*
+   * MDRT's gold (`Overall.html:8013`, the *MDRT Qualification* poster, a raw `#C9A227` there): **a poster's
+   * fill only**, under an emoji and the white-washed tags. As a mark on white it is 2.42:1, short of the 3:1 a
+   * graphic needs, so the roster's *Chasing MDRT* ✓ (`:1655`) is `gold-ink`, the same hue darkened to 4.03:1
+   * on the card. Both pinned in `campaigns-contrast.spec.ts` (P18.5-T7, row 44).
+   */
+  --color-gold: #c9a227;
+  --color-gold-ink: #9a7b12;
   /* A warm off-white, not a neutral grey — substituting one loses the product's character. */
   --color-base: #faf9f7;
   --color-card: #ffffff;

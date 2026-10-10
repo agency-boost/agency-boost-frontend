@@ -5,7 +5,7 @@ import { stubFetch } from '@test/harness';
 import { activationView, item, RINA, SARI } from '@test/activation-fixtures';
 import {
   ACTIVATION_NOTE_MAX, aspectTitle, attributionOf, correctionOf, correctStartDate, dayShown, earliestStart,
-  FIRST_CASE_CLOSED, graduateMyActivation, groupTitle, isComplete, isManual, isWholeDate, ITEM_NOTE_MAX, newHireHref, OWN_COPY,
+  FIRST_CASE_CLOSED, graduateMyActivation, groupTitle, isComplete, isManual, isTickedByHandLink, isWholeDate, ITEM_NOTE_MAX, newHireHref, OWN_COPY,
   PROTOTYPE_COPY, readMyActivation, readNewHire, readNewHires, saveActivationNote, saveHireItem, saveMyItem,
   startDateAllowed, startDateRangeText,
 } from './activation';
@@ -82,6 +82,19 @@ describe('the small readings', () => {
     expect(isManual(item('A', 'a'))).toBe(true);
     expect(isManual(item('A', 'a', { link: { ...LINK, live: false } }))).toBe(true);
     expect(isManual(item('A', 'a', { link: LINK }))).toBe(false);
+  });
+
+  it('P18.5-T3 AC-4, D-orphan: a link not live is ticked by hand, unless the link already completed the item', () => {
+    const orphan = { ...LINK, live: false };
+    expect(isManual(item('A', 'a', { link: orphan }))).toBe(true);
+    expect(isTickedByHandLink(item('A', 'a', { link: orphan }))).toBe(true);
+    expect(isTickedByHandLink(item('A', 'a'))).toBe(false);
+    // Sticky (ADR-0031): the record is the link's, and the server refuses a hand edit (409 ACTIVATION_ITEM_AUTOMATIC).
+    const completed = item('A', 'a', { link: orphan, done: true, source: 'link', doneBy: SARI, doneAt: '2026-10-01T03:00:00.000Z' });
+    expect(isManual(completed)).toBe(false);
+    expect(isTickedByHandLink(completed)).toBe(false);
+    // Ticked by hand while the module was withdrawn: still a hand's, still untickable by hand.
+    expect(isManual(item('A', 'a', { link: orphan, done: true, source: 'hire' }))).toBe(true);
   });
 
   describe('attribution (OD-121, P13-T4 AC-5)', () => {

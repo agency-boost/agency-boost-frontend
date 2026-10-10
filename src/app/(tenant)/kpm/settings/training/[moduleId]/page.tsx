@@ -282,7 +282,7 @@ export default function TrainingModulePage({
     <SettingsScreen
       title={title}
       subtitle={where}
-      permission="tenant_config:read"
+      permission="training_settings:read"
       actions={<Link href={BACK} className="text-md font-semibold text-navy underline">Back to Training</Link>}
       error={error}
       bars={<PublishBar refreshKey={published} />}

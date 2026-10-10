@@ -818,7 +818,7 @@ export default function TrainingSettingsPage() {
     <SettingsScreen
       title="Training"
       subtitle="Categories, skills, and modules available to this KPM"
-      permission="tenant_config:read"
+      permission="training_settings:read"
       tabs={TABS}
       tabsLabel="Training sections"
       activeHref={`#${tab}`}

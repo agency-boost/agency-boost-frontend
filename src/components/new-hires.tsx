@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivationSkeleton, AspectCard, AttributionMark, AutoBadge, DateField, ITEM_CHECKBOX, ITEM_ROW, ProgressHeading,
+  ActivationSkeleton, AspectCard, AttributionMark, AutoBadge, ByHandBadge, DateField, ITEM_CHECKBOX, ITEM_ROW, ProgressHeading,
   ProgressSummary, RowError, useWriteQueue,
 } from '@/components/activation-parts';
 import { PageHeader } from '@/components/app-shell';
@@ -11,7 +11,7 @@ import { Button, Card, ErrorBanner, Textarea } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
 import {
-  ACTIVATION_NOTE_MAX, attributionOf, correctionOf, correctStartDate, dayShown, earliestStart, groupTitle, isManual,
+  ACTIVATION_NOTE_MAX, attributionOf, correctionOf, correctStartDate, dayShown, earliestStart, groupTitle, isManual, isTickedByHandLink,
   newHireHref, OWN_COPY, PROTOTYPE_COPY, readNewHire, readNewHires, saveActivationNote, saveHireItem,
   startDateAllowed, startDateRangeText, type ActivationItemProgress, type ActivationView, type NewHireGroup,
   type NewHiresRoster,
@@ -416,6 +416,8 @@ function HireItemRow({
           <span>{item.label}</span>
         </label>
         {!manual && item.link && <AutoBadge link={item.link} />}
+        {/* D-orphan (P18.5-T3 AC-4): a link that does not complete the item now — ticked by hand, as Settings says. */}
+        {isTickedByHandLink(item) && <ByHandBadge />}
         <AttributionMark words={attributionOf(item, reader)} />
       </div>
       <RowError message={error} />

@@ -1,30 +1,13 @@
 'use client';
 
-import { use } from 'react';
-import { ComingInPhase } from '@/components/coming-in-phase';
+import { CoacheeTraining } from '@/components/training/person-training';
 
 /**
- * A coachee's *Training* tab (`Overall.html:4330-4335`), not built yet: it reads the training modules
- * this person has finished, which nothing records yet. The bar draws the tab disabled (P11-T7 AC-7);
- * this is what a typed or remembered address lands on, inside the person shell, rather than on the
- * not-found page. Which task builds it is the route registry's to say, not this page's (ADR-0062 §3).
- *
- * A sign renders no data and calls no endpoint (`backend-then-frontend.md`). The person shell above
- * has already answered an address outside the reader's reach, so the one thing it reads from the
- * address is where this person's Summary tab is — what works for the reader here.
+ * A coachee's *Training* tab (`Overall.html:3991`, `:4331-4335`, renderer `:7663-7765`; P18.5-T4): their
+ * training, category by category, read-only, from `GET /training/progress?for=` — the read the learner's
+ * own list makes, so the coach and the learner read one record (AC-4). The person shell above has already
+ * answered an address outside the reader's reach.
  */
-export default function CoacheeTrainingTab({ params }: { params: Promise<{ membershipId: string }> }) {
-  const { membershipId } = use(params);
-  return (
-    <ComingInPhase
-      what="Which training this person has finished, and what is still to do, category by category."
-      elsewhere={[
-        {
-          href: `/coaching/${encodeURIComponent(membershipId)}/summary`,
-          label: 'Personal Summary',
-          detail: 'Their goal, activity and leads on one page.',
-        },
-      ]}
-    />
-  );
+export default function CoacheeTrainingTab() {
+  return <CoacheeTraining />;
 }

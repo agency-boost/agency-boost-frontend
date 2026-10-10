@@ -35,7 +35,8 @@ export interface ActivationPerson {
 export interface ActivationItemLink {
   kind: string;
   label: string;
-  route: string;
+  /** `null`: nowhere to go — a training module no longer offered (D-orphan); no *Go to* is drawn. */
+  route: string | null;
   completesWhen: string;
   live: boolean;
 }
@@ -388,8 +389,17 @@ export function correctionOf(view: ActivationView, reader: string | null | undef
   return OWN_COPY.correctedBy(c.by.membershipId === reader ? OWN_COPY.you : c.by.name, formatOfficeDay(c.at));
 }
 
-/** Whether an item is one the hire or a leader ticks: it has no link, or its link does not work yet. */
-export const isManual = (item: ActivationItemProgress) => !item.link?.live;
+/**
+ * Whether an item is one the hire or a leader ticks: it has no link, or its link does not complete it now —
+ * a training link whose module the office no longer offers (D-orphan, P18.5-T3 AC-4). **An item its link
+ * already completed is never ticked by hand**, offered or not: the record is the link's, sticky (ADR-0031),
+ * and the server refuses a hand edit with 409 `ACTIVATION_ITEM_AUTOMATIC`.
+ */
+export const isManual = (item: ActivationItemProgress) =>
+  !item.link?.live && !(item.done && item.source === 'link');
+
+/** D-orphan: a manual item that still carries a link — the badge says *Ticked by hand*, as Settings does. */
+export const isTickedByHandLink = (item: ActivationItemProgress) => isManual(item) && item.link !== null;
 
 /**
  * Whether every item is done — the server's own test for the nav's amber check (`me.activation.complete`,

@@ -237,13 +237,40 @@ describe('the sidebar matches the prototype', () => {
     expect(item.textContent).toBe('User management');
   });
 
-  it('agent app: an unbuilt item is disabled and keeps its pill', async () => {
-    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
-    // Every group starts open (P10.1-T3), so no click reaches it. Personal summary was this
-    // example until P10-T4 built it.
-    const training = screen.getByText('Training modules').closest('a')!;
-    expect(training).toHaveAttribute('aria-disabled');
-    expect(within(training).getByText('Upcoming')).toBeInTheDocument();
+  /*
+   * P18.5-T1 AC-9 (I-150 amended): *Training modules* is live for every field rung and for the Owner and
+   * the Admin in their field view, current on the list and on every module's page. It was this file's
+   * example of an unbuilt item; `app-shell.spec.tsx` keeps that behaviour pinned on its own item.
+   */
+  describe('P18.5-T1 AC-9 Training modules is live (`Overall.html:2651`)', () => {
+    it('is a link to the learner’s list, with no pill', () => {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+      const training = screen.getByText('Training modules').closest('a')!;
+      expect(training).toHaveAttribute('href', '/training');
+      expect(training).not.toHaveAttribute('aria-disabled');
+      expect(within(training).queryByText('Upcoming')).not.toBeInTheDocument();
+    });
+
+    it.each(['/training', '/training/SALES', '/training/SALES/CLOSING_TECHNIQUES'])('is the current item on %s', (path) => {
+      route.path = path;
+      try {
+        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+        expect(screen.getByText('Training modules').closest('a')).toHaveAttribute('aria-current', 'page');
+      } finally {
+        route.path = '/group-tree';
+      }
+    });
+
+    it.each(['/coaching/me/training', '/coaching/mem-9/training', '/trainings'])('is not current on %s', (path) => {
+      // The coaching *Training* tabs are coaching's; a prefix is not a parent.
+      route.path = path;
+      try {
+        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+        expect(screen.getByText('Training modules').closest('a')).not.toHaveAttribute('aria-current');
+      } finally {
+        route.path = '/group-tree';
+      }
+    });
   });
 
   describe('P15-T2 AC-1 Unit dashboard is live for a member who leads somebody (`Overall.html:2634`)', () => {

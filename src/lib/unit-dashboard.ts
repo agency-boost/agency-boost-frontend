@@ -144,6 +144,19 @@ export interface UnitRow {
   /** `PACING_TO_MAA`: the ✓. `null` without a target. */
   pacingToMaa: boolean | null;
   followUp: FollowUp | null;
+  /**
+   * *Chasing MDRT* (ADR-0122, P18.5-T7 AC-7): chasing `MDRT_QUALIFICATION`, not ended. `null` where the
+   * reader's `campaign_qualification:read` does not reach the person: a plain —.
+   */
+  chasingMdrt: boolean | null;
+  /** *Campaigns they're chasing* (D-19): chases of campaigns not ended, by title; `null` as above. */
+  campaigns: ChasedRef[] | null;
+}
+
+/** A campaign a person is chasing, as the detail's chip names it. */
+export interface ChasedRef {
+  code: string;
+  title: string;
 }
 
 /** A total's goal: sums of the figures held; `missing` counts the rows holding no actual. */
@@ -226,6 +239,12 @@ export interface UnitProductionState {
   canUpdate: boolean;
 }
 
+/** *Chasing MDRT*'s header tooltip, composed by the server from the MDRT campaign (OD-152, ADR-0142). */
+export interface MdrtHeader {
+  running: boolean;
+  tooltip: string;
+}
+
 /** `GET /unit/dashboard`: one read for the whole screen (D-api). */
 export interface UnitDashboardView {
   today: string;
@@ -241,6 +260,7 @@ export interface UnitDashboardView {
   yourUnit: YourUnit;
   units: UnitGroup[];
   production: UnitProductionState;
+  mdrt: MdrtHeader;
 }
 
 /**

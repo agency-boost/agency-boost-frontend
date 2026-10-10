@@ -359,6 +359,27 @@ describe('a company’s Company template (P4-T8)', () => {
       expect(stub.calls.some((c) => c.url.includes('/metrics'))).toBe(true);
     });
 
+    it('P18.5-T8 AC-1 a carrier rule still names any metric — the campaign flag narrows the Owner’s campaigns only — and X-68 prints rupiah', async () => {
+      stubFetch({
+        '/admin/companies/c1/template': { body: CAMPAIGN_KINDS },
+        '/metrics': {
+          body: [
+            { key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true, campaign: true },
+            // MOC's input, which no campaign can measure (D-evaluable), and which a carrier rule names.
+            { key: 'NET_APE', name: 'Net APE', unit: 'idr_minor', phase: 9, computed: true, campaign: false },
+          ],
+        },
+      });
+      renderWithSession(<CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />, { me: SUPER_ADMIN });
+      await userEvent.click(await screen.findByRole('link', { name: 'Campaigns' }));
+      const criterion = (await screen.findByText(/APE achieved/)).closest('p')!;
+      // X-68 (P18.5-T7 AC-10): Rp 1,2 miliar from its sen, where it read 120.000.000.000.
+      expect(criterion).toHaveTextContent('Rp 1.200.000.000');
+      await userEvent.click(within(criterion.closest('li')!).getByRole('button', { name: 'Edit' }));
+      const options = [...(screen.getByLabelText('Metric') as HTMLSelectElement).options].map((o) => o.value);
+      expect(options).toEqual(expect.arrayContaining(['APE_ACHIEVED', 'NET_APE']));
+    });
+
     it('says publishing carrier rules reaches the offices that already exist', async () => {
       // Unlike every other kind: the rules are the company's and are read live, so this is not
       // a preset a future office is seeded from.

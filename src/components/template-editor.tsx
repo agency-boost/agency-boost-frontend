@@ -11,7 +11,11 @@ import {
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { DragHandle } from '@/components/ui/drag-handle';
 import { suggestCode } from '@/lib/config-code';
+import { formatRupiah } from '@/lib/goals';
 import { planSummaryTile, summaryGroups, summaryTileName } from '@/lib/summary-tiles';
+import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import { OWN_COPY as LINK_OWN_COPY, PROTOTYPE_COPY as LINK_PROTOTYPE_COPY } from '@/lib/activation';
+import type { TemplateLinkKind, TemplateLinkKinds } from '@/lib/admin';
 
 export interface TaxonomyPayload {
   categories: {
@@ -1600,6 +1604,41 @@ const ACTIVATION_FEATURE_OPTIONS = [
  */
 const ACTIVATION_LINK_HINT = 'A linked item will complete on its own when the agent does that action.';
 
+/** `ConfigBadge`'s pill, painted on the button that carries the badge's words (ADR-0062 §2, form 2). */
+const LINK_BADGE_FACE = 'h-auto w-auto whitespace-nowrap rounded-pill px-2 py-0.5 text-2xs font-bold uppercase tracking-wide';
+
+/**
+ * A link's badge, from **what the server resolves it to** (P18.5-T3 AC-6, I-80; the carry at
+ * `functional/activation.md:1404-1407`): *Auto*, with the registry's sentence as its tooltip and its name,
+ * only for a link that completes the item on its own (`live`), and *Ticked by hand* for one that does
+ * not — the office's own screen's badge (`LinkBadge`). It said *Auto* for any link, and *Ticked by the
+ * leader* for a manual item, stale since ADR-0105. A manual item has no badge; a link not resolved yet —
+ * chosen and not saved — claims neither.
+ */
+function TemplateLinkBadge({ link }: { link: TemplateLinkKind }) {
+  return link.live ? (
+    <TippedGlyph
+      glyph={LINK_PROTOTYPE_COPY.auto}
+      name={LINK_OWN_COPY.autoName(link.completesWhen)}
+      tip={LINK_OWN_COPY.autoTip(link.completesWhen)}
+      align="fit"
+      face={`${LINK_BADGE_FACE} bg-success/10 text-success hover:bg-success/15 hover:text-success`}
+    />
+  ) : (
+    <TippedGlyph
+      glyph={LINK_OWN_COPY.byHand}
+      name={LINK_OWN_COPY.byHandName}
+      tip={LINK_OWN_COPY.byHandTip}
+      align="fit"
+      face={`${LINK_BADGE_FACE} border border-hairline bg-base text-muted hover:bg-base hover:text-navy`}
+    />
+  );
+}
+
+/** The resolved view of one item's link: by its kind, and `training` for any `training:<code>`. */
+const resolveLinkKind = (kinds: TemplateLinkKinds | null | undefined, link: string): TemplateLinkKind | null =>
+  kinds?.[link] ?? (link.startsWith('training:') ? kinds?.training ?? null : null);
+
 /**
  * The activation checklist of a company template (P5-T3, ADR-0031).
  *
@@ -1612,12 +1651,15 @@ const ACTIVATION_LINK_HINT = 'A linked item will complete on its own when the ag
 export function ActivationChecklistEditor({
   payload,
   modules,
+  linkKinds,
   onChange,
   disabled,
 }: {
   payload: ActivationChecklistPayload;
   /** The company's own training modules, for the link picker. */
   modules: { code: string; title: string }[];
+  /** Each link kind as the template read resolves it (P18.5-T3 AC-6): what the badge reads `live` from. */
+  linkKinds?: TemplateLinkKinds | null;
   onChange: (next: ActivationChecklistPayload) => void;
   disabled?: boolean;
 }) {
@@ -1784,11 +1826,15 @@ export function ActivationChecklistEditor({
                   )}
                 >
                   <p className="text-md text-navy">{item.label}</p>
-                  <p className="mt-1 flex flex-wrap items-center gap-2">
-                    {item.autoLink
-                      ? <ConfigBadge tone="won">Auto · {linkLabel(item.autoLink)}</ConfigBadge>
-                      : <ConfigBadge tone="open">Ticked by the leader</ConfigBadge>}
-                  </p>
+                  {item.autoLink && (
+                    <p className="mt-1 flex flex-wrap items-center gap-2">
+                      {(() => {
+                        const resolved = resolveLinkKind(linkKinds, item.autoLink);
+                        return resolved && <TemplateLinkBadge link={resolved} />;
+                      })()}
+                      <span className="text-sm text-muted">{linkLabel(item.autoLink)}</span>
+                    </p>
+                  )}
                 </EditableRow>
                 </div>
                 </div>
@@ -2205,7 +2251,9 @@ export function CampaignKindsEditor({
                                   {COMPARATORS.find((o) => o.value === criterion.comparator)?.label
                                     ?? criterion.comparator}
                                   {' '}
-                                  {criterion.value.toLocaleString('id-ID')}
+                                  {metrics.find((m) => m.key === criterion.metricKey)?.unit === 'idr_minor'
+                                    ? formatRupiah(criterion.value)
+                                    : criterion.value.toLocaleString('id-ID')}
                                 </p>
                               </EditableRow>
                             </li>

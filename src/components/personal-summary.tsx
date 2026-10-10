@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { ChasingCampaigns } from '@/components/campaigns/chasing-card';
 import { ComingInPhaseSection } from '@/components/coming-in-phase';
 import { Card, ErrorBanner } from '@/components/ui/field';
 import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
@@ -10,6 +11,7 @@ import { StatusPill } from '@/components/ui/status-pill';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import type { ActivityRatio, ActivityRatios } from '@/lib/activity';
 import type { ApiError } from '@/lib/api-client';
+import { PROTOTYPE_COPY as CAMPAIGN_COPY } from '@/lib/campaigns';
 import { cn } from '@/lib/cn';
 import { capitalized, coachingTabHref, PRONOUN_FORMS, type CoacheeSubject } from '@/lib/coaching';
 import { formatMonth, formatShortDay } from '@/lib/format';
@@ -103,7 +105,7 @@ export function SummaryCards({
   /**
    * The *Activity pulse*'s own read and its failure: the reader's `GET /activity/ratios`, or a
    * coachee's `GET /activity/ratios?for=` on their rung (P11-T8). **Absent where no read serves it**,
-   * and the card's slot is then a sign, as the campaigns card's is, rather than a card left out.
+   * and the card's slot is then a sign rather than a card left out.
    */
   pulse?: { ratios: ActivityRatios | null; error: ApiError | null };
   /** The coachee the page is about; absent on the reader's own `/summary`. */
@@ -160,24 +162,21 @@ export function SummaryCards({
       )}
       <LeadsCard leads={summary.leads} voice={voice} />
       {/*
-        * *Campaigns you're chasing* (`Overall.html:3225-3232`), in the prototype's slot, as a sign: the
-        * client asked on 2026-10-01 that a section not ready yet show as one rather than be left out
-        * (parity D-11, ADR-0070). Nothing produces a chase yet, so it renders no rows and calls nothing.
-        * A card like its neighbours: SummaryCard's padding and heading size, and the prototype's own icon
-        * for this card, the bolt (`Overall.html:3228`). Off the paper: a sign on the PDF says nothing
-        * about the period.
+        * *Campaigns you're chasing* (`Overall.html:3225-3232`, P18.5-T7 AC-6), replacing the sign it was
+        * (parity D-11, ADR-0059): the bolt and *From the Campaign list*, a row per chase with *View →*. On
+        * paper with the rest, as the prototype prints it.
         *
-        * **On a coachee's page the same way** (P11-T7's review, ADR-0070 rule 2): their *Campaigns she's
-        * chasing* (`:4124`, *he's* at `:4433`) is the same unbuilt section, so it is the same sign, in
-        * their pronoun, where `/summary` shows the reader's.
+        * **On a coachee's page**, *Campaigns she's chasing* in their pronoun (`:4121-4130`, P18.5-T9 AC-1): the
+        * bolt and no tag, as drawn, and 🚀 chips by title — the same chases, from the same read.
         */}
-      <ComingInPhaseSection
+      <SummaryCard
+        id="summary-campaigns"
         title={`Campaigns ${voice.isShort.replace('’', "'")} chasing`}
-        what={`The campaigns ${voice.pronoun} choose${voice.s} to chase from the Campaign list, and how close ${voice.pronoun} ${voice.s ? 'is' : 'are'} to each.`}
         icon="bolt"
-        headingClassName="text-md"
-        className="px-[22px] py-[18px] print:hidden"
-      />
+        tag={voice.self ? CAMPAIGN_COPY.fromList : undefined}
+      >
+        <ChasingCampaigns forMembershipId={voice.subject?.membershipId} />
+      </SummaryCard>
       <InsightCards insights={summary.insights} voice={voice} />
     </div>
   );

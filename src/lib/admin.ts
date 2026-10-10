@@ -430,7 +430,24 @@ export interface CompanyTemplate {
    * they are current is not known, so they are never counted as behind.
    */
   officesUnrecorded: number;
+  /**
+   * The activation checklist's links as the server resolves them (P18.5-T3 AC-6, I-80): by kind —
+   * `feature:goals`, `feature:leads`, `feature:activity`, and `training` for every `training:<code>`.
+   * Only on the `activation_checklist` kind; the badge says *Auto* from `live`, never from an assumption.
+   */
+  linkKinds?: TemplateLinkKinds | null;
 }
+
+/** One link kind as the server resolves it — the words and whether it completes an item on its own. */
+export interface TemplateLinkKind {
+  label: string;
+  route: string;
+  completesWhen: string;
+  live: boolean;
+}
+
+/** `CompanyTemplate.linkKinds`, keyed by kind (`training` stands for every `training:<code>`). */
+export type TemplateLinkKinds = Readonly<Record<string, TemplateLinkKind>>;
 
 /**
  * The query of a kind route: `templateId=` the template named, or nothing — the company's default. The

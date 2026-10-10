@@ -14,10 +14,19 @@ const OWNER = makeMe({
     membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
     status: 'active', isKpmOwner: true, isKpmAdmin: false, directCount: 0,
   },
-  permissions: ['tenant_config:read', 'tenant_config:write'],
+  // The checklist's read is the office's administration's own since P18.5-T3 (`activation_settings:read`), and
+  // its module picker reads Settings › Training (`training_settings:read`, P18.5-T1 AC-8).
+  permissions: ['tenant_config:read', 'tenant_config:write', 'activation_settings:read', 'training_settings:read'],
 });
 
-const READER = makeMe({ ...OWNER, permissions: ['tenant_config:read'] });
+const READER = makeMe({ ...OWNER, permissions: ['tenant_config:read', 'activation_settings:read', 'training_settings:read'] });
+
+/** A field member: every rung holds `tenant_config:read`, and none holds the checklist's read. */
+const FIELD_MEMBER = makeMe({
+  ...OWNER,
+  membership: { ...OWNER.membership!, isKpmOwner: false, orgLevelCode: 'AGENT', hierarchyRole: 'agent' },
+  permissions: ['tenant_config:read'],
+});
 
 const item = (over: Record<string, unknown> = {}) => ({
   code: 'INSURANCE_BASICS', label: 'Learn insurance basics', displayOrder: 1,
@@ -377,6 +386,14 @@ it('removes an aspect with its items, and says how many are going', async () => 
     expect(body.aspects).toEqual([expect.objectContaining({
       code: 'FIRST_STEPS', label: 'First steps', items: [expect.objectContaining({ label: 'Meet your leader' })],
     })]);
+  });
+
+  it('P18.5-T3 refuses a field member, who holds tenant_config:read but not activation_settings:read, and asks for nothing', async () => {
+    const { calls } = render(FIELD_MEMBER);
+
+    expect(await screen.findByRole('alert')).toHaveAttribute('data-permission', 'activation_settings:read');
+    expect(screen.getByText('Not available to you')).toBeInTheDocument();
+    expect(calls.filter((c) => c.url.includes('/kpm/settings/'))).toEqual([]);
   });
 
   it('gives a reader without write permission the checklist and none of the controls', async () => {

@@ -10,6 +10,7 @@ import {
   type EventTypesPayload, type PipelinePayload, type RatioSetPayload, type TaxonomyPayload,
   type TrainingTaxonomyPayload,
 } from '@/components/template-editor';
+import type { TemplateLinkKinds } from '@/lib/admin';
 
 const TAXONOMY: TaxonomyPayload = {
   categories: [
@@ -507,6 +508,13 @@ describe('ActivationChecklistEditor (P5-T3)', () => {
     ],
   };
   const MODULES = [{ code: 'PROSPECT_LIST', title: 'Building Your Prospect List' }];
+  /** The template read's resolved links (P18.5-T3 AC-6), as the contract serves them: every kind live. */
+  const LINK_KINDS: TemplateLinkKinds = {
+    'feature:goals': { label: 'Goal Settings', route: '/goals', completesWhen: 'the hire has saved a goal', live: true },
+    'feature:leads': { label: 'Leads Management', route: '/leads', completesWhen: 'the hire has added a lead', live: true },
+    'feature:activity': { label: 'Activity Management', route: '/activity/log', completesWhen: 'the hire has logged activity', live: true },
+    training: { label: 'Training', route: '/training', completesWhen: 'the hire has completed that training module', live: true },
+  };
 
   describe('reordering (client feedback, 2026-09-24)', () => {
     /*
@@ -566,12 +574,17 @@ describe('ActivationChecklistEditor (P5-T3)', () => {
     });
   });
 
-  function Editor({ onChange = vi.fn() }: { onChange?: (next: ActivationChecklistPayload) => void }) {
-    const [payload, setPayload] = useState(CHECKLIST);
+  function Editor({ onChange = vi.fn(), linkKinds = LINK_KINDS, payload: start = CHECKLIST }: {
+    onChange?: (next: ActivationChecklistPayload) => void;
+    linkKinds?: TemplateLinkKinds | null;
+    payload?: ActivationChecklistPayload;
+  }) {
+    const [payload, setPayload] = useState(start);
     return (
       <ActivationChecklistEditor
         payload={payload}
         modules={MODULES}
+        linkKinds={linkKinds}
         onChange={(next) => { setPayload(next); onChange(next); }}
       />
     );
@@ -590,11 +603,52 @@ describe('ActivationChecklistEditor (P5-T3)', () => {
     expect(screen.getByText('No aspects yet.')).toBeInTheDocument();
   });
 
-  it('says of each item whether it completes on its own, or waits for a leader', () => {
+  /*
+   * P18.5-T3 AC-6 (I-80; the carry at `functional/activation.md:1404-1407`): the badge is the office's own
+   * screen's, from the `live` the template read serves — *Auto* with the registry's sentence for a link
+   * that completes the item, *Ticked by hand* for one that does not, and nothing on a manual item. It
+   * said *Auto* for any link and *Ticked by the leader* for a manual item.
+   */
+  it('P18.5-T3 AC-6 says Auto only for a link the server serves as live, with its words as the name', () => {
     render(<Editor />);
 
-    expect(within(rowOf('Goal setting')).getByText('Auto · Goal Settings')).toBeInTheDocument();
-    expect(within(rowOf('Learn insurance basics')).getByText('Ticked by the leader')).toBeInTheDocument();
+    const goal = rowOf('Goal setting');
+    expect(within(goal).getByRole('button', { name: 'Auto — completes when the hire has saved a goal' })).toHaveTextContent('Auto');
+    expect(within(goal).getByText('Goal Settings')).toBeInTheDocument();
+    expect(screen.queryByText(/Auto ·/)).not.toBeInTheDocument();
+  });
+
+  it('P18.5-T3 AC-6 draws no badge on a manual item: Ticked by the leader is gone', () => {
+    render(<Editor />);
+
+    const manual = rowOf('Learn insurance basics');
+    expect(within(manual).queryByRole('button', { name: /Auto|Ticked by hand/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Ticked by the leader')).not.toBeInTheDocument();
+  });
+
+  it('P18.5-T3 AC-6 reads a training link’s badge from the training kind, live', () => {
+    const payload: ActivationChecklistPayload = {
+      aspects: [{ code: 'SKILLS', label: '3. Skills', items: [{ code: 'MANDATORY_TRAINING', label: 'Mandatory training', autoLink: 'training:PROSPECT_LIST' }] }],
+    };
+    render(<Editor payload={payload} />);
+
+    const row = rowOf('Mandatory training');
+    expect(within(row).getByRole('button', { name: 'Auto — completes when the hire has completed that training module' })).toBeInTheDocument();
+    expect(within(row).getByText('Training · Building Your Prospect List')).toBeInTheDocument();
+  });
+
+  it('P18.5-T3 AC-6 says Ticked by hand for a link the server serves as not live', () => {
+    render(<Editor linkKinds={{ ...LINK_KINDS, 'feature:goals': { ...LINK_KINDS['feature:goals'], live: false } }} />);
+
+    expect(within(rowOf('Goal setting')).getByRole('button', { name: /^Ticked by hand/ })).toBeInTheDocument();
+    expect(within(rowOf('Goal setting')).queryByRole('button', { name: /^Auto/ })).not.toBeInTheDocument();
+  });
+
+  it('P18.5-T3 AC-6 claims neither before the server has resolved the links', () => {
+    render(<Editor linkKinds={null} />);
+
+    expect(within(rowOf('Goal setting')).queryByRole('button', { name: /Auto|Ticked by hand/ })).not.toBeInTheDocument();
+    expect(within(rowOf('Goal setting')).getByText('Goal Settings')).toBeInTheDocument();
   });
 
   it('offers this company’s own training modules as links', async () => {
@@ -882,6 +936,32 @@ describe('CampaignKindsEditor (P5-T9)', () => {
     expect(soon.closest('[title]')).toHaveAttribute('title', 'Not measured yet');
     expect(row).toHaveTextContent(/MADE_UP_METRIC\s*Soon, not measured yet, at least/);
     expect(row).not.toHaveTextContent(/registry/);
+  });
+
+  it('P18.5-T7 AC-10 (X-68) prints a money threshold in rupiah from sen, and a count as it is', () => {
+    render(<CampaignKindsEditor
+      section="production_club"
+      payload={{
+        rules: [{
+          ...CAMPAIGN_KINDS.rules[0],
+          criteriaGroups: [{
+            mode: 'all',
+            criteria: [
+              // Rp 600 juta, held as sen: it read *60.000.000.000*.
+              { metricKey: 'APE_ACHIEVED', comparator: 'gte', value: 60_000_000_000 },
+              { metricKey: 'NEW_ACTIVE_AGENTS', comparator: 'gte', value: 1200 },
+            ],
+          }],
+        }],
+      }}
+      metrics={[...METRICS, { key: 'NEW_ACTIVE_AGENTS', label: 'New active agents', unit: 'count' }]}
+      onChange={vi.fn()}
+    />);
+
+    expect(screen.getByText(/APE achieved/).closest('p')).toHaveTextContent(/Rp 600\.000\.000$/);
+    expect(screen.getByText(/APE achieved/).closest('p')).not.toHaveTextContent('60.000.000.000');
+    expect(screen.getByText(/New active agents/).closest('p')).toHaveTextContent(/1\.200$/);
+    expect(screen.getByText(/New active agents/).closest('p')).not.toHaveTextContent('Rp');
   });
 
   it('marks only the metric nothing measures, never one the registry has', () => {

@@ -15,11 +15,11 @@ const OWNER = makeMe({
     membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
     status: 'active', isKpmOwner: true, isKpmAdmin: false, directCount: 0,
   },
-  permissions: ['tenant_config:read', 'tenant_config:write'],
+  permissions: ['tenant_config:read', 'tenant_config:write', 'training_settings:read'],
 });
 
 /** A support session reads an office's configuration and writes none of it. */
-const READER = makeMe({ ...OWNER, permissions: ['tenant_config:read'] });
+const READER = makeMe({ ...OWNER, permissions: ['tenant_config:read', 'training_settings:read'] });
 
 const moduleRow = (over: Record<string, unknown>) => ({
   id: 'm-x', code: 'X', skillCode: 'PROSPECTING', title: 'X', publishState: 'published',

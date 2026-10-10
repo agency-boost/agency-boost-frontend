@@ -76,9 +76,23 @@ import CoacheeActivationTab from './(agent)/coaching/[membershipId]/activation/p
 import MyCoachingActivationPage from './(agent)/coaching/me/activation/page';
 import { activationView, completeView, leaderView, RINA_ME, ROSTER, SARI, SARI_ME } from '@test/activation-fixtures';
 import ProductCatalogLayout from './(agent)/product-catalog/layout';
+import CampaignsLayout from './(agent)/campaigns/layout';
+import CampaignsPage from './(agent)/campaigns/page';
+import CampaignDialogPage from './(agent)/campaigns/[campaignCode]/page';
+import {
+  detail as campaignDetail, LIST as CAMPAIGN_LIST, RINA_CHASING as CAMPAIGNS_RINA_CHASING, RINA_ME as CAMPAIGNS_RINA,
+} from '@test/campaigns-fixtures';
 import ProductCatalogPage from './(agent)/product-catalog/page';
 import ProductDrawerPage from './(agent)/product-catalog/[productCode]/page';
 import AttackPlanPage from './(agent)/attack-plan/page';
+import LearnerTrainingLayout from './(agent)/training/layout';
+import LearnerCategoryPage from './(agent)/training/[categoryCode]/page';
+import LearnerModulePage from './(agent)/training/[categoryCode]/[moduleCode]/page';
+import MyCoachingTrainingPage from './(agent)/coaching/me/training/page';
+import {
+  LEARNER as TRAINING_LEARNER, modulePage as trainingModulePage, PRODUCT as TRAINING_PRODUCT,
+  progressView as trainingProgressView, SALES as TRAINING_SALES, skill as trainingSkill, SUPPORT as TRAINING_SUPPORT,
+} from '@test/training-fixtures';
 import {
   PGB, plan as salesPlan, product as salesProduct, RINA_ME as SALES_ME, SHELF,
 } from '@test/sales-tools-fixtures';
@@ -108,6 +122,14 @@ import {
   FIELD_ME as FORUM_FIELD, LINK_CAN as FORUM_LINK_CAN, listView as forumList, meetingView as forumMeeting,
   notFound as FORUM_NOT_FOUND, OWNER_ME as FORUM_OWNER, SHELL_STUBS as FORUM_SHELL,
 } from './leader-meetings/forum-fixtures';
+import EventsLayout from './(agent)/events/layout';
+import EventsPage from './(agent)/events/page';
+import EventModalPage from './(agent)/events/[eventId]/page';
+import {
+  BOOTCAMP as EVENT_BOOTCAMP, eventList as eventsList, feedbackSummary as eventFeedbackSummary, INVITEES as EVENT_INVITEES,
+  KICKOFF as EVENT_KICKOFF, PRULINK as EVENT_PRULINK, RINA_ME as EVENTS_ME, rollCall as eventRollCall,
+  SHELL_STUBS as EVENTS_SHELL, TOWN_HALL as EVENT_TOWN_HALL,
+} from '@test/events-fixtures';
 
 /**
  * Where the screen is, for the one shell that reads it: the coaching person shell's archive (P11-T10),
@@ -902,9 +924,12 @@ describe('screens have no axe violations', () => {
           },
         },
         '/activity/ratios': { body: sessionRatios },
+        // P18.5-T9: *Campaigns she's chasing*, as chips.
+        'GET /campaigns/chasing': { body: CAMPAIGNS_RINA_CHASING },
       });
       inShell(<CoacheeSummaryTab />);
       await screen.findByRole('region', { name: 'Leads that need her' });
+      await within(await screen.findByRole('region', { name: "Campaigns she's chasing" })).findByText('Q4 APE Sprint');
       await expectClean('coaching/[membershipId]/summary');
     });
 
@@ -936,10 +961,15 @@ describe('screens have no axe violations', () => {
       await expectClean('coaching/[membershipId]/goal-setting');
     });
 
-    it('a person’s disabled tab reached by its address: a sign inside the shell (P11-T7 AC-7)', async () => {
-      stubFetch({ ...shell, '/coaching/coachees/': { body: rina } });
-      inShell(<CoacheeTrainingTab params={routeParams({ membershipId: 'mem-rina' })} />);
-      await screen.findByRole('region', { name: /^Upcoming Which training this person has finished/ });
+    it('a person’s Training tab, populated: every category with its counts, the skill cards, an archived row (P18.5-T4)', async () => {
+      const retention = trainingSkill('RETENTION', 'Retention', [], {
+        offered: false,
+        archived: [{ code: 'CLIENT_RETENTION', title: 'Client Retention Best Practices', status: 'done', completedAt: '2026-08-01T03:00:00.000Z', formats: ['file'] }],
+      });
+      const sales = { ...TRAINING_SALES, skills: [...TRAINING_SALES.skills, retention] };
+      stubFetch({ ...shell, '/coaching/coachees/': { body: rina }, 'GET /training/progress': { body: trainingProgressView([sales, TRAINING_PRODUCT]) } });
+      inShell(<CoacheeTrainingTab />);
+      await screen.findByRole('heading', { level: 2, name: 'Sales (4/10)' });
       await expectClean('coaching/[membershipId]/training');
     });
 
@@ -1167,7 +1197,7 @@ describe('screens have no axe violations', () => {
 
     it('a person outside the reader’s reach: the not-found state inside the shell (P11-T7 AC-8)', async () => {
       stubFetch({ ...shell, '/coaching/coachees/': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-1' } } } });
-      inShell(<CoacheeTrainingTab params={routeParams({ membershipId: 'mem-nobody' })} />, 'mem-nobody');
+      inShell(<CoacheeTrainingTab />, 'mem-nobody');
       await screen.findByRole('heading', { name: 'This person isn’t someone you coach.' });
       await expectClean('coaching/[membershipId] (not found)');
     });
@@ -1255,6 +1285,8 @@ describe('screens have no axe violations', () => {
       numeratorCount: 1, denominatorCount: 10, status,
     });
     stubFetch({
+      // P18.5-T7 AC-6: *Campaigns you're chasing*, with its rows.
+      'GET /campaigns/chasing': { body: CAMPAIGNS_RINA_CHASING },
       '/activity/ratios': {
         body: { membershipId: 'm-1', from: '2026-08-16', to: '2026-09-14', days: 30, ratios: [rate('SSR', 0.1, 'alert'), rate('LPA', null, 'neutral')] },
       },
@@ -1295,8 +1327,8 @@ describe('screens have no axe violations', () => {
     renderInLayout(AgentLayout, <PersonalSummaryPage />, {});
     await screen.findByRole('region', { name: 'The gap' });
     await screen.findByText('SSR');
-    // The *Upcoming* section in card 6's slot is in the pass too (P10.1-T2): its pill inside an h2.
-    await screen.findByRole('region', { name: "Campaigns you're chasing Upcoming" });
+    // Card 6, *Campaigns you're chasing*, with its rows (P18.5-T7 AC-6).
+    await within(await screen.findByRole('region', { name: "Campaigns you're chasing" })).findByText('Q4 APE Sprint');
     await expectClean('summary');
   });
 
@@ -2477,6 +2509,119 @@ describe('screens have no axe violations', () => {
    * Sales tools (Phase 14): the catalog filled and empty, its drawer open on each tab, and the Sales Attack
    * Plan's two steps — a plan with its alternatives, a Check fit, and the catalog's run-off deep link.
    */
+  /*
+   * Training (P18.5-T1, T4): the learner's list filled and with a category offering nothing, a module's page
+   * with its tiles and the status toggle, the same page in a support session, and the reader's own coaching
+   * tab. The coach's tab is with coaching, above.
+   */
+  describe('training (P18.5-T1, P18.5-T4)', () => {
+    const SHELL = {
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      'GET /training/progress': { body: trainingProgressView() },
+    };
+    const list = (code: string) => (
+      <LearnerTrainingLayout><LearnerCategoryPage params={routeParams({ categoryCode: code })} /></LearnerTrainingLayout>
+    );
+    const page = (
+      <LearnerTrainingLayout>
+        <LearnerModulePage params={routeParams({ categoryCode: 'SALES', moduleCode: 'CLOSING_TECHNIQUES' })} />
+      </LearnerTrainingLayout>
+    );
+
+    it('a category’s Skills List, filled (P18.5-T1 AC-4)', async () => {
+      nav.pathname = '/training/SALES';
+      stubFetch(SHELL);
+      renderInLayout(AgentLayout, list('SALES'), { me: TRAINING_LEARNER });
+      await screen.findByRole('heading', { level: 2, name: 'Skills List' });
+      await expectClean('training/[categoryCode]');
+    });
+
+    it('a category offering nothing yet: the prototype’s empty card (P18.5-T1 AC-4)', async () => {
+      nav.pathname = '/training/PRODUCT';
+      stubFetch(SHELL);
+      renderInLayout(AgentLayout, list('PRODUCT'), { me: TRAINING_LEARNER });
+      await screen.findByRole('heading', { level: 1, name: 'Product Training' });
+      await expectClean('training/[categoryCode] (empty)');
+    });
+
+    it('a module’s page with its tiles and the status toggle, a status set (P18.5-T1 AC-5, AC-7)', async () => {
+      nav.pathname = '/training/SALES/CLOSING_TECHNIQUES';
+      stubFetch({
+        ...SHELL,
+        'GET /training/modules/CLOSING_TECHNIQUES': { body: trainingModulePage({ status: 'in_progress' }) },
+      });
+      renderInLayout(AgentLayout, page, { me: TRAINING_LEARNER });
+      await screen.findByRole('group', { name: 'Status of Closing Techniques That Work' });
+      await expectClean('training/[categoryCode]/[moduleCode]');
+    });
+
+    it('a module’s page in a read-only support session: no toggle (P18.5-T1 AC-7)', async () => {
+      nav.pathname = '/training/SALES/CLOSING_TECHNIQUES';
+      stubFetch({
+        ...SHELL,
+        'GET /training/modules/CLOSING_TECHNIQUES': { body: trainingModulePage({ can: { update: false } }) },
+      });
+      renderInLayout(AgentLayout, page, { me: TRAINING_SUPPORT });
+      await screen.findByRole('heading', { level: 2, name: 'Closing Techniques That Work' });
+      await expectClean('training/[categoryCode]/[moduleCode] (support session)');
+    });
+
+    it('a module holding nothing yet (P18.5-T1 AC-5)', async () => {
+      nav.pathname = '/training/SALES/CLOSING_TECHNIQUES';
+      stubFetch({
+        ...SHELL,
+        'GET /training/modules/CLOSING_TECHNIQUES': { body: trainingModulePage({ items: [], openedItemIds: [] }) },
+      });
+      renderInLayout(AgentLayout, page, { me: TRAINING_LEARNER });
+      await screen.findByText('Nothing to open in this module yet.');
+      await expectClean('training/[categoryCode]/[moduleCode] (empty)');
+    });
+
+    it('the reader’s own Training tab on their coaching (P18.5-T4 AC-3)', async () => {
+      nav.pathname = '/coaching/me/training';
+      stubFetch(SHELL);
+      renderInLayout(AgentLayout, <MyCoachingTrainingPage />, { me: TRAINING_LEARNER });
+      await screen.findByRole('heading', { level: 2, name: 'Sales (4/10)' });
+      await expectClean('coaching/me/training');
+    });
+  });
+
+  describe('KPM Events (P18.5-T5, P18.5-T6)', () => {
+    it('the list, every card state (P18.5-T5 AC-4)', async () => {
+      nav.pathname = '/events';
+      stubFetch({ ...EVENTS_SHELL, 'GET /events': { body: eventsList() } });
+      renderInLayout(AgentLayout, <EventsLayout><EventsPage /></EventsLayout>, { me: EVENTS_ME });
+      await screen.findByRole('heading', { level: 3, name: 'Kickoff 2026' });
+      await expectClean('events');
+    });
+
+    it('the list with nothing in it: the three empty rows (P18.5-T5 AC-4)', async () => {
+      nav.pathname = '/events';
+      stubFetch({ ...EVENTS_SHELL, 'GET /events': { body: eventsList([]) } });
+      renderInLayout(AgentLayout, <EventsLayout><EventsPage /></EventsLayout>, { me: EVENTS_ME });
+      await screen.findByText('No past events yet.');
+      await expectClean('events (empty)');
+    });
+
+    it.each([
+      ['an upcoming event, Join event (P18.5-T5 AC-5)', EVENT_KICKOFF],
+      ['a past event, the feedback form (P18.5-T6 AC-2)', EVENT_PRULINK],
+      ['a past event not joined, the claim (P18.5-T5 AC-6)', EVENT_TOWN_HALL],
+      ['a past event answered, the thanks (P18.5-T6 AC-4)', EVENT_BOOTCAMP],
+    ])('the modal over the list: %s', async (_state, event) => {
+      nav.pathname = `/events/${event.id}`;
+      stubFetch({ ...EVENTS_SHELL, 'GET /events': { body: eventsList() }, [`GET /events/${event.id}`]: { body: event } });
+      renderInLayout(
+        AgentLayout,
+        <EventsLayout><EventModalPage params={routeParams({ eventId: event.id })} /></EventsLayout>,
+        { me: EVENTS_ME },
+      );
+      await screen.findByRole('dialog', { name: event.title });
+      await expectClean(`events/[eventId] (${event.id})`);
+    });
+  });
+
   describe('sales tools (Phase 14)', () => {
     const SHELL = {
       '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
@@ -2601,6 +2746,76 @@ describe('screens have no axe violations', () => {
       renderInLayout(AgentLayout, attackPlan({}), { me: RECRUITMENT_ME });
       await screen.findByText('No recruitment plan can be built yet.');
       await expectClean('recruitment/attack-plan (no playbook)');
+    });
+  });
+
+  /*
+   * Campaigns (P18.5-T7, T8): the list on both tabs, empty, a read-only support session's, and the dialog with
+   * its progress rows and its not-found state. The Summary's card and the coachee's chips are with their pages.
+   */
+  describe('campaigns (P18.5-T7)', () => {
+    const SHELL = {
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+    };
+    const renderList = (list: unknown = CAMPAIGN_LIST, me = CAMPAIGNS_RINA) => {
+      nav.pathname = '/campaigns';
+      stubFetch({ ...SHELL, 'GET /campaigns': { body: list } });
+      renderInLayout(AgentLayout, <CampaignsLayout><CampaignsPage /></CampaignsLayout>, { me });
+    };
+
+    it('the list, seasonal, every section and card state (P18.5-T7 AC-2, AC-3)', async () => {
+      renderList();
+      await screen.findByRole('region', { name: 'Running' });
+      await expectClean('campaigns (seasonal)');
+    });
+
+    it('the list, structural: promotions with a chase not open to the rung, and MDRT (P18.5-T7 AC-3)', async () => {
+      renderList();
+      await screen.findByRole('region', { name: 'Running' });
+      await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
+      await screen.findByRole('region', { name: 'Promotion Criteria' });
+      await expectClean('campaigns (structural)');
+    });
+
+    it('the list, empty: the five empty lines (P18.5-T7 AC-2)', async () => {
+      renderList({ campaigns: [], can: { chase: true } });
+      await screen.findByText('No running campaigns right now.');
+      await expectClean('campaigns (empty)');
+    });
+
+    it('the list in a read-only support session: no chase (P18.5-T7 AC-1)', async () => {
+      renderList({ ...CAMPAIGN_LIST, can: { chase: false } }, { ...CAMPAIGNS_RINA, isImpersonating: true, impersonationReadOnly: true, impersonatedBy: 'u-root' });
+      await screen.findByRole('region', { name: 'Running' });
+      await expectClean('campaigns (read-only session)');
+    });
+
+    it('the dialog, its requirement rows with progress (P18.5-T7 AC-4, P18.5-T8 AC-6)', async () => {
+      nav.pathname = '/campaigns/APE_SPRINT';
+      stubFetch({ ...SHELL, 'GET /campaigns': { body: CAMPAIGN_LIST }, 'GET /campaigns/APE_SPRINT': { body: campaignDetail() } });
+      renderInLayout(
+        AgentLayout,
+        <CampaignsLayout><CampaignDialogPage params={routeParams({ campaignCode: 'APE_SPRINT' })} /></CampaignsLayout>,
+        { me: CAMPAIGNS_RINA },
+      );
+      await screen.findByRole('dialog', { name: 'Q4 APE Sprint' });
+      await screen.findByRole('region', { name: 'Running' });
+      await expectClean('campaigns/[campaignCode]');
+    });
+
+    it('the dialog of a code not on the list (P18.5-T7 AC-1)', async () => {
+      nav.pathname = '/campaigns/GADING_PUSH';
+      stubFetch({
+        ...SHELL, 'GET /campaigns': { body: CAMPAIGN_LIST },
+        'GET /campaigns/GADING_PUSH': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Campaign not found.', requestId: 'r-1' } } },
+      });
+      renderInLayout(
+        AgentLayout,
+        <CampaignsLayout><CampaignDialogPage params={routeParams({ campaignCode: 'GADING_PUSH' })} /></CampaignsLayout>,
+        { me: CAMPAIGNS_RINA },
+      );
+      await screen.findByText('This campaign isn’t on your list.');
+      await expectClean('campaigns/[campaignCode] (not found)');
     });
   });
 
@@ -2733,10 +2948,13 @@ describe('screens have no axe violations', () => {
       // `kpm:read_profile` instead, because it is the office's identity rather than its
       // configuration — and writes under `tenant_config:write` like the rest (ADR-0027), so
       // its form is checked here with Save on screen.
-      // `product_settings:read` is the Products screen's own (the Phase 14 exit review).
+      // `product_settings:read` is the Products screen's own (the Phase 14 exit review); Training's, Events'
+      // and Campaigns' reads are theirs since Phase 18.5 (the settings-read leaks it closed).
       permissions: [
         'member:read_profile', 'tenant_config:read', 'tenant_config:write', 'kpm:read_profile',
-        'product_settings:read',
+        'product_settings:read', 'training_settings:read', 'event_settings:read', 'campaign_settings:read',
+        // Settings › Activation checklist reads under its own grant since P18.5-T3.
+        'activation_settings:read',
       ],
     });
 
@@ -2748,7 +2966,8 @@ describe('screens have no axe violations', () => {
       },
       permissions: [
         'member:read_profile', 'tenant_config:read', 'tenant_config:write', 'kpm:read_profile',
-        'product_settings:read', 'sales_script:approve',
+        'product_settings:read', 'training_settings:read', 'event_settings:read', 'campaign_settings:read',
+        'activation_settings:read', 'sales_script:approve',
       ],
     });
 
@@ -2948,8 +3167,10 @@ describe('screens have no axe violations', () => {
             id: 'c1', code: 'YEAR_END_DRIVE', title: 'Year-End Star Club Drive',
             description: 'Push to Star Club.', startsAt: '2026-10-01T00:00:00.000Z',
             endsAt: '2026-12-31T16:59:59.000Z', phase: 'running',
-            requirements: [money(50_000_000_000)], reward: 'Extra unit budget',
+            requirements: [{ ...money(50_000_000_000), measured: true }], reward: 'Extra unit budget',
             status: 'active', version: 1,
+            kind: 'seasonal', subtype: null, window: 'campaign_dates', appliesToOrgLevelCodes: [],
+            poster: { emoji: '⭐', color: 'amber' }, blurb: 'The last push of the year.',
           }],
         },
       });
@@ -2958,6 +3179,22 @@ describe('screens have no axe violations', () => {
       await userEvent.click(screen.getByRole('link', { name: 'Production club tiers' }));
       await screen.findByText('Star Club');
       await expectClean('kpm/settings/campaigns');
+    });
+
+    it('the office’s Campaigns, the form open on a structural campaign with every D-field (P18.5-T7 AC-9)', async () => {
+      stubFetch({
+        ...configStubs,
+        '/kpm/settings/campaigns/rules': { body: [] },
+        '/kpm/settings/campaigns': { body: [] },
+        '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true, campaign: true }] },
+      });
+      renderInLayout(TenantLayout, <CampaignsSettingsPage />, { me: settingsOwner });
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
+      await userEvent.selectOptions(screen.getByLabelText('Kind'), 'structural');
+      await userEvent.click(screen.getByRole('button', { name: '+ Add requirement' }));
+      await userEvent.selectOptions(screen.getByLabelText('Requirement 1'), 'APE_ACHIEVED');
+      await screen.findByLabelText('Section');
+      await expectClean('kpm/settings/campaigns (form)');
     });
 
     it('the office’s Events, with the add panel open (P5-T6)', async () => {
@@ -2980,9 +3217,53 @@ describe('screens have no axe violations', () => {
           }],
         },
       });
-      renderInLayout(TenantLayout, <EventsSettingsPage />, { me: settingsOwner });
+      // The list reads under `event_settings:read` since P18.5-T5 AC-2.
+      renderInLayout(TenantLayout, <EventsSettingsPage />, { me: eventsOwner });
       await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
       await expectClean('kpm/settings/events');
+    });
+
+    /** The Owner as Settings › Events reads them since Phase 18.5: the list's own read, the roll call, the feedback. */
+    const eventsOwner = {
+      ...settingsOwner,
+      permissions: [...settingsOwner.permissions, 'event_settings:read', 'event_attendance:confirm', 'event_feedback:read'],
+    };
+    const PAST_EVENT = {
+      id: 'ev-prulink', code: 'PRULINK', typeCode: 'TRAINING', title: 'PRULink briefing', blurb: '', description: '',
+      startsAt: '2026-09-19T02:00:00.000Z', endsAt: '2026-09-19T04:00:00.000Z', startsOn: '2026-09-19',
+      location: 'Jakarta', locationUrl: null,
+      audience: { issuer: 'company', scope: 'select_agents', inviteeMembershipIds: ['mem-rina'] },
+      phase: 'past', status: 'active', version: 1,
+    };
+    const eventsStubs = {
+      ...configStubs,
+      '/kpm/settings/events/types': {
+        body: [{
+          id: 't1', code: 'TRAINING', label: 'Training', description: null, emoji: '📚',
+          color: '#2D9CDB', displayOrder: 1, status: 'active', events: 1,
+        }],
+      },
+      '/kpm/settings/events': { body: [PAST_EVENT] },
+      'GET /kpm/settings/events/invitees': { body: { people: EVENT_INVITEES } },
+      'GET /kpm/settings/events/ev-prulink/attendance': { body: eventRollCall() },
+      'GET /kpm/settings/events/ev-prulink/feedback': { body: eventFeedbackSummary() },
+    };
+
+    it('the office’s Events, View feedback open: the roll call and the Feedback Summary (P18.5-T5 AC-7, T6 AC-5)', async () => {
+      stubFetch(eventsStubs);
+      renderInLayout(TenantLayout, <EventsSettingsPage />, { me: eventsOwner });
+      await userEvent.click(await screen.findByRole('button', { name: 'View feedback' }));
+      await screen.findByRole('table');
+      await screen.findByRole('heading', { name: 'PRULink briefing — Feedback Summary' });
+      await expectClean('kpm/settings/events (View feedback)');
+    });
+
+    it('the office’s Events, editing a chosen audience with the picker (P18.5-T5 AC-10)', async () => {
+      stubFetch(eventsStubs);
+      renderInLayout(TenantLayout, <EventsSettingsPage />, { me: eventsOwner });
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      await screen.findByRole('searchbox', { name: 'Search people' });
+      await expectClean('kpm/settings/events (picker)');
     });
 
     it('the office’s Products, with one product open (P5-T5)', async () => {

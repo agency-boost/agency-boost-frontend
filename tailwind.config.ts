@@ -62,6 +62,8 @@ const config: Config = {
         'input-focus': token('input-focus'),
         success: token('success'),
         club: { chairman: token('club-chairman') },
+        // MDRT's poster fill, and its ✓ on the roster at 4.03:1 (P18.5-T7, row 44).
+        gold: { DEFAULT: token('gold'), ink: token('gold-ink') },
         alert: token('alert'),
         neutral: token('neutral'),
         info: token('info'),

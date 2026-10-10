@@ -2,7 +2,8 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { makeMe, renderInLayout, routeParams, stubFetch } from '@test/harness';
+import { NONE_CHASED, RINA_CHASING } from '@test/campaigns-fixtures';
+import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
 import CoachingPersonLayout from '../layout';
 import CoacheeSummaryTab from './page';
 
@@ -91,8 +92,13 @@ const RATIOS = {
   }],
 };
 
-const show = (body: unknown, who = person('she'), me = LEADER, ratios: { status?: number; body?: unknown } = { body: RATIOS }) => {
-  const stub = stubFetch({ ...SHELL, '/coaching/coachees/': { body: who }, '/summary': { body }, '/activity/ratios': ratios });
+const show = (
+  body: unknown, who = person('she'), me = LEADER, ratios: { status?: number; body?: unknown } = { body: RATIOS },
+  chasing: StubReply | StubReply[] = { body: RINA_CHASING },
+) => {
+  const stub = stubFetch({
+    ...SHELL, '/coaching/coachees/': { body: who }, '/summary': { body }, '/activity/ratios': ratios, 'GET /campaigns/chasing': chasing,
+  });
   renderInLayout(
     AgentLayout,
     <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoacheeSummaryTab /></CoachingPersonLayout>,
@@ -212,23 +218,45 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
   });
 
   /*
-   * P11-T7's review, ADR-0070 rule 2: `/summary` shows *Campaigns you're chasing* as an Upcoming sign in
-   * its slot, so the coachee's page shows *Campaigns she's chasing* (`Overall.html:4124`) the same way.
+   * P18.5-T9: *Campaigns she's chasing* (`Overall.html:4121-4130`), the sign of P11-T7's review replaced — the
+   * coachee's chases, from the read `/summary`'s card makes for the member, as 🚀 chips.
    */
   it.each([
-    ['she', "Campaigns she's chasing", 'The campaigns she chooses to chase from the Campaign list, and how close she is to each.'],
-    ['he', "Campaigns he's chasing", 'The campaigns he chooses to chase from the Campaign list, and how close he is to each.'],
-    ['they', "Campaigns they're chasing", 'The campaigns they choose to chase from the Campaign list, and how close they are to each.'],
-  ] as const)('P11-T7 review shows the campaigns card as /summary does, a sign in its slot, in %s’s words', async (pronoun, title, what) => {
+    ['she', "Campaigns she's chasing"],
+    ['he', "Campaigns he's chasing"],
+    ['they', "Campaigns they're chasing"],
+  ] as const)('P18.5-T9 AC-1 titles the card in %s’s pronoun, with the bolt and no tag, and draws 🚀 chips by title', async (pronoun, title) => {
     const { calls } = show(summary(), person(pronoun));
-    const sign = await card(`${title} Upcoming`);
+    const section = await card(title);
+    const heading = within(section).getByRole('heading', { level: 2 });
+    expect(heading).toHaveTextContent(new RegExp(`^${title}$`));
+    expect(heading.firstElementChild?.tagName.toLowerCase()).toBe('svg');
+    expect(within(section).queryByText('From the Campaign list')).not.toBeInTheDocument();
+    const chips = await within(section).findAllByRole('listitem');
+    // Sorted by title, where the read answers D-lists' order (the sprint, then MDRT).
+    expect(chips.map((c) => c.textContent)).toEqual(['🚀 MDRT Qualification', '🚀 Q4 APE Sprint']);
+    expect(within(section).queryByRole('link')).not.toBeInTheDocument();
+    expect(within(section).queryByRole('button')).not.toBeInTheDocument();
+    expect(section).not.toHaveClass('print:hidden');
+    expect(section.textContent).not.toMatch(SIX_WORDS);
+    // P18.5-T9 AC-2: the coachee's chases, through ?for= — the one read the member's own card makes.
+    expect(calls.filter((c) => c.url.includes('/campaigns')).map((c) => c.url))
+      .toEqual(['http://api.test/api/v1/campaigns/chasing?for=mem-rina']);
+  });
 
-    expect(within(sign).getByRole('heading', { level: 2 })).toHaveTextContent(title);
-    expect(sign).toHaveTextContent(what);
-    expect(sign).toHaveClass('print:hidden');
-    expect(within(sign).queryByRole('link')).not.toBeInTheDocument();
-    expect(calls.some((c) => /campaign/i.test(c.url))).toBe(false);
-    expect(sign.textContent).not.toMatch(SIX_WORDS);
+  it('P18.5-T9 AC-1 says the Unit Dashboard’s words when she chases nothing', async () => {
+    show(summary(), person('she'), LEADER, { body: RATIOS }, { body: NONE_CHASED });
+    const section = await card("Campaigns she's chasing");
+    expect(await within(section).findByText('Not currently chasing any campaigns.')).toBeInTheDocument();
+  });
+
+  it('P18.5-T9 AC-2 fails on its own card, and the Summary stands', async () => {
+    show(summary(), person('she'), LEADER, { body: RATIOS }, {
+      status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-9' } },
+    });
+    const section = await card("Campaigns she's chasing");
+    expect(await within(section).findByRole('alert')).toHaveTextContent('Not found');
+    expect(screen.getByRole('region', { name: 'Goal vs. actual (APE)' })).toBeInTheDocument();
   });
 
   it('P11-T8 fails the pulse in its own card, and the Summary stands', async () => {

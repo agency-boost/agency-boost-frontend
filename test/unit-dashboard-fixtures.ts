@@ -10,6 +10,9 @@ import { makeMe } from './harness';
  * unit nested two deep the seed does not hold, Wulan's (Tono) inside Sari's, as a test fixture.
  */
 
+/** *Chasing MDRT*'s header tooltip as the server composes it from 0417's MDRT campaign (OD-152). */
+export const MDRT_TOOLTIP = 'Chasing MDRT (Million Dollar Round Table) this year — APE achieved ≥ Rp 2.400.000.000.';
+
 /** Rupiah in minor units: `rp(80)` is Rp 80.000.000. */
 export const rp = (millions: number) => Math.round(millions * 1_000_000 * 100);
 
@@ -53,6 +56,8 @@ export function unitRow(membershipId: string, name: string, over: Partial<UnitRo
     status: 'watch_closely',
     pacingToMaa: true,
     followUp: null,
+    chasingMdrt: false,
+    campaigns: [],
     ...over,
   };
 }
@@ -67,11 +72,17 @@ export const total = (over: Partial<UnitTotal> = {}): UnitTotal => ({
 
 const AAB = { code: 'AAB', label: 'Associate Agency Builder' };
 
+/** The seed's chases (`phase-18.5-agent-enablement.md`, *Seed*): Agus MDRT; Dimas and Rina MDRT and the sprint. */
+const MDRT = { code: 'MDRT_QUALIFICATION', title: 'MDRT Qualification' };
+const SPRINT = { code: 'APE_SPRINT', title: 'Q4 APE Sprint' };
+
 export const AGUS_ROW = unitRow('mem-agus', 'Agus Santoso', {
+  chasingMdrt: true, campaigns: [MDRT],
   isReader: true, depth: 0, leads: true, rung: { code: 'AB', label: 'Agency Builder' }, lastOneOnOne: null, status: 'on_track',
   goal: goalCell({ actualMinor: rp(108), attainmentPct: 135, targetMet: true, overMinor: rp(28), gapMinor: 0, policiesNeeded: 0 }),
 });
 export const DIMAS = unitRow('mem-dimas', 'Dimas Pratama', {
+  chasingMdrt: true, campaigns: [MDRT, SPRINT],
   lastOneOnOne: { days: 12, date: '2026-09-26', overdue: true, coach: { membershipId: 'mem-agus', name: 'Agus Santoso' } },
   followUp: { text: 'Role-play objection handling before next presentation', dueDate: '2026-10-05', overdueDays: 3 },
 });
@@ -104,6 +115,7 @@ export const BUDI = unitRow('mem-budi', 'Budi Santoso', {
   depth: 2, status: 'needs_attention', leadsCounts: { salesOpen: 3, salesClosing: 1, recruitOpen: 1, recruitNominated: 1 },
 });
 export const RINA = unitRow('mem-rina', 'Rina Wijaya', {
+  chasingMdrt: true, campaigns: [MDRT, SPRINT],
   depth: 2, lastOneOnOne: { days: 0, date: '2026-10-08', overdue: false, coach: { membershipId: 'mem-sari', name: 'Sari Wulandari' } },
 });
 export const YANTI = unitRow('mem-yanti', 'Yanti Puspita', {
@@ -152,6 +164,7 @@ export function dashboard(over: Partial<UnitDashboardView> = {}): UnitDashboardV
     yourUnit: { rows: [AGUS_ROW, DIMAS, INDAH, SITI], total: total() },
     units: UNITS,
     production: { month: '2026-10', revision: 7, locked: false, canUpdate: true },
+    mdrt: { running: true, tooltip: MDRT_TOOLTIP },
     ...over,
   };
 }

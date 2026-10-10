@@ -179,7 +179,9 @@ function Chrome({
     {
       label: 'Training',
       divider: true,
-      items: [{ label: 'Training modules', href: '/training', icon: 'graduation', upcoming: true }],
+      // Live for every field rung, and the Owner and the Admin in their field view (P18.5-T1 AC-9): the
+      // prototype gates it for nobody (`Overall.html:2651`). Current on the list and every module's page.
+      items: [{ label: 'Training modules', href: '/training', icon: 'graduation', active: on('/training') }],
     },
     {
       label: 'Sales tools',
@@ -206,11 +208,15 @@ function Chrome({
     {
       label: 'KPM',
       divider: true,
-      items: [{ label: 'Event list', href: '/events', icon: 'calendar', upcoming: true }],
+      // Live for every field role (P18.5-T5 AC-4; I-150): the prototype gates it on nothing (`Overall.html:2662-2665`).
+      // Current over an event's modal too, `/events/{eventId}`.
+      items: [{ label: 'Event list', href: '/events', icon: 'calendar', active: on('/events') }],
     },
     {
       label: 'Campaign',
-      items: [{ label: 'Campaign list', href: '/campaigns', icon: 'trophy', upcoming: true }],
+      // Live for every field role (P18.5-T7; roles §4.2): the prototype gates it on nothing (`Overall.html:2667-2670`).
+      // Current over a campaign's dialog too, `/campaigns/{code}`.
+      items: [{ label: 'Campaign list', href: '/campaigns', icon: 'trophy', active: on('/campaigns') }],
       divider: true,
     },
     {

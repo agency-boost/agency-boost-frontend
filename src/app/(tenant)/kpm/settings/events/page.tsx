@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { AudiencePicker } from '@/components/events/audience-picker';
+import { FeedbackDialog } from '@/components/events/feedback-dialog';
 import { PublishBar } from '@/components/publish-bar';
 import { SettingsScreen } from '@/components/settings-screen';
 import { ConfigBadge } from '@/components/ui/config-badge';
@@ -9,9 +11,10 @@ import {
   Button, Card, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
-import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { suggestCode } from '@/lib/config-code';
 import { useCan } from '@/lib/session';
+import { ADMIN_COPY, officeInstant, officeWallClock, OWNER_PROTOTYPE_COPY } from '@/lib/events-admin';
 import { useHashTab } from '@/lib/use-hash-tab';
 import {
   archiveEvent, archiveEventType, createEvent, createEventType, listEventTypes, listEvents,
@@ -31,18 +34,14 @@ const ISSUERS = [
   { value: 'group', label: 'A group' },
 ];
 /**
- * The two `select_*` scopes need a list of people, and the roster picker that chooses them is not
- * built. They stay in the select so the reader can see they are coming, **disabled and marked
- * *coming soon*** like every other unbuilt thing (the client, 2026-10-01). The phrase is the
- * prototype's own for a thing not built (`Overall.html:3773`), not the nav pill's *Upcoming*: on
- * this screen *Upcoming* already means an event that has not started. The mark is on the option
- * only: an event the API saved with one of them still reads as its plain label in the list.
+ * The two `select_*` scopes carry a list of people, chosen with the picker beneath the field (P18.5-T5
+ * AC-10, D-picker). They were *coming soon* until it was built (F-44, amended as built).
  */
-const SCOPES: { value: string; label: string; upcoming?: true }[] = [
+const SCOPES: { value: string; label: string }[] = [
   { value: 'all_agents', label: 'Everybody in the office' },
   { value: 'leaders', label: 'Leaders — anybody with somebody under them' },
-  { value: 'select_agents', label: 'Chosen people', upcoming: true },
-  { value: 'select_leaders', label: 'Chosen leaders', upcoming: true },
+  { value: 'select_agents', label: 'Chosen people' },
+  { value: 'select_leaders', label: 'Chosen leaders' },
 ];
 
 const PHASE: Record<string, { tone: 'won' | 'open'; text: string }> = {
@@ -54,15 +53,23 @@ const PHASE: Record<string, { tone: 'won' | 'open'; text: string }> = {
 const label = (options: { value: string; label: string }[], value: string) =>
   options.find((o) => o.value === value)?.label ?? value;
 
-/** A local `datetime-local` value as an instant the API can store. */
-const toInstant = (value: string) => (value ? new Date(value).toISOString() : '');
+/** Two invitee lists name the same people, in any order. */
+const sameIds = (a: readonly string[], b: readonly string[]) =>
+  a.length === b.length && a.every((id) => b.includes(id));
+
+/** Where a refusal of the panel's save is said: under *Ends*, or under *Who is invited*. */
+type FieldRefusal = { field: 'dates' | 'audience'; message: string };
 
 /**
  * The events an office runs (P5-T6, ADR-0034).
  *
- * **Nothing per-person is here.** RSVP, attendance and feedback belong to the agent's Events screen,
- * each a record of its own — the prototype keeps all three on the shared event, so with two users the
- * second overwrites the first's RSVP and reads the first's feedback as their own.
+ * **Nothing per-person is edited here.** RSVP, the claim and feedback are each member's own record,
+ * written on the agent's Events screen. What the office does with them is behind *View feedback* on a
+ * past row (`KPM_Owner.html:1655`; P18.5-T5 AC-7, T6 AC-5): the roll call, where the Owner or an Admin
+ * confirms who came, and the *Feedback Summary*.
+ *
+ * **The list is the office's administration's** (P18.5-T5 AC-2): it carries every invitee list and every
+ * leaders-only event, so it reads under `event_settings:read`, which no field rung holds.
  *
  * **Nothing says when an event is happening except its dates.** The phase badge is worked out on
  * every read; the prototype hardcodes a status beside a date it never checks against, and labels
@@ -79,10 +86,23 @@ export default function EventsSettingsPage() {
   /** `'new'` while adding, an id while editing, `null` when the panel is closed. */
   const [adding, setAdding] = useState<string | null>(null);
   const [draft, setDraft] = useState(emptyDraft());
+  /** The event as it was when *Edit* opened it, so a save sends the audience and the times only when they changed. */
+  const [original, setOriginal] = useState<Draft | null>(null);
+  const [fieldRefusal, setFieldRefusal] = useState<FieldRefusal | null>(null);
   const [typeDraft, setTypeDraft] = useState({ label: '', code: '', touched: false, emoji: '' });
   const [addingType, setAddingType] = useState<string | null>(null);
+  /** The past event whose *View feedback* is open. */
+  const [feedbackFor, setFeedbackFor] = useState<EventRow | null>(null);
+  const mayReadList = useCan('event_settings:read');
+  // *View feedback* opens the roll call (`event_attendance:confirm`) and the summary (`event_feedback:read`).
+  const mayConfirm = useCan('event_attendance:confirm');
+  const mayReadFeedback = useCan('event_feedback:read');
+  const mayViewFeedback = mayConfirm || mayReadFeedback;
+  const setInvitees = useCallback((ids: string[]) => setDraft((n) => ({ ...n, invitees: ids })), []);
 
   const load = useCallback(async () => {
+    // The page's gate refuses a reader without the list's read; nothing is asked for them either.
+    if (!mayReadList) return;
     try {
       const [t, e] = await Promise.all([listEventTypes(true), listEvents(true)]);
       setTypes(t);
@@ -91,7 +111,7 @@ export default function EventsSettingsPage() {
     } catch (err) {
       setError(toDisplayError(err));
     }
-  }, []);
+  }, [mayReadList]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -105,6 +125,55 @@ export default function EventsSettingsPage() {
     } catch (err) {
       setError(toDisplayError(err));
       return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * **The panel's save.** The times are the office's wall clock, read in `Asia/Jakarta` whatever the browser's
+   * zone (invariant §9). On an edit, **the audience and the times are sent only when they changed** (P18.5-T5
+   * AC-9): an ended event people have answered keeps both, and the server refuses a change to either. That
+   * refusal is said under the field it is about — the times under *Ends*, in the spec's words; the audience
+   * under *Who is invited*, in the server's — and the panel stays open with what was typed.
+   */
+  const saveEvent = async (fallbackType: string | undefined) => {
+    const editing = adding !== null && adding !== 'new';
+    const selecting = draft.scope.startsWith('select_');
+    const datesChanged = !original || draft.startsAt !== original.startsAt || draft.endsAt !== original.endsAt;
+    const audienceChanged = !original || draft.issuer !== original.issuer || draft.scope !== original.scope
+      || (selecting && !sameIds(draft.invitees, original.invitees));
+    const body = {
+      typeCode: draft.typeCode || fallbackType,
+      title: draft.title.trim(),
+      blurb: draft.blurb.trim(),
+      location: draft.location.trim(),
+      ...(datesChanged ? { startsAt: officeInstant(draft.startsAt), endsAt: officeInstant(draft.endsAt) } : {}),
+      ...(audienceChanged ? {
+        audience: {
+          issuer: draft.issuer,
+          scope: draft.scope,
+          ...(selecting ? { inviteeMembershipIds: draft.invitees } : {}),
+        },
+      } : {}),
+    };
+    setBusy(true);
+    setError(null);
+    setFieldRefusal(null);
+    try {
+      // The code is never sent on an edit: an event that already happened points at it.
+      if (editing) await updateEvent(adding!, body);
+      else await createEvent({ ...body, code: draft.code.trim() });
+      setDraft(emptyDraft());
+      setOriginal(null);
+      setAdding(null);
+      await load();
+    } catch (err) {
+      const shown = toDisplayError(err);
+      const about = err instanceof ApiRequestError && err.status === 409 ? refusedField(shown, datesChanged, audienceChanged) : null;
+      if (about === 'dates') setFieldRefusal({ field: 'dates', message: ADMIN_COPY.hasResponses });
+      else if (about === 'audience') setFieldRefusal({ field: 'audience', message: shown.message });
+      else setError(shown);
     } finally {
       setBusy(false);
     }
@@ -129,7 +198,7 @@ export default function EventsSettingsPage() {
           {canWrite && (
             <Button
               disabled={busy || adding !== null || active.length === 0}
-              onClick={() => { setDraft(emptyDraft()); setAdding('new'); }}
+              onClick={() => { setDraft(emptyDraft()); setOriginal(null); setFieldRefusal(null); setAdding('new'); }}
             >
               Add an event
             </Button>
@@ -178,12 +247,23 @@ export default function EventsSettingsPage() {
                         {event.location && <> · {event.location}</>}
                       </p>
                     </div>
+                    {event.phase === 'past' && mayViewFeedback && (
+                      <Button variant="inline" onClick={() => setFeedbackFor(event)}>
+                        {OWNER_PROTOTYPE_COPY.viewFeedback}
+                      </Button>
+                    )}
                     {canWrite && (
                       <div className="flex flex-wrap gap-2">
                         <Button
                           variant="inline"
                           disabled={busy}
-                          onClick={() => { setDraft(draftOf(event)); setAdding(event.id); }}
+                          onClick={() => {
+                            const opened = draftOf(event);
+                            setDraft(opened);
+                            setOriginal(opened);
+                            setFieldRefusal(null);
+                            setAdding(event.id);
+                          }}
                         >
                           Edit
                         </Button>
@@ -210,11 +290,11 @@ export default function EventsSettingsPage() {
 
   function addPanel(active: EventTypeRow[]) {
     /*
-     * The two chosen-people options are disabled, so a new event never lands here. Editing one the
-     * API saved with a list does: this screen cannot show or send that list, and saving without it
-     * would be refused or would drop it, so Save waits until the reader picks a scope it can send.
+     * A chosen audience needs somebody in it: Save waits for the first person picked, and the field's
+     * line says so while nobody is.
      */
     const selecting = draft.scope.startsWith('select_');
+    const nobodyChosen = selecting && draft.invitees.length === 0;
     const editing = adding !== null && adding !== 'new';
     return (
       <Card>
@@ -286,6 +366,7 @@ export default function EventsSettingsPage() {
             label="Ends"
             htmlFor="ev-ends"
             hint="Required — without it nothing can say whether the event is running now."
+            error={fieldRefusal?.field === 'dates' ? fieldRefusal.message : undefined}
             className="min-w-56 flex-1"
           >
             <TextInput
@@ -321,11 +402,12 @@ export default function EventsSettingsPage() {
           <Field
             label="Who is invited"
             htmlFor="ev-scope"
-            // While a scope the API saved with a chosen list is selected, the field's one line says
-            // why Save waits: a disabled button with no stated reason is hard to recover from.
-            hint={selecting
-              ? 'Pick Everybody or Leaders to save — a chosen list can’t be edited here yet.'
+            // While a chosen audience has nobody in it, the field's one line says why Save waits: a
+            // disabled button with no stated reason is hard to recover from.
+            hint={nobodyChosen
+              ? 'Pick at least one person below to save.'
               : 'A leader is somebody with people under them — not a job title.'}
+            error={fieldRefusal?.field === 'audience' ? fieldRefusal.message : undefined}
             className="min-w-64 flex-1"
           >
             <Select
@@ -334,39 +416,28 @@ export default function EventsSettingsPage() {
               disabled={busy}
               onChange={(e) => setDraft((n) => ({ ...n, scope: e.target.value }))}
             >
-              {SCOPES.map((o) => (
-                <option key={o.value} value={o.value} disabled={o.upcoming}>
-                  {o.upcoming ? `${o.label} — coming soon` : o.label}
-                </option>
-              ))}
+              {SCOPES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </Select>
           </Field>
         </div>
+        {selecting && (
+          <AudiencePicker
+            leadersOnly={draft.scope === 'select_leaders'}
+            chosen={draft.invitees}
+            disabled={busy}
+            onChange={setInvitees}
+          />
+        )}
 
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
             disabled={busy || !draft.title.trim() || !draft.code.trim()
-              || !draft.startsAt || !draft.endsAt || selecting}
-            onClick={() => void run(async () => {
-              const body = {
-                typeCode: draft.typeCode || active[0]?.code,
-                title: draft.title.trim(),
-                blurb: draft.blurb.trim(),
-                startsAt: toInstant(draft.startsAt),
-                endsAt: toInstant(draft.endsAt),
-                location: draft.location.trim(),
-                audience: { issuer: draft.issuer, scope: draft.scope },
-              };
-              // The code is never sent on an edit: an event that already happened points at it.
-              if (editing) await updateEvent(adding!, body);
-              else await createEvent({ ...body, code: draft.code.trim() });
-              setDraft(emptyDraft());
-              setAdding(null);
-            })}
+              || !draft.startsAt || !draft.endsAt || nobodyChosen}
+            onClick={() => void saveEvent(active[0]?.code)}
           >
             {editing ? 'Save the event' : 'Add the event'}
           </Button>
-          <Button variant="secondary" disabled={busy} onClick={() => setAdding(null)}>Cancel</Button>
+          <Button variant="secondary" disabled={busy} onClick={() => { setAdding(null); setFieldRefusal(null); }}>Cancel</Button>
         </div>
       </Card>
     );
@@ -524,7 +595,7 @@ export default function EventsSettingsPage() {
     <SettingsScreen
       title="Events"
       subtitle="What your office is running, and who is invited."
-      permission="tenant_config:read"
+      permission="event_settings:read"
       tabs={TABS}
       tabsLabel="Events sections"
       activeHref={tab}
@@ -538,22 +609,33 @@ export default function EventsSettingsPage() {
         </div>
       )}
       {tab === '#types' ? typesTab() : eventsTab()}
+      {feedbackFor && (
+        <FeedbackDialog eventId={feedbackFor.id} title={feedbackFor.title} onClose={() => setFeedbackFor(null)} />
+      )}
     </SettingsScreen>
   );
 }
 
-/** One event as the panel's fields, with the instants back in the browser's local form. */
-function draftOf(event: EventRow) {
-  const local = (iso: string) => {
-    const at = new Date(iso);
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`
-      + `T${pad(at.getHours())}:${pad(at.getMinutes())}`;
-  };
+/**
+ * Which field a `409` on the panel's save is about: the one the server names (`details.field`), else the one
+ * the save changed — the times first, since `EVENT_HAS_RESPONSES` is theirs (AC-9).
+ */
+function refusedField(shown: ApiError, datesChanged: boolean, audienceChanged: boolean): FieldRefusal['field'] | null {
+  const named = shown.details?.field;
+  if (named === 'dates' || named === 'audience') return named;
+  if (shown.code === 'EVENT_HAS_RESPONSES' && datesChanged) return 'dates';
+  return audienceChanged ? 'audience' : null;
+}
+
+type Draft = ReturnType<typeof emptyDraft>;
+
+/** One event as the panel's fields, its instants as the office's wall clock (invariant §9). */
+function draftOf(event: EventRow): Draft {
   return {
     title: event.title, code: event.code, touched: true, typeCode: event.typeCode,
-    blurb: event.blurb, startsAt: local(event.startsAt), endsAt: local(event.endsAt),
+    blurb: event.blurb, startsAt: officeWallClock(event.startsAt), endsAt: officeWallClock(event.endsAt),
     location: event.location, issuer: event.audience.issuer, scope: event.audience.scope,
+    invitees: [...event.audience.inviteeMembershipIds] as string[],
   };
 }
 
@@ -561,5 +643,6 @@ function emptyDraft() {
   return {
     title: '', code: '', touched: false, typeCode: '', blurb: '',
     startsAt: '', endsAt: '', location: '', issuer: 'kpm', scope: 'all_agents',
+    invitees: [] as string[],
   };
 }

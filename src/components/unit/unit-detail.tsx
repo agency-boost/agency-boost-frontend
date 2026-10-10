@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import { ChaseChips } from '@/components/campaigns/chasing-card';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import type { ActivityRatio, ActivityRatios } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { PROTOTYPE_COPY as CAMPAIGN_COPY } from '@/lib/campaigns';
 import { cn } from '@/lib/cn';
 import { formatShortDay } from '@/lib/format';
 import { balanceSideNames, formatBalanceSplit } from '@/lib/ratio-balance';
@@ -20,9 +22,11 @@ export type ReadRatios = (row: UnitRow) => Promise<ActivityRatios>;
  * The expanded detail (`Overall.html:7302-7355`, CSS `:1738-1785`): *Gap*, *Activity breakdown*, *Ratios*
  * and *Flagged follow-up (system-detected)*, four tiles on the warm base, one column on a phone.
  *
- * **No campaigns part** (`:7278-7285`): campaigns come last, so its tile holds only the follow-up, and is
- * not drawn when there is none (OD-140). *Team snapshot* is defined and never drawn by the prototype, and
- * not here either.
+ * **The last tile** (`:7349-7352`): *Campaigns they're chasing* — 🚀 chips by title, or *"Not currently chasing
+ * any campaigns."* (`:7278-7285`; P18.5-T7 AC-8, parity D-19) — with the follow-up beneath it (OD-140). Always
+ * drawn, but for somebody whose chases the reader may not read (`campaigns: null`), where it holds the
+ * follow-up alone, and is not drawn without one. *Team snapshot* is defined and never drawn by the
+ * prototype, and not here either.
  *
  * **The ratios are read when the row opens** (D-ratios), the person's as `GET /activity/ratios?for=`
  * answers them — the office's ratios on their rung, its labels, the last 30 days — and the tile waits and
@@ -34,7 +38,7 @@ export function UnitDetail({
   const gap = gapWords(row.goal);
   return (
     <tr>
-      <td id={id} colSpan={7} className="border-b border-hairline bg-base p-0">
+      <td id={id} colSpan={8} className="border-b border-hairline bg-base p-0">
         <div className="grid grid-cols-1 gap-3.5 px-6 pb-[22px] pt-[18px] md:grid-cols-4">
           <Tile title={PROTOTYPE_COPY.gap}>
             <p className="mb-1 font-body text-[1.0625rem] font-bold text-navy">{gap.value}</p>
@@ -52,25 +56,45 @@ export function UnitDetail({
               reader) has one to give; an Owner's or an Admin's view of a unit outside their downline
               draws the rest of the detail without it. */}
           {(row.coached || row.isReader) && <RatiosTile row={row} readRatios={readRatios} />}
-          {row.followUp && (
+          {row.campaigns !== null ? (
+            <Tile title={CAMPAIGN_COPY.theyreChasing}>
+              {row.campaigns.length > 0
+                ? <ChaseChips campaigns={row.campaigns} />
+                : <p className="text-sm italic text-muted">{CAMPAIGN_COPY.notChasingAny}</p>}
+              {row.followUp && (
+                // `.detail-followup` (`:1763-1764`): beneath the chips, over a hairline.
+                <div className="mt-2.5 border-t border-hairline pt-2.5">
+                  <h3 className="mb-1.5 text-2xs font-bold uppercase tracking-wide text-muted">{PROTOTYPE_COPY.followUp}</h3>
+                  <FollowUpLine followUp={row.followUp} />
+                </div>
+              )}
+            </Tile>
+          ) : row.followUp && (
             <Tile title={PROTOTYPE_COPY.followUp}>
-              <p className="text-base text-navy">
-                {row.followUp.overdueDays !== null ? (
-                  <span className="mr-1.5 inline-block rounded-pill bg-alert/10 px-2 py-0.5 text-2xs font-bold text-alert">
-                    {overdueTag(row.followUp.overdueDays)}
-                  </span>
-                ) : row.followUp.dueDate && (
-                  <span className="mr-1.5 inline-block rounded-pill bg-navy/[0.06] px-2 py-0.5 text-2xs font-bold text-muted">
-                    {formatShortDay(row.followUp.dueDate)}
-                  </span>
-                )}
-                {row.followUp.text}
-              </p>
+              <FollowUpLine followUp={row.followUp} />
             </Tile>
           )}
         </div>
       </td>
     </tr>
+  );
+}
+
+/** The follow-up's line (`.detail-followup-item`, `:1765-1768`): its date or how overdue, and the item. */
+function FollowUpLine({ followUp }: { followUp: NonNullable<UnitRow['followUp']> }) {
+  return (
+    <p className="text-base text-navy">
+      {followUp.overdueDays !== null ? (
+        <span className="mr-1.5 inline-block rounded-pill bg-alert/10 px-2 py-0.5 text-2xs font-bold text-alert">
+          {overdueTag(followUp.overdueDays)}
+        </span>
+      ) : followUp.dueDate && (
+        <span className="mr-1.5 inline-block rounded-pill bg-navy/[0.06] px-2 py-0.5 text-2xs font-bold text-muted">
+          {formatShortDay(followUp.dueDate)}
+        </span>
+      )}
+      {followUp.text}
+    </p>
   );
 }
 

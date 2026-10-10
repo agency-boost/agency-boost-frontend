@@ -4,14 +4,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
-  ActivationSkeleton, AspectCard, AttributionMark, AutoBadge, DateField, GoToLink, ITEM_CHECKBOX, ITEM_ROW,
+  ActivationSkeleton, AspectCard, AttributionMark, AutoBadge, ByHandBadge, DateField, GoToLink, ITEM_CHECKBOX, ITEM_ROW,
   ProgressHeading, ProgressSummary, RowError, useWriteQueue,
 } from '@/components/activation-parts';
 import { Dialog } from '@/components/ui/dialog';
 import { Button, Card, ErrorBanner, TextInput } from '@/components/ui/field';
 import { Toast, useHostToast, useToast } from '@/components/ui/toast';
 import {
-  attributionOf, correctionOf, graduateMyActivation, isComplete, isManual, ITEM_NOTE_MAX, MY_COACHING_ACTIVATION_HREF, OWN_COPY,
+  attributionOf, correctionOf, graduateMyActivation, isComplete, isManual, isTickedByHandLink, ITEM_NOTE_MAX, MY_COACHING_ACTIVATION_HREF, OWN_COPY,
   PROTOTYPE_COPY, readMyActivation, saveMyItem, type ActivationItemProgress, type ActivationView, type MyItemInput,
 } from '@/lib/activation';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
@@ -222,9 +222,10 @@ function StartDate({ view, reader }: { view: ActivationView; reader: string | nu
 }
 
 /**
- * One of the hire's rows (`:6570-6607`). A live link is *Auto*, disabled, with its *Go to* link; anything
- * else — no link, or one whose evaluator does not exist yet (ADR-0031) — is ticked by hand, with the
- * chevron opening the hire's own note and date.
+ * One of the hire's rows (`:6570-6607`). A live link is *Auto*, disabled, with its *Go to* link, and so is
+ * an item its link already completed (its *Go to* gone once the module is not offered); anything else — no
+ * link, or a training link whose module is not offered (D-orphan, *Ticked by hand*) — is ticked by hand,
+ * with the chevron opening the hire's own note and date.
  */
 function MyItemRow({
   item, reader, writable, onSave, error, resetKey,
@@ -251,9 +252,12 @@ function MyItemRow({
           <AutoBadge link={item.link} />
           <AttributionMark words={words} />
         </div>
-        <div className="ml-[26px] mt-[9px] flex flex-wrap gap-2">
-          <GoToLink link={item.link} />
-        </div>
+        {/* Not to a module no longer offered (D-orphan): its link already completed the item, and its page is gone. */}
+        {item.link.live && (
+          <div className="ml-[26px] mt-[9px] flex flex-wrap gap-2">
+            <GoToLink link={item.link} />
+          </div>
+        )}
       </div>
     );
   }
@@ -272,6 +276,7 @@ function MyItemRow({
             />
             <span>{item.label}</span>
           </label>
+          {isTickedByHandLink(item) && <ByHandBadge />}
           <AttributionMark words={words} />
         </div>
         <button

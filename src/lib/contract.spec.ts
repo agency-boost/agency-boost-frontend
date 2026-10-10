@@ -274,6 +274,24 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['leader-meetings.ts', 'AgendaItem', 'AgendaItemDto'],
   ['leader-meetings.ts', 'ActionItem', 'LeaderActionItemDto'],
   ['leader-meetings.ts', 'ShareLink', 'ShareLinkDto'],
+  // Phase 18.5 (P18.5-T5, T6): KPM Events — the list and the modal read every one of these off `GET /events`
+  // and the writes' answers; *View feedback* reads the roll call and the Feedback Summary; the picker its people.
+  ['events.ts', 'GuestEventList', 'GuestEventListDto'],
+  ['events.ts', 'GuestEvent', 'GuestEventDto'],
+  ['events.ts', 'GuestEventType', 'GuestEventTypeDto'],
+  ['events.ts', 'GuestEventAudience', 'GuestEventAudienceDto'],
+  ['events.ts', 'GuestEventMe', 'MyEventPartDto'],
+  ['events.ts', 'GuestFeedback', 'MyEventFeedbackDto'],
+  ['events.ts', 'GuestEventLimits', 'GuestEventLimitsDto'],
+  ['events.ts', 'GuestEventCan', 'GuestEventCanDto'],
+  ['events.ts', 'NpsConstants', 'NpsConstantsDto'],
+  ['events-admin.ts', 'RollCall', 'RollCallDto'],
+  ['events-admin.ts', 'RollCallRow', 'RollCallRowDto'],
+  ['events-admin.ts', 'RollCallCan', 'RollCallCanDto'],
+  ['events-admin.ts', 'FeedbackSummary', 'FeedbackSummaryDto'],
+  ['events-admin.ts', 'FeedbackRow', 'FeedbackRowDto'],
+  ['events-admin.ts', 'EventInvitee', 'EventInviteeDto'],
+  ['events-admin.ts', 'EventInviteeList', 'EventInviteeListDto'],
 ];
 
 describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
@@ -652,6 +670,175 @@ describe('the activation’s types match the API document (P13)', () => {
     const called = callsIn(readFileSync(join(__dirname, 'activation.ts'), 'utf8'));
     expect(called.length).toBe(8);
     expect(called.filter((p) => !matches(p, paths))).toEqual([]);
+  });
+});
+
+/**
+ * P18.5-T1 to T4: training's shapes, held to their shape as the activation's are — the learner's list and
+ * module page, and the coaching *Training* tab, read these fields straight off the response.
+ */
+const TRAINING_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
+  ['training.ts', 'TrainingProgressView', 'TrainingProgressDto'],
+  ['training.ts', 'TrainingCategoryProgress', 'TrainingCategoryProgressDto'],
+  ['training.ts', 'TrainingSkillProgress', 'TrainingSkillProgressDto'],
+  ['training.ts', 'TrainingModuleRow', 'TrainingModuleRowDto'],
+  ['training.ts', 'TrainingArchivedModuleRow', 'TrainingArchivedModuleDto'],
+  ['training.ts', 'TrainingModulePage', 'TrainingModulePageDto'],
+  ['training.ts', 'TrainingRef', 'TrainingPlaceDto'],
+  ['training.ts', 'TrainingModuleCan', 'TrainingModuleCanDto'],
+  ['training.ts', 'TrainingItemView', 'TrainingItemDto'],
+  ['training.ts', 'TrainingOpenAnswer', 'TrainingOpenDto'],
+];
+
+describe('training’s types match the API document (P18.5-T1 to T4)', () => {
+  it.each(TRAINING_PAIRS)('%s › %s ⊆ %s', (file, ours, theirs) => {
+    const documented = new Set(propertiesOf(theirs));
+    expect(declaredFields(file, ours).filter((f) => !documented.has(f))).toEqual([]);
+  });
+
+  it.each(TRAINING_PAIRS)('%s › %s is shaped as %s promises: required, nullable, its values', (file, ours, theirs) => {
+    const schema = doc.components.schemas[theirs];
+    const required = new Set(schema.required ?? []);
+    const problems: string[] = [];
+    for (const field of declaredTypes(file, ours)) {
+      const prop = schema.properties?.[field.name] ?? {};
+      if (!field.optional && !required.has(field.name)) problems.push(`${field.name}: declared always there, documented optional`);
+      if (prop.nullable && !field.nullable) problems.push(`${field.name}: documented nullable, declared without | null`);
+      const theirValues = (prop.enum ?? []).filter((v): v is string => typeof v === 'string');
+      if (theirValues.length > 0) {
+        const ourValues = literalsOf(file, field.type);
+        if (ourValues === null) problems.push(`${field.name}: documented as values, declared as ${field.type}`);
+        else if ([...ourValues].sort().join() !== [...theirValues].sort().join()) {
+          problems.push(`${field.name}: ${[...ourValues].sort().join('|')} against ${[...theirValues].sort().join('|')}`);
+        }
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it('the status write sends only what SetTrainingStatusDto takes, with its values', () => {
+    expect(propertiesOf('SetTrainingStatusDto')).toEqual(['status']);
+    const values = (doc.components.schemas.SetTrainingStatusDto.properties?.status.enum ?? []) as string[];
+    expect([...values].sort()).toEqual([...(literalsOf('training.ts', 'TrainingStatus') ?? [])].sort());
+  });
+
+  it('every route the training client calls is in the document, with its method', async () => {
+    const { vi } = await import('vitest');
+    const training = await import('./training');
+    const sent: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+      sent.push(`${(init.method ?? 'GET').toLowerCase()} ${new URL(url).pathname.replace('/api/v1', '')}`);
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    }));
+    try {
+      await training.readTrainingProgress();
+      await training.readCoacheeTraining('m1');
+      await training.readTrainingModule('MOD');
+      await training.openTrainingItem('MOD', 'it1');
+      await training.setTrainingStatus('MOD', 'done');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(sent).toHaveLength(5);
+    const routes = Object.entries(doc.paths).flatMap(([path, ops]) =>
+      Object.keys(ops).map((method) => ({ method, path: path.replace('/api/v1', '') })));
+    const unknown = sent.filter((call) => {
+      const [method, path] = call.split(' ');
+      const asCalled = path.split('/').map((seg) => (['m1', 'MOD', 'it1'].includes(seg) ? '*' : seg)).join('/');
+      return !routes.some((r) => r.method === method && matches(asCalled, new Set([r.path])));
+    });
+    expect(unknown).toEqual([]);
+  });
+});
+
+/**
+ * P18.5-T7 to T9: campaigns' shapes — the list, the dialog and its progress, the chases on the Summary and the
+ * coachee's card, the Unit Dashboard's *Chasing MDRT* and chips, the Owner's form's fields and the registry's
+ * `campaign` flag — held to their shape as training's are. `CampaignDetail` extends `CampaignCard`, which
+ * `declaredFields` cannot follow: its own fields are held in the last test.
+ */
+const CAMPAIGN_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
+  ['campaigns.ts', 'CampaignPoster', 'AgentCampaignPosterDto'],
+  ['campaigns.ts', 'CampaignRequirement', 'AgentCampaignRequirementDto'],
+  ['campaigns.ts', 'CampaignCard', 'CampaignCardDto'],
+  ['campaigns.ts', 'CampaignCan', 'CampaignCanDto'],
+  ['campaigns.ts', 'CampaignList', 'CampaignListDto'],
+  ['campaigns.ts', 'ProgressRow', 'CampaignProgressRowDto'],
+  ['campaigns.ts', 'CampaignProgress', 'CampaignProgressDto'],
+  ['campaigns.ts', 'ChasedCampaign', 'ChasedCampaignDto'],
+  ['campaigns.ts', 'ChasingList', 'ChasingDto'],
+  ['tenant-config.ts', 'CampaignRow', 'CampaignDto'],
+  ['tenant-config.ts', 'CampaignRowPoster', 'CampaignPosterDto'],
+  ['tenant-config.ts', 'MetricDefinition', 'MetricDefinitionDto'],
+  ['unit-dashboard.ts', 'ChasedRef', 'UnitChasedCampaignDto'],
+  ['unit-dashboard.ts', 'MdrtHeader', 'UnitMdrtDto'],
+];
+
+describe('campaigns’ types match the API document (P18.5-T7 to T9)', () => {
+  it.each(CAMPAIGN_PAIRS)('%s › %s ⊆ %s', (file, ours, theirs) => {
+    const documented = new Set(propertiesOf(theirs));
+    expect(declaredFields(file, ours).filter((f) => !documented.has(f))).toEqual([]);
+  });
+
+  it.each(CAMPAIGN_PAIRS)('%s › %s is shaped as %s promises: required, nullable, and the values it names', (file, ours, theirs) => {
+    const schema = doc.components.schemas[theirs];
+    const required = new Set(schema.required ?? []);
+    const problems: string[] = [];
+    for (const field of declaredTypes(file, ours)) {
+      const prop = schema.properties?.[field.name] ?? {};
+      if (!field.optional && !required.has(field.name)) problems.push(`${field.name}: declared always there, documented optional`);
+      if (prop.nullable && !field.nullable) problems.push(`${field.name}: documented nullable, declared without | null`);
+      // Where we name the values (a kind, a phase, a state, a palette), they are the document's; a unit or a
+      // comparator we read as text is printed, not branched on.
+      const theirValues = (prop.enum ?? []).filter((v): v is string => typeof v === 'string');
+      const ourValues = literalsOf(file, field.type);
+      if (theirValues.length > 0 && ourValues !== null && [...ourValues].sort().join() !== [...theirValues].sort().join()) {
+        problems.push(`${field.name}: ${[...ourValues].sort().join('|')} against ${[...theirValues].sort().join('|')}`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it('the Unit Dashboard’s row and view carry the chases and the MDRT header', () => {
+    expect(propertiesOf('UnitRowDto')).toEqual(expect.arrayContaining(['chasingMdrt', 'campaigns']));
+    expect(propertiesOf('UnitDashboardDto')).toContain('mdrt');
+  });
+
+  it('CampaignDetail’s own fields are documented on CampaignDetailDto, and the card’s it extends', () => {
+    const documented = new Set(propertiesOf('CampaignDetailDto'));
+    expect(['description', 'can', 'progress'].filter((f) => !documented.has(f))).toEqual([]);
+    expect(declaredFields('campaigns.ts', 'CampaignCard').filter((f) => !documented.has(f))).toEqual([]);
+  });
+
+  it('every route the campaigns client calls is in the document, with its method', async () => {
+    const { vi } = await import('vitest');
+    const campaigns = await import('./campaigns');
+    const sent: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+      sent.push(`${(init.method ?? 'GET').toLowerCase()} ${new URL(url).pathname.replace('/api/v1', '')}`);
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    }));
+    try {
+      await campaigns.readCampaigns();
+      await campaigns.readCampaign('CODE');
+      await campaigns.chaseCampaign('CODE');
+      await campaigns.unchaseCampaign('CODE');
+      await campaigns.readChasing();
+      await campaigns.readChasing('m1');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(sent).toHaveLength(6);
+    const routes = Object.entries(doc.paths).flatMap(([path, ops]) =>
+      Object.keys(ops).map((method) => ({ method, path: path.replace('/api/v1', '') })));
+    const unknown = sent.filter((call) => {
+      const [method, path] = call.split(' ');
+      const asCalled = path.split('/').map((seg) => (['CODE', 'm1'].includes(seg) ? '*' : seg)).join('/');
+      return !routes.some((r) => r.method === method && matches(asCalled, new Set([r.path])));
+    });
+    expect(unknown).toEqual([]);
   });
 });
 

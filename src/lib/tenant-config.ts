@@ -724,7 +724,17 @@ export interface RequirementView {
   value: number;
   /** `idr_minor` means integer sen. */
   unit: string;
+  /**
+   * A campaign's requirement only (P18.5-T8, D-evaluable): `false` for one stored before the evaluable set,
+   * naming a metric a campaign cannot measure — the badge *Not measured yet*.
+   */
+  measured?: boolean;
 }
+
+/** P18.5-T7, D-fields: the agent's card draws each of these. */
+export type CampaignKindCode = 'seasonal' | 'structural';
+export type CampaignSubtypeCode = 'promotion' | 'ongoing';
+export type CampaignWindowCode = 'campaign_dates' | 'calendar_year' | 'rolling_12m';
 
 export interface CampaignRow {
   id: string;
@@ -732,13 +742,27 @@ export interface CampaignRow {
   title: string;
   description: string;
   startsAt: string;
-  endsAt: string;
+  /** `null` for a structural campaign, which runs on. */
+  endsAt: string | null;
   /** Derived on every read, never stored. */
   phase: 'upcoming' | 'running' | 'ended';
   requirements: RequirementView[];
   reward: string;
   status: 'active' | 'archived';
   version: number;
+  kind: CampaignKindCode;
+  subtype: CampaignSubtypeCode | null;
+  window: CampaignWindowCode;
+  /** The company's rung codes the campaign is for; empty is everybody (ADR-0035's shape). */
+  appliesToOrgLevelCodes: string[];
+  poster: CampaignRowPoster;
+  blurb: string;
+}
+
+/** An emoji and a token name of the poster palette (`lib/campaigns.ts`, `POSTER_COLORS`). */
+export interface CampaignRowPoster {
+  emoji: string;
+  color: string;
 }
 
 export interface QualificationRuleRow {
@@ -872,6 +896,11 @@ export interface MetricDefinition {
   phase: number;
   /** Whether it is measured by the time campaigns are evaluated — the server's answer, never derived from `phase`. */
   computed: boolean;
+  /**
+   * Whether a campaign requirement may name it (P18.5-T8 AC-1, D-evaluable): the Owner's picker offers only
+   * these. A carrier rule may name any metric, so the Company template reads every row.
+   */
+  campaign: boolean;
 }
 
 /**

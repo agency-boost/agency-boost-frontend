@@ -13,8 +13,8 @@ const member = {
   membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab' as const,
   status: 'active' as const, isKpmOwner: true, isKpmAdmin: false, directCount: 0,
 };
-const OWNER = makeMe({ membership: member, permissions: ['tenant_config:read', 'tenant_config:write'] });
-const READER = makeMe({ membership: member, permissions: ['tenant_config:read'] });
+const OWNER = makeMe({ membership: member, permissions: ['tenant_config:read', 'tenant_config:write', 'campaign_settings:read'] });
+const READER = makeMe({ membership: member, permissions: ['tenant_config:read', 'campaign_settings:read'] });
 
 const campaign = (over: Record<string, unknown> = {}) => ({
   id: 'c1', code: 'YEAR_END_DRIVE', title: 'Year-End Star Club Drive',
@@ -23,9 +23,13 @@ const campaign = (over: Record<string, unknown> = {}) => ({
   phase: 'running',
   requirements: [{
     metricKey: 'APE_ACHIEVED', metricName: 'APE achieved', comparator: 'gte',
-    value: 50_000_000_000, unit: 'idr_minor',
+    value: 50_000_000_000, unit: 'idr_minor', measured: true,
   }],
-  reward: 'Extra unit budget', status: 'active', version: 1, ...over,
+  reward: 'Extra unit budget', status: 'active', version: 1,
+  // D-fields (P18.5-T7 AC-9).
+  kind: 'seasonal', subtype: null, window: 'campaign_dates', appliesToOrgLevelCodes: [],
+  poster: { emoji: '⭐', color: 'amber' }, blurb: 'The last push of the year.',
+  ...over,
 });
 
 const tier = (over: Record<string, unknown> = {}) => ({
@@ -73,16 +77,20 @@ function render(
     // The metric vocabulary is served, not listed in the screen (P5-T9, invariant 7).
     '/metrics': {
       body: [
-        { key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true },
+        { key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true, campaign: true },
         {
           key: 'SELLING_SUCCESS_RATE', name: 'Selling success rate', unit: 'percentage',
-          phase: 9, computed: true,
+          phase: 9, computed: true, campaign: true,
         },
+        { key: 'NEW_HIRES', name: 'New Hire', unit: 'count', phase: 18.5, computed: true, campaign: true },
+        // Measured, but nothing a member achieves over a window (D-evaluable): not offered.
+        { key: 'TRAINING_COMPLETION_PCT', name: 'Training completion', unit: 'percentage', phase: 18.5, computed: true, campaign: false },
+        { key: 'GOAL_PACE_STATUS', name: 'Goal pace status', unit: 'enum', phase: 11, computed: true, campaign: false },
         // Not measured by the time campaigns are evaluated: it must not be offered. A stand-in:
         // since the 2026-10-08 re-plan campaigns are evaluated after every metric registered
         // today, so the server answers `computed: false` for none. Coaching coverage stood here
         // until coaching moved ahead of campaigns, and Event NPS until that re-plan.
-        { key: 'LATER_METRIC', name: 'A metric measured later', unit: 'count', phase: 19, computed: false },
+        { key: 'LATER_METRIC', name: 'A metric measured later', unit: 'count', phase: 19, computed: false, campaign: false },
       ],
     },
     '/kpm/settings/publish-state': {
@@ -169,8 +177,9 @@ describe('the office’s Campaigns screen', () => {
     await userEvent.type(screen.getByLabelText('Title'), 'Push to Star');
     await userEvent.type(screen.getByLabelText('Starts'), '2026-10-01');
     await userEvent.type(screen.getByLabelText('Ends'), '2026-12-31');
-    await userEvent.selectOptions(screen.getByLabelText('What has to be reached'), 'APE_ACHIEVED');
-    await userEvent.type(screen.getByLabelText('At least (Rp)'), '500000000');
+    await userEvent.click(screen.getByRole('button', { name: '+ Add requirement' }));
+    await userEvent.selectOptions(screen.getByLabelText('Requirement 1'), 'APE_ACHIEVED');
+    await userEvent.type(screen.getByLabelText('Requirement 1 Target (Rp)'), '500000000');
     await userEvent.click(screen.getByRole('button', { name: 'Add the campaign' }));
 
     await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'POST')).toBe(true));
@@ -185,9 +194,10 @@ describe('the office’s Campaigns screen', () => {
     // screen does not offer it in the first place.
     render([]);
     await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
+    await userEvent.click(screen.getByRole('button', { name: '+ Add requirement' }));
 
     const options = Array.from(
-      screen.getByLabelText('What has to be reached').querySelectorAll('option'),
+      screen.getByLabelText('Requirement 1').querySelectorAll('option'),
     ).map((o) => (o as HTMLOptionElement).value);
     expect(options).not.toContain('NET_APE');
     expect(options).toContain('APE_ACHIEVED');
@@ -222,8 +232,9 @@ describe('the office’s Campaigns screen', () => {
     // evaluated is left out: a target nothing computes could never be reached.
     render();
     await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
+    await userEvent.click(screen.getByRole('button', { name: '+ Add requirement' }));
 
-    const select = screen.getByLabelText('What has to be reached');
+    const select = screen.getByLabelText('Requirement 1');
     expect(within(select).getByRole('option', { name: 'APE achieved' })).toBeInTheDocument();
     expect(within(select).queryByRole('option', { name: 'A metric measured later' })).not.toBeInTheDocument();
   });
@@ -234,5 +245,197 @@ describe('the office’s Campaigns screen', () => {
 
     expect(screen.queryByRole('button', { name: 'Add a campaign' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+  });
+
+  describe('the fields the agent’s card draws (P18.5-T7 AC-9, D-fields)', () => {
+    it('P18.5-T7 AC-9 a seasonal campaign: its poster, line, description and who it is for, its days as the office’s instants', async () => {
+      const stub = render([]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
+      expect(screen.getByLabelText('Kind')).toHaveValue('seasonal');
+      expect(screen.queryByLabelText('Section')).not.toBeInTheDocument();
+
+      await userEvent.type(screen.getByLabelText('Title'), 'Q4 APE Sprint');
+      await userEvent.type(screen.getByLabelText('Starts'), '2026-10-01');
+      await userEvent.type(screen.getByLabelText('Ends'), '2026-12-31');
+      await userEvent.clear(screen.getByLabelText('Poster emoji'));
+      await userEvent.type(screen.getByLabelText('Poster emoji'), '🚀');
+      await userEvent.selectOptions(screen.getByLabelText('Poster colour'), 'amber');
+      expect(document.querySelector('[data-poster-preview]')).toHaveClass('bg-amber');
+      await userEvent.type(screen.getByLabelText('Card line'), 'Push for APE this quarter.');
+      await userEvent.type(screen.getByLabelText('Description'), 'All qualifiers get a bonus.');
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Agent' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Add the campaign' }));
+
+      await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'POST')).toBe(true));
+      const sent = JSON.parse(String(stub.calls.find((c) => c.init.method === 'POST')!.init.body));
+      expect(sent).toMatchObject({
+        title: 'Q4 APE Sprint', code: 'Q4_APE_SPRINT', kind: 'seasonal', subtype: null, window: 'campaign_dates',
+        appliesToOrgLevelCodes: ['AGENT'], poster: { emoji: '🚀', color: 'amber' },
+        blurb: 'Push for APE this quarter.', description: 'All qualifiers get a bonus.',
+        // 00:00 on the 1st and the last moment of the 31st in Jakarta: whole office months (D-windows).
+        startsAt: '2026-09-30T17:00:00.000Z', endsAt: '2026-12-31T16:59:59.999Z',
+      });
+    });
+
+    it('P18.5-T7 AC-9 a structural campaign: its section and its window, and no end', async () => {
+      const stub = render([]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
+      await userEvent.type(screen.getByLabelText('Title'), 'MDRT Qualification');
+      await userEvent.selectOptions(screen.getByLabelText('Kind'), 'structural');
+      expect(screen.queryByLabelText('Ends')).not.toBeInTheDocument();
+      await userEvent.selectOptions(screen.getByLabelText('Section'), 'ongoing');
+      await userEvent.selectOptions(screen.getByLabelText('Read over'), 'calendar_year');
+      await userEvent.type(screen.getByLabelText('Starts'), '2026-01-01');
+      await userEvent.click(screen.getByRole('button', { name: 'Add the campaign' }));
+
+      await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'POST')).toBe(true));
+      const sent = JSON.parse(String(stub.calls.find((c) => c.init.method === 'POST')!.init.body));
+      expect(sent).toMatchObject({
+        kind: 'structural', subtype: 'ongoing', window: 'calendar_year', endsAt: null,
+        startsAt: '2025-12-31T17:00:00.000Z', appliesToOrgLevelCodes: [],
+      });
+    });
+
+    it('P18.5-T7 AC-9 the server’s refusal is named on the screen, in its words', async () => {
+      const stub = stubFetch({
+        '/kpm/settings/campaigns/rules': { body: [] },
+        'GET /kpm/settings/campaigns': { body: [] },
+        'POST /kpm/settings/campaigns': {
+          status: 400,
+          body: {
+            error: {
+              code: 'VALIDATION_FAILED', requestId: 'r-1',
+              message: 'A campaign asking for figures from the monthly production file runs in whole months: start it on the 1st and end it on the last day of a month.',
+              details: { violations: ['A campaign asking for figures from the monthly production file runs in whole months: start it on the 1st and end it on the last day of a month.'] },
+            },
+          },
+        },
+        '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true, campaign: true }] },
+        '/kpm/settings/publish-state': { body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null } },
+      });
+      renderWithSession(<CampaignsSettingsPage />, { me: OWNER });
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
+      await userEvent.type(screen.getByLabelText('Title'), 'Mid-month');
+      await userEvent.type(screen.getByLabelText('Starts'), '2026-10-15');
+      await userEvent.type(screen.getByLabelText('Ends'), '2026-11-15');
+      await userEvent.click(screen.getByRole('button', { name: 'Add the campaign' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('runs in whole months: start it on the 1st');
+      expect(stub.calls.filter((c) => c.init.method === 'POST')).toHaveLength(1);
+    });
+
+    it('P18.5-T8 AC-1 the picker offers only what a campaign can measure', async () => {
+      render([]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Add a campaign' }));
+      await userEvent.click(screen.getByRole('button', { name: '+ Add requirement' }));
+      const values = Array.from(screen.getByLabelText('Requirement 1').querySelectorAll('option'))
+        .map((o) => (o as HTMLOptionElement).value);
+      expect(values).toEqual(['', 'APE_ACHIEVED', 'SELLING_SUCCESS_RATE', 'NEW_HIRES']);
+    });
+
+    it('P18.5-T8 AC-1 a stored requirement a campaign cannot measure reads Not measured yet, and editing sends it back unchanged', async () => {
+      const old = campaign({
+        requirements: [{
+          metricKey: 'TRAINING_COMPLETION_PCT', metricName: 'Training completion', comparator: 'gt', value: 80, unit: 'percentage', measured: false,
+        }],
+      });
+      const stub = render([old]);
+      const row = (await screen.findByText(/Training completion more than 80%/)).closest('li')!;
+      expect(within(row).getByText('Not measured yet')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+      const select = screen.getByLabelText('Requirement 1');
+      expect(select).toHaveValue('TRAINING_COMPLETION_PCT');
+      expect(within(select).getByRole('option', { name: 'Training completion (not measured yet)' })).toBeInTheDocument();
+      await userEvent.clear(screen.getByLabelText('Title'));
+      await userEvent.type(screen.getByLabelText('Title'), 'Renamed');
+      await userEvent.click(screen.getByRole('button', { name: 'Save the campaign' }));
+      await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+      expect(JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body)).requirements)
+        .toEqual([{ metricKey: 'TRAINING_COMPLETION_PCT', comparator: 'gt', value: 80 }]);
+    });
+
+    /** The seed's *APE Sprint*: two requirements, one of them not *at least*. */
+    const sprint = () => campaign({
+      id: 'c-sprint', code: 'APE_SPRINT', title: 'Q4 APE Sprint', blurb: 'Push for APE this quarter.',
+      requirements: [
+        { metricKey: 'APE_ACHIEVED', metricName: 'APE achieved', comparator: 'gte', value: 50_000_000_000, unit: 'idr_minor', measured: true },
+        { metricKey: 'NEW_HIRES', metricName: 'New Hire', comparator: 'gt', value: 1, unit: 'count', measured: true },
+      ],
+    });
+
+    it('P18.5-T7 AC-9 editing a two-requirement campaign’s line sends both requirements back, each with its comparator', async () => {
+      const stub = render([sprint()]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      expect(screen.getByLabelText('Requirement 1')).toHaveValue('APE_ACHIEVED');
+      expect(screen.getByLabelText('Requirement 1 Comparison')).toHaveValue('gte');
+      expect(screen.getByLabelText('Requirement 1 Target (Rp)')).toHaveValue(500000000);
+      expect(screen.getByLabelText('Requirement 2')).toHaveValue('NEW_HIRES');
+      expect(screen.getByLabelText('Requirement 2 Comparison')).toHaveValue('gt');
+      expect(screen.getByLabelText('Requirement 2 Target')).toHaveValue(1);
+      await userEvent.clear(screen.getByLabelText('Card line'));
+      await userEvent.type(screen.getByLabelText('Card line'), 'A new line.');
+      await userEvent.click(screen.getByRole('button', { name: 'Save the campaign' }));
+
+      await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+      const sent = JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body));
+      expect(sent.blurb).toBe('A new line.');
+      expect(sent.requirements).toEqual([
+        { metricKey: 'APE_ACHIEVED', comparator: 'gte', value: 50_000_000_000 },
+        { metricKey: 'NEW_HIRES', comparator: 'gt', value: 1 },
+      ]);
+    });
+
+    it('P18.5-T7 AC-9 a row is added and removed, the metric another row names not offered twice', async () => {
+      const stub = render([sprint()]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      await userEvent.click(screen.getByRole('button', { name: '+ Add requirement' }));
+      const third = screen.getByLabelText('Requirement 3');
+      expect(within(third).getByRole('option', { name: 'APE achieved' })).toBeDisabled();
+      expect(within(third).getByRole('option', { name: 'New Hire' })).toBeDisabled();
+      // A row without a metric and a target cannot be saved.
+      expect(screen.getByRole('button', { name: 'Save the campaign' })).toBeDisabled();
+      await userEvent.selectOptions(third, 'SELLING_SUCCESS_RATE');
+      await userEvent.selectOptions(screen.getByLabelText('Requirement 3 Comparison'), 'lte');
+      await userEvent.type(screen.getByLabelText('Requirement 3 Target'), '40');
+      await userEvent.click(screen.getByRole('button', { name: 'Remove requirement 1' }));
+      expect(screen.getAllByRole('button', { name: /^Remove requirement/ })).toHaveLength(2);
+      expect(screen.getByLabelText('Requirement 1')).toHaveValue('NEW_HIRES');
+      await userEvent.click(screen.getByRole('button', { name: 'Save the campaign' }));
+
+      await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+      expect(JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body)).requirements).toEqual([
+        { metricKey: 'NEW_HIRES', comparator: 'gt', value: 1 },
+        { metricKey: 'SELLING_SUCCESS_RATE', comparator: 'lte', value: 40 },
+      ]);
+    });
+
+    it('P18.5-T7 AC-9 removing every row saves a campaign that measures nothing', async () => {
+      const stub = render([sprint()]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Remove requirement 2' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Remove requirement 1' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Save the campaign' }));
+      await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+      expect(JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body)).requirements).toEqual([]);
+    });
+
+    it('P18.5-T7 AC-9 editing reads back the office’s days and the fields as stored', async () => {
+      render([campaign({ startsAt: '2026-09-30T17:00:00.000Z', endsAt: '2026-12-31T16:59:59.999Z', appliesToOrgLevelCodes: ['AGENT'] })]);
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      // It read the UTC day of the instant: Sep 30 for a campaign that starts on Oct 1 in Jakarta.
+      expect(screen.getByLabelText('Starts')).toHaveValue('2026-10-01');
+      expect(screen.getByLabelText('Ends')).toHaveValue('2026-12-31');
+      expect(screen.getByLabelText('Poster emoji')).toHaveValue('⭐');
+      expect(screen.getByLabelText('Poster colour')).toHaveValue('amber');
+      expect(screen.getByLabelText('Card line')).toHaveValue('The last push of the year.');
+      expect(screen.getByRole('checkbox', { name: 'Agent' })).toBeChecked();
+    });
+
+    it('P18.5-T7 AC-9 the settings list is otherwise unchanged: no kind, poster or line on the row', async () => {
+      render();
+      const title = await screen.findByText('Year-End Star Club Drive');
+      const row = title.closest('li')!;
+      expect(row).not.toHaveTextContent('The last push of the year.');
+      expect(row).not.toHaveTextContent(/Seasonal|⭐/);
+    });
   });
 });

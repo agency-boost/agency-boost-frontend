@@ -7,8 +7,9 @@ import { cn } from '@/lib/cn';
 import {
   coachingTabHref, lastOneOnOneOverdue, lastOneOnOneText, ROSTER_STATUS_LABEL, type RosterStatus,
 } from '@/lib/coaching';
+import { PROTOTYPE_COPY as CAMPAIGN_COPY } from '@/lib/campaigns';
 import {
-  goalWords, missingWords, namesMissing, OWN_COPY, PROTOTYPE_COPY, provenanceWords, recruitLine, rowName,
+  firstName, goalWords, missingWords, namesMissing, OWN_COPY, PROTOTYPE_COPY, provenanceWords, recruitLine, rowName,
   rowsOf, salesLine, STATUS_TOOLTIP, totalRecruitLine, touchesWords,
   type GoalWords, type LeadsCounts, type UnitDashboardView, type UnitGroup, type UnitPeriod, type UnitRow,
   type UnitTotal,
@@ -19,9 +20,10 @@ import { UnitDetail, type ReadRatios } from './unit-detail';
  * *Your team's roster* (`Overall.html:3903-3946`, rows `:7357-7423`, totals `:7426-7476`, CSS
  * `:1643-1736`).
  *
- * **Six of the prototype's eight columns, and the expander's.** *Chasing MDRT* is left out until
- * campaigns are built (OD-138); *Remarks* is the expander column, its heading blank on screen and named
- * for a screen reader, each ⌄ named *View details* for its person (OD-139).
+ * **The prototype's eight columns.** *Chasing MDRT* third (ADR-0122, P18.5-T7 AC-7): ✓ for a person chasing
+ * the office's MDRT campaign, its header tooltip the server's words about that campaign (OD-152). *Remarks*
+ * is the expander column, its heading blank on screen and named for a screen reader, each ⌄ named *View
+ * details* for its person (OD-139).
  *
  * **The prototype's own table**, not `DataTable`, as the coaching roster is: rows grouped under
  * full-width dividers and units nested beneath their heads have no place in a one-`<tbody>` table. Each
@@ -67,22 +69,36 @@ export function UnitRoster({
       {/* `relative`, so a screen-reader label's `position: absolute` is clipped by this box rather than
           widening the page (the `.table-scroll` of `:3908` scrolls inside its card, never the body). */}
       <div className="relative overflow-x-auto">
-        {/* The prototype's widths (`:1644-1649`) with *Chasing MDRT*'s 11% given back (OD-138): to the name,
-            which carries the indent, ✓ and *Personal* of a nested head, and to the leads lines, which do
-            not wrap (`:1701`). */}
-        <table aria-labelledby={headingId} className="w-full min-w-[1100px] table-fixed border-collapse text-left">
+        {/* The prototype's widths (`:1644-1649`), *Chasing MDRT* back among them (P18.5-T7 AC-7; parity D-18). */}
+        <table aria-labelledby={headingId} className="w-full min-w-[1080px] table-fixed border-collapse text-left">
           <colgroup>
-            <col className="w-[25%]" />
             <col className="w-[17%]" />
-            <col className="w-[16%]" />
+            <col className="w-[13%]" />
+            <col className="w-[11%]" />
+            <col className="w-[15%]" />
             <col className="w-[13%]" />
             <col className="w-[10%]" />
-            <col className="w-[14%]" />
-            <col className="w-[5%]" />
+            <col className="w-[12%]" />
+            <col className="w-[9%]" />
           </colgroup>
           <thead>
             <tr className="border-b border-hairline">
-              {['Name', 'Goal progress', 'Leads', 'Activity', 'Last 1:1'].map((name) => (
+              {['Name', 'Goal progress'].map((name) => (
+                <th key={name} scope="col" className={HEAD}>{name}</th>
+              ))}
+              <th scope="col" className={cn(HEAD, 'text-center')}>
+                {/* `.c-mdrt-h` (`:3917-3922`): the words are the tooltip's trigger, as drawn, and the tooltip is the
+                    server's sentence about the MDRT campaign (OD-152) — the heading's description, not its name. */}
+                <TippedGlyph
+                  glyph={CAMPAIGN_COPY.chasingMdrt}
+                  name={CAMPAIGN_COPY.chasingMdrt}
+                  tip={view.mdrt.tooltip}
+                  align="fit"
+                  className={MDRT_TIP}
+                  face="h-auto w-auto px-0.5 text-xs font-semibold uppercase tracking-wide text-muted hover:bg-transparent hover:text-navy"
+                />
+              </th>
+              {['Leads', 'Activity', 'Last 1:1'].map((name) => (
                 <th key={name} scope="col" className={HEAD}>{name}</th>
               ))}
               <th scope="col" className={HEAD}>
@@ -131,6 +147,13 @@ export function UnitRoster({
 /** `table.roster-table thead th` (`:1650`): small grey capitals. */
 const HEAD = 'bg-card px-3.5 py-[13px] text-xs font-semibold uppercase tracking-wide text-muted';
 
+/** *Chasing MDRT*'s bubble, below its glyph for the same reason, in sentence case. */
+const MDRT_TIP = cn(
+  'normal-case tracking-normal',
+  '[&>[role=tooltip]]:bottom-auto [&>[role=tooltip]]:top-full [&>[role=tooltip]]:mb-0 [&>[role=tooltip]]:mt-1',
+  '[&>[role=tooltip]]:w-[240px] [&>[role=tooltip]]:font-normal [&>[role=tooltip]]:leading-relaxed',
+);
+
 /** The status rules' bubble: the prototype's width, its lines kept, below its glyph. */
 const STATUS_TIP = cn(
   'normal-case tracking-normal',
@@ -145,7 +168,7 @@ function GroupDivider({ label, count }: { label: string; count?: number }) {
       {/* `tr.group-divider td` (`:1658-1659`): a full-width band naming the group beneath it. */}
       <th
         scope="rowgroup"
-        colSpan={7}
+        colSpan={8}
         className="border-y border-hairline bg-navy/[0.045] px-5 py-2.5 text-left font-display text-base font-bold text-navy"
       >
         {label}
@@ -237,6 +260,8 @@ function TotalRow({
           {missing && <TippedGlyph glyph="ⓘ" name={missing} tip={missing} align="fit" className="-my-1" />}
         </div>
       </td>
+      {/* A total chases nothing (`:7458`). */}
+      <td className={cn(CELL, 'py-2 text-center')}><span className="text-sm text-muted">—</span></td>
       <td className={cn(CELL, 'py-2')}>
         <LeadsText counts={total.leadsCounts} recruit={totalRecruitLine(total.leadsCounts)} />
       </td>
@@ -341,6 +366,29 @@ function Drill({ href, children }: { href: string | undefined; children: ReactNo
     : <div className="px-1 py-0.5 -mx-1 -my-0.5 text-navy">{children}</div>;
 }
 
+/**
+ * *Chasing MDRT*'s cell (`:7393-7398`): ✓ in MDRT's gold, darkened to 4.03:1 (`gold-ink`, where the
+ * prototype's `#C9A227` is 2.42:1, row 44), or —, each with the prototype's tooltip — the reader's own row
+ * named by first name, as the prototype strips *You (…)*. Beyond the reader's reach, a plain — that claims
+ * nothing.
+ */
+function MdrtCell({ row }: { row: UnitRow }) {
+  if (row.chasingMdrt === null) return <span className="text-sm text-muted">—</span>;
+  const words = row.chasingMdrt
+    ? CAMPAIGN_COPY.mdrtChasing(row.isReader ? firstName(row.name) : row.name)
+    : CAMPAIGN_COPY.mdrtNot;
+  return (
+    <TippedGlyph
+      glyph={row.chasingMdrt ? '✓' : '—'}
+      name={words}
+      tip={words}
+      align="fit"
+      className="-my-1.5"
+      face={row.chasingMdrt ? 'text-md font-bold text-gold-ink hover:text-gold-ink' : 'text-muted'}
+    />
+  );
+}
+
 function PersonRow({
   row, level, period, expanded, onToggle, readRatios,
 }: { row: UnitRow; level: number } & Omit<RosterProps, 'view'>) {
@@ -420,6 +468,7 @@ function PersonRow({
             {marker && <TippedGlyph glyph="ⓘ" name={marker} tip={marker} align="fit" className="-my-1" />}
           </div>
         </td>
+        <td className={cn(CELL, 'text-center')}><MdrtCell row={row} /></td>
         <td className={CELL}>
           <Drill href={drills?.leads}>
             <LeadsText counts={row.leadsCounts} recruit={recruitLine(row.leadsCounts)} />

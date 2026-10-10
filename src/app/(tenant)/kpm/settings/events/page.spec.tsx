@@ -1,7 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { feedbackSummary, INVITEES, rollCall } from '@test/events-fixtures';
 import EventsSettingsPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -13,8 +14,11 @@ const member = {
   membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab' as const,
   status: 'active' as const, isKpmOwner: true, isKpmAdmin: false, directCount: 0,
 };
-const OWNER = makeMe({ membership: member, permissions: ['tenant_config:read', 'tenant_config:write'] });
-const READER = makeMe({ membership: member, permissions: ['tenant_config:read'] });
+const OWNER = makeMe({
+  membership: member,
+  permissions: ['tenant_config:read', 'tenant_config:write', 'event_settings:read', 'event_attendance:confirm', 'event_feedback:read'],
+});
+const READER = makeMe({ membership: member, permissions: ['tenant_config:read', 'event_settings:read'] });
 
 const type = (over: Record<string, unknown> = {}) => ({
   id: 't1', code: 'TRAINING', label: 'Training', description: null, emoji: '📚',
@@ -39,6 +43,9 @@ function render(
     '/kpm/settings/publish-state': {
       body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
     },
+    'GET /kpm/settings/events/invitees': { body: { people: INVITEES } },
+    'GET /kpm/settings/events/e3/attendance': { body: rollCall({ eventId: 'e3', title: 'Last month' }) },
+    'GET /kpm/settings/events/e3/feedback': { body: feedbackSummary({ eventId: 'e3', title: 'Last month' }) },
   });
   renderWithSession(<EventsSettingsPage />, { me });
   return stub;
@@ -180,53 +187,183 @@ describe('the office’s Events screen', () => {
     expect(new Date(sent.endsAt).getTime()).toBeGreaterThan(new Date(sent.startsAt).getTime());
   });
 
-  it('shows the chosen-people options as coming soon, and will not let either be picked', async () => {
-    // The roster picker that chooses invitees is not built. Offering a "chosen people" event with
-    // no way to choose them would be a control that cannot work, so both options are shown disabled
-    // and marked, as the client asked of everything not built (2026-10-01). The mark is the
-    // prototype's *coming soon* (`Overall.html:3773`): *Upcoming* on this screen is an event's status.
-    // No sentence names a phase in their place.
+  it('P18.5-T5 AC-10 Chosen people and Chosen leaders are live, no longer coming soon (D-picker)', async () => {
     render([type()], []);
     await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
 
     const scope = screen.getByLabelText('Who is invited');
-    const option = (name: string) => within(scope).getByRole('option', { name });
-    expect(option('Chosen people — coming soon')).toBeDisabled();
-    expect(option('Chosen leaders — coming soon')).toBeDisabled();
-    expect(within(scope).queryByRole('option', { name: /upcoming/i })).not.toBeInTheDocument();
-    expect(option('Everybody in the office')).toBeEnabled();
-    expect(option('Leaders — anybody with somebody under them')).toBeEnabled();
-
-    // A disabled option cannot be chosen: user-event skips it, as a browser does.
-    await userEvent.selectOptions(scope, 'select_agents');
-    expect(scope).toHaveValue('all_agents');
-    expect(document.body).not.toHaveTextContent(/roster picker|phase \d/i);
+    expect(within(scope).getByRole('option', { name: 'Chosen people' })).toBeEnabled();
+    expect(within(scope).getByRole('option', { name: 'Chosen leaders' })).toBeEnabled();
+    expect(scope).not.toHaveTextContent(/coming soon/i);
   });
 
-  it('keeps an event the API saved with a chosen list readable, and unsaveable here', async () => {
-    // Only the API can make one. The list reads its plain label; the edit panel cannot send the
-    // invitee list, so Save waits until a scope it can send is picked.
-    render([type()], [event({
-      audience: { issuer: 'kpm', scope: 'select_agents', inviteeMembershipIds: ['mem-2', 'mem-3'] },
-    })]);
+  it('P18.5-T5 AC-10 Chosen people: a searchable checklist of the active members, and Save waits for one', async () => {
+    const stub = render([type()], []);
+    await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
+    await userEvent.type(screen.getByLabelText('Title'), 'Bootcamp');
+    await userEvent.type(screen.getByLabelText('Starts'), '2026-10-01T09:00');
+    await userEvent.type(screen.getByLabelText('Ends'), '2026-10-01T13:00');
+    await userEvent.selectOptions(screen.getByLabelText('Who is invited'), 'select_agents');
 
+    const picker = await screen.findByRole('searchbox', { name: 'Search people' });
+    expect(screen.getAllByRole('checkbox', { name: /Agus|Budi|Dewi|Rina|Sari/ })).toHaveLength(5);
+    expect(screen.getByText('0 chosen')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add the event' })).toBeDisabled();
+    expect(screen.getByLabelText('Who is invited')).toHaveAccessibleDescription('Pick at least one person below to save.');
+
+    await userEvent.type(picker, 'rina');
+    expect(screen.getAllByRole('checkbox', { name: /Agus|Budi|Dewi|Rina|Sari/ }).map((c) => c.closest('label')!.textContent))
+      .toEqual(['Rina WijayaAgent']);
+    await userEvent.click(screen.getByRole('checkbox', { name: /Rina Wijaya/ }));
+    await userEvent.clear(picker);
+    await userEvent.click(screen.getByRole('checkbox', { name: /Budi Santoso/ }));
+    expect(screen.getByText('2 chosen')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add the event' })).toBeEnabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add the event' }));
+    await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'POST')).toBe(true));
+    const sent = JSON.parse(String(stub.calls.find((c) => c.init.method === 'POST')!.init.body));
+    expect(sent.audience).toEqual({ issuer: 'kpm', scope: 'select_agents', inviteeMembershipIds: ['mem-rina', 'mem-budi'] });
+    expect(stub.calls.filter((c) => c.url.endsWith('/kpm/settings/events/invitees'))).toHaveLength(1);
+  });
+
+  it('P18.5-T5 AC-10 Chosen leaders lists only members who lead somebody (the graph, not the title)', async () => {
+    render([type()], []);
+    await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
+    await userEvent.selectOptions(screen.getByLabelText('Who is invited'), 'select_leaders');
+    await screen.findByRole('searchbox', { name: 'Search people' });
+    // Dewi is an AAB who leads nobody: she is not offered.
+    expect(screen.getAllByRole('checkbox').filter((c) => c.closest('[data-part="audience-picker"]'))
+      .map((c) => c.closest('label')!.querySelector('span')!.textContent)).toEqual(['Agus Wibowo', 'Sari Puspita']);
+  });
+
+  it('P18.5-T5 AC-10 a chosen person the list cannot offer is kept, never dropped, and saving unchanged sends no audience', async () => {
+    const stub = render([type()], [event({
+      audience: { issuer: 'kpm', scope: 'select_agents', inviteeMembershipIds: ['mem-rina', 'mem-gone'] },
+    })]);
     expect(await screen.findByText(/Chosen people · 2 invited/)).toBeInTheDocument();
-    expect(screen.queryByText(/Chosen people — coming soon ·/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
-    const scope = screen.getByLabelText('Who is invited');
-    expect(scope).toHaveValue('select_agents');
-    expect(screen.getByRole('button', { name: 'Save the event' })).toBeDisabled();
-    // The disabled Save carries its reason, on the field's own hint line, linked to the select.
-    const why = 'Pick Everybody or Leaders to save — a chosen list can’t be edited here yet.';
-    expect(scope).toHaveAccessibleDescription(why);
-    expect(screen.queryByText('A leader is somebody with people under them — not a job title.')).not.toBeInTheDocument();
+    await screen.findByRole('searchbox', { name: 'Search people' });
+    expect(screen.getByRole('checkbox', { name: /Rina Wijaya/ })).toBeChecked();
+    // Somebody who has left has no name on the read: one row, ticked, saying so.
+    expect(screen.getByRole('checkbox', { name: 'Somebody who has left' })).toBeChecked();
+    expect(screen.getByText('2 chosen')).toBeInTheDocument();
 
-    await userEvent.selectOptions(scope, 'all_agents');
-    expect(screen.getByRole('button', { name: 'Save the event' })).toBeEnabled();
-    // Once a scope this screen can send is picked, the reason goes and the field's usual hint is back.
-    expect(screen.queryByText(why)).not.toBeInTheDocument();
-    expect(scope).toHaveAccessibleDescription('A leader is somebody with people under them — not a job title.');
+    await userEvent.clear(screen.getByLabelText('Title'));
+    await userEvent.type(screen.getByLabelText('Title'), 'Kickoff, renamed');
+    await userEvent.click(screen.getByRole('button', { name: 'Save the event' }));
+    await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+    const sent = JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body));
+    expect(sent.title).toBe('Kickoff, renamed');
+    expect(sent).not.toHaveProperty('audience');
+    expect(sent).not.toHaveProperty('startsAt');
+    expect(sent).not.toHaveProperty('endsAt');
+  });
+
+  it('P18.5-T5 AC-10 a chosen leader who leads nobody now is kept with the reason, and can be cleared but not chosen again', async () => {
+    const stub = render([type()], [event({
+      audience: { issuer: 'kpm', scope: 'select_leaders', inviteeMembershipIds: ['mem-agus', 'mem-dewi'] },
+    })]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await screen.findByRole('searchbox', { name: 'Search people' });
+    const dewi = screen.getByRole('checkbox', { name: /Dewi Lestari/ });
+    expect(dewi).toBeChecked();
+    expect(dewi.closest('label')).toHaveTextContent('Leads nobody now');
+    await userEvent.click(dewi);
+    expect(screen.queryByRole('checkbox', { name: /Dewi Lestari/ })).not.toBeInTheDocument();
+    expect(screen.getByText('1 chosen')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save the event' }));
+    await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+    const sent = JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body));
+    expect(sent.audience).toEqual({ issuer: 'kpm', scope: 'select_leaders', inviteeMembershipIds: ['mem-agus'] });
+  });
+
+  it('P18.5-T5 AC-9 an audience change the server refuses is said under Who is invited, the panel kept', async () => {
+    stubFetch({
+      '/kpm/settings/events/types': { body: [type()] },
+      '/kpm/settings/events': { body: [event({ phase: 'past', title: 'Town Hall' })] },
+      'PATCH /kpm/settings/events/e1': {
+        status: 409,
+        body: { error: { code: 'EVENT_HAS_RESPONSES', message: 'People have answered this event, so its audience stays as it is.', requestId: 'r-9' } },
+      },
+      '/kpm/settings/publish-state': { body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null } },
+    });
+    renderWithSession(<EventsSettingsPage />, { me: OWNER });
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await userEvent.selectOptions(screen.getByLabelText('Who is invited'), 'leaders');
+    await userEvent.click(screen.getByRole('button', { name: 'Save the event' }));
+    const line = await screen.findByText('People have answered this event, so its audience stays as it is.');
+    expect(screen.getByLabelText('Who is invited')).toHaveAccessibleDescription(
+      'A leader is somebody with people under them — not a job title. People have answered this event, so its audience stays as it is.',
+    );
+    expect(line).toHaveAttribute('role', 'alert');
+    expect(screen.getByRole('button', { name: 'Save the event' })).toBeInTheDocument();
+  });
+
+  it('P18.5-T5 AC-9 moving an answered event back into the future: the spec’s line under Ends', async () => {
+    stubFetch({
+      '/kpm/settings/events/types': { body: [type()] },
+      '/kpm/settings/events': { body: [event({ phase: 'past', title: 'Town Hall' })] },
+      'PATCH /kpm/settings/events/e1': {
+        status: 409,
+        body: { error: { code: 'EVENT_HAS_RESPONSES', message: 'People have already answered this event.', requestId: 'r-9' } },
+      },
+      '/kpm/settings/publish-state': { body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null } },
+    });
+    renderWithSession(<EventsSettingsPage />, { me: OWNER });
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await userEvent.clear(screen.getByLabelText('Ends'));
+    await userEvent.type(screen.getByLabelText('Ends'), '2027-01-01T13:00');
+    await userEvent.click(screen.getByRole('button', { name: 'Save the event' }));
+    expect(await screen.findByText('People have already responded to this event, so its start can’t move and it can’t end in the future.'))
+      .toHaveAttribute('role', 'alert');
+    expect(screen.getByLabelText('Ends')).toHaveValue('2027-01-01T13:00');
+  });
+
+  it('P18.5-T5 AC-10 a scope with no list sends none', async () => {
+    const stub = render([type()], [event({ audience: { issuer: 'kpm', scope: 'select_agents', inviteeMembershipIds: ['mem-rina'] } })]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    await userEvent.selectOptions(screen.getByLabelText('Who is invited'), 'all_agents');
+    expect(screen.queryByRole('searchbox', { name: 'Search people' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Save the event' }));
+    await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+    const sent = JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body));
+    expect(sent.audience).toEqual({ issuer: 'kpm', scope: 'all_agents' });
+  });
+
+  it('P18.5-T5 AC-7 View feedback on a past row only, opening the roll call and the Feedback Summary', async () => {
+    render([type()], [
+      event(),
+      event({ id: 'e2', code: 'NOW', title: 'Happening', phase: 'running' }),
+      event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past' }),
+    ]);
+    await screen.findByText('Last month');
+    const buttons = screen.getAllByRole('button', { name: 'View feedback' });
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0].closest('li')).toHaveTextContent('Last month');
+
+    await userEvent.click(buttons[0]);
+    const box = await screen.findByRole('dialog', { name: 'Last month' });
+    expect(await within(box).findByRole('heading', { name: 'Roll call' })).toBeInTheDocument();
+    expect(await within(box).findByRole('heading', { name: 'Last month — Feedback Summary' })).toBeInTheDocument();
+    await userEvent.click(within(box).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('P18.5-T5 AC-7 View feedback is a read: a reader who cannot write still has it', async () => {
+    const reader = makeMe({ membership: member, permissions: ['tenant_config:read', 'event_settings:read', 'event_feedback:read'] });
+    render([type()], [event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past' })], reader);
+    await screen.findByText('Last month');
+    expect(screen.getByRole('button', { name: 'View feedback' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+  });
+
+  it('P18.5-T5 AC-2 the list is the office’s administration’s: without event_settings:read nothing is read', async () => {
+    const stub = render([type()], [event()], makeMe({ membership: member, permissions: ['tenant_config:read'] }));
+    await waitFor(() => expect(screen.queryByText('Kickoff 2026')).not.toBeInTheDocument());
+    expect(stub.calls.some((c) => /\/kpm\/settings\/events(\?|$)/.test(c.url))).toBe(false);
   });
 
   it('adds and edits an event type, never resending its code', async () => {
@@ -303,5 +440,45 @@ describe('the office’s Events screen', () => {
     expect(screen.queryByText('Kickoff 2026')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('checkbox', { name: 'Show archived' }));
     expect(await screen.findByText('Kickoff 2026')).toBeInTheDocument();
+  });
+});
+
+/**
+ * **The panel's times are the office's, whatever the browser's zone** (invariant §9, ADR-0016; the exit review).
+ * The browser here is in Los Angeles, fifteen hours behind Jakarta in October: a field read or written in the
+ * browser's own zone would be off by that much.
+ */
+describe('the office’s Events screen in a browser outside Jakarta', () => {
+  const original = process.env.TZ;
+  beforeAll(() => { process.env.TZ = 'America/Los_Angeles'; });
+  afterAll(() => { process.env.TZ = original; });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P18.5-T5 AC-9 a typed time is read as Jakarta’s: 09:00 there is 02:00 UTC', async () => {
+    expect(new Date('2026-10-01T09:00').toISOString()).toBe('2026-10-01T16:00:00.000Z');
+    const stub = render([type()], []);
+    await userEvent.click(await screen.findByRole('button', { name: 'Add an event' }));
+    await userEvent.type(screen.getByLabelText('Title'), 'Kickoff');
+    await userEvent.type(screen.getByLabelText('Starts'), '2026-10-01T09:00');
+    await userEvent.type(screen.getByLabelText('Ends'), '2026-10-01T13:00');
+    await userEvent.click(screen.getByRole('button', { name: 'Add the event' }));
+    await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'POST')).toBe(true));
+    const sent = JSON.parse(String(stub.calls.find((c) => c.init.method === 'POST')!.init.body));
+    expect(sent.startsAt).toBe('2026-10-01T02:00:00.000Z');
+    expect(sent.endsAt).toBe('2026-10-01T06:00:00.000Z');
+  });
+
+  it('P18.5-T5 AC-9 a stored instant is shown as Jakarta’s wall clock, and saved back unchanged when untouched', async () => {
+    const stub = render([type()], [event({ startsAt: '2026-10-01T02:00:00.000Z', endsAt: '2026-10-01T06:00:00.000Z' })]);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    expect(screen.getByLabelText('Starts')).toHaveValue('2026-10-01T09:00');
+    expect(screen.getByLabelText('Ends')).toHaveValue('2026-10-01T13:00');
+    await userEvent.clear(screen.getByLabelText('Ends'));
+    await userEvent.type(screen.getByLabelText('Ends'), '2026-10-01T14:30');
+    await userEvent.click(screen.getByRole('button', { name: 'Save the event' }));
+    await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
+    const sent = JSON.parse(String(stub.calls.find((c) => c.init.method === 'PATCH')!.init.body));
+    expect(sent.startsAt).toBe('2026-10-01T02:00:00.000Z');
+    expect(sent.endsAt).toBe('2026-10-01T07:30:00.000Z');
   });
 });

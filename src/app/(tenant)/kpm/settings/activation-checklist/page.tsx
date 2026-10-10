@@ -107,6 +107,8 @@ const move = <T,>(rows: T[], from: number, to: number): T[] => {
  */
 export default function ActivationChecklistPage() {
   const canWrite = useCan('tenant_config:write');
+  // The screen's own gate (P18.5-T3): a field member meets the refusal, and nothing is asked for them.
+  const canRead = useCan('activation_settings:read');
   const [server, setServer] = useState<ActivationChecklist | null>(null);
   const [draft, setDraft] = useState<ActivationDraft | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -143,7 +145,7 @@ export default function ActivationChecklistPage() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { if (canRead) void load(); }, [load, canRead]);
 
   const links = resolvedLinks(server);
 
@@ -506,7 +508,9 @@ export default function ActivationChecklistPage() {
     <SettingsScreen
       title="Activation checklist"
       subtitle="What every new hire works through in their first 90 days."
-      permission="tenant_config:read"
+      // The office's administration's own read since P18.5-T3 (as `training_settings:read`): a field member typing
+      // the address meets the permission-denied state rather than a page of failed reads.
+      permission="activation_settings:read"
       error={error}
       toolbar={{
         /* The prototype's own sentence, which is the whole explanation of the AUTO badge. */

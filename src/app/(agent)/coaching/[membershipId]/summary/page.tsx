@@ -26,9 +26,9 @@ import { readSummary, type Summary } from '@/lib/summary';
  * - **The insight rules under the prototype's *AI-powered* badge** (ADR-0069), as `/summary` has them.
  * - **The *Activity pulse* is the coachee's ratios**, from `GET /activity/ratios?for=` on their rung
  *   (ADR-0020), read beside the Summary and failing on its own card, as `/summary`'s does.
- * - ***Campaigns she's chasing* is a sign in its slot** (`:4124`), as *Campaigns you're chasing* is on
- *   `/summary` (ADR-0070 rule 2): the same unbuilt section, in the coachee's pronoun, with no row and no
- *   read until a member's chased campaigns can be read.
+ * - ***Campaigns she's chasing*** (`:4121-4130`, P18.5-T9): the coachee's chases of campaigns not ended, 🚀
+ *   chips by title, from `GET /campaigns/chasing?for=` — the read `/summary`'s card makes for the member, so
+ *   the two cannot disagree. Its own read, failing in its own card.
  *
  * No *Download* and no page title of its own: the prototype's person view has neither, and the shell
  * above names the person.
