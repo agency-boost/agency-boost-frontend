@@ -214,6 +214,72 @@ describe('members directory (P3-T1 AC-3)', () => {
     expect(within(table).getByRole('row', { name: /Rina/ })).toHaveTextContent('KPM0417-001');
   });
 
+  describe('Last activity and Last coached (P18-T1 AC-8, D-directory)', () => {
+    const page = (members: ReturnType<typeof member>[]) => ({
+      '/members': { body: { members, nextCursor: null, counts: { directory: members.length, pending: 0, removed: 0 } } },
+    });
+
+    it('AC-8: the directory carries both columns, beside Reports to, as the prototype places them', async () => {
+      stubFetch(page([member({ lastActivityOn: '2026-10-09', lastActivityDays: 0, lastCoachedDays: 1 })]));
+      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+
+      const table = await screen.findByRole('table');
+      expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
+        'Name', 'Agent code', 'Role', 'Reports to', 'Last activity', 'Last coached', 'Unit', 'Status',
+      ]);
+    });
+
+    it('AC-8: Today, "{n} days ago" and Never, from the server’s counts in the office’s calendar', async () => {
+      stubFetch(page([
+        member({ membershipId: 'a', fullName: 'Today Person', preferredName: null, lastActivityOn: '2026-10-09', lastActivityDays: 0, lastCoachedDays: 0 }),
+        member({ membershipId: 'b', fullName: 'One Day', preferredName: null, lastActivityOn: '2026-10-08', lastActivityDays: 1, lastCoachedDays: 14 }),
+        member({ membershipId: 'c', fullName: 'Never Person', preferredName: null, lastActivityOn: null, lastActivityDays: null, lastCoachedDays: null }),
+      ]));
+      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+
+      const table = await screen.findByRole('table');
+      const cells = (name: RegExp) => within(within(table).getByRole('row', { name })).getAllByRole('cell').map((c) => c.textContent);
+      expect(cells(/Today Person/).slice(4, 6)).toEqual(['Today', 'Today']);
+      expect(cells(/One Day/).slice(4, 6)).toEqual(['1 day ago', '14 days ago']);
+      expect(cells(/Never Person/).slice(4, 6)).toEqual(['Never', 'Never']);
+      // The last logged day is the machine-readable date behind the words.
+      expect(within(table).getByText('1 day ago').closest('time')).toHaveAttribute('dateTime', '2026-10-08');
+    });
+
+    it('AC-8: a row the server sent without them reads a dash, never "Never"', async () => {
+      stubFetch(page([member()]));
+      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+
+      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Rina/ });
+      expect(within(row).getAllByRole('cell').slice(4, 6).map((c) => c.textContent)).toEqual(['—', '—']);
+    });
+
+    it('AC-8: the Removed tab keeps its own columns, as the prototype’s does', async () => {
+      stubFetch({
+        '/members': { body: { members: [member({ status: 'removed', removedAt: '2026-07-19T04:00:00.000Z', lastActivityDays: 3, lastCoachedDays: 3 })], nextCursor: null } },
+      });
+      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+      await userEvent.click(await screen.findByRole('button', { name: 'Removed' }));
+      const table = await screen.findByRole('table');
+      await within(table).findByRole('columnheader', { name: 'Removed' });
+      expect(within(table).queryByRole('columnheader', { name: 'Last activity' })).not.toBeInTheDocument();
+      expect(within(table).queryByRole('columnheader', { name: 'Last coached' })).not.toBeInTheDocument();
+    });
+
+    it('AC-8: every page carries them — the next page’s rows too', async () => {
+      stubFetch({
+        '/members': [
+          { body: { members: [member({ lastActivityDays: 2, lastCoachedDays: 5 })], nextCursor: '50', counts: { directory: 51, pending: 0, removed: 0 } } },
+          { body: { members: [member({ membershipId: 'mem-51', agentCode: 'KPM0417-051', fullName: 'Last Page', preferredName: null, lastActivityDays: 9, lastCoachedDays: null })], nextCursor: null } },
+        ],
+      });
+      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+      await userEvent.click(await screen.findByRole('button', { name: 'Next' }));
+      const row = within(await screen.findByRole('table')).getByRole('row', { name: /Last Page/ });
+      expect(within(row).getAllByRole('cell').slice(4, 6).map((c) => c.textContent)).toEqual(['9 days ago', 'Never']);
+    });
+  });
+
   it('draws every tab as one that opens, with none waiting on a later build', async () => {
     // This used to loop over the unbuilt tabs, and the list had been empty since the last one
     // shipped, so it asserted nothing. The disabled branch it guarded went with it (P10.1-T2).

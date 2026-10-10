@@ -24,8 +24,8 @@ type AdminNavItem = {
  *
  * Five groups, `Overview` alone and unlabelled at the top. Until 2026-09-06 there was no
  * Super Admin prototype and this was two invented groups — `Platform` and `Later phases`.
- * Six of these ten destinations are surfaces we have not built; they carry the prototype's
- * own `Soon` pill rather than being hidden, which is what it does too.
+ * A destination not built yet carries the prototype's own `Soon` pill rather than being
+ * hidden, which is what it does too; since P18-T8 every one of them is built.
  */
 const SECTIONS: readonly { label: string | null; divider?: boolean; items: AdminNavItem[] }[] = [
   // Notifications is **not** in this list. It is the bell beside the identity chip at the foot
@@ -85,7 +85,12 @@ const SECTIONS: readonly { label: string | null; divider?: boolean; items: Admin
   },
   {
     label: 'Reporting',
-    items: [{ label: 'Cross-platform analytics', href: '/admin/analytics', icon: 'chart', upcoming: true }],
+    /*
+     * Live since P18-T8, OD-148's answer 1: adoption across offices, inside ADR-0011's line. It was
+     * the console's last *Soon*, as drawn (`:204`); the console has none now, and `upcomingLabel`
+     * stays for the next destination that is scheduled before it is built.
+     */
+    items: [{ label: 'Cross-platform analytics', href: '/admin/analytics', icon: 'chart' }],
   },
 ];
 

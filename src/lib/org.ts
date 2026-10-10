@@ -41,6 +41,15 @@ export interface Member {
   canChangeRole: boolean;
   canPromoteToAb: boolean;
   canRemove: boolean;
+  /**
+   * The directory's *Last activity* (P18-T1, D-directory): the member's last logged day, in the office's
+   * calendar, and how many days ago that was; `null` when they have never logged. Each directory row
+   * carries them and is an audited read; optional because one member's own read does not.
+   */
+  lastActivityOn?: string | null;
+  lastActivityDays?: number | null;
+  /** The directory's *Last coached*: `DAYS_SINCE_LAST_COACHING`, `null` without a session. */
+  lastCoachedDays?: number | null;
 }
 
 export interface MemberPage {

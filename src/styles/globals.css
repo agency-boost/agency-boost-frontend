@@ -27,6 +27,11 @@
   --color-amber-deep: #b5651d;
   /* The only amber that clears 4.5:1 as small text (4.90:1 on card) — the leads Type word. */
   --color-amber-ink: #a85e1b;
+  /*
+   * The Chairman's Club badge (`KPM_Owner.html:348`, a raw `#5B3CC4` there): its own words on its own 12%
+   * tint read 6.03:1, so it is drawn as the prototype draws it, as a token (Phase 18, parity).
+   */
+  --color-club-chairman: #5b3cc4;
   /* A warm off-white, not a neutral grey — substituting one loses the product's character. */
   --color-base: #faf9f7;
   --color-card: #ffffff;

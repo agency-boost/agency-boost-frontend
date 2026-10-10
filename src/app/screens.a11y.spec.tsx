@@ -32,11 +32,15 @@ import TenantsPage from './(admin)/admin/tenants/page';
 import NewTenantPage from './(admin)/admin/tenants/new/page';
 import CompaniesPage from './(admin)/admin/companies/page';
 import AuditPage from './(admin)/admin/audit/page';
+import PlatformAnalyticsPage from './(admin)/admin/analytics/page';
 import MembersPage from './(tenant)/people/members/page';
 import MemberPage from './(tenant)/people/members/[membershipId]/page';
 import AdminsPage from './(tenant)/people/admins/page';
 import RegisterKpmPage from './(agent)/user-management/kpm/page';
 import KpmOverviewPage from './(tenant)/kpm/overview/page';
+import {
+  EMPTY as OVERVIEW_EMPTY, NOBODY as OVERVIEW_NOBODY, NOT_LOGGED as OVERVIEW_NOT_LOGGED, overviewView as overviewFixture,
+} from './(tenant)/kpm/overview/overview-fixtures';
 import DataUploadPage from './(tenant)/kpm/data-upload/page';
 import UnitDashboardPage from './(agent)/unit/dashboard/page';
 import UnitBelowPage from './(agent)/unit/dashboard/[membershipId]/page';
@@ -91,6 +95,12 @@ import {
 } from '@test/recruitment-plan-fixtures';
 import RecruitmentPitchPage from './(tenant)/kpm/settings/recruitment-pitch/page';
 import PitchMaterialsPage from './(agent)/recruitment/pitch-materials/page';
+import KpmAnalyticsLayout from './(tenant)/kpm/analytics/layout';
+import KpmAnalyticsPage from './(tenant)/kpm/analytics/page';
+import KpmAnalyticsCompliancePage from './(tenant)/kpm/analytics/compliance/page';
+import {
+  analyticsView, NO_AB as ANALYTICS_NO_AB, OWNER_ME as ANALYTICS_OWNER, SHELL_STUBS as ANALYTICS_SHELL,
+} from '@test/kpm-analytics-fixtures';
 
 /**
  * Where the screen is, for the one shell that reads it: the coaching person shell's archive (P11-T10),
@@ -540,19 +550,81 @@ describe('screens have no axe violations', () => {
     await expectClean('kpm/data-upload with a preview');
   });
 
-  it('the office overview, a sign and nothing else', async () => {
-    // Its two cards went (P10.1-T2): the page is the placeholder, so it reads nothing of its own.
+  describe('the KPM Overview (P18-T1 AC-10)', () => {
+    // The sign went (P18-T1): the page reads the Overview, and the reveal reads its list when opened.
     const owner = makeMe({
       membership: {
         membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
         isKpmOwner: true, isKpmAdmin: false, directCount: 2,
       },
-      permissions: ['member:read_profile'],
+      permissions: ['member:read_profile', 'kpm_overview:read', 'kpm_overview:set_recruit_target'],
     });
-    stubFetch({});
-    renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
-    await within(screen.getByRole('main')).findByText('Upcoming');
-    await expectClean('kpm/overview');
+    const overviewRegion = () => within(screen.getByRole('main')).findByRole('region', { name: 'Team composition' });
+
+    it('filled, with the Target input', async () => {
+      stubFetch({ '/kpm/overview': { body: overviewFixture() } });
+      renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
+      await overviewRegion();
+      await expectClean('kpm/overview');
+    });
+
+    it('expanded: the not-logged list, the full ranking and a unit’s AABs open', async () => {
+      stubFetch({ '/kpm/overview/not-logged': { body: OVERVIEW_NOT_LOGGED }, '/kpm/overview': { body: overviewFixture() } });
+      renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
+      await overviewRegion();
+      await userEvent.click(screen.getByRole('button', { name: "View who hasn't logged →" }));
+      await screen.findByText('Sinta Halim — Agent');
+      for (const more of screen.getAllByRole('button', { name: 'view full ranking →' })) await userEvent.click(more);
+      await userEvent.click(screen.getByRole('button', { name: /^Hendra Wibowo/ }));
+      await userEvent.click(screen.getByRole('button', { name: /^Lina Chandra/ }));
+      await expectClean('kpm/overview (expanded)');
+    });
+
+    it('empty: 0701, with no file, no session, no lead and no target', async () => {
+      stubFetch({ '/kpm/overview': { body: OVERVIEW_EMPTY } });
+      renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
+      await overviewRegion();
+      await userEvent.click(screen.getByRole('button', { name: /^Hadi Gunawan/ }));
+      await expectClean('kpm/overview (empty)');
+    });
+
+    it('an office with nobody in it, every rate a dash', async () => {
+      stubFetch({ '/kpm/overview': { body: OVERVIEW_NOBODY } });
+      renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
+      await overviewRegion();
+      await expectClean('kpm/overview (nobody)');
+    });
+
+    it('loading, the five sections in outline', async () => {
+      vi.stubGlobal('fetch', vi.fn((url: string) => (String(url).includes('/kpm/overview')
+        ? new Promise(() => undefined)
+        : Promise.resolve({ ok: false, status: 404, json: async () => null }))));
+      renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
+      await within(screen.getByRole('main')).findByText('Loading the overview…');
+      await expectClean('kpm/overview (loading)');
+    });
+
+    it('the directory’s Last activity and Last coached, populated (AC-8)', async () => {
+      const row = (membershipId: string, fullName: string, lastActivityDays: number | null, lastCoachedDays: number | null) => ({
+        membershipId, agentCode: `KPM0417-${membershipId}`, role: 'agent', status: 'active', fullName, preferredName: null,
+        email: `${membershipId}@kpm0417.test`, initials: 'XX', leaderId: null, leaderName: 'Wilson Tanoto', depth: 1,
+        directCount: 0, subtreeCount: 0, isLeader: false, isKpmOwner: false, isKpmAdmin: false,
+        joinedAt: '2026-03-01T00:00:00.000Z', removedAt: null, canChangeRole: false, canPromoteToAb: false, canRemove: false,
+        lastActivityOn: lastActivityDays === null ? null : '2026-10-07', lastActivityDays, lastCoachedDays,
+      });
+      stubFetch({
+        '/members': {
+          body: {
+            members: [row('001', 'Rina Wijaya', 0, 2), row('002', 'Sinta Halim', null, null)],
+            nextCursor: null,
+            counts: { directory: 2, pending: 0, removed: 0 },
+          },
+        },
+      });
+      renderInLayout(TenantLayout, <MembersPage />, { me: owner });
+      await within(await screen.findByRole('table')).findByRole('columnheader', { name: 'Last coached' });
+      await expectClean('people/members (last activity, last coached)');
+    });
   });
 
   describe('the Unit Dashboard (P15-T2 AC-9)', () => {
@@ -1939,6 +2011,49 @@ describe('screens have no axe violations', () => {
     await expectClean('admin/audit');
   });
 
+  describe('Cross-platform analytics (P18-T8 AC-4)', () => {
+    const ANALYST = { ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'platform_analytics:read'] };
+    const rungs = (agent: number, aab: number, ab: number) => [
+      { code: 'AGENT', label: 'Agent', count: agent },
+      { code: 'AAB', label: 'AAB', count: aab },
+      { code: 'AB', label: 'AB', count: ab },
+    ];
+    const figures = (members: number, agent: number, aab: number, ab: number) => ({
+      members, byRung: rungs(agent, aab, ab), joinedThisMonth: 2, leftThisMonth: 1, signedIn7d: 3, signedIn30d: members,
+    });
+    const VIEW = {
+      offices: [
+        { kpmId: 'kpm-1', code: '0417', branch: 'BSD City Branch', company: { id: 'co-1', name: 'Prudential' }, state: 'active', ...figures(40, 34, 4, 2) },
+        { kpmId: 'kpm-2', code: '0555', branch: 'Kelapa Gading Branch', company: { id: 'co-1', name: 'Prudential' }, state: 'suspended', ...figures(10, 8, 1, 1) },
+      ],
+      companies: [{ id: 'co-1', name: 'Prudential', offices: 2, ...figures(50, 42, 5, 3) }],
+      platform: { offices: 2, companies: 1, ...figures(50, 42, 5, 3) },
+    };
+
+    it('the table, with its office rows, the company’s total and the platform’s', async () => {
+      nav.pathname = '/admin/analytics';
+      stubFetch({ '/admin/analytics': { body: VIEW } });
+      renderInLayout(AdminLayout, <PlatformAnalyticsPage />, { me: ANALYST });
+      await screen.findByRole('table', { name: 'Adoption by branch and company' });
+      await expectClean('admin/analytics');
+    });
+
+    it('empty and error', async () => {
+      nav.pathname = '/admin/analytics';
+      stubFetch({ '/admin/analytics': { body: { ...VIEW, offices: [], companies: [] } } });
+      renderInLayout(AdminLayout, <PlatformAnalyticsPage />, { me: ANALYST });
+      await screen.findByText('No branches on the platform yet.');
+      await expectClean('admin/analytics (empty)');
+      cleanup();
+      stubFetch({
+        '/admin/analytics': { status: 500, body: { error: { code: 'INTERNAL', message: 'Something went wrong.', requestId: 'req-1' } } },
+      });
+      renderInLayout(AdminLayout, <PlatformAnalyticsPage />, { me: ANALYST });
+      await screen.findByRole('button', { name: 'Try again' });
+      await expectClean('admin/analytics (error)');
+    });
+  });
+
   // Three screens the sweep had never seen. It covered 23 of 31 when route groups landed,
   // and the gap was invisible because nothing counts the file against the route tree.
 
@@ -3272,6 +3387,65 @@ describe('screens have no axe violations', () => {
         await userEvent.click(within(screen.getByRole('group', { name })).getByRole('button', { name: 'Edit' }));
       }
       await expectClean('admin/companies/[companyId]/template#recruitment');
+    });
+  });
+
+  describe('KPM analytics (P18-T2 AC-10)', () => {
+    const analyticsPage = (period?: string) => (
+      <KpmAnalyticsLayout>
+        <KpmAnalyticsPage searchParams={routeParams(period ? { period } : {})} />
+      </KpmAnalyticsLayout>
+    );
+
+    it('filled: the comparison with an agency open, its people listed, every MOC state and badge, the chart', async () => {
+      nav.pathname = '/kpm/analytics';
+      stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
+      renderInLayout(TenantLayout, analyticsPage(), { me: ANALYTICS_OWNER });
+      await screen.findByRole('table', { name: 'Unit comparison' });
+      await userEvent.click(screen.getByRole('button', { name: 'Units in Hendra Wibowo’s agency' }));
+      await userEvent.click(screen.getByRole('button', { name: '31 people in Hendra Wibowo’s agency' }));
+      await expectClean('kpm/analytics');
+    });
+
+    it('the MOC dialog, met and with an input not uploaded', async () => {
+      nav.pathname = '/kpm/analytics';
+      stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView('previous_month') } });
+      renderInLayout(TenantLayout, analyticsPage('previous_month'), { me: ANALYTICS_OWNER });
+      await screen.findByRole('table', { name: 'Unit comparison' });
+      await userEvent.click(screen.getByRole('button', { name: 'MOC requirements met for Hendra Wibowo' }));
+      await screen.findByRole('dialog', { name: 'Hendra Wibowo — Maintenance of Contract' });
+      await expectClean('kpm/analytics (MOC dialog)');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+      await userEvent.click(screen.getByRole('button', { name: /^MOC for Wilson Tanoto — / }));
+      await screen.findByRole('dialog', { name: 'Wilson Tanoto — Maintenance of Contract' });
+      await expectClean('kpm/analytics (MOC dialog, unknown)');
+    });
+
+    it('no AB yet, and the error with its retry', async () => {
+      nav.pathname = '/kpm/analytics';
+      stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: ANALYTICS_NO_AB } });
+      renderInLayout(TenantLayout, analyticsPage(), { me: ANALYTICS_OWNER });
+      await screen.findByText('There are no ABs to compare yet.');
+      await expectClean('kpm/analytics (no AB)');
+
+      cleanup();
+      vi.unstubAllGlobals();
+      stubFetch({
+        ...ANALYTICS_SHELL,
+        'GET /kpm/analytics': { status: 500, body: { error: { code: 'INTERNAL', message: 'Something went wrong.', requestId: 'r-1' } } },
+      });
+      renderInLayout(TenantLayout, analyticsPage(), { me: ANALYTICS_OWNER });
+      await screen.findByRole('button', { name: 'Try again' });
+      await expectClean('kpm/analytics (error)');
+    });
+
+    it('the Compliance, Events, and Campaigns sign', async () => {
+      nav.pathname = '/kpm/analytics/compliance';
+      stubFetch(ANALYTICS_SHELL);
+      renderInLayout(TenantLayout, <KpmAnalyticsLayout><KpmAnalyticsCompliancePage /></KpmAnalyticsLayout>, { me: ANALYTICS_OWNER });
+      await within(screen.getByRole('main')).findByText('Upcoming');
+      await expectClean('kpm/analytics/compliance');
     });
   });
 });

@@ -44,7 +44,10 @@ const SECTIONS: readonly {
   {
     label: 'Reporting',
     items: [
-      { label: 'KPM analytics', href: '/kpm/analytics', icon: 'chart', upcoming: true },
+      // Live since P18-T2: the unit comparison, MOC, the clubs and the monthly chart. Its *Compliance,
+      // Events, and Campaigns* tab is a sign until those three are built; *Advanced analytics* stays
+      // *Upcoming*, as the prototype draws it with nothing behind it (`KPM_Owner.html:882`, parity D-01).
+      { label: 'KPM analytics', href: '/kpm/analytics', icon: 'chart' },
       { label: 'Data upload', href: '/kpm/data-upload', icon: 'upload' },
       { label: 'Advanced analytics', href: '/kpm/advanced-analytics', icon: 'chartUp', upcoming: true },
     ],

@@ -63,6 +63,45 @@ describe('org tree (P3-T8)', () => {
       .toHaveAttribute('href', '/people/members/mem-ab');
   });
 
+  it('P18-T2 AC-7 drills a card of somebody who leads to their Unit Dashboard, in this tab (D-drill)', async () => {
+    open({
+      ...OFFICE,
+      nodes: [
+        ...OFFICE.nodes.map((n) => ((n as Record<string, unknown>).membershipId === 'mem-ab'
+          ? { ...n, isLeader: true, directCount: 1, directCounts: { ab: 0, aab: 0, agent: 1, total: 1 } }
+          : n)),
+        node({ membershipId: 'mem-agent', fullName: 'Dimas Pratama', initials: 'DP', role: 'agent',
+               layer: 3, leaderId: 'mem-ab' }),
+      ],
+      counts: { ab: 1, aab: 0, agent: 1, total: 2 },
+    });
+    await screen.findByText('Layer 1');
+
+    const leader = within(document.querySelector('[data-node="mem-ab"]') as HTMLElement).getByRole('link', { name: 'Agus Prasetyo' });
+    expect(leader).toHaveAttribute('href', '/unit/dashboard/mem-ab');
+    // The same tab: the console's own drill, unlike the comparison's new tab.
+    expect(leader).not.toHaveAttribute('target');
+    // The reader's own card goes to their own, which the page of their own id would refuse.
+    expect(within(document.querySelector('[data-node="mem-owner"]') as HTMLElement).getByRole('link', { name: 'Wilson Tanoto' }))
+      .toHaveAttribute('href', '/unit/dashboard');
+  });
+
+  it('P18-T2 AC-7 keeps the person page for somebody who leads nobody, and the drill writes nothing', async () => {
+    const { mock } = open({
+      ...OFFICE,
+      nodes: [
+        ...OFFICE.nodes,
+        node({ membershipId: 'mem-agent', fullName: 'Dimas Pratama', initials: 'DP', role: 'agent',
+               layer: 2, leaderId: 'mem-owner' }),
+      ],
+    });
+    await screen.findByText('Layer 1');
+    expect(within(document.querySelector('[data-node="mem-agent"]') as HTMLElement).getByRole('link', { name: 'Dimas Pratama' }))
+      .toHaveAttribute('href', '/people/members/mem-agent');
+    const methods = mock.mock.calls.map(([, init]) => (init as RequestInit | undefined)?.method ?? 'GET');
+    expect(methods.every((m) => m === 'GET')).toBe(true);
+  });
+
   it('draws a forest, and says so, when somebody reports to nobody', async () => {
     // What P3-T7's orphan disposition leaves behind. Rooting at the Owner would hide them.
     open({

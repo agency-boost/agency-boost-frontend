@@ -381,14 +381,22 @@ describe('the sidebar matches the prototype', () => {
     expect(screen.getByText('SUPERADMIN')).toBeInTheDocument();
   });
 
-  it('Superadmin: says Soon where the KPM Owner app says Upcoming', async () => {
-    // Each prototype writes its own word. The only unbuilt console destination left is
-    // `Cross-platform analytics`, in `Reporting`, which starts open like every group (P10.1-T3).
-    renderWithSession(
-      <AdminShell title="x">body</AdminShell>,
-      { me: makeMe({ user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'] }) },
-    );
-    expect(screen.getAllByText('Soon').length).toBeGreaterThan(0);
+  it('P18-T8 AC-4: Cross-platform analytics is live, and the console says Soon nowhere', async () => {
+    // It was the console's last `Soon` (`Superadmin.html:204`). Built, it is a link like the
+    // rest, current on its own route, and no pill is left in `Reporting` or anywhere else.
+    route.path = '/admin/analytics';
+    try {
+      renderWithSession(
+        <AdminShell title="x">body</AdminShell>,
+        { me: makeMe({ user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'] }) },
+      );
+      const item = (await everyItem()).find((a) => a.textContent?.trim() === 'Cross-platform analytics');
+      expect(item).toHaveAttribute('href', '/admin/analytics');
+      expect(item).toHaveAttribute('aria-current', 'page');
+      expect(screen.queryByText('Soon')).not.toBeInTheDocument();
+    } finally {
+      route.path = '/group-tree';
+    }
   });
 
   it('every built Superadmin destination is a real link', async () => {
@@ -411,7 +419,7 @@ describe('the sidebar matches the prototype', () => {
     for (const name of [
       'Overview', 'Manage companies', 'All KPMs',
       'Pending KPM requests', 'KPM Owners & Admins',
-      'Audit / role change log',
+      'Audit / role change log', 'Cross-platform analytics',
     ]) {
       const item = (await everyItem()).find((a) => a.textContent?.trim() === name);
       expect(item, `${name} is not in the nav`).toBeDefined();

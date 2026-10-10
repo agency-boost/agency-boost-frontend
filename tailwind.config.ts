@@ -61,6 +61,7 @@ const config: Config = {
         'sidebar-text': token('sidebar-text'),
         'input-focus': token('input-focus'),
         success: token('success'),
+        club: { chairman: token('club-chairman') },
         alert: token('alert'),
         neutral: token('neutral'),
         info: token('info'),

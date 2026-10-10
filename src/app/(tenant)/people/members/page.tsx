@@ -13,6 +13,7 @@ import { RoleBadge } from '@/components/ui/role-badge';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { daysAgoWords } from '@/lib/kpm-overview';
 import { useDebounced } from '@/lib/use-debounced';
 import { declineRequest, readInbox, approveRequest, type PendingRequest } from '@/lib/join';
 import {
@@ -38,8 +39,10 @@ import {
  * The prototype's own note reads *"Showing 17 of 187 members"* — it renders every row it
  * has and stops. This pages, because 500 members is the stated budget.
  *
- * Two of its columns, Last activity and Last coached, are not here: the data arrives in
- * Phases 6 and 13, and a column of dashes reads as "never" rather than "not yet".
+ * *Last activity* and *Last coached* (`KPM_Owner.html:1834`, `:4490-4519`; P18-T1, D-directory) are
+ * the server's, counted in the office's calendar: *Today*, *"{n} days ago"*, or *Never*. This is the
+ * full list the Overview's *"+ {n} more — full list on the People screen"* points at, and each row's
+ * two columns are an audited read of that member's activity and coaching, written by the server.
  */
 /**
  * The roster indents a name by role, so the flat list still reads as a hierarchy
@@ -92,6 +95,10 @@ const rosterColumns = (tab: TabKey) =>
     'Agent code',
     'Role',
     'Reports to',
+    // Beside *Reports to*, where the prototype puts them after *Recruited by* (`KPM_Owner.html:1834`).
+    // The directory's only: the prototype's Removed tab has neither (`:1849`), and a leaver's last
+    // activity answers nothing about who to chase.
+    ...(tab === 'removed' ? [] : ['Last activity', 'Last coached'] as const),
     'Unit',
     // On the Removed tab every row reads "Removed", which answers nothing. When they left
     // is the question actually asked of this list.
@@ -674,6 +681,18 @@ export default function MembersPage() {
                   </span>
                 </Cell>
                 <Cell className="text-muted">{m.leaderName ?? '—'}</Cell>
+                {tab !== 'removed' && (
+                  <>
+                    <Cell className="whitespace-nowrap text-muted">
+                      {m.lastActivityDays === undefined ? '—' : m.lastActivityOn ? (
+                        <time dateTime={m.lastActivityOn}>{daysAgoWords(m.lastActivityDays)}</time>
+                      ) : daysAgoWords(m.lastActivityDays)}
+                    </Cell>
+                    <Cell className="whitespace-nowrap text-muted">
+                      {m.lastCoachedDays === undefined ? '—' : daysAgoWords(m.lastCoachedDays)}
+                    </Cell>
+                  </>
+                )}
                 <Cell className="text-muted">
                   {/* Leadership is the graph, not the role (OD-23): an AAB with no
                       reports leads nobody, and this column says so. */}

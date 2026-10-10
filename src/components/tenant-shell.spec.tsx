@@ -81,6 +81,19 @@ describe('the tenant shell (P3-T10 AC-4)', () => {
   });
 
   it.each([['the Owner', true], ['the Admin', false]])(
+    'P18-T2 AC-1 gives %s Reporting › KPM analytics, live, and keeps Advanced analytics Upcoming',
+    (_who, isOwner) => {
+      // An `upcoming` item renders an anchor with no href: no link role, so a flag left on would fail this.
+      renderWithSession(<TenantShell title="KPM Analytics">body</TenantShell>, { me: tenantAdmin(isOwner) });
+      openGroup(/^Reporting/);
+
+      expect(screen.getByRole('link', { name: 'KPM analytics' })).toHaveAttribute('href', '/kpm/analytics');
+      expect(screen.queryByRole('link', { name: /Advanced analytics/ })).not.toBeInTheDocument();
+      expect(screen.getByText('Advanced analytics').closest('a')).toHaveAttribute('aria-disabled');
+    },
+  );
+
+  it.each([['the Owner', true], ['the Admin', false]])(
     'P17-T5 AC-1 gives %s Settings › Recruitment pitch, right after Products',
     (_who, isOwner) => {
       renderWithSession(<TenantShell title="Recruitment pitch">body</TenantShell>, { me: tenantAdmin(isOwner) });
