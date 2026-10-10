@@ -96,6 +96,18 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       ]);
     });
 
+    it('ADR-0137: the chip and the channel that are on stay navy — a filter says what is chosen, it is not an action', async () => {
+      grid();
+      await shelfReady();
+      const [allProducts, life] = within(screen.getByRole('group', { name: 'Category' })).getAllByRole('button');
+      const [all, conventional] = within(screen.getByRole('group', { name: 'Channel' })).getAllByRole('button');
+      for (const on of [allProducts, all]) {
+        expect(on).toHaveClass('bg-navy', 'text-white');
+        expect(on).not.toHaveClass('bg-amber');
+      }
+      for (const off of [life, conventional]) expect(off).not.toHaveClass('bg-navy');
+    });
+
     it('P14-T7 AC-2 a section per category in order, hidden when empty, each with its count', async () => {
       grid();
       await shelfReady();

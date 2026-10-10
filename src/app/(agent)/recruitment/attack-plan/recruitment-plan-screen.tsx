@@ -170,7 +170,7 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
               />
             </BriefCard>
             </div>
-            {/* Navy with white text (I-88), full width (`.btn-block`, `:104`), disabled until the brief is complete. */}
+            {/* The primary, amber with navy text (an action, ADR-0137), full width (`.btn-block`, `:104`), disabled until the brief is complete. */}
             <Button disabled={!brief} onClick={build} className="h-auto w-full px-[22px] py-3.5 text-lg">
               {PROTOTYPE_COPY.build}
             </Button>

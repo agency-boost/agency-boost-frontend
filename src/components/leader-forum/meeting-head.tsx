@@ -18,8 +18,8 @@ const OUTLINED = 'border-[1.5px] border-navy bg-transparent text-navy hover:bg-n
 /**
  * **A meeting's head** (`:2709-2733`; *The head*): the title; *"{date} · Upcoming"* — the date a button for
  * whoever may move or delete the meeting, opening *Meeting details* (ADR-0130 §4); the cadence note; *Share*,
- * *Save as PDF* and *Save* for whoever may do each, *Save* navy with white text (I-88); then *Can edit this
- * MOM* and its chips, and *Manage tags →* for whoever may tag.
+ * *Save as PDF* and *Save* for whoever may do each, *Save* the amber primary with navy text (an action,
+ * ADR-0137); then *Can edit this MOM* and its chips, and *Manage tags →* for whoever may tag.
  *
  * In print the head stays — the title, the date and who can edit, as the prototype prints them — and its
  * controls, the cadence note and *Manage tags →* go (`:756-765`).

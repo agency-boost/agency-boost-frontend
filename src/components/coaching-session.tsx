@@ -843,18 +843,20 @@ function ActivityCard({ coachee, refresh }: { coachee: Coachee; refresh: number 
  * ── Tips and action items ───────────────────────────────────────────────────────────────────────
  */
 
-/** The round *+* in a card's head (`Overall.html:4290`, `:4298`). */
+/**
+ * The round *+* in a card's head (`Overall.html:4290`, `:4298`) — the prototype's `.btn-primary`, so the
+ * primary button made round: it adds, and an action is amber (ADR-0137).
+ */
 function AddButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button
-      type="button"
+    <Button
       title={label}
       aria-label={label}
       onClick={onClick}
-      className="flex h-[30px] w-[30px] items-center justify-center rounded-full bg-navy text-lg leading-none text-white hover:bg-navy-soft"
+      className="h-[30px] w-[30px] shrink-0 rounded-full px-0 text-lg leading-none"
     >
       <span aria-hidden="true">+</span>
-    </button>
+    </Button>
   );
 }
 

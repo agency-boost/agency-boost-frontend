@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/app-shell';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, Card, ErrorBanner } from '@/components/ui/field';
+import { Button, buttonClass, Card, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
@@ -136,14 +136,15 @@ export function UnitDashboard({ forId, period }: { forId?: string; period: UnitP
             onToggle={toggle}
             readRatios={readRatios}
             action={canUpdate && (view.production.locked ? (
-              // Drawn and not usable: the month is locked, and the words say who reopens it (P15-T3).
+              // Drawn and not usable: the month is locked, and the words say who reopens it (P15-T3). Its face is
+              // the primary button's own classes, so the held button and the live one are the same amber.
               <TippedGlyph
                 glyph={PROTOTYPE_COPY.updateProduction}
                 name={PROTOTYPE_COPY.updateProduction}
                 tip={lockedWords(view.production.month)}
                 unavailable
                 align="fit"
-                face="h-auto w-auto rounded-md bg-navy px-4 py-[9px] text-base font-semibold text-white"
+                face={buttonClass('primary', 'h-auto w-auto px-4 py-[9px] text-base')}
               />
             ) : (
               <Button className="h-auto px-4 py-[9px] text-base" onClick={() => setUpdating(true)}>

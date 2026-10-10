@@ -87,7 +87,9 @@ export function SettingsTabs({
             })}
             className={[
               subtabs ? 'rounded-full px-3 py-1 text-sm' : 'border-b-2 px-3 py-2 text-md',
-              active && subtabs ? 'bg-amber font-semibold text-navy' : '',
+              // The chosen subtab is navy, as every selected chip and filter is: orange is for an action
+              // (ADR-0137, the client's request of 2026-10-10), and an amber pill read as a button.
+              active && subtabs ? 'bg-navy font-semibold text-white' : '',
               active && !subtabs ? 'border-amber font-semibold text-navy' : '',
               !active && subtabs ? 'text-muted hover:bg-base hover:text-navy' : '',
               !active && !subtabs ? 'border-transparent text-muted hover:text-navy' : '',

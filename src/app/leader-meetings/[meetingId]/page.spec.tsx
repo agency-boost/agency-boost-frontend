@@ -45,7 +45,10 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
       expect(head().getByText(/· Upcoming$/)).toBeInTheDocument();
       expect(head().getByText('Recommended: every 2 weeks · 60–90 mins')).toBeInTheDocument();
       const buttons = ['Share', 'Save as PDF', 'Save'].map((name) => head().getByRole('button', { name }));
-      expect(buttons[2]).toHaveClass('bg-navy', 'text-white');
+      // *Save* is an action, so amber with navy words; *Share* and *Save as PDF* keep their navy outline (ADR-0137).
+      expect(buttons[2]).toHaveClass('bg-amber', 'text-navy');
+      expect(buttons[2]).not.toHaveClass('bg-navy');
+      for (const outlined of buttons.slice(0, 2)) expect(outlined).toHaveClass('border-navy', 'text-navy');
     });
 
     it('P18.1-T2 AC-3: the date is a button for whoever may move the meeting, named for what it does (ADR-0130 §4)', async () => {

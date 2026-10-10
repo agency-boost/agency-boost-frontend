@@ -114,6 +114,23 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
     expect(mock.mock.calls.filter(([url]) => String(url).endsWith('/leader-meetings'))).toHaveLength(1);
   });
 
+  it('ADR-0137: the filter on is navy — what is chosen; + New meeting is amber with navy words — an action', async () => {
+    list();
+    renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
+    await screen.findByText('Strategic Check-in — #14');
+    const all = screen.getByRole('button', { name: 'All' });
+    const past = screen.getByRole('button', { name: 'Past' });
+    expect(all).toHaveClass('bg-navy', 'text-white');
+    expect(past).not.toHaveClass('bg-navy');
+    await userEvent.click(past);
+    expect(past).toHaveClass('bg-navy', 'text-white');
+    for (const option of [all, past]) expect(option).not.toHaveClass('bg-amber');
+
+    const create = screen.getByRole('button', { name: '+ New meeting' });
+    expect(create).toHaveClass('bg-amber', 'text-navy', 'hover:bg-amber-dark');
+    expect(create).not.toHaveClass('bg-navy');
+  });
+
   it('P18.1-T2 AC-2: "No meetings match this filter." when a filter leaves nothing (`:2619`)', async () => {
     list(listView({ meetings: [MEETINGS[1], MEETINGS[2]] }));
     renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });

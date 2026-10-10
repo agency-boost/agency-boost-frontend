@@ -531,18 +531,16 @@ const BUTTON_BASE =
 const INLINE_BASE = 'inline-flex items-center rounded-sm text-sm font-semibold';
 const BUTTON_VARIANT = {
   /*
-   * Navy with white text, as `.btn-add` has it (`KPM_Owner.html:225`).
+   * **Orange is an action; navy is where you are** (ADR-0137, the client's request of 2026-10-10).
+   * Save, Create, Add, Confirm — anything that does something — is amber. A selected tab, filter
+   * chip, segmented option or toggle stays navy, and so does the nav: those say what is chosen,
+   * not what a press will do. A selection is never painted with this variant.
    *
-   * **This was `bg-amber text-navy`, and `tokens.md` justified that by saying the prototypes
-   * do it.** They do not: every amber button in every prototype file sets `color:#fff`. The
-   * screens this product actually implements — the Owner's settings — have no `.btn-primary`
-   * rule at all; their page-level primary is `.btn-add`, and it is navy.
-   *
-   * `Overall.html:2244` does define an amber `.btn-primary`, and diverging from it is
-   * deliberate: white on amber is 2.2:1 and fails AA, and two primary colours on one product
-   * is a rule nobody can apply. White on navy is 13:1. Registered in `prototype-parity.md`.
+   * **Navy text, not the prototype's white** (`.btn-primary`, `Overall.html:2244`). White on amber
+   * is 2.23:1 and fails WCAG AA 1.4.3; navy on amber is 6.31:1, and on the amber-dark hover 4.71:1.
+   * `a11y.spec.tsx` pins all three. Registered in `prototype-parity.md`.
    */
-  primary: 'bg-navy text-white hover:bg-navy-soft',
+  primary: 'bg-amber text-navy hover:bg-amber-dark',
   secondary: 'border border-hairline bg-card text-navy',
   // The prototype's `.btn-danger` (`Overall.html:2244-2245`): transparent, with an
   // alert-red border and alert-red text. Deliberately quieter than the primary — a

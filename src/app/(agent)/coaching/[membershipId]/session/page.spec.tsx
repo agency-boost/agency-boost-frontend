@@ -595,6 +595,17 @@ describe('the session workspace (P11-T8)', () => {
   });
 
   describe('tips and action items', () => {
+    it('ADR-0137: each round + is the primary — amber with navy text, an action — and a real button', async () => {
+      show();
+      const tips = await card('Coaching tips');
+      const next = await card('Next action items');
+      for (const add of [within(tips).getByRole('button', { name: 'Add tip' }), within(next).getByRole('button', { name: 'Add action' })]) {
+        expect(add).toHaveClass('bg-amber', 'text-navy', 'rounded-full');
+        expect(add).not.toHaveClass('bg-navy');
+        expect(add).toHaveAttribute('type', 'button');
+      }
+    });
+
     it('P11-T8 AC-8 adds a tip with +, focused on Type the tip…, saved once it is left', async () => {
       const { calls } = show();
       const tips = await card('Coaching tips');

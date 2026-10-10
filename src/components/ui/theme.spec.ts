@@ -87,6 +87,30 @@ describe('the Tailwind theme', () => {
     });
   });
 
+  describe('the primary button’s amber (ADR-0137)', () => {
+    /*
+     * An action is amber with navy words, darkening to amber-dark under the pointer. Each class must
+     * compile from its token, and each token must hold the value `a11y.spec.tsx` measures the 4.5:1 on —
+     * a class reading an undefined property paints nothing and passes every jsdom test.
+     */
+    it.each([
+      ['bg-amber', '.bg-amber', 'amber'],
+      ['hover:bg-amber-dark', '.hover\\:bg-amber-dark:hover', 'amber-dark'],
+      ['text-navy', '.text-navy', 'navy'],
+    ])('%s emits a rule mixed from its own token', async (cls, selector, token) => {
+      const css = await compile(cls);
+      expect(css).toContain(selector);
+      expect(css).toContain(`var(--color-${token}) calc(`);
+    });
+
+    it('globals.css defines both ambers and navy at the values the contrast test measures', () => {
+      const globals = readFileSync(join(__dirname, '../../styles/globals.css'), 'utf8');
+      expect(globals).toMatch(/--color-amber:\s*#f2994a;/i);
+      expect(globals).toMatch(/--color-amber-dark:\s*#d97f30;/i);
+      expect(globals).toMatch(/--color-navy:\s*#1b2b4b;/i);
+    });
+  });
+
   describe('the calendar’s teal (H-19, P12-T2 AC-12)', () => {
     /*
      * The prototype declared `--teal` in its section file alone (`Calendar_Section.html:15`). It is a

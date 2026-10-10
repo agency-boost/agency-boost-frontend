@@ -33,6 +33,14 @@ describe('Settings sub-tabs', () => {
       .toHaveAttribute('aria-current', 'page');
   });
 
+  it('paints the chosen pill navy, never the amber of an action button (ADR-0137)', () => {
+    render(<SettingsTabs tabs={ACTIVITY_SETTINGS_TABS} variant="subtabs" />);
+    const chosen = screen.getByRole('link', { name: 'Activity types' });
+    expect(chosen).toHaveClass('bg-navy', 'text-white');
+    expect(chosen.className).not.toMatch(/bg-amber/);
+    expect(screen.getByRole('link', { name: 'Ratio benchmarks' }).className).not.toMatch(/bg-navy|bg-amber/);
+  });
+
   it('names the group, so it is not an unlabelled nav', () => {
     render(<SettingsTabs tabs={ACTIVITY_SETTINGS_TABS} />);
     expect(screen.getByRole('navigation', { name: 'Activity settings' })).toBeInTheDocument();

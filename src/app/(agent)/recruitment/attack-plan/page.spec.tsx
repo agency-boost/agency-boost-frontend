@@ -129,17 +129,19 @@ describe('/recruitment/attack-plan, the Recruitment Attack Plan (P17-T3)', () =>
       expect(screen.queryByRole('button', { name: 'Fresh grad' })).not.toBeInTheDocument();
     });
 
-    it('P17-T3 AC-3 Build recruitment plan: navy, full width, disabled until a type, a motivation and a hesitation', async () => {
+    it('P17-T3 AC-3 Build recruitment plan: amber (an action, ADR-0137), full width, disabled until a type, a motivation and a hesitation', async () => {
       show();
       await briefHeading();
       const build = screen.getByRole('button', { name: 'Build recruitment plan' });
-      expect(build).toHaveClass('bg-navy', 'text-white', 'w-full');
+      expect(build).toHaveClass('bg-amber', 'text-navy', 'w-full');
       expect(build).toBeDisabled();
       await userEvent.click(chip('Candidate type', 'Retiree'));
       await userEvent.click(chip('What\'s driving them', 'Full career change'));
       expect(build).toBeDisabled();
       await userEvent.click(chip('Their biggest hesitation', 'No network to sell to'));
       expect(build).toBeEnabled();
+      // A chosen chip is a selection, so it stays navy beside the amber action.
+      expect(chip('Their biggest hesitation', 'No network to sell to')).toHaveClass('bg-navy', 'text-white');
       // Unchoosing the only hesitation closes it again.
       await userEvent.click(chip('Their biggest hesitation', 'No network to sell to'));
       expect(build).toBeDisabled();

@@ -279,8 +279,25 @@ describe('accessibility', () => {
       expect(ratio(SIDEBAR_TEXT, NAVY)).toBeGreaterThanOrEqual(4.5);
     });
 
-    it('navy on an amber button clears 4.5:1 — which is why buttons are not amber-on-white', () => {
-      expect(ratio(NAVY, AMBER)).toBeGreaterThanOrEqual(4.5);
+    describe('the primary button, amber with navy words (ADR-0137)', () => {
+      /*
+       * An action is orange, so the primary's words have to clear 4.5:1 on amber at rest **and** on the
+       * amber-dark it darkens to under the pointer — a hover that drops the label below the floor is a
+       * failure a mouse user meets on every press.
+       */
+      it('navy on amber clears 4.5:1 — the button at rest', () => {
+        expect(ratio(NAVY, AMBER)).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it('navy on amber-dark clears 4.5:1 — the button under the pointer', () => {
+        expect(ratio(NAVY, AMBER_DARK)).toBeGreaterThanOrEqual(4.5);
+      });
+
+      it('white on amber misses 4.5:1 — which is why the words are navy, not the prototype’s white', () => {
+        // `.btn-primary{background:var(--amber);color:#fff}` (`Overall.html:2244`): 2.23:1.
+        expect(ratio(CARD, AMBER)).toBeLessThan(4.5);
+        expect(ratio(CARD, AMBER_DARK)).toBeLessThan(4.5);
+      });
     });
 
     /**

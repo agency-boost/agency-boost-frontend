@@ -440,6 +440,18 @@ describe('Segmented', () => {
     expect(other).not.toHaveAttribute('aria-controls');
     expect(panel).toHaveAttribute('aria-labelledby', selected.id);
   });
+
+  it('paints the selected option navy, never the action amber — navy is what is chosen (ADR-0137)', async () => {
+    render(<Host />);
+    const [first, second] = screen.getAllByRole('tab');
+    expect(first).toHaveClass('bg-navy');
+    expect(first).not.toHaveClass('bg-amber');
+    expect(second).not.toHaveClass('bg-navy');
+
+    await userEvent.click(second);
+    expect(second).toHaveClass('bg-navy');
+    expect(first).not.toHaveClass('bg-navy');
+  });
 });
 
 describe('CascadeRow', () => {
@@ -951,20 +963,42 @@ describe('Button', () => {
 });
 
 describe('Button', () => {
-  it('paints the primary navy with white text, not amber', () => {
+  it('paints the primary amber with navy text, darkening on hover — an action is orange (ADR-0137)', () => {
     /*
-     * `.btn-add` — the primary on every Owner settings screen in the prototype
-     * (`KPM_Owner.html:225`) — is `background:var(--navy);color:#fff`. This was `bg-amber
-     * text-navy`, on a line in `tokens.md` claiming the prototypes did that. They do not: every
-     * amber button in every prototype file sets `color:#fff`, which is 2.2:1 and fails AA.
-     * White on navy is 13:1.
+     * The client's request of 2026-10-10: Save, Create and the like are the orange button; tabs and
+     * filters stay navy. **Navy text, not the prototype's white** (`.btn-primary`, `Overall.html:2244`):
+     * white on amber is 2.23:1 and fails AA, navy on amber 6.31:1 — `a11y.spec.tsx` pins both.
      */
     render(<Button>Publish</Button>);
 
-    const className = screen.getByRole('button').className;
-    expect(className).toContain('bg-navy');
-    expect(className).toContain('text-white');
-    expect(className).not.toContain('bg-amber');
+    const className = screen.getByRole('button').className.split(/\s+/);
+    expect(className).toEqual(expect.arrayContaining(['bg-amber', 'text-navy', 'hover:bg-amber-dark']));
+    expect(className).not.toContain('bg-navy');
+    expect(className).not.toContain('text-white');
+    // Disabled is as it was: dimmed, not recoloured.
+    expect(className).toContain('disabled:opacity-40');
+  });
+
+  it('gives every surface of the primary the same amber — buttonClass, ButtonLink and the confirm dialog', () => {
+    expect(buttonClass('primary').split(/\s+/)).toEqual(expect.arrayContaining(['bg-amber', 'text-navy', 'hover:bg-amber-dark']));
+    render(
+      <>
+        <ButtonLink href="/coaching/me">My Coaching Notes</ButtonLink>
+        <Dialog open message="Publish to agents?" confirmLabel="Publish" onConfirm={() => {}} onCancel={() => {}} />
+      </>,
+    );
+    expect(screen.getByRole('link', { name: 'My Coaching Notes' })).toHaveClass('bg-amber', 'text-navy');
+    expect(screen.getByRole('button', { name: 'Publish' })).toHaveClass('bg-amber', 'text-navy');
+    // Its Cancel is the secondary: backing out is not the action the dialog is asking about.
+    expect(screen.getByRole('button', { name: 'Cancel' })).not.toHaveClass('bg-amber');
+  });
+
+  it('leaves secondary and danger as they were — only the primary moved to amber', () => {
+    render(<><Button variant="secondary">Cancel</Button><Button variant="danger">Delete</Button></>);
+    const [cancel, remove] = screen.getAllByRole('button');
+    expect(cancel).toHaveClass('bg-card', 'text-navy');
+    expect(remove).toHaveClass('border-alert', 'text-alert');
+    for (const button of [cancel, remove]) expect(button).not.toHaveClass('bg-amber');
   });
 
   it('gives a row action text rather than a box', () => {
