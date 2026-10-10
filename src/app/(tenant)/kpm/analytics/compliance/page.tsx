@@ -1,35 +1,21 @@
 'use client';
 
-import { ComingInPhase } from '@/components/coming-in-phase';
+import { use } from 'react';
+import { ComplianceScreen } from '@/components/analytics/compliance-screen';
+import { complianceSelectionFrom } from '@/lib/kpm-compliance';
+
+type Query = { category?: string | string[]; item?: string | string[] };
 
 /**
- * *Compliance, Events, and Campaigns* (`KPM_Owner.html:1262-1286`; P18-T2 AC-1, contradiction 23): a sign
- * until the training, events and campaigns it reads are built — they come last, after every other feature
- * (the product owner, 2026-10-08).
+ * KPM analytics' *Compliance, Events, and Campaigns* (`KPM_Owner.html:1262-1286`, `:3449-4118`; P18.6-T1,
+ * P18.6-T2; `kpm-analytics.md`, *Compliance*): six chips, the chosen category's tabs or picker, and every AB's
+ * agency with a status per person, over one read of the server's. The title, the sub-line and the tabs are the
+ * layout's, which also refuses a reader without `kpm_analytics:read` (*Not available to you*).
  *
- * The title, the sub-line and the tabs are the layout's, so the tab strip still says where the reader is
- * and how to get back. **It imports only what `scripts/lib/screens.py` allows a placeholder**: no figure,
- * no call, a sentence in the reader's words about what will be here, and two screens that work today.
+ * The selection is the address's, `?category=&item=`: *Training* and its first module when it names none, and
+ * an item only where the category has items to choose from (the read would refuse one anywhere else).
  */
-export default function KpmAnalyticsCompliancePage() {
-  return (
-    <ComingInPhase
-      // The prototype's tab (`:1262-1286`): each agent's training modules, events and campaigns, by unit,
-      // searchable and sorted worst first — in the reader's words, with no figure of any kind.
-      what="Who in each unit has finished each training module, attended each event and joined each campaign — searchable by name, the people furthest behind first."
-      // Both the Owner's and the Admin's: `kpm_analytics:read` and `member:read_profile` are granted to both.
-      elsewhere={[
-        {
-          href: '/kpm/analytics',
-          label: 'Overview',
-          detail: 'Every AB’s agency side by side: production against target, coaching, active agents, leads, MOC and the clubs.',
-        },
-        {
-          href: '/people/members',
-          label: 'All members',
-          detail: 'The roster: who is here, their role and their leader.',
-        },
-      ]}
-    />
-  );
+export default function KpmAnalyticsCompliancePage({ searchParams }: { searchParams?: Promise<Query> }) {
+  const query = searchParams ? use(searchParams) : {};
+  return <ComplianceScreen selection={complianceSelectionFrom(query)} />;
 }

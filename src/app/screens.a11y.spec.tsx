@@ -115,6 +115,9 @@ import KpmAnalyticsCompliancePage from './(tenant)/kpm/analytics/compliance/page
 import {
   analyticsView, NO_AB as ANALYTICS_NO_AB, OWNER_ME as ANALYTICS_OWNER, SHELL_STUBS as ANALYTICS_SHELL,
 } from '@test/kpm-analytics-fixtures';
+import {
+  complianceView, EMPTY_CATALOG as COMPLIANCE_EMPTY_CATALOG, NO_AB as COMPLIANCE_NO_AB,
+} from '@test/kpm-compliance-fixtures';
 import LeaderMeetingsPage from './leader-meetings/page';
 import LeaderMeetingPage from './leader-meetings/[meetingId]/page';
 import SharedLeaderMeetingPage from './leader-meetings/shared/[token]/page';
@@ -3728,12 +3731,67 @@ describe('screens have no axe violations', () => {
       await expectClean('kpm/analytics (error)');
     });
 
-    it('the Compliance, Events, and Campaigns sign', async () => {
+  });
+
+  describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1 AC-10, P18.6-T2)', () => {
+    const compliancePage = (query: Record<string, string> = {}) => (
+      <KpmAnalyticsLayout><KpmAnalyticsCompliancePage searchParams={routeParams(query)} /></KpmAnalyticsLayout>
+    );
+    const openCompliance = async (body: unknown, query: Record<string, string> = {}) => {
       nav.pathname = '/kpm/analytics/compliance';
-      stubFetch(ANALYTICS_SHELL);
-      renderInLayout(TenantLayout, <KpmAnalyticsLayout><KpmAnalyticsCompliancePage /></KpmAnalyticsLayout>, { me: ANALYTICS_OWNER });
-      await within(screen.getByRole('main')).findByText('Upcoming');
+      stubFetch({
+        ...ANALYTICS_SHELL,
+        'GET /kpm/analytics/compliance': { body },
+        'GET /kpm/settings/events/': { body: eventFeedbackSummary() },
+      });
+      renderInLayout(TenantLayout, compliancePage(query), { me: ANALYTICS_OWNER });
+    };
+
+    it('filled: Training’s three rows of tabs and the tree, the chips above', async () => {
+      await openCompliance(complianceView('training'));
+      await screen.findAllByRole('region');
       await expectClean('kpm/analytics/compliance');
+    });
+
+    it('filled: Activation, an expired one’s Overdue with its tooltip shown', async () => {
+      await openCompliance(complianceView('activation'), { category: 'activation' });
+      await screen.findAllByRole('region');
+      await userEvent.click(screen.getByRole('button', { name: /^Overdue: ended on/ }));
+      await expectClean('kpm/analytics/compliance?category=activation');
+    });
+
+    it('filled: a past event with its Feedback Summary, and an ended campaign’s Achieved cells', async () => {
+      await openCompliance(complianceView('events', 'ev-townhall'), { category: 'events', item: 'ev-townhall' });
+      await screen.findByRole('heading', { name: /Feedback Summary$/ });
+      await expectClean('kpm/analytics/compliance?category=events');
+
+      cleanup();
+      vi.unstubAllGlobals();
+      await openCompliance(complianceView('campaigns', 'PERSISTENCY_PUSH'), { category: 'campaigns', item: 'PERSISTENCY_PUSH' });
+      await screen.findAllByRole('region');
+      await expectClean('kpm/analytics/compliance?category=campaigns');
+    });
+
+    it('searched, and searched to nothing', async () => {
+      await openCompliance(complianceView('training'));
+      await screen.findAllByRole('region');
+      await userEvent.type(screen.getByRole('searchbox', { name: 'Search agent or leader name' }), 'sinta');
+      await expectClean('kpm/analytics/compliance (searched)');
+      await userEvent.type(screen.getByRole('searchbox'), 'zzz');
+      await screen.findByText('No one matches this search.');
+      await expectClean('kpm/analytics/compliance (searched to nothing)');
+    });
+
+    it('empty: no AB yet, and a category with nothing to show', async () => {
+      await openCompliance(COMPLIANCE_NO_AB);
+      await screen.findByText('There are no ABs yet.');
+      await expectClean('kpm/analytics/compliance (no AB)');
+
+      cleanup();
+      vi.unstubAllGlobals();
+      await openCompliance(COMPLIANCE_EMPTY_CATALOG('events'), { category: 'events' });
+      await screen.findByText('There are no events this year.');
+      await expectClean('kpm/analytics/compliance (no events)');
     });
   });
 

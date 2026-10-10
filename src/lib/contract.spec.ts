@@ -843,6 +843,81 @@ describe('campaigns’ types match the API document (P18.5-T7 to T9)', () => {
 });
 
 /**
+ * P18.6-T1, P18.6-T2: **the compliance tree's one read** (`GET /kpm/analytics/compliance`), held to its shape as
+ * campaigns' are — every chip, tab, picker, card and cell on the screen is read straight off these. A field the
+ * screen declares always there is one the document requires, one it marks `nullable` is typed `| null`, and a
+ * category, phase, kind or rung it names is spelled with exactly the document's values.
+ *
+ * *Red until `backend/openapi.json` is regenerated with the read's DTOs* — the lead's step (P18.6-T3).
+ */
+const COMPLIANCE_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
+  ['kpm-compliance.ts', 'ComplianceView', 'ComplianceViewDto'],
+  ['kpm-compliance.ts', 'ComplianceChip', 'ComplianceChipDto'],
+  ['kpm-compliance.ts', 'ComplianceCatalog', 'ComplianceCatalogDto'],
+  ['kpm-compliance.ts', 'ComplianceTrainingCategory', 'ComplianceTrainingCategoryDto'],
+  ['kpm-compliance.ts', 'ComplianceSkill', 'ComplianceTrainingSkillDto'],
+  ['kpm-compliance.ts', 'ComplianceModule', 'ComplianceTrainingModuleDto'],
+  ['kpm-compliance.ts', 'ComplianceGoals', 'ComplianceGoalsCatalogDto'],
+  ['kpm-compliance.ts', 'ComplianceEvent', 'ComplianceEventEntryDto'],
+  ['kpm-compliance.ts', 'ComplianceCampaign', 'ComplianceCampaignEntryDto'],
+  ['kpm-compliance.ts', 'ComplianceSelection', 'ComplianceSelectionDto'],
+  ['kpm-compliance.ts', 'ComplianceSection', 'ComplianceSectionDto'],
+  ['kpm-compliance.ts', 'ComplianceUnit', 'ComplianceUnitDto'],
+  ['kpm-compliance.ts', 'CompliancePerson', 'CompliancePersonDto'],
+  ['kpm-compliance.ts', 'ComplianceRow', 'ComplianceRowDto'],
+  ['kpm-compliance.ts', 'ComplianceCell', 'ComplianceCellDto'],
+  ['kpm-compliance.ts', 'ComplianceOverride', 'ComplianceOverrideDto'],
+  ['kpm-compliance.ts', 'ComplianceOverrideBy', 'ComplianceOverridePersonDto'],
+  ['kpm-compliance.ts', 'ComplianceCan', 'ComplianceCanDto'],
+];
+
+describe('the compliance tree’s types match the API document (P18.6-T1, P18.6-T2)', () => {
+  it.each(COMPLIANCE_PAIRS)('%s › %s ⊆ %s', (file, ours, theirs) => {
+    const documented = new Set(propertiesOf(theirs));
+    expect(declaredFields(file, ours).filter((f) => !documented.has(f))).toEqual([]);
+  });
+
+  it.each(COMPLIANCE_PAIRS)('%s › %s is shaped as %s promises: required, nullable, and the values it names', (file, ours, theirs) => {
+    const schema = doc.components.schemas[theirs];
+    const required = new Set(schema.required ?? []);
+    const problems: string[] = [];
+    for (const field of declaredTypes(file, ours)) {
+      const prop = schema.properties?.[field.name] ?? {};
+      if (!field.optional && !required.has(field.name)) problems.push(`${field.name}: declared always there, documented optional`);
+      if (prop.nullable && !field.nullable) problems.push(`${field.name}: documented nullable, declared without | null`);
+      const theirValues = (prop.enum ?? []).filter((v): v is string => typeof v === 'string');
+      const ourValues = literalsOf(file, field.type);
+      if (theirValues.length > 0 && ourValues !== null && [...ourValues].sort().join() !== [...theirValues].sort().join()) {
+        problems.push(`${field.name}: ${[...ourValues].sort().join('|')} against ${[...theirValues].sort().join('|')}`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it('the screen’s one read is in the document, a GET', async () => {
+    const { vi } = await import('vitest');
+    const compliance = await import('./kpm-compliance');
+    const sent: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+      sent.push(`${(init.method ?? 'GET').toLowerCase()} ${new URL(url).pathname.replace('/api/v1', '')}`);
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    }));
+    try {
+      await compliance.readCompliance({ category: 'events', item: 'ev-1' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(sent).toEqual(['get /kpm/analytics/compliance']);
+    expect(Object.keys(doc.paths['/api/v1/kpm/analytics/compliance'] ?? {})).toEqual(['get']);
+  });
+
+  it('the read takes the two parameters the screen sends, and no others', () => {
+    const parameters = doc.paths['/api/v1/kpm/analytics/compliance']?.get.parameters ?? [];
+    expect(parameters.filter((p) => p.in === 'query').map((p) => p.name).sort()).toEqual(['category', 'item']);
+  });
+});
+
+/**
  * P13.2-T2: the quote tool's one read, held to its shape as the activation's are. The screen prices
  * every figure from these fields, so one renamed on the server would price nothing in the browser.
  */
@@ -934,5 +1009,107 @@ describe('the forum’s routes match the API document (P18.1-T2, P18.1-T3)', () 
     expect(own.filter((f) => !documented.has(f))).toEqual([]);
     // And the card's, which it extends.
     expect(declaredFields('leader-meetings.ts', 'MeetingCard').filter((f) => !documented.has(f))).toEqual([]);
+  });
+});
+
+/**
+ * P18.6-T2 AC-5, AC-8: **the override of a final campaign standing** — its two writes and their answer, held to
+ * their shape as the campaigns' are. The answer's `override` and its `by` are reached through the document's own
+ * `$ref`s, so their schema names are the generator's, not ours to guess; and the reason's bound on screen is the
+ * one both writes validate. The routes are read off the client as it calls them, the forum's way.
+ */
+const OVERRIDE_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
+  ['standing-override.ts', 'StandingOverrideResult', 'StandingOverrideResultDto'],
+];
+
+type Wrapped = Schema & { allOf?: Schema[]; oneOf?: Schema[] };
+type Operation = { requestBody?: { content?: Record<string, { schema?: Wrapped }> } };
+
+/** The schema a property or a body names: its `$ref`, directly or through the generator's wrapper for a nullable one. */
+function refOf(schema: Wrapped | undefined): string {
+  const ref = schema?.$ref ?? schema?.allOf?.find((s) => s.$ref)?.$ref ?? schema?.oneOf?.find((s) => s.$ref)?.$ref;
+  if (!ref) throw new Error(`no $ref in ${JSON.stringify(schema)}`);
+  return ref.split('/').pop()!;
+}
+
+/** Ours against theirs: a field read as always there is required, one documented nullable is `| null`, values match. */
+function shapeProblems(file: string, ours: string, theirs: string): string[] {
+  const schema = doc.components.schemas[theirs];
+  const required = new Set(schema.required ?? []);
+  const documented = new Set(Object.keys(schema.properties ?? {}));
+  const problems: string[] = [];
+  for (const field of declaredTypes(file, ours)) {
+    if (!documented.has(field.name)) {
+      problems.push(`${field.name}: not documented`);
+      continue;
+    }
+    const prop = (schema.properties?.[field.name] ?? {}) as Wrapped;
+    if (!field.optional && !required.has(field.name)) problems.push(`${field.name}: declared always there, documented optional`);
+    if (prop.nullable && !field.nullable) problems.push(`${field.name}: documented nullable, declared without | null`);
+    const theirValues = (prop.enum ?? []).filter((v): v is string => typeof v === 'string');
+    const ourValues = literalsOf(file, field.type);
+    if (theirValues.length > 0 && ourValues !== null && [...ourValues].sort().join() !== [...theirValues].sort().join()) {
+      problems.push(`${field.name}: ${[...ourValues].sort().join('|')} against ${[...theirValues].sort().join('|')}`);
+    }
+  }
+  return problems;
+}
+
+/** The override's route as the document spells it, whatever it names its two parameters. */
+function overrideRoute(): Record<string, Operation> {
+  const entry = Object.entries(doc.paths).find(([path]) =>
+    matches('/api/v1/kpm/settings/campaigns/*/standings/*/override', new Set([path])));
+  if (!entry) throw new Error('no override route in openapi.json');
+  return entry[1] as unknown as Record<string, Operation>;
+}
+
+describe('the override’s types and routes match the API document (P18.6-T2)', () => {
+  it.each(OVERRIDE_PAIRS)('%s › %s is shaped as %s promises: documented, required, nullable, its values', (file, ours, theirs) => {
+    expect(shapeProblems(file, ours, theirs)).toEqual([]);
+  });
+
+  it('the answer’s override, and who set it, are documented as the tree’s cell reads them', () => {
+    const override = refOf(doc.components.schemas.StandingOverrideResultDto.properties?.override);
+    const by = refOf(doc.components.schemas[override].properties?.by);
+    expect(shapeProblems('standing-override.ts', 'StandingOverride', override)).toEqual([]);
+    expect(shapeProblems('standing-override.ts', 'OverrideActor', by)).toEqual([]);
+  });
+
+  it('the reason’s bound on screen is the one both writes validate', async () => {
+    const { OVERRIDE_REASON_MAX } = await import('./standing-override');
+    const route = overrideRoute();
+    for (const method of ['put', 'delete']) {
+      const body = refOf(route[method]?.requestBody?.content?.['application/json']?.schema);
+      expect(doc.components.schemas[body].properties?.reason.maxLength, `${method} ${body}`).toBe(OVERRIDE_REASON_MAX);
+    }
+  });
+
+  it('every route the override client calls is in the document, with its method', async () => {
+    const { vi } = await import('vitest');
+    const override = await import('./standing-override');
+    const sent: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+      sent.push(`${(init.method ?? 'GET').toLowerCase()} ${new URL(url).pathname.replace('/api/v1', '')}`);
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    }));
+    try {
+      await override.setOverride('CODE', 'm1', { status: 'qualified', reason: 'r' });
+      await override.clearOverride('CODE', 'm1', { reason: 'r' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(sent).toEqual([
+      'put /kpm/settings/campaigns/CODE/standings/m1/override',
+      'delete /kpm/settings/campaigns/CODE/standings/m1/override',
+    ]);
+    const routes = Object.entries(doc.paths).flatMap(([path, ops]) =>
+      Object.keys(ops).map((method) => ({ method, path: path.replace('/api/v1', '') })));
+    const unknown = sent.filter((call) => {
+      const [method, path] = call.split(' ');
+      const asCalled = path.split('/').map((seg) => (['CODE', 'm1'].includes(seg) ? '*' : seg)).join('/');
+      return !routes.some((r) => r.method === method && matches(asCalled, new Set([r.path])));
+    });
+    expect(unknown).toEqual([]);
   });
 });
