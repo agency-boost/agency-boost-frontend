@@ -50,13 +50,32 @@ describe('choosing your own password (P3.6-T4)', () => {
     });
   });
 
-  it('sends them back to sign in, because the change kills this session too', async () => {
+  it('sends them back to sign in, ending this tab’s session as Sign out does, because the change kills it too', async () => {
     stubFetch({ '/auth/change-password': { body: { status: 'changed' } } });
-    renderWithSession(<ChooseAPasswordPage />, { me: OWED });
+    const { session } = renderWithSession(<ChooseAPasswordPage />, { me: OWED });
 
     await fill();
     await userEvent.click(screen.getByRole('button', { name: 'Save and sign in again' }));
-    expect(replace).toHaveBeenCalledWith('/login?changed=1');
+    // Through the session, so nothing of it stays in memory and it is marked as their own doing (2026-10-11).
+    await vi.waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
+    expect(session.signOut).toHaveBeenCalledTimes(1);
+    expect(replace.mock.calls).toEqual([['/login']]);
+  });
+
+  it('keeps the session when the change is refused', async () => {
+    stubFetch({
+      '/auth/change-password': {
+        status: 401,
+        body: { error: { code: 'AUTH_INVALID_CREDENTIALS', message: 'That is not the password you were sent.', requestId: 'r-1' } },
+      },
+    });
+    const { session } = renderWithSession(<ChooseAPasswordPage />, { me: OWED });
+
+    await fill();
+    await userEvent.click(screen.getByRole('button', { name: 'Save and sign in again' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('That is not the password you were sent.');
+    expect(session.signOut).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it('refuses the password they were sent as the new one', async () => {

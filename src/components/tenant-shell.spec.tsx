@@ -5,8 +5,9 @@ import { makeMe, renderWithSession } from '@test/harness';
 import { PHONE_QUERY } from '@/lib/use-phone';
 import { TenantShell } from './tenant-shell';
 
+const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => router,
   usePathname: () => '/people/members',
 }));
 
@@ -153,8 +154,12 @@ describe('Open agent view, in the identity menu (P13.2-T5, ADR-0114)', () => {
     expect(within(panel()).getByRole('link', { name: 'Open agent view' })).toHaveAttribute('href', '/unit/dashboard');
   });
 
-  it('P13.2-T5 AC-2 offers nothing to a reader of the console who neither owns nor administers the office', async () => {
-    // The shell follows the route group, so an AB whose grants pass a console route's gate wears it.
+  it('P13.2-T5 AC-2 offers nothing to a reader who neither owns nor administers the office: they are never in the console', () => {
+    /*
+     * The shell followed the route group, so an AB whose grants passed the console's gate wore it, menu and all
+     * — the leak of the product owner's report (2026-10-11). The console now admits only the Owner and the
+     * Admins (`familyAllows`): an AB is sent to their own landing, and there is no menu to offer them anything.
+     */
     const ab = makeMe({
       membership: {
         membershipId: 'mem-2', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
@@ -162,9 +167,11 @@ describe('Open agent view, in the identity menu (P13.2-T5, ADR-0114)', () => {
       },
       permissions: ['member:read_profile'],
     });
+    router.replace.mockClear();
     renderWithSession(<TenantShell title="All members">body</TenantShell>, { me: ab });
-    await userEvent.click(chip());
-    expect(links()).toEqual(['Your account']);
+    expect(router.replace.mock.calls).toEqual([['/unit/dashboard']]);
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+    expect(screen.queryByText('body')).not.toBeInTheDocument();
   });
 
   it('P13.2-T5 AC-3 on a phone sits after the nav groups and before Your account', async () => {

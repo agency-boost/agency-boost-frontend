@@ -33,6 +33,96 @@ describe('RequireSession', () => {
     }
   });
 
+  /*
+   * **The product owner's report, 2026-10-11**: signing out of an Owner page woke this guard, which sent the
+   * reader to `/login?next=<that page>`, and the next person to sign in was taken there. A reader who signed
+   * out themselves (`signedOut`) goes to plain sign-in; any other end of the session still carries the page.
+   */
+  describe('when the session ends (2026-10-11)', () => {
+    const COMPLIANCE = '/kpm/analytics/compliance?category=training';
+    const at = (path: string, run: () => void) => {
+      window.history.pushState({}, '', path);
+      replace.mockClear();
+      try {
+        run();
+      } finally {
+        window.history.pushState({}, '', '/');
+      }
+    };
+
+    it('a reader who signed out themselves goes to plain sign-in, carrying no page', () => {
+      at(COMPLIANCE, () => {
+        renderWithSession(<RequireSession permission="kpm_analytics:read">secret</RequireSession>, {
+          me: null, loading: false, signedOut: true,
+        });
+        expect(replace.mock.calls).toEqual([['/login']]);
+      });
+    });
+
+    it('an involuntary end — an expired session, a link opened signed out — still carries the page', () => {
+      at(COMPLIANCE, () => {
+        renderWithSession(<RequireSession permission="kpm_analytics:read">secret</RequireSession>, {
+          me: null, loading: false, signedOut: false,
+        });
+        expect(replace.mock.calls).toEqual([['/login?next=%2Fkpm%2Fanalytics%2Fcompliance%3Fcategory%3Dtraining']]);
+      });
+    });
+  });
+
+  /*
+   * **A shell admits only its own family** (2026-10-11): an Agent who typed an office address was shown the
+   * Owner's sidebar, because the tenant shell's gate is every member's. The shells pass `family`.
+   */
+  describe('family, which the shells pass (2026-10-11)', () => {
+    const OWNER = makeMe({
+      membership: {
+        membershipId: 'mem-o', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: true, isKpmAdmin: false, directCount: 3,
+      },
+      permissions: ['member:read_profile'],
+    });
+
+    it('renders for a reader of the family', () => {
+      replace.mockClear();
+      renderWithSession(<RequireSession family="tenant" permission="member:read_profile">secret</RequireSession>, { me: OWNER });
+      expect(screen.getByText('secret')).toBeInTheDocument();
+      expect(replace).not.toHaveBeenCalled();
+    });
+
+    it('sends anybody else to their own landing, rendering nothing of the screen and no refusal on the way', () => {
+      replace.mockClear();
+      // The default reader is an Agent who leads nobody, and holds the tenant shell's own gate.
+      renderWithSession(<RequireSession family="tenant" permission="member:read_profile">secret</RequireSession>, {
+        me: makeMe({ permissions: ['member:read_profile'] }),
+      });
+      expect(replace.mock.calls).toEqual([['/activity/log']]);
+      expect(screen.queryByText('secret')).not.toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.getByRole('status')).toHaveTextContent('Taking you to your work…');
+    });
+
+    it('asks it before the permission: a reader of another family is not refused here, but sent on', () => {
+      replace.mockClear();
+      renderWithSession(<RequireSession family="admin" permission="kpm:list_all">secret</RequireSession>, { me: OWNER });
+      expect(replace.mock.calls).toEqual([['/kpm/overview']]);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('leaves a password that must be replaced to its own redirect', () => {
+      replace.mockClear();
+      renderWithSession(<RequireSession family="admin">secret</RequireSession>, {
+        me: makeMe({ mustChangePassword: true }),
+      });
+      expect(replace.mock.calls).toEqual([['/choose-a-password']]);
+    });
+
+    it('waits for the session before deciding anything', () => {
+      replace.mockClear();
+      renderWithSession(<RequireSession family="admin">secret</RequireSession>, { me: null, loading: true });
+      expect(replace).not.toHaveBeenCalled();
+    });
+  });
+
   it('renders for a session that holds the permission', () => {
     renderWithSession(<RequireSession permission="kpm:list_all">secret</RequireSession>, {
       me: makeMe({ permissions: ['kpm:list_all'] }),

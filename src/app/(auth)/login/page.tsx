@@ -9,7 +9,7 @@ import { type DemoAccount } from '@/lib/demo-accounts';
 import { DemoAccountsPanel } from '@/components/demo-accounts-panel';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { resendVerification } from '@/lib/sessions';
-import { returnPathFrom } from '@/lib/return-path';
+import { destinationAfterSignIn } from '@/lib/return-path';
 import { PasswordInput } from '@/components/ui/password-input';
 
 export default function LoginPage() {
@@ -26,11 +26,13 @@ export default function LoginPage() {
       setBusy(true);
       setError(null);
       try {
-        await signIn(withEmail, withPassword);
-        // Back to the page that sent the reader here, when one did (`?next=`); otherwise `/`, which
-        // forwards by role: a Super Admin to the console, a tenant admin to their office, everyone
-        // else to their account.
-        router.push(returnPathFrom(window.location.search));
+        const signedIn = await signIn(withEmail, withPassword);
+        // Back to the page that sent the reader here (`?next=`), when the person who just signed in can
+        // open it; otherwise their own landing — a Super Admin to the console, a tenant admin to their
+        // office, everyone else to their field landing. Whoever signed out before them on this device
+        // left their page in `next`, and it was honoured for anybody (the product owner's report,
+        // 2026-10-11).
+        router.push(destinationAfterSignIn(window.location.search, signedIn));
       } catch (err) {
         setError(toDisplayError(err));
       } finally {

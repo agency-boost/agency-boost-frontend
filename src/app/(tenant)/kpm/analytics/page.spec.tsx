@@ -8,6 +8,7 @@ import {
 } from '@test/kpm-analytics-fixtures';
 import KpmAnalyticsLayout from './layout';
 import KpmAnalyticsPage from './page';
+import { landingFor } from '@/lib/landing';
 
 const nav = vi.hoisted(() => ({ replace: vi.fn(), pathname: '/kpm/analytics' }));
 vi.mock('next/navigation', () => ({
@@ -459,8 +460,19 @@ describe('KPM analytics (P18-T2)', () => {
         permissions: ['member:read_profile', 'org_tree:read'],
       })],
       ['an Agent', makeMe({ permissions: ['member:read_profile'] })],
-    ])('refuses %s, and asks the API for nothing', async (_who, me) => {
+    ])('sends %s to their own landing, never into the console, and asks the API for nothing', async (_who, me) => {
+      // They were refused here, inside the Owner's chrome: the product owner's report, 2026-10-11. The console
+      // now admits only the Owner and the Admins (`familyAllows`).
+      nav.replace.mockClear();
       const { calls } = open(undefined, { me });
+      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith(landingFor(me)));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+      expect(reads(calls)).toEqual([]);
+    });
+
+    it('refuses an Admin without the grant, in the console, and asks the API for nothing', async () => {
+      const { calls } = open(undefined, { me: makeMe({ ...ADMIN_ME, permissions: ['member:read_profile'] }) });
       expect(await screen.findByRole('alert')).toHaveTextContent('Not available to you');
       expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'kpm_analytics:read');
       await waitFor(() => expect(reads(calls)).toEqual([]));

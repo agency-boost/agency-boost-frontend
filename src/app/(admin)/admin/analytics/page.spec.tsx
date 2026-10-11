@@ -12,9 +12,11 @@ import {
   type PlatformAnalyticsView,
 } from '@/lib/admin-analytics';
 import PlatformAnalyticsPage from './page';
+import { landingFor } from '@/lib/landing';
 
+const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => router,
   usePathname: () => '/admin/analytics',
 }));
 
@@ -272,11 +274,16 @@ describe('Cross-platform analytics (P18-T8)', () => {
       ['an AB', { isKpmOwner: false, isKpmAdmin: false, hierarchyRole: 'ab' as const }, ['activity_log:create_own']],
       ['an AAB', { isKpmOwner: false, isKpmAdmin: false, hierarchyRole: 'aab' as const }, ['activity_log:create_own']],
       ['an agent', { isKpmOwner: false, isKpmAdmin: false, hierarchyRole: 'agent' as const }, ['activity_log:create_own']],
-    ])('%s never reaches the console: refused at its gate, and nothing is asked of the API', (_who, membership, permissions) => {
+    ])('%s never reaches the console: sent to their own landing, and nothing is asked of the API', (_who, membership, permissions) => {
+      // It was refused at the console's gate; since 2026-10-11 the console's shell sends anybody but a Super
+      // Admin to their own landing (`familyAllows`), before any gate is asked.
       const { calls } = stubFetch({ '/admin/analytics': { body: VIEW } });
-      const me = makeMe({ permissions });
-      renderInLayout(AdminLayout, <PlatformAnalyticsPage />, { me: { ...me, membership: { ...me.membership!, ...membership } } });
-      expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
+      const base = makeMe({ permissions });
+      const me = { ...base, membership: { ...base.membership!, ...membership } };
+      router.replace.mockClear();
+      renderInLayout(AdminLayout, <PlatformAnalyticsPage />, { me });
+      expect(router.replace.mock.calls).toEqual([[landingFor(me)]]);
+      expect(screen.queryByText('SUPERADMIN')).not.toBeInTheDocument();
       expect(screen.queryByRole('heading', { name: 'Cross-platform analytics' })).not.toBeInTheDocument();
       expect(calls.filter((c) => c.url.includes('/admin/analytics'))).toEqual([]);
     });

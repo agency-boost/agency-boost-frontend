@@ -38,11 +38,17 @@ export function makeMe(overrides: Partial<Me> = {}): Me {
   };
 }
 
+/**
+ * A session as a screen sees it. `signIn` resolves to the session's own `me`, as the provider's resolves
+ * to whoever it just read; a login spec about *who* signed in passes a `signIn` of its own.
+ */
 export function makeSession(overrides: Partial<SessionValue> = {}): SessionValue {
+  const me = 'me' in overrides ? overrides.me ?? null : makeMe();
   return {
-    me: makeMe(),
+    me,
     loading: false,
-    signIn: vi.fn(async () => undefined),
+    signedOut: false,
+    signIn: vi.fn(async () => me),
     signOut: vi.fn(async () => undefined),
     reload: vi.fn(async () => undefined),
     ...overrides,

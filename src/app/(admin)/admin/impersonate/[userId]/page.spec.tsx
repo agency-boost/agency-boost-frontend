@@ -1,14 +1,17 @@
-import { screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminLayout from '@/app/(admin)/layout';
-import { makeMe, renderInLayout, routeParams, stubFetch } from '@test/harness';
+import { makeMe, makeSession, renderInLayout, routeParams, stubFetch } from '@test/harness';
 import { getAccessToken, isImpersonating, setAccessToken, setImpersonating } from '@/lib/api-client';
+import { SessionContext, type Me } from '@/lib/session';
 import ImpersonatePage from './page';
 
 const push = vi.fn();
+const replace = vi.fn();
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push, replace: vi.fn() }),
+  useRouter: () => ({ push, replace }),
   usePathname: () => '/admin/impersonate/u-owner',
 }));
 
@@ -28,6 +31,7 @@ describe('start impersonation', () => {
     setAccessToken(null);
     setImpersonating(false);
     push.mockClear();
+    replace.mockClear();
   });
   afterEach(() => vi.unstubAllGlobals());
 
@@ -76,8 +80,40 @@ describe('start impersonation', () => {
       reason: 'support ticket 42',
       durationMinutes: 60,
     });
-    // The session id travels so a colleague can be sent straight to the approval.
-    expect(push).toHaveBeenCalledWith('/profile?session=sess-1');
+    // To the member's landing, by way of `/` (2026-10-11): see the next test.
+    expect(push).toHaveBeenCalledWith('/');
+  });
+
+  /*
+   * **The session is the member's now** (2026-10-11): the console's shell admits only a Super Admin
+   * (`RequireSession`'s `family`), so it sends the session to the member's landing, as `/` does — the two
+   * navigations agree, and the member is never refused in the console's chrome, nor shown it.
+   */
+  it('a session as an Agent goes to the Agent’s landing: the console is not refused to them, nor drawn around them', async () => {
+    const AGENT = makeMe({ permissions: ['profile:read_self'] });
+    stubFetch({
+      '/admin/impersonate/u-owner': { body: { accessToken: 'imp-token', expiresAt: '2026-09-04T03:00:00Z', sessionId: 'sess-1', readOnly: true } },
+      '/notifications/unread-count': { body: { count: 0 } },
+    });
+    /** The session as the provider holds it: `reload` reads the member the new token belongs to. */
+    function Switching({ children }: { children: React.ReactNode }) {
+      const [me, setMe] = useState<Me>(SUPER_ADMIN);
+      return (
+        <SessionContext.Provider value={makeSession({ me, reload: async () => setMe(AGENT) })}>
+          {children}
+        </SessionContext.Provider>
+      );
+    }
+    render(<Switching><AdminLayout><ImpersonatePage params={params} /></AdminLayout></Switching>);
+
+    await userEvent.type(screen.getByLabelText('Reason'), 'support ticket 42');
+    await userEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/activity/log'));
+    expect(push).toHaveBeenCalledWith('/');
+    expect(screen.queryByText('SUPERADMIN')).not.toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('leaves the Super Admin as themselves when the API refuses', async () => {

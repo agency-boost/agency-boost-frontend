@@ -698,7 +698,9 @@ describe('members directory (P3-T1 AC-3)', () => {
   });
 
   it('never renders for a session without the permission', () => {
-    renderInLayout(TenantLayout, <MembersPage />, { me: makeMe({ permissions: [] }) });
+    // An office reader without the grant: anybody else is not refused here but sent to their own landing
+    // (2026-10-11, `shell-family.spec.tsx`).
+    renderInLayout(TenantLayout, <MembersPage />, { me: makeMe({ ...OWNER, permissions: [] }) });
     expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
     // The gate's code is on the refusal as data, and never in its words (P11-T6).
     expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'member:read_profile');

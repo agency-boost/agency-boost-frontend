@@ -10,6 +10,7 @@ import {
 } from '@/lib/leader-meetings';
 import { printAs, restorePrintTitle } from '@/lib/print';
 import { formatShortDay } from '@/lib/format';
+import { signInPathFrom } from '@/lib/return-path';
 import { useSession } from '@/lib/session';
 import { LoadError, MeetingSkeleton, NotFound } from './forum-states';
 import { MeetingDialog } from './meeting-dialog';
@@ -27,9 +28,11 @@ const PRINT_DELAY_MS = 400;
 
 /**
  * Where a reader not signed in goes: sign in, and come back here (D-share — *"one not signed in signs in
- * first and returns to it"*). The address rides on `next`.
+ * first and returns to it"*). The address rides on `next` — except after the reader signed out themselves
+ * (`signedOut`, 2026-10-11), when it is plain `/login`, as `signInPathFrom` decides for every guard.
  */
-export const signInAndReturn = (pathname: string) => `/login?next=${encodeURIComponent(pathname)}`;
+export const signInAndReturn = (pathname: string, signedOut: boolean) =>
+  signInPathFrom({ pathname, search: '' }, { signedOut });
 
 /**
  * **A meeting** (`/leader-meetings/[meetingId]`, and read-only by a link at `/leader-meetings/shared/[token]`):
@@ -38,7 +41,7 @@ export const signInAndReturn = (pathname: string) => `/login?next=${encodeURICom
  * false but *Save as PDF*, so the same screen draws no write control there.
  */
 export function MeetingScreen({ source }: { source: MeetingSource }) {
-  const { me, loading } = useSession();
+  const { me, loading, signedOut } = useSession();
   const router = useRouter();
   const pathname = usePathname();
   const signedIn = !loading && me !== null;
@@ -55,8 +58,8 @@ export function MeetingScreen({ source }: { source: MeetingSource }) {
   );
 
   useEffect(() => {
-    if (!loading && !me) router.replace(signInAndReturn(pathname));
-  }, [loading, me, router, pathname]);
+    if (!loading && !me) router.replace(signInAndReturn(pathname, signedOut));
+  }, [loading, me, signedOut, router, pathname]);
 
   useEffect(() => {
     if (!signedIn) return undefined;

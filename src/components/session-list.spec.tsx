@@ -1,8 +1,11 @@
-import { screen, waitFor } from '@testing-library/react';
+import { render as renderDom, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { setAccessToken } from '@/lib/api-client';
+import { RequireSession } from './require-session';
 import { SessionList, describeDevice } from './session-list';
+import { SessionProvider } from './session-provider';
 
 const replace = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -26,8 +29,7 @@ function render(body: unknown = [session({ current: true }), session({ sessionId
     '/auth/sessions': { body },
     '/auth/logout-all': { status: 204, body: null },
   });
-  renderWithSession(<SessionList />, { me: makeMe() });
-  return stub;
+  return { ...stub, ...renderWithSession(<SessionList />, { me: makeMe() }) };
 }
 
 describe('where you are signed in (P4-T13)', () => {
@@ -74,12 +76,61 @@ describe('where you are signed in (P4-T13)', () => {
     expect(call.url).toContain('/auth/sessions/s2');
   });
 
-  it('sends somebody to sign in after signing out everywhere', async () => {
+  it('sends somebody to sign in after signing out everywhere, ending this tab’s session as Sign out does', async () => {
     // Every session is gone, this one included — there is nothing to reload into.
-    render();
+    const { calls, session: value } = render();
     await screen.findByText('This device');
     await userEvent.click(screen.getByRole('button', { name: 'Sign out everywhere' }));
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('/login?signedOut=1'));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
+    expect(calls.some((c) => c.url.includes('/auth/logout-all') && c.init.method === 'POST')).toBe(true);
+    // Through the session, so it is marked as the reader's own doing (2026-10-11).
+    expect(value.signOut).toHaveBeenCalledTimes(1);
+    expect(replace.mock.calls).toEqual([['/login']]);
+  });
+
+  it('leaves the session alone when signing out everywhere is refused', async () => {
+    stubFetch({
+      '/auth/sessions': { body: [session({ current: true })] },
+      '/auth/logout-all': {
+        status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something broke.', requestId: 'r-2' } },
+      },
+    });
+    const { session: value } = renderWithSession(<SessionList />, { me: makeMe() });
+    await screen.findByText('This device');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out everywhere' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Something broke.');
+    expect(value.signOut).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  /*
+   * **The product owner's report, 2026-10-11**, end to end: the account screen sits behind `RequireSession`, so
+   * ending the session there wakes its guard too. Whatever order the two navigations land in, neither carries
+   * the page as `next` to whoever signs in next on the device.
+   */
+  it('signing out everywhere from behind the account screen’s guard lands on plain /login, with no next', async () => {
+    window.history.pushState({}, '', '/profile');
+    try {
+      stubFetch({
+        '/auth/refresh': { body: { accessToken: 'fresh' } },
+        '/auth/me': { body: makeMe({ permissions: ['profile:read_self'] }) },
+        '/auth/sessions': { body: [session({ current: true })] },
+        '/auth/logout-all': { status: 204, body: null },
+        '/auth/logout': { status: 204, body: undefined },
+      });
+      renderDom(
+        <SessionProvider>
+          <RequireSession permission="profile:read_self"><SessionList /></RequireSession>
+        </SessionProvider>,
+      );
+      await userEvent.click(await screen.findByRole('button', { name: 'Sign out everywhere' }));
+
+      await waitFor(() => expect(replace).toHaveBeenCalledTimes(2));
+      expect(replace.mock.calls).toEqual([['/login'], ['/login']]);
+    } finally {
+      setAccessToken(null);
+      window.history.pushState({}, '', '/');
+    }
   });
 
   it('says what signing out everywhere does before it is pressed', async () => {

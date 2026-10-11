@@ -182,6 +182,13 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login?next=%2Fleader-meetings'));
   });
 
+  it('a reader who signed out themselves here goes to plain sign-in, carrying no page (2026-10-11)', async () => {
+    stubFetch({});
+    renderWithSession(<LeaderMeetingsPage />, { me: null, signedOut: true });
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login'));
+    expect(nav.replace).not.toHaveBeenCalledWith(expect.stringContaining('next='));
+  });
+
   it('P18.1-T2 AC-8: markup in a title is text — <b> and <script> drawn as typed', async () => {
     list(listView({ meetings: [card({ title: '<b>Bold</b> <script>alert(1)</script>' })] }));
     const { container } = renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });

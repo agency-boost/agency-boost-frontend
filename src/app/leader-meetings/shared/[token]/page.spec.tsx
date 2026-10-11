@@ -75,4 +75,11 @@ describe('/leader-meetings/shared/[token] — a meeting by its link (P18.1-T3)',
     renderWithSession(page(), { me: null });
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login?next=%2Fleader-meetings%2Fshared%2Ftok_abc-123'));
   });
+
+  it('a reader who signed out themselves on the link goes to plain sign-in, carrying no link (2026-10-11)', async () => {
+    stubFetch({});
+    renderWithSession(page(), { me: null, signedOut: true });
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login'));
+    expect(nav.replace).not.toHaveBeenCalledWith(expect.stringContaining('next='));
+  });
 });

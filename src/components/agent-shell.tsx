@@ -55,7 +55,7 @@ export function AgentShell({
   children: React.ReactNode;
 }) {
   return (
-    <RequireSession permission={permission}>
+    <RequireSession permission={permission} family="agent">
       {/* The shell's toast, for a write that leaves its page (P13-T7 AC-3). */}
       <ToastHost>
         <Chrome

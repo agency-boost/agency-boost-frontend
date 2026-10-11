@@ -12,6 +12,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   /**
+   * The reader signed out themselves (`SessionValue.signedOut`): set by `signOut` alone, so an expired
+   * session, a failed refresh or a link opened signed out still carries the page back through `next`.
+   */
+  const [signedOut, setSignedOut] = useState(false);
+  /**
    * The office the reader belongs to cannot be used — its subscription ended, or it is suspended or
    * archived (ADR-0112 §4, P13.2-T3 AC-9). Set by whichever request met the refusal, `/auth/me` or a
    * later one; while it is set, the app is the page saying so and nothing else.
@@ -37,15 +42,25 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setMe(next);
   }, []);
 
-  const reload = useCallback(async () => {
+  /** Reads the session, and says who it found: `signIn` hands that to the login page. */
+  const load = useCallback(async (): Promise<Me | null> => {
     try {
-      remember(await api<Me>('/auth/me'));
+      const found = await api<Me>('/auth/me');
+      remember(found);
+      // Somebody is signed in again, so whatever ends this session next was not them pressing Sign out.
+      setSignedOut(false);
+      return found;
     } catch {
       // A refusal that means the office cannot be used has already replaced the app (above); any
       // other leaves no session, and the screens send the reader to sign in.
       remember(null);
+      return null;
     }
   }, [remember]);
+
+  const reload = useCallback(async () => {
+    await load();
+  }, [load]);
 
   // On mount the access token is gone (it lives in memory only), but the httpOnly
   // refresh cookie survives a reload — so a signed-in user comes back signed in
@@ -64,19 +79,25 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         body: { email, password },
       });
       setAccessToken(accessToken);
-      await reload();
+      return load();
     },
-    [reload],
+    [load],
   );
 
   // Signing out never fails. The server call revokes the refresh-token family, but if
   // it cannot be reached the local session must still end — leaving someone signed in
   // because the network dropped is the wrong failure mode, and rethrowing would only
   // hand every caller an error there is no useful response to.
+  //
+  // `signedOut` is set in the same update that clears `me`, so the page whose guard notices first already
+  // knows not to carry itself to the next person who signs in (2026-10-11). Every deliberate sign-out comes
+  // through here: the shells', the account screen's and its *Sign out everywhere* (`useSignOut`), and
+  // `OfficeUnavailable`'s.
   const signOut = useCallback(async () => {
     await api<void>('/auth/logout', { method: 'POST' }).catch(() => undefined);
     setAccessToken(null);
     remember(null);
+    setSignedOut(true);
     setUnavailable(null);
   }, [remember]);
 
@@ -98,8 +119,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   }, [reload, remember]);
 
   const value = useMemo(
-    () => ({ me, loading, signIn, signOut, reload }),
-    [me, loading, signIn, signOut, reload],
+    () => ({ me, loading, signedOut, signIn, signOut, reload }),
+    [me, loading, signedOut, signIn, signOut, reload],
   );
 
   return (

@@ -34,13 +34,16 @@ export default function ImpersonatePage({ params }: { params: Promise<{ userId: 
     setBusy(true);
     setError(null);
     try {
-      const { accessToken, sessionId } = await startImpersonation(userId, reason.trim(), duration);
+      const { accessToken } = await startImpersonation(userId, reason.trim(), duration);
       setAccessToken(accessToken);
       setImpersonating(true);
       await reload();
-      // The id travels so a colleague can be sent straight to the approval — a support
-      // case that needs writing usually knows so before the session starts.
-      router.push(`/profile?session=${sessionId}`);
+      // To the member's own landing, where their session starts (2026-10-11). The session is
+      // theirs now, so this console's shell sends it there too (`RequireSession`'s `family`);
+      // `/` forwards by the same `landingFor`, so whichever navigation lands last, both arrive
+      // in the same place. It went to `/profile?session=<id>`, which the guard would race, and
+      // whose `session` nothing ever read: the approval is reached at `/admin/impersonation/<id>`.
+      router.push('/');
     } catch (err) {
       setError(toDisplayError(err));
       setBusy(false);

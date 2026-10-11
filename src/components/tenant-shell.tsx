@@ -126,7 +126,7 @@ export function TenantShell({
   children: React.ReactNode;
 }) {
   return (
-    <RequireSession permission={permission}>
+    <RequireSession permission={permission} family="tenant">
       <TenantChrome title={title} subtitle={subtitle} actions={actions}>
         {children}
       </TenantChrome>

@@ -1,9 +1,10 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderWithSession, stubFetch } from '@test/harness';
+import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { ApiConfigError } from '@/lib/api';
 import { ApiRequestError } from '@/lib/api-client';
+import type { Me } from '@/lib/session';
 import LoginPage from './page';
 
 const push = vi.fn();
@@ -12,6 +13,38 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/login',
 }));
 
+/** A member of the office, as `signIn` resolves to them: active, with the rung and the reports given. */
+const member = (membership: Partial<NonNullable<Me['membership']>>, permissions: string[]) => makeMe({
+  membership: {
+    membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent', status: 'active',
+    isKpmOwner: false, isKpmAdmin: false, directCount: 0, ...membership,
+  },
+  permissions,
+});
+
+const FIELD = ['member:read_profile', 'tenant_config:read', 'profile:read_self', 'leader_meeting:read_shared_link'];
+const OWNER = member(
+  { orgLevelCode: 'AB', hierarchyRole: 'ab', isKpmOwner: true, directCount: 3 },
+  [...FIELD, 'kpm_overview:read', 'kpm_analytics:read'],
+);
+const AGENT = member({}, FIELD);
+const LEADER = member({ orgLevelCode: 'AB', hierarchyRole: 'ab', directCount: 4 }, [...FIELD, 'unit_dashboard:read']);
+
+/** Signs in from `/login<search>` as `who`, and gives back where the page sent them. */
+async function signInFrom(search: string, who: Me | null): Promise<unknown> {
+  window.history.pushState({}, '', `/login${search}`);
+  try {
+    renderWithSession(<LoginPage />, { me: null, signIn: vi.fn(async () => who) });
+    await userEvent.type(screen.getByLabelText('Email'), 'someone@kpm0417.test');
+    await userEvent.type(screen.getByLabelText('Password'), 'a password');
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(push).toHaveBeenCalledTimes(1);
+    return push.mock.calls[0][0];
+  } finally {
+    window.history.pushState({}, '', '/');
+  }
+}
+
 describe('login', () => {
   it('labels both fields and marks them for the password manager', () => {
     renderWithSession(<LoginPage />);
@@ -19,27 +52,56 @@ describe('login', () => {
     expect(screen.getByLabelText('Password')).toHaveAttribute('autocomplete', 'current-password');
   });
 
-  it('signs in and lands the user somewhere', async () => {
+  it('signs in and lands the user on their own landing when no page sent them here', async () => {
+    // The session's `me` is an Agent who leads nobody, and `signIn` resolves to them.
     const { session } = renderWithSession(<LoginPage />);
     await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
     await userEvent.type(screen.getByLabelText('Password'), 'demo password rina');
     await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
 
     expect(session.signIn).toHaveBeenCalledWith('rina@kpm0417.test', 'demo password rina');
-    expect(push).toHaveBeenCalledWith('/');
+    expect(push).toHaveBeenCalledWith('/activity/log');
   });
 
   it('P18.1-T3 AC-2 returns to the page that sent the reader to sign in, such as a shared meeting', async () => {
-    window.history.pushState({}, '', '/login?next=%2Fleader-meetings%2Fshared%2Fabc');
-    try {
-      renderWithSession(<LoginPage />);
-      await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
-      await userEvent.type(screen.getByLabelText('Password'), 'demo password rina');
-      await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-      expect(push).toHaveBeenCalledWith('/leader-meetings/shared/abc');
-    } finally {
-      window.history.pushState({}, '', '/');
-    }
+    expect(await signInFrom('?next=%2Fleader-meetings%2Fshared%2Fabc', AGENT)).toBe('/leader-meetings/shared/abc');
+  });
+
+  /*
+   * **The product owner's report, 2026-10-11**: the Owner signed out of *Compliance, Events, and Campaigns*,
+   * an Agent signed in on the same device, and was sent to the Owner's page — `next` was honoured for whoever
+   * signed in. It is honoured now only for somebody who can open it; anybody else lands on their own page.
+   */
+  describe('only for the person who can open the page (2026-10-11)', () => {
+    const COMPLIANCE = '?next=%2Fkpm%2Fanalytics%2Fcompliance%3Fcategory%3Dtraining';
+
+    it('the Owner, who can open it, goes back to it, query kept', async () => {
+      expect(await signInFrom(COMPLIANCE, OWNER)).toBe('/kpm/analytics/compliance?category=training');
+    });
+
+    it('the reported case: an Agent who signs in after them lands on their own day, not on the Owner’s page', async () => {
+      expect(await signInFrom(COMPLIANCE, AGENT)).toBe('/activity/log');
+    });
+
+    it('a leader who signs in after them lands on their unit’s dashboard', async () => {
+      expect(await signInFrom(COMPLIANCE, LEADER)).toBe('/unit/dashboard');
+    });
+
+    it('an address that is no page of the app lands on their own page rather than a 404', async () => {
+      expect(await signInFrom('?next=%2Fkpm%2Fadvanced-analytics', OWNER)).toBe('/kpm/overview');
+    });
+
+    it('an unsafe next still lands on their own page: a host written as a path', async () => {
+      expect(await signInFrom('?next=%2F%2Fevil.test%2Fx', AGENT)).toBe('/activity/log');
+    });
+
+    it('an unsafe next still lands on their own page: another origin, whatever path it ends in', async () => {
+      expect(await signInFrom('?next=https%3A%2F%2Fevil.test%2Fkpm%2Foverview', OWNER)).toBe('/kpm/overview');
+    });
+
+    it('no next lands on their own page', async () => {
+      expect(await signInFrom('', OWNER)).toBe('/kpm/overview');
+    });
   });
 
   it('shows the server message and the request id, and marks both fields invalid', async () => {
@@ -64,7 +126,7 @@ describe('login', () => {
     expect(alert.textContent).not.toMatch(/no account|not found|unknown user/i);
     expect(screen.getByLabelText('Email')).toHaveAttribute('aria-invalid', 'true');
     expect(screen.getByLabelText('Password')).toHaveAttribute('aria-invalid', 'true');
-    expect(push).not.toHaveBeenCalledWith('/');
+    expect(push).not.toHaveBeenCalled();
   });
 
   it('reports a network failure as a network failure, not as bad credentials', async () => {
@@ -121,7 +183,10 @@ describe('login', () => {
 
     it('fills both fields and signs in, leaving the values on screen', async () => {
       process.env.NEXT_PUBLIC_APP_ENV = 'development';
-      const { session } = renderWithSession(<LoginPage />);
+      const root = makeMe({
+        user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
+      });
+      const { session } = renderWithSession(<LoginPage />, { signIn: vi.fn(async () => root) });
 
       await userEvent.click(screen.getByRole('button', { name: /Show all \d+ accounts/ }));
       await userEvent.click(screen.getByRole('button', { name: /Super Admin.*superadmin@/s }));
@@ -134,7 +199,7 @@ describe('login', () => {
       // repeated blindly.
       expect(screen.getByLabelText('Email')).toHaveValue('superadmin@agencyboost.test');
       expect(screen.getByLabelText('Password')).toHaveValue('demo super admin');
-      expect(push).toHaveBeenCalledWith('/');
+      expect(push).toHaveBeenCalledWith('/admin');
     });
 
     it('shows the ordinary error when a seeded account does not exist yet', async () => {

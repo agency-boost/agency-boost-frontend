@@ -146,8 +146,9 @@ describe('org tree (P3-T8)', () => {
     // Holding the office gate, so it is *this screen's* refusal being tested and not the
     // layout's — the two are different questions and the layer that answers first would
     // otherwise mask the one we mean.
+    // An office reader, since anybody else is sent to their own landing first (2026-10-11).
     renderInLayout(TenantLayout, <OrgTreePage />, {
-      me: makeMe({ permissions: ['member:read_profile'] }),
+      me: makeMe({ ...OWNER, permissions: ['member:read_profile'] }),
     });
     expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
     // The gate's code is on the refusal as data, and never in its words (P11-T6).

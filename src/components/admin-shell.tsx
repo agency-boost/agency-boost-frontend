@@ -119,7 +119,7 @@ export function AdminShell({
   children: React.ReactNode;
 }) {
   return (
-    <RequireSession permission={permission}>
+    <RequireSession permission={permission} family="admin">
       <AdminChrome title={title} subtitle={subtitle} actions={actions}>
         {children}
       </AdminChrome>

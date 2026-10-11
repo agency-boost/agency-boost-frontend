@@ -86,8 +86,18 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       expect((await tree()).length).toBeGreaterThan(0);
     });
 
-    it('refuses a field role, and asks the API for nothing (the layout’s page)', async () => {
+    it('sends a field role to their own landing, never into the console, and asks the API for nothing', async () => {
+      // The product owner's report, 2026-10-11: an Agent here was refused inside the Owner's chrome.
+      nav.replace.mockClear();
       const { calls } = open(undefined, { me: makeMe({ permissions: ['member:read_profile'] }) });
+      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/activity/log'));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+      expect(reads(calls)).toEqual([]);
+    });
+
+    it('refuses an Admin without the grant, in the console, and asks the API for nothing (the layout’s page)', async () => {
+      const { calls } = open(undefined, { me: makeMe({ ...ADMIN_ME, permissions: ['member:read_profile'] }) });
       expect(await screen.findByRole('alert')).toHaveTextContent('Not available to you');
       expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'kpm_analytics:read');
       await waitFor(() => expect(reads(calls)).toEqual([]));

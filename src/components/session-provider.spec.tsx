@@ -5,7 +5,14 @@ import { stubFetch } from '@test/harness';
 import { useEffect, useState } from 'react';
 import { api, getAccessToken, isImpersonating, setAccessToken, setImpersonating } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
+import { RequireSession } from './require-session';
 import { SessionProvider } from './session-provider';
+
+const replace = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace, push: vi.fn() }),
+  usePathname: () => '/kpm/analytics/compliance',
+}));
 
 function Probe() {
   const { me, loading, signIn, signOut } = useSession();
@@ -246,6 +253,80 @@ describe('SessionProvider', () => {
       render(<SessionProvider><Screen /></SessionProvider>);
       await waitFor(() => expect(screen.getByTestId('screen')).toHaveTextContent('signed in refused'));
       expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    });
+  });
+
+  /*
+   * **A deliberate sign-out** (the product owner's report, 2026-10-11): `signedOut` is what tells a page's guard
+   * not to carry the page to the next person who signs in. Only `signOut` sets it; signing in clears it.
+   */
+  describe('a deliberate sign-out (2026-10-11)', () => {
+    function Flag() {
+      const { me, loading, signedOut, signIn, signOut } = useSession();
+      const [who, setWho] = useState('');
+      return (
+        <div>
+          <p data-testid="flag">{loading ? 'loading' : `${me ? 'in' : 'out'}, ${signedOut ? 'signed out' : 'not signed out'}`}</p>
+          <p data-testid="who">{who}</p>
+          <button onClick={() => void signIn('rina@kpm0417.test', 'pw').then((m) => setWho(m?.user.email ?? 'nobody'))}>
+            sign in
+          </button>
+          <button onClick={() => void signOut()}>sign out</button>
+        </div>
+      );
+    }
+
+    afterEach(() => window.history.pushState({}, '', '/'));
+
+    it('is marked by Sign out, and cleared by signing in again, which resolves to who signed in', async () => {
+      stubFetch({
+        '/auth/refresh': { body: { accessToken: 'fresh' } },
+        '/auth/me': { body: ME },
+        '/auth/logout': { status: 204, body: undefined },
+        '/auth/login': { body: { accessToken: 'tok' } },
+      });
+      render(<SessionProvider><Flag /></SessionProvider>);
+      await waitFor(() => expect(screen.getByTestId('flag')).toHaveTextContent('in, not signed out'));
+
+      await userEvent.click(screen.getByRole('button', { name: 'sign out' }));
+      await waitFor(() => expect(screen.getByTestId('flag')).toHaveTextContent('out, signed out'));
+
+      await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+      await waitFor(() => expect(screen.getByTestId('flag')).toHaveTextContent('in, not signed out'));
+      expect(screen.getByTestId('who')).toHaveTextContent('rina@kpm0417.test');
+    });
+
+    it('is not marked by a session that was never there or could not be read: those still carry the page', async () => {
+      stubFetch({
+        '/auth/refresh': { status: 401, body: {} },
+        '/auth/login': { body: { accessToken: 'tok' } },
+        '/auth/me': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'No.', requestId: 'r' } } },
+      });
+      render(<SessionProvider><Flag /></SessionProvider>);
+      await waitFor(() => expect(screen.getByTestId('flag')).toHaveTextContent('out, not signed out'));
+
+      // Signed in, but the session could not be read: `signIn` resolves to nobody, and nobody signed out.
+      await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+      await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('nobody'));
+      expect(screen.getByTestId('flag')).toHaveTextContent('out, not signed out');
+    });
+
+    it('Sign out on the page for an office that cannot be used sends the page’s guard to plain /login', async () => {
+      window.history.pushState({}, '', '/kpm/analytics/compliance');
+      stubFetch({
+        '/auth/refresh': { body: { accessToken: 'fresh' } },
+        '/auth/me': {
+          status: 403,
+          body: { error: { code: 'TENANT_SUSPENDED', message: 'This office is suspended.', requestId: 'r-8' } },
+        },
+        '/auth/logout': { status: 204, body: undefined },
+      });
+      replace.mockClear();
+      render(<SessionProvider><RequireSession permission="kpm_analytics:read">secret</RequireSession></SessionProvider>);
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+      await waitFor(() => expect(replace).toHaveBeenCalled());
+      expect(replace.mock.calls).toEqual([['/login']]);
     });
   });
 

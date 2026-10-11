@@ -85,6 +85,28 @@ describe('RoleShell', () => {
     expect(screen.queryByRole('navigation')).toBeNull();
   });
 
+  /*
+   * **The chrome it picks admits its reader** (2026-10-11): each shell now sends a reader who is not of its
+   * family to their own landing (`familyAllows`). A cross-family route must never be sent away by the chrome it
+   * chose itself — a pending Owner and somebody in no office included.
+   */
+  it.each([
+    ['a Super Admin', SUPER_ADMIN],
+    ['an Owner', member({ isKpmOwner: true })],
+    ['an Admin', member({ isKpmAdmin: true })],
+    ['an AB', member({ directCount: 2 })],
+    ['an Agent', member({ orgLevelCode: 'AGENT', hierarchyRole: 'agent' })],
+    ['a pending member', member({ status: 'pending' })],
+    ['a pending Owner', member({ status: 'pending', isKpmOwner: true })],
+    ['somebody in no office', makeMe({ membership: null, permissions: ['member:read_profile'] })],
+  ])('2026-10-11: the chrome it picks for %s is one that admits them — nobody is sent away', async (_who, me) => {
+    stubFetch({ '/notifications': { body: { items: [], unread: 0 } }, '/kpm/config': { body: {} }, '/kpm/org-levels': { body: [] } });
+    router.replace.mockClear();
+    renderWithSession(<RoleShell title="Notifications">body</RoleShell>, { me });
+    expect(await screen.findByText('body')).toBeInTheDocument();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
   it('picks the same way landingFor does, so the two cannot drift', () => {
     // Where somebody lands and what chrome they wear are one question asked twice. This
     // pins the correspondence rather than trusting two lists to stay in the same order.

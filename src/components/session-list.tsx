@@ -1,11 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { SkeletonText } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { listSessions, logoutEverywhere, revokeSession, type Session } from '@/lib/sessions';
+import { useSignOut } from '@/lib/use-sign-out';
 
 /**
  * A device name a person would recognise, out of a user agent string.
@@ -46,7 +46,7 @@ function when(iso: string | null): string {
  * says so.
  */
 export function SessionList() {
-  const router = useRouter();
+  const { signOut } = useSignOut();
   const [sessions, setSessions] = useState<Session[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -124,8 +124,12 @@ export function SessionList() {
             try {
               await logoutEverywhere();
               // Every session is gone, this one included — so there is nothing to reload
-              // into but the sign-in page.
-              router.replace('/login?signedOut=1');
+              // into but the sign-in page. This tab's own session is then ended the way
+              // every *Sign out* ends it (`useSignOut`): marked as the reader's own doing,
+              // so neither the redirect nor the account screen's guard hands this page to
+              // whoever signs in next (2026-10-11). It used to leave the session in memory
+              // and go to `/login?signedOut=1`, a parameter the sign-in page never read.
+              await signOut();
             } catch (err) {
               setError(toDisplayError(err));
               setBusy(false);

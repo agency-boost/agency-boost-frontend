@@ -1,11 +1,11 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Button, Card, ErrorBanner, Field } from '@/components/ui/field';
 import { PasswordInput } from '@/components/ui/password-input';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
+import { useSignOut } from '@/lib/use-sign-out';
 
 const MIN_LENGTH = 10;
 
@@ -22,8 +22,8 @@ const MIN_LENGTH = 10;
  * on it returns `403` for. The one way out is forward.
  */
 export default function ChooseAPasswordPage() {
-  const router = useRouter();
   const { me } = useSession();
+  const { signOut } = useSignOut();
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -50,7 +50,9 @@ export default function ChooseAPasswordPage() {
       });
       // Changing a password signs every session out, this one included — which is the
       // point, because the token was minted under a credential somebody else has seen.
-      router.replace('/login?changed=1');
+      // So this tab's session is ended the way every *Sign out* ends it (`useSignOut`), to
+      // plain `/login` (2026-10-11): it used to stay in memory, and `?changed=1` was never read.
+      await signOut();
     } catch (err) {
       setError(toDisplayError(err));
     } finally {
