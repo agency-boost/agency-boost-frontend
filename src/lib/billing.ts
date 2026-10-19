@@ -1,0 +1,415 @@
+import { api } from './api-client';
+import { dayInZone, OFFICE_TIME_ZONE } from './format';
+import { formatRupiah, groupDigits, MINOR_UNITS_PER_MAJOR } from './goals';
+
+/**
+ * The quote tool at `/admin/billing` (ADR-0111; `functional/billing.md`): its one read, the one pure
+ * function that prices the calculator and the quote, the *Send quote* dialog's dates, and every string.
+ *
+ * **Nothing here is stored and nothing is sent but the read.** The prices come from the backend's
+ * constant (invariant §7; the 101+ tier's real rates never ship in this bundle); every figure is worked
+ * out here, in the browser, on every keystroke; the quote is the page, and its PDF the browser's print.
+ */
+
+/** One tier of the price table, as `GET /admin/billing/prices` serves it (`BillingTierDto`). */
+export interface BillingTier {
+  code: string;
+  minLeaders: number;
+  maxLeaders: number | null;
+  standardMinor: number;
+  sixMonthMinor: number;
+  annualMinor: number;
+  customPricing: boolean;
+}
+
+/** `GET /admin/billing/prices` (`BillingPricesDto`). */
+export interface BillingPrices {
+  currency: 'IDR';
+  tiers: BillingTier[];
+  annualDiscountPct: number;
+}
+
+export const readBillingPrices = () => api<BillingPrices>('/admin/billing/prices');
+
+/** The toggle's two periods (`setPeriod`, `:551-556`). */
+export type BillingPeriod = 'sixMonth' | 'annual';
+/** The manual override's select (`:291-294`). */
+export type DiscountType = 'percent' | 'flat';
+
+/** The calculator's inputs, **as typed**: the function reads them as the prototype does, and better. */
+export interface CalculatorInput {
+  /** *Number of leaders*. */
+  leaders: string;
+  period: BillingPeriod;
+  discountType: DiscountType;
+  /** *Arbitrary discount (internal, per leader)*. */
+  discount: string;
+}
+
+/** Every figure the calculator and the quote print, in integer IDR minor units. */
+export interface Pricing {
+  /** The count priced: what was typed, read as the prototype reads it, never below 1. */
+  leaders: number;
+  tier: BillingTier;
+  period: BillingPeriod;
+  months: 6 | 12;
+  /** *Standard price / leader / mo*. */
+  standardMinor: number;
+  /** *Offering price / leader / mo*: the six-month rate, in either period. */
+  offerMinor: number;
+  /** The period's rate, before the manual discount. */
+  baseMinor: number;
+  /** The six-month rate less the annual, on an annual plan; 0 on six months. */
+  annualDiscountMinor: number;
+  /** The base rate less the final: what the manual discount took off, per leader. */
+  manualDiscountMinor: number;
+  /** *Offering price after discount* and *Final price / leader / mo*. */
+  finalMinor: number;
+  /** *Monthly total (all leaders)*: the final rate × the count, exactly. */
+  monthlyTotalMinor: number;
+  /** *6-month* or *Annual total (all leaders)*: the monthly total × 6 or 12, exactly. */
+  periodTotalMinor: number;
+  /**
+   * The sentence under the discount field when the discount is out of bounds, or `null`. While it is set
+   * the rate is priced without the manual discount and **no quote is generated** (ADR-0111 §5).
+   */
+  discountError: string | null;
+}
+
+/*
+ * ── Words ────────────────────────────────────────────────────────────────────────────────────────
+ */
+
+/** **The prototype's own strings, verbatim** (`AgencyBoost_Billing_Subscription.html`; ADR-0062). */
+export const BILLING_COPY = {
+  title: 'Billing & subscription',
+  launch: 'Launch pricing — locked in for signups before March 2027.',
+  leadersSuffix: ' leaders',
+  perLeaderMonth: ' /leader/mo',
+  perMonth: '/mo',
+  customPricing: "Custom pricing based on your unit's structure.",
+  talkToUs: 'Talk to us',
+  yourTier: 'Your tier',
+  estimate: 'Estimate your price',
+  leaderCount: 'Number of leaders',
+  billingPeriod: 'Billing period',
+  sixMonth: '6-month',
+  annual: 'Annual',
+  standardRow: 'Standard price / leader / mo',
+  offerRow: 'Offering price / leader / mo',
+  offerAfterRow: 'Offering price after discount / leader / mo',
+  monthlyRow: 'Monthly total (all leaders)',
+  sixMonthTotal: '6-month total (all leaders)',
+  annualTotal: 'Annual total (all leaders)',
+  discountsApplied: 'Discounts applied',
+  annualDiscount: 'Annual discount',
+  annualDiscountOn: 'Annual discount (extra 5% off 6-month rate)',
+  manualOverride: 'Manual override',
+  arbitraryDiscount: 'Arbitrary discount (internal, per leader)',
+  percentOption: '%',
+  flatOption: 'Rp/leader',
+  confirmPlan: 'Confirm plan',
+  sendCustomQuote: 'Send custom quote',
+  sendQuote: 'Send quote',
+  finePrint: 'Prices shown in IDR, per leader. Agents under each leader are included at no extra cost.',
+  // The dialog (`:374-415`).
+  dialogLine: 'Fill in the client details to generate a quote page you can send.',
+  kpmName: 'Name of KPM',
+  kpmPlaceholder: 'e.g. Jakarta Selatan',
+  kpmError: 'Enter the KPM name.',
+  picName: 'Name of PIC',
+  picPlaceholder: 'e.g. Andi Wijaya',
+  picError: 'Enter the PIC name.',
+  salesBy: 'Sales input by',
+  salesPlaceholder: 'e.g. your name or teammate',
+  salesError: "Enter who's submitting this quote.",
+  startDate: 'Start date',
+  endDate: 'End date',
+  datePlaceholder: 'DD/MM/YYYY',
+  generate: 'Generate quote',
+  cancel: 'Cancel',
+  // The quote (`:308-372`).
+  quoteTitle: 'Subscription quote',
+  generated: (day: string) => `Generated ${day}`,
+  kpm: 'KPM',
+  pic: 'Person in charge (PIC)',
+  planStart: 'Plan start date',
+  planEnd: 'Plan end date',
+  planDetails: 'Plan details',
+  tier: 'Tier',
+  leadersOnPlan: 'Leaders on plan',
+  sixMonthPlan: '6-month plan',
+  annualPlan: 'Annual plan',
+  custom: ' (custom)',
+  discounts: 'Discounts',
+  manualDiscount: 'Manual discount',
+  finalRow: 'Final price / leader / mo',
+  total: 'Total',
+  footer:
+    'This quote is valid for the plan period shown above. Rate is locked for the duration of the '
+    + "subscription under AgencyBoost's launch pricing, valid for signups before March 2027.",
+  print: 'Print / save as PDF',
+  back: 'Back to editor',
+} as const;
+
+/**
+ * **Ours**: the sentences the prototype has no words for, each a registered Fix or Fill
+ * (`prototype-parity.md`; `functional/billing.md`).
+ */
+export const BILLING_OWN_COPY = {
+  /** The prototype's *"switch to Annual below"* (`:529`), with the toggle above it. */
+  notApplied: 'Not applied — switch to Annual above',
+  percentError: 'Enter a percent from 0 to 100.',
+  flatError: (rateMinor: number) => `Enter an amount from Rp 0 to ${formatRupiah(rateMinor)}.`,
+  startError: 'Enter a valid start date, as DD/MM/YYYY.',
+  endError: 'Enter a valid end date, as DD/MM/YYYY.',
+  endBeforeStart: 'Enter an end date on or after the start date.',
+  /** The select's name: its options say *%* and *Rp/leader*, and the label above names the input. */
+  discountType: 'Discount type',
+  loading: 'Loading prices…',
+  failed: "The prices couldn't be loaded, so nothing can be priced.",
+  retry: 'Try again',
+  /** What the PDF is saved as: the prototype's file would be *AgencyBoost — Billing & Subscription*. */
+  printTitle: (kpm: string) => `Subscription quote – ${kpm}`,
+} as const;
+
+/*
+ * ── The arithmetic (ADR-0111 §4) ─────────────────────────────────────────────────────────────────
+ */
+
+/**
+ * *Number of leaders*, read as the prototype reads it (`:487-488`): `parseInt`, and empty, `0`, a
+ * negative or anything unparsable counts as **1**, while the field keeps what was typed. `8.9` is 8.
+ */
+export function leaderCountOf(text: string): number {
+  const count = Number.parseInt(text, 10);
+  return !count || count < 1 ? 1 : count;
+}
+
+/** The first tier whose bounds hold the count, else the first (`findTier`, `:432-434`). */
+export function tierFor(tiers: readonly BillingTier[], count: number): BillingTier {
+  return tiers.find((t) => count >= t.minLeaders && (t.maxLeaders === null || count <= t.maxLeaders)) ?? tiers[0];
+}
+
+/** *"1–10"*, *"101+"*: the card's and the quote's tier name, from its bounds (`label`, `:421-425`). */
+export function tierLabel(tier: Pick<BillingTier, 'minLeaders' | 'maxLeaders'>): string {
+  return tier.maxLeaders === null ? `${tier.minLeaders}+` : `${tier.minLeaders}–${tier.maxLeaders}`;
+}
+
+/**
+ * The card's *Save n%*: the six-month rate's saving on the standard, rounded half up to a whole percent
+ * (`:457`). Integers only: 20, 21, 22 and 29 down the table.
+ */
+export function savePct(tier: Pick<BillingTier, 'standardMinor' | 'sixMonthMinor'>): number {
+  const s = tier.standardMinor;
+  return Math.floor(((s - tier.sixMonthMinor) * 200 + s) / (2 * s));
+}
+
+/** A decimal typed as a percent: digits with one optional separator, **a comma read as a decimal**. */
+const PERCENT = /^(?:\d+(?:[.,]\d*)?|[.,]\d+)$/;
+
+/** A percent as an exact fraction, `units / scale`, so no float decides a half-rupiah. */
+function percentOf(text: string): { units: bigint; scale: bigint } | null {
+  const trimmed = text.trim();
+  if (trimmed === '') return { units: BigInt(0), scale: BigInt(1) };
+  if (!PERCENT.test(trimmed)) return null;
+  const [whole, fraction = ''] = trimmed.replace(',', '.').split('.');
+  const scale = BigInt(10) ** BigInt(fraction.length);
+  return { units: BigInt(`${whole || '0'}${fraction}`), scale };
+}
+
+/** Rupiah typed into *Rp/leader*: digits and the grouping the field writes, nothing else. */
+function amountOf(text: string): number | null {
+  const trimmed = text.trim();
+  if (trimmed === '') return 0;
+  if (!/^[\d.]+$/.test(trimmed)) return null;
+  const digits = trimmed.replace(/\./g, '');
+  return digits === '' ? null : Number(digits);
+}
+
+/**
+ * The rate after a percent discount, **rounded half up to the whole rupiah** (ADR-0111 §4), exactly:
+ * `rate × (100 − p) / 100` in integers, so *7%* off Rp 356.250 is Rp 331.313 and never Rp 331.312.
+ */
+function afterPercent(rateMinor: number, pct: { units: bigint; scale: bigint }): number {
+  const rate = BigInt(rateMinor / MINOR_UNITS_PER_MAJOR);
+  const hundred = BigInt(100) * pct.scale;
+  const numerator = rate * (hundred - pct.units);
+  const two = BigInt(2);
+  const major = (numerator * two + hundred) / (two * hundred);
+  return Number(major) * MINOR_UNITS_PER_MAJOR;
+}
+
+/**
+ * **The one pricing function** (ADR-0111 §4): the tier, the base rate, the manual discount, the final
+ * rate, the totals and the quote's two discounts, in integer IDR minor units.
+ *
+ * - One rate per leader, chosen by the count's tier, the inversions charged as the table says.
+ * - **The rate is rounded once**: after a percent discount, half up to the whole rupiah. Every total is
+ *   that rate × the count (× 6 or 12), exactly, so a printed rate × count is always the printed total.
+ * - **The manual discount is bounded** (§5): a percent from 0 to 100, an amount from Rp 0 to the period's
+ *   rate. Outside that, the rate is priced without it and `discountError` says why.
+ */
+export function priceQuote(prices: Pick<BillingPrices, 'tiers'>, input: CalculatorInput): Pricing {
+  const leaders = leaderCountOf(input.leaders);
+  const tier = tierFor(prices.tiers, leaders);
+  const months = input.period === 'annual' ? 12 : 6;
+  const baseMinor = input.period === 'annual' ? tier.annualMinor : tier.sixMonthMinor;
+
+  let finalMinor = baseMinor;
+  let discountError: string | null = null;
+  if (input.discountType === 'percent') {
+    const pct = percentOf(input.discount);
+    if (pct === null || pct.units > BigInt(100) * pct.scale) discountError = BILLING_OWN_COPY.percentError;
+    else finalMinor = afterPercent(baseMinor, pct);
+  } else {
+    const amount = amountOf(input.discount);
+    if (amount === null || amount * MINOR_UNITS_PER_MAJOR > baseMinor) discountError = BILLING_OWN_COPY.flatError(baseMinor);
+    else finalMinor = baseMinor - amount * MINOR_UNITS_PER_MAJOR;
+  }
+
+  const monthlyTotalMinor = finalMinor * leaders;
+  return {
+    leaders,
+    tier,
+    period: input.period,
+    months,
+    standardMinor: tier.standardMinor,
+    offerMinor: tier.sixMonthMinor,
+    baseMinor,
+    annualDiscountMinor: input.period === 'annual' ? tier.sixMonthMinor - tier.annualMinor : 0,
+    manualDiscountMinor: baseMinor - finalMinor,
+    finalMinor,
+    monthlyTotalMinor,
+    periodTotalMinor: monthlyTotalMinor * months,
+    discountError,
+  };
+}
+
+/** The *Rp/leader* field as it is typed: digits only, in the product's grouping, `25.000` (F-03). */
+export function maskAmount(text: string): string {
+  const digits = text.replace(/\D/g, '');
+  return digits === '' ? '' : groupDigits(Number(digits));
+}
+
+/** A money figure as the page prints it, `Rp 400.000` (`fmt`, `:430`, in the one formatter). */
+export const money = (minor: number) => formatRupiah(minor);
+
+/** A per-leader discount as the page prints it, `-Rp 20.000/leader/mo` (`:525`, `:675`). */
+export const perLeaderDiscount = (minor: number) => `-${formatRupiah(minor)}/leader/mo`;
+
+/*
+ * ── The dialog's dates (ADR-0111 §5; invariant §9) ───────────────────────────────────────────────
+ *
+ * Calendar days are `YYYY-MM-DD` strings worked on as three numbers in UTC, so the browser's zone moves
+ * nothing; *today* is the office's, `Asia/Jakarta` (ADR-0016), never the browser's.
+ */
+
+/** How far ahead the default start date is (`addDays(new Date(), 7)`, `:602`). */
+export const START_DAYS_AHEAD = 7;
+
+/** The office's today, `YYYY-MM-DD`. */
+export const officeToday = (now: Date = new Date()) => dayInZone(OFFICE_TIME_ZONE, now);
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const isoOf = (at: Date) =>
+  `${String(at.getUTCFullYear()).padStart(4, '0')}-${pad(at.getUTCMonth() + 1)}-${pad(at.getUTCDate())}`;
+/** Midnight UTC of a calendar day. `setUTCFullYear`, because `Date.UTC` reads years 0–99 as 1900s. */
+const utcOf = (day: string) => {
+  const [y, m, d] = day.split('-').map(Number);
+  const at = new Date(0);
+  at.setUTCFullYear(y, m - 1, d);
+  return at;
+};
+/** The days in a month, `month` 1 to 12: day 0 of the next month is this one's last. */
+const daysIn = (year: number, month: number) => {
+  const at = new Date(0);
+  at.setUTCFullYear(year, month, 0);
+  return at.getUTCDate();
+};
+
+/** A calendar day `n` days on (or back). */
+export function addDays(day: string, n: number): string {
+  const at = utcOf(day);
+  at.setUTCDate(at.getUTCDate() + n);
+  return isoOf(at);
+}
+
+/**
+ * A calendar day `n` months on, **the day clamped to the shorter month**: 31 August and six months is
+ * 28 February, as the activation's six months are (OD-120).
+ */
+export function addMonths(day: string, n: number): string {
+  const [y, m, d] = day.split('-').map(Number);
+  const index = y * 12 + (m - 1) + n;
+  const year = Math.floor(index / 12);
+  const month = (index % 12) + 1;
+  return `${String(year).padStart(4, '0')}-${pad(month)}-${pad(Math.min(d, daysIn(year, month)))}`;
+}
+
+/**
+ * The plan's end: the start + the chosen period − 1 day (a Fix: the prototype always added a year,
+ * `oneYearEnd`, `:579`). 8 October and six months ends on 7 April.
+ */
+export const planEnd = (start: string, period: BillingPeriod) =>
+  addDays(addMonths(start, period === 'annual' ? 12 : 6), -1);
+
+/** `YYYY-MM-DD` as the dialog and the quote write it, `DD/MM/YYYY` (`formatDMY`, `:580`). */
+export function toDmy(day: string): string {
+  const [y, m, d] = day.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+/**
+ * `DD/MM/YYYY` as a calendar day, or `null` when it is not one — **an impossible date included**, where
+ * the prototype let `31/02/2027` through as 3 March (`parseDMY`, `:581-586`).
+ */
+export function parseDmy(text: string): string | null {
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text.trim());
+  if (!match) return null;
+  const [d, m, y] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  if (m < 1 || m > 12 || d < 1 || d > daysIn(y, m)) return null;
+  return `${match[3]}-${match[2]}-${match[1]}`;
+}
+
+/** The date field as it is typed: digits only, the slashes inserted (`formatDateInput`, `:589-595`). */
+export function maskDate(text: string): string {
+  const digits = text.replace(/\D/g, '').slice(0, 8);
+  if (digits.length > 4) return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+  if (digits.length > 2) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return digits;
+}
+
+/** The dialog's five values, as typed. */
+export interface QuoteDetails {
+  kpm: string;
+  pic: string;
+  sales: string;
+  start: string;
+  end: string;
+}
+
+export type QuoteErrors = Partial<Record<keyof QuoteDetails, string>>;
+
+/**
+ * *Generate quote*'s checks (`generateQuote`, `:625-650`, and the Fixes): the three names non-empty once
+ * trimmed, each date a real `DD/MM/YYYY` day, and the end on or after the start — each refusal a sentence.
+ */
+export function validateQuote(details: QuoteDetails): QuoteErrors {
+  const errors: QuoteErrors = {};
+  if (details.kpm.trim() === '') errors.kpm = BILLING_COPY.kpmError;
+  if (details.pic.trim() === '') errors.pic = BILLING_COPY.picError;
+  if (details.sales.trim() === '') errors.sales = BILLING_COPY.salesError;
+  const start = parseDmy(details.start);
+  const end = parseDmy(details.end);
+  if (!start) errors.start = BILLING_OWN_COPY.startError;
+  if (!end) errors.end = BILLING_OWN_COPY.endError;
+  else if (start && end < start) errors.end = BILLING_OWN_COPY.endBeforeStart;
+  return errors;
+}
+
+/** The dialog's two dates as it opens: the office's today + 7 days, and the plan's end from there. */
+export function defaultDates(period: BillingPeriod, now: Date = new Date()): { start: string; end: string } {
+  const start = addDays(officeToday(now), START_DAYS_AHEAD);
+  return { start: toDmy(start), end: toDmy(planEnd(start, period)) };
+}

@@ -1,10 +1,18 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { stubFetch } from '../../test/harness';
-import { getAccessToken, setAccessToken, setImpersonating } from '@/lib/api-client';
+import { stubFetch } from '@test/harness';
+import { useEffect, useState } from 'react';
+import { api, getAccessToken, isImpersonating, setAccessToken, setImpersonating } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
+import { RequireSession } from './require-session';
 import { SessionProvider } from './session-provider';
+
+const replace = vi.hoisted(() => vi.fn());
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace, push: vi.fn() }),
+  usePathname: () => '/kpm/analytics/compliance',
+}));
 
 function Probe() {
   const { me, loading, signIn, signOut } = useSession();
@@ -86,6 +94,240 @@ describe('SessionProvider', () => {
 
     await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('anonymous'));
     expect(getAccessToken()).toBeNull();
+  });
+
+  /*
+   * **An office its member cannot use** (P13.2-T3 AC-9, ADR-0112 §4): a 403 with one of three codes, on
+   * `/auth/me` or on any request after it, replaces the whole app with a page naming the office and what
+   * happened. It used to be swallowed, and the reader was sent back to sign in.
+   */
+  describe('an office the reader cannot use (P13.2-T3 AC-9)', () => {
+    const OFFICE = { kpmCode: '0601', branch: 'Cikarang Branch' };
+    const REFUSALS = [
+      {
+        code: 'TENANT_SUBSCRIPTION_ENDED',
+        message: 'This office’s subscription ended on 2026-09-25.',
+        details: { endDate: '2026-09-25', ...OFFICE },
+        heading: 'Your office’s subscription has ended',
+        says: /ended on September 25, 2026.*Contact AgencyBoost/,
+      },
+      {
+        code: 'TENANT_SUSPENDED',
+        message: 'This office is suspended, so nobody in it can use AgencyBoost until it is reactivated.',
+        details: OFFICE,
+        heading: 'Your office is suspended',
+        says: /until it is reactivated/,
+      },
+      {
+        code: 'TENANT_ARCHIVED',
+        message: 'This office is archived. Its records are kept, and nobody in it can use AgencyBoost.',
+        details: OFFICE,
+        heading: 'Your office is archived',
+        says: /Its records are kept/,
+      },
+    ];
+
+    /** A screen that reads something once it has a session — the "later request". */
+    function Screen() {
+      const { me } = useSession();
+      const [read, setRead] = useState('');
+      useEffect(() => {
+        if (me) void api<{ ok: boolean }>('/kpm/config').then(() => setRead('read')).catch(() => setRead('refused'));
+      }, [me]);
+      return <p data-testid="screen">{me ? `signed in ${read}` : 'anonymous'}</p>;
+    }
+
+    it.each(REFUSALS)('$code on /auth/me replaces the app, naming the office, with Sign out and no navigation', async (refusal) => {
+      stubFetch({
+        '/auth/refresh': { body: { accessToken: 'fresh' } },
+        '/auth/me': { status: 403, body: { error: { ...refusal, requestId: 'r-1' } } },
+      });
+      render(<SessionProvider><Screen /></SessionProvider>);
+
+      const heading = await screen.findByRole('heading', { level: 1, name: refusal.heading });
+      await waitFor(() => expect(heading).toHaveFocus());
+      expect(screen.getByText('KPM 0601 · Cikarang Branch')).toBeInTheDocument();
+      expect(screen.getByRole('main')).toHaveTextContent(refusal.says);
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+      expect(screen.queryAllByRole('link')).toHaveLength(0);
+      expect(screen.queryByTestId('screen')).not.toBeInTheDocument();
+      // No code reaches the words.
+      expect(screen.getByRole('main')).not.toHaveTextContent(refusal.code);
+    });
+
+    it.each(REFUSALS)('$code on a later request replaces the app the same way', async (refusal) => {
+      stubFetch({
+        '/auth/refresh': { body: { accessToken: 'fresh' } },
+        '/auth/me': { body: ME },
+        '/kpm/config': { status: 403, body: { error: { ...refusal, requestId: 'r-2' } } },
+      });
+      render(<SessionProvider><Screen /></SessionProvider>);
+
+      expect(await screen.findByRole('heading', { level: 1, name: refusal.heading })).toBeInTheDocument();
+      expect(screen.queryByTestId('screen')).not.toBeInTheDocument();
+    });
+
+    it('Sign out ends the session and gives the app back, signed out', async () => {
+      const { calls } = stubFetch({
+        '/auth/refresh': { body: { accessToken: 'fresh' } },
+        '/auth/me': { status: 403, body: { error: { ...REFUSALS[0], requestId: 'r-3' } } },
+        '/auth/logout': { status: 204, body: undefined },
+      });
+      render(<SessionProvider><Screen /></SessionProvider>);
+      await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+      await waitFor(() => expect(screen.getByTestId('screen')).toHaveTextContent('anonymous'));
+      expect(calls.some((c) => c.url.includes('/auth/logout'))).toBe(true);
+      expect(getAccessToken()).toBeNull();
+    });
+
+    /*
+     * **Never the Super Admin's console, and a support session ends from the page** (P13.2 exit review).
+     * The page is a member's. A Super Admin outside a session is nobody's member, so one of the three
+     * codes on their request is that screen's error. Inside a session the page appears with *End support
+     * session*, which ends the session, resets the impersonation and gives the Super Admin back — where
+     * *Sign out* revoked the Super Admin's own sign-in and left the session running.
+     */
+    const ROOT = {
+      ...ME,
+      user: { id: 'u-root', email: 'root@agencyboost.test', fullName: 'Root', initials: 'R', platformRole: 'super_admin' },
+    };
+
+    it.each(REFUSALS)('$code on a Super Admin’s own request is that screen’s error: the console stays', async (refusal) => {
+      stubFetch({
+        '/auth/refresh': { body: { accessToken: 'fresh' } },
+        '/auth/me': { body: ROOT },
+        '/kpm/config': { status: 403, body: { error: { ...refusal, requestId: 'r-5' } } },
+      });
+      render(<SessionProvider><Screen /></SessionProvider>);
+      await waitFor(() => expect(screen.getByTestId('screen')).toHaveTextContent('signed in refused'));
+      expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    });
+
+    it('inside a support session the page offers End support session, which ends it and restores the Super Admin', async () => {
+      setImpersonating(true);
+      const { calls } = stubFetch({
+        '/auth/refresh': { body: { accessToken: 'root-token' } },
+        '/auth/me': [
+          { status: 403, body: { error: { ...REFUSALS[1], requestId: 'r-6' } } },
+          { body: ROOT },
+        ],
+        '/admin/impersonate/end': { body: { status: 'ended' } },
+      });
+      render(<SessionProvider><Screen /></SessionProvider>);
+
+      expect(await screen.findByRole('heading', { level: 1, name: 'This office is suspended' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'End support session' }));
+
+      await waitFor(() => expect(screen.getByTestId('screen')).toHaveTextContent('signed in'));
+      expect(calls.some((c) => c.url.includes('/admin/impersonate/end') && c.init.method === 'POST')).toBe(true);
+      // Never the Super Admin's own sign-out.
+      expect(calls.some((c) => c.url.includes('/auth/logout'))).toBe(false);
+      expect(isImpersonating()).toBe(false);
+      expect(getAccessToken()).toBe('root-token');
+    });
+
+    it('a support session the end call cannot reach is still left: the Super Admin is given back', async () => {
+      setImpersonating(true);
+      stubFetch({
+        '/auth/refresh': { body: { accessToken: 'root-token' } },
+        '/auth/me': [
+          { status: 403, body: { error: { ...REFUSALS[2], requestId: 'r-7' } } },
+          { body: ROOT },
+        ],
+        '/admin/impersonate/end': { status: 500, body: {} },
+      });
+      render(<SessionProvider><Screen /></SessionProvider>);
+      await userEvent.click(await screen.findByRole('button', { name: 'End support session' }));
+      await waitFor(() => expect(screen.getByTestId('screen')).toHaveTextContent('signed in'));
+      expect(isImpersonating()).toBe(false);
+    });
+
+    it('any other 403 is the screen’s own business: the app stays', async () => {
+      stubFetch({
+        '/auth/refresh': { body: { accessToken: 'fresh' } },
+        '/auth/me': { body: ME },
+        '/kpm/config': { status: 403, body: { error: { code: 'PERM_DENIED', message: 'No.', requestId: 'r-4' } } },
+      });
+      render(<SessionProvider><Screen /></SessionProvider>);
+      await waitFor(() => expect(screen.getByTestId('screen')).toHaveTextContent('signed in refused'));
+      expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    });
+  });
+
+  /*
+   * **A deliberate sign-out** (the product owner's report, 2026-10-11): `signedOut` is what tells a page's guard
+   * not to carry the page to the next person who signs in. Only `signOut` sets it; signing in clears it.
+   */
+  describe('a deliberate sign-out (2026-10-11)', () => {
+    function Flag() {
+      const { me, loading, signedOut, signIn, signOut } = useSession();
+      const [who, setWho] = useState('');
+      return (
+        <div>
+          <p data-testid="flag">{loading ? 'loading' : `${me ? 'in' : 'out'}, ${signedOut ? 'signed out' : 'not signed out'}`}</p>
+          <p data-testid="who">{who}</p>
+          <button onClick={() => void signIn('rina@kpm0417.test', 'pw').then((m) => setWho(m?.user.email ?? 'nobody'))}>
+            sign in
+          </button>
+          <button onClick={() => void signOut()}>sign out</button>
+        </div>
+      );
+    }
+
+    afterEach(() => window.history.pushState({}, '', '/'));
+
+    it('is marked by Sign out, and cleared by signing in again, which resolves to who signed in', async () => {
+      stubFetch({
+        '/auth/refresh': { body: { accessToken: 'fresh' } },
+        '/auth/me': { body: ME },
+        '/auth/logout': { status: 204, body: undefined },
+        '/auth/login': { body: { accessToken: 'tok' } },
+      });
+      render(<SessionProvider><Flag /></SessionProvider>);
+      await waitFor(() => expect(screen.getByTestId('flag')).toHaveTextContent('in, not signed out'));
+
+      await userEvent.click(screen.getByRole('button', { name: 'sign out' }));
+      await waitFor(() => expect(screen.getByTestId('flag')).toHaveTextContent('out, signed out'));
+
+      await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+      await waitFor(() => expect(screen.getByTestId('flag')).toHaveTextContent('in, not signed out'));
+      expect(screen.getByTestId('who')).toHaveTextContent('rina@kpm0417.test');
+    });
+
+    it('is not marked by a session that was never there or could not be read: those still carry the page', async () => {
+      stubFetch({
+        '/auth/refresh': { status: 401, body: {} },
+        '/auth/login': { body: { accessToken: 'tok' } },
+        '/auth/me': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'No.', requestId: 'r' } } },
+      });
+      render(<SessionProvider><Flag /></SessionProvider>);
+      await waitFor(() => expect(screen.getByTestId('flag')).toHaveTextContent('out, not signed out'));
+
+      // Signed in, but the session could not be read: `signIn` resolves to nobody, and nobody signed out.
+      await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+      await waitFor(() => expect(screen.getByTestId('who')).toHaveTextContent('nobody'));
+      expect(screen.getByTestId('flag')).toHaveTextContent('out, not signed out');
+    });
+
+    it('Sign out on the page for an office that cannot be used sends the page’s guard to plain /login', async () => {
+      window.history.pushState({}, '', '/kpm/analytics/compliance');
+      stubFetch({
+        '/auth/refresh': { body: { accessToken: 'fresh' } },
+        '/auth/me': {
+          status: 403,
+          body: { error: { code: 'TENANT_SUSPENDED', message: 'This office is suspended.', requestId: 'r-8' } },
+        },
+        '/auth/logout': { status: 204, body: undefined },
+      });
+      replace.mockClear();
+      render(<SessionProvider><RequireSession permission="kpm_analytics:read">secret</RequireSession></SessionProvider>);
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+      await waitFor(() => expect(replace).toHaveBeenCalled());
+      expect(replace.mock.calls).toEqual([['/login']]);
+    });
   });
 
   it('refuses to render a consumer outside the provider', () => {

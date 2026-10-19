@@ -1,7 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
-import { AppShell, type NavSection } from './app-shell';
+import { renderToString } from 'react-dom/server';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { axe } from 'vitest-axe';
+import { PHONE_QUERY } from '@/lib/use-phone';
+import { AppShell, PageHeader, type NavSection } from './app-shell';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -12,16 +15,22 @@ const SECTIONS: readonly NavSection[] = [
   {
     label: 'Personal tools',
     items: [
-      { label: 'Activity management', href: '/activity', active: true },
-      { label: 'Leads management', href: '/leads' },
+      { label: 'Activity management', href: '/activity', icon: 'activity', active: true },
+      { label: 'Leads management', href: '/leads', icon: 'funnel' },
     ],
   },
-  { label: 'Reporting', items: [{ label: 'Advanced analytics', href: '#', upcoming: true }] },
+  {
+    label: 'Reporting',
+    items: [{ label: 'Advanced analytics', href: '#', icon: 'chartUp', upcoming: true }],
+  },
 ];
 
 const USER = { name: 'Rina Wijaya', role: 'Agent · KPM 0417', initials: 'RW' };
 
 function renderShell() {
+  // The rail preference is remembered in `localStorage`, which jsdom shares across the file
+  // — so a test that collapses it would hand the next one an already-collapsed sidebar.
+  window.localStorage.clear();
   return render(
     <AppShell sections={SECTIONS} user={USER} title="Log Activity" subtitle="Enter today's activities in 1 minute.">
       <p>content</p>
@@ -47,8 +56,9 @@ describe('AppShell', () => {
     );
   });
 
-  it('keeps an upcoming item visible but not navigable, so the roadmap is not a surprise', () => {
+  it('keeps an upcoming item visible but not navigable, so the roadmap is not a surprise', async () => {
     renderShell();
+    // Every group starts open (P10.1-T3), so `Reporting`'s item is there without a click.
     const upcoming = screen.getByText('Advanced analytics').closest('a');
     expect(upcoming).toHaveAttribute('aria-disabled', 'true');
     expect(upcoming).not.toHaveAttribute('href');
@@ -101,5 +111,549 @@ describe('AppShell', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
       expect(onSignOut).toHaveBeenCalled();
     });
+  });
+
+  describe('every group opens on its own, and all start open (P10.1-T3, client item 3)', () => {
+    /*
+     * The client asked on 2026-09-24 for one group open at a time, and on 2026-09-29 for the
+     * opposite; the later request wins (ADR-0062). The toggles stay — they were the first
+     * request's too — and only the rule that opening one closes the rest goes.
+     */
+    const header = (name: RegExp) => screen.getByRole('button', { name });
+
+    it('starts with every group open (AC-1)', () => {
+      renderShell();
+
+      expect(screen.getByRole('link', { name: 'Activity management' })).toBeInTheDocument();
+      expect(screen.getByText('Advanced analytics')).toBeInTheDocument();
+      expect(header(/Personal tools/)).toHaveAttribute('aria-expanded', 'true');
+      expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('starts open on the server too, so the first client render has nothing to reconcile (AC-1)', () => {
+      const html = renderToString(
+        <AppShell sections={SECTIONS} user={USER}>
+          <p>content</p>
+        </AppShell>,
+      );
+
+      expect(html.match(/aria-expanded="true" aria-controls="nav-group-/g)).toHaveLength(2);
+      expect(html).not.toMatch(/aria-expanded="false" aria-controls="nav-group-/);
+    });
+
+    it('toggles only its own group — two can be closed, and closing one opens nothing (AC-2)', async () => {
+      renderShell();
+
+      await userEvent.click(header(/Reporting/));
+      expect(screen.queryByText('Advanced analytics')).toBeNull();
+      expect(screen.getByRole('link', { name: 'Activity management' })).toBeInTheDocument();
+
+      await userEvent.click(header(/Personal tools/));
+      expect(screen.queryByRole('link', { name: 'Activity management' })).toBeNull();
+      expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'false');
+
+      // Reopening one leaves the other as it was.
+      await userEvent.click(header(/Reporting/));
+      expect(screen.getByText('Advanced analytics')).toBeInTheDocument();
+      expect(header(/Personal tools/)).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('keeps each toggle wired to its own list (AC-2)', () => {
+      renderShell();
+
+      for (const name of [/Personal tools/, /Reporting/]) {
+        const list = document.getElementById(header(name).getAttribute('aria-controls')!);
+        expect(list?.tagName).toBe('UL');
+      }
+    });
+
+    it('reopens a closed group when the page moves into it, and leaves the others alone (AC-3)', async () => {
+      const { rerender } = renderShell();
+      await userEvent.click(header(/Personal tools/));
+      await userEvent.click(header(/Reporting/));
+
+      // The reader follows a link into Reporting: the layout re-renders with it active.
+      const inReporting: readonly NavSection[] = [
+        { ...SECTIONS[0], items: SECTIONS[0].items.map((i) => ({ ...i, active: false })) },
+        { ...SECTIONS[1], items: [{ label: 'Advanced analytics', href: '/analytics', icon: 'chartUp', active: true }] },
+      ];
+      rerender(
+        <AppShell sections={inReporting} user={USER}>
+          <p>content</p>
+        </AppShell>,
+      );
+
+      expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'true');
+      expect(header(/Personal tools/)).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('does not remember a closed group across a reload (AC-4)', async () => {
+      const { unmount } = renderShell();
+      await userEvent.click(header(/Reporting/));
+      // Nothing about groups is stored: the rail is the one remembered preference.
+      expect(Object.keys(window.localStorage)).toEqual([]);
+      unmount();
+
+      render(
+        <AppShell sections={SECTIONS} user={USER}>
+          <p>content</p>
+        </AppShell>,
+      );
+      expect(header(/Reporting/)).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('closes a group that was open, so the nav can be put away entirely', async () => {
+      renderShell();
+      await userEvent.click(screen.getByRole('button', { name: /Personal tools/ }));
+
+      expect(screen.queryByRole('link', { name: 'Activity management' })).toBeNull();
+      expect(screen.getByRole('button', { name: /Personal tools/ }))
+        .toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('collapses to icons, and every one of them keeps its name', async () => {
+      // The glyph is aria-hidden, so without the label as the accessible name the rail is a
+      // column of links called nothing.
+      renderShell();
+      await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
+
+      expect(screen.getByRole('link', { name: 'Activity management' })).toBeInTheDocument();
+      // The words themselves are gone; the name is not.
+      expect(screen.queryByText('Activity management')).toBeNull();
+    });
+
+    it('flattens the groups in the rail, so nothing is behind a heading that is not there', async () => {
+      renderShell();
+      // Closed at full width first — every group starts open now (P10.1-T3), so the test makes
+      // the case it is about.
+      await userEvent.click(screen.getByRole('button', { name: /Reporting/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
+
+      // `Reporting` was closed at full width; collapsed, its item is reachable.
+      expect(screen.getByRole('link', { name: 'Activity management' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Reporting/ })).toBeNull();
+      // An upcoming item has no href and so no link role; its name reaches a pointer as the
+      // title and assistive technology as the label, and it says it is not ready yet.
+      expect(screen.getByTitle('Advanced analytics — Upcoming')).toBeInTheDocument();
+    });
+
+    it('P13-T7 AC-5 an item with the amber check keeps saying so in the rail', async () => {
+      window.localStorage.clear();
+      render(
+        <AppShell
+          sections={[{ label: 'New agent', items: [{ label: 'Your 90-day activation', href: '/activation', icon: 'clipboard', done: true }] }]}
+          user={USER}
+          title="x"
+        >
+          <p>content</p>
+        </AppShell>,
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
+      const item = screen.getByRole('link', { name: 'Your 90-day activation — complete' });
+      expect(item).toHaveAttribute('title', 'Your 90-day activation — complete');
+      // Only the glyph is drawn collapsed: the check has nowhere to sit.
+      expect(item.querySelector('[data-mark="done"]')).toBeNull();
+    });
+
+    it('offers the way back, and remembers the choice', async () => {
+      renderShell();
+      await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
+
+      expect(screen.getByRole('button', { name: 'Expand the sidebar' })).toBeInTheDocument();
+      expect(window.localStorage.getItem('ab.sidebar.rail')).toBe('1');
+    });
+  });
+
+  describe('the rail actually narrows the sidebar (client feedback, 2026-09-24)', () => {
+    /*
+     * Collapsing it made the sidebar cover the page. `w-sidebar-rail` needed a new key in
+     * `tailwind.config.ts`, which Tailwind's JIT does not pick up without a dev-server
+     * restart — so the class did not exist, the `w-full` underneath it won, and the one
+     * control that decides whether anything else is visible silently did nothing.
+     *
+     * Asserted on the class rather than on a computed width, because jsdom applies no
+     * stylesheet: what can be checked here is that the element asks for the right width, in
+     * a form that cannot fail to be generated.
+     */
+    const aside = () => document.querySelector('aside')!;
+
+    it('asks for a width that needs no theme key, and drops w-sidebar', async () => {
+      renderShell();
+      expect(aside().className).toContain('md:w-sidebar');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
+
+      expect(aside().className).toContain('md:w-[var(--sidebar-rail-width)]');
+      expect(aside().className).not.toContain('md:w-sidebar ');
+    });
+
+    it('keeps the toggle beside the brand mark, not above the nav', async () => {
+      // A window control belongs on the frame. Its own row under the brand read as the first
+      // item in the menu.
+      renderShell();
+      const toggle = screen.getByRole('button', { name: 'Collapse the sidebar' });
+      const brand = document.querySelector('svg[viewBox="0 0 26 26"]')!;
+
+      expect(toggle.parentElement).toBe(brand.parentElement);
+      expect(toggle.compareDocumentPosition(document.querySelector('nav')!))
+        // 4 = DOCUMENT_POSITION_FOLLOWING: the nav comes after the control.
+        .toBe(4);
+    });
+  });
+
+  describe('the bell stays put (client feedback, 2026-09-24)', () => {
+    /*
+     * The chip sized itself to its contents, so a short name pulled the bell left and a long
+     * one pushed it right. A control that moves with somebody's name is one nobody learns the
+     * position of.
+     */
+    const footerOf = (name: string) => {
+      window.localStorage.clear();
+      const { container, unmount } = render(
+        <AppShell
+          sections={SECTIONS}
+          user={{ name, role: 'Agent · KPM 0417', initials: 'RW' }}
+          account={{ href: '/profile', onSignOut: () => {} }}
+          notifications={{ href: '/notifications', unread: 0 }}
+        >
+          <p>content</p>
+        </AppShell>,
+      );
+      // The bell is a button since P12.1-T2, in a box that also holds the popover it opens.
+      const bell = container.querySelector('button[aria-label="Notifications"]')!;
+      const box = bell.parentElement!;
+      const row = box.parentElement!;
+      const chip = row.firstElementChild!;
+      return { row, chip, bell, box, unmount };
+    };
+
+    it.each([['a short name', 'Al'], ['a long one', 'Bambang Wijayakusuma Hartono']])(
+      'gives the chip the space, so the bell is last in the row for %s',
+      (_label, name) => {
+        const { row, chip, bell, box, unmount } = footerOf(name);
+
+        // The chip absorbs the width; the bell is the final child, pinned to the end.
+        expect(chip.className).toContain('flex-1');
+        expect(row.lastElementChild).toBe(box);
+        expect(box.className).not.toContain('flex-1');
+        expect(bell.className).not.toContain('flex-1');
+        unmount();
+      },
+    );
+  });
+
+  describe('the foot of the sidebar, collapsed (client feedback, 2026-09-24)', () => {
+    // `renderShell` wires neither an account nor a bell; the foot needs both.
+    const collapse = async () => {
+      window.localStorage.clear();
+      render(
+        <AppShell
+          sections={SECTIONS}
+          user={USER}
+          account={{ href: '/profile', onSignOut: () => {} }}
+          notifications={{ href: '/notifications', unread: 0 }}
+        >
+          <p>content</p>
+        </AppShell>,
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
+      const bell = document.querySelector('button[aria-label^="Notifications"]')!;
+      return { column: bell.parentElement!.parentElement!, box: bell.parentElement!, bell };
+    };
+
+    it('shows the avatar alone — the name and the role go, they do not shrink', async () => {
+      // Truncated to a few characters they say nothing and take the width the avatar needs.
+      const { column } = await collapse();
+
+      expect(within(column as HTMLElement).queryByText('Rina Wijaya')).toBeNull();
+      expect(within(column as HTMLElement).queryByText('Agent · KPM 0417')).toBeNull();
+      expect(within(column as HTMLElement).getByText('RW')).toBeInTheDocument();
+    });
+
+    it('keeps the name reachable, in the trigger’s own name', async () => {
+      // What is announced should not change with the width.
+      const { column } = await collapse();
+
+      expect(within(column as HTMLElement)
+        .getByRole('button', { name: 'Rina Wijaya — Agent · KPM 0417' })).toBeInTheDocument();
+    });
+
+    it('puts the bell above the avatar, in the DOM as well as on screen', async () => {
+      // `flex-col-reverse` would leave a keyboard reaching the chip first while the eye reads
+      // the bell first — a mismatch only the people who cannot see it would meet.
+      const { column, box } = await collapse();
+
+      expect(column.firstElementChild).toBe(box);
+    });
+
+    it('gives the account menu its own width, so it is not a column of one word', async () => {
+      await collapse();
+      await userEvent.click(screen.getByRole('button', { name: 'Rina Wijaya — Agent · KPM 0417' }));
+
+      const panel = document.getElementById('sidebar-user-actions')!;
+      expect(panel.className).toContain('w-48');
+      expect(within(panel).getByRole('link', { name: 'Your account' })).toBeInTheDocument();
+    });
+  });
+});
+
+/**
+ * A screen of a given width, as far as the shell can ask: `matchMedia`, which jsdom does not have.
+ * `resize` moves the width afterwards and tells whoever is listening, as a phone turned on its side does.
+ */
+function atWidth(px: number) {
+  let width = px;
+  const listeners = new Set<() => void>();
+  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    media: query,
+    get matches() { return query === PHONE_QUERY && width < 768; },
+    addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+    removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+  })));
+  return {
+    resize(next: number) {
+      width = next;
+      act(() => listeners.forEach((fn) => fn()));
+    },
+  };
+}
+
+describe('below 768px, the account chip is the way round (ADR-0085, P11-T6 AC-11)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function renderPhoneShell(px = 360) {
+    window.localStorage.clear();
+    const onSignOut = vi.fn();
+    const width = atWidth(px);
+    const result = render(
+      <>
+        <p data-testid="outside">elsewhere</p>
+        <AppShell
+          sections={SECTIONS}
+          user={{ ...USER, email: 'rina@kpm0417.test' }}
+          account={{ href: '/profile', onSignOut }}
+          title="Log Activity"
+        >
+          <p>content</p>
+        </AppShell>
+      </>,
+    );
+    return { ...result, onSignOut, width };
+  }
+  const chip = () => screen.getByRole('button', { name: /Rina Wijaya/ });
+  const panel = () => document.getElementById('sidebar-user-actions');
+
+  it('P11-T6 AC-11 offers no nav on the bar until the chip opens it', () => {
+    renderPhoneShell();
+    // The prototype's phone: the nav hidden, and nothing drawn in its place (`Overall.html:1421-1428`).
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+    expect(chip()).toHaveAttribute('aria-expanded', 'false');
+    // The rail is a desktop control, and there is no sidebar here to collapse.
+    expect(screen.queryByRole('button', { name: /the sidebar/ })).not.toBeInTheDocument();
+  });
+
+  it('P11-T6 AC-11 opens the nav groups, in their order and names, then Your account and Sign out, below the bar', async () => {
+    renderPhoneShell();
+    await userEvent.click(chip());
+
+    const open = panel()!;
+    expect(chip()).toHaveAttribute('aria-expanded', 'true');
+    // Below the bar, across it, and scrolling inside itself.
+    expect(open.className).toContain('top-full');
+    expect(open.className).toContain('inset-x-0');
+    expect(open.className).not.toContain('bottom-full');
+
+    const nav = within(open).getByRole('navigation', { name: 'Main' });
+    const groups = within(nav).getAllByRole('button').map((b) => b.textContent);
+    expect(groups).toEqual(['Personal tools', 'Reporting']);
+    expect(within(nav).getByRole('link', { name: 'Leads management' })).toHaveAttribute('href', '/leads');
+    // An upcoming item keeps its pill and stays inert, as in the sidebar.
+    expect(within(nav).getByText('Advanced analytics').closest('a')).toHaveAttribute('aria-disabled');
+
+    // The account's two, after the nav.
+    const account = within(open).getByRole('link', { name: 'Your account' });
+    const signOut = within(open).getByRole('button', { name: 'Sign out' });
+    expect(nav.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(account.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(open).getByText('rina@kpm0417.test')).toBeInTheDocument();
+  });
+
+  it('P11-T6 AC-11 moves focus into the panel, and holds it there', async () => {
+    renderPhoneShell();
+    await userEvent.click(chip());
+
+    const first = screen.getByRole('button', { name: /Personal tools/ });
+    const last = screen.getByRole('button', { name: 'Sign out' });
+    expect(first).toHaveFocus();
+
+    // Shift+Tab from the first goes round to the last, and Tab from the last back to the first.
+    await userEvent.tab({ shift: true });
+    expect(last).toHaveFocus();
+    await userEvent.tab();
+    expect(first).toHaveFocus();
+    // In between, Tab walks the panel in order: a group, its live links, the next group.
+    await userEvent.tab();
+    expect(screen.getByRole('link', { name: 'Activity management' })).toHaveFocus();
+  });
+
+  it('P11-T6 AC-11 closes on Escape, and puts focus back on the chip', async () => {
+    renderPhoneShell();
+    await userEvent.click(chip());
+    await userEvent.keyboard('{Escape}');
+
+    expect(panel()).toBeNull();
+    expect(chip()).toHaveAttribute('aria-expanded', 'false');
+    expect(chip()).toHaveFocus();
+  });
+
+  it('P11-T6 AC-11 closes on a click outside it', async () => {
+    renderPhoneShell();
+    await userEvent.click(chip());
+    await userEvent.click(screen.getByTestId('outside'));
+    expect(panel()).toBeNull();
+  });
+
+  it('P11-T6 AC-11 lets a group close inside it without closing the panel', async () => {
+    renderPhoneShell();
+    await userEvent.click(chip());
+    await userEvent.click(screen.getByRole('button', { name: /Personal tools/ }));
+    expect(panel()).not.toBeNull();
+    expect(screen.queryByRole('link', { name: 'Leads management' })).not.toBeInTheDocument();
+  });
+
+  it('P11-T6 AC-11 offers Sign out, and it signs out', async () => {
+    const { onSignOut } = renderPhoneShell();
+    await userEvent.click(chip());
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(onSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('P11-T6 AC-11 follows a link and closes, so it is not left open over the next screen', async () => {
+    // jsdom cannot navigate, and the navigation is next/link's: the href is where it goes, and the
+    // click is what closes the panel.
+    const swallow = (event: Event) => event.preventDefault();
+    document.addEventListener('click', swallow);
+    try {
+      renderPhoneShell();
+      await userEvent.click(chip());
+      const leads = screen.getByRole('link', { name: 'Leads management' });
+      expect(leads).toHaveAttribute('href', '/leads');
+      await userEvent.click(leads);
+      expect(panel()).toBeNull();
+
+      await userEvent.click(chip());
+      await userEvent.click(screen.getByRole('link', { name: 'Your account' }));
+      expect(panel()).toBeNull();
+    } finally {
+      document.removeEventListener('click', swallow);
+    }
+  });
+
+  it('P11-T6 AC-11 does not open at 768px: the sidebar holds the nav, and the chip opens its account panel upward', async () => {
+    renderPhoneShell(768);
+    const sidebarNav = screen.getByRole('navigation', { name: 'Main' });
+    expect(sidebarNav).toHaveAttribute('id', 'sidebar-nav');
+
+    await userEvent.click(chip());
+    const open = panel()!;
+    expect(within(open).queryByRole('navigation')).not.toBeInTheDocument();
+    expect(open.className).toContain('bottom-full');
+    expect(open.className).not.toContain('top-full');
+    // Focus stays on the chip, as the desktop disclosure always has: Tab reaches the two items.
+    expect(chip()).toHaveFocus();
+    expect(screen.getAllByRole('navigation', { name: 'Main' })).toHaveLength(1);
+  });
+
+  it('P11-T6 AC-11 moves the nav when the width crosses 768px', async () => {
+    const { width } = renderPhoneShell(1024);
+    expect(screen.getByRole('navigation', { name: 'Main' })).toHaveAttribute('id', 'sidebar-nav');
+
+    width.resize(360);
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+    await userEvent.click(chip());
+    expect(within(panel()!).getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+  });
+
+  it('P11-T6 AC-11 shows the whole chip on a phone, whatever rail a wider window remembered', () => {
+    window.localStorage.setItem('ab.sidebar.rail', '1');
+    atWidth(360);
+    render(
+      <AppShell sections={SECTIONS} user={USER} account={{ href: '/profile', onSignOut: vi.fn() }}>
+        <p>content</p>
+      </AppShell>,
+    );
+    expect(within(chip()).getByText('Rina Wijaya')).toBeInTheDocument();
+    window.localStorage.clear();
+  });
+
+  it('P11-T6 AC-11 has no axe violations while it is open', async () => {
+    const { container } = renderPhoneShell();
+    await userEvent.click(chip());
+    const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
+    expect(results.violations ?? []).toHaveLength(0);
+  });
+
+  /*
+   * At 360×800 the Super Admin's bar ran 23px past the screen and clipped the bell: *AgencyBoost
+   * SUPERADMIN* beside a chip that would not give way, because its row was `shrink-0` (the 2026-10-02
+   * walk, `superadmin-360-panel.png`). jsdom lays nothing out, so this pins the classes that let the
+   * row take what the brand leaves and the chip's name truncate inside it, below 768px only.
+   */
+  it('P11-T6 AC-11 fits the Super Admin’s bar at 360px: the chip gives way, the bell stays whole', () => {
+    atWidth(360);
+    window.localStorage.clear();
+    render(
+      <AppShell
+        sections={SECTIONS}
+        brandTag="SUPERADMIN"
+        user={{ name: 'Platform Operator', role: 'Superadmin', initials: 'PO' }}
+        account={{ href: '/profile', onSignOut: vi.fn() }}
+        notifications={{ href: '/notifications', unread: 3 }}
+      >
+        <p>content</p>
+      </AppShell>,
+    );
+    const bell = screen.getByRole('button', { name: 'Notifications, 3 unread' });
+    const box = bell.parentElement!;
+    const row = box.parentElement!;
+    // The row shrinks below its contents' width on the bar, and holds in the sidebar from 768px.
+    expect(row.classList).toContain('min-w-0');
+    expect(row.classList).toContain('shrink');
+    expect(row.classList).not.toContain('shrink-0');
+    expect(row.classList).toContain('md:shrink-0');
+    // The chip takes the space and truncates its words; the bell keeps its size.
+    const chipBox = row.firstElementChild!;
+    expect(chipBox.classList).toContain('min-w-0');
+    expect(chipBox.classList).toContain('flex-1');
+    expect(within(chipBox as HTMLElement).getByText('Platform Operator').className).toContain('truncate');
+    expect(within(chipBox as HTMLElement).getByText('Superadmin').className).toContain('truncate');
+    expect(bell.className).toContain('shrink-0');
+    expect(box.className).toContain('shrink-0');
+    expect(row.lastElementChild).toBe(box);
+  });
+});
+
+describe('PageHeader: the title holds its place (P10.1-T8, client item 1)', () => {
+  it('top-aligns the heading row, so an actions slot taller than the title cannot push it down', () => {
+    // `Overall.html:839`, the last of four `.topbar` rules and the one that renders, is
+    // `align-items:flex-start`. Bottom-aligned, Log's Date block set the line and its title sat
+    // ~25px below Dashboard's. jsdom lays nothing out, so the alignment class is what is checked.
+    render(
+      <PageHeader
+        title="Log Activity"
+        subtitle="Enter today's activities in 1 minute."
+        actions={(
+          <div className="flex h-32 flex-col gap-1.5">
+            <label>Date<input type="date" /></label>
+            <span>Not yet saved</span>
+          </div>
+        )}
+      />,
+    );
+    const row = screen.getByRole('heading', { name: 'Log Activity', level: 1 })
+      .parentElement!.parentElement!;
+    expect(row).toContainElement(screen.getByLabelText('Date'));
+    expect(row).toHaveClass('items-start');
+    expect(row).not.toHaveClass('items-end');
   });
 });

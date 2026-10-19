@@ -4,9 +4,12 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { Skeleton, SkeletonText } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { previewInvite, redeemInvite, type InvitePreview } from '@/lib/join';
 import { useSession } from '@/lib/session';
+import { landingFor } from '@/lib/landing';
+import { RoleShell } from '@/components/role-shell';
 
 /**
  * Opening a leader's invite link, or typing their code.
@@ -29,9 +32,9 @@ export default function JoinPage() {
 function Waiting() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5">
-      <p role="status" className="text-md text-muted">
-        Loading…
-      </p>
+      <Skeleton>
+        <SkeletonText lines={3} />
+      </Skeleton>
     </main>
   );
 }
@@ -89,11 +92,10 @@ function Join() {
   const alreadyIn = Boolean(me?.membership);
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
-      <h1 className="font-display text-3xl font-bold text-navy">Join an office</h1>
-      <p className="mb-6 mt-1 text-md text-muted">
-        With a leader&apos;s code, link or QR. All three are the same invite.
-      </p>
+    <RoleShell
+      title="Join an office"
+      subtitle="With a leader's code, link or QR. All three are the same invite."
+    >
 
       <Card>
         {error && <ErrorBanner {...error} />}
@@ -123,6 +125,12 @@ function Join() {
               Moving between offices is not something you do to yourself — ask whoever
               administers yours.
             </p>
+            {/* The way out. Somebody who opened a colleague's invite by mistake was told
+                this and then given nothing — no link, and until 2026-09-06 no sidebar
+                either, so the browser's back button was the only exit. */}
+            <ButtonLink href={landingFor(me)} variant="secondary" className="mt-3">
+              Back to your work
+            </ButtonLink>
           </div>
         )}
 
@@ -181,6 +189,6 @@ function Join() {
           </div>
         )}
       </Card>
-    </main>
+    </RoleShell>
   );
 }

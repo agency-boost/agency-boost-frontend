@@ -7,6 +7,8 @@ export interface KpmDirectoryEntry {
   kpmId: string;
   code: string;
   branchName: string;
+  /** Needed by somebody asking for an office that does not exist yet. */
+  companyId: string;
   companyName: string;
   city: string | null;
 }
@@ -47,19 +49,18 @@ export const requestLeader = (leaderMembershipId: string) =>
 export const cancelLeaderRequest = () =>
   api<JoinState>('/join/leader-request', { method: 'DELETE' });
 
-/** One invite, three presentations: the code, the link, and a QR of the link. */
-export interface Invite {
-  inviteId: string;
+/**
+ * Your own code, in the three forms the prototype shows it: the code, the link, and a QR
+ * of the link.
+ *
+ * One per person, generated with your membership and never reissued (P3.6-T1). The
+ * `Invite` type that stood here carried `inviteId`, `label`, `autoApprove`, `maxUses`,
+ * `useCount`, `expiresAt`, `revokedAt` and a derived `state` — every one of them a way to
+ * bound a credential somebody could mint again. Nobody can.
+ */
+export interface MyLeaderCode {
   code: string;
   url: string;
-  label: string | null;
-  autoApprove: boolean;
-  maxUses: number | null;
-  useCount: number;
-  expiresAt: string | null;
-  revokedAt: string | null;
-  /** Derived server-side, because "why can nobody use this" needs one answer. */
-  state: 'active' | 'revoked' | 'expired' | 'exhausted';
 }
 
 export interface InvitePreview {
@@ -68,13 +69,7 @@ export interface InvitePreview {
   leaderName: string;
 }
 
-export const listInvites = () => api<Invite[]>('/join/invites');
-
-export const issueInvite = (body: { label?: string; maxUses?: number; expiresInDays?: number }) =>
-  api<Invite>('/join/invites', { method: 'POST', body });
-
-export const revokeInvite = (inviteId: string) =>
-  api<Invite>(`/join/invites/${inviteId}`, { method: 'DELETE' });
+export const myLeaderCode = () => api<MyLeaderCode>('/join/my-code');
 
 export const previewInvite = (code: string) =>
   api<InvitePreview>(`/join/invite?code=${encodeURIComponent(code)}`);
@@ -82,9 +77,76 @@ export const previewInvite = (code: string) =>
 export const redeemInvite = (code: string) =>
   api<{ kpmId: string; leaderName: string }>('/join/redeem', { method: 'POST', body: { code } });
 
-export const INVITE_STATE_LABEL: Record<Invite['state'], string> = {
-  active: 'Working',
-  revoked: 'Withdrawn',
-  expired: 'Expired',
-  exhausted: 'Fully used',
-};
+/** The leader's side: deciding who gets in, and pulling in somebody already here. */
+export interface PendingRequest {
+  requestId: string;
+  membershipId: string;
+  fullName: string;
+  initials: string;
+  email: string;
+  agentCode: string;
+  role: 'ab' | 'aab' | 'agent';
+  requestedAt: string;
+  /** Set when somebody above routed this to you instead of deciding it themselves. */
+  routedFromName: string | null;
+  /** The leader this request names — always you in your own inbox, not in the office queue. */
+  leaderMembershipId: string;
+  leaderName: string;
+}
+
+export interface RoutingChoice {
+  membershipId: string;
+  fullName: string;
+  unitSize: number;
+  /** Whose sub-unit this is. The office queue holds rows for many leaders. */
+  forLeaderMembershipId: string;
+}
+
+export interface UntaggedMember {
+  membershipId: string;
+  fullName: string;
+  initials: string;
+  email: string;
+  agentCode: string;
+  role: 'ab' | 'aab' | 'agent';
+}
+
+export const readInbox = () => api<PendingRequest[]>('/join/requests');
+
+export const readRoutingChoices = () => api<RoutingChoice[]>('/join/requests/routing');
+
+export const approveRequest = (requestId: string, routeToMembershipId?: string) =>
+  api<PendingRequest[]>(`/join/requests/${requestId}/approve`, {
+    method: 'POST',
+    body: routeToMembershipId ? { routeToMembershipId } : {},
+  });
+
+export const declineRequest = (requestId: string, reason?: string) =>
+  api<PendingRequest[]>(`/join/requests/${requestId}/decline`, {
+    method: 'POST',
+    body: reason ? { reason } : {},
+  });
+
+export const searchUntagged = (q?: string) =>
+  api<UntaggedMember[]>(`/join/untagged${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+
+export const tagUntagged = (membershipId: string) =>
+  api<UntaggedMember[]>(`/join/untagged/${membershipId}`, { method: 'POST' });
+
+export interface MyKpmRequest {
+  requestId: string;
+  branchName: string;
+  companyName: string;
+  status: 'pending' | 'approved' | 'declined';
+  requestedAt: string;
+  reason: string | null;
+  createdKpmId: string | null;
+}
+
+export const readMyKpmRequest = async (): Promise<MyKpmRequest | null> =>
+  // Wrapped on the wire: a bare `null` arrives as an empty body, which is
+  // indistinguishable from a response that failed to serialise.
+  (await api<{ request: MyKpmRequest | null }>('/join/kpm-request')).request;
+
+export const askForKpm = (body: { companyId: string; branchName: string; note?: string }) =>
+  api<MyKpmRequest>('/join/kpm-request', { method: 'POST', body });

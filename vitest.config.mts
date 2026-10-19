@@ -3,7 +3,14 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  resolve: { alias: { '@': new URL('./src', import.meta.url).pathname } },
+  resolve: {
+    alias: {
+      '@': new URL('./src', import.meta.url).pathname,
+      // Specs reached the harness by counting `../`, so every one broke when a route
+      // group added a directory level. An alias makes the depth irrelevant.
+      '@test': new URL('./test', import.meta.url).pathname,
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,

@@ -41,7 +41,7 @@ const SEEDED: readonly DemoGroup[] = [
         role: 'Super Admin',
         email: 'superadmin@agencyboost.test',
         password: 'demo super admin',
-        lands: 'The platform console — tenants, companies, the audit log',
+        lands: 'The platform console — KPMs, companies, the audit log',
       },
       {
         role: 'Super Admin (second)',
@@ -152,24 +152,55 @@ const SEEDED: readonly DemoGroup[] = [
   },
 ];
 
-export const DEMO_GROUPS: readonly DemoGroup[] =
-  process.env.NODE_ENV === 'production' ? [] : SEEDED;
+/**
+ * Which environments may show seeded credentials, and the only ones.
+ *
+ * This used to be keyed on `NODE_ENV !== 'production'`, which cannot express what is
+ * wanted: `next build` sets `NODE_ENV=production` for *every* deployment, staging
+ * included, so the list compiled to `[]` and the panel could never appear on a deployed
+ * environment at all. Staging runs against the seeded demo tenant and exists to be tried
+ * by people who are not developers, so the accounts belong there — and nowhere else.
+ *
+ * `NEXT_PUBLIC_APP_ENV` names the environment rather than the build mode, which is the
+ * distinction that was missing.
+ *
+ * **Written twice on purpose**, because the two gates have incompatible requirements:
+ *
+ * - `IS_DEMO_BUILD` must be a literal comparison Next can inline and the minifier can
+ *   fold, so a build for anywhere else drops `SEEDED` from the bundle entirely. A
+ *   function call here would not fold, and the credentials would ship. `pnpm
+ *   check:secrets` asserts that against the artifact, not the config.
+ * - `showDemoAccounts` must read the variable *on each call*, because that is the only
+ *   gate a test can move and a dev server can change without a rebuild.
+ *
+ * Both fail closed: unset, misspelled, or `production` all mean no.
+ *
+ * **A prospect-facing demo deployment is not a demo-accounts environment** (ADR-0041, amended
+ * 2026-10-01, P10.1-T2 AC-11). It names itself `demo`, which is deliberately not in this list,
+ * so its build folds `SEEDED` away like production's: an office being shown the product must
+ * never be shown a seeded password. Staging keeps the panel for the people ADR-0041 kept it
+ * for — testers who are not developers. `pnpm check:secrets` is the proof, against the artifact.
+ */
+const IS_DEMO_BUILD =
+  process.env.NEXT_PUBLIC_APP_ENV === 'development' ||
+  process.env.NEXT_PUBLIC_APP_ENV === 'staging';
+
+export const DEMO_GROUPS: readonly DemoGroup[] = IS_DEMO_BUILD ? SEEDED : [];
 
 /** Flattened, for anything that wants the accounts without their grouping. */
 export const DEMO_ACCOUNTS: readonly DemoAccount[] = DEMO_GROUPS.flatMap((g) => g.accounts);
 
 /**
- * Two gates, and they do different jobs.
+ * The operational gate, read fresh each call — see the note above for why it repeats the
+ * comparison rather than sharing a helper.
  *
- * `NODE_ENV` is the structural one: a built bundle has no accounts to show because the
- * list above compiled to `[]`. `NEXT_PUBLIC_APP_ENV` is the operational one, so the
- * panel can be turned off in a dev server without a code change; it fails closed, so an
- * unset or unrecognised value hides the panel rather than revealing it.
+ * The length check is the belt: if the seed list is ever empty, a heading with nothing
+ * under it is worse than no panel at all.
  */
 export function showDemoAccounts(): boolean {
+  const appEnv = process.env.NEXT_PUBLIC_APP_ENV;
   return (
-    process.env.NODE_ENV !== 'production' &&
-    process.env.NEXT_PUBLIC_APP_ENV === 'development' &&
+    (appEnv === 'development' || appEnv === 'staging') &&
     DEMO_ACCOUNTS.length > 0
   );
 }

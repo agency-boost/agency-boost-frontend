@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { landingFor } from '@/lib/landing';
 import { useSession } from '@/lib/session';
+import { PageSkeleton } from '@/components/ui/skeleton';
 
 /**
  * The landing. It has no content of its own — it sends each person to the surface that
@@ -24,9 +25,5 @@ export default function Home() {
 
   // Always a hand-off. Rendering content here as well would mean two screens claiming to
   // be home, and which one you saw would depend on how fast the redirect ran.
-  return (
-    <p role="status" className="px-5 py-10 text-md text-muted">
-      Loading…
-    </p>
-  );
+  return <PageSkeleton label="Taking you to your work…" />;
 }

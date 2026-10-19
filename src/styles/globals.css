@@ -15,6 +15,31 @@
   --color-navy-soft: #2e4370;
   --color-amber: #f2994a;
   --color-amber-dark: #d97f30;
+  /*
+   * Amber numerals on an **amber tint**, where amber-dark is not dark enough.
+   *
+   * The prototype's own KPI tiles, result tiles and cascade columns put `--amber-dark` on
+   * `rgba(242,153,74,0.08)`. That computes to 2.81:1 — below even the 3:1 large-text floor, and far
+   * below it at the 12.5px the leads table uses. This is the one raw hex in the prototype
+   * (`Overall.html:723`, the cascade hero), and it is 4.1:1 on the same tint: the prototype's own fix
+   * for a contrast defect it has everywhere else. Pinned in `a11y.spec.tsx`.
+   */
+  --color-amber-deep: #b5651d;
+  /* The only amber that clears 4.5:1 as small text (4.90:1 on card) — the leads Type word. */
+  --color-amber-ink: #a85e1b;
+  /*
+   * The Chairman's Club badge (`KPM_Owner.html:348`, a raw `#5B3CC4` there): its own words on its own 12%
+   * tint read 6.03:1, so it is drawn as the prototype draws it, as a token (Phase 18, parity).
+   */
+  --color-club-chairman: #5b3cc4;
+  /*
+   * MDRT's gold (`Overall.html:8013`, the *MDRT Qualification* poster, a raw `#C9A227` there): **a poster's
+   * fill only**, under an emoji and the white-washed tags. As a mark on white it is 2.42:1, short of the 3:1 a
+   * graphic needs, so the roster's *Chasing MDRT* ✓ (`:1655`) is `gold-ink`, the same hue darkened to 4.03:1
+   * on the card. Both pinned in `campaigns-contrast.spec.ts` (P18.5-T7, row 44).
+   */
+  --color-gold: #c9a227;
+  --color-gold-ink: #9a7b12;
   /* A warm off-white, not a neutral grey — substituting one loses the product's character. */
   --color-base: #faf9f7;
   --color-card: #ffffff;
@@ -25,6 +50,11 @@
   /* Warm wash on a focused numeric input, from the prototype's stepper. */
   --color-input-focus: #fff6ec;
 
+  /* The table row hover: the prototype's 1.5%-navy wash (`Overall.html:424`). A colour, not a
+     background, so a table can lay it **over** a row that has its own — a total row stays
+     amber under the pointer — rather than paint the row's colour away (data-table.tsx). */
+  --row-hover: color-mix(in srgb, var(--color-navy) 1.5%, transparent);
+
   /* Status. Three values, not two: "not enough data" is never styled as failure. */
   --color-success: #3b6d11;
   --color-alert: #a32d2d;
@@ -33,7 +63,25 @@
   /* Role accents. Always paired with a text label — colour is never the only cue. */
   --color-role-ab: #f2994a;
   --color-role-aab: #2f80ed;
+  /* The prototype's `--blue` (`Superadmin.html:17`), which it uses for both the AAB tile
+     and the `approval` chip on the attention queue. Held as its own token because a role
+     colour and a severity are different ideas; that they share a hex today is a fact
+     about this palette, not a reason to make one stand for the other. */
+  --color-info: #2f80ed;
   --color-role-agent: rgba(27, 43, 75, 0.32);
+
+  /*
+   * Travel, on the calendar (`Calendar_Section.html:15`; H-19, P12-T2 AC-12). The prototype's
+   * `--teal` was declared in that file alone and never in the design system. As a fill and a border,
+   * and under white words on the type toggle: white on it is 5.07:1.
+   */
+  --color-teal: #2c7a73;
+  /*
+   * Teal **words** on teal's own tint — a trip's bar and its badge. The prototype put `--teal` there,
+   * 4.20:1 on its 14% wash, short of 4.5:1 at 10.5px and 11px; this darker step is 5.54:1. Pinned in
+   * `a11y.spec.tsx`, as amber-ink is.
+   */
+  --color-teal-ink: #24665f;
 
   /* Typography */
   --font-display: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -43,7 +91,12 @@
   --shadow-modal: 0 20px 50px rgba(27, 43, 75, 0.3);
 
   /* Layout */
-  --sidebar-width: 228px;
+  /* 228px in the prototype. Widened once the nav grew an icon column and a collapse
+     control: at 228 a label like "Pending KPM requests" wrapped, and a wrapped nav item
+     reads as two. */
+  --sidebar-width: 252px;
+  /* Icon, centred, with the same 8px gutter either side. */
+  --sidebar-rail-width: 56px;
 }
 
 html,
@@ -74,4 +127,39 @@ h3 {
 :focus-visible {
   outline: 2px solid var(--color-amber);
   outline-offset: 1px;
+}
+
+/**
+ * Print (P10-T8, ADR-0061) — the page as it is seen, on white.
+ *
+ * **Colours are printed exactly.** A browser leaves backgrounds off by default, and on this product the
+ * backgrounds are figures: a progress bar is a filled track, a status is a tinted pill. Printed without
+ * them, a month at 89% of its target came out as an empty bar — the reading *an empty track is zero*
+ * that the screen was fixed for. The page itself goes on white rather than the app's warm base, as the
+ * prototype's own print rules put it (`Overall.html:1027`), and the sheet keeps a margin.
+ */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    background: var(--color-card);
+  }
+
+  @page {
+    margin: 14mm;
+  }
+
+  /*
+   * **A print view prints alone** (P11-T10, ADR-0077). A coaching session's *⬇ Download as PDF* puts the
+   * session's paper on the page, off the screen (`hidden print:block`), for as long as the print window
+   * is open; everything else on the page stays off the paper, the app around it and the screen the
+   * button was pressed on alike. Nothing changes for a page with no print view on it: the Summary's
+   * Download still prints the page as it is seen.
+   */
+  body:has(> [data-print-view]) > :not([data-print-view]) {
+    display: none !important;
+  }
 }

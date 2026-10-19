@@ -8,15 +8,19 @@ describe('demo accounts', () => {
     process.env.NEXT_PUBLIC_APP_ENV = ORIGINAL;
   });
 
-  it('shows only when the environment explicitly says development', () => {
-    process.env.NEXT_PUBLIC_APP_ENV = 'development';
-    expect(showDemoAccounts()).toBe(true);
+  it('shows on development and on staging, and on nothing else', () => {
+    // Staging was added deliberately (ADR-0041): it runs against the same seeded tenant
+    // and is tried by people who are not developers, who have no other way in.
+    for (const value of ['development', 'staging']) {
+      process.env.NEXT_PUBLIC_APP_ENV = value;
+      expect(showDemoAccounts()).toBe(true);
+    }
   });
 
   it('fails closed on anything else, including unset', () => {
     // Credentials in a client bundle are safe only while this cannot be true by
     // accident. An unset variable must hide the panel, not reveal it.
-    for (const value of ['production', 'staging', 'preview', '', 'Development']) {
+    for (const value of ['production', 'preview', 'staging-2', 'Staging', '', 'Development']) {
       process.env.NEXT_PUBLIC_APP_ENV = value;
       expect(showDemoAccounts()).toBe(false);
     }
@@ -24,11 +28,29 @@ describe('demo accounts', () => {
     expect(showDemoAccounts()).toBe(false);
   });
 
+  it('is absent from a prospect-facing demo deployment, which names itself `demo`', () => {
+    // ADR-0041, amended 2026-10-01 (P10.1-T2 AC-11): an office being shown the product must never
+    // be shown a seeded password, so the demo deployment's own value is deliberately not one of
+    // the two above, and fails closed like any other — unset and a typo (`Staging`) are the
+    // test above's. Staging keeps the panel for the testers ADR-0041 kept it for; a prospect is
+    // not one of them.
+    //
+    // Only the per-call gate is testable here. `DEMO_GROUPS` is decided once, at module load,
+    // from the literal comparison Next inlines and the minifier folds, so no test can move it
+    // after the import. That its list is genuinely absent from a `demo` build — not hidden,
+    // absent — is `pnpm check:secrets`' assertion against the artifact. CI builds with
+    // `NEXT_PUBLIC_APP_ENV=demo`, the prospect-facing value itself, and runs that check on
+    // every push.
+    process.env.NEXT_PUBLIC_APP_ENV = 'demo';
+    expect(showDemoAccounts()).toBe(false);
+  });
+
   it('has nothing to show once the list has compiled away', () => {
-    // The structural gate is NODE_ENV: a built bundle holds an empty list, so the panel
-    // cannot render even if NEXT_PUBLIC_APP_ENV somehow says development. This asserts
-    // the runtime consequence; `scripts/check-no-demo-credentials.mjs` asserts that the
-    // strings are genuinely absent from the build output.
+    // The structural gate is NEXT_PUBLIC_APP_ENV read at module load: a bundle built for
+    // production holds an empty list, so the panel cannot render even if the variable is
+    // somehow flipped afterwards. This asserts the runtime consequence;
+    // `scripts/check-no-demo-credentials.mjs` asserts that the strings are genuinely
+    // absent from the build output.
     process.env.NEXT_PUBLIC_APP_ENV = 'development';
     expect(showDemoAccounts()).toBe(DEMO_ACCOUNTS.length > 0);
   });

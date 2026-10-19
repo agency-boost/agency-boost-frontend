@@ -59,19 +59,28 @@ two — which every screen did while this was an inline ternary — points whoev
 environment variable at a backend that is running perfectly.
 
 **Hiding is not excluding.** A runtime guard keeps something off the screen; it does not keep it out
-of the bundle. Anything that must not ship needs a `process.env.NODE_ENV === 'production'` fold the
-compiler can eliminate, plus a check on the build output. See `src/lib/demo-accounts.ts` and
+of the bundle. Anything that must not ship needs a literal `process.env.<VAR> === '...'` comparison
+the compiler can fold away, plus a check on the build output. See `src/lib/demo-accounts.ts` and
 `scripts/check-no-demo-credentials.mjs` — the first version of that panel was correctly hidden and
 still shipped its credentials.
+
+Key it on `NEXT_PUBLIC_APP_ENV`, not `NODE_ENV`: `next build` sets `NODE_ENV=production` for *every*
+deployment, so it cannot tell staging from production and gating on it means "not a dev server"
+rather than "not public" (ADR-0041).
 
 ## Layout
 
 ```
 src/
-├── app/<route>/page.tsx      the screen, with page.spec.tsx beside it
+├── app/(group)/<route>/      one group per application — (auth) (agent) (tenant) (admin)
+│   ├── layout.tsx            renders that family's shell; the chrome lives here, not in pages
+│   └── page.tsx              the screen, with page.spec.tsx beside it
+├── app/<route>/page.tsx      cross-family routes only — /, /join, /notifications, /profile.
+│                             These render RoleShell, which picks the chrome by the reader
 ├── app/screens.a11y.spec.tsx every screen through axe, in its populated state
 ├── components/               app-shell, admin-shell, session-provider, require-session
-├── components/ui/            the primitives — field, data-table, status-pill, role-badge, …
+├── components/ui/            the primitives — field, data-table, status-pill, role-badge, skeleton
+│                             every wait is a Skeleton shaped like what is coming, never `Loading…`
 ├── lib/                      api.ts (URLs) · api-client.ts (fetch, tokens) · session.ts · admin.ts
 └── styles/globals.css        the token definitions
 test/

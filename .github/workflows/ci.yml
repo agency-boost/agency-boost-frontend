@@ -48,7 +48,7 @@ jobs:
         run: pnpm build | tee build.log
         env:
           NEXT_PUBLIC_API_ORIGIN: http://localhost:3001
-          NEXT_PUBLIC_APP_ENV: test
+          NEXT_PUBLIC_APP_ENV: demo
 
       # The agent's daily loop runs on a mid-range Android over 4G. First Load JS is
       # the budget that protects it (docs/02-specs/nfr/performance-and-scale.md).
@@ -60,13 +60,17 @@ jobs:
       - name: First Load JS budget
         run: node scripts/check-bundle-size.mjs < build.log
 
-      # The sign-in screen offers the seeded development accounts, which is safe only
-      # while it is true in `next dev` and nowhere else. Two build-time gates keep the
-      # strings out of the output; this proves they worked, because a runtime-only
-      # guard hid the panel and shipped the credentials anyway.
+      # The sign-in screen offers the seeded development accounts, which is safe only in
+      # environments that run against the seeded tenant — `next dev` and staging
+      # (ADR-0041). Two build-time gates keep the strings out of every other build; this
+      # proves they worked, because a runtime-only guard hid the panel and shipped the
+      # credentials anyway.
       #
-      # Note the build above sets NEXT_PUBLIC_APP_ENV=test — but this check must hold
-      # whatever that value is, so it is asserted against the artifact, not the config.
+      # The build above sets NEXT_PUBLIC_APP_ENV=demo: the value the prospect-facing demo
+      # deployment itself sets (ADR-0041, amended 2026-10-01), so the artifact checked is the
+      # one an office being shown the product would load. Nothing else in src reads the
+      # variable, so the First Load JS figure above is that same build's. The check must hold
+      # whatever the value is, so it is still asserted against the artifact, not the config.
       - name: No development credentials in the build output
         run: pnpm check:secrets
 

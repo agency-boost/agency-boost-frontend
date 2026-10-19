@@ -1,0 +1,863 @@
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import AgentLayout from '@/app/(agent)/layout';
+import { makeMe, renderInLayout, stubFetch } from '@test/harness';
+import GoalSettingsPage from './page';
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => '/goals',
+}));
+
+const AGENT = makeMe({ permissions: ['goal:read', 'goal:update'] });
+
+const PERIOD = String(new Date().getFullYear());
+
+/** The prototype's defaults over five months: 6 policies, 20 appointments, 67 leads. */
+const projection = (over: Record<string, unknown> = {}) => ({
+  annualApeTargetMinor: 500_000_000_00,
+  apeAchievedMinor: 0,
+  remainingApeMinor: 500_000_000_00,
+  monthlyApeTargetMinor: 100_000_000_00,
+  policiesPerMonth: 6,
+  policiesPerWeek: 2,
+  appointmentsPerMonth: 20,
+  appointmentsPerWeek: 5,
+  leadsPerMonth: 67,
+  leadsPerWeek: 16,
+  targetMet: false,
+  ...over,
+});
+
+const goal = (over: Record<string, unknown> = {}) => ({
+  period: PERIOD,
+  mode: 'direct',
+  annualApeTargetMinor: 500_000_000_00,
+  savingsTargetMinor: 50_000_000_00,
+  commissionRatePct: 10,
+  monthsLeft: 5,
+  apeAchievedMinor: 0,
+  // No production held yet: the plan is measured against the agent's own figure (P9-T6).
+  achieved: { minor: (over.apeAchievedMinor as number | undefined) ?? 0, provenance: 'self_reported', month: null },
+  caseSizeMinor: 18_000_000_00,
+  leadsToApptPct: 30,
+  closingRatePct: 30,
+  snapshot: {
+    monthlyApeTargetMinor: 100_000_000_00,
+    policiesPerMonth: 6,
+    appointmentsPerMonth: 20,
+    leadsPerMonth: 67,
+  },
+  projected: projection(),
+  cascadeMapping: {
+    leadsCode: 'LEADS_CONTACTED',
+    appointmentsCode: 'SELL_PRESENTATION',
+    closingsCode: 'SELL_SUBMISSION',
+  },
+  measured: { from: '2026-08-15', to: '2026-09-13', days: 30, leadToAppointmentRate: 0.25, closingRate: null },
+  monthsLeftIsOverride: false,
+  savedAt: '2026-09-13T04:00:00.000Z',
+  savedByMembershipId: 'mem-1',
+  ...over,
+});
+
+/** An activity type as the published configuration carries it; only its code, label and number matter here. */
+const type = (code: string, categoryCode: string, label: string, displayOrder: number, over: Record<string, unknown> = {}) => ({
+  id: `t-${code}`, code, categoryCode, label, description: null, appliesToOrgLevelCodes: [], displayOrder, version: 1,
+  status: 'active', ...over,
+});
+const category = (code: string, label: string, displayOrder: number, types: unknown[]) => ({
+  id: `c-${code}`, code, label, description: null, appliesToOrgLevelCodes: [], displayOrder, version: 1, status: 'active', types,
+});
+/** The seed's numbering: the cascade's three types are the prototype's #3, #4 and #6 (`Overall.html:3021`, `:3038`, `:3055`). */
+const SEED_ACTIVITY = [
+  category('LEADS_GENERATION', 'Leads Generation', 1, [
+    type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Menghubungi prospek yang sudah ada', 3),
+  ]),
+  category('SELLING', 'Selling', 2, [
+    type('SELL_PRESENTATION', 'SELLING', 'Melakukan presentasi penjualan untuk calon atau existing nasabah', 4),
+    type('SELL_FOLLOWUP', 'SELLING', 'Melakukan diskusi follow up dari presentasi penjualan sebelumnya', 5),
+    type('SELL_SUBMISSION', 'SELLING', 'Submission polis', 6),
+  ]),
+];
+const config = (activity: unknown[]) => ({ '/kpm/config': { body: { activity, ratios: [], leadPipelines: [], version: 1 } } });
+
+const base = {
+  ...config(SEED_ACTIVITY),
+  '/kpm/org-levels': { body: [] },
+};
+
+const render = (routes: Record<string, unknown>, me = AGENT) => {
+  const stub = stubFetch({ ...base, ...routes } as Parameters<typeof stubFetch>[0]);
+  renderInLayout(AgentLayout, <GoalSettingsPage />, { me });
+  return stub;
+};
+
+describe('Goal Settings (P8-T3)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('renders five numbered cards and the commitment', async () => {
+    render({ '/goals': { body: goal() } });
+
+    expect(await screen.findByRole('heading', { name: /APE target this year/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Your current progress/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /From APE to policy count/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Conversion assumptions/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Monthly activity target/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /My commitment/ })).toBeInTheDocument();
+  });
+
+  describe('AC-2 — the server is the only source of the numbers', () => {
+    it('renders the cascade it was given, not one it worked out', async () => {
+      // The prototype's markup says 80 leads and its calculator says 67. The screen holds no
+      // copy of the formula, so there is nothing here that could disagree with the server.
+      render({ '/goals': { body: goal() } });
+
+      expect(await screen.findByText('67')).toBeInTheDocument();
+      expect(screen.getByText('20')).toBeInTheDocument();
+      expect(screen.getByText('≈ 16/week')).toBeInTheDocument();
+    });
+
+    it('AC-2b: shows the recomputed figure, not the stored snapshot', async () => {
+      /*
+       * Moved here from P8-T1's AC-4. A plan agreed in January with five months left, read in
+       * October with two, is a different monthly target — and the screen has to show the second
+       * one or it is describing a year that no longer exists (client PRD §17).
+       */
+      render({
+        '/goals': {
+          body: goal({
+            snapshot: {
+              monthlyApeTargetMinor: 100_000_000_00,
+              policiesPerMonth: 6, appointmentsPerMonth: 20, leadsPerMonth: 67,
+            },
+            projected: projection({
+              monthlyApeTargetMinor: 250_000_000_00,
+              policiesPerMonth: 14, appointmentsPerMonth: 47, leadsPerMonth: 157,
+            }),
+          }),
+        },
+      });
+
+      expect(await screen.findByText('157')).toBeInTheDocument();
+      expect(screen.queryByText('67')).not.toBeInTheDocument();
+    });
+
+    it('sends the six inputs and renders what comes back', async () => {
+      const { calls } = render({
+        '/goals': [
+          { body: goal() },
+          { body: goal({ caseSizeMinor: 9_000_000_00, projected: projection({ policiesPerMonth: 11 }) }) },
+        ],
+      });
+
+      const caseSize = await screen.findByLabelText('Average case size (APE per policy)');
+      await userEvent.clear(caseSize);
+      await userEvent.type(caseSize, '9000000');
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body))).toMatchObject({ caseSizeMinor: 9_000_000_00 });
+      });
+      // The Closings column and the policies-per-month figure both read it back.
+      expect((await screen.findAllByText('11')).length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('money is typed in rupiah and sent in sen', () => {
+    it('shows 500,000,000 where the record holds 50,000,000,000', async () => {
+      render({ '/goals': { body: goal() } });
+
+      // Grouped in the box as well as beside it: nine digits in a row is a figure you have to
+      // count rather than read, and a number input cannot carry a separator at all.
+      expect(await screen.findByLabelText('Annual APE target')).toHaveValue('500.000.000');
+      // Indonesian grouping, which the prototype's `toLocaleString('en-US')` gets wrong for its
+      // own audience. It appears in the remaining-needed figure and in the commitment sentence.
+      expect(screen.getAllByText('Rp 500.000.000').length).toBeGreaterThan(0);
+    });
+
+    it('converts on the way out, so nobody types twelve digits for a nine-digit figure', async () => {
+      const { calls } = render({
+        '/goals': [{ body: goal() }, { body: goal() }],
+      });
+
+      const target = await screen.findByLabelText('Annual APE target');
+      await userEvent.clear(target);
+      await userEvent.type(target, '300000000');
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body)).annualApeTargetMinor).toBe(300_000_000_00);
+      });
+    });
+  });
+
+  describe('every field reaches the server', () => {
+    it('sends all six inputs, including the ones the defaults already fill', async () => {
+      /*
+       * A field nobody types into is a field nobody has proved is wired. Each of these moves a
+       * number the cascade divides by, so a control that silently does not reach the server would
+       * show the agent a plan they did not set.
+       */
+      const { calls } = render({ '/goals': [{ body: goal() }, { body: goal() }] });
+
+      const type = async (label: string | RegExp, value: string) => {
+        const field = await screen.findByLabelText(label);
+        await userEvent.clear(field);
+        await userEvent.type(field, value);
+      };
+
+      await type(/Months left this year/, '2.5');
+      await type('APE already produced this year', '120000000');
+      await type('Leads to Appointment', '25');
+      await type('Closing rate', '40');
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body))).toMatchObject({
+          monthsLeft: 2.5,
+          apeAchievedMinor: 120_000_000_00,
+          leadsToApptPct: 25,
+          closingRatePct: 40,
+        });
+      });
+    });
+  });
+
+  describe('the two entry modes', () => {
+    it('offers the savings pair when that is how the agent thinks', async () => {
+      render({ '/goals': { body: goal({ mode: 'from_savings' }) } });
+
+      expect(await screen.findByLabelText('Annual savings target')).toBeInTheDocument();
+      expect(screen.getByLabelText('Commission rate')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Annual APE target')).not.toBeInTheDocument();
+    });
+
+    it('takes a decimal rate, which the prototype cannot (I-108)', async () => {
+      const { calls } = render({
+        '/goals': [{ body: goal({ mode: 'from_savings' }) }, { body: goal({ mode: 'from_savings' }) }],
+      });
+
+      const rate = await screen.findByLabelText('Commission rate');
+      await userEvent.clear(rate);
+      await userEvent.type(rate, '12.5');
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body)).commissionRatePct).toBe(12.5);
+      });
+    });
+  });
+
+  describe('AC-6 and the states a plan can be in', () => {
+    it('replaces the cascade with a sentence when the target is met (ADR-0047)', async () => {
+      // Not *contact 0 leads*, printed to the best producer in the office.
+      render({
+        '/goals': {
+          body: goal({
+            projected: projection({
+              targetMet: true, remainingApeMinor: 0, monthlyApeTargetMinor: 0,
+              policiesPerMonth: 0, appointmentsPerMonth: 0, leadsPerMonth: 0,
+            }),
+          }),
+        },
+      });
+
+      expect(await screen.findByText(/passed your annual target/)).toBeInTheDocument();
+      expect(screen.queryByText('Leads contacted')).not.toBeInTheDocument();
+    });
+
+    it('says which numbers it cannot work from, rather than showing nothing', async () => {
+      render({ '/goals': { body: goal({ projected: null }) } });
+
+      expect(await screen.findByText(/cannot be worked out/)).toBeInTheDocument();
+      expect(screen.getByText(/case size and the two/)).toBeInTheDocument();
+    });
+
+    it('shows the server’s refusal of an unusable assumption', async () => {
+      render({
+        '/goals': [
+          { body: goal() },
+          {
+            status: 422,
+            body: {
+              error: {
+                code: 'GOAL_INVALID_ASSUMPTION',
+                message: 'Average case size must be above zero: it is what a policy is worth.',
+                requestId: 'req-1',
+              },
+            },
+          },
+        ],
+      });
+      await screen.findByLabelText('Average case size (APE per policy)');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      expect(await screen.findByText(/case size must be above zero/)).toBeInTheDocument();
+    });
+
+    it('shows a skeleton while it loads, and an error instead of an empty form', async () => {
+      render({
+        '/goals': {
+          status: 500,
+          body: { error: { code: 'INTERNAL_ERROR', message: 'Nope.', requestId: 'r' } },
+        },
+      });
+
+      expect(await screen.findByText('Nope.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Save goal' })).not.toBeInTheDocument();
+    });
+
+    it('refuses the screen to somebody without goal:read', async () => {
+      render({ '/goals': { body: goal() } }, makeMe({ permissions: [] }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Not available to you');
+      // The gate's code is on the refusal as data, and never in its words (P11-T6).
+      expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'goal:read');
+      expect(screen.queryByText('goal:read')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('what the prototype gets wrong and this does not', () => {
+    it('dates the commitment from the goal, not from a string typed into the markup', async () => {
+      // The prototype's header reads "as of Aug 28, 2026" and JS never updates it.
+      render({ '/goals': { body: goal({ savedAt: '2026-09-13T04:00:00.000Z' }) } });
+
+      expect(await screen.findByText(/Sep 13, 2026/)).toBeInTheDocument();
+    });
+
+    it('keeps the disclaimer the retired section files carried (L-29)', async () => {
+      render({ '/goals': { body: goal() } });
+
+      expect(await screen.findByText(/Estimates for personal planning/)).toBeInTheDocument();
+    });
+
+    it('says saved when it is saved, rather than on every recalculation', async () => {
+      // The prototype marks the goal unsaved on page load and on any cross-tab read.
+      render({ '/goals': { body: goal() } });
+      // The loading skeleton is also a `status`, so wait for the form before asking.
+      await screen.findByRole('button', { name: 'Save goal' });
+
+      expect(screen.getByRole('status')).toHaveTextContent('Saved');
+    });
+
+    it('says not yet saved when there is no goal to have saved', async () => {
+      render({ '/goals': { body: goal({ savedAt: null, savedByMembershipId: null }) } });
+      await screen.findByRole('button', { name: 'Save goal' });
+
+      expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
+    });
+  });
+
+  describe('P8-T5 — the divisor the office works out, and the one you choose', () => {
+    it('sends null when the figure is the office’s, so nothing stale is stored', async () => {
+      /*
+       * The defect this closes: a plan saved in January with 11.9 months left, stored and served
+       * back, still claimed 11.9 in October — and a monthly target a fifth of the truth
+       * (client PRD §17).
+       */
+      const { calls } = render({
+        '/goals': [{ body: goal({ monthsLeft: 3.1, monthsLeftIsOverride: false }) }, { body: goal() }],
+      });
+      await screen.findByLabelText(/Months left this year/);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body)).monthsLeft).toBeNull();
+      });
+    });
+
+    it('shows the figure in force even while it sends null', async () => {
+      render({ '/goals': { body: goal({ monthsLeft: 3.1, monthsLeftIsOverride: false }) } });
+
+      // Empty, with the office's figure as the placeholder: prefilling it meant clearing the box
+      // refilled it, so typing over the number appended to it.
+      const field = await screen.findByLabelText(/Months left this year/);
+      expect(field).toHaveValue(null);
+      expect(field).toHaveAttribute('placeholder', '3.1');
+    });
+
+    it('sends the number once the agent types over it', async () => {
+      const { calls } = render({
+        '/goals': [{ body: goal({ monthsLeft: 3.1, monthsLeftIsOverride: false }) }, { body: goal() }],
+      });
+
+      await userEvent.type(await screen.findByLabelText(/Months left this year/), '2');
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body)).monthsLeft).toBe(2);
+      });
+    });
+
+    it('goes back to the office’s calendar when the box is cleared', async () => {
+      const { calls } = render({
+        '/goals': [{ body: goal({ monthsLeft: 2, monthsLeftIsOverride: true }) }, { body: goal() }],
+      });
+
+      await userEvent.clear(await screen.findByLabelText(/Months left this year/));
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        expect(JSON.parse(String(sent?.init.body)).monthsLeft).toBeNull();
+      });
+    });
+  });
+
+  /*
+   * *P8-T4 — setting somebody else’s plan* tested the *Whose plan* picker (L-30): its seven specs
+   * went with it in P11-T7 (AC-6, D-picker). A leader sets a coachee's plan on that person's *Goal
+   * Setting* tab, whose spec is `coaching/[membershipId]/goal-setting/page.spec.tsx`.
+   */
+  describe('P11-T7 AC-6 — the reader’s own plan, and nobody else’s', () => {
+    it('P11-T7 AC-6 offers no Whose plan picker, even to somebody who leads people, and reads no team', async () => {
+      const leader = makeMe({
+        permissions: ['goal:read', 'goal:update'],
+        membership: {
+          membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+          isKpmOwner: false, isKpmAdmin: false, directCount: 3,
+        },
+      });
+      const { calls } = render({ '/goals': { body: goal() } }, leader);
+      await screen.findByRole('button', { name: 'Save goal' });
+
+      expect(screen.queryByLabelText('Whose plan')).not.toBeInTheDocument();
+      expect(screen.queryByText(/You are setting/)).not.toBeInTheDocument();
+      expect(calls.some((c) => c.url.includes('/members/my-team'))).toBe(false);
+      // Every read and the save are the reader's own: no `for=`.
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+      await waitFor(() => expect(calls.some((c) => c.init.method === 'PUT')).toBe(true));
+      expect(calls.filter((c) => c.url.includes('/goals/')).every((c) => !c.url.includes('for='))).toBe(true);
+    });
+  });
+
+  describe('a goal somebody else set (ADR-0046)', () => {
+    it('names the leader who set it, on the agent’s own screen', async () => {
+      render({ '/goals': { body: goal({ savedByMembershipId: 'mem-leader' }) } });
+
+      expect(await screen.findByText('Set by your leader')).toBeInTheDocument();
+      expect(screen.getByText(/it is your plan/)).toBeInTheDocument();
+    });
+
+    it('says nothing when the agent set it themselves', async () => {
+      render({ '/goals': { body: goal({ savedByMembershipId: 'mem-1' }) } });
+      await screen.findByRole('heading', { name: /My commitment/ });
+
+      expect(screen.queryByText('Set by your leader')).not.toBeInTheDocument();
+    });
+  });
+  describe('the prototype’s own shape (third UI pass)', () => {
+    it('offers both entry modes as visible segments, not behind a dropdown', async () => {
+      render({ '/goals': { body: goal() } });
+
+      await screen.findByRole('tab', { name: 'Set APE target directly' });
+      expect(screen.getByRole('tab', { name: 'Calculate from savings target' })).toBeInTheDocument();
+      // A dropdown hid the second mode from an agent who thinks in take-home pay.
+      expect(screen.queryByRole('combobox', { name: /how you want/i })).not.toBeInTheDocument();
+    });
+
+    it('swaps the panel when the other mode is chosen', async () => {
+      render({ '/goals': { body: goal() } });
+
+      await userEvent.click(await screen.findByRole('tab', { name: 'Calculate from savings target' }));
+      expect(screen.getByLabelText('Annual savings target')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Annual APE target')).not.toBeInTheDocument();
+    });
+
+    it('puts the unit inside the box rather than in the question', async () => {
+      render({ '/goals': { body: goal() } });
+
+      await screen.findByLabelText('Annual APE target');
+      // Visible, and out of the accessible name — the label is the question.
+      const rp = screen.getAllByText('Rp').find((el) => el.getAttribute('aria-hidden') === 'true');
+      expect(rp).toBeDefined();
+      expect(screen.getByText('months')).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('says the months figure is automatic, and stops saying so once it is overridden', async () => {
+      render({ '/goals': { body: goal() } });
+
+      expect(await screen.findByText('auto')).toBeInTheDocument();
+      await userEvent.type(await screen.findByLabelText(/Months left this year/), '3');
+      expect(screen.queryByText('auto')).not.toBeInTheDocument();
+    });
+
+    it('marks this month’s target as the number the card is for', async () => {
+      render({ '/goals': { body: goal() } });
+
+      await screen.findByText("This month's APE target");
+      const tile = screen.getByText("This month's APE target").closest('[data-variant]')!;
+      expect(tile).toHaveAttribute('data-variant', 'insight');
+      // The two figures beside it merely restate what was typed.
+      expect(screen.getByText('Already produced').closest('[data-variant]'))
+        .toHaveAttribute('data-variant', 'plain');
+      expect(document.querySelectorAll('[data-variant]').length).toBeGreaterThan(2);
+    });
+
+    it('draws the cascade as a cascade — chips, hero and the rate between steps', async () => {
+      render({ '/goals': { body: goal() } });
+
+      await screen.findByText('Leads contacted');
+      // Each column names the activity it counts against, as the log screen numbers it (P10.1-T6 AC-11).
+      expect(await screen.findByText('Activity #3')).toBeInTheDocument();
+      expect(screen.getByText('Activity #4')).toBeInTheDocument();
+      expect(screen.getByText('Activity #6')).toBeInTheDocument();
+      // The closings column is the hero.
+      expect(document.querySelector('[data-hero="true"]')).toHaveTextContent('Closings');
+      // And the arrow's percentage is spelled out, because the glyph is decorative.
+      expect(screen.getByText('30% of leads contacted become appointments')).toBeInTheDocument();
+    });
+
+    it('inverts the commitment, and paints its figures amber', async () => {
+      render({ '/goals': { body: goal() } });
+
+      const heading = await screen.findByRole('heading', { name: /My commitment/ });
+      expect(heading.parentElement!.className).toContain('bg-navy');
+      // Every figure in the sentence is emphasised in amber — on navy, which is 6.3:1.
+      const figure = screen.getByText('67 leads');
+      expect(figure.tagName).toBe('STRONG');
+      expect(figure.className).toContain('text-amber');
+    });
+
+    it('puts the save status beside the button, and has only one live region', async () => {
+      render({ '/goals': { body: goal() } });
+
+      // Wait for the plan: the loading skeleton is itself a live region, and the two never coexist —
+      // which is why a screen gets exactly one `role="status"` and this query would otherwise read it.
+      await screen.findByRole('heading', { name: /APE target this year/ });
+
+      // A stored plan says so, with a green dot.
+      const status = screen.getByRole('status');
+      expect(status).toHaveTextContent('Saved');
+      expect(status.className).toContain('text-success');
+
+      // Same header as the Save button, rather than 500px below it.
+      const header = screen.getByRole('button', { name: 'Save goal' }).parentElement!;
+      expect(header).toContainElement(status);
+    });
+
+    it('stops claiming to be saved the moment a number is changed', async () => {
+      // The dot stayed green while the agent typed a new target, so the screen said *Saved* about
+      // numbers nobody had saved. `refreshSaveStatus()` in the prototype reports from a dirty flag.
+      render({ '/goals': { body: goal() } });
+      await screen.findByRole('heading', { name: /APE target this year/ });
+      expect(screen.getByRole('status')).toHaveTextContent('Saved');
+
+      await userEvent.type(screen.getByLabelText('Annual APE target'), '1');
+      expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
+      expect(screen.getByRole('status').className).not.toContain('text-success');
+    });
+
+    it('groups a figure as it is typed, and sends the digits', async () => {
+      const { calls } = render({ '/goals': [{ body: goal() }, { body: goal() }] });
+
+      const field = await screen.findByLabelText('Annual APE target');
+      await userEvent.clear(field);
+      await userEvent.type(field, '750000000');
+      expect(field).toHaveValue('750.000.000');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+      await waitFor(() => {
+        const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
+        // Separators out, sen in: 750,000,000 rupiah is 75,000,000,000 sen.
+        expect(JSON.parse(String(sent?.init.body))).toMatchObject({
+          annualApeTargetMinor: 75_000_000_000,
+        });
+      });
+    });
+
+    it('leaves the unit in the affix rather than inside the value', async () => {
+      // `Rp` is the field's prefix. Putting it in the value too would print it twice in one box.
+      render({ '/goals': { body: goal() } });
+      expect(await screen.findByLabelText('Annual APE target')).not.toHaveValue('Rp 500.000.000');
+    });
+
+    it('pads a field whose affix is on the other side', async () => {
+      // `30 %` and `3.2 months` had the number hard against the left border: the affix supplies the
+      // gap on its own side only.
+      render({ '/goals': { body: goal() } });
+      const pct = await screen.findByLabelText('Leads to Appointment');
+      expect(pct.className).toContain('pl-3');
+      // And the side that does have one is not padded twice.
+      expect(screen.getByLabelText('Annual APE target').className).not.toContain('pl-3');
+    });
+
+    it('holds every card on the screen to one width and one padding', async () => {
+      // The banners were outside the measure at `p-6`, so the first card a reader saw was wider and
+      // more thickly padded than the plan underneath. (It pinned the *Whose plan* picker's card until
+      // the picker went in P11-T7, AC-6; the banner that stays is held to the same.)
+      render({ '/goals': { body: goal({ savedByMembershipId: 'mem-leader' }) } });
+
+      const picker = (await screen.findByText('Set by your leader')).closest('.rounded-lg')!;
+      const step = screen.getByRole('heading', { name: /APE target this year/ }).closest('.rounded-lg')!;
+      // One padding utility each, and the same one — not `p-6` plus an override whose winner depends
+      // on the order Tailwind emits them in.
+      expect(picker.className).toContain('px-5');
+      expect(picker.className).not.toContain('p-6');
+      expect(step.className).toContain('px-5');
+      expect(step.className).not.toContain('p-6');
+      // Same parent, so the same measure applies to both.
+      expect(picker.parentElement).toBe(step.parentElement);
+    });
+
+    it('holds the plan to a readable measure', async () => {
+      render({ '/goals': { body: goal() } });
+
+      await screen.findByText('Leads contacted');
+      // 820px, as `.content` has it — five cards across a 1,600px window put a label a hand's
+      // width from its input.
+      expect(document.querySelector('[class*="max-w-"]')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: /APE target this year/ }).closest('.mx-auto'))
+        .toBeInTheDocument();
+    });
+  });
+});
+
+// ── P9-T6: the figure the plan is measured against, and whose it is ─────────────────────────
+
+describe('Goal settings — the APE already produced, once the office holds production (P9-T6)', () => {
+  const imported = (over: Record<string, unknown> = {}) => goal({
+    apeAchievedMinor: 50_000_000_00,
+    achieved: { minor: 120_000_000_00, provenance: 'imported', month: '2026-08' },
+    projected: projection({ apeAchievedMinor: 120_000_000_00, remainingApeMinor: 380_000_000_00 }),
+    ...over,
+  });
+
+  it('shows the carrier’s figure in place of the box, read-only, with its marker and no sentence', async () => {
+    render({ '/goals': { body: imported() } });
+
+    const shown = (await screen.findByText('APE already produced this year')).closest('dl')!;
+    expect(shown).toHaveTextContent('APE already produced this yearRp 120.000.000');
+    // The reason sentence went in P10.1-T6: whose figure it is, is the marker's to say.
+    expect(shown.querySelectorAll('dd')).toHaveLength(1);
+    expect(screen.queryByText(/typed on this plan is kept/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'APE already produced this year' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'From your office’s upload, year to date as of August 2026' })).toBeInTheDocument();
+  });
+
+  it('keeps the marker, on the field, when the plan cannot be worked out and there is no tile to carry it', async () => {
+    render({ '/goals': { body: imported({ projected: null }) } });
+    await screen.findByText(/cannot be worked out/);
+
+    const marker = screen.getByRole('button', { name: 'From your office’s upload, year to date as of August 2026' });
+    expect(marker.closest('dl')).toHaveTextContent('APE already produced this year');
+    // Once: the tile it would otherwise sit on is not drawn.
+    expect(screen.getAllByRole('button', { name: /year to date as of August 2026/ })).toHaveLength(1);
+  });
+
+  it('marks the figure once, on the tile, when the plan is worked out', async () => {
+    render({ '/goals': { body: imported() } });
+    await screen.findByText('APE already produced this year');
+    expect(screen.getAllByRole('button', { name: /year to date as of August 2026/ })).toHaveLength(1);
+    expect(screen.getByText('APE already produced this year').closest('dl')!.querySelector('button')).toBeNull();
+  });
+
+  it('says so when the office corrected it by hand', async () => {
+    render({ '/goals': { body: imported({ achieved: { minor: 120_000_000_00, provenance: 'corrected', month: '2026-08' } }) } });
+    await screen.findByText('APE already produced this year');
+    expect(screen.getByRole('button', { name: 'Corrected by hand, year to date as of August 2026' })).toBeInTheDocument();
+  });
+
+  it('keeps the typed figure on save, untouched — it is the agent’s own', async () => {
+    const { calls } = render({ '/goals': [{ body: imported() }, { body: imported() }] });
+    await screen.findByText('APE already produced this year');
+    await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+    await waitFor(() => expect(calls.some((c) => c.init.method === 'PUT')).toBe(true));
+    const sent = JSON.parse(calls.find((c) => c.init.method === 'PUT')!.init.body as string);
+    expect(sent.apeAchievedMinor).toBe(50_000_000_00);
+  });
+
+  it('leaves the box for the agent’s own figure until production arrives, and marks it as theirs', async () => {
+    render({ '/goals': { body: goal() } });
+    const box = await screen.findByRole('textbox', { name: 'APE already produced this year' });
+    expect(box).not.toHaveAccessibleDescription();
+    expect(screen.getByRole('button', { name: 'Your own figure, entered in Goal Settings' })).toBeInTheDocument();
+  });
+
+  it('sits beside the months as a field and takes the rest of the row, as the prototype’s does (P10.1-T8)', async () => {
+    // The client, 2026-10-01: the office's figure looked lopsided beside the months box.
+    render({ '/goals': { body: imported() } });
+    const label = await screen.findByText('APE already produced this year');
+    const field = label.closest('dl')!;
+    const months = screen.getByText(/Months left this year/).closest('label')!;
+
+    // One row, the two labels on its label line: the office's figure is not a box with its label inside.
+    expect(field.parentElement).toBe(months.parentElement!.parentElement);
+    expect(field).toHaveClass('grow', 'basis-56');
+    expect(field).not.toHaveClass('p-3');
+    expect(within(field).getByText('Rp 120.000.000')).toHaveClass('h-10');
+    // The auto badge gives back its padding, so the months label is no taller than this one.
+    expect(within(months).getByText('auto')).toHaveClass('-my-0.5');
+  });
+
+  it('gives the agent’s own box the rest of the row too', async () => {
+    render({ '/goals': { body: goal() } });
+    const box = await screen.findByRole('textbox', { name: 'APE already produced this year' });
+    expect(box.closest('.flex-col')).toHaveClass('grow', 'basis-56');
+  });
+});
+
+
+// ── P10.1-T6: the prototype's screen, and what a requirement keeps beside it (ADR-0063) ──────────
+
+describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('AC-7: the prototype’s title and subtitle, loading and loaded', async () => {
+    render({ '/goals': { body: goal() } });
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Goal Settings' })).toBeInTheDocument();
+    expect(screen.getByText('Turn your annual target into this month\'s activity numbers.')).toBeInTheDocument();
+    await screen.findByRole('button', { name: 'Save goal' });
+    expect(screen.getByRole('heading', { level: 1, name: 'Goal Settings' })).toBeInTheDocument();
+    expect(screen.getByText('Turn your annual target into this month\'s activity numbers.')).toBeInTheDocument();
+  });
+
+  describe('AC-8 — the hints go, the behaviours stay', () => {
+    it('AC-8: no sentence under the months or under the APE already produced', async () => {
+      render({ '/goals': { body: goal({ monthsLeft: 3.1, monthsLeftIsOverride: false }) } });
+
+      const months = await screen.findByLabelText(/Months left this year/);
+      expect(months).not.toHaveAccessibleDescription();
+      expect(screen.getByRole('textbox', { name: 'APE already produced this year' })).not.toHaveAccessibleDescription();
+      expect(screen.queryByText(/office’s calendar says/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/By your own count/)).not.toBeInTheDocument();
+      // The override still works: the office's figure in the placeholder, the auto badge beside the name.
+      expect(months).toHaveAttribute('placeholder', '3.1');
+      expect(screen.getByText('auto')).toBeInTheDocument();
+    });
+
+    it('AC-8: Already produced carries the marker — the Summary’s glyph, its words on a tap', async () => {
+      render({
+        '/goals': {
+          body: goal({
+            achieved: { minor: 120_000_000_00, provenance: 'imported', month: '2026-08' },
+            projected: projection({ apeAchievedMinor: 120_000_000_00, remainingApeMinor: 380_000_000_00 }),
+          }),
+        },
+      });
+
+      const marker = await screen.findByRole('button', { name: 'From your office’s upload, year to date as of August 2026' });
+      const tile = marker.closest('[data-variant]')!;
+      expect(tile).toHaveTextContent('Already produced');
+      expect(tile).toHaveTextContent('Rp 120.000.000');
+      const tip = screen.getByText('From your office’s upload, year to date as of August 2026', { selector: '[role="tooltip"]' });
+      fireEvent.click(marker);
+      expect(tip).toBeVisible();
+    });
+
+  });
+
+  it('AC-9: the measured rates leave the screen, and the prototype’s tip stays', async () => {
+    render({ '/goals': { body: goal() } });
+
+    expect(await screen.findByLabelText('Leads to Appointment'))
+      .toHaveAccessibleDescription('% of contacted leads that become an appointment');
+    expect(screen.getByLabelText('Closing rate')).toHaveAccessibleDescription('% of appointments that become a closing');
+    expect(screen.queryByText(/logged rate/)).not.toBeInTheDocument();
+    expect(screen.getByText('Use your real conversion ratios for accuracy.')).toBeInTheDocument();
+  });
+
+  it('AC-10: no history card, and nothing asks for the retired history', async () => {
+    const { calls } = render({ '/goals': [{ body: goal() }, { body: goal() }] });
+    await screen.findByRole('button', { name: 'Save goal' });
+    await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+    await waitFor(() => expect(calls.some((c) => c.init.method === 'PUT')).toBe(true));
+
+    expect(screen.queryByText('What this plan has been')).not.toBeInTheDocument();
+    expect(calls.filter((c) => c.url.includes('/history'))).toHaveLength(0);
+  });
+
+  describe('AC-11 — the cascade chips show what the prototype shows', () => {
+    it('AC-11: Activity #3, #4 and #6, read from configuration — never the code', async () => {
+      render({ '/goals': { body: goal() } });
+
+      expect(await screen.findByText('Activity #3')).toBeInTheDocument();
+      expect(screen.getByText('Activity #4')).toBeInTheDocument();
+      expect(screen.getByText('Activity #6')).toBeInTheDocument();
+      expect(screen.getByText('Maps to activities #3, #4, #6 in Activity Management.')).toBeInTheDocument();
+      expect(screen.queryByText(/LEADS_CONTACTED|SELL_PRESENTATION|SELL_SUBMISSION/)).not.toBeInTheDocument();
+    });
+
+    it('AC-11: follows the office’s order — a type dragged elsewhere renumbers the chip, and the plan still binds by code', async () => {
+      const reordered = [
+        category('SELLING', 'Selling', 1, [
+          type('SELL_SUBMISSION', 'SELLING', 'Submission polis', 1),
+          type('SELL_PRESENTATION', 'SELLING', 'Melakukan presentasi penjualan untuk calon atau existing nasabah', 2),
+        ]),
+        category('LEADS_GENERATION', 'Leads Generation', 2, [
+          type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Menghubungi prospek yang sudah ada', 7),
+        ]),
+      ];
+      render({ '/goals': { body: goal() }, ...config(reordered) });
+
+      expect(await screen.findByText('Maps to activities #7, #2, #1 in Activity Management.')).toBeInTheDocument();
+      const hero = document.querySelector('[data-hero="true"]')!;
+      expect(hero).toHaveTextContent('Closings');
+      expect(hero).toHaveTextContent('Activity #1');
+    });
+
+    it('AC-11: a type the configuration holds no live row for gets no chip and no tip — never a code', async () => {
+      const archived = [
+        category('LEADS_GENERATION', 'Leads Generation', 1, [
+          type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Menghubungi prospek yang sudah ada', 3),
+        ]),
+        category('SELLING', 'Selling', 2, [
+          type('SELL_PRESENTATION', 'SELLING', 'Melakukan presentasi penjualan', 4, { status: 'archived' }),
+          type('SELL_SUBMISSION', 'SELLING', 'Submission polis', 6),
+        ]),
+      ];
+      render({ '/goals': { body: goal() }, ...config(archived) });
+
+      expect(await screen.findByText('Activity #3')).toBeInTheDocument();
+      expect(screen.getByText('Activity #6')).toBeInTheDocument();
+      expect(screen.queryByText('Activity #4')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Maps to activities/)).not.toBeInTheDocument();
+      expect(screen.queryByText('SELL_PRESENTATION')).not.toBeInTheDocument();
+    });
+
+    it('AC-11: an archived section numbers none of its types', async () => {
+      const retired = [
+        category('LEADS_GENERATION', 'Leads Generation', 1, [
+          type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Menghubungi prospek yang sudah ada', 3),
+        ]),
+        { ...category('SELLING', 'Selling', 2, [type('SELL_PRESENTATION', 'SELLING', 'Presentasi', 4), type('SELL_SUBMISSION', 'SELLING', 'Submission polis', 6)]), status: 'archived' },
+      ];
+      render({ '/goals': { body: goal() }, ...config(retired) });
+
+      expect(await screen.findByText('Activity #3')).toBeInTheDocument();
+      expect(screen.queryByText('Activity #4')).not.toBeInTheDocument();
+      expect(screen.queryByText('Activity #6')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('AC-12 — what a requirement keeps', () => {
+    it('AC-12: Set by your leader on the day, the disclaimer, and the target-passed state', async () => {
+      render({
+        '/goals': {
+          body: goal({
+            savedByMembershipId: 'mem-leader',
+            projected: projection({
+              targetMet: true, remainingApeMinor: 0, monthlyApeTargetMinor: 0,
+              policiesPerMonth: 0, appointmentsPerMonth: 0, leadsPerMonth: 0,
+            }),
+          }),
+        },
+      });
+
+      expect((await screen.findByText('Set by your leader')).parentElement).toHaveTextContent(/^Set by your leader on .+2026\. You can change it — it is your plan\.$/);
+      expect(screen.getByText('Estimates for personal planning — assumptions vary per individual.')).toBeInTheDocument();
+      expect(screen.getByText('You have passed your annual target.')).toBeInTheDocument();
+    });
+  });
+});

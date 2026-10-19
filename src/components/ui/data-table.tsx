@@ -15,35 +15,170 @@ import { cn } from '@/lib/cn';
  * An empty string is not an option, deliberately: axe's `empty-table-header` caught one,
  * and the fix is a name nobody can see rather than no name at all.
  */
-export type Column = string | { label: string; visuallyHidden: true };
+export type Column =
+  | string
+  | { label: string; visuallyHidden: true }
+  | { label: string; detail: string }
+  | SortableColumn;
+
+/**
+ * A heading the reader can sort by.
+ *
+ * **`aria-sort` on the `<th>`, and a real `<button>` inside it.** The prototype sorts by clicking
+ * the heading text itself (`Overall.html:2790`), which is a click target a keyboard cannot reach
+ * and a state a screen reader is never told — the arrow glyph is the only signal, and it is
+ * decoration. Here the glyph is `aria-hidden` and `aria-sort` carries the meaning, so the two
+ * cannot drift apart.
+ *
+ * Only one column is ever `ascending` or `descending`: sorting is single-key, and a second sorted
+ * heading would be a claim about grouping that no screen here implements.
+ */
+export interface SortableColumn {
+  label: string;
+  sort: 'ascending' | 'descending' | 'none';
+  onSort: () => void;
+}
+
+/** The prototype's three glyphs (`Overall.html:5540`), kept as the only visual difference. */
+const SORT_GLYPH = { ascending: '▲', descending: '▼', none: '⇅' } as const;
+
+function isSortable(column: Column): column is SortableColumn {
+  return typeof column !== 'string' && 'sort' in column;
+}
+
+/**
+ * A dense table, on one class string applied to the `<table>`.
+ *
+ * `components-and-patterns.md` has specified `table-layout: fixed` with explicit widths since Phase 1
+ * and no screen could ask for it, so the leads table shipped at three times the prototype's row height
+ * (`px-4 py-2.5 text-md` against `padding:3px 8px; font-size:12.5px`) and a reader saw five rows where
+ * the prototype shows fifteen.
+ *
+ * **Arbitrary descendant variants, not a React context.** `skeleton.tsx` builds `SkeletonTable` from
+ * this component and is deliberately *not* a client component, so `loading.tsx` can render it directly
+ * — a `createContext` here would pull every route group's loading state into the client bundle, and the
+ * failure would read as a missing boundary rather than a missing provider. `[&_td]:px-2` has
+ * specificity `0,1,1` and beats `Cell`'s own `.px-4` at `0,1,0` deterministically, which a context
+ * would not do any better.
+ *
+ * The header's `bg-base` band is `--warm-base` in the prototype (`Overall.html:416`), and the row hover
+ * is the 1.5%-navy wash at `:424` — faint on purpose: it tells you which row your pointer is on without
+ * competing with the amber focus ring inside it.
+ *
+ * **The hovered row, and only it, and over its own colour.** This was `[&_tbody_tr]:hover:bg-navy/…`,
+ * which Tailwind 3 compiles to `.table:hover tbody tr` — the *table* hovered, *every* row repainted —
+ * at a specificity (0,2,2) that beat each row's own `bg-*` (0,1,0). Pointing anywhere at the Activity
+ * Dashboard turned its amber total row and its grey section rows white. The arbitrary variant now puts
+ * `:hover` on the row, and the wash is a `background-image` layered over the row's `background-color`,
+ * so a coloured row keeps its colour under the pointer as the prototype's inline-styled rows do.
+ */
+const DENSITY_COMPACT = [
+  'table-fixed',
+  '[&_thead]:bg-base',
+  '[&_th]:px-2 [&_th]:py-[7px] [&_th]:text-2xs',
+  '[&_td]:px-2 [&_td]:py-[3px] [&_td]:leading-tight',
+  '[&_tbody_tr:hover]:[background-image:linear-gradient(var(--row-hover),var(--row-hover))]',
+  /*
+   * **The body's type size rides on the `<table>`, not on a per-cell variant** — it replaces the
+   * `text-md` already there, and a cell inherits it because `Cell` sets no size of its own.
+   *
+   * It used to be a descendant variant scoping the size to every `td`, and that is a trap two ways
+   * over. The size name was also a colour name until the theme stopped it, near-white; and wrapped
+   * in an arbitrary variant it carried specificity `0,1,1`, enough to beat a cell's own `.text-muted`
+   * at `0,1,0`. The row number and the registered date were invisible.
+   *
+   * Inheritance cannot do that. **An inherited value loses to any declaration on the element**,
+   * whatever its specificity — so a cell that states its colour keeps it even if the collision is
+   * ever reintroduced. The theme fix and this one are independent, and either alone is enough.
+   */
+  'text-base',
+].join(' ');
 
 export function DataTable({
   caption,
   columns,
   children,
   className,
+  tableClassName,
+  density = 'default',
+  widths,
 }: {
   caption: string;
   columns: readonly Column[];
   children: React.ReactNode;
   className?: string;
+  /**
+   * For a table with more columns than a phone has room for — a minimum width, so the columns
+   * keep their shape and **the wrapper scrolls** rather than the page body. Without it a wide
+   * table squashes to fit and the horizontal scroll this wrapper exists for never happens.
+   */
+  tableClassName?: string;
+  /** `compact` is the prototype's editable-list density. Opt-in: eleven other screens use this. */
+  density?: 'default' | 'compact';
+  /**
+   * One CSS width per column, rendered as a `<colgroup>` (`Overall.html:2799-2802`, `:426-435`).
+   *
+   * **Only meaningful with `density="compact"`**, which sets `table-fixed` — without a fixed layout
+   * the browser treats these as suggestions and a long remark still widens its column, which is the
+   * whole thing a nine-column editable table has to prevent.
+   */
+  widths?: readonly string[];
 }) {
   return (
     <div className={cn('overflow-x-auto rounded-lg border border-hairline bg-card', className)}>
-      <table className="w-full border-collapse text-left text-md">
+      {/*
+        * **`relative`, so nothing inside escapes the scroll box.** A `sr-only` name is
+        * `position: absolute`; with no positioned ancestor inside this wrapper it is placed against one
+        * outside it, and the wrapper's `overflow-x-auto` stops clipping it. On /leads the Actions
+        * glyphs' names ran past a 1280px window and widened the whole page to 1379px — the body
+        * scrolled sideways, which it never may (found walking P10.1-T4, 2026-09-30).
+        */}
+      <table
+        className={cn(
+          'relative w-full border-collapse text-left text-md',
+          density === 'compact' && DENSITY_COMPACT,
+          tableClassName,
+        )}
+      >
         <caption className="sr-only">{caption}</caption>
+        {widths ? (
+          <colgroup>
+            {widths.map((w, i) => (
+              <col key={i} style={{ width: w }} />
+            ))}
+          </colgroup>
+        ) : null}
         <thead>
           <tr className="border-b border-hairline">
-            {columns.map((column) => {
+            {columns.map((column, i) => {
               const label = typeof column === 'string' ? column : column.label;
-              const hidden = typeof column !== 'string';
+              const hidden = typeof column !== 'string' && 'visuallyHidden' in column;
+              // A second, smaller line under the heading — the Activity Dashboard's *Week 1* over its
+              // dates (`Overall.html:5043`). Keyed by position too: a month of daily columns repeats
+              // every weekday's name.
+              const detail = typeof column !== 'string' && 'detail' in column ? column.detail : null;
               return (
                 <th
-                  key={label}
+                  key={`${i}-${label}`}
                   scope="col"
+                  aria-sort={isSortable(column) ? column.sort : undefined}
                   className="px-4 py-2.5 text-sm font-semibold uppercase tracking-wide text-muted"
                 >
-                  <span className={hidden ? 'sr-only' : undefined}>{label}</span>
+                  {isSortable(column) ? (
+                    <button
+                      type="button"
+                      onClick={column.onSort}
+                      className="inline-flex items-center gap-1 rounded-sm uppercase tracking-wide hover:text-navy"
+                    >
+                      {label}
+                      <span aria-hidden="true" className="text-2xs">{SORT_GLYPH[column.sort]}</span>
+                    </button>
+                  ) : (
+                    <span className={hidden ? 'sr-only' : undefined}>{label}</span>
+                  )}
+                  {detail ? (
+                    <span className="block text-2xs font-normal normal-case tracking-normal">{detail}</span>
+                  ) : null}
                 </th>
               );
             })}
@@ -55,10 +190,23 @@ export function DataTable({
   );
 }
 
-export function Row({ children }: { children: React.ReactNode }) {
-  return <tr className="border-b border-hairline last:border-b-0">{children}</tr>;
+export function Row({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <tr className={cn('border-b border-hairline last:border-b-0', className)}>{children}</tr>;
 }
 
-export function Cell({ children, className }: { children?: React.ReactNode; className?: string }) {
-  return <td className={cn('px-4 py-2.5 align-middle text-navy', className)}>{children}</td>;
+export function Cell({
+  children,
+  className,
+  colSpan,
+}: {
+  children?: React.ReactNode;
+  className?: string;
+  /** For a row that becomes one editor rather than a row of values. */
+  colSpan?: number;
+}) {
+  return (
+    <td colSpan={colSpan} className={cn('px-4 py-2.5 align-middle text-navy', className)}>
+      {children}
+    </td>
+  );
 }

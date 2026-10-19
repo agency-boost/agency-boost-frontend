@@ -19,8 +19,23 @@ describe('DemoAccountsPanel', () => {
     process.env.NEXT_PUBLIC_APP_ENV = ORIGINAL;
   });
 
-  it('renders nothing outside development', () => {
+  it('renders nothing in production', () => {
     process.env.NEXT_PUBLIC_APP_ENV = 'production';
+    const { container } = render(<DemoAccountsPanel onChoose={vi.fn()} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('renders on staging, which runs against the same seeded tenant', () => {
+    // Staging is tried by people who are not developers and has no other way in. It was
+    // unreachable before: the list was gated on NODE_ENV, and `next build` sets that to
+    // production for every deployment, staging included (ADR-0041).
+    process.env.NEXT_PUBLIC_APP_ENV = 'staging';
+    render(<DemoAccountsPanel onChoose={vi.fn()} />);
+    expect(screen.getByRole('heading', { name: 'Development accounts' })).toBeInTheDocument();
+  });
+
+  it('renders nothing for an unrecognised environment — failing closed', () => {
+    process.env.NEXT_PUBLIC_APP_ENV = 'staging-2';
     const { container } = render(<DemoAccountsPanel onChoose={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
   });
@@ -75,7 +90,8 @@ describe('DemoAccountsPanel', () => {
     inDevelopment();
     render(<DemoAccountsPanel onChoose={vi.fn()} />);
     expect(screen.getByText(/pnpm seed:demo/)).toBeInTheDocument();
-    expect(screen.getByText(/development only/)).toBeInTheDocument();
+    // Staging shows it too (ADR-0041), and a staging tester reads this sentence.
+    expect(screen.getByText(/development and staging only/)).toBeInTheDocument();
   });
 
   it('hands the whole account back on a choice', async () => {

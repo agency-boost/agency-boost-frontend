@@ -1,20 +1,30 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { RequireSession } from '@/components/require-session';
-import { RoleBadge } from '@/components/ui/role-badge';
+import { RoleShell } from '@/components/role-shell';
+import { SessionList } from '@/components/session-list';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import { PasswordInput } from '@/components/ui/password-input';
 import { api, toDisplayError } from '@/lib/api-client';
 import { useSession, type Me } from '@/lib/session';
 import { useSignOut } from '@/lib/use-sign-out';
 
+/**
+ * Your account.
+ *
+ * **`RoleShell`, so the sidebar survives.** This rendered a bare `RequireSession` with no
+ * chrome at all until 2026-09-06: you signed in as a Super Admin, clicked your own name,
+ * and every link on the screen vanished. Everybody has an account, so the route belongs
+ * to no one role family and wears whichever chrome its reader came in with.
+ *
+ * **No *Where you stand* card since 2026-10-01** (P10.1-T2 AC-10, ADR-0062 §3). It listed the
+ * platform role, the raw office id and every permission code, for a Phase 2 reviewer who had
+ * no other screen to see them on. None of those is a customer's word: the sidebar chip already
+ * says who you are, and what you may do is what the screens offer. The password and *Where you
+ * are signed in* sections stay — they are the account's security, not its description.
+ */
 export default function ProfilePage() {
-  return (
-    <RequireSession>
-      <Profile />
-    </RequireSession>
-  );
+  return <Profile />;
 }
 
 const PRONOUNS: { value: Me['user']['pronoun']; label: string }[] = [
@@ -29,89 +39,25 @@ function Profile() {
   const { signOut, busy } = useSignOut();
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-8">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-3xl font-bold text-navy">Your account</h1>
-          <p className="mt-1 text-md text-muted">{me?.user.email}</p>
-        </div>
+    <RoleShell
+      title="Your account"
+      subtitle={me?.user.email}
+      // Everybody may read their own account, and the matrix says so at `own` in all six
+      // columns. Naming it here overrides the chrome's own gate, which is about the
+      // application that chrome belongs to and not about this route.
+      permission="profile:read_self"
+      actions={
         <Button variant="secondary" disabled={busy} onClick={() => void signOut()}>
           {busy ? 'Signing out…' : 'Sign out'}
         </Button>
-      </div>
-
-      <div className="flex flex-col gap-4">
-        <WhoAmI />
+      }
+    >
+      <div className="flex max-w-3xl flex-col gap-4">
         <ProfileForm onSaved={reload} />
         <PasswordForm />
+        <SessionList />
       </div>
-    </main>
-  );
-}
-
-function WhoAmI() {
-  const { me } = useSession();
-  if (!me) return null;
-
-  return (
-    <Card>
-      <h2 className="font-display text-lg font-bold text-navy">Where you stand</h2>
-      <dl className="mt-3 grid grid-cols-[10rem_1fr] gap-y-2 text-md">
-        <dt className="text-muted">Platform role</dt>
-        <dd className="text-navy">
-          {me.user.platformRole === 'super_admin' ? 'Super Admin' : 'None'}
-        </dd>
-
-        <dt className="text-muted">Office</dt>
-        <dd className="text-navy">
-          {me.membership ? <code className="text-sm">{me.membership.kpmId}</code> : 'Not in an office yet'}
-        </dd>
-
-        <dt className="text-muted">Role in office</dt>
-        <dd className="text-navy">
-          {me.membership ? (
-            <span className="flex flex-wrap items-center gap-1.5">
-              <RoleBadge role={me.membership.hierarchyRole} />
-              {me.membership.isKpmOwner && <Tag>KPM Owner</Tag>}
-              {me.membership.isKpmAdmin && <Tag>KPM Admin</Tag>}
-            </span>
-          ) : (
-            '—'
-          )}
-        </dd>
-
-        <dt className="text-muted">Permissions</dt>
-        <dd className="text-navy">
-          {/* Shown because Phase 2 has almost no screens to exercise them on, and a
-              reviewer needs to see that the server resolved a real set rather than a
-              placeholder. */}
-          <details>
-            <summary className="cursor-pointer text-muted">{me.permissions.length} granted</summary>
-            <ul className="mt-1.5 flex flex-wrap gap-1">
-              {me.permissions.map((p) => (
-                <li key={p} className="rounded-pill bg-navy/[0.06] px-2 py-0.5 text-sm">
-                  {p}
-                </li>
-              ))}
-            </ul>
-          </details>
-        </dd>
-      </dl>
-
-      {me.user.platformRole === 'super_admin' && (
-        <Link href="/admin" className="mt-4 inline-block text-md text-navy underline">
-          Open the platform console
-        </Link>
-      )}
-    </Card>
-  );
-}
-
-function Tag({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded-pill bg-amber/20 px-2 py-0.5 text-2xs font-bold uppercase tracking-wide text-amber-dark">
-      {children}
-    </span>
+    </RoleShell>
   );
 }
 
@@ -202,9 +148,13 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
 function PasswordForm() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [done, setDone] = useState(false);
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Only once they have started the second box — an empty field has not disagreed yet.
+  const mismatch = confirmNewPassword.length > 0 && confirmNewPassword !== newPassword;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -212,12 +162,14 @@ function PasswordForm() {
     setError(null);
     setDone(false);
     try {
+      // The confirmation is a screen concern. The endpoint takes two fields.
       await api('/auth/change-password', {
         method: 'POST',
         body: { currentPassword, newPassword },
       });
       setCurrentPassword('');
       setNewPassword('');
+      setConfirmNewPassword('');
       setDone(true);
     } catch (err) {
       setError(toDisplayError(err));
@@ -241,9 +193,8 @@ function PasswordForm() {
         )}
 
         <Field label="Current password" htmlFor="currentPassword">
-          <TextInput
+          <PasswordInput
             id="currentPassword"
-            type="password"
             autoComplete="current-password"
             required
             value={currentPassword}
@@ -252,9 +203,8 @@ function PasswordForm() {
         </Field>
 
         <Field label="New password" htmlFor="newPassword" hint="At least 10 characters. Length beats symbols.">
-          <TextInput
+          <PasswordInput
             id="newPassword"
-            type="password"
             autoComplete="new-password"
             required
             minLength={10}
@@ -263,7 +213,28 @@ function PasswordForm() {
           />
         </Field>
 
-        <Button type="submit" disabled={busy || !currentPassword || newPassword.length < 10}>
+        <Field
+          label="Confirm new password"
+          htmlFor="confirmNewPassword"
+          error={mismatch ? 'The two passwords do not match.' : undefined}
+        >
+          <PasswordInput
+            id="confirmNewPassword"
+            autoComplete="new-password"
+            required
+            value={confirmNewPassword}
+            onChange={(e) => setConfirmNewPassword(e.target.value)}
+            invalid={mismatch}
+          />
+        </Field>
+
+        <Button
+          type="submit"
+          disabled={
+            busy || !currentPassword || newPassword.length < 10
+            || mismatch || !confirmNewPassword
+          }
+        >
           {busy ? 'Changing…' : 'Change password'}
         </Button>
       </form>

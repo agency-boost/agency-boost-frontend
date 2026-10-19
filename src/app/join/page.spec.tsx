@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '../../../test/harness';
+import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import JoinPage from './page';
 
 const replace = vi.fn();
@@ -33,7 +33,9 @@ describe('redeeming an invite (P3-T4)', () => {
     renderWithSession(<JoinPage />, { me: NEWCOMER });
 
     expect(await screen.findByText('Prudential — KPM 0417 · BSD City Branch')).toBeInTheDocument();
-    expect(calls[0].url).toContain('code=JOR417');
+    // Found rather than indexed: the shell reads the unread count on mount, so the
+    // preview is no longer the first call this screen makes.
+    expect(calls.find((c) => c.url.includes('/join/invite'))!.url).toContain('code=JOR417');
   });
 
   it('shows whose unit and which office before anybody accepts', async () => {
@@ -53,7 +55,7 @@ describe('redeeming an invite (P3-T4)', () => {
     await userEvent.type(await screen.findByLabelText('Invite code'), 'jor417');
     await userEvent.click(screen.getByRole('button', { name: 'Check this invite' }));
 
-    expect(calls[0].url).toContain('code=jor417');
+    expect(calls.find((c) => c.url.includes('/join/invite'))!.url).toContain('code=jor417');
     expect(await screen.findByText('Wilson Tanoto')).toBeInTheDocument();
     // Nothing was written — accepting is a second, deliberate step.
     expect(calls.some((c) => c.init.method === 'POST')).toBe(false);
@@ -83,7 +85,7 @@ describe('redeeming an invite (P3-T4)', () => {
     renderWithSession(<JoinPage />, {
       me: makeMe({
         membership: {
-          membershipId: 'mem-1', kpmId: 'kpm-1', hierarchyRole: 'agent', status: 'active',
+          membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent', status: 'active',
           isKpmOwner: false, isKpmAdmin: false, directCount: 0,
         },
       }),
@@ -140,5 +142,32 @@ describe('redeeming an invite (P3-T4)', () => {
     expect(submit).toBeDisabled();
     await userEvent.type(screen.getByLabelText('Invite code'), 'JOR4');
     expect(submit).toBeEnabled();
+  });
+
+  it('gives somebody who already has an office a way back to it', async () => {
+    // They opened a colleague's invite by mistake. Until 2026-09-06 they were told the
+    // invite was not theirs and then given nothing — no link, and no sidebar either, so
+    // the browser's back button was the only exit.
+    stubFetch({ '/notifications': { body: { items: [], unread: 0 } } });
+    renderWithSession(<JoinPage />, {
+      me: makeMe({
+        membership: {
+          membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent', status: 'active',
+          isKpmOwner: false, isKpmAdmin: false, directCount: 0,
+        },
+        permissions: ['join_via_code_link_qr'],
+      }),
+    });
+
+    expect(await screen.findByText(/this invite is not for you/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to your work' }))
+      .toHaveAttribute('href', '/activity/log');
+  });
+
+  it('gives a stranger no chrome, because there is no role to pick one from', () => {
+    // The link arrives by email and is opened by somebody who may have no account. A
+    // shell here would bounce them to /login and lose the code they came with.
+    renderWithSession(<JoinPage />, { me: null });
+    expect(screen.queryByRole('navigation')).toBeNull();
   });
 });
