@@ -2,11 +2,12 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiRequestError } from '@/lib/api-client';
-import type { SignedUpload } from '@/lib/tenant-config';
 import { PDF_MAX_BYTES } from '@/lib/recruitment-pitch';
+import { GCS_UPLOAD_URL, gcsSignedUpload } from '@test/storage-fixtures';
 import { PdfUploadNotice, usePdfUpload } from './pdf-upload';
 
-const SIGNED: SignedUpload = { uploadUrl: 'https://storage.test/up', storageKey: 'dev/k/products/01A', signature: 's', expiresAt: '' };
+/** A GCS signed POST policy, as the API answers since Phase 18.7 (ADR-0153). */
+const SIGNED = gcsSignedUpload('dev/k/products/01A');
 
 type Options = Parameters<typeof usePdfUpload<string>>[0];
 
@@ -45,7 +46,8 @@ describe('usePdfUpload', () => {
     const sign = vi.fn(async () => { order.push('sign'); return SIGNED; });
     const attach = vi.fn(async () => { order.push('attach'); return 'row'; });
     const onAttached = vi.fn();
-    const send = vi.fn(async () => { order.push('send'); return { ok: true } as Response; });
+    // GCS answers a stored object with 204 No Content, and that is a success.
+    const send = vi.fn(async () => { order.push('send'); return { ok: true, status: 204 } as Response; });
     vi.stubGlobal('fetch', send);
     render(<Harness sign={sign} attach={attach} onAttached={onAttached} />);
 
@@ -55,7 +57,7 @@ describe('usePdfUpload', () => {
     await waitFor(() => expect(onAttached).toHaveBeenCalledWith('row'));
     expect(order).toEqual(['sign', 'send', 'attach']);
     expect(sign).toHaveBeenCalledWith({ filename: 'brochure.pdf', mimeType: 'application/pdf', bytes: 2048 });
-    expect(send).toHaveBeenCalledWith('https://storage.test/up', expect.objectContaining({ method: 'POST' }));
+    expect(send).toHaveBeenCalledWith(GCS_UPLOAD_URL, expect.objectContaining({ method: 'POST' }));
     expect(attach).toHaveBeenCalledWith('dev/k/products/01A', file);
     expect(input().value).toBe('');
   });

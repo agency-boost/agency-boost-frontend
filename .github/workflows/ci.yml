@@ -1,21 +1,28 @@
 name: ci
 
+# Pull requests, and every push to the two branches that deploy (ADR-0154): `development` is staging and
+# `main` is production. Vercel builds those two itself and runs no tests of its own; a production
+# deployment waits on these jobs by name (Deployment Checks, README.md § Deployment), so renaming one
+# means updating that selection. A push to `development` went unchecked until Phase 18.7, and work
+# lands there directly.
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, development]
 
 jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # pnpm's version comes from package.json's `packageManager`, the one Vercel reads too (plan D7).
+      # No `version:` here: pnpm/action-setup refuses one that disagrees with that field, so a second pin
+      # is only a second place to forget. `node-version: 24` below matches `engines.node` (24.x), which is
+      # where Vercel takes its Node from.
       - uses: pnpm/action-setup@v6
-        with:
-          version: 9
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
@@ -36,11 +43,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v6
-        with:
-          version: 9
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
@@ -79,11 +84,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v6
-        with:
-          version: 9
       - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Dependency audit

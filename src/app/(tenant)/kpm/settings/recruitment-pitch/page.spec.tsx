@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import { GCS_UPLOAD_URL, gcsSignedUpload } from '@test/storage-fixtures';
 import type { PitchMaterialsView, PitchSlot } from '@/lib/recruitment-pitch';
 import RecruitmentPitchPage from './page';
 
@@ -74,10 +75,8 @@ const field = (orgLevelCode: string, hierarchyRole: 'ab' | 'aab' | 'agent') => m
   permissions: ['member:read_profile', 'tenant_config:read', 'recruitment:read'],
 });
 
-const SIGNED = {
-  uploadUrl: 'https://storage.test/upload', storageKey: 'dev/kpm-1/recruitment-pitch/01NEW',
-  signature: 'sig', expiresAt: '2026-10-09T03:10:00.000Z',
-};
+/** A GCS signed POST policy, as the API answers since Phase 18.7 (ADR-0153). */
+const SIGNED = gcsSignedUpload('dev/kpm-1/recruitment-pitch/01NEW');
 
 function render(read: StubReply | StubReply[] = { body: DEMO }, me = OWNER, extra: Record<string, StubReply | StubReply[]> = {}) {
   const stub = stubFetch({ 'GET /recruitment/pitch-materials': read, ...extra });
@@ -313,7 +312,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       const faq = plain('faq', 'FAQ', { state: 'uploaded', file: file('faq.pdf', 14_336, '2026-10-09'), version: 1 });
       const stub = render([{ body: DEMO }, { body: view([DEMO.slots[0], DEMO.slots[1], faq, DEMO.slots[3]]) }], OWNER, {
         'POST /kpm/settings/recruitment-pitch/uploads': { body: SIGNED },
-        'https://storage.test/upload': { body: {} },
+        [GCS_UPLOAD_URL]: { status: 204 },
         'PUT /kpm/settings/recruitment-pitch/faq': { body: faq },
       });
       await screen.findByRole('article', { name: 'FAQ' });
@@ -323,9 +322,11 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(within(card('FAQ')).getByText('14 KB · updated Oct 9, 2026')).toBeInTheDocument();
       expect(JSON.parse(calls(stub, '/recruitment-pitch/uploads', 'POST')[0].init.body as string))
         .toEqual({ filename: 'faq.pdf', mimeType: 'application/pdf', bytes: 14_336 });
-      const sent = calls(stub, 'https://storage.test/upload', 'POST')[0].init.body as FormData;
-      expect(sent.get('public_id')).toBe(SIGNED.storageKey);
-      expect(sent.get('signature')).toBe('sig');
+      // The signed policy's own fields, then the file — what storage checks the upload against.
+      const sent = calls(stub, GCS_UPLOAD_URL, 'POST')[0].init.body as FormData;
+      expect(sent.get('key')).toBe(SIGNED.storageKey);
+      expect(sent.get('x-goog-signature')).toBe(SIGNED.fields['x-goog-signature']);
+      expect([...sent.keys()].at(-1)).toBe('file');
       expect(JSON.parse(calls(stub, '/recruitment-pitch/faq', 'PUT')[0].init.body as string))
         .toEqual({ storageKey: SIGNED.storageKey });
       expect(await screen.findByRole('img', { name: '2 of 4 documents complete' })).toBeInTheDocument();
@@ -342,7 +343,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       });
       const base = globalThis.fetch;
       vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-        if (url.startsWith('https://storage.test')) { await held; return { ok: true, status: 200, json: async () => ({}) } as Response; }
+        if (url.startsWith(GCS_UPLOAD_URL)) { await held; return { ok: true, status: 204 } as Response; }
         return base(url, init);
       }));
       renderWithSession(<RecruitmentPitchPage />, { me: OWNER });
@@ -384,7 +385,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
         at(s('partial', v2, [], 2)),
       ], OWNER, {
         'POST /kpm/settings/recruitment-pitch/uploads': { body: SIGNED },
-        'https://storage.test/upload': { body: {} },
+        [GCS_UPLOAD_URL]: { status: 204 },
         'PUT /kpm/settings/recruitment-pitch/opportunity': [
           { body: s('partial', v1, [], 1) },
           { body: s('partial', v2, [], 2) },

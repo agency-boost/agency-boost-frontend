@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { GCS_UPLOAD_URL, gcsSignedUpload } from '@test/storage-fixtures';
 import KpmProductsPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -438,10 +439,8 @@ describe('the office’s Products screen', () => {
    * recruitment pitch's control, in the prototype's words and place (`KPM_Owner.html:2404`).
    */
   describe('the office’s own document upload (P17-T9)', () => {
-    const SIGNED = {
-      uploadUrl: 'https://storage.test/upload', storageKey: 'dev/kpm-1/products/01DOC',
-      signature: 'sig', expiresAt: '2026-10-09T03:10:00.000Z',
-    };
+    /** A GCS signed POST policy, as the API answers since Phase 18.7 (ADR-0153). */
+    const SIGNED = gcsSignedUpload('dev/kpm-1/products/01DOC');
     const DOCS = [
       { slot: 'brochure', label: 'Brochure', storageKey: 'k1', filename: 'ours.pdf', source: 'kpm' },
       { slot: 'illustration', label: 'Illustration / Simulation', storageKey: 'k2', filename: 'theirs.pdf', source: 'company' },
@@ -471,7 +470,7 @@ describe('the office’s Products screen', () => {
     it('signs a PDF into the office’s folder, sends it, and attaches it under its own name', async () => {
       const stub = render([product({ documents: DOCS })], OWNER, {
         'POST /kpm/settings/products/uploads': { body: SIGNED },
-        'https://storage.test/upload': { body: {} },
+        [GCS_UPLOAD_URL]: { status: 204 },
         'PUT /kpm/settings/products/p1/documents/productDoc': { body: withDoc('productDoc', 'pd.pdf') },
       });
       await open();
@@ -489,7 +488,7 @@ describe('the office’s Products screen', () => {
     it('replaces an office file through the same route', async () => {
       const stub = render([product({ documents: DOCS })], OWNER, {
         'POST /kpm/settings/products/uploads': { body: SIGNED },
-        'https://storage.test/upload': { body: {} },
+        [GCS_UPLOAD_URL]: { status: 204 },
         'PUT /kpm/settings/products/p1/documents/brochure': { body: withDoc('brochure', 'ours-v2.pdf') },
       });
       await open();
