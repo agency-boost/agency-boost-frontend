@@ -58,9 +58,29 @@ It uses Node 24, and pnpm comes from `packageManager`.
 
 | Job | Runs |
 |---|---|
-| `quality` | Lint, typecheck, the tests, the coverage ratchet |
+| `quality` | The backend's source beside the checkout (below), shellcheck on `.github/ci/`, lint, typecheck, the tests, the coverage ratchet |
 | `build` | A production build with `NEXT_PUBLIC_APP_ENV=demo`, the First Load JS budget (`scripts/check-bundle-size.mjs`), and `pnpm check:secrets` on that output |
-| `audit` | `pnpm audit --audit-level high` |
+| `audit` | `pnpm audit --audit-level high`. It ignores one advisory, which has no patched release: `../docs/02-specs/nfr/security-and-privacy.md`, *Dependencies* |
+
+**`quality` reads the backend.** Six spec files check this repository against the backend's own
+source, so the two cannot drift: the OpenAPI document the API client is held to, and the constants the
+screens mirror. They read it at `../backend`, where the superproject puts it on a laptop. On CI this
+repository is checked out alone, so `.github/ci/backend-beside.sh` clones the backend's top level and
+`src/` there first, read-only, with a deploy key. It reads a pull request's own branch where the
+backend has one, otherwise the branch it merges into, and for a push the branch pushed. Set the key up
+once, on a laptop signed in to `gh` as an owner of both repositories:
+
+```bash
+ssh-keygen -t ed25519 -N '' -C 'agency-boost-frontend CI: read the backend' -f ./backend-ci
+gh repo deploy-key add ./backend-ci.pub --repo agency-boost/agency-boost-backend --title 'agency-boost-frontend CI (read-only)'
+gh secret set BACKEND_DEPLOY_KEY --repo agency-boost/agency-boost-frontend < ./backend-ci
+gh secret set BACKEND_DEPLOY_KEY --repo agency-boost/agency-boost-frontend --app dependabot < ./backend-ci
+rm ./backend-ci ./backend-ci.pub
+```
+
+The backend is `<this owner>/agency-boost-backend` unless the `BACKEND_REPOSITORY` variable names
+another. Because that job holds a key, **every action is pinned by commit**, with its version beside
+it, and the token is read-only.
 
 `companion-pr.yml` also runs on pull requests. A PR that touches `src/` must name its superproject
 PR, or say `docs:none` and give a reason.
@@ -69,8 +89,8 @@ PR, or say `docs:none` and give a reason.
 once, in Actions, on the pull request, before anything merges. Running them again inside the Vercel
 build would cost build minutes, and a failure there would arrive only after the merge, as a failed
 deployment. Vercel's build does the two things that depend on the deployment itself: it checks that
-deployment's environment, and it scans that deployment's bundle for seeded credentials. Deployment
-Checks (below) connect the two systems.
+deployment's environment, and it scans that deployment's bundle for seeded credentials. A person
+connects the two systems (*The CI gate is a person*, below).
 
 ## Deployment (Vercel)
 

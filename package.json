@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "clsx": "^2.1.1",
-    "next": "^15.1.4",
+    "next": "^15.5.28",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -36,13 +36,13 @@
     "@vitest/coverage-v8": "^5.0.0",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
-    "eslint-config-next": "^15.1.4",
+    "eslint-config-next": "^15.5.28",
     "jest-axe": "^11.0.0",
     "jsdom": "^25.0.1",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.3",
-    "vite": "^8.2.2",
+    "vite": "^8.2.4",
     "vitest": "^5.0.0",
     "vitest-axe": "^0.1.0"
   },
@@ -52,7 +52,16 @@
   },
   "pnpm": {
     "overrides": {
-      "next>postcss": ">=8.5.18"
+      "magicast>source-map-js": "^1.2.2",
+      "minimatch@10>brace-expansion": "^5.0.12",
+      "minimatch@3>brace-expansion": "^1.1.21",
+      "next>postcss": ">=8.5.18",
+      "postcss>source-map-js": "^1.2.2"
+    },
+    "auditConfig": {
+      "ignoreGhsas": [
+        "GHSA-vfj7-8cjw-p6xm"
+      ]
     }
   }
 }
