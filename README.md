@@ -68,7 +68,9 @@ screens mirror. They read it at `../backend`, where the superproject puts it on 
 repository is checked out alone, so `.github/ci/backend-beside.sh` clones the backend's top level and
 `src/` there first, read-only, with a deploy key. It reads a pull request's own branch where the
 backend has one, otherwise the branch it merges into, and for a push the branch pushed. Set the key up
-once, on a laptop signed in to `gh` as an owner of both repositories:
+once, on a laptop signed in to `gh` as an owner of both repositories. **The organisation must allow
+deploy keys first** (*Settings → Member privileges → Deploy keys → Enabled*); a new organisation starts
+with them off, and the second command then fails with *"Deploy keys are disabled for this repository"*:
 
 ```bash
 ssh-keygen -t ed25519 -N '' -C 'agency-boost-frontend CI: read the backend' -f ./backend-ci
