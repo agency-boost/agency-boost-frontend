@@ -131,4 +131,39 @@ describe('the shared tenant configuration (P4-T7)', () => {
     render(<TenantConfigProvider><Reader /></TenantConfigProvider>);
     await waitFor(() => expect(screen.getByText('vnone')).toBeInTheDocument());
   });
+
+  describe('a read that lands after the provider is gone', () => {
+    /*
+     * On CI the answer arrived after the spec's environment was torn down: no `window`, so setting state threw,
+     * and the unhandled rejection failed a run whose every test had passed (2026-10-24). Reproduced as it
+     * happened: the provider unmounted, `window` taken away as the teardown takes it, and only then the answer.
+     */
+    for (const outcome of ['answered', 'refused'] as const) {
+      it(`is dropped when ${outcome}, and touches nothing`, async () => {
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        const fetchMock = vi.fn(async (url: string) => {
+          await gate;
+          return outcome === 'answered'
+            ? { ok: true, status: 200, json: async () => (url.includes('/kpm/org-levels') ? LADDER : CONFIG) }
+            : { ok: false, status: 500, json: async () => ({ error: { code: 'INTERNAL_ERROR', message: 'x', requestId: 'r' } }) };
+        });
+        vi.stubGlobal('fetch', fetchMock);
+        const unhandled = vi.fn();
+        process.on('unhandledRejection', unhandled);
+        try {
+          const { unmount } = render(<TenantConfigProvider><Reader /></TenantConfigProvider>);
+          expect(fetchMock).toHaveBeenCalledTimes(2);
+          unmount();
+          vi.stubGlobal('window', undefined);
+          release();
+          for (let tick = 0; tick < 3; tick += 1) await new Promise((resolve) => { setTimeout(resolve, 0); });
+        } finally {
+          vi.unstubAllGlobals();
+          process.off('unhandledRejection', unhandled);
+        }
+        expect(unhandled).not.toHaveBeenCalled();
+      });
+    }
+  });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api-client';
 import { SessionContext } from './session';
 import type {
@@ -101,6 +101,19 @@ export function TenantConfigProvider({ children }: { children: React.ReactNode }
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
 
+  /*
+   * **A read that lands after the provider is gone is dropped.** A screen can be left — or a spec end — while
+   * the two requests are still out, and their answer then set state on a tree that no longer exists: on CI it
+   * arrived after the test environment was torn down, and `setLoading(false)` threw *"window is not defined"*
+   * as an unhandled rejection that failed a run whose every test had passed (2026-10-24). Set in the effect,
+   * not only at creation, so React's development remount leaves it true.
+   */
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       /*
@@ -112,13 +125,14 @@ export function TenantConfigProvider({ children }: { children: React.ReactNode }
         api<TenantConfig>('/kpm/config'),
         api<OrgLevel[]>('/kpm/org-levels'),
       ]);
+      if (!mounted.current) return;
       setConfig(next);
       setLadder(rungs);
       setError(null);
     } catch (err) {
-      setError(err);
+      if (mounted.current) setError(err);
     } finally {
-      setLoading(false);
+      if (mounted.current) setLoading(false);
     }
   }, []);
 
