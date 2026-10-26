@@ -50,7 +50,7 @@ export function RoleShell({
   allowSignedOut?: boolean;
   children: ReactNode;
 }) {
-  const { me, loading, signedOut } = useSession();
+  const { me, loading, signedOut, expired } = useSession();
   const router = useRouter();
   const toSignIn = !loading && !me && !allowSignedOut;
 
@@ -59,11 +59,12 @@ export function RoleShell({
    * page bare for anybody not signed in, so an expired session on `/profile` drew an empty form, no header, a
    * pronoun of *they / them* and the raw `AUTH_TOKEN_INVALID` of the read that failed — while every page behind a
    * group layout went to `/login?next=…`. The same redirect as `RequireSession`, by the same `signInPathFrom`:
-   * `next` carries the page, except after the reader signed out themselves.
+   * `next` carries the page, except after the reader signed out themselves, and `reason=expired` says a session
+   * ended under them (ADR-0168 §1).
    */
   useEffect(() => {
-    if (toSignIn) router.replace(signInPathFrom(window.location, { signedOut }));
-  }, [toSignIn, signedOut, router]);
+    if (toSignIn) router.replace(signInPathFrom(window.location, { signedOut, expired }));
+  }, [toSignIn, signedOut, expired, router]);
 
   if (!me) {
     // The one page that opts in decides for itself, loading or not, as it always has.

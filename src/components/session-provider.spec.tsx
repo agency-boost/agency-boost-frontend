@@ -244,6 +244,26 @@ describe('SessionProvider', () => {
       expect(isImpersonating()).toBe(false);
     });
 
+    it('ADR-0168 §1: a support session ended after the Super Admin’s own session ended is a session that ended', async () => {
+      setImpersonating(true);
+      stubFetch({
+        '/auth/refresh': [
+          { body: { accessToken: 'imp-start' } },
+          { status: 401, body: { error: { code: 'AUTH_SESSION_ENDED', message: 'Your session ended.', requestId: 'r' } } },
+        ],
+        '/auth/me': { status: 403, body: { error: { ...REFUSALS[1], requestId: 'r-9' } } },
+        '/admin/impersonate/end': { body: { status: 'ended' } },
+      });
+      function Ended() {
+        const { me, expired } = useSession();
+        return <p data-testid="ended">{`${me ? 'in' : 'out'}, ${expired ? 'expired' : 'not expired'}`}</p>;
+      }
+      render(<SessionProvider><Ended /></SessionProvider>);
+      await userEvent.click(await screen.findByRole('button', { name: 'End support session' }));
+      await waitFor(() => expect(screen.getByTestId('ended')).toHaveTextContent('out, expired'));
+      expect(isImpersonating()).toBe(false);
+    });
+
     it('any other 403 is the screen’s own business: the app stays', async () => {
       stubFetch({
         '/auth/refresh': { body: { accessToken: 'fresh' } },
@@ -325,6 +345,187 @@ describe('SessionProvider', () => {
       render(<SessionProvider><RequireSession permission="kpm_analytics:read">secret</RequireSession></SessionProvider>);
 
       await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+      await waitFor(() => expect(replace).toHaveBeenCalled());
+      expect(replace.mock.calls).toEqual([['/login']]);
+    });
+  });
+
+  /*
+   * ADR-0168 §1 (OD-208; the client's UI review, UI-006): **a session that ends under the reader says so.** A request
+   * answered `401` whose refresh the server refuses ends the session this tab had, and the page's guard sends the
+   * reader to sign in with `reason=expired`. A reader who arrives with no session keeps the plain return path.
+   */
+  describe('a session that ends under the reader (ADR-0168 §1)', () => {
+    const PAGE = '/kpm/analytics/compliance';
+    const EXPIRED = `/login?next=${encodeURIComponent(PAGE)}&reason=expired`;
+
+    /** A screen that reads something when asked, and says what came back. */
+    function Screen() {
+      const [said, setSaid] = useState('');
+      return (
+        <div>
+          <button onClick={() => void api('/widgets').then(() => setSaid('read')).catch(() => setSaid('refused'))}>
+            read
+          </button>
+          <p data-testid="said">{said}</p>
+        </div>
+      );
+    }
+
+    function Flags() {
+      const { me, loading, signedOut, expired } = useSession();
+      return (
+        <p data-testid="flags">
+          {loading ? 'loading' : `${me ? 'in' : 'out'}, ${signedOut ? 'signed out' : 'not signed out'}, ${expired ? 'expired' : 'not expired'}`}
+        </p>
+      );
+    }
+
+    beforeEach(() => {
+      window.history.pushState({}, '', PAGE);
+      replace.mockClear();
+    });
+    afterEach(() => window.history.pushState({}, '', '/'));
+
+    it('a read whose refresh the server refuses ends the session, and the guard sends the reader to the expired path', async () => {
+      stubFetch({
+        // Signed in on load; the second refresh, mid-use, is refused: the cookie expired or was revoked.
+        '/auth/refresh': [{ body: { accessToken: 'fresh' } }, { status: 401, body: {} }],
+        '/auth/me': { body: ME },
+        '/widgets': { status: 401, body: { error: { code: 'AUTH_TOKEN_EXPIRED', message: 'Expired.', requestId: 'r' } } },
+      });
+      render(<SessionProvider><Flags /><RequireSession><Screen /></RequireSession></SessionProvider>);
+      await userEvent.click(await screen.findByRole('button', { name: 'read' }));
+
+      await waitFor(() => expect(replace).toHaveBeenCalled());
+      expect(replace.mock.calls).toEqual([[EXPIRED]]);
+      expect(screen.getByTestId('flags')).toHaveTextContent('out, not signed out, expired');
+      expect(getAccessToken()).toBeNull();
+    });
+
+    /*
+     * The client's own case (UI-006): the app closed, opened again later, and the first refresh finds the cookie
+     * the session left — expired, revoked or spent. The server says `AUTH_SESSION_ENDED`, and the reader is told.
+     */
+    it('a reload whose refresh cookie no longer works is a session that ended: the expired path', async () => {
+      stubFetch({
+        '/auth/refresh': {
+          status: 401,
+          body: { error: { code: 'AUTH_SESSION_ENDED', message: 'Your session ended. Sign in again.', requestId: 'r' } },
+        },
+      });
+      render(<SessionProvider><Flags /><RequireSession>secret</RequireSession></SessionProvider>);
+
+      await waitFor(() => expect(replace).toHaveBeenCalled());
+      expect(replace.mock.calls).toEqual([[EXPIRED]]);
+      expect(screen.getByTestId('flags')).toHaveTextContent('out, not signed out, expired');
+    });
+
+    it('a fresh visit with no cookie at all is somebody arriving signed out: the plain return path', async () => {
+      stubFetch({
+        '/auth/refresh': {
+          status: 401,
+          body: { error: { code: 'AUTH_TOKEN_INVALID', message: 'No session to refresh. Sign in again.', requestId: 'r' } },
+        },
+      });
+      render(<SessionProvider><Flags /><RequireSession>secret</RequireSession></SessionProvider>);
+
+      await waitFor(() => expect(replace).toHaveBeenCalled());
+      expect(replace.mock.calls).toEqual([[`/login?next=${encodeURIComponent(PAGE)}`]]);
+      expect(screen.getByTestId('flags')).toHaveTextContent('out, not signed out, not expired');
+    });
+
+    it('after a deliberate sign-out, the next load finds no cookie — sign-out cleared it — and is not told it ended', async () => {
+      stubFetch({
+        '/auth/refresh': [
+          { body: { accessToken: 'fresh' } },
+          // What the browser sends once the sign-out's clear has landed: no cookie, so no session to refresh.
+          { status: 401, body: { error: { code: 'AUTH_TOKEN_INVALID', message: 'No session to refresh.', requestId: 'r' } } },
+        ],
+        '/auth/me': { body: ME },
+        '/auth/logout': { status: 204, body: undefined },
+      });
+      const first = render(<SessionProvider><Flags /><Probe /><RequireSession>secret</RequireSession></SessionProvider>);
+      await waitFor(() => expect(screen.getByTestId('flags')).toHaveTextContent('in, not signed out, not expired'));
+      await userEvent.click(screen.getByRole('button', { name: 'sign out' }));
+      await waitFor(() => expect(replace).toHaveBeenCalled());
+      expect(replace.mock.calls).toEqual([['/login']]);
+
+      // The app opened again, on the page.
+      first.unmount();
+      replace.mockClear();
+      render(<SessionProvider><Flags /><RequireSession>secret</RequireSession></SessionProvider>);
+      await waitFor(() => expect(replace).toHaveBeenCalled());
+      expect(replace.mock.calls).toEqual([[`/login?next=${encodeURIComponent(PAGE)}`]]);
+      expect(screen.getByTestId('flags')).toHaveTextContent('out, not signed out, not expired');
+    });
+
+    it('a fresh visit with no session to end keeps the plain return path, and is not marked expired', async () => {
+      stubFetch({ '/auth/refresh': { status: 401, body: {} } });
+      render(<SessionProvider><Flags /><RequireSession>secret</RequireSession></SessionProvider>);
+
+      await waitFor(() => expect(replace).toHaveBeenCalled());
+      expect(replace.mock.calls).toEqual([[`/login?next=${encodeURIComponent(PAGE)}`]]);
+      expect(screen.getByTestId('flags')).toHaveTextContent('out, not signed out, not expired');
+    });
+
+    it('a refresh answered with something that is not about the session ends nothing: the screen shows its error', async () => {
+      stubFetch({
+        '/auth/refresh': [{ body: { accessToken: 'fresh' } }, { status: 503, body: {} }],
+        '/auth/me': { body: ME },
+        '/widgets': { status: 401, body: { error: { code: 'AUTH_TOKEN_EXPIRED', message: 'Expired.', requestId: 'r' } } },
+      });
+      render(<SessionProvider><Flags /><RequireSession><Screen /></RequireSession></SessionProvider>);
+      await userEvent.click(await screen.findByRole('button', { name: 'read' }));
+
+      await waitFor(() => expect(screen.getByTestId('said')).toHaveTextContent('refused'));
+      expect(screen.getByTestId('flags')).toHaveTextContent('in, not signed out, not expired');
+      expect(replace).not.toHaveBeenCalled();
+    });
+
+    it('a support session’s 401 ends nothing: it never refreshes, the cookie being the Super Admin’s', async () => {
+      const { calls } = stubFetch({
+        '/auth/refresh': { body: { accessToken: 'fresh' } },
+        '/auth/me': { body: ME },
+        '/widgets': { status: 401, body: { error: { code: 'AUTH_TOKEN_EXPIRED', message: 'Ended.', requestId: 'r' } } },
+      });
+      render(<SessionProvider><Flags /><RequireSession><Screen /></RequireSession></SessionProvider>);
+      await screen.findByRole('button', { name: 'read' });
+      setImpersonating(true);
+      await userEvent.click(screen.getByRole('button', { name: 'read' }));
+
+      await waitFor(() => expect(screen.getByTestId('said')).toHaveTextContent('refused'));
+      expect(calls.filter((c) => c.url.includes('/auth/refresh'))).toHaveLength(1);
+      expect(screen.getByTestId('flags')).toHaveTextContent('in, not signed out, not expired');
+      expect(replace).not.toHaveBeenCalled();
+    });
+
+    it('signing in again clears it, and a later Sign out goes to plain /login', async () => {
+      stubFetch({
+        '/auth/refresh': [{ body: { accessToken: 'fresh' } }, { status: 401, body: {} }],
+        '/auth/me': { body: ME },
+        '/auth/login': { body: { accessToken: 'tok' } },
+        '/auth/logout': { status: 204, body: undefined },
+        '/widgets': { status: 401, body: {} },
+      });
+      function Again() {
+        const { signIn, signOut } = useSession();
+        return (
+          <>
+            <button onClick={() => void signIn('rina@kpm0417.test', 'pw')}>sign in</button>
+            <button onClick={() => void signOut()}>sign out</button>
+          </>
+        );
+      }
+      render(<SessionProvider><Flags /><Again /><RequireSession><Screen /></RequireSession></SessionProvider>);
+      await userEvent.click(await screen.findByRole('button', { name: 'read' }));
+      await waitFor(() => expect(screen.getByTestId('flags')).toHaveTextContent('out, not signed out, expired'));
+
+      await userEvent.click(screen.getByRole('button', { name: 'sign in' }));
+      await waitFor(() => expect(screen.getByTestId('flags')).toHaveTextContent('in, not signed out, not expired'));
+
+      replace.mockClear();
+      await userEvent.click(screen.getByRole('button', { name: 'sign out' }));
       await waitFor(() => expect(replace).toHaveBeenCalled());
       expect(replace.mock.calls).toEqual([['/login']]);
     });

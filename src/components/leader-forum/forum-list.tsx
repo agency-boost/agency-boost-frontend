@@ -23,7 +23,7 @@ const FILTERS: readonly MeetingFilter[] = ['all', 'upcoming', 'past'];
  * meets the not-found state.
  */
 export function ForumList() {
-  const { me, loading, signedOut } = useSession();
+  const { me, loading, signedOut, expired } = useSession();
   const router = useRouter();
   const pathname = usePathname();
   const signedIn = !loading && me !== null;
@@ -35,8 +35,8 @@ export function ForumList() {
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    if (!loading && !me) router.replace(signInAndReturn(pathname, signedOut));
-  }, [loading, me, signedOut, router, pathname]);
+    if (!loading && !me) router.replace(signInAndReturn(pathname, { signedOut, expired }));
+  }, [loading, me, signedOut, expired, router, pathname]);
 
   useEffect(() => {
     if (!signedIn) return undefined;

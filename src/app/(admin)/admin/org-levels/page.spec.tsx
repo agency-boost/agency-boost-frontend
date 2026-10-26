@@ -269,20 +269,82 @@ describe('org role ladder (P3.5-T7)', () => {
     ).toBeInTheDocument();
   });
 
-  it('P18.9-T3 AC-3 lists the insurers’ ladders, and not the Template library’s', async () => {
-    stubFetch({
-      '/admin/org-levels': { body: [...LADDER, rung({ orgLevelId: 'lvl-t', companyId: 'co-lib', code: 'AGENT' })] },
-      '/admin/companies': {
-        body: [
-          { _id: 'co-lib', name: 'Template', slug: 'template', defaultCurrency: 'IDR', defaultTimezone: 'Asia/Jakarta', status: 'active', kind: 'template' },
-          { ...COMPANIES[0], kind: 'insurer' },
-        ],
-      },
+  /*
+   * **ADR-0168 §3 — the Template library's ladder is edited here** (amending P18.9-T3 AC-3, which left it out): it
+   * is listed under *Company* by its name, an insurer still chosen first, and while it is chosen the *Template
+   * library* badge of `/admin/companies` sits beside the select; its rungs take every write the insurers' do.
+   */
+  describe('the Template library (ADR-0168 §3)', () => {
+    const LIBRARY = {
+      _id: 'co-lib', name: 'Template', slug: 'template', defaultCurrency: 'IDR', defaultTimezone: 'Asia/Jakarta',
+      status: 'active', kind: 'template',
+    };
+    const LIBRARY_LADDER = [
+      rung({ orgLevelId: 'lib-1', companyId: 'co-lib' }),
+      rung({ orgLevelId: 'lib-2', companyId: 'co-lib', code: 'AAB', label: 'AAB', displayOrder: 2, leaderTier: 'associate' }),
+      rung({ orgLevelId: 'lib-3', companyId: 'co-lib', code: 'AB', label: 'Agency Builder', displayOrder: 3, leaderTier: 'senior' }),
+    ];
+    const routes = (extra: Parameters<typeof stubFetch>[0] = {}) => stubFetch({
+      ...extra,
+      '/admin/org-levels': { body: [...LADDER, ...LIBRARY_LADDER] },
+      '/admin/companies': { body: [{ ...COMPANIES[0], kind: 'insurer' }, LIBRARY] },
     });
-    renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
 
-    const company = await screen.findByRole('combobox', { name: 'Company' });
-    expect([...(company as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Prudential']);
-    expect(await screen.findByText('Agent → AAB → AB')).toBeInTheDocument();
+    it('lists it under Company, an insurer still chosen first, and no badge while an insurer is', async () => {
+      routes();
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      const company = await screen.findByRole('combobox', { name: 'Company' });
+      expect([...(company as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Prudential', 'Template']);
+      expect(company).toHaveDisplayValue('Prudential');
+      expect(await screen.findByText('Agent → AAB → AB')).toBeInTheDocument();
+      expect(screen.queryByText('Template library')).not.toBeInTheDocument();
+    });
+
+    it('labels it Template library while it is chosen, the badge describing the select, and shows its ladder', async () => {
+      routes();
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      const company = await screen.findByRole('combobox', { name: 'Company' });
+      // The companies arrive after the select does: choose the library once it is an option.
+      await screen.findByRole('option', { name: 'Template' });
+      await userEvent.selectOptions(company, 'co-lib');
+      const badge = await screen.findByText('Template library');
+      expect(company).toHaveAccessibleDescription('Template library');
+      // The same chip `/admin/companies` puts on the library's row: the component, its tone and its words.
+      expect(badge).toHaveAttribute('data-tone', 'navy');
+      expect(await screen.findByText('Agent → AAB → Agency Builder')).toBeInTheDocument();
+    });
+
+    it('takes a rung, a tier and an archive on its ladder, as on any company’s', async () => {
+      const { calls } = routes({
+        '/admin/org-levels/lib-2': { body: [LIBRARY_LADDER[0], { ...LIBRARY_LADDER[1], leaderTier: null }, LIBRARY_LADDER[2]] },
+      });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      const company = await screen.findByRole('combobox', { name: 'Company' });
+      await screen.findByRole('option', { name: 'Template' });
+      await userEvent.selectOptions(company, 'co-lib');
+      await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Leader tier of AAB' }), 'Not a leader');
+      const patch = calls.find((c) => c.init.method === 'PATCH');
+      expect(patch?.url).toContain('/admin/org-levels/lib-2');
+      expect(JSON.parse(String(patch?.init.body))).toEqual({ leaderTier: null });
+      expect(await screen.findByRole('combobox', { name: 'Leader tier of AAB' })).toHaveDisplayValue('Not a leader');
+
+      await userEvent.type(screen.getByLabelText('Code'), 'SM');
+      await userEvent.type(screen.getByLabelText('Label'), 'Senior Manager');
+      await userEvent.click(screen.getByRole('button', { name: 'Add rung' }));
+      const post = calls.find((c) => c.init.method === 'POST');
+      expect(JSON.parse(String(post?.init.body))).toMatchObject({ companyId: 'co-lib', code: 'SM', displayOrder: 4 });
+    });
+
+    it('is chosen where it is the only company', async () => {
+      stubFetch({ '/admin/org-levels': { body: LIBRARY_LADDER }, '/admin/companies': { body: [LIBRARY] } });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      expect(await screen.findByRole('combobox', { name: 'Company' })).toHaveDisplayValue('Template');
+      expect(await screen.findByText('Agent → AAB → Agency Builder')).toBeInTheDocument();
+      expect(screen.getByText('Template library')).toBeInTheDocument();
+    });
   });
 });

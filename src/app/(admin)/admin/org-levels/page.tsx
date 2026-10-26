@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Page } from '@/components/page';
+import { ConfigBadge } from '@/components/ui/config-badge';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
@@ -10,6 +11,7 @@ import { StatusPill } from '@/components/ui/status-pill';
 import {
   createOrgLevel,
   insurersOf,
+  isTemplateLibrary,
   listCompanies,
   listOrgLevels,
   updateOrgLevel,
@@ -66,6 +68,11 @@ function tierInUse(error: ApiError, level: OrgLevel | undefined): ApiError {
  *
  * Built in the console's own idiom — the list-plus-side-panel of `/admin/companies` —
  * rather than a new visual language for one screen.
+ *
+ * **The Template library is listed** (ADR-0168 §3, 2026-10-26): its ladder is the one a new company copies,
+ * and it is edited here like any company's — *Company* offers it by its name, and beside the select the same
+ * *Template library* badge `/admin/companies` puts on its row says which it is. It has no offices, so a tier
+ * change on it is never refused for members; the server is where that is decided. Registered as an Improve.
  */
 export default function OrgLevelsPage() {
   const [levels, setLevels] = useState<OrgLevel[] | null>(null);
@@ -80,12 +87,11 @@ export default function OrgLevelsPage() {
   useEffect(() => {
     void Promise.all([listOrgLevels(), listCompanies()])
       .then(([ladder, all]) => {
-        // The insurers' ladders: the Template library's is the one a new company copies, and is not an
-        // insurer's to edit here (ADR-0164 §3).
-        const cos = insurersOf(all);
+        // Every company, the Template library included (ADR-0168 §3): its ladder is what a new company copies.
+        // An insurer is chosen first, as before the library was listed; the library only where there is none.
         setLevels(ladder);
-        setCompanies(cos);
-        setCompanyId((c) => c || (cos[0]?._id ?? ''));
+        setCompanies(all);
+        setCompanyId((c) => c || (insurersOf(all)[0]?._id ?? all[0]?._id ?? ''));
       })
       .catch((err) => {
         setError(toDisplayError(err));
@@ -157,6 +163,7 @@ export default function OrgLevelsPage() {
   }
 
   const company = companies.find((c) => c._id === companyId);
+  const libraryChosen = company ? isTemplateLibrary(company) : false;
 
   return (
     <Page
@@ -166,14 +173,29 @@ export default function OrgLevelsPage() {
     >
       {error && !takenCode && <ErrorBanner {...error} />}
 
-      <Field label="Company" htmlFor="company" className="mb-6 max-w-sm">
-        <Select id="company" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
-          {companies.map((c) => (
-            <option key={c._id} value={c._id}>
-              {c.name}
-            </option>
-          ))}
-        </Select>
+      <Field label="Company" htmlFor="company" className="mb-6">
+        {/* The badge `/admin/companies` puts on the library's row, beside the select while it is the one chosen,
+            and named by the select's description so a screen reader hears it with the choice (ADR-0168 §3). */}
+        <div className="flex items-center gap-3">
+          <Select
+            id="company"
+            className="max-w-sm"
+            value={companyId}
+            aria-describedby={libraryChosen ? 'company-kind' : undefined}
+            onChange={(e) => setCompanyId(e.target.value)}
+          >
+            {companies.map((c) => (
+              <option key={c._id} value={c._id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+          {libraryChosen && (
+            <span id="company-kind">
+              <ConfigBadge tone="navy">Template library</ConfigBadge>
+            </span>
+          )}
+        </div>
       </Field>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">

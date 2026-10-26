@@ -19,16 +19,16 @@ const CODE = /^[A-Za-z0-9-]{2,16}$/;
 const START_HINT = {
   template: 'Its settings are copied from this template’s published sections; a section it has not published starts empty, except Capability Mapping, which starts with AgencyBoost’s standard capability ladder.',
   library: 'Its settings are copied from the Template library’s published sections, and every role they show must be on this company’s ladder. Changing the Template later changes nothing in this office.',
-  defaults: 'Every section as AgencyBoost ships it.',
   empty: 'Nothing but the three activity types the goal plan counts and AgencyBoost’s standard capability ladder. The Owner builds the rest.',
 } as const;
 
 /**
- * `template:<id>`, `library:<id>`, `defaults` or `empty`: one select's value for the four kinds of source.
- * `library:` is the Template library's template (ADR-0164 §5), copied across companies.
+ * `template:<id>`, `library:<id>` or `empty`: one select's value for the three kinds of source. `library:` is
+ * the Template library's template (ADR-0164 §5), copied across companies. *AgencyBoost defaults* is not one:
+ * the Template's Default template holds them, and the API refuses the source (ADR-0168 §2).
  */
 function startFromOf(value: string): StartFrom {
-  if (value === 'defaults' || value === 'empty') return { kind: value };
+  if (value === 'empty') return { kind: 'empty' };
   if (value.startsWith('library:')) {
     return { kind: 'template', templateLibrary: true, templateId: value.slice('library:'.length) };
   }
@@ -39,7 +39,7 @@ function startFromOf(value: string): StartFrom {
 function hintOf(value: string): string {
   if (value.startsWith('template:') || !value) return START_HINT.template;
   if (value.startsWith('library:')) return START_HINT.library;
-  return START_HINT[value as 'defaults' | 'empty'];
+  return START_HINT.empty;
 }
 
 export default function NewTenantPage() {
@@ -55,8 +55,10 @@ export default function NewTenantPage() {
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
   const [busy, setBusy] = useState(false);
   /**
-   * **Start from** (ADR-0115 §4): the company's active templates, the default first and chosen, then
-   * the AgencyBoost defaults and *Empty*. Read again whenever the company changes; `null` while it is.
+   * **Start from** (ADR-0115 §4, ADR-0168 §2): the company's active templates, the default first and chosen,
+   * then *Template · Default template* and *Empty*. Read again whenever the company changes; `null` while it is.
+   * `startFrom` is the reader's choice, or the company's default once its templates arrive; `chosen`, below, is
+   * what the form sends.
    */
   const [templates, setTemplates] = useState<NamedTemplate[] | null>(null);
   const [startFrom, setStartFrom] = useState('');
@@ -72,8 +74,9 @@ export default function NewTenantPage() {
    * **The Template library's default template** (ADR-0164 §5), offered after the company's own as *Template ·
    * Default template*. Read once; where it cannot be read, or there is no library, it is simply not offered —
    * the company's own templates stay the choice, and nothing is chosen for the reader that they were not shown.
+   * `undefined` until the read has answered, `null` for none.
    */
-  const [libraryTemplate, setLibraryTemplate] = useState<NamedTemplate | null>(null);
+  const [libraryTemplate, setLibraryTemplate] = useState<NamedTemplate | null | undefined>(undefined);
   const library = companies.find(isTemplateLibrary) ?? null;
   // The insurers: the Template library holds no office (ADR-0164 §3), and the API refuses one.
   const insurers = insurersOf(companies);
@@ -91,7 +94,7 @@ export default function NewTenantPage() {
         const offered = rows.filter((t) => t.status === 'active')
           .sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
         setTemplates(offered);
-        setStartFrom(offered[0] ? `template:${offered[0].id}` : 'defaults');
+        setStartFrom(offered[0] ? `template:${offered[0].id}` : '');
       })
       .catch((err) => {
         if (current) setTemplatesError(toDisplayError(err));
@@ -116,9 +119,23 @@ export default function NewTenantPage() {
       .then((rows) => {
         if (current) setLibraryTemplate(rows.find((t) => t.isDefault && t.status === 'active') ?? null);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (current) setLibraryTemplate(null);
+      });
     return () => { current = false; };
   }, [libraryId]);
+
+  /**
+   * **What is chosen** (ADR-0168 §2): the reader's pick, or the company's default template. A company with no
+   * active template of its own — the only case the AgencyBoost defaults were chosen for before — gets the
+   * Template's Default template, which holds them, once its read has answered; with no Template library to
+   * offer, *Empty*. Nothing while either read is outstanding, so the form waits rather than guessing.
+   */
+  const libraryRead = !libraryId || libraryTemplate !== undefined;
+  const fallback = templates?.length === 0 && libraryRead
+    ? (libraryTemplate ? `library:${libraryTemplate.id}` : 'empty')
+    : '';
+  const chosen = startFrom || fallback;
 
   const badCode = form.code.length > 0 && !CODE.test(form.code);
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
@@ -135,7 +152,7 @@ export default function NewTenantPage() {
         branchName: form.branchName,
         ...(form.address ? { address: form.address } : {}),
         ...(form.contactPhone ? { contactPhone: form.contactPhone } : {}),
-        startFrom: startFromOf(startFrom),
+        startFrom: startFromOf(chosen),
       });
       router.push(`/admin/tenants/${kpm._id}`);
     } catch (err) {
@@ -175,17 +192,17 @@ export default function NewTenantPage() {
               <Field
                 label="Start from"
                 htmlFor="startFrom"
-                hint={templatesError ? undefined : hintOf(startFrom)}
+                hint={templatesError ? undefined : hintOf(chosen)}
                 error={templatesError ? `This company’s templates could not be read, so there is nothing to start from yet. ${templatesError.message}` : undefined}
               >
                 <Select
                   id="startFrom"
-                  value={startFrom}
+                  value={chosen}
                   disabled={templates === null}
                   invalid={Boolean(templatesError)}
                   onChange={(e) => setStartFrom(e.target.value)}
                 >
-                  {templates === null && <option value="">{templatesError ? 'Not loaded' : 'Loading…'}</option>}
+                  {!chosen && <option value="">{templatesError ? 'Not loaded' : 'Loading…'}</option>}
                   {templates?.map((t) => (
                     <option key={t.id} value={`template:${t.id}`}>
                       {t.isDefault ? `${t.name} · Default` : t.name}
@@ -196,7 +213,6 @@ export default function NewTenantPage() {
                       {`${library.name} · ${libraryTemplate.name}`}
                     </option>
                   )}
-                  {templates !== null && <option value="defaults">AgencyBoost defaults</option>}
                   {templates !== null && <option value="empty">Empty</option>}
                 </Select>
               </Field>
@@ -240,7 +256,7 @@ export default function NewTenantPage() {
             />
 
             <div className="flex gap-2">
-              <Button type="submit" disabled={busy || badCode || !form.code || !form.branchName || !startFrom}>
+              <Button type="submit" disabled={busy || badCode || !form.code || !form.branchName || !chosen}>
                 {busy ? 'Creating…' : 'Create office'}
               </Button>
               <ButtonLink href="/admin/tenants" variant="secondary">

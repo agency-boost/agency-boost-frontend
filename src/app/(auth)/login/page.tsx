@@ -1,15 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useCallback, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useState } from 'react';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
 import { type DemoAccount } from '@/lib/demo-accounts';
 import { DemoAccountsPanel } from '@/components/demo-accounts-panel';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { resendVerification } from '@/lib/sessions';
-import { destinationAfterSignIn } from '@/lib/return-path';
+import { destinationAfterSignIn, sessionEndedIn } from '@/lib/return-path';
 import { PasswordInput } from '@/components/ui/password-input';
 
 export default function LoginPage() {
@@ -68,7 +68,10 @@ export default function LoginPage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
       <h1 className="font-display text-3xl font-bold text-navy">AgencyBoost</h1>
-      <p className="mb-6 mt-1 text-md text-muted">Sign in to continue.</p>
+      {/* `useSearchParams` needs a boundary; until the address is read, the sentence everybody else reads. */}
+      <Suspense fallback={<Lede ended={false} />}>
+        <LedeFromAddress />
+      </Suspense>
 
       <Card>
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
@@ -138,5 +141,22 @@ export default function LoginPage() {
 
       <DemoAccountsPanel onChoose={chooseDemo} disabled={busy} />
     </main>
+  );
+}
+
+/**
+ * **The line under the title** (ADR-0168 §1): *Your session ended. Sign in again.* when a page found the reader's
+ * session gone and said so in the address (`reason=expired`, `signInPathFrom`), *Sign in to continue.* for anybody
+ * else — a link opened signed out, a deliberate sign-out, or any other `reason`.
+ */
+function LedeFromAddress() {
+  return <Lede ended={sessionEndedIn(useSearchParams())} />;
+}
+
+function Lede({ ended }: { ended: boolean }) {
+  return (
+    <p className="mb-6 mt-1 text-md text-muted">
+      {ended ? 'Your session ended. Sign in again.' : 'Sign in to continue.'}
+    </p>
   );
 }

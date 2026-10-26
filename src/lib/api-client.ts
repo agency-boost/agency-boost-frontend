@@ -146,8 +146,12 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
     // A refresh that finished while this request was out has already replaced the token it
     // carried: replay with that one, rather than spend the cookie it was issued with again.
     const replaced = accessToken !== null && accessToken !== sentWith;
-    const refreshed = replaced || (await tryRefresh());
-    if (refreshed) response = await raw(path, options);
+    const outcome: RefreshOutcome = replaced ? 'refreshed' : await refreshSession();
+    if (outcome === 'refreshed') response = await raw(path, options);
+    // The server refused the refresh — the cookie gone, or presented and dead: whatever session this tab had is
+    // over, and the session decides what that means for the screen (ADR-0168 §1). A refresh that never arrived is
+    // not an ended session.
+    else if (outcome === 'ended' || outcome === 'none') sessionLostListener?.();
   }
 
   if (response.status === 204) return undefined as T;
@@ -216,27 +220,71 @@ export function onOfficeUnavailable(listener: (error: ApiError) => void): () => 
  * could sign the reader out. Concurrent callers now wait on the same request, and each replays once
  * it has settled.
  */
-let refreshing: Promise<boolean> | null = null;
+let refreshing: Promise<RefreshOutcome> | null = null;
 
-export function tryRefresh(): Promise<boolean> {
+/**
+ * How a refresh ended (ADR-0168 §1):
+ *
+ * - **`refreshed`** — a new access token;
+ * - **`ended`** — `401 AUTH_SESSION_ENDED`: a refresh cookie was presented and no longer works (expired, revoked,
+ *   already spent, unknown). This browser had a session, and it ended;
+ * - **`none`** — any other `401`, `AUTH_TOKEN_INVALID` for no cookie at all: there was no session to refresh — never
+ *   signed in here, or the cookie a sign-out cleared;
+ * - **`unreachable`** — anything else: the request never arrived, or was answered with something that is not about
+ *   the session (a rate limit, a refused origin, a server error).
+ */
+export type RefreshOutcome = 'refreshed' | 'ended' | 'none' | 'unreachable';
+
+/** The code `/auth/refresh` answers a presented refresh token that no longer works with (ADR-0168 §1). */
+export const SESSION_ENDED_CODE = 'AUTH_SESSION_ENDED';
+
+/**
+ * Refresh, and say how it went — for the session's first read, which tells a reader whose session ended from one
+ * who never had one. One request however many ask, as `tryRefresh`.
+ */
+export function refreshSession(): Promise<RefreshOutcome> {
   refreshing ??= refreshOnce().finally(() => {
     refreshing = null;
   });
   return refreshing;
 }
 
-async function refreshOnce(): Promise<boolean> {
+export async function tryRefresh(): Promise<boolean> {
+  return (await refreshSession()) === 'refreshed';
+}
+
+async function refreshOnce(): Promise<RefreshOutcome> {
   try {
     const response = await raw('/auth/refresh', { method: 'POST', skipRefresh: true });
-    if (!response.ok) return false;
+    if (response.status === 401) {
+      const body = (await response.json().catch(() => null)) as { error?: { code?: string } } | null;
+      return body?.error?.code === SESSION_ENDED_CODE ? 'ended' : 'none';
+    }
+    if (!response.ok) return 'unreachable';
     const { accessToken: token } = (await response.json()) as { accessToken: string };
     setAccessToken(token);
-    return true;
+    return 'refreshed';
   } catch (err) {
     // "Not refreshed" is the right answer to a network failure or a rejected cookie.
     // It is the wrong answer to a misconfigured origin: the app would show a signed-out
     // shell and never say why, on every screen at once.
     if (err instanceof ApiConfigError) throw err;
-    return false;
+    return 'unreachable';
   }
+}
+
+let sessionLostListener: (() => void) | null = null;
+
+/**
+ * **Be told when a request finds the session gone** (ADR-0168 §1): it was answered `401`, and the refresh it
+ * tried was refused by the server (`ended` or `none`). One listener, the session's, which decides whether that ends a session this
+ * tab had — the reader is sent to sign in with `reason=expired` — or whether there was none to end (a request
+ * made signed out, a wrong password at sign-in). Not told while impersonating: a support session never refreshes,
+ * because the cookie is the Super Admin's own. The returned function removes it.
+ */
+export function onSessionLost(listener: () => void): () => void {
+  sessionLostListener = listener;
+  return () => {
+    if (sessionLostListener === listener) sessionLostListener = null;
+  };
 }

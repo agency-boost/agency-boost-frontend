@@ -273,13 +273,13 @@ export const updateSubscription = (kpmId: string, body: SubscriptionInput) =>
 
 /**
  * **Start from** (ADR-0115 §4): one of the company's active templates, one of the Template library's
- * (`templateLibrary`, ADR-0164 §5), the AgencyBoost defaults, or *Empty*. Left out, the company's default
- * template — what approving a KPM request uses.
+ * (`templateLibrary`, ADR-0164 §5), or *Empty*. Left out, the company's default template — what approving a
+ * KPM request uses. The AgencyBoost defaults are not a choice: the Template's Default template holds them, and
+ * the API refuses `{ kind: 'defaults' }` (ADR-0168 §2).
  */
 export type StartFrom =
   | { kind: 'template'; templateId: string }
   | { kind: 'template'; templateLibrary: true; templateId?: string }
-  | { kind: 'defaults' }
   | { kind: 'empty' };
 
 export interface CreateKpmInput {

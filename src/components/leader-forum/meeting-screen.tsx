@@ -10,7 +10,7 @@ import {
 } from '@/lib/leader-meetings';
 import { printAs, restorePrintTitle } from '@/lib/print';
 import { formatShortDay } from '@/lib/format';
-import { signInPathFrom } from '@/lib/return-path';
+import { signInPathFrom, type SessionEnd } from '@/lib/return-path';
 import { useSession } from '@/lib/session';
 import { LoadError, MeetingSkeleton, NotFound } from './forum-states';
 import { MeetingDialog } from './meeting-dialog';
@@ -29,10 +29,11 @@ const PRINT_DELAY_MS = 400;
 /**
  * Where a reader not signed in goes: sign in, and come back here (D-share — *"one not signed in signs in
  * first and returns to it"*). The address rides on `next` — except after the reader signed out themselves
- * (`signedOut`, 2026-10-11), when it is plain `/login`, as `signInPathFrom` decides for every guard.
+ * (`signedOut`, 2026-10-11), when it is plain `/login`, and a session that ended under the reader adds
+ * `reason=expired` (ADR-0168 §1), as `signInPathFrom` decides for every guard.
  */
-export const signInAndReturn = (pathname: string, signedOut: boolean) =>
-  signInPathFrom({ pathname, search: '' }, { signedOut });
+export const signInAndReturn = (pathname: string, end: SessionEnd) =>
+  signInPathFrom({ pathname, search: '' }, end);
 
 /**
  * **A meeting** (`/leader-meetings/[meetingId]`, and read-only by a link at `/leader-meetings/shared/[token]`):
@@ -41,7 +42,7 @@ export const signInAndReturn = (pathname: string, signedOut: boolean) =>
  * false but *Save as PDF*, so the same screen draws no write control there.
  */
 export function MeetingScreen({ source }: { source: MeetingSource }) {
-  const { me, loading, signedOut } = useSession();
+  const { me, loading, signedOut, expired } = useSession();
   const router = useRouter();
   const pathname = usePathname();
   const signedIn = !loading && me !== null;
@@ -58,8 +59,8 @@ export function MeetingScreen({ source }: { source: MeetingSource }) {
   );
 
   useEffect(() => {
-    if (!loading && !me) router.replace(signInAndReturn(pathname, signedOut));
-  }, [loading, me, signedOut, router, pathname]);
+    if (!loading && !me) router.replace(signInAndReturn(pathname, { signedOut, expired }));
+  }, [loading, me, signedOut, expired, router, pathname]);
 
   useEffect(() => {
     if (!signedIn) return undefined;

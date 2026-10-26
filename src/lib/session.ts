@@ -96,6 +96,14 @@ export interface SessionValue {
    */
   signedOut: boolean;
   /**
+   * **The session this tab had ended under the reader** (ADR-0168 §1): a request was answered `401` and the
+   * server refused the refresh. Set only when somebody was signed in, cleared when somebody signs in or signs out.
+   * A page that loses its session then sends the reader to `/login?next=<the page>&reason=expired`, and the
+   * sign-in page reads *Your session ended. Sign in again.* A reader who arrives signed out, with no session to
+   * end, is not marked.
+   */
+  expired: boolean;
+  /**
    * Signs in and reads the session, resolving to who is now signed in — `null` when the session could
    * not be read — so the login page can ask whether *that* person can open the page it came from.
    */

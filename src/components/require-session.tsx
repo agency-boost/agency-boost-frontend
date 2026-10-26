@@ -44,7 +44,7 @@ export function RequireSession({
   headingLevel?: 1 | 2;
   children: React.ReactNode;
 }) {
-  const { me, loading, signedOut } = useSession();
+  const { me, loading, signedOut, expired } = useSession();
   const router = useRouter();
   const titled = useContext(TitledPageContext);
   const Heading = (headingLevel ?? (titled ? 2 : 1)) === 1 ? 'h1' : 'h2';
@@ -53,8 +53,9 @@ export function RequireSession({
   useEffect(() => {
     // Back to this page once signed in (`?next=`, `lib/return-path.ts`): a link opened signed out lands on it.
     // Not after the reader signed out themselves (2026-10-11): then this is the same plain `/login` the
-    // sign-out goes to, so which of the two navigations lands last no longer decides where they end up.
-    if (!loading && !me) router.replace(signInPathFrom(window.location, { signedOut }));
+    // sign-out goes to, so which of the two navigations lands last no longer decides where they end up. A session
+    // that ended under the reader adds `reason=expired`, and the sign-in page says so (ADR-0168 §1).
+    if (!loading && !me) router.replace(signInPathFrom(window.location, { signedOut, expired }));
     // Every route but three answers 403 while this is set, so rendering the screen would
     // put a shell around a page of failed requests (P3.6-T4). One redirect here covers
     // every screen, rather than each one inferring it from a 403 of its own.
@@ -63,7 +64,7 @@ export function RequireSession({
     // landing is always of the reader's own family, so this cannot send anybody round in a circle; and when
     // a support session starts or ends on a page of the other family, this is what takes them on.
     else if (!loading && me && elsewhere) router.replace(landingFor(me));
-  }, [loading, me, signedOut, elsewhere, router]);
+  }, [loading, me, signedOut, expired, elsewhere, router]);
 
   if (loading) {
     return (

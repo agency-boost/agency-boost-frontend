@@ -37,6 +37,16 @@ describe('landing', () => {
     expect(replace).toHaveBeenCalledWith('/login');
   });
 
+  it('ADR-0168 §1 sends somebody whose session ended to sign in, told it ended', () => {
+    renderWithSession(<Home />, { me: null, loading: false, expired: true });
+    expect(replace.mock.calls).toEqual([['/login?reason=expired']]);
+  });
+
+  it('sends somebody who signed out themselves to plain sign-in', () => {
+    renderWithSession(<Home />, { me: null, loading: false, signedOut: true });
+    expect(replace.mock.calls).toEqual([['/login']]);
+  });
+
   it('sends a Super Admin to the platform console', () => {
     renderWithSession(<Home />, {
       me: makeMe({

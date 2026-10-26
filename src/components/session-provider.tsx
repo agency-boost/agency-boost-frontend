@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { endImpersonation } from '@/lib/admin';
 import {
-  api, isImpersonating, onOfficeUnavailable, setAccessToken, setImpersonating, tryRefresh, type ApiError,
+  api, isImpersonating, onOfficeUnavailable, onSessionLost, refreshSession, setAccessToken, setImpersonating,
+  type ApiError,
 } from '@/lib/api-client';
 import { Me, SessionContext } from '@/lib/session';
 import { OfficeUnavailable } from './office-unavailable';
@@ -16,6 +17,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
    * session, a failed refresh or a link opened signed out still carries the page back through `next`.
    */
   const [signedOut, setSignedOut] = useState(false);
+  /**
+   * The reader's session ended (`SessionValue.expired`, ADR-0168 §1): set by the API client's report that a
+   * refresh was refused while somebody was signed in, or by the first read finding a refresh cookie that no
+   * longer works (`AUTH_SESSION_ENDED`) — the app closed and opened again after the session ended.
+   */
+  const [expired, setExpired] = useState(false);
   /**
    * The office the reader belongs to cannot be used — its subscription ended, or it is suspended or
    * archived (ADR-0112 §4, P13.2-T3 AC-9). Set by whichever request met the refusal, `/auth/me` or a
@@ -42,13 +49,30 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setMe(next);
   }, []);
 
+  /*
+   * **A session that ends under the reader says so** (ADR-0168 §1). A request answered `401` whose refresh the
+   * server refused ends the session this tab had: it is cleared, and marked `expired` in the same update, so the
+   * page's guard sends the reader to `/login?next=<the page>&reason=expired`. With nobody signed in there was no
+   * session to end — a request made before the session was read, a wrong password at sign-in — and nothing
+   * changes.
+   */
+  useEffect(() => onSessionLost(() => {
+    if (!signedIn.current) return;
+    setAccessToken(null);
+    remember(null);
+    setSignedOut(false);
+    setExpired(true);
+  }), [remember]);
+
   /** Reads the session, and says who it found: `signIn` hands that to the login page. */
   const load = useCallback(async (): Promise<Me | null> => {
     try {
       const found = await api<Me>('/auth/me');
       remember(found);
-      // Somebody is signed in again, so whatever ends this session next was not them pressing Sign out.
+      // Somebody is signed in again, so whatever ends this session next was not them pressing Sign out, and the
+      // session that ended before it is behind them.
       setSignedOut(false);
+      setExpired(false);
       return found;
     } catch {
       // A refusal that means the office cannot be used has already replaced the app (above); any
@@ -65,9 +89,15 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   // On mount the access token is gone (it lives in memory only), but the httpOnly
   // refresh cookie survives a reload — so a signed-in user comes back signed in
   // without the token ever being reachable from script.
+  //
+  // **A cookie that no longer works is a session that ended** (ADR-0168 §1): the reader comes back to a tab or an
+  // app closed after the session expired or was revoked, and is sent to sign in with `reason=expired`. No cookie at
+  // all is somebody arriving signed out — never signed in here, or signed out, which clears it — and is not marked.
   useEffect(() => {
     void (async () => {
-      if (await tryRefresh()) await reload();
+      const outcome = await refreshSession();
+      if (outcome === 'refreshed') await reload();
+      else if (outcome === 'ended') setExpired(true);
       setLoading(false);
     })();
   }, [reload]);
@@ -98,6 +128,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setAccessToken(null);
     remember(null);
     setSignedOut(true);
+    setExpired(false);
     setUnavailable(null);
   }, [remember]);
 
@@ -113,14 +144,19 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setImpersonating(false);
     setAccessToken(null);
     // The Super Admin first, then the app: given back before they are, it would send them to sign in.
-    if (await tryRefresh()) await reload();
-    else remember(null);
+    const outcome = await refreshSession();
+    if (outcome === 'refreshed') await reload();
+    else {
+      remember(null);
+      // Their own session is gone too: refused by the server, it ended under them (ADR-0168 §1).
+      if (outcome !== 'unreachable') setExpired(true);
+    }
     setUnavailable(null);
   }, [reload, remember]);
 
   const value = useMemo(
-    () => ({ me, loading, signedOut, signIn, signOut, reload }),
-    [me, loading, signedOut, signIn, signOut, reload],
+    () => ({ me, loading, signedOut, expired, signIn, signOut, reload }),
+    [me, loading, signedOut, expired, signIn, signOut, reload],
   );
 
   return (

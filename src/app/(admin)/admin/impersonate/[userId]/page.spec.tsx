@@ -283,4 +283,29 @@ describe('start impersonation', () => {
     expect(isImpersonating()).toBe(false);
     expect(push).not.toHaveBeenCalled();
   });
+
+  /*
+   * ADR-0168 §4: a second start as the same person within one second signs the same token, and is refused
+   * `409 IMPERSONATION_JUST_STARTED` — it was a `500`. The screen says the server's sentence, keeps the Super
+   * Admin as themselves, and gives the button back.
+   */
+  it('ADR-0168 §4 shows a double start refused, and gives the button back', async () => {
+    const JUST_STARTED = 'A session as this person started a moment ago. Use that one, or wait a second and start again.';
+    stubFetch({
+      '/admin/impersonate/u-owner': {
+        status: 409,
+        body: { error: { code: 'IMPERSONATION_JUST_STARTED', message: JUST_STARTED, requestId: 'req-13' } },
+      },
+    });
+    renderInLayout(AdminLayout, <ImpersonatePage params={params} />, { me: SUPER_ADMIN });
+
+    await userEvent.type(screen.getByLabelText('Reason'), 'support ticket 42');
+    await userEvent.click(screen.getByRole('button', { name: 'Start session' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(JUST_STARTED);
+    expect(screen.getByRole('button', { name: 'Start session' })).toBeEnabled();
+    expect(getAccessToken()).toBeNull();
+    expect(isImpersonating()).toBe(false);
+    expect(push).not.toHaveBeenCalled();
+  });
 });

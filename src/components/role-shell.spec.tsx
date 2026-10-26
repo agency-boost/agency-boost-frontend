@@ -111,6 +111,14 @@ describe('RoleShell', () => {
       expect(screen.queryByRole('navigation')).toBeNull();
     });
 
+    it('ADR-0168 §1 sends somebody whose session ended under them to sign in with reason=expired', () => {
+      at('/profile');
+      router.replace.mockClear();
+      renderWithSession(<RoleShell title="Your account">the profile form</RoleShell>, { me: null, expired: true });
+      expect(router.replace.mock.calls).toEqual([['/login?next=%2Fprofile&reason=expired']]);
+      expect(screen.queryByText('the profile form')).toBeNull();
+    });
+
     it('P18.8-T15 AC-2 sends somebody who signed out themselves to plain /login', () => {
       at('/profile');
       router.replace.mockClear();

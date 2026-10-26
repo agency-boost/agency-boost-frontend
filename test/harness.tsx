@@ -48,6 +48,7 @@ export function makeSession(overrides: Partial<SessionValue> = {}): SessionValue
     me,
     loading: false,
     signedOut: false,
+    expired: false,
     signIn: vi.fn(async () => me),
     signOut: vi.fn(async () => undefined),
     reload: vi.fn(async () => undefined),

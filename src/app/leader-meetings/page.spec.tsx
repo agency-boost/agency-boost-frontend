@@ -185,6 +185,16 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login?next=%2Fleader-meetings'));
   });
 
+  it('ADR-0168 §1: a reader whose session ended here is sent to sign in and back, told it ended', async () => {
+    window.history.replaceState(null, '', '/leader-meetings');
+    onTestFinished(() => window.history.replaceState(null, '', '/'));
+    stubFetch({});
+    renderWithSession(<LeaderMeetingsPage />, { me: null, expired: true });
+    await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login?next=%2Fleader-meetings&reason=expired'));
+    // The shell and the list both send them, and both say why.
+    expect(nav.replace.mock.calls.every(([to]) => to === '/login?next=%2Fleader-meetings&reason=expired')).toBe(true);
+  });
+
   it('a reader who signed out themselves here goes to plain sign-in, carrying no page (2026-10-11)', async () => {
     stubFetch({});
     renderWithSession(<LeaderMeetingsPage />, { me: null, signedOut: true });

@@ -59,6 +59,17 @@ describe('RequireSession', () => {
       });
     });
 
+    it('ADR-0168 §1 a session that ended under the reader carries the page and says so: reason=expired', () => {
+      at(COMPLIANCE, () => {
+        renderWithSession(<RequireSession permission="kpm_analytics:read">secret</RequireSession>, {
+          me: null, loading: false, expired: true,
+        });
+        expect(replace.mock.calls).toEqual([
+          ['/login?next=%2Fkpm%2Fanalytics%2Fcompliance%3Fcategory%3Dtraining&reason=expired'],
+        ]);
+      });
+    });
+
     it('an involuntary end — an expired session, a link opened signed out — still carries the page', () => {
       at(COMPLIANCE, () => {
         renderWithSession(<RequireSession permission="kpm_analytics:read">secret</RequireSession>, {

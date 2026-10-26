@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { ApiConfigError } from '@/lib/api';
 import { ApiRequestError } from '@/lib/api-client';
@@ -11,6 +11,7 @@ const push = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push, replace: vi.fn() }),
   usePathname: () => '/login',
+  useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
 /** A member of the office, as `signIn` resolves to them: active, with the rung and the reports given. */
@@ -101,6 +102,45 @@ describe('login', () => {
 
     it('no next lands on their own page', async () => {
       expect(await signInFrom('', OWNER)).toBe('/kpm/overview');
+    });
+  });
+
+  /*
+   * ADR-0168 §1 (OD-208; the client's UI review, UI-006): **a session that ended says so.** A page that found the
+   * reader's session gone sends them here with `reason=expired`; everybody else — a link opened signed out, a
+   * deliberate sign-out — reads what the page always said.
+   */
+  describe('what the page says (ADR-0168 §1)', () => {
+    const at = (search: string) => {
+      window.history.pushState({}, '', `/login${search}`);
+      onTestFinished(() => window.history.pushState({}, '', '/'));
+      renderWithSession(<LoginPage />, { me: null });
+    };
+
+    it('reads "Your session ended. Sign in again." when the session ended', () => {
+      at('?next=%2Fprofile&reason=expired');
+      expect(screen.getByText('Your session ended. Sign in again.')).toBeInTheDocument();
+      expect(screen.queryByText('Sign in to continue.')).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ['no reason', '?next=%2Fprofile'],
+      ['no query at all', ''],
+      ['another reason', '?next=%2Fprofile&reason=signed_out'],
+      ['the word in another case', '?reason=EXPIRED'],
+    ])('reads "Sign in to continue." for %s', (_what, search) => {
+      at(search);
+      expect(screen.getByText('Sign in to continue.')).toBeInTheDocument();
+      expect(screen.queryByText('Your session ended. Sign in again.')).not.toBeInTheDocument();
+    });
+
+    it('still returns to next: the reason beside it changes nothing of where signing in lands', async () => {
+      expect(await signInFrom('?next=%2Fleader-meetings%2Fshared%2Fabc&reason=expired', AGENT))
+        .toBe('/leader-meetings/shared/abc');
+    });
+
+    it('still honours next only for somebody who can open it', async () => {
+      expect(await signInFrom('?next=%2Fkpm%2Fanalytics%2Fcompliance&reason=expired', AGENT)).toBe('/activity/log');
     });
   });
 

@@ -8,6 +8,8 @@ import {
   isImpersonating,
   isOfficeUnavailable,
   onOfficeUnavailable,
+  onSessionLost,
+  refreshSession,
   setAccessToken,
   setImpersonating,
   toDisplayError,
@@ -149,6 +151,79 @@ describe('api client', () => {
 
     await expect(api('/widgets')).rejects.toBeInstanceOf(ApiRequestError);
     expect(calls.filter((c) => c.url.includes('/auth/refresh'))).toHaveLength(1);
+  });
+
+  /*
+   * ADR-0168 §1: **the session is told when a request finds it gone** — a 401 whose refresh the server refused — and
+   * decides itself what that ends. Not for a refresh that never arrived, nor one answered with anything else.
+   */
+  describe('telling the session it is gone (ADR-0168 §1)', () => {
+    it.each([
+      ['the server refused the refresh, 401', { status: 401, body: {} }, 1],
+      ['the server said the presented cookie no longer works, AUTH_SESSION_ENDED', {
+        status: 401, body: { error: { code: 'AUTH_SESSION_ENDED', message: 'Your session ended.', requestId: 'r' } },
+      }, 1],
+      ['the refresh was answered with something not about the session, 503', { status: 503, body: {} }, 0],
+      ['the refresh was rate limited, 429', { status: 429, body: {} }, 0],
+    ])('when %s: told %i time(s)', async (_what, refresh, times) => {
+      const lost = vi.fn();
+      const off = onSessionLost(lost);
+      try {
+        setAccessToken('stale');
+        stubFetch({ '/widgets': { status: 401, body: {} }, '/auth/refresh': refresh });
+        await expect(api('/widgets')).rejects.toMatchObject({ status: 401 });
+        expect(lost).toHaveBeenCalledTimes(times);
+      } finally {
+        off();
+      }
+    });
+
+    it('not when the refresh worked, nor while impersonating, nor once the listener is removed', async () => {
+      const lost = vi.fn();
+      const off = onSessionLost(lost);
+      stubFetch({ '/widgets': [{ status: 401, body: {} }, { body: { ok: true } }], '/auth/refresh': { body: { accessToken: 'new' } } });
+      await expect(api('/widgets')).resolves.toEqual({ ok: true });
+
+      setImpersonating(true);
+      stubFetch({ '/widgets': { status: 401, body: {} } });
+      await expect(api('/widgets')).rejects.toMatchObject({ status: 401 });
+      setImpersonating(false);
+
+      off();
+      stubFetch({ '/widgets': { status: 401, body: {} }, '/auth/refresh': { status: 401, body: {} } });
+      await expect(api('/widgets')).rejects.toMatchObject({ status: 401 });
+      expect(lost).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['refreshed', { body: { accessToken: 'new' } }],
+      ['ended', { status: 401, body: { error: { code: 'AUTH_SESSION_ENDED', message: 'Ended.', requestId: 'r' } } }],
+      ['none', { status: 401, body: { error: { code: 'AUTH_TOKEN_INVALID', message: 'No session.', requestId: 'r' } } }],
+      ['none', { status: 401, body: {} }],
+      ['unreachable', { status: 503, body: {} }],
+      ['unreachable', { status: 429, body: {} }],
+    ])('refreshSession tells the first read %s from the answer', async (outcome, answer) => {
+      stubFetch({ '/auth/refresh': answer });
+      await expect(refreshSession()).resolves.toBe(outcome);
+      // `tryRefresh` is the same request, answering only whether it worked.
+      await expect(tryRefresh()).resolves.toBe(outcome === 'refreshed');
+    });
+
+    it('a refresh that never arrived is not refused either, and tryRefresh still answers false', async () => {
+      const lost = vi.fn();
+      const off = onSessionLost(lost);
+      try {
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+          if (url.includes('/auth/refresh')) throw new TypeError('Failed to fetch');
+          return { ok: false, status: 401, json: async () => ({}) } as Response;
+        }));
+        await expect(api('/widgets')).rejects.toMatchObject({ status: 401 });
+        await expect(tryRefresh()).resolves.toBe(false);
+        expect(lost).not.toHaveBeenCalled();
+      } finally {
+        off();
+      }
+    });
   });
 
   it('refuses to refresh while impersonating, so a request is never replayed as the Super Admin', async () => {
