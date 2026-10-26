@@ -62,14 +62,39 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   describe('the page, verbatim (AC-1, AC-2)', () => {
-    it('P14-T7 AC-1 the nav items are live for a field member, the catalog current', async () => {
+    it('P14-T7 AC-1, P18.8-T12 AC-1 one Sales tools entry, live and current on the catalog', async () => {
       grid();
       await shelfReady();
-      const catalog = screen.getByRole('link', { name: 'Product Catalog' });
-      expect(catalog).toHaveAttribute('href', '/product-catalog');
-      expect(catalog).not.toHaveAttribute('aria-disabled');
-      expect(within(catalog).queryByText('Upcoming')).not.toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Sales Attack Plan' })).toHaveAttribute('href', '/attack-plan');
+      const sidebar = within(screen.getByRole('navigation', { name: 'Main' }));
+      const entry = sidebar.getByRole('link', { name: 'Sales Attack Plan' });
+      expect(entry).toHaveAttribute('href', '/attack-plan');
+      expect(entry).toHaveAttribute('aria-current', 'page');
+      expect(entry).not.toHaveAttribute('aria-disabled');
+      expect(within(entry).queryByText('Upcoming')).not.toBeInTheDocument();
+      // The catalog is no longer an entry of its own (ADR-0161 §5): its tab reaches it.
+      expect(sidebar.queryByRole('link', { name: 'Product Catalog' })).not.toBeInTheDocument();
+    });
+
+    it('P18.8-T12 AC-2 the tabs Sales Attack Plan | Product Catalog, the catalog current, above the category pills', async () => {
+      grid();
+      await shelfReady();
+      const tabs = screen.getByRole('navigation', { name: 'Sales tools' });
+      expect(within(tabs).getAllByRole('link').map((l) => [l.textContent, l.getAttribute('href'), l.getAttribute('aria-current')]))
+        .toEqual([['Sales Attack Plan', '/attack-plan', null], ['Product Catalog', '/product-catalog', 'page']]);
+      // Two idioms, two rows: the route strip first, then the category pills, which are buttons in a group.
+      const categories = screen.getByRole('group', { name: 'Category' });
+      expect(tabs.compareDocumentPosition(categories) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(tabs).not.toContainElement(categories);
+    });
+
+    it('P18.8-T12 AC-2 over a product’s drawer the catalog’s tab is still current, and the strip is behind the modal', async () => {
+      drawer('PRUMAPAN');
+      await dialog();
+      const tabs = screen.getByRole('navigation', { name: 'Sales tools', hidden: true });
+      expect(within(tabs).getByRole('link', { name: 'Product Catalog', hidden: true })).toHaveAttribute('aria-current', 'page');
+      expect(tabs.closest('[inert]')).not.toBeNull();
+      expect(within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Sales Attack Plan' }))
+        .toHaveAttribute('aria-current', 'page');
     });
 
     it('P14-T7 AC-2 is titled and sub-titled as drawn, and reads the shelf once', async () => {

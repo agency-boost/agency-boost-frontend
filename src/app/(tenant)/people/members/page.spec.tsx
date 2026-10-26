@@ -280,6 +280,74 @@ describe('members directory (P3-T1 AC-3)', () => {
     });
   });
 
+  describe('the Core Leader chip and control (P18.8-T5 AC-3, ADR-0159 §1)', () => {
+    const page = (members: Record<string, unknown>[]) => ({
+      body: { members, nextCursor: null, counts: { directory: members.length, pending: 0, removed: 0 } },
+    });
+    const AGUS = member({
+      membershipId: 'mem-agus', role: 'ab', fullName: 'Agus Salim', preferredName: null, isCoreLeader: true, canTagCoreLeader: true,
+    });
+    const SARI = member({
+      membershipId: 'mem-sari', agentCode: 'KPM0417-002', role: 'aab', fullName: 'Sari Puspita', preferredName: null,
+      isCoreLeader: false, canTagCoreLeader: true,
+    });
+    const RINA = member({ membershipId: 'mem-rina', agentCode: 'KPM0417-003', isCoreLeader: false, canTagCoreLeader: false });
+
+    it('draws the chip on a Core Leader’s row, and the control on a leader’s row alone', async () => {
+      stubFetch({ '/members': page([AGUS, SARI, RINA]) });
+      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+      const table = await screen.findByRole('table');
+      const agus = within(table).getByRole('row', { name: /Agus Salim/ });
+      expect(within(agus).getByText('Core Leader')).toBeInTheDocument();
+      expect(within(agus).getByRole('button', { name: 'Remove the Core Leader tag from Agus Salim' })).toBeEnabled();
+      const sari = within(table).getByRole('row', { name: /Sari Puspita/ });
+      expect(within(sari).queryByText('Core Leader')).not.toBeInTheDocument();
+      expect(within(sari).getByRole('button', { name: 'Tag Sari Puspita Core Leader' })).toHaveTextContent('+ Core Leader');
+      const rina = within(table).getByRole('row', { name: /Rina/ });
+      expect(within(rina).queryByRole('button', { name: /Core Leader/ })).not.toBeInTheDocument();
+    });
+
+    it('tags from the row with the flag alone, and draws what the server stored', async () => {
+      const { calls } = stubFetch({
+        '/members': page([SARI]),
+        'PUT /members/mem-sari/core-leader': ({ body }) => ({
+          body: { membershipId: 'mem-sari', fullName: 'Sari Puspita', groupIds: ['grp-1'], ...(body as object), canBeCoreLeader: true },
+        }),
+      });
+      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+      await userEvent.click(await screen.findByRole('button', { name: 'Tag Sari Puspita Core Leader' }));
+      const sent = calls.find((c) => c.init.method === 'PUT')!;
+      expect(sent.url).toContain('/members/mem-sari/core-leader');
+      expect(JSON.parse(sent.init.body as string)).toEqual({ isCoreLeader: true });
+      const row = within(screen.getByRole('table')).getByRole('row', { name: /Sari Puspita/ });
+      expect(await within(row).findByText('Core Leader')).toBeInTheDocument();
+      expect(within(row).getByRole('button', { name: 'Remove the Core Leader tag from Sari Puspita' })).toBeInTheDocument();
+    });
+
+    it('says the server’s refusal, and leaves the row as it was', async () => {
+      stubFetch({
+        '/members': page([SARI]),
+        'PUT /members/mem-sari/core-leader': {
+          status: 400,
+          body: { error: { code: 'CORE_LEADER_NOT_A_LEADER', message: 'Only a leader can be a Core Leader. Move them to a leader rung first.', requestId: 'r' } },
+        },
+      });
+      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+      await userEvent.click(await screen.findByRole('button', { name: 'Tag Sari Puspita Core Leader' }));
+      expect(await screen.findByText(/Only a leader can be a Core Leader/)).toBeInTheDocument();
+      const row = within(screen.getByRole('table')).getByRole('row', { name: /Sari Puspita/ });
+      expect(within(row).queryByText('Core Leader')).not.toBeInTheDocument();
+    });
+
+    it('offers no control on the Removed tab', async () => {
+      stubFetch({ '/members': page([{ ...AGUS, status: 'removed', removedAt: '2026-09-01T00:00:00.000Z' }]) });
+      renderInLayout(TenantLayout, <MembersPage />, { me: OWNER });
+      await userEvent.click(await screen.findByRole('button', { name: /^Removed/ }));
+      const table = await screen.findByRole('table', { name: 'Removed members' });
+      expect(within(table).queryByRole('button', { name: /Core Leader/ })).not.toBeInTheDocument();
+    });
+  });
+
   it('draws every tab as one that opens, with none waiting on a later build', async () => {
     // This used to loop over the unbuilt tabs, and the list had been empty since the last one
     // shipped, so it asserted nothing. The disabled branch it guarded went with it (P10.1-T2).
@@ -489,6 +557,36 @@ describe('members directory (P3-T1 AC-3)', () => {
       const alert = await screen.findByRole('alert');
       expect(alert).toHaveTextContent('This office has reached its limit of 3 leaders, so nobody else can be made an AB or an AAB.');
       expect(alert).not.toHaveTextContent('LEADER_LIMIT_REACHED');
+    });
+
+    it('P18.8-T2 AC-6: asks AgencyBoost to let the joiner in, and the row then waits with Cancel request', async () => {
+      const waitingRow = {
+        requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch',
+        subjectMembershipId: 'mem-asked', subjectName: 'Putri Anggraini', subjectAgentCode: '88008', action: 'activate',
+        fromOrgLevelCode: 'AAB', toOrgLevelCode: null, reason: null, requestedByMembershipId: 'mem-owner',
+        requestedByName: 'Wilson', status: 'pending', requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null,
+        declineReason: null, maxLeaders: 3, leadersUsed: 3,
+      };
+      await openTab([asked], [request({ role: 'aab' })], {
+        '/join/requests/req-1/approve': {
+          status: 409,
+          body: {
+            error: {
+              code: 'LEADER_LIMIT_REACHED', message: 'x', requestId: 'r-2',
+              details: { maxLeaders: 3, leadersUsed: 3, canRequest: true },
+            },
+          },
+        },
+        '/members/leader-limit-requests': [{ body: [] }, { body: [waitingRow] }],
+        'POST /members/mem-asked/leader-limit-request': { status: 201, body: waitingRow },
+      });
+      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      const alert = await screen.findByRole('alert');
+      await userEvent.click(within(alert).getByRole('button', { name: 'Ask AgencyBoost to approve' }));
+      expect(await screen.findByText("Waiting for AgencyBoost's approval")).toBeInTheDocument();
+      expect(screen.getByText('Let in as Associate Agency Builder')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Cancel request' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
     });
   });
 

@@ -22,7 +22,14 @@ const SUPER_ADMIN = makeMe({
 const PRUDENTIAL = {
   _id: 'co-1', name: 'Prudential', slug: 'prudential',
   defaultCurrency: 'IDR', defaultTimezone: 'Asia/Jakarta', status: 'active',
-  usesPlatformDefaults: true,
+  usesPlatformDefaults: true, kind: 'insurer',
+};
+
+/** The Template library (ADR-0164), as migration 0037 makes it in every environment. */
+const TEMPLATE = {
+  _id: '000000000000000000000001', name: 'Template', slug: 'template',
+  defaultCurrency: 'IDR', defaultTimezone: 'Asia/Jakarta', status: 'active',
+  usesPlatformDefaults: true, kind: 'template',
 };
 
 describe('companies', () => {
@@ -202,15 +209,46 @@ describe('companies', () => {
 
       expect(await screen.findByText('Started blank')).toBeInTheDocument();
     });
+
+    it('P18.9-T3 AC-3 labels the Template library on its row, and no insurer', async () => {
+      render([PRUDENTIAL, TEMPLATE]);
+
+      const table = within(await screen.findByRole('table'));
+      const row = table.getByRole('row', { name: /Template/ });
+      expect(within(row).getByText('Template library')).toBeInTheDocument();
+      // Its templates are reached as every company's are.
+      expect(within(row).getByRole('link', { name: 'Company template' }))
+        .toHaveAttribute('href', `/admin/companies/${TEMPLATE._id}/template`);
+      expect(within(table.getByRole('row', { name: /Prudential/ })).queryByText('Template library')).toBeNull();
+    });
   });
 
   describe('starting a company from nothing', () => {
-    it('asks for the defaults by default', async () => {
-      stubFetch({ '/admin/companies': { body: [] } });
+    it('P18.9-T3 AC-4 starts from Template · Default template by default, and sends it as the defaults', async () => {
+      const stub = stubFetch({
+        '/admin/companies': { body: [PRUDENTIAL, TEMPLATE] },
+        'POST /admin/companies': { body: { ...PRUDENTIAL, _id: 'co-2', name: 'Allianz Life', slug: 'allianz-life' } },
+      });
       renderInLayout(AdminLayout, <CompaniesPage />, { me: SUPER_ADMIN });
 
-      expect(await screen.findByRole('switch', { name: /Start from the AgencyBoost defaults/ }))
-        .toBeChecked();
+      const select = await screen.findByLabelText('Start from');
+      await screen.findByRole('option', { name: 'Template · Default template' });
+      expect(select).toHaveDisplayValue('Template · Default template');
+      expect(screen.getByText(/A copy of the Template library/)).toBeInTheDocument();
+
+      await userEvent.type(screen.getByLabelText('Name'), 'Allianz Life');
+      await userEvent.click(screen.getByRole('button', { name: 'Add company' }));
+      const sent = stub.calls.find((c) => c.init?.method === 'POST');
+      expect(JSON.parse(String(sent?.init?.body))).toMatchObject({ name: 'Allianz Life', usesPlatformDefaults: true });
+    });
+
+    it('P18.9-T3 AC-4 offers the AgencyBoost defaults where no Template library exists', async () => {
+      stubFetch({ '/admin/companies': { body: [PRUDENTIAL] } });
+      renderInLayout(AdminLayout, <CompaniesPage />, { me: SUPER_ADMIN });
+
+      await screen.findByRole('table');
+      expect(screen.getByLabelText('Start from')).toHaveDisplayValue('AgencyBoost defaults');
+      expect(screen.getByRole('option', { name: 'Empty' })).toBeInTheDocument();
     });
 
     it('sends the choice, so a blank company stays blank on every tab', async () => {
@@ -224,7 +262,8 @@ describe('companies', () => {
       renderInLayout(AdminLayout, <CompaniesPage />, { me: SUPER_ADMIN });
 
       await userEvent.type(await screen.findByLabelText('Name'), 'Blank Co');
-      await userEvent.click(screen.getByRole('switch', { name: /Start from the AgencyBoost defaults/ }));
+      await userEvent.selectOptions(screen.getByLabelText('Start from'), 'Empty');
+      expect(screen.getByText(/Every one of them starts empty/)).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Add company' }));
 
       const sent = stub.calls.find((c) => c.init?.method === 'POST');

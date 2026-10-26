@@ -181,7 +181,13 @@ export interface ActivityTotal {
  */
 export interface SubPeriodTarget {
   key: 'leads' | 'appointments' | 'closings';
+  /** The first code the office binds to this stage. */
   code: string;
+  /**
+   * Every code the office binds to this stage (ADR-0163); `logged` is their sum. Absent from a coaching snapshot
+   * frozen before the binding existed, which keeps the one `code` it showed.
+   */
+  codes?: string[];
   logged: number;
   /** `null` without an APE target to derive it from; 0 when the month needs nothing more. */
   target: number | null;

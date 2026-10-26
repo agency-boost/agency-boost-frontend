@@ -110,6 +110,17 @@ describe('branch info (P4-T5)', () => {
     expect(JSON.parse(call.init.body as string)).toMatchObject({ branchName: 'Serpong Branch' });
   });
 
+  it('P18.9-T1 AC-5: opens for editing in a setup session, whose session carries the write (ADR-0162)', async () => {
+    // The settings screens read `tenant_config:write` and nothing else; `/auth/me` lists it in a setup session.
+    render(makeMe({
+      membership, permissions: ['kpm:read_profile', 'tenant_config:write'],
+      isImpersonating: true, impersonatedBy: 'u-root', impersonationReadOnly: true,
+      impersonationPurpose: 'setup', impersonationWriteScope: ['tenant_config:write', 'kpm:import_roster'],
+    }));
+    expect(await screen.findByDisplayValue('BSD City Branch')).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+  });
+
   it('shows somebody without the write the office and no way to change it', async () => {
     // A read-only support session. The API refuses them too — this is convenience, not
     // control.

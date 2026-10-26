@@ -88,16 +88,26 @@ export function RequireSession({
    * office"*. Said without the word, it settles nothing for the rest of the product (OD-39).
    */
   if (permission && !me.permissions.includes(permission)) {
-    return (
-      <div role="alert" data-permission={permission} className="px-5 py-10">
-        <Heading className="font-display text-xl font-bold text-navy">Not available to you</Heading>
-        <p className="mt-1 text-md text-muted">
-          Your account does not have access to this screen. If you believe it should, ask
-          whoever manages accounts where you work.
-        </p>
-      </div>
-    );
+    return <NotAvailableToYou permission={permission} headingLevel={Heading === 'h1' ? 1 : 2} />;
   }
 
   return <>{children}</>;
+}
+
+/**
+ * **The refusal, on its own** — what `RequireSession` draws for a missing permission, and what a page draws for a
+ * reader the server would refuse on a fact that is no permission: KPM analytics for a leader who is not a Core
+ * Leader (ADR-0159 §2), who holds the grant and is answered 404. One set of words, so the two cannot differ.
+ */
+export function NotAvailableToYou({ permission, headingLevel = 1 }: { permission?: string; headingLevel?: 1 | 2 }) {
+  const Heading = headingLevel === 1 ? 'h1' : 'h2';
+  return (
+    <div role="alert" data-permission={permission} className="px-5 py-10">
+      <Heading className="font-display text-xl font-bold text-navy">Not available to you</Heading>
+      <p className="mt-1 text-md text-muted">
+        Your account does not have access to this screen. If you believe it should, ask
+        whoever manages accounts where you work.
+      </p>
+    </div>
+  );
 }

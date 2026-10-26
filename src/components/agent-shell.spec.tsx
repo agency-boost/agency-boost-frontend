@@ -107,6 +107,62 @@ describe('Open Owner view and Open Admin view, in the field view’s identity me
  * shell (`Recruitment_Section.html:251-254`), after *Sales tools* and before the line above *KPM*, for
  * every field role and in the Owner's and the Admin's field view.
  */
+/**
+ * **One *Sales tools* entry** (P18.8-T12 AC-1, ADR-0161 §5): *Sales Attack Plan*, current on the plan and on the
+ * catalog — its drawer included — whose tabs reach each other; *Product Catalog* is no longer an entry of its own.
+ */
+describe('the profile line under the name (P18.8-T6 AC-2, ADR-0159 §5)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const OFFICE = { code: '0417', branch: 'Cempaka Putih' };
+
+  it('the rung · Core Leader · the groups · the office, one line, its whole text in the tooltip', () => {
+    renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, {
+      me: reader({ isCoreLeader: true, groups: ['Mentoring Circle', 'Top Producers 2026'], office: OFFICE }),
+    });
+    const line = 'AB · Core Leader · Mentoring Circle, Top Producers 2026 · 0417 · Cempaka Putih';
+    const shown = screen.getByText(line);
+    expect(shown).toHaveAttribute('title', line);
+    expect(shown.className).toContain('truncate');
+  });
+
+  it('leaves out what does not apply: an Agent in no group and untagged reads their rung and their office', () => {
+    renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, {
+      me: reader({ orgLevelCode: 'AGENT', hierarchyRole: 'agent', isCoreLeader: false, groups: [], office: OFFICE }),
+    });
+    expect(screen.getByText('Agent · 0417 · Cempaka Putih')).toBeInTheDocument();
+    expect(screen.queryByText(/Core Leader/)).not.toBeInTheDocument();
+  });
+
+  it('somebody in no office reads No office yet, alone', () => {
+    renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, { me: makeMe({ membership: null }) });
+    expect(screen.getByText('No office yet')).toHaveAttribute('title', 'No office yet');
+  });
+});
+
+describe('Sales tools, one entry (P18.8-T12 AC-1)', () => {
+  afterEach(() => { route.path = '/coaching'; });
+  const sidebar = () => within(screen.getByRole('navigation', { name: 'Main' }));
+
+  it('P18.8-T12 AC-1 holds Sales Attack Plan alone, opening the plan', () => {
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
+    const entry = sidebar().getByRole('link', { name: 'Sales Attack Plan' });
+    expect(entry).toHaveAttribute('href', '/attack-plan');
+    expect(sidebar().queryByRole('link', { name: 'Product Catalog' })).not.toBeInTheDocument();
+  });
+
+  it.each(['/attack-plan', '/product-catalog', '/product-catalog/PRUMAPAN'])('P18.8-T12 AC-1 is current on %s', (path) => {
+    route.path = path;
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
+    expect(sidebar().getByRole('link', { name: 'Sales Attack Plan' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it.each(['/product-catalogs', '/recruitment/attack-plan', '/kpm/settings/products'])('P18.8-T12 AC-1 is not current on %s', (path) => {
+    route.path = path;
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
+    expect(sidebar().getByRole('link', { name: 'Sales Attack Plan' })).not.toHaveAttribute('aria-current');
+  });
+});
+
 describe('Recruitment tools, after Sales tools (P17-T3 AC-1)', () => {
   afterEach(() => { route.path = '/coaching'; });
 
@@ -125,8 +181,9 @@ describe('Recruitment tools, after Sales tools (P17-T3 AC-1)', () => {
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me });
     const order = navOrder();
     const at = order.indexOf('Recruitment tools');
-    expect(order.slice(at - 3, at + 3)).toEqual([
-      'Sales tools', 'Sales Attack Plan', 'Product Catalog', 'Recruitment tools', 'Recruitment', 'KPM',
+    // *Sales tools* is one entry since P18.8-T12 (ADR-0161 §5): the catalog is a tab under it.
+    expect(order.slice(at - 2, at + 3)).toEqual([
+      'Sales tools', 'Sales Attack Plan', 'Recruitment tools', 'Recruitment', 'KPM',
     ]);
     const item = screen.getByRole('link', { name: 'Recruitment' });
     expect(item).toHaveAttribute('href', '/recruitment/attack-plan');
@@ -169,5 +226,26 @@ describe('Recruitment tools, after Sales tools (P17-T3 AC-1)', () => {
     const others = items.filter((a) => a !== recruitment).map(glyph);
     expect(others.length).toBeGreaterThan(10);
     expect(others).not.toContain(glyph(recruitment));
+  });
+});
+
+/*
+ * P18.8-T15 AC-1 (UI-005): the header's name falls back to the full name when the preferred name is empty or blank.
+ * `preferredName ?? fullName` fell back on `null` only, so a profile saved with the field emptied — `''` until the
+ * API stored `null` — printed no name at all.
+ */
+describe('the header name (P18.8-T15 AC-1)', () => {
+  it.each([[''], ['   '], [null]])('P18.8-T15 AC-1 shows the full name for a preferred name of %j', (preferredName) => {
+    const me = reader();
+    renderWithSession(<AgentShell title="x">body</AgentShell>, {
+      me: { ...me, user: { ...me.user, preferredName } },
+    });
+    expect(screen.getByRole('button', { name: /Rina Wijaya/ })).toBeInTheDocument();
+  });
+
+  it('P18.8-T15 AC-1 shows the preferred name when there is one', () => {
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader() });
+    expect(screen.getByRole('button', { name: /Rina/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Rina Wijaya/ })).not.toBeInTheDocument();
   });
 });

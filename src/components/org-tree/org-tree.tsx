@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import {
   avatarClassFor, rungLabel, useLadder, RoleBadge, SEEDED_LADDER,
 } from '@/components/ui/role-badge';
+import { displayName } from '@/lib/display-name';
 import type { OrgLevel } from '@/lib/tenant-config-cache';
 import type { OrgTree as OrgTreeData } from '@/lib/org';
 import { defaultCollapsed, layoutTree, NODE_HEIGHT, NODE_WIDTH } from './layout';
@@ -157,7 +158,7 @@ export function OrgTree({
               </div>
               {column.nodes.map(({ node, x, y }) => {
                 const href = personHref?.(node.membershipId);
-                const label = node.preferredName ?? node.fullName;
+                const label = displayName(node);
                 return (
                   <div
                     key={node.membershipId}

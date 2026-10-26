@@ -48,7 +48,9 @@ import { useTenantConfig, type TenantConfig } from '@/lib/tenant-config-cache';
  *
  * **The prototype's screen, and no more** (P10.1-T6, ADR-0062, ADR-0063): no hint sentences under
  * step 2, no measured rate under the assumptions (ADR-0063 §7) — a coachee's read no longer even
- * carries one (D-rates) — and no history card. What stays beyond the prototype is what a requirement
+ * carries one (D-rates) — and no history card. **Less, since the client's revisions of 2026-10-26**
+ * (ADR-0160 §4–5): no 💡 tip and no helper line under the two percentages, the cascade in the client's
+ * words, and policies per week to one decimal. What stays beyond the prototype is what a requirement
  * needs: *Set by your leader* (ADR-0046), the provenance marker on the APE already produced
  * (ADR-0063 §5), the disclaimer (L-29) and the target-passed state (ADR-0047).
  */
@@ -150,7 +152,7 @@ export function GoalCalculator({
   const byLeader = mine
     && goal.savedByMembershipId !== null
     && goal.savedByMembershipId !== me?.membership?.membershipId;
-  const numbers = activityNumbers(config, goal.cascadeMapping);
+  const numbers = activityNumbers(config, goal.cascadeBinding);
   const produced = producedFrom(goal.achieved, 'year', subject?.pronoun);
 
   return (
@@ -414,32 +416,35 @@ export function GoalCalculator({
                 value={projected.policiesPerMonth}
                 unit="policies"
               />
+              {/*
+                * **One decimal** (ADR-0160 §5): the server divides by 4.33 to a tenth and a whole figure
+                * comes back whole, so six a month reads *≈ 1.4* where it read *≈ 2*. The 💡 tip under this
+                * step went at the client's request.
+                */}
               <KpiTile label="Policies per week" value={`≈ ${projected.policiesPerWeek}`} />
             </div>
           )}
-          <Tip glyph="💡">
-            APE per closing. Increase if one appointment often yields multiple policies.
-          </Tip>
         </Step>
 
         <Step n={4} title="Conversion assumptions">
           <FieldRow>
             {/*
-              * The prototype's own labels, with its `.field-sub` explanation underneath as the hint
-              * (`:2981-2999`), verbatim. The sub-line is a `<span>` inside the label there, which makes
-              * it part of the field's accessible name; ours is a `hint` bound by `aria-describedby`, so
-              * it is announced after the name rather than as part of it (L-20).
+              * **The client's label, and no helper lines** (ADR-0160 §4, 2026-10-26): the prototype reads
+              * *Leads to Appointment* (`:2981-2999`), with a `.field-sub` under each field and a 💡 tip
+              * under both, and the client asked for all three to go. *Closing rate* is the prototype's.
+              *
+              * **Unsaved, each opens on the office's benchmark** — *Set appointment to meeting* and *Selling
+              * success rate* — or 30 (ADR-0160 §3). The server answers it; the screen holds no copy.
               *
               * **Not the measured rate** (ADR-0063 §7): *Your logged rate* left this screen in
               * P10.1-T6. `GET /goals` keeps `measured`; where coaching shows it is P11-T1's.
               */}
             <Percent
-              label="Leads to Appointment"
+              label="Appointment to Sales meeting"
               id="goal-leads-to-appt"
               className="min-w-[14rem] flex-1"
               value={draft.leadsToApptPct}
               onChange={(leadsToApptPct) => set({ leadsToApptPct })}
-              hint="% of contacted leads that become an appointment"
             />
             <Percent
               label="Closing rate"
@@ -447,10 +452,8 @@ export function GoalCalculator({
               className="min-w-[14rem] flex-1"
               value={draft.closingRatePct}
               onChange={(closingRatePct) => set({ closingRatePct })}
-              hint="% of appointments that become a closing"
             />
           </FieldRow>
-          <Tip glyph="💡">Use your real conversion ratios for accuracy.</Tip>
         </Step>
 
         <Step n={5} title="Monthly activity target">
@@ -472,28 +475,33 @@ export function GoalCalculator({
              * it read as *67 leads, of which 30% become 20 appointments, of which 30% become 6
              * closings*. It was five bare divs in a flex row with `—30%→` as grey caption text, so the
              * three numbers were adjacent rather than consequent.
+             *
+             * **The client's words, and the month written out** (ADR-0160 §4–5, 2026-10-26): *Set appointment*,
+             * *Sales meeting* and *Submission polis*, where the prototype reads *Leads contacted*, *Appointments*
+             * and *Closings*; each figure *n/month* above *≈ n/week* — the policies' to one decimal, the two
+             * counts to do whole.
              */
             <CascadeRow
               columns={[
                 {
-                  label: 'Leads contacted',
+                  label: 'Set appointment',
                   chip: chipOf(numbers.leads),
                   icon: 'clipboard',
-                  month: String(projected.leadsPerMonth),
+                  month: `${projected.leadsPerMonth}/month`,
                   week: `≈ ${projected.leadsPerWeek}/week`,
                 },
                 {
-                  label: 'Appointments',
+                  label: 'Sales meeting',
                   chip: chipOf(numbers.appointments),
                   icon: 'calendar',
-                  month: String(projected.appointmentsPerMonth),
+                  month: `${projected.appointmentsPerMonth}/month`,
                   week: `≈ ${projected.appointmentsPerWeek}/week`,
                 },
                 {
-                  label: 'Closings',
+                  label: 'Submission polis',
                   chip: chipOf(numbers.closings),
                   icon: 'target',
-                  month: String(projected.policiesPerMonth),
+                  month: `${projected.policiesPerMonth}/month`,
                   week: `≈ ${projected.policiesPerWeek}/week`,
                   hero: true,
                 },
@@ -514,7 +522,8 @@ export function GoalCalculator({
             */}
           {numbers.leads !== null && numbers.appointments !== null && numbers.closings !== null && (
             <Tip glyph="🔗">
-              Maps to activities #{numbers.leads}, #{numbers.appointments}, #{numbers.closings} in Activity Management.
+              Maps to activities {[numbers.leads, numbers.appointments, numbers.closings].map(hashes).join(', ')} in
+              {' '}Activity Management.
             </Tip>
           )}
         </Step>
@@ -589,27 +598,37 @@ function Figure({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * **The number the log screen shows beside each cascade type** (P10.1-T6 AC-11): its display order in
- * the office's published configuration, found by the code the cascade binds to (invariant §4) — the
- * prototype's *Activity #3* (`Overall.html:3021`, `:3038`, `:3055`). The code is an internal id and is
- * never shown (ADR-0062 §3). `null` until the configuration arrives, and for a code it holds no live
- * type for: a number pointing at nothing on the log is not printed.
+ * **The numbers the log screen shows beside each cascade stage's types** (P10.1-T6 AC-11): their display order
+ * in the office's published configuration, found by the codes the **office's activity binding** names for the
+ * stage (`goal.cascadeBinding`, ADR-0163; invariant §4) — the prototype's *Activity #3* (`Overall.html:3021`,
+ * `:3038`, `:3055`). A stage bound to a replaced activity and its replacement shows both. The code is an internal
+ * id and is never shown (ADR-0062 §3). `null` until the configuration arrives, and for a stage it holds no live
+ * type for: a number pointing at nothing on the log is not printed — so an archived type, still counted for its
+ * history, is not numbered.
  */
-function activityNumbers(config: TenantConfig | null, mapping: Goal['cascadeMapping']) {
+function activityNumbers(config: TenantConfig | null, binding: Goal['cascadeBinding']) {
   const types = (config?.activity ?? [])
     .filter((category) => category.status === 'active')
     .flatMap((category) => category.types)
     .filter((type) => type.status === 'active');
-  const numberOf = (code: string) => types.find((type) => type.code === code)?.displayOrder ?? null;
+  const numbersOf = (codes: readonly string[] | undefined) => {
+    const found = (codes ?? [])
+      .map((code) => types.find((type) => type.code === code)?.displayOrder)
+      .filter((n): n is number => n !== undefined);
+    return found.length ? found : null;
+  };
   return {
-    leads: numberOf(mapping.leadsCode),
-    appointments: numberOf(mapping.appointmentsCode),
-    closings: numberOf(mapping.closingsCode),
+    leads: numbersOf(binding?.leads),
+    appointments: numbersOf(binding?.appointments),
+    closings: numbersOf(binding?.closings),
   };
 }
 
+/** `#3`, or `#3, #13` for a stage that counts two. */
+const hashes = (numbers: readonly number[]) => numbers.map((n) => `#${n}`).join(', ');
+
 /** The chip over a cascade column: *Activity #3*, verbatim, or none while the number is unknown. */
-const chipOf = (n: number | null) => (n === null ? undefined : `Activity #${n}`);
+const chipOf = (numbers: readonly number[] | null) => (numbers === null ? undefined : `Activity ${hashes(numbers)}`);
 
 
 /**

@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { renderWithSession, stubFetch } from '@test/harness';
 import LeaderMeetingsPage from './page';
 import {
@@ -177,6 +177,9 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
   });
 
   it('a reader not signed in is sent to sign in, and back here after (D-share)', async () => {
+    // Sent by the shell since P18.8-T15 AC-2, from the address the browser is on.
+    window.history.replaceState(null, '', '/leader-meetings');
+    onTestFinished(() => window.history.replaceState(null, '', '/'));
     stubFetch({});
     renderWithSession(<LeaderMeetingsPage />, { me: null });
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login?next=%2Fleader-meetings'));

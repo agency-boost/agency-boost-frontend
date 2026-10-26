@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithSession, stubFetch } from '@test/harness';
@@ -23,7 +23,19 @@ async function fill(password = 'a long enough password') {
   // The insurer that issued the code, and the code itself (ADR-0017).
   await screen.findByRole('option', { name: 'Prudential' });
   await userEvent.selectOptions(screen.getByLabelText('Insurer'), 'co-2');
-  await userEvent.type(screen.getByLabelText('Agent code'), 'PRU-88213');
+  await userEvent.type(screen.getByLabelText('Agent code'), '88213');
+  await personal();
+}
+
+/**
+ * What a person records (ADR-0158, P18.8-T4). A `type="date"` or `type="month"` input takes a value,
+ * not keystrokes: jsdom has no picker to type into.
+ */
+async function personal() {
+  fireEvent.change(screen.getByLabelText('Date of birth'), { target: { value: '1990-03-15' } });
+  fireEvent.change(screen.getByLabelText(/^Joined /), { target: { value: '2021-07' } });
+  await userEvent.selectOptions(screen.getByLabelText('Status'), 'full_time');
+  await userEvent.selectOptions(screen.getByLabelText('Gender'), 'female');
 }
 
 describe('register', () => {
@@ -36,7 +48,7 @@ describe('register', () => {
     expect(screen.getByText(/office is added separately/)).toBeInTheDocument();
   });
 
-  it('sends the five fields the API asks for', async () => {
+  it('sends the nine fields the API asks for', async () => {
     const { calls } = stubFetch({
       '/companies': { body: INSURERS },
       '/auth/register': { status: 201, body: { status: 'verification_sent' } },
@@ -52,8 +64,73 @@ describe('register', () => {
       email: 'rina@kpm0417.test',
       password: 'a long enough password',
       companyId: 'co-2',
-      agentCode: 'PRU-88213',
+      agentCode: '88213',
+      dateOfBirth: '1990-03-15',
+      companyJoinMonth: '2021-07',
+      workStatus: 'full_time',
+      gender: 'female',
     });
+  });
+
+  it('P18.8-T4 AC-3: asks the four a person records, the join month named after the insurer chosen', async () => {
+    stubFetch({ '/companies': { body: INSURERS } });
+    renderWithSession(<RegisterPage />, { me: null });
+
+    expect(screen.getByLabelText('Date of birth')).toHaveAttribute('type', 'date');
+    // Month and year, and the insurer's own name once one is chosen.
+    expect(screen.getByLabelText('Joined your insurer')).toHaveAttribute('type', 'month');
+    await screen.findByRole('option', { name: 'Prudential' });
+    await userEvent.selectOptions(screen.getByLabelText('Insurer'), 'co-2');
+    expect(screen.getByLabelText('Joined Prudential')).toHaveAttribute('type', 'month');
+
+    const status = screen.getByLabelText<HTMLSelectElement>('Status');
+    expect([...status.options].map((o) => o.text)).toEqual(['Choose', 'Full-time', 'Part-time']);
+    const gender = screen.getByLabelText<HTMLSelectElement>('Gender');
+    expect([...gender.options].map((o) => o.text)).toEqual(['Choose', 'Male', 'Female']);
+  });
+
+  it('P18.8-T4 AC-3: holds the button until all four are given', async () => {
+    stubFetch({ '/companies': { body: INSURERS } });
+    renderWithSession(<RegisterPage />, { me: null });
+    const submit = screen.getByRole('button', { name: 'Create account' });
+
+    await userEvent.type(screen.getByLabelText('Full name'), 'Rina Wijaya');
+    await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
+    await userEvent.type(screen.getByLabelText('Password'), 'a long enough password');
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'a long enough password');
+    await screen.findByRole('option', { name: 'Prudential' });
+    await userEvent.selectOptions(screen.getByLabelText('Insurer'), 'co-2');
+    await userEvent.type(screen.getByLabelText('Agent code'), '88213');
+    expect(submit).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('Date of birth'), { target: { value: '1990-03-15' } });
+    fireEvent.change(screen.getByLabelText('Joined Prudential'), { target: { value: '2021-07' } });
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'part_time');
+    expect(submit).toBeDisabled();
+    await userEvent.selectOptions(screen.getByLabelText('Gender'), 'male');
+    expect(submit).toBeEnabled();
+  });
+
+  it('P18.8-T4 AC-4: says a refusal that names one of the four under that field', async () => {
+    stubFetch({
+      '/companies': { body: INSURERS },
+      '/auth/register': {
+        status: 400,
+        body: { error: {
+          code: 'VALIDATION_FAILED', message: 'A date of birth must be at least 18 years ago.',
+          details: { field: 'dateOfBirth' }, requestId: 'req-4',
+        } },
+      },
+    });
+    renderWithSession(<RegisterPage />, { me: null });
+
+    await fill();
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
+
+    const said = await screen.findByText('A date of birth must be at least 18 years ago.');
+    expect(said).toHaveAttribute('id', 'dateOfBirth-error');
+    expect(screen.getByLabelText('Date of birth')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.queryByText(/verification link is on its way/)).not.toBeInTheDocument();
   });
 
   it('offers no insurer chosen for you, because the wrong one is not recoverable here', async () => {
@@ -94,7 +171,8 @@ describe('register', () => {
     // Everything else valid, so the password is the only thing holding the button.
     await screen.findByRole('option', { name: 'Prudential' });
     await userEvent.selectOptions(screen.getByLabelText('Insurer'), 'co-2');
-    await userEvent.type(screen.getByLabelText('Agent code'), 'PRU-88213');
+    await userEvent.type(screen.getByLabelText('Agent code'), '88213');
+    await personal();
 
     await userEvent.type(screen.getByLabelText('Password'), 'short');
     expect(screen.getByText('Use at least 10 characters.')).toBeInTheDocument();

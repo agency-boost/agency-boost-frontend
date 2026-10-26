@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { SUMMARY_VIEWS, SummaryCards, type SummaryView } from '@/components/personal-summary';
+import { SummaryPeriodSelect, useSummaryPeriod } from '@/components/summary-period';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Segmented } from '@/components/ui/segmented';
 import { SkeletonCards } from '@/components/ui/skeleton';
@@ -10,7 +11,7 @@ import { readActivityRatios, type ActivityRatios } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { formatMonth } from '@/lib/format';
 import { printAs, restorePrintTitle } from '@/lib/print';
-import { readSummary, type Summary } from '@/lib/summary';
+import { readSummary, summaryPeriodFrom, type Summary } from '@/lib/summary';
 
 /**
  * The Personal Summary (P10-T4): your goal against what you produced, this month and this year, and
@@ -48,10 +49,17 @@ import { readSummary, type Summary } from '@/lib/summary';
  *
  * **The cards are `SummaryCards`** (P11-T7): the same cards draw a coachee's *Personal Summary* tab in
  * that person's pronoun. This page is the reader's own: its title, its Download, and its two reads.
+ *
+ * **An earlier month or year** (P18.8-T11, ADR-0161 §4): a month select under *Monthly*, a year select under
+ * *Yearly*, from the office's first month to this one, the choice in the address (`?month=`, `?year=`). A closed
+ * period shows its final figures, with no pace sentence and no *The gap*. While the next one is read the selects
+ * stay and the cards wait as a skeleton: the old month's figures under the new month's name would lie.
  */
 type View = SummaryView;
 
 const VIEWS = SUMMARY_VIEWS;
+
+type Query = { month?: string | string[]; year?: string | string[] };
 
 /**
  * *⬇ Download* (ADR-0068): the browser's print, as the prototype's handler is, under a title that says what
@@ -61,10 +69,12 @@ const VIEWS = SUMMARY_VIEWS;
 const downloadTitle = (summary: Summary, view: View) =>
   `Personal Summary – ${view === 'month' ? formatMonth(summary.month) : summary.year}`;
 
-export default function PersonalSummaryPage() {
-  const [summary, setSummary] = useState<Summary | null>(null);
+export default function PersonalSummaryPage({ searchParams }: { searchParams?: Promise<Query> }) {
+  const query = searchParams ? use(searchParams) : {};
+  const { asked, view, chooseView, choose, key } = useSummaryPeriod(summaryPeriodFrom(query));
+  /** The last Summary read, and the period it was read for. */
+  const [held, setHeld] = useState<{ key: string; summary: Summary } | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  const [view, setView] = useState<View>('month');
   // The pulse is the ratio screen's own read (P10-T2, P10-T3), fetched once — it is the last 30 days
   // whichever period is showing, so switching views does not ask again.
   const [pulse, setPulse] = useState<ActivityRatios | null>(null);
@@ -73,16 +83,29 @@ export default function PersonalSummaryPage() {
   useEffect(() => restorePrintTitle, []);
   const [pulseError, setPulseError] = useState<ApiError | null>(null);
 
+  // The period's Summary: read again whenever the period changes.
   useEffect(() => {
     let live = true;
-    readSummary()
-      .then((next) => { if (live) setSummary(next); })
+    setError(null);
+    readSummary(undefined, asked)
+      .then((next) => { if (live) setHeld({ key, summary: next }); })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
+    return () => { live = false; };
+    // `key` is the period, said once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  useEffect(() => {
+    let live = true;
     readActivityRatios()
       .then((next) => { if (live) setPulse(next); })
       .catch((err) => { if (live) setPulseError(toDisplayError(err)); });
     return () => { live = false; };
   }, []);
+
+  // The Summary on the page is the asked period's; until it arrives, the last one only holds the selects.
+  const summary = held?.key === key ? held.summary : null;
+  const frame = held?.summary ?? null;
 
   return (
     <Page
@@ -98,16 +121,23 @@ export default function PersonalSummaryPage() {
     >
       <div className="mx-auto max-w-[860px]">
         {error && <ErrorBanner {...error} />}
-        {!summary && !error && <SkeletonCards count={2} label="Putting your summary together…" />}
-        {summary && (
+        {!frame && !error && <SkeletonCards count={2} label="Putting your summary together…" />}
+        {frame && (
           <Segmented
             label="Period"
             tabs={VIEWS}
             active={view}
-            onSelect={(id) => setView(id as View)}
+            onSelect={(id) => chooseView(id as View)}
             className="w-fit print:hidden [&_button]:whitespace-nowrap [&_button]:px-3.5"
           >
-            {() => <SummaryCards summary={summary} view={view} pulse={{ ratios: pulse, error: pulseError }} />}
+            {() => (
+              <>
+                <SummaryPeriodSelect view={view} frame={frame} asked={asked} onChoose={(value) => choose(value, frame.period)} />
+                {summary
+                  ? <SummaryCards summary={summary} view={view} pulse={{ ratios: pulse, error: pulseError }} />
+                  : !error && <SkeletonCards count={2} label="Putting your summary together…" />}
+              </>
+            )}
           </Segmented>
         )}
       </div>

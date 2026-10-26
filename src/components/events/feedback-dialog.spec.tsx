@@ -21,6 +21,8 @@ function open(routes: Routes = {}, me = OWNER_ME) {
 }
 
 const dialog = () => screen.findByRole('dialog', { name: 'PRULink briefing' });
+/** The *Feedback summary* tab, opened (P18.8-T13). */
+const toSummary = async () => userEvent.click(await screen.findByRole('tab', { name: 'Feedback summary' }));
 const rollCallReady = () => screen.findByRole('table');
 const row = (name: string) => screen.getByRole('rowheader', { name }).closest('tr')!;
 const bodyOf = (call: { init: RequestInit }) => JSON.parse(String(call.init.body));
@@ -28,13 +30,47 @@ const bodyOf = (call: { init: RequestInit }) => JSON.parse(String(call.init.body
 describe('View feedback: the roll call and the Feedback Summary (P18.5-T5 AC-7, P18.5-T6 AC-5)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.5-T5 AC-7 one dialog named by the event: the roll call first, the summary below', async () => {
+  it('P18.8-T13 AC-1 one dialog named by the event, its two parts as tabs: Roll call first and open', async () => {
     open();
     const box = await dialog();
     await rollCallReady();
-    await within(box).findByRole('heading', { name: 'PRULink briefing — Feedback Summary' });
-    const parts = [...box.querySelectorAll('section[data-part]')].map((p) => p.getAttribute('data-part'));
-    expect(parts).toEqual(['roll-call', 'feedback-summary']);
+    const strip = within(box).getByRole('tablist', { name: 'Roll call and feedback' });
+    expect(within(strip).getAllByRole('tab').map((t) => [t.textContent, t.getAttribute('aria-selected')]))
+      .toEqual([['Roll call', 'true'], ['Feedback summary', 'false']]);
+    const panel = within(box).getByRole('tabpanel', { name: 'Roll call' });
+    expect(within(panel).getByRole('table')).toBeInTheDocument();
+    // The tab names the part, so its heading is for assistive technology alone.
+    expect(within(panel).getByRole('heading', { name: 'Roll call' })).toHaveClass('sr-only');
+    expect(within(box).queryByRole('heading', { name: 'PRULink briefing — Feedback Summary' })).not.toBeInTheDocument();
+  });
+
+  it('P18.8-T13 AC-1 the Feedback summary tab shows the summary in place of the roll call', async () => {
+    open();
+    const box = await dialog();
+    await rollCallReady();
+    await toSummary();
+
+    const panel = within(box).getByRole('tabpanel', { name: 'Feedback summary' });
+    expect(await within(panel).findByRole('heading', { name: 'PRULink briefing — Feedback Summary' })).toBeInTheDocument();
+    expect(within(box).queryByRole('table')).not.toBeInTheDocument();
+    // The arrow keys move between the two, as a tablist's do.
+    await userEvent.keyboard('{ArrowLeft}');
+    expect(within(box).getByRole('tab', { name: 'Roll call' })).toHaveAttribute('aria-selected', 'true');
+    expect(within(box).getByRole('table')).toBeInTheDocument();
+  });
+
+  it('P18.8-T13 AC-1 marks not yet saved survive a look at the summary', async () => {
+    const { calls } = open();
+    await rollCallReady();
+    await userEvent.click(screen.getByRole('button', { name: 'Attended — Indah Permata' }));
+    await toSummary();
+    await userEvent.click(screen.getByRole('tab', { name: 'Roll call' }));
+
+    expect(screen.getByRole('button', { name: 'Attended — Indah Permata' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Save attendance' })).toBeEnabled();
+    // Each part was read once: switching tabs asks the server for nothing.
+    expect(calls.filter((c) => c.url.endsWith('/attendance'))).toHaveLength(1);
+    expect(calls.filter((c) => c.url.endsWith('/feedback'))).toHaveLength(1);
   });
 
   it('P18.5-T5 AC-7 the audience as at the start: name, role, what they said, and the confirmation', async () => {
@@ -107,7 +143,8 @@ describe('View feedback: the roll call and the Feedback Summary (P18.5-T5 AC-7, 
     await userEvent.click(screen.getByRole('button', { name: 'Save attendance' }));
     await waitFor(() => expect(calls.filter((c) => c.url.endsWith('/feedback'))).toHaveLength(2));
     await waitFor(() => expect(screen.queryByText(/awaiting attendance confirmation/)).not.toBeInTheDocument());
-    expect(screen.getByText(/· 2 responses/)).toBeInTheDocument();
+    await toSummary();
+    expect(screen.getByText(/· 2 responses/)).toBeVisible();
   });
 
   it('P18.5-T5 AC-7 a refusal on save is said beside the button', async () => {
@@ -122,11 +159,12 @@ describe('View feedback: the roll call and the Feedback Summary (P18.5-T5 AC-7, 
     expect(await screen.findByRole('alert')).toHaveTextContent('Nobody confirms their own attendance.');
   });
 
-  it('P18.5-T5 AC-1 a read-only support session as the Owner holds no confirmation: no roll call, the summary still read', async () => {
+  it('P18.5-T5 AC-1, P18.8-T13 AC-1 a read-only support session as the Owner: no roll call, the summary alone with no strip', async () => {
     // The roll call's read is guarded by `event_attendance:confirm` (contract, final): the server answers this
     // session 403, so the screen neither asks nor draws it.
     const { calls } = open({ [ATTENDANCE]: { status: 403, body: { error: { code: 'PERM_DENIED', message: 'No.', requestId: 'r' } } } }, READ_ONLY_OWNER);
     await screen.findByRole('heading', { name: 'PRULink briefing — Feedback Summary' });
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Roll call' })).not.toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save attendance' })).not.toBeInTheDocument();
@@ -180,6 +218,14 @@ describe('View feedback: the roll call and the Feedback Summary (P18.5-T5 AC-7, 
     await screen.findByRole('heading', { name: 'PRULink briefing — Feedback Summary' });
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
     expect(calls.some((c) => c.url.endsWith('/attendance'))).toBe(false);
+  });
+
+  it('P18.8-T13 AC-1 a reader who may confirm and not read the summary sees the roll call alone, its heading shown, no strip', async () => {
+    const { calls } = open({}, { ...OWNER_ME, permissions: ['event_attendance:confirm'] });
+    await rollCallReady();
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Roll call' })).not.toHaveClass('sr-only');
+    expect(calls.some((c) => c.url.endsWith('/feedback'))).toBe(false);
   });
 });
 
@@ -264,6 +310,7 @@ describe('the Feedback Summary card (P18.5-T6 AC-5)', () => {
   it('P18.5-T6 AC-5 its own states: a skeleton and an error with a retry', async () => {
     const { calls } = open({ [FEEDBACK]: [serverError, { body: feedbackSummary() }] });
     await rollCallReady();
+    await toSummary();
     const retry = await screen.findByRole('button', { name: 'Try again' });
     await userEvent.click(retry);
     await screen.findByRole('heading', { name: 'PRULink briefing — Feedback Summary' });

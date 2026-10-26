@@ -5,7 +5,7 @@ import {
 } from '@test/unit-dashboard-fixtures';
 import {
   candidates, countWords, dialogGroups, everyRow, gapWords, goalWords, inputsOf, lockedWords, missingWords,
-  periodFrom, prefill, productionChanges, productionToast, provenanceWords, readUnitDashboard, readerName,
+  OWN_COPY, periodFrom, prefill, productionChanges, productionToast, provenanceWords, readUnitDashboard, readerName,
   recruitLine, regroup, rowName, salesLine, totalRecruitLine, touchesWords, updateUnitProduction,
 } from './unit-dashboard';
 
@@ -99,12 +99,22 @@ describe('the words a row is drawn in', () => {
     expect(totalRecruitLine({ ...counts, recruitNominated: 0 })).toBeNull();
   });
 
-  it('P15-T2 AC-3 writes touches against their target, pro-rated under Last 7 days, and no bar without a target', () => {
-    expect(touchesWords({ logged: 85, target: 95 }, 'month')).toEqual({ logged: 85, rest: '/ 95 touches', pct: 89 });
-    expect(touchesWords({ logged: 20, target: 22 }, '7d')).toEqual({ logged: 20, rest: '/ 22 pro-rated touches', pct: 91 });
+  it('P15-T2 AC-3 writes goal activities against their target, pro-rated under Last 7 days, and no bar without a target', () => {
+    // *Goal activities*, not *touches*, since ADR-0165 §2 (P18.8-T15 AC-5).
+    expect(touchesWords({ logged: 85, target: 95 }, 'month')).toEqual({ logged: 85, rest: '/ 95 goal activities', pct: 89 });
+    expect(touchesWords({ logged: 20, target: 22 }, '7d')).toEqual({ logged: 20, rest: '/ 22 pro-rated goal activities', pct: 91 });
     expect(touchesWords({ logged: 140, target: 95 }, 'year').pct).toBe(100);
     expect(touchesWords({ logged: 0, target: 0 }, 'month').pct).toBe(100);
-    expect(touchesWords({ logged: 7, target: null }, 'month')).toEqual({ logged: 7, rest: 'touches', pct: null });
+    expect(touchesWords({ logged: 7, target: null }, 'month')).toEqual({ logged: 7, rest: 'goal activities', pct: null });
+  });
+
+  it('P18.8-T15 AC-5 never calls the figure touches, singular at one, and names the three types it counts', () => {
+    expect(touchesWords({ logged: 1, target: null }, 'month').rest).toBe('goal activity');
+    expect(touchesWords({ logged: 0, target: 1 }, 'month').rest).toBe('/ 1 goal activity');
+    expect(touchesWords({ logged: 2, target: null }, 'month').rest).not.toContain('touch');
+    expect(OWN_COPY.activityRule).toBe(
+      'The activities a goal is built from: Set appointment, Sales meeting, Submission polis. Not every activity logged.',
+    );
   });
 
   it('P15-T2 AC-5 writes the breakdown’s counts, pro-rated under Last 7 days', () => {

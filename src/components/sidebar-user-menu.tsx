@@ -156,7 +156,8 @@ export function SidebarUserMenu({
           <>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-md font-semibold text-white">{user.name}</span>
-              <span className="block truncate text-xs text-white/55">{user.role}</span>
+              {/* The profile line (ADR-0159 §5): one line, truncated, the whole of it on hover. */}
+              <span className="block truncate text-xs text-white/55" title={user.role}>{user.role}</span>
             </span>
             {/* Which way it opens: down from the bar on a phone, up from the foot of the sidebar wider. */}
             <span aria-hidden className="shrink-0 text-xs text-white/40">

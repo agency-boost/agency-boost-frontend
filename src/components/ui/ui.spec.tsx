@@ -75,6 +75,23 @@ describe('RouteTabs', () => {
     );
     expect(screen.getByRole('link', { name: 'Pending Requests 3' })).toBeInTheDocument();
   });
+
+  it('P18.8-T12 a nested tab is current beneath its own address too, and a prefix is not a parent', () => {
+    // The mocked address is `/activity/log`: beneath `/activity`, not beneath `/activity/lo`.
+    render(
+      <RouteTabs
+        label="Nested"
+        tabs={[
+          { href: '/activity', label: 'Beneath', nested: true },
+          { href: '/activity/lo', label: 'A prefix', nested: true },
+        ]}
+      />,
+    );
+    render(<RouteTabs label="Exact" tabs={[{ href: '/activity', label: 'Exact only' }]} />);
+    expect(screen.getByRole('link', { name: 'Beneath' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'A prefix' })).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: 'Exact only' })).not.toHaveAttribute('aria-current');
+  });
 });
 
 describe('Card', () => {
@@ -105,15 +122,26 @@ describe('SectionCard', () => {
     expect(container.firstElementChild!.className).toContain('overflow-hidden');
   });
 
-  it('tops the row rather than centring it, because the left side can run to two lines', () => {
+  it('P18.8-T8 AC-1 centres the row, with a sub-note and without, at the client’s request', () => {
+    // ADR-0161 §3: a registered divergence from the prototype's `flex-start` (`Overall.html:118`).
     const { container } = render(
       <SectionCard title="Leads">
-        <SectionCard.Row control={<button>+</button>}>Menghubungi prospek</SectionCard.Row>
+        <SectionCard.Row control={<button>+</button>}>Set Appointment</SectionCard.Row>
+        <SectionCard.Row control={<button>+</button>}>
+          <span>Set Appointment</span>
+          <span>telepon, WhatsApp, tatap muka, dll</span>
+        </SectionCard.Row>
       </SectionCard>,
     );
-    const row = container.querySelector('header')!.nextElementSibling!;
-    expect(row.className).toContain('items-start');
-    expect(row.className).toContain('justify-between');
+    const rows = [...container.querySelectorAll('section > div')];
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(row.className).toContain('items-center');
+      expect(row.className).not.toContain('items-start');
+      expect(row.className).toContain('justify-between');
+      // The number and the words beside it share the middle too.
+      expect(row.firstElementChild!.className).toContain('items-center');
+    }
   });
 });
 
@@ -455,10 +483,11 @@ describe('Segmented', () => {
 });
 
 describe('CascadeRow', () => {
+  // The goal calculator's three, in the client's words (ADR-0160 §4).
   const COLUMNS = [
-    { label: 'Leads contacted', chip: 'Activity #3', icon: 'clipboard' as const, month: '67', week: '≈ 16/week' },
-    { label: 'Appointments', chip: 'Activity #4', icon: 'calendar' as const, month: '20', week: '≈ 5/week' },
-    { label: 'Closings', chip: 'Activity #6', icon: 'target' as const, month: '6', week: '≈ 1/week', hero: true },
+    { label: 'Set appointment', chip: 'Activity #3', icon: 'clipboard' as const, month: '40/month', week: '≈ 10/week' },
+    { label: 'Sales meeting', chip: 'Activity #4', icon: 'calendar' as const, month: '20/month', week: '≈ 5/week' },
+    { label: 'Submission polis', chip: 'Activity #6', icon: 'target' as const, month: '6/month', week: '≈ 1.4/week', hero: true },
   ];
 
   it('renders every column with its chip, monthly figure and weekly sub-line', () => {
@@ -473,18 +502,18 @@ describe('CascadeRow', () => {
   it('emphasises the hero column in fill as well as in value', () => {
     const { container } = render(<CascadeRow columns={COLUMNS} links={['30%', '30%']} />);
     const hero = container.querySelector('[data-hero="true"]')!;
-    expect(hero).toHaveTextContent('Closings');
+    expect(hero).toHaveTextContent('Submission polis');
     expect(hero.className).toContain('bg-amber/[0.14]');
   });
 
   it('uses amber-deep for the figures, because amber-dark on this tint clears no floor', () => {
     render(<CascadeRow columns={COLUMNS} links={['30%', '30%']} />);
-    expect(screen.getByText('67').className).toContain('text-amber-deep');
+    expect(screen.getByText('40/month').className).toContain('text-amber-deep');
   });
 
   it('P13.1-T5 AC-5 draws the weekly line larger and blue, in a blue that passes AA at its size', () => {
     render(<CascadeRow columns={COLUMNS} links={['30%', '30%']} />);
-    const week = screen.getByText('≈ 16/week');
+    const week = screen.getByText('≈ 10/week');
     // 14px semibold navy-soft: 8.8:1 on the hero tint. Not the prototype's 11px grey caption (`:724`), and
     // not `--color-info`, which passes only as large text (tokens.md, *Status*).
     expect(week.className.split(' ')).toEqual(expect.arrayContaining(['text-md', 'font-semibold', 'text-navy-soft']));
@@ -492,12 +521,13 @@ describe('CascadeRow', () => {
   });
 
   it('spells the conversion out for a screen reader, since the arrow is decorative', () => {
-    render(<CascadeRow columns={COLUMNS} links={['30%', '30%']} />);
+    render(<CascadeRow columns={COLUMNS} links={['50%', '30%']} />);
+    // *From … to …*, as the field it repeats reads: *Appointment to Sales meeting* (ADR-0160 §4).
     expect(
-      screen.getByText('30% of leads contacted become appointments'),
+      screen.getByText('50% from set appointment to sales meeting'),
     ).toBeInTheDocument();
     expect(
-      screen.getByText('30% of appointments become closings'),
+      screen.getByText('30% from sales meeting to submission polis'),
     ).toBeInTheDocument();
   });
 
@@ -506,11 +536,11 @@ describe('CascadeRow', () => {
     // no useful weekly equivalent, still draws its column.
     render(
       <CascadeRow
-        columns={[{ label: 'Leads contacted', icon: 'clipboard', month: '67' }]}
+        columns={[{ label: 'Set appointment', icon: 'clipboard', month: '40/month' }]}
         links={[]}
       />,
     );
-    expect(screen.getByText('67')).toBeInTheDocument();
+    expect(screen.getByText('40/month')).toBeInTheDocument();
     expect(screen.queryByText(/week/)).not.toBeInTheDocument();
   });
 

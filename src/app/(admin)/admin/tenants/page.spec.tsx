@@ -138,6 +138,28 @@ describe('tenants list', () => {
       expect(within(unlimited).getByText('—')).toBeInTheDocument();
     });
 
+    it('P18.8-T2 AC-7 reads 13 / 10 and “3 over” past the limit, and says it whole to a screen reader', async () => {
+      stubFetch({
+        '/admin/tenants': {
+          body: [
+            { ...KPM, subscription: SUBSCRIPTION, subscriptionState: 'active', leadersUsed: 13 },
+            { ...KPM, _id: 'kpm-2', code: '0555', branchName: 'Kelapa Gading Branch', subscription: SUBSCRIPTION, subscriptionState: 'active', leadersUsed: 10 },
+          ],
+        },
+      });
+      renderInLayout(AdminLayout, <TenantsPage />, { me: SUPER_ADMIN });
+
+      const table = await screen.findByRole('table');
+      const over = within(table).getByRole('row', { name: /^0417/ });
+      expect(within(over).getByText('13 / 10')).toBeInTheDocument();
+      expect(within(over).getByText('3 over')).toBeInTheDocument();
+      expect(within(over).getByText('13 leaders of a limit of 10, 3 over')).toHaveClass('sr-only');
+      // At the limit, not past it: no overage.
+      const at = within(table).getByRole('row', { name: /^0555/ });
+      expect(within(at).getByText('10 / 10')).toBeInTheDocument();
+      expect(within(at).queryByText(/over/)).not.toBeInTheDocument();
+    });
+
     it.each([
       ['ended', 'Ended'],
       ['ended_kept_active', 'Ended — kept active'],

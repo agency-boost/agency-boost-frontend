@@ -266,4 +266,56 @@ describe('the approval inbox (P3-T5)', () => {
     // The gate's code is on the refusal as data, and never in its words (P11-T6).
     expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'leader_request:read_inbox');
   });
+
+  /*
+   * P18.8-T2 AC-6 (ADR-0157): an approval past the limit may wait for AgencyBoost — *Ask AgencyBoost to approve*
+   * asks to let the joiner in, and the row then says it is waiting, with *Cancel request*, in place of Approve.
+   */
+  describe('P18.8-T2 — a leader past the limit waits for AgencyBoost', () => {
+    const ASKER = makeMe({
+      membership: AB.membership,
+      permissions: [...AB.permissions, 'leader_limit_request:create', 'leader_limit_request:read'],
+    });
+    const ask = (over: Record<string, unknown> = {}) => ({
+      requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch',
+      subjectMembershipId: 'mem-joiner', subjectName: 'Putri Anggraini', subjectAgentCode: '88009', action: 'activate',
+      fromOrgLevelCode: 'AAB', toOrgLevelCode: null, reason: null, requestedByMembershipId: 'mem-ab',
+      requestedByName: 'Agus Prasetyo', status: 'pending', requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null,
+      declineReason: null, maxLeaders: 10, leadersUsed: 10, ...over,
+    });
+
+    it('asks to let the joiner in, and the row then waits with Cancel request', async () => {
+      const { calls } = stubFetch({
+        '/join/requests/routing': { body: [] },
+        '/join/requests/req-1/approve': {
+          status: 409,
+          body: {
+            error: {
+              code: 'LEADER_LIMIT_REACHED', message: 'x', requestId: 'r-2',
+              details: { maxLeaders: 10, leadersUsed: 10, canRequest: true },
+            },
+          },
+        },
+        '/join/requests': { body: [request({ role: 'aab' })] },
+        'POST /members/mem-joiner/leader-limit-request': { status: 201, body: ask() },
+        '/members/leader-limit-requests': [{ body: [] }, { body: [] }, { body: [ask()] }],
+        'DELETE /members/leader-limit-requests/llr-1': { body: [] },
+      });
+      renderInLayout(AgentLayout, <PendingPage />, { me: ASKER });
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+      const alert = await screen.findByRole('alert');
+      await userEvent.click(within(alert).getByRole('button', { name: 'Ask AgencyBoost to approve' }));
+
+      const posted = calls.find((c) => c.url.includes('/leader-limit-request') && c.init.method === 'POST');
+      expect(posted?.url).toContain('/members/mem-joiner/leader-limit-request');
+      expect(JSON.parse(String(posted?.init.body))).toEqual({ action: 'activate' });
+
+      expect(await screen.findByText("Waiting for AgencyBoost's approval")).toBeInTheDocument();
+      expect(screen.getByText('Let in as Associate Agency Builder')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel request' }));
+      expect(calls.some((c) => c.init.method === 'DELETE')).toBe(true);
+    });
+  });
 });

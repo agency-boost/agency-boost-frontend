@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderInLayout, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
 import {
-  AGUS_ME, dashboard, EMPTY, goalCell, RATIOS, ratio, rp, unitRow, UNITS,
+  AGUS_ME, dashboard, EMPTY, goalCell, RATIOS, ratio, rp, total, unitRow, UNITS,
 } from '@test/unit-dashboard-fixtures';
 import type { UnitDashboardView } from '@/lib/unit-dashboard';
 import AgentLayout from '../../layout';
@@ -98,7 +98,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       render(dashboard({
         tiles: {
           ...dashboard().tiles,
-          directGroupProduction: { targetMinor: rp(320), actualMinor: null, attainmentPct: null, missing: 16, period: 'month' },
+          directGroupProduction: { targetMinor: rp(320), actualMinor: null, attainmentPct: null, missing: 16, gapMinor: null, overMinor: null, period: 'month' },
         },
       }));
       await table();
@@ -119,7 +119,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
 
     it('P15-T2 AC-2 says the year’s target is made, never “/ Rp 0”, when every target-holding row made it (ADR-0047)', async () => {
       render(dashboard({
-        tiles: { ...dashboard().tiles, directGroupProduction: { targetMinor: 0, actualMinor: rp(10), attainmentPct: null, missing: 0, period: 'month' } },
+        tiles: { ...dashboard().tiles, directGroupProduction: { targetMinor: 0, actualMinor: rp(10), attainmentPct: null, missing: 0, gapMinor: 0, overMinor: rp(10), period: 'month' } },
       }));
       await table();
       const tile = screen.getByText('Direct Group production').parentElement!;
@@ -130,7 +130,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
 
     it('P15-T2 AC-2 says No goal set in the production tile when nobody has a target', async () => {
       render(dashboard({
-        tiles: { ...dashboard().tiles, directGroupProduction: { targetMinor: null, actualMinor: rp(10), attainmentPct: null, missing: 0, period: 'month' } },
+        tiles: { ...dashboard().tiles, directGroupProduction: { targetMinor: null, actualMinor: rp(10), attainmentPct: null, missing: 0, gapMinor: null, overMinor: null, period: 'month' } },
       }));
       await table();
       const tile = screen.getByText('Direct Group production').parentElement!;
@@ -162,6 +162,22 @@ describe('the Unit Dashboard (P15-T2)', () => {
       ].join('\n'));
       act(() => info.focus());
       expect(screen.getByText(/^Evaluated for the current calendar month/, { selector: '[role="tooltip"]' })).toBeVisible();
+    });
+
+    /*
+     * P18.8-T15 AC-5 (ADR-0165 §2; the client's UI review, UI-001): the figure counts the types a goal is built from,
+     * not every logged item, so it is not called touches and its header names the three.
+     */
+    it('P18.8-T15 AC-5 names the three goal activities behind the Activity header, a control a keyboard reaches', async () => {
+      render();
+      await table();
+      const info = screen.getByRole('button', { name: 'What counts as a goal activity?' });
+      expect(info).toHaveAccessibleDescription(
+        'The activities a goal is built from: Set appointment, Sales meeting, Submission polis. Not every activity logged.',
+      );
+      act(() => info.focus());
+      expect(screen.getByText(/^The activities a goal is built from/, { selector: '[role="tooltip"]' })).toBeVisible();
+      expect(screen.getByRole('table')).not.toHaveTextContent(/touches/);
     });
 
     it('P15-T2 AC-2 titles the roster Your team’s roster, with Update production beside it', async () => {
@@ -229,11 +245,12 @@ describe('the Unit Dashboard (P15-T2)', () => {
       expect(within(rowOf('Indah Lestari')).getAllByRole('cell')[2]).toHaveTextContent('Sales: 6 · 2 closingRecruit: 2 · 1 nominated');
     });
 
-    it('P15-T2 AC-3 writes the touches against their target, with the bar', async () => {
+    it('P15-T2 AC-3 writes the goal activities against their target, with the bar', async () => {
       render();
       await table();
       const cell = within(rowOf('Dimas Pratama')).getAllByRole('cell')[3];
-      expect(cell).toHaveTextContent('85 / 95 touches');
+      // *Goal activities*, not *touches* (ADR-0165 §2, P18.8-T15 AC-5).
+      expect(cell).toHaveTextContent('85 / 95 goal activities');
       expect(cell.querySelector('[aria-hidden="true"] > div')).toHaveStyle({ width: '89%' });
     });
 
@@ -246,8 +263,10 @@ describe('the Unit Dashboard (P15-T2)', () => {
       expect(last('Rina Wijaya')).toHaveTextContent(/^Todayby Sari Wulandari$/);
       expect(last('Indah Lestari')).toHaveTextContent(/^4 days agoby Agus Santoso$/);
       expect(within(last('Indah Lestari')).getByText('4 days ago')).toHaveClass('text-success');
-      expect(last('Dimas Pratama')).toHaveTextContent(/^12 days ago, overdueby Agus Santoso$/);
-      expect(within(last('Dimas Pratama')).getByText(', overdue')).toHaveClass('sr-only');
+      // *Overdue* in visible words, not by colour alone (P18.8-T15 AC-7).
+      expect(last('Dimas Pratama')).toHaveTextContent(/^12 days ago · overdueby Agus Santoso$/);
+      expect(within(last('Dimas Pratama')).getByText('12 days ago · overdue')).toHaveClass('text-alert');
+      expect(last('Dimas Pratama').querySelector('.sr-only')).toBeNull();
     });
 
     it('P15-T2 AC-3 writes one day as one day ago', async () => {
@@ -336,7 +355,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       expect(cells[1]).toHaveTextContent(/^—$/);
       expect(within(cells[1]).queryByRole('button')).not.toBeInTheDocument();
       expect(cells[2]).toHaveTextContent('Sales: 36 · 16 closingRecruit: 1 potential recruit');
-      expect(cells[3]).toHaveTextContent('340 / 380 touches');
+      expect(cells[3]).toHaveTextContent('340 / 380 goal activities');
       expect(cells[4]).toHaveTextContent(/^—$/);
       expect(cells[5]).toHaveTextContent('3/4 potential active');
     });
@@ -347,6 +366,38 @@ describe('the Unit Dashboard (P15-T2)', () => {
       const sari = screen.getByRole('rowheader', { name: 'Sari Wulandari’s Unit — Total' }).closest('tr')!;
       expect(within(sari).getByRole('button', { name: 'Not uploaded yet for Yanti Puspita, so not counted in this total.' }))
         .toBeInTheDocument();
+    });
+
+    /*
+     * P18.8-T15 AC-6 (ADR-0165 §1; the client's UI review, UI-004): the total pairs each target with the production it
+     * measures, so the shortfall is the server's, from those pairs — never the screen's own subtraction.
+     */
+    it('P18.8-T15 AC-6 writes a total’s shortfall as the server paired it, and names who is left out', async () => {
+      const paired = dashboard({
+        yourUnit: {
+          ...dashboard().yourUnit,
+          total: total({ goal: { targetMinor: rp(142.666667), actualMinor: rp(13), attainmentPct: 9, missing: 2, gapMinor: rp(129.666667), overMinor: 0 } }),
+        },
+      });
+      render(paired);
+      await table();
+      const cells = within(screen.getByRole('rowheader', { name: 'Your Unit — Total' }).closest('tr')!).getAllByRole('cell');
+      expect(cells[0]).toHaveTextContent('9% · Rp 129.666.667 short');
+      expect(cells[0]).toHaveTextContent('Rp 13.000.000 of Rp 142.666.667');
+    });
+
+    it('P18.8-T15 AC-6 a total with nobody’s production held reads Not uploaded yet, beside its target, as a row does', async () => {
+      render(dashboard({
+        yourUnit: {
+          ...dashboard().yourUnit,
+          total: total({ goal: { targetMinor: rp(135), actualMinor: null, attainmentPct: null, missing: 4, gapMinor: null, overMinor: null } }),
+        },
+      }));
+      await table();
+      const cells = within(screen.getByRole('rowheader', { name: 'Your Unit — Total' }).closest('tr')!).getAllByRole('cell');
+      expect(cells[0]).toHaveTextContent('Not uploaded yet');
+      expect(cells[0]).toHaveTextContent('of Rp 135.000.000 target');
+      expect(cells[0]).not.toHaveTextContent('short');
     });
 
     it('P15-T2 AC-4 nests a unit inside a unit one step further in, behind ↳', async () => {
@@ -386,7 +437,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       expect(within(detail).getByRole('heading', { name: 'Gap' })).toBeInTheDocument();
       expect(detail).toHaveTextContent('Rp 14.400.000 remaining');
       expect(detail).toHaveTextContent('≈ 1 policy needed at their avg case size of Rp 18.000.000.');
-      expect(detail).toHaveTextContent('Activity breakdownLeads contacted63/70Appointments18/20Closings4/5');
+      expect(detail).toHaveTextContent('Activity breakdownSet appointment63/70Sales meeting18/20Submission polis4/5');
       // P18.5-T7 AC-8: the last tile opens with the chases, the follow-up beneath them.
       expect(detail).toHaveTextContent(
         'Campaigns they’re chasing🚀 MDRT Qualification🚀 Q4 APE SprintFlagged follow-up (system-detected)Overdue 3dRole-play objection handling before next presentation',
@@ -577,7 +628,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       render(dashboard({ period: '7d' }), { period: '7d' });
       await table();
       expect(within(rowOf('Dimas Pratama')).getAllByRole('cell')[0]).toHaveTextContent('Rp 65.600.000 of Rp 80.000.000 · this month');
-      expect(within(rowOf('Dimas Pratama')).getAllByRole('cell')[3]).toHaveTextContent('85 / 95 pro-rated touches');
+      expect(within(rowOf('Dimas Pratama')).getAllByRole('cell')[3]).toHaveTextContent('85 / 95 pro-rated goal activities');
       const tile = screen.getByText('Direct Group production').parentElement!;
       expect(within(tile).getByText('this month')).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'View details for Dimas Pratama' }));

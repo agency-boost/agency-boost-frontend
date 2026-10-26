@@ -5,8 +5,9 @@ import { Modal } from '@/components/ui/modal';
 import { Button, ErrorBanner, Field, Switch, TextInput } from '@/components/ui/field';
 import { updateSubscription, type TenantRow } from '@/lib/admin';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import { costMissingWords, subscriptionCosts } from '@/lib/billing';
 import { dayInZone, formatCalendarDay } from '@/lib/format';
-import { groupDigits, parseDigits, toMajor, toMinor } from '@/lib/goals';
+import { formatRupiah, groupDigits, parseDigits, toMajor, toMinor } from '@/lib/goals';
 
 /** The five fields, as typed. Money and the limit are text until saved: an empty box is "none". */
 interface Draft {
@@ -74,6 +75,18 @@ export function SubscriptionDialog({
 
   const max = draft.maxLeaders.trim() === '' ? null : Number(draft.maxLeaders);
   const overLimit = max !== null && Number.isFinite(max) && max < row.leadersUsed;
+  /*
+   * ADR-0157 §6, the client's request of 2026-10-26: beside the price per leader per month, what the whole quota
+   * costs a month, how many months the dates run, and the cost over them — worked out as the fields are typed, and
+   * charged nowhere (ADR-0112). `subscriptionCosts` is the one place the arithmetic lives.
+   */
+  const costs = subscriptionCosts({
+    pricePerLeaderMinor: draft.price.trim() === '' ? null : toMinor(parseDigits(draft.price)),
+    maxLeaders: max,
+    startDate: draft.startDate || null,
+    endDate: draft.endDate || null,
+  });
+  const quota = max !== null && Number.isInteger(max) && max >= 1 ? max : null;
   // The office's today, in its own zone — never the browser's (invariant §9).
   const today = dayInZone(row.timezone, new Date());
   const endPassed = draft.endDate !== '' && draft.endDate < today;
@@ -195,6 +208,25 @@ export function SubscriptionDialog({
           />
         </Field>
 
+        <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-md border border-hairline bg-base p-3 text-md">
+          <dt className="text-muted">
+            {quota === null ? 'Per month' : `Per month for ${quota} ${quota === 1 ? 'leader' : 'leaders'}`}
+          </dt>
+          <dd className="text-right font-semibold text-navy">
+            {costs.monthlyMinor === null ? costMissingWords(costs.missing.monthly) : formatRupiah(costs.monthlyMinor)}
+          </dd>
+          <dt className="text-muted">Duration</dt>
+          <dd className="text-right font-semibold text-navy">
+            {costs.months === null
+              ? costMissingWords(costs.missing.months)
+              : `${costs.months} ${costs.months === 1 ? 'month' : 'months'}`}
+          </dd>
+          <dt className="text-muted">Over the duration</dt>
+          <dd className="text-right font-semibold text-navy">
+            {costs.totalMinor === null ? costMissingWords(costs.missing.total) : formatRupiah(costs.totalMinor)}
+          </dd>
+        </dl>
+
         <p className="text-md text-navy">
           Leaders used now: <span className="font-semibold">{row.leadersUsed}</span>
         </p>
@@ -210,8 +242,8 @@ export function SubscriptionDialog({
         <div aria-live="polite" className="flex flex-col gap-2">
           {overLimit && (
             <p className="rounded-md border border-alert/30 bg-alert/5 p-3 text-md text-navy">
-              This office has {row.leadersUsed} leaders now, more than {max}. Nobody is demoted, and no new
-              AB or AAB can be added until it has fewer than {max}.
+              This office has {row.leadersUsed} leaders now, more than {max}. Nobody is demoted, and each new
+              AB or AAB past {max} waits for AgencyBoost&apos;s approval.
             </p>
           )}
           {endPassed && (

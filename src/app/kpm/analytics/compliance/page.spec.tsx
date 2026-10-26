@@ -3,9 +3,8 @@ import { join } from 'node:path';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import TenantLayout from '@/app/(tenant)/layout';
 import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
-import { ADMIN_ME, OWNER_ME, SHELL_STUBS } from '@test/kpm-analytics-fixtures';
+import { ADMIN_ME, CORE_LEADER_ME, OWNER_ME, SHELL_STUBS } from '@test/kpm-analytics-fixtures';
 import { TOWN_HALL_SUMMARY } from '@test/events-fixtures';
 import {
   complianceView, EMPTY_CATALOG, ITEM_REFUSED, NEXT_YEAR_CAMPAIGN, NO_AB, NOT_FOUND, SERVER_ERROR,
@@ -36,8 +35,8 @@ function open(
 ) {
   const stub = stubFetch({ ...SHELL_STUBS, [READ]: reply, [FEEDBACK]: { body: TOWN_HALL_SUMMARY } });
   renderInLayout(
-    TenantLayout,
-    <KpmAnalyticsLayout><KpmAnalyticsCompliancePage searchParams={routeParams(query)} /></KpmAnalyticsLayout>,
+    KpmAnalyticsLayout,
+    <KpmAnalyticsCompliancePage searchParams={routeParams(query)} />,
     { me },
   );
   return stub;
@@ -86,13 +85,24 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       expect((await tree()).length).toBeGreaterThan(0);
     });
 
-    it('sends a field role to their own landing, never into the console, and asks the API for nothing', async () => {
-      // The product owner's report, 2026-10-11: an Agent here was refused inside the Owner's chrome.
+    it('P18.8-T5 AC-5 refuses an Agent as their own field app does, never in the console’s chrome, and asks the API for nothing', async () => {
+      // The product owner's report, 2026-10-11: an Agent here was refused inside the Owner's chrome. The route wears the
+      // reader's own shell since ADR-0159 §3.
       nav.replace.mockClear();
       const { calls } = open(undefined, { me: makeMe({ permissions: ['member:read_profile'] }) });
-      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/activity/log'));
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-      expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+      expect(await screen.findByRole('alert')).toHaveTextContent('Not available to you');
+      expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
+      expect(reads(calls)).toEqual([]);
+    });
+
+    it('P18.8-T5 AC-4 a Core Leader reads the tree in their own shell; one who is not is refused without a read', async () => {
+      open(undefined, { me: CORE_LEADER_ME });
+      expect((await tree()).length).toBeGreaterThan(0);
+      expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
+      vi.unstubAllGlobals();
+      const untagged = makeMe({ ...CORE_LEADER_ME, membership: { ...CORE_LEADER_ME.membership!, isCoreLeader: false } });
+      const { calls } = open(undefined, { me: untagged });
+      expect(await screen.findByRole('alert')).toHaveTextContent('Not available to you');
       expect(reads(calls)).toEqual([]);
     });
 
@@ -469,7 +479,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     it('shows the tree in outline while it is read', () => {
       stubFetch({ ...SHELL_STUBS });
       vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
-      renderInLayout(TenantLayout, <KpmAnalyticsLayout><KpmAnalyticsCompliancePage searchParams={routeParams({})} /></KpmAnalyticsLayout>, { me: OWNER_ME });
+      renderInLayout(KpmAnalyticsLayout, <KpmAnalyticsCompliancePage searchParams={routeParams({})} />, { me: OWNER_ME });
       expect(screen.getByRole('status')).toHaveTextContent('Loading each unit’s statuses…');
     });
 

@@ -31,7 +31,15 @@ const TD = 'border-b border-hairline px-2.5 py-2 align-middle text-base';
  * Ours to draw (a Fill in the console's idiom, form 3: inside the dialog the prototype's *View feedback*
  * already opens). Its states are Fills too: a skeleton, an error with a retry, and an audience of nobody.
  */
-export function RollCallSection({ eventId, onSaved }: { eventId: string; onSaved: () => void }) {
+export function RollCallSection({ eventId, onSaved, tabbed = false }: {
+  eventId: string;
+  onSaved: () => void;
+  /**
+   * Under its own tab (P18.8-T13): the tab names it, so the heading is for assistive technology alone, and nothing
+   * follows it to keep a margin for.
+   */
+  tabbed?: boolean;
+}) {
   const [view, setView] = useState<RollCall | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -83,8 +91,8 @@ export function RollCallSection({ eventId, onSaved }: { eventId: string; onSaved
   };
 
   return (
-    <section aria-labelledby={headingId} className="mb-6" data-part="roll-call">
-      <h3 id={headingId} className="mb-2.5 font-display text-md font-bold text-navy">{ADMIN_COPY.rollCall}</h3>
+    <section aria-labelledby={headingId} className={tabbed ? undefined : 'mb-6'} data-part="roll-call">
+      <h3 id={headingId} className={cn('mb-2.5 font-display text-md font-bold text-navy', tabbed && 'sr-only')}>{ADMIN_COPY.rollCall}</h3>
       {error && !view && (
         <div>
           <ErrorBanner {...error} />

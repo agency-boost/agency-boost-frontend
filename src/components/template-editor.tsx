@@ -16,6 +16,8 @@ import { planSummaryTile, summaryGroups, summaryTileName } from '@/lib/summary-t
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { OWN_COPY as LINK_OWN_COPY, PROTOTYPE_COPY as LINK_PROTOTYPE_COPY } from '@/lib/activation';
 import type { TemplateLinkKind, TemplateLinkKinds } from '@/lib/admin';
+import { ActivityBindingFields } from '@/components/activity-binding-fields';
+import { BINDING_ROLE_LABEL, BINDING_ROLES, type ActivityBinding } from '@/lib/activity-binding';
 
 export interface TaxonomyPayload {
   categories: {
@@ -32,6 +34,12 @@ export interface TaxonomyPayload {
     code: string; categoryCode: string; label: string;
     description: string | null; displayOrder: number;
   }[];
+  /**
+   * **Which of its types each cascade role counts** (ADR-0163 §1) — copied into every office made from the
+   * template. Absent on a template that never set one: its offices count the default binding. Publishing checks
+   * it against the taxonomy it publishes.
+   */
+  bindings?: ActivityBinding;
 }
 
 export interface PipelinePayload {
@@ -567,6 +575,8 @@ export function TaxonomyEditor({
                               types.filter((t) => t.code !== type.code),
                               'displayOrder',
                             ),
+                            // A removed type is no longer the template's to count (ADR-0163).
+                            ...(payload.bindings ? { bindings: unbound(payload.bindings, type.code) } : {}),
                           })}
                         >
                           Remove
@@ -614,8 +624,68 @@ export function TaxonomyEditor({
       })}
 
       </div>
+
+      <TemplateBinding payload={payload} types={types} onChange={onChange} disabled={disabled} />
     </div>
   );
+}
+
+/**
+ * **The template's activity binding** (ADR-0163 §3, P18.9-T2 AC-3): which of its types the summary, the goal plan and
+ * coaching count at each cascade stage, in every office made from it. The explicit request of the product owner,
+ * 2026-10-26: one card under the sections, read as one line per stage, edited behind *Edit binding*.
+ */
+function TemplateBinding({
+  payload, types, onChange, disabled,
+}: {
+  payload: TaxonomyPayload;
+  types: TaxonomyPayload['types'];
+  onChange: (next: TaxonomyPayload) => void;
+  disabled?: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const binding = payload.bindings;
+  const name = (code: string) => types.find((type) => type.code === code)?.label ?? code;
+  return (
+    <Card>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-display text-lg font-bold text-navy">Activity binding</h2>
+        {!editing && (
+          <Button variant="inline" disabled={disabled} onClick={() => setEditing(true)}>Edit binding</Button>
+        )}
+      </div>
+      <p className="mt-1 text-sm text-muted">
+        {binding
+          ? 'Which activities the summary and the goal plan count at each stage, in every office made from this template.'
+          : 'Not set: offices made from this template count the platform\u2019s default activities.'}
+      </p>
+      {editing ? (
+        <div className="mt-3 flex flex-col gap-3">
+          <ActivityBindingFields
+            idPrefix="template-binding"
+            value={binding ?? { leads: [], appointments: [], closings: [] }}
+            types={types.map((type) => ({ code: type.code, label: type.label, status: 'active' as const }))}
+            disabled={disabled}
+            onChange={(next) => onChange({ ...payload, bindings: next })}
+          />
+          <Button variant="secondary" className="self-start" onClick={() => setEditing(false)}>Done</Button>
+        </div>
+      ) : binding && (
+        <ul className="mt-2 flex flex-col gap-0.5 text-sm text-navy">
+          {BINDING_ROLES.map((role) => (
+            <li key={role}>{`${BINDING_ROLE_LABEL[role]}: ${(binding[role] ?? []).map(name).join(', ') || '—'}`}</li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/** A binding with one code taken out of every role. */
+function unbound(binding: ActivityBinding, code: string): ActivityBinding {
+  return Object.fromEntries(
+    BINDING_ROLES.map((role) => [role, (binding[role] ?? []).filter((c) => c !== code)]),
+  ) as unknown as ActivityBinding;
 }
 
 /**

@@ -245,7 +245,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.queryByText(/shown/)).not.toBeInTheDocument();
     });
 
-    it('P13.1-T4 AC-4: sorts on three headings, with no Registered column, and opens newest registered first', async () => {
+    it('P13.1-T4 AC-4, P18.8-T7 AC-3: sorts on three headings, with no Registered column, and opens in the saved order', async () => {
       const { calls } = render({ '/leads': { body: page([lead()]) } });
       await screen.findByDisplayValue('Pak Budi');
 
@@ -259,11 +259,12 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       const sorted = screen.getAllByRole('columnheader')
         .filter((th) => ['ascending', 'descending'].includes(th.getAttribute('aria-sort') ?? ''));
       expect(sorted).toHaveLength(0);
-      expect(lastRead(calls).get('sort')).toBe('dateRegistered');
-      expect(lastRead(calls).get('dir')).toBe('desc');
+      // P18.8-T7 AC-3: no sort at all, which the server answers in the owner's own order.
+      expect(lastRead(calls).get('sort')).toBeNull();
+      expect(lastRead(calls).get('dir')).toBeNull();
     });
 
-    it('P13.1-T4 AC-4: comes back to newest first on a heading’s third press', async () => {
+    it('P13.1-T4 AC-4, P18.8-T7 AC-4: comes back to the saved order on a heading’s third press', async () => {
       const { calls } = render({ '/leads': { body: page([lead()]) } });
       await screen.findByDisplayValue('Pak Budi');
 
@@ -275,9 +276,11 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(lastRead(calls).get('sort')).toBe('name');
       await userEvent.click(heading());
 
-      await waitFor(() => expect(lastRead(calls).get('sort')).toBe('dateRegistered'));
-      expect(lastRead(calls).get('dir')).toBe('desc');
+      await waitFor(() => expect(lastRead(calls).get('sort')).toBeNull());
+      expect(lastRead(calls).get('dir')).toBeNull();
       expect(screen.getByRole('columnheader', { name: /Lead name/ })).toHaveAttribute('aria-sort', 'none');
+      // A sort is a look: nothing was saved by any of it.
+      expect(writes(calls)).toHaveLength(0);
     });
 
     it('AC-2: shows the Actions heading, as the prototype does', async () => {
@@ -342,7 +345,8 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.getByRole('heading', { name: '✓ Successful' })).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: '✕ Not successful' })).toBeInTheDocument();
       expect(screen.getByText('Sales · Paid and issued')).toBeInTheDocument();
-      expect(screen.getByText('Recruitment · Not approached')).toBeInTheDocument();
+      // P18.8-T7 AC-6: *Recruit*, wherever the type is named.
+      expect(screen.getByText('Recruit · Not approached')).toBeInTheDocument();
     });
 
     it('AC-2: says so when a card holds nothing', async () => {
@@ -430,7 +434,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.getByText('2 active leads')).toBeInTheDocument();
       expect(document.querySelectorAll('tbody tr input[aria-label^="Lead name"]')).toHaveLength(2);
       // Nor did the dropped order go on to ask for its page 3.
-      expect(reads.filter((q) => q.get('sort') === 'dateRegistered').map((q) => q.get('page'))).toEqual(['1', '2']);
+      expect(reads.filter((q) => q.get('sort') === null).map((q) => q.get('page'))).toEqual(['1', '2']);
       expect(reads.at(-1)!.get('page')).toBe('1');
     });
 
@@ -963,28 +967,29 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.queryByRole('button', { name: /Last changed by/ })).not.toBeInTheDocument();
     });
 
-    it('P13.1-T4 AC-2: links to WhatsApp, in a new tab, with the number as wa.me takes it', async () => {
+    it('P18.8-T7 AC-5: offers no WhatsApp in the dialog any more — it is beside the row’s ⋮', async () => {
       render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) } });
       const dialog = await openDetails();
 
-      const chat = within(dialog).getByRole('link', { name: 'Chat with Pak Budi on WhatsApp (opens in a new tab)' });
-      expect(chat).toHaveTextContent('WhatsApp');
-      expect(chat).toHaveAttribute('href', 'https://wa.me/6281211002200');
-      expect(chat).toHaveAttribute('target', '_blank');
-      expect(chat).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(within(dialog).queryByRole('link', { name: /WhatsApp/ })).not.toBeInTheDocument();
+      expect(within(dialog).queryByText('WhatsApp')).not.toBeInTheDocument();
+      expect(within(dialog).getByLabelText('Phone')).toHaveValue('0812-1100-2200');
     });
 
-    it('P13.1-T4 AC-2: offers no WhatsApp without a number it could open, and follows what is typed', async () => {
+    it('P18.8-T7 AC-5: links the row to the number the dialog saves, once it is saved', async () => {
       render({
         '/leads': { body: page([lead({ contact: { phone: '123', email: null } })]) },
         '/leads/l1': { body: lead({ contact: { phone: '+62 812 1100 2200', email: null }, version: 3 }) },
       });
       const dialog = await openDetails();
-      expect(within(dialog).queryByRole('link', { name: /WhatsApp/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /WhatsApp/ })).not.toBeInTheDocument();
 
       await userEvent.clear(within(dialog).getByLabelText('Phone'));
       await userEvent.type(within(dialog).getByLabelText('Phone'), '+62 812 1100 2200');
-      expect(within(dialog).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', 'https://wa.me/6281211002200');
+      await userEvent.tab();
+
+      await waitFor(() => expect(screen.getByRole('link', { name: 'Chat with Pak Budi on WhatsApp (opens in a new tab)' }))
+        .toHaveAttribute('href', 'https://wa.me/6281211002200'));
     });
 
     it('AC-8: corrects one detail and keeps the other', async () => {
@@ -1047,8 +1052,8 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await userEvent.tab();
       expect(within(dialog).getByLabelText('Phone')).toHaveFocus();
       await userEvent.tab();
-      // The WhatsApp link is a stop of its own, beside the number it opens.
-      expect(within(dialog).getByRole('link', { name: /WhatsApp/ })).toHaveFocus();
+      // The Email box is next: the WhatsApp link left the dialog for the row (P18.8-T7 AC-5).
+      expect(within(dialog).getByLabelText('Email')).toHaveFocus();
       await userEvent.tab({ shift: true });
       await userEvent.tab({ shift: true });
       expect(within(dialog).getByRole('button', { name: 'Close' })).toHaveFocus();
@@ -1403,8 +1408,9 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
 
       const table = screen.getByRole('table');
       expect(table.className).not.toMatch(/min-w-/);
+      // P18.8-T7: the first column holds a drag handle beside the number on `/leads` — 0.75rem more.
       expect([...table.querySelectorAll('colgroup col')].map((c) => (c as HTMLElement).style.width))
-        .toEqual(['2rem', '11rem', '7.5rem', '11rem', '6.5rem', 'auto', 'auto', '4.5rem']);
+        .toEqual(['2.75rem', '11rem', '7.5rem', '11rem', '6.5rem', 'auto', 'auto', '4.5rem']);
     });
 
     it.each([360, 768, 1024 - 252 - 80])('P13.1-T4 AC-7: draws each lead as a card in a box %ipx wide', async (width) => {
@@ -1482,9 +1488,10 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       await screen.findByRole('list', { name: 'Your leads' });
 
       const order = screen.getByLabelText('Sort leads');
-      expect(order).toHaveDisplayValue('Newest first');
+      // P18.8-T7 AC-4: the cards open in the saved order too, and a sort comes back to it by name.
+      expect(order).toHaveDisplayValue('Saved order');
       expect(within(order).getAllByRole('option').map((o) => o.textContent)).toEqual([
-        'Newest first', 'Lead name, A–Z', 'Lead name, Z–A', 'Type, ascending', 'Type, descending',
+        'Saved order', 'Lead name, A–Z', 'Lead name, Z–A', 'Type, ascending', 'Type, descending',
         'Status, ascending', 'Status, descending',
       ]);
       await userEvent.selectOptions(order, 'Lead name, Z–A');
@@ -1980,11 +1987,11 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(none).toContain('text-muted');
       expect(none).not.toContain('font-semibold');
 
-      // The cell's own ground — transparent, hairline on hover — is all any of them has.
+      // The cell's own ground, transparent — and, since P18.8-T7 AC-6, a hairline at rest, not only on hover.
       for (const cls of [sales, recruitment, none]) {
         expect(cls).toContain('bg-transparent');
-        expect(cls).toContain('border-transparent');
-        expect(cls).toContain('hover:border-hairline');
+        expect(cls).toContain('border-hairline');
+        expect(cls).not.toContain('border-transparent');
       }
     });
 
@@ -2013,6 +2020,215 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(won.querySelector('[aria-hidden="true"]')!.className).toContain('text-success');
       expect(screen.getByRole('menuitem', { name: 'Mark not successful' }).querySelector('[aria-hidden="true"]')!.className)
         .toContain('text-alert');
+    });
+  });
+  /**
+   * P18.8-T7 (ADR-0161 §1–2): the reader's own order, kept; WhatsApp beside the ⋮; *Type* bordered and
+   * *Recruit*; no placeholder in the two note boxes.
+   */
+  describe('P18.8-T7 — the client’s revisions to /leads, 2026-10-26', () => {
+    const handle = (name = 'Pak Budi') =>
+      screen.getByRole('button', { name: `Reorder ${name}. Press the up or down arrow to move it.` });
+    const names = () => [...document.querySelectorAll<HTMLInputElement>('input[aria-label^="Lead name, row"]')].map((i) => i.value);
+    const orders = (calls: Call[]) => calls.filter((c) => c.url.includes('/leads/order'));
+    const two = () => page([lead(), lead({ id: 'l2', name: 'Ibu Wati' })]);
+
+    it('P18.8-T7 AC-4 puts a drag handle beside the number of each of the reader’s own leads', async () => {
+      render({ '/leads': { body: two() } });
+      await screen.findByDisplayValue('Ibu Wati');
+
+      const first = handle();
+      expect(first.closest('td')).toBe(screen.getAllByRole('row')[1].querySelector('td'));
+      expect(first.closest('td')).toHaveTextContent('⠿1');
+      expect(first).toHaveAttribute('draggable', 'true');
+      expect(first).toBeEnabled();
+      expect(handle('Ibu Wati')).toBeInTheDocument();
+    });
+
+    it('P18.8-T7 AC-4 offers none on an agent’s row on a leader’s list, nor on the inline row', async () => {
+      render({ '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Bu Rina', ownerMembershipId: 'mem-7' })]) } });
+      await screen.findByDisplayValue('Bu Rina');
+
+      expect(screen.queryByRole('button', { name: /^Reorder Bu Rina/ })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: '+ Add lead' }));
+      expect(screen.getAllByRole('button', { name: /^Reorder / })).toHaveLength(1);
+    });
+
+    it('P18.8-T7 AC-4 hides the handles while a column sort is on, and brings them back with the saved order', async () => {
+      const { calls } = render({ '/leads': { body: two() } });
+      await screen.findByDisplayValue('Ibu Wati');
+
+      const heading = () => screen.getByRole('button', { name: /Lead name/ });
+      await userEvent.click(heading());
+      await waitFor(() => expect(lastRead(calls).get('sort')).toBe('name'));
+      expect(screen.queryByRole('button', { name: /^Reorder / })).not.toBeInTheDocument();
+      // The column keeps its room, so a sort moves no other column.
+      expect((screen.getByRole('table').querySelector('colgroup col') as HTMLElement).style.width).toBe('2.75rem');
+
+      await userEvent.click(heading());
+      await userEvent.click(heading());
+      await waitFor(() => expect(lastRead(calls).get('sort')).toBeNull());
+      expect(await screen.findAllByRole('button', { name: /^Reorder / })).toHaveLength(2);
+      expect(orders(calls)).toHaveLength(0);
+    });
+
+    it('P18.8-T7 AC-4 saves a drop as the whole order, and shows it at once', async () => {
+      const { calls } = render({ '/leads': { body: two() }, 'PATCH /leads/order': { body: { ids: ['l2', 'l1'] } } });
+      await screen.findByDisplayValue('Ibu Wati');
+
+      fireEvent.dragStart(handle('Ibu Wati'), { dataTransfer: { setDragImage: vi.fn(), effectAllowed: '' } });
+      const target = rowOf(screen.getByDisplayValue('Pak Budi'));
+      fireEvent.dragOver(target);
+      fireEvent.drop(target);
+
+      expect(names()).toEqual(['Ibu Wati', 'Pak Budi']);
+      await waitFor(() => expect(orders(calls)).toHaveLength(1));
+      expect(orders(calls)[0].init.method).toBe('PATCH');
+      expect(JSON.parse(String(orders(calls)[0].init.body))).toEqual({ ids: ['l2', 'l1'] });
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('P18.8-T7 AC-4 moves a lead with ↓ and ↑, keeps the focus on its handle, and saves each move', async () => {
+      const { calls } = render({
+        '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Ibu Wati' }), lead({ id: 'l3', name: 'Sdri. Maya' })]) },
+        'PATCH /leads/order': { body: { ids: [] } },
+      });
+      await screen.findByDisplayValue('Sdri. Maya');
+
+      handle().focus();
+      await userEvent.keyboard('{ArrowDown}');
+      expect(names()).toEqual(['Ibu Wati', 'Pak Budi', 'Sdri. Maya']);
+      expect(handle()).toHaveFocus();
+      await userEvent.keyboard('{ArrowDown}');
+      expect(names()).toEqual(['Ibu Wati', 'Sdri. Maya', 'Pak Budi']);
+      expect(handle()).toHaveFocus();
+      await userEvent.keyboard('{ArrowUp}');
+
+      await waitFor(() => expect(orders(calls)).toHaveLength(3));
+      expect(orders(calls).map((c) => JSON.parse(String(c.init.body)).ids)).toEqual([
+        ['l2', 'l1', 'l3'], ['l2', 'l3', 'l1'], ['l2', 'l1', 'l3'],
+      ]);
+    });
+
+    it('P18.8-T7 AC-4 goes nowhere above the first row, and sends nothing', async () => {
+      const { calls } = render({ '/leads': { body: two() } });
+      await screen.findByDisplayValue('Ibu Wati');
+
+      handle().focus();
+      await userEvent.keyboard('{ArrowUp}');
+      expect(names()).toEqual(['Pak Budi', 'Ibu Wati']);
+      expect(orders(calls)).toHaveLength(0);
+    });
+
+    it('P18.8-T7 AC-4 steps a leader’s lead past an agent’s row, and sends their own leads alone', async () => {
+      const { calls } = render({
+        '/leads': { body: page([lead(), lead({ id: 'l2', name: 'Bu Rina', ownerMembershipId: 'mem-7' }), lead({ id: 'l3', name: 'Ibu Wati' })]) },
+        'PATCH /leads/order': { body: { ids: ['l3', 'l1'] } },
+      });
+      await screen.findByDisplayValue('Ibu Wati');
+
+      handle().focus();
+      await userEvent.keyboard('{ArrowDown}');
+
+      expect(names()).toEqual(['Bu Rina', 'Ibu Wati', 'Pak Budi']);
+      await waitFor(() => expect(orders(calls)).toHaveLength(1));
+      expect(JSON.parse(String(orders(calls)[0].init.body))).toEqual({ ids: ['l3', 'l1'] });
+    });
+
+    it('P18.8-T7 AC-4 puts the rows back when the save is refused, says why, and reads the list again', async () => {
+      const { calls } = render({
+        '/leads': { body: two() },
+        'PATCH /leads/order': error(400, 'VALIDATION_FAILED', 'Send every one of your open leads, once each, in the order you want them.'),
+      });
+      await screen.findByDisplayValue('Ibu Wati');
+      const before = tableReads(calls).length;
+
+      handle().focus();
+      await userEvent.keyboard('{ArrowDown}');
+
+      expect(await screen.findByText('Send every one of your open leads, once each, in the order you want them.')).toBeInTheDocument();
+      expect(names()).toEqual(['Pak Budi', 'Ibu Wati']);
+      await waitFor(() => expect(tableReads(calls).length).toBeGreaterThan(before));
+    });
+
+    it('P18.8-T7 AC-4 holds the handles still until every page has arrived', async () => {
+      stubPaged((q) => (q.get('page') === '1'
+        ? page(many(1, 3), { total: 5, pageSize: 3 })
+        : new Promise(() => {})));
+      await screen.findByDisplayValue('Lead 3');
+
+      expect(handle('Lead 1')).toBeDisabled();
+    });
+
+    it('P18.8-T7 AC-4 puts the handle in a card’s first line, and saves a drop there the same way', async () => {
+      boxWidth(360);
+      const { calls } = render({ '/leads': { body: two() }, 'PATCH /leads/order': { body: { ids: ['l2', 'l1'] } } });
+      const list = await screen.findByRole('list', { name: 'Your leads' });
+
+      const card = within(list).getAllByRole('listitem')[1];
+      expect(within(card).getByRole('button', { name: /^Reorder Ibu Wati/ }).parentElement)
+        .toBe(within(card).getByLabelText('Lead name, row 2').parentElement!.parentElement);
+      fireEvent.dragStart(handle('Ibu Wati'), { dataTransfer: { setDragImage: vi.fn(), effectAllowed: '' } });
+      fireEvent.dragOver(within(list).getAllByRole('listitem')[0]);
+      fireEvent.drop(within(list).getAllByRole('listitem')[0]);
+
+      await waitFor(() => expect(orders(calls)).toHaveLength(1));
+      expect(JSON.parse(String(orders(calls)[0].init.body))).toEqual({ ids: ['l2', 'l1'] });
+    });
+
+    it('P18.8-T7 AC-5 links to WhatsApp beside the ⋮, in a new tab, with the number as wa.me takes it', async () => {
+      render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } }), lead({ id: 'l2', name: 'Ibu Wati' })]) } });
+      await screen.findByDisplayValue('Ibu Wati');
+
+      const chat = screen.getByRole('link', { name: 'Chat with Pak Budi on WhatsApp (opens in a new tab)' });
+      expect(chat).toHaveAttribute('href', 'https://wa.me/6281211002200');
+      expect(chat).toHaveAttribute('target', '_blank');
+      expect(chat).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(chat).toHaveAttribute('title', 'WhatsApp');
+      expect(chat.className).toContain('h-7');
+      expect(chat.closest('td')).toBe(actionsOf().closest('td'));
+      // No number WhatsApp could open, no link — and no column was added for it.
+      expect(screen.getAllByRole('link', { name: /WhatsApp/ })).toHaveLength(1);
+      expect(screen.getAllByRole('columnheader')).toHaveLength(8);
+    });
+
+    it('P18.8-T7 AC-5 puts the WhatsApp link beside the ⋮ in a card too', async () => {
+      boxWidth(360);
+      render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) } });
+      const card = within(within(await screen.findByRole('list', { name: 'Your leads' })).getByRole('listitem'));
+
+      expect(card.getByRole('link', { name: /WhatsApp/ }).nextElementSibling)
+        .toBe(card.getByRole('button', { name: 'Actions for Pak Budi' }));
+    });
+
+    it('P18.8-T7 AC-6 borders Type at rest on a transparent ground, and offers Sales and Recruit', async () => {
+      const { calls } = render({ '/leads': { body: page([lead({ type: null, statusCode: null })]) } });
+      const type = await screen.findByLabelText('Type, row 1');
+
+      expect(type.className).toContain('border-hairline');
+      expect(type.className).toContain('bg-transparent');
+      expect(within(type).getAllByRole('option').map((o) => o.textContent)).toEqual(['Select type', 'Sales', 'Recruit']);
+      await userEvent.selectOptions(type, 'Recruit');
+      // The word changed; the value the server stores did not.
+      await waitFor(() => expect(lastBody(calls)).toEqual({ type: 'recruitment', version: 2 }));
+    });
+
+    it('P18.8-T7 AC-6 leaves Remarks and the next-action note without a placeholder', async () => {
+      render({ '/leads': { body: page([lead({ remarks: null })]) } });
+      await screen.findByDisplayValue('Pak Budi');
+
+      expect(screen.getByLabelText('Remarks, row 1')).not.toHaveAttribute('placeholder');
+      expect(screen.getByLabelText('Next action note, row 1')).not.toHaveAttribute('placeholder');
+      // The name keeps its own.
+      expect(screen.getByLabelText('Lead name, row 1')).toHaveAttribute('placeholder', 'First Last');
+    });
+
+    it('P18.8-T7 has no axe violations with handles, a WhatsApp link and an agent’s row', async () => {
+      render({ '/leads': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } }), lead({ id: 'l2', name: 'Bu Rina', ownerMembershipId: 'mem-7' })]) } });
+      await screen.findByDisplayValue('Bu Rina');
+
+      const { violations } = await axe(document.body, { rules: { 'color-contrast': { enabled: false } } });
+      expect(violations.map((v) => v.id)).toEqual([]);
     });
   });
 });

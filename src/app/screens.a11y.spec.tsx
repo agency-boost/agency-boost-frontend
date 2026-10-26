@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import AdminLayout from '@/app/(admin)/layout';
 import KpmRequestsPage from './(admin)/admin/kpm-requests/page';
+import LeaderLimitRequestsPage from './(admin)/admin/leader-limit-requests/page';
 import TenantAdminsPage from './(admin)/admin/tenant-admins/page';
 import NotificationsPage from './notifications/page';
 import TenantLayout from '@/app/(tenant)/layout';
@@ -109,11 +110,12 @@ import {
 } from '@test/recruitment-plan-fixtures';
 import RecruitmentPitchPage from './(tenant)/kpm/settings/recruitment-pitch/page';
 import PitchMaterialsPage from './(agent)/recruitment/pitch-materials/page';
-import KpmAnalyticsLayout from './(tenant)/kpm/analytics/layout';
-import KpmAnalyticsPage from './(tenant)/kpm/analytics/page';
-import KpmAnalyticsCompliancePage from './(tenant)/kpm/analytics/compliance/page';
+import KpmAnalyticsLayout from './kpm/analytics/layout';
+import KpmAnalyticsPage from './kpm/analytics/page';
+import KpmAnalyticsCompliancePage from './kpm/analytics/compliance/page';
 import {
-  analyticsView, NO_AB as ANALYTICS_NO_AB, OWNER_ME as ANALYTICS_OWNER, SHELL_STUBS as ANALYTICS_SHELL,
+  analyticsView, CORE_LEADER_ME as ANALYTICS_CORE_LEADER, NO_AB as ANALYTICS_NO_AB, OWNER_ME as ANALYTICS_OWNER,
+  SHELL_STUBS as ANALYTICS_SHELL,
 } from '@test/kpm-analytics-fixtures';
 import {
   complianceView, EMPTY_CATALOG as COMPLIANCE_EMPTY_CATALOG, NO_AB as COMPLIANCE_NO_AB,
@@ -915,6 +917,7 @@ describe('screens have no axe violations', () => {
         '/summary': {
           body: {
             year: '2026', month: '2026-09', today: '2026-09-14', goal: { set: true, savedAt: '2026-09-01T02:00:00.000Z' }, caseSizeMinor: 18 * M,
+            period: { firstMonth: '2026-01', thisMonth: '2026-09', currentMonth: true, currentYear: true },
             monthly: { ...figures, source: { provenance: 'imported', month: '2026-09' } },
             yearly: { ...figures, source: { provenance: 'imported', month: '2026-09' } },
             pace: { closingTarget: 5, closingsLast30Days: 4, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 3, neededPerWeek: 1, targetMet: false },
@@ -951,10 +954,11 @@ describe('screens have no axe violations', () => {
             snapshot: { monthlyApeTargetMinor: 100_000_000_00, policiesPerMonth: 6, appointmentsPerMonth: 20, leadsPerMonth: 67 },
             projected: {
               annualApeTargetMinor: 500_000_000_00, apeAchievedMinor: 120_000_000_00, remainingApeMinor: 380_000_000_00,
-              monthlyApeTargetMinor: 126_000_000_00, policiesPerMonth: 7, policiesPerWeek: 2, appointmentsPerMonth: 24,
+              monthlyApeTargetMinor: 126_000_000_00, policiesPerMonth: 7, policiesPerWeek: 1.6, appointmentsPerMonth: 24,
               appointmentsPerWeek: 6, leadsPerMonth: 80, leadsPerWeek: 19, targetMet: false,
             },
             cascadeMapping: { leadsCode: 'LEADS_CONTACTED', appointmentsCode: 'SELL_PRESENTATION', closingsCode: 'SELL_SUBMISSION' },
+            cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
             measured: null, savedAt: '2026-09-13T04:00:00.000Z', savedByMembershipId: 'mem-ab',
           },
         },
@@ -1066,6 +1070,7 @@ describe('screens have no axe violations', () => {
         '/summary?for=mem-rina': {
           body: {
             year: '2026', month: '2026-10', today: '2026-10-02', goal: { set: true, savedAt: null }, caseSizeMinor: 18 * M,
+            period: { firstMonth: '2026-01', thisMonth: '2026-10', currentMonth: true, currentYear: true },
             monthly: { ...figures(80 * M, 65.6 * M, 82, 14.4 * M), source: { provenance: 'imported', month: '2026-09' } },
             yearly: { ...figures(960 * M, 620 * M, 65, 340 * M), source: { provenance: 'imported', month: '2026-09' } },
             pace: null, activity: { monthly: none, yearly: none }, leads: { rows: [], total: 0 }, insights: [],
@@ -1272,7 +1277,7 @@ describe('screens have no axe violations', () => {
       targets: [target('leads', 20, 57), target('appointments', 6, null), { ...target('closings', 2, 0), targetMet: true }],
       // The seed's two summary tiles (ADR-0064): a section of its own, and a group of two.
       sections: [
-        { code: 'RECRUITMENT', label: 'Recruitment', total: 3, rows: [{ code: 'RECRUIT_PRESENTATION', label: 'Proses pendaftaran kode agen', count: 3 }] },
+        { code: 'RECRUITMENT', label: 'Recruitment', total: 3, rows: [{ code: 'RECRUIT_PRESENTATION', label: 'Melakukan presentasi recruitment', count: 3 }] },
         {
           code: 'DEVELOPMENT', label: 'Development', total: 5,
           rows: [
@@ -1297,6 +1302,7 @@ describe('screens have no axe violations', () => {
       '/summary': {
         body: {
           year: '2026', month: '2026-09', today: '2026-09-14', goal: { set: true, savedAt: '2026-09-01T02:00:00.000Z' },
+          period: { firstMonth: '2026-01', thisMonth: '2026-09', currentMonth: true, currentYear: true },
           caseSizeMinor: 18 * M,
           monthly: { ...figures, source: { provenance: 'imported', month: '2026-09' } },
           yearly: { ...figures, targetMinor: 500 * M, source: { provenance: 'self_reported', month: null } },
@@ -1381,7 +1387,7 @@ describe('screens have no axe violations', () => {
             appliesToOrgLevelCodes: [], displayOrder: 1, version: 1, status: 'active',
             summaryGroupCode: 'LEADS', summaryGroupLabel: 'Leads Generation',
             types: [{
-              id: 't1', code: 'LEADS_CONTACTED', label: 'Menghubungi prospek yang sudah ada',
+              id: 't1', code: 'LEADS_CONTACTED', label: 'Set Appointment',
               categoryCode: 'LEADS', description: null, displayOrder: 1, version: 1,
               status: 'active',
             }],
@@ -1509,7 +1515,7 @@ describe('screens have no axe violations', () => {
           projected: {
             annualApeTargetMinor: 500_000_000_00, apeAchievedMinor: 0,
             remainingApeMinor: 500_000_000_00, monthlyApeTargetMinor: 100_000_000_00,
-            policiesPerMonth: 6, policiesPerWeek: 2,
+            policiesPerMonth: 6, policiesPerWeek: 1.4,
             appointmentsPerMonth: 20, appointmentsPerWeek: 5,
             leadsPerMonth: 67, leadsPerWeek: 16, targetMet: false,
           },
@@ -1518,6 +1524,7 @@ describe('screens have no axe violations', () => {
             appointmentsCode: 'SELL_PRESENTATION',
             closingsCode: 'SELL_SUBMISSION',
           },
+          cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
           measured: { from: '2026-08-15', to: '2026-09-13', days: 30, leadToAppointmentRate: 0.25, closingRate: null },
           savedAt: '2026-09-13T04:00:00.000Z',
           savedByMembershipId: 'mem-leader',
@@ -1558,7 +1565,7 @@ describe('screens have no axe violations', () => {
           projected: {
             annualApeTargetMinor: 500_000_000_00, apeAchievedMinor: 0,
             remainingApeMinor: 500_000_000_00, monthlyApeTargetMinor: 100_000_000_00,
-            policiesPerMonth: 6, policiesPerWeek: 2,
+            policiesPerMonth: 6, policiesPerWeek: 1.4,
             appointmentsPerMonth: 20, appointmentsPerWeek: 5,
             leadsPerMonth: 67, leadsPerWeek: 16, targetMet: false,
           },
@@ -1567,6 +1574,7 @@ describe('screens have no axe violations', () => {
             appointmentsCode: 'SELL_PRESENTATION',
             closingsCode: 'SELL_SUBMISSION',
           },
+          cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
           measured: { from: '2026-08-15', to: '2026-09-13', days: 30, leadToAppointmentRate: 0.25, closingRate: null },
           savedAt: '2026-09-13T04:00:00.000Z',
           savedByMembershipId: 'mem-leader',
@@ -1921,6 +1929,8 @@ describe('screens have no axe violations', () => {
           directCount: 0, directCounts: { ab: 0, aab: 0, agent: 0, total: 0 }, subtreeCount: 0, isLeader: false, isKpmOwner: false,
           isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z', removedAt: null,
           canChangeRole: true, canPromoteToAb: true, canRemove: true,
+          // P18.8-T4: what the person records, one of them not recorded.
+          personal: { dateOfBirth: '1990-03-15', gender: 'female', companyJoinMonth: null, workStatus: 'full_time' },
         },
       },
     });
@@ -2114,6 +2124,26 @@ describe('screens have no axe violations', () => {
     renderInLayout(AdminLayout, <KpmRequestsPage />, { me: SUPER_ADMIN });
     await screen.findByLabelText('KPM code');
     await expectClean('admin/kpm-requests');
+  });
+
+  it('P18.8-T2: leaders past the limit, one waiting and one decided', async () => {
+    const row = {
+      requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch',
+      subjectMembershipId: 'mem-1', subjectName: 'Rizky Ramadhan', subjectAgentCode: '86114', action: 'promote',
+      fromOrgLevelCode: 'AGENT', toOrgLevelCode: 'AAB', reason: 'Ready to bring on his own agents',
+      requestedByMembershipId: 'mem-owner', requestedByName: 'Hendra Gunawan', status: 'pending',
+      requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null, declineReason: null, maxLeaders: 10, leadersUsed: 13,
+    };
+    stubFetch({
+      '/admin/leader-limit-requests': {
+        body: [row, { ...row, requestId: 'llr-2', subjectName: 'Irfan Hakim', status: 'approved', decidedAt: '2026-09-16T00:00:00.000Z' }],
+      },
+    });
+    renderInLayout(AdminLayout, <LeaderLimitRequestsPage />, {
+      me: makeMe({ ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'leader_limit_request:read', 'leader_limit_request:decide'] }),
+    });
+    await screen.findByLabelText('Why not?');
+    await expectClean('admin/leader-limit-requests');
   });
 
   it('the office administrators roster, populated', async () => {
@@ -3257,8 +3287,11 @@ describe('screens have no axe violations', () => {
       renderInLayout(TenantLayout, <EventsSettingsPage />, { me: eventsOwner });
       await userEvent.click(await screen.findByRole('button', { name: 'View feedback' }));
       await screen.findByRole('table');
+      await expectClean('kpm/settings/events (View feedback, Roll call)');
+      // Tabs since P18.8-T13 (ADR-0161 §6): each part is checked in its own panel.
+      await userEvent.click(screen.getByRole('tab', { name: 'Feedback summary' }));
       await screen.findByRole('heading', { name: 'PRULink briefing — Feedback Summary' });
-      await expectClean('kpm/settings/events (View feedback)');
+      await expectClean('kpm/settings/events (View feedback, Feedback summary)');
     });
 
     it('the office’s Events, editing a chosen audience with the picker (P18.5-T5 AC-10)', async () => {
@@ -3682,16 +3715,15 @@ describe('screens have no axe violations', () => {
   });
 
   describe('KPM analytics (P18-T2 AC-10)', () => {
+    // The layout wears the reader's own shell (`RoleShell`, P18.8-T5), so it is the layout a page renders in.
     const analyticsPage = (period?: string) => (
-      <KpmAnalyticsLayout>
-        <KpmAnalyticsPage searchParams={routeParams(period ? { period } : {})} />
-      </KpmAnalyticsLayout>
+      <KpmAnalyticsPage searchParams={routeParams(period ? { period } : {})} />
     );
 
     it('filled: the comparison with an agency open, its people listed, every MOC state and badge, the chart', async () => {
       nav.pathname = '/kpm/analytics';
       stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
-      renderInLayout(TenantLayout, analyticsPage(), { me: ANALYTICS_OWNER });
+      renderInLayout(KpmAnalyticsLayout, analyticsPage(), { me: ANALYTICS_OWNER });
       await screen.findByRole('table', { name: 'Unit comparison' });
       await userEvent.click(screen.getByRole('button', { name: 'Units in Hendra Wibowo’s agency' }));
       await userEvent.click(screen.getByRole('button', { name: '31 people in Hendra Wibowo’s agency' }));
@@ -3701,7 +3733,7 @@ describe('screens have no axe violations', () => {
     it('the MOC dialog, met and with an input not uploaded', async () => {
       nav.pathname = '/kpm/analytics';
       stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView('previous_month') } });
-      renderInLayout(TenantLayout, analyticsPage('previous_month'), { me: ANALYTICS_OWNER });
+      renderInLayout(KpmAnalyticsLayout, analyticsPage('previous_month'), { me: ANALYTICS_OWNER });
       await screen.findByRole('table', { name: 'Unit comparison' });
       await userEvent.click(screen.getByRole('button', { name: 'MOC requirements met for Hendra Wibowo' }));
       await screen.findByRole('dialog', { name: 'Hendra Wibowo — Maintenance of Contract' });
@@ -3716,7 +3748,7 @@ describe('screens have no axe violations', () => {
     it('no AB yet, and the error with its retry', async () => {
       nav.pathname = '/kpm/analytics';
       stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: ANALYTICS_NO_AB } });
-      renderInLayout(TenantLayout, analyticsPage(), { me: ANALYTICS_OWNER });
+      renderInLayout(KpmAnalyticsLayout, analyticsPage(), { me: ANALYTICS_OWNER });
       await screen.findByText('There are no ABs to compare yet.');
       await expectClean('kpm/analytics (no AB)');
 
@@ -3726,16 +3758,24 @@ describe('screens have no axe violations', () => {
         ...ANALYTICS_SHELL,
         'GET /kpm/analytics': { status: 500, body: { error: { code: 'INTERNAL', message: 'Something went wrong.', requestId: 'r-1' } } },
       });
-      renderInLayout(TenantLayout, analyticsPage(), { me: ANALYTICS_OWNER });
+      renderInLayout(KpmAnalyticsLayout, analyticsPage(), { me: ANALYTICS_OWNER });
       await screen.findByRole('button', { name: 'Try again' });
       await expectClean('kpm/analytics (error)');
+    });
+
+    it('P18.8-T5 a Core Leader’s: the office’s comparison in the field shell, its Core leader group open', async () => {
+      nav.pathname = '/kpm/analytics';
+      stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
+      renderInLayout(KpmAnalyticsLayout, analyticsPage(), { me: ANALYTICS_CORE_LEADER });
+      await screen.findByRole('table', { name: 'Unit comparison' });
+      await expectClean('kpm/analytics (a Core Leader)');
     });
 
   });
 
   describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1 AC-10, P18.6-T2)', () => {
     const compliancePage = (query: Record<string, string> = {}) => (
-      <KpmAnalyticsLayout><KpmAnalyticsCompliancePage searchParams={routeParams(query)} /></KpmAnalyticsLayout>
+      <KpmAnalyticsCompliancePage searchParams={routeParams(query)} />
     );
     const openCompliance = async (body: unknown, query: Record<string, string> = {}) => {
       nav.pathname = '/kpm/analytics/compliance';
@@ -3744,7 +3784,7 @@ describe('screens have no axe violations', () => {
         'GET /kpm/analytics/compliance': { body },
         'GET /kpm/settings/events/': { body: eventFeedbackSummary() },
       });
-      renderInLayout(TenantLayout, compliancePage(query), { me: ANALYTICS_OWNER });
+      renderInLayout(KpmAnalyticsLayout, compliancePage(query), { me: ANALYTICS_OWNER });
     };
 
     it('filled: Training’s three rows of tabs and the tree, the chips above', async () => {

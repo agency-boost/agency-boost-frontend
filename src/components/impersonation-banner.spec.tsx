@@ -26,6 +26,33 @@ describe('impersonation banner', () => {
     expect(banner).toHaveTextContent('recorded against you as well');
   });
 
+  /*
+   * ADR-0162 (P18.9-T1 AC-5): **which kind of session**, and for a setup one what it may change — it is
+   * read-only for everything else, so neither of the other two sentences is true of it.
+   */
+  it.each([
+    ['a support session', { impersonationReadOnly: true, impersonationPurpose: 'support' as const },
+      'You can look but not change anything — a second Super Admin has to approve that.'],
+    ['a setup session', { impersonationReadOnly: true, impersonationPurpose: 'setup' as const },
+      'This is a setup session: you can change the office’s settings, import people and upload production files, and nothing else.'],
+    ['an elevated session', { impersonationReadOnly: false, impersonationPurpose: 'setup' as const },
+      'This session can make changes. It was approved by a second Super Admin.'],
+  ])('AC-5 says which kind of session it is: %s', (_kind, session, sentence) => {
+    renderWithSession(<ImpersonationBanner />, {
+      me: makeMe({ isImpersonating: true, impersonatedBy: 'u-root', ...session }),
+    });
+    const banner = screen.getByRole('status');
+    expect(banner).toHaveTextContent(sentence);
+    expect(banner).toHaveTextContent('recorded against you as well');
+  });
+
+  it('reads a session from before the purpose existed as a support session', () => {
+    renderWithSession(<ImpersonationBanner />, {
+      me: makeMe({ isImpersonating: true, impersonatedBy: 'u-root', impersonationReadOnly: true }),
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('You can look but not change anything');
+  });
+
   it('records the end before dropping the token, then restores the Super Admin', async () => {
     setAccessToken('imp-token');
     setImpersonating(true);

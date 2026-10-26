@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Field, Select } from '@/components/ui/field';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { SkeletonTable } from '@/components/ui/skeleton';
+import { displayName } from '@/lib/display-name';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   grantAdmin,
@@ -55,7 +56,7 @@ export default function AdminsPage() {
       setCandidates(
         office.nodes
           .filter((n) => !already.has(n.membershipId))
-          .map((n) => ({ membershipId: n.membershipId, fullName: n.preferredName ?? n.fullName }))
+          .map((n) => ({ membershipId: n.membershipId, fullName: displayName(n) }))
           .sort((a, b) => a.fullName.localeCompare(b.fullName)),
       );
     } catch (err) {

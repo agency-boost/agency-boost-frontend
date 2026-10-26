@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext } from 'react';
+import type { Gender, WorkStatus } from './personal';
 
 export type HierarchyRole = 'ab' | 'aab' | 'agent';
 
@@ -13,6 +14,15 @@ export interface Me {
     pronoun: 'she' | 'he' | 'they';
     initials: string;
     platformRole: 'super_admin' | 'none';
+    /*
+     * What a person records (ADR-0158, P18.8-T4): `null` is *Not recorded*. The API always sends them;
+     * optional here so a fixture that is about something else need not. `workStatus` is the reader's
+     * membership's, or what they registered with until an office has them.
+     */
+    dateOfBirth?: string | null;
+    gender?: Gender | null;
+    companyJoinMonth?: string | null;
+    workStatus?: WorkStatus | null;
   };
   membership: {
     membershipId: string;
@@ -26,10 +36,28 @@ export interface Me {
     isKpmAdmin: boolean;
     /** Active direct reports. Leadership is this, not the role (OD-23). */
     directCount: number;
+    /**
+     * **A Core Leader now** (ADR-0159 §4): tagged *Core Leader* and on a leader rung, resolved on every request. The
+     * field shell's *Core leader* menu and the profile line read it; the forum and KPM analytics refuse regardless.
+     * The API always sends it; optional so a fixture that is about something else need not.
+     */
+    isCoreLeader?: boolean;
+    /** The live groups they are tagged with, A to Z — the profile line's (ADR-0159 §5). */
+    groups?: string[];
+    /** Their office as the profile line names it: *0417 · Cempaka Putih* (ADR-0159 §5). */
+    office?: { code: string; branch: string } | null;
   } | null;
   isImpersonating: boolean;
-  /** A support session that may look and not touch (§3.13). */
+  /** A support session that may look and not touch (§3.13). True in a setup session too. */
   impersonationReadOnly: boolean;
+  /**
+   * Why the session was started (ADR-0162): `support` to look, `setup` to configure the office as its Owner
+   * or Admin would; `null` outside one. The API always sends both; optional so a fixture about something else
+   * need not.
+   */
+  impersonationPurpose?: 'support' | 'setup' | null;
+  /** What a setup session may write besides reading — already reflected in `permissions`. */
+  impersonationWriteScope?: string[];
   impersonatedBy: string | null;
   /**
    * They are on a password somebody else generated (P3.6-T4).

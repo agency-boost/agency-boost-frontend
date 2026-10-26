@@ -27,13 +27,13 @@ const COMPANIES = [
 
 const rung = (over: Record<string, unknown> = {}) => ({
   orgLevelId: 'lvl-1', companyId: 'co-1', code: 'AGENT', label: 'Agent',
-  displayOrder: 1, status: 'active', archivedAt: null, ...over,
+  displayOrder: 1, leaderTier: null, status: 'active', archivedAt: null, ...over,
 });
 
 const LADDER = [
   rung(),
-  rung({ orgLevelId: 'lvl-2', code: 'AAB', label: 'AAB', displayOrder: 2 }),
-  rung({ orgLevelId: 'lvl-3', code: 'AB', label: 'AB', displayOrder: 3 }),
+  rung({ orgLevelId: 'lvl-2', code: 'AAB', label: 'AAB', displayOrder: 2, leaderTier: 'associate' }),
+  rung({ orgLevelId: 'lvl-3', code: 'AB', label: 'AB', displayOrder: 3, leaderTier: 'senior' }),
 ];
 
 describe('org role ladder (P3.5-T7)', () => {
@@ -109,7 +109,7 @@ describe('org role ladder (P3.5-T7)', () => {
 
     const post = calls.find((c) => c.init.method === 'POST');
     expect(JSON.parse(String(post?.init.body))).toEqual({
-      companyId: 'co-1', code: 'SAB', label: 'Senior AB', displayOrder: 4,
+      companyId: 'co-1', code: 'SAB', label: 'Senior AB', displayOrder: 4, leaderTier: null,
     });
   });
 
@@ -162,11 +162,127 @@ describe('org role ladder (P3.5-T7)', () => {
     expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'org_level:crud');
   });
 
+  describe('P18.8-T1 the leader tier (ADR-0156)', () => {
+    const tierOf = async (label: string) => screen.findByRole('combobox', { name: `Leader tier of ${label}` });
+
+    it('AC-6 shows each rung’s tier in its own column, in the client’s words', async () => {
+      stubFetch({ '/admin/org-levels': { body: LADDER }, '/admin/companies': { body: COMPANIES } });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      expect(await screen.findByRole('columnheader', { name: 'Leader tier' })).toBeInTheDocument();
+      expect(await tierOf('Agent')).toHaveDisplayValue('Not a leader');
+      expect(await tierOf('AAB')).toHaveDisplayValue('Associate Leader');
+      expect(await tierOf('AB')).toHaveDisplayValue('Senior Leader');
+      const options = within(await tierOf('Agent')).getAllByRole('option').map((o) => o.textContent);
+      expect(options).toEqual(['Senior Leader', 'Associate Leader', 'Not a leader']);
+    });
+
+    it('AC-6 saves a change of tier at once, Not a leader as null', async () => {
+      const custom = [...LADDER, rung({ orgLevelId: 'lvl-4', code: 'SM', label: 'Senior Manager', displayOrder: 4 })];
+      const { calls } = stubFetch({
+        '/admin/org-levels/lvl-4': [
+          { body: [...LADDER, { ...custom[3], leaderTier: 'senior' }] },
+          { body: custom },
+        ],
+        '/admin/org-levels': { body: custom },
+        '/admin/companies': { body: COMPANIES },
+      });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      await userEvent.selectOptions(await tierOf('Senior Manager'), 'Senior Leader');
+      expect(await tierOf('Senior Manager')).toHaveDisplayValue('Senior Leader');
+      await userEvent.selectOptions(await tierOf('Senior Manager'), 'Not a leader');
+      expect(await tierOf('Senior Manager')).toHaveDisplayValue('Not a leader');
+
+      const patches = calls.filter((c) => c.init.method === 'PATCH');
+      expect(patches.map((c) => [c.url.split('/api/v1')[1] ?? c.url, JSON.parse(String(c.init.body))])).toEqual([
+        [expect.stringContaining('/admin/org-levels/lvl-4'), { leaderTier: 'senior' }],
+        [expect.stringContaining('/admin/org-levels/lvl-4'), { leaderTier: null }],
+      ]);
+    });
+
+    it('AC-6 says how many stand on a rung whose tier cannot change, and keeps the stored tier', async () => {
+      stubFetch({
+        '/admin/org-levels/lvl-3': {
+          status: 409,
+          body: {
+            error: {
+              code: 'ORG_LEVEL_TIER_IN_USE',
+              message: 'The API’s sentence.',
+              details: { orgLevelId: 'lvl-3', code: 'AB', members: 12 },
+              requestId: 'req-2',
+            },
+          },
+        },
+        '/admin/org-levels': { body: LADDER },
+        '/admin/companies': { body: COMPANIES },
+      });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      await userEvent.selectOptions(await tierOf('AB'), 'Associate Leader');
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        '12 people stand on AB, so its leader tier cannot change. Move them to another rung first, or add a new rung.',
+      );
+      expect(await tierOf('AB')).toHaveDisplayValue('Senior Leader');
+    });
+
+    it('AC-6 falls back to the API’s sentence when the refusal carries no count', async () => {
+      stubFetch({
+        '/admin/org-levels/lvl-3': {
+          status: 409,
+          body: { error: { code: 'ORG_LEVEL_TIER_IN_USE', message: 'Somebody stands on it.', requestId: 'req-3' } },
+        },
+        '/admin/org-levels': { body: LADDER },
+        '/admin/companies': { body: COMPANIES },
+      });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      await userEvent.selectOptions(await tierOf('AB'), 'Not a leader');
+      expect(await screen.findByRole('alert')).toHaveTextContent('Somebody stands on it.');
+    });
+
+    it('AC-6 adds a rung with the tier chosen on Add a rung', async () => {
+      const { calls } = stubFetch({
+        '/admin/org-levels': [{ body: LADDER }, { body: LADDER }],
+        '/admin/companies': { body: COMPANIES },
+      });
+      renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+      expect(await screen.findByLabelText('Leader tier')).toHaveDisplayValue('Not a leader');
+      await userEvent.type(screen.getByLabelText('Code'), 'UM');
+      await userEvent.type(screen.getByLabelText('Label'), 'Unit Manager');
+      await userEvent.selectOptions(screen.getByLabelText('Leader tier'), 'Associate Leader');
+      await userEvent.click(screen.getByRole('button', { name: 'Add rung' }));
+
+      const post = calls.find((c) => c.init.method === 'POST');
+      expect(JSON.parse(String(post?.init.body))).toMatchObject({ code: 'UM', leaderTier: 'associate' });
+      // The form resets to the default, so the next rung is not marked a leader by accident.
+      expect(await screen.findByLabelText('Leader tier')).toHaveDisplayValue('Not a leader');
+    });
+  });
+
   it('tells a company with no ladder what to do first', async () => {
     stubFetch({ '/admin/org-levels': { body: [] }, '/admin/companies': { body: COMPANIES } });
     renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
     expect(
       await screen.findByText('Prudential has no ladder yet. Add the most junior rung first.'),
     ).toBeInTheDocument();
+  });
+
+  it('P18.9-T3 AC-3 lists the insurers’ ladders, and not the Template library’s', async () => {
+    stubFetch({
+      '/admin/org-levels': { body: [...LADDER, rung({ orgLevelId: 'lvl-t', companyId: 'co-lib', code: 'AGENT' })] },
+      '/admin/companies': {
+        body: [
+          { _id: 'co-lib', name: 'Template', slug: 'template', defaultCurrency: 'IDR', defaultTimezone: 'Asia/Jakarta', status: 'active', kind: 'template' },
+          { ...COMPANIES[0], kind: 'insurer' },
+        ],
+      },
+    });
+    renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+    const company = await screen.findByRole('combobox', { name: 'Company' });
+    expect([...(company as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['Prudential']);
+    expect(await screen.findByText('Agent → AAB → AB')).toBeInTheDocument();
   });
 });

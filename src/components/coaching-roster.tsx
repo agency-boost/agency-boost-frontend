@@ -6,7 +6,7 @@ import { RoleBadge, useLadder } from '@/components/ui/role-badge';
 import { StatusPill } from '@/components/ui/status-pill';
 import { cn } from '@/lib/cn';
 import {
-  coachingSessionHref, lastOneOnOneOverdue, lastOneOnOneText, ROSTER_STATUS_LABEL,
+  coachingSessionHref, lastOneOnOneLine, lastOneOnOneOverdue, ROSTER_STATUS_LABEL,
   type Roster, type RosterRow, type RosterStatus,
 } from '@/lib/coaching';
 
@@ -122,9 +122,8 @@ function PersonRow({
       </th>
       <td className={CELL}>
         <span className={cn('text-sm font-semibold', overdue ? 'text-alert' : 'text-success')}>
-          {lastOneOnOneText(last)}
-          {/* Red is the only mark of an overdue 1:1 on screen; a screen reader is told in words. */}
-          {last !== null && last.overdue && <span className="sr-only">, overdue</span>}
+          {/* *Overdue* in words, not by colour alone (P18.8-T15 AC-7). */}
+          {lastOneOnOneLine(last)}
         </span>
       </td>
       <td className={CELL}>

@@ -4,7 +4,7 @@ import { NavIcon, type NavIconName } from './nav-icon';
 import { ConfigBadge } from './config-badge';
 
 export interface CascadeColumn {
-  /** *Leads contacted*, *Appointments*, *Closings*. */
+  /** *Set appointment*, *Sales meeting*, *Submission polis* (ADR-0160 §4). */
   readonly label: string;
   /**
    * The activity type this column counts against, as the log screen numbers it — *Activity #3*. Never
@@ -12,6 +12,7 @@ export interface CascadeColumn {
    */
   readonly chip?: string;
   readonly icon: NavIconName;
+  /** The monthly figure as the screen writes it — *57/month* (ADR-0160 §4). */
   readonly month: string;
   /** The `≈ 19/week` line — larger than the prototype's grey caption, and blue, at the client's request. */
   readonly week?: string;
@@ -27,8 +28,8 @@ export interface CascadeColumn {
  * `→` over the conversion percentage.
  *
  * **The arrows are the argument.** Without them the row is three numbers that happen to be adjacent;
- * with them it reads as *67 leads, of which 30% become 20 appointments, of which 30% become 6
- * closings* — which is the one thing the screen exists to explain. The version this replaces rendered
+ * with them it reads as *40 appointments set, of which 50% become 20 sales meetings, of which 30% become
+ * 6 submissions* — which is the one thing the screen exists to explain. The version this replaces rendered
  * them as the text `—30%→` in grey, at the same size as a caption.
  *
  * **The hero is the last column**, deeper in fill and border, because the closings figure is what the
@@ -95,10 +96,14 @@ export function CascadeRow({
                 * Read aloud as a whole sentence. A bare "30%" between two panels tells a
                 * screen-reader user nothing about which two it joins, and the arrow it sits under is
                 * decorative — so the relationship has to be in the text or it is nowhere.
+                *
+                * *From … to …*, the shape of the field it repeats — *Appointment to Sales meeting* — since
+                * the stages became actions (ADR-0160 §4): *30% of set appointment become sales meeting*
+                * is not a sentence.
                 */}
               <span className="text-xs font-bold text-navy-soft">
                 <span className="sr-only">
-                  {`${links[i]} of ${columns[i].label.toLowerCase()} become ${columns[i + 1].label.toLowerCase()}`}
+                  {`${links[i]} from ${columns[i].label.toLowerCase()} to ${columns[i + 1].label.toLowerCase()}`}
                 </span>
                 <span aria-hidden="true">{links[i]}</span>
               </span>

@@ -249,7 +249,7 @@ describe('LeadsTable, for a coachee (P11-T8 AC-7)', () => {
 
 /**
  * The lock, on what P13.1-T4 changed (AC-9): the ⋮ still opens the lead's details, and the details only
- * read. The WhatsApp button stays — opening a chat writes nothing.
+ * read. The WhatsApp link stays, beside the ⋮ since P18.8-T7 — opening a chat writes nothing.
  */
 describe('LeadsTable, read-only, as P13.1-T4 left it', () => {
   afterEach(() => {
@@ -263,7 +263,7 @@ describe('LeadsTable, read-only, as P13.1-T4 left it', () => {
     expect(await menuOf('Pak Budi')).toEqual(['Lead details']);
   });
 
-  it('P13.1-T4 AC-9 shows the details read-only, saves nothing, and still opens WhatsApp', async () => {
+  it('P13.1-T4 AC-9, P18.8-T7 AC-5 shows the details read-only, saves nothing, and still opens WhatsApp from the row', async () => {
     const { calls } = renderFor(
       { 'outcome=open': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null }, source: 'Referral' })]) } },
       { readOnly: true },
@@ -280,8 +280,10 @@ describe('LeadsTable, read-only, as P13.1-T4 left it', () => {
     await userEvent.tab();
     expect(phone).toHaveValue('0812-1100-2200');
     expect(within(dialog).getByLabelText('Where they came from')).toHaveAttribute('readonly');
-    expect(within(dialog).getByRole('link', { name: /WhatsApp/ })).toHaveAttribute('href', 'https://wa.me/6281211002200');
+    expect(within(dialog).queryByRole('link', { name: /WhatsApp/ })).not.toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.getByRole('link', { name: 'Chat with Pak Budi on WhatsApp (opens in a new tab)' }))
+      .toHaveAttribute('href', 'https://wa.me/6281211002200');
     expect(calls.some((c) => c.init.method === 'PATCH')).toBe(false);
   });
 
@@ -311,5 +313,49 @@ describe('LeadsTable, read-only, as P13.1-T4 left it', () => {
     await userEvent.selectOptions(screen.getByLabelText('Sort leads'), 'Status, ascending');
     await waitFor(() => expect(lastRead(calls).get('sort')).toBe('status'));
     expect(lastRead(calls).get('owner')).toBe('mem-rina');
+  });
+});
+
+/**
+ * P18.8-T7 on the coaching session's card: the coachee's own order, and no handle to change it — the order
+ * of a list is its owner's (ADR-0161 §1). WhatsApp beside the ⋮, and *Recruit* in the type filter.
+ */
+describe('LeadsTable, on a coaching session’s card (P18.8-T7)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P18.8-T7 AC-4 reads the coachee’s saved order, and offers no drag handle on any of her rows', async () => {
+    const { calls } = renderFor({
+      'outcome=open': { body: page([lead(), lead({ id: 'l2', name: 'Ibu Wati' })]) },
+    });
+    await screen.findByDisplayValue('Ibu Wati');
+
+    expect(lastRead(calls).get('sort')).toBeNull();
+    expect(lastRead(calls).get('owner')).toBe('mem-rina');
+    expect(screen.queryByRole('button', { name: /^Reorder / })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('row')[1].querySelector('td')).toHaveTextContent(/^1$/);
+    // Its first column keeps the narrow width it had: there is no handle to make room for.
+    expect((screen.getByRole('table').querySelector('colgroup col') as HTMLElement).style.width).toBe('2rem');
+    expect(calls.some((c) => c.url.includes('/leads/order'))).toBe(false);
+  });
+
+  it('P18.8-T7 AC-5 puts WhatsApp beside the ⋮ in the coachee’s rows', async () => {
+    renderFor({
+      'outcome=open': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) },
+    });
+    await screen.findByDisplayValue('Pak Budi');
+
+    const chat = screen.getByRole('link', { name: 'Chat with Pak Budi on WhatsApp (opens in a new tab)' });
+    expect(chat.closest('td')).toBe(screen.getByRole('button', { name: 'Actions for Pak Budi' }).closest('td'));
+  });
+
+  it('P18.8-T7 AC-6 filters by *Sales* and *Recruit*, the type’s words everywhere', async () => {
+    renderFor({ 'outcome=open': { body: page([lead({ type: 'recruitment', statusCode: null })]) } });
+    await screen.findByDisplayValue('Pak Budi');
+
+    expect(within(screen.getByLabelText('Filter by type')).getAllByRole('option').map((o) => o.textContent))
+      .toEqual(['All types', 'Sales', 'Recruit']);
+    expect(within(screen.getByLabelText('Type, row 1')).getAllByRole('option').map((o) => o.textContent))
+      .toEqual(['Select type', 'Sales', 'Recruit']);
+    expect(screen.getByLabelText('Type, row 1')).toHaveValue('recruitment');
   });
 });

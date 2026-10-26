@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { RoleShell } from './role-shell';
 import { landingFor } from '@/lib/landing';
@@ -77,12 +77,55 @@ describe('RoleShell', () => {
     expect(screen.queryByText('SUPERADMIN')).toBeNull();
   });
 
-  it('renders bare when nobody is signed in, rather than redirecting to sign in', async () => {
+  it('renders bare when nobody is signed in on the page that opts in, rather than redirecting to sign in', async () => {
     // `/join` is opened from an emailed link by somebody who may have no account at all.
     // A shell here would bounce them to /login and lose the code they arrived with.
-    renderWithSession(<RoleShell title="Join">the invite form</RoleShell>, { me: null });
+    router.replace.mockClear();
+    renderWithSession(<RoleShell title="Join" allowSignedOut>the invite form</RoleShell>, { me: null });
     expect(screen.getByText('the invite form')).toBeInTheDocument();
     expect(screen.queryByRole('navigation')).toBeNull();
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  /*
+   * P18.8-T15 AC-2 (the client's UI review, UI-006): every other cross-family page sends a signed-out reader to sign
+   * in and back. It rendered bare for them, so an expired session on `/profile` drew an empty form, no header and the
+   * raw code of the read that failed.
+   */
+  describe('a reader with no session (P18.8-T15 AC-2)', () => {
+    const at = (path: string) => {
+      window.history.replaceState(null, '', path);
+      onTestFinished(() => window.history.replaceState(null, '', '/'));
+    };
+
+    it.each([
+      ['/profile', '/login?next=%2Fprofile'],
+      ['/notifications', '/login?next=%2Fnotifications'],
+      ['/leader-meetings?tab=past', '/login?next=%2Fleader-meetings%3Ftab%3Dpast'],
+    ])('P18.8-T15 AC-2 sends somebody signed out of %s to %s, and renders none of the page', (path, to) => {
+      at(path);
+      router.replace.mockClear();
+      renderWithSession(<RoleShell title="Your account">the profile form</RoleShell>, { me: null });
+      expect(router.replace).toHaveBeenCalledWith(to);
+      expect(screen.queryByText('the profile form')).toBeNull();
+      expect(screen.queryByRole('navigation')).toBeNull();
+    });
+
+    it('P18.8-T15 AC-2 sends somebody who signed out themselves to plain /login', () => {
+      at('/profile');
+      router.replace.mockClear();
+      renderWithSession(<RoleShell title="Your account">the profile form</RoleShell>, { me: null, signedOut: true });
+      expect(router.replace).toHaveBeenCalledWith('/login');
+    });
+
+    it('P18.8-T15 AC-2 shows the page skeleton while the session loads, and sends nobody anywhere yet', () => {
+      at('/profile');
+      router.replace.mockClear();
+      renderWithSession(<RoleShell title="Your account">the profile form</RoleShell>, { me: null, loading: true });
+      expect(screen.getByRole('status')).toHaveTextContent('Loading…');
+      expect(screen.queryByText('the profile form')).toBeNull();
+      expect(router.replace).not.toHaveBeenCalled();
+    });
   });
 
   /*

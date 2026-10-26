@@ -15,6 +15,7 @@
  * are moving.
  */
 export function DragHandle({
+  id,
   label,
   onPick,
   onDrop,
@@ -22,6 +23,8 @@ export function DragHandle({
   disabled,
   className,
 }: {
+  /** For a caller that puts the focus back on it once its row has moved (the leads table, P18.8-T7). */
+  id?: string;
   /** What is being moved, for the accessible name. */
   label: string;
   onPick: () => void;
@@ -33,6 +36,7 @@ export function DragHandle({
 }) {
   return (
     <button
+      id={id}
       type="button"
       draggable={!disabled}
       disabled={disabled}

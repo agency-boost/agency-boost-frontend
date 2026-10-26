@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, addMonths, BILLING_OWN_COPY, START_DAYS_AHEAD, defaultDates, leaderCountOf, maskAmount, maskDate, money, officeToday,
-  parseDmy, perLeaderDiscount, planEnd, priceQuote, savePct, tierFor, tierLabel, toDmy, validateQuote,
+  addDays, addMonths, BILLING_OWN_COPY, START_DAYS_AHEAD, costMissingWords, defaultDates, leaderCountOf, maskAmount,
+  maskDate, money, officeToday, parseDmy, perLeaderDiscount, planEnd, priceQuote, savePct, subscriptionCosts,
+  subscriptionMonths, tierFor, tierLabel, toDmy, validateQuote,
   type BillingTier, type CalculatorInput,
 } from './billing';
 
@@ -234,5 +235,66 @@ describe('the dialog’s dates (P13.2-T2 AC-6)', () => {
     expect(validateQuote({ ...ok, end: '13/10/2026' })).toEqual({ end: BILLING_OWN_COPY.endBeforeStart });
     // The same day is a one-day plan, not a refusal.
     expect(validateQuote({ ...ok, end: '14/10/2026' })).toEqual({});
+  });
+});
+
+/*
+ * P18.8-T3 AC-1, AC-3 (ADR-0157 §6): the *Edit subscription* dialog's three cost lines — the month for the whole
+ * quota, the duration and the cost over it — and why a line reads *—*.
+ */
+describe('the subscription’s cost (P18.8-T3)', () => {
+  const costs = (over: Partial<Parameters<typeof subscriptionCosts>[0]> = {}) => subscriptionCosts({
+    pricePerLeaderMinor: rp(350_000), maxLeaders: 10, startDate: '2026-01-06', endDate: '2027-01-05', ...over,
+  });
+
+  it('AC-1 a whole year: Rp 3.500.000 a month for ten leaders, 12 months, Rp 42.000.000 over them', () => {
+    expect(costs()).toEqual({
+      monthlyMinor: rp(3_500_000), months: 12, totalMinor: rp(42_000_000),
+      missing: { monthly: [], months: [], total: [] },
+    });
+  });
+
+  it('AC-1 the month is the whole quota, whatever is used', () => {
+    expect(costs({ maxLeaders: 13 }).monthlyMinor).toBe(rp(4_550_000));
+  });
+
+  it('AC-1 a part month counts whole', () => {
+    expect(subscriptionMonths('2026-01-15', '2026-03-20')).toBe(3);
+    expect(subscriptionMonths('2026-01-15', '2026-03-14')).toBe(2);
+    expect(subscriptionMonths('2026-03-01', '2026-03-01')).toBe(1);
+    // Clamped to the shorter month, as `addMonths` is: 31 January to 27 February is one month.
+    expect(subscriptionMonths('2026-01-31', '2026-02-27')).toBe(1);
+    expect(subscriptionMonths('2026-01-31', '2026-02-28')).toBe(2);
+    expect(costs({ startDate: '2026-01-15', endDate: '2026-03-20' }).totalMinor).toBe(rp(10_500_000));
+  });
+
+  it('AC-1 no limit: no month and no total, and says the limit is what is missing', () => {
+    expect(costs({ maxLeaders: null })).toMatchObject({
+      monthlyMinor: null, months: 12, totalMinor: null, missing: { monthly: ['limit'], total: ['limit'] },
+    });
+    expect(costs({ maxLeaders: 0 }).missing.monthly).toEqual(['limit']);
+    expect(costs({ maxLeaders: 2.5 }).missing.monthly).toEqual(['limit']);
+  });
+
+  it('AC-1 no price: likewise, naming the price', () => {
+    expect(costs({ pricePerLeaderMinor: null })).toMatchObject({
+      monthlyMinor: null, months: 12, totalMinor: null, missing: { monthly: ['price'], total: ['price'] },
+    });
+    // A price of nothing is a price: the office pays nothing.
+    expect(costs({ pricePerLeaderMinor: 0 }).totalMinor).toBe(0);
+  });
+
+  it('AC-1 no dates, or an end before the start: no duration and no total', () => {
+    expect(costs({ startDate: null, endDate: null })).toMatchObject({
+      monthlyMinor: rp(3_500_000), months: null, totalMinor: null, missing: { months: ['dates'], total: ['dates'] },
+    });
+    expect(costs({ endDate: '2025-12-31' }).months).toBeNull();
+    expect(costs({ endDate: '2026-02-30' }).months).toBeNull();
+  });
+
+  it('AC-2 names what a line lacks', () => {
+    expect(costMissingWords(['price'])).toBe('— no price per leader');
+    expect(costMissingWords(['price', 'limit', 'dates']))
+      .toBe('— no price per leader and no maximum leaders and no start and end dates');
   });
 });

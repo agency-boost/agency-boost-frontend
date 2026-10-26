@@ -26,9 +26,9 @@ export type HierarchyRole = 'ab' | 'aab' | 'agent';
  * ships one ladder, and this is it.
  */
 export const SEEDED_LADDER: OrgLevel[] = [
-  { orgLevelId: 'seed-agent', companyId: '', code: 'AGENT', label: 'Agent', displayOrder: 1, status: 'active' },
-  { orgLevelId: 'seed-aab', companyId: '', code: 'AAB', label: 'Associate Agency Builder', displayOrder: 2, status: 'active' },
-  { orgLevelId: 'seed-ab', companyId: '', code: 'AB', label: 'Agency Builder', displayOrder: 3, status: 'active' },
+  { orgLevelId: 'seed-agent', companyId: '', code: 'AGENT', label: 'Agent', displayOrder: 1, leaderTier: null, status: 'active' },
+  { orgLevelId: 'seed-aab', companyId: '', code: 'AAB', label: 'Associate Agency Builder', displayOrder: 2, leaderTier: 'associate', status: 'active' },
+  { orgLevelId: 'seed-ab', companyId: '', code: 'AB', label: 'Agency Builder', displayOrder: 3, leaderTier: 'senior', status: 'active' },
 ];
 
 /** Senior first. The first rung gets the strongest colour. */
@@ -68,6 +68,19 @@ function shortFor(level: OrgLevel | undefined, code: string): string {
  */
 export function rungLabel(code: string, ladder: OrgLevel[] = SEEDED_LADDER): string {
   return ladder.find((l) => l.code === code.toUpperCase())?.label ?? code.toUpperCase();
+}
+
+/**
+ * **The class a rung gives the member placed on it** (ADR-0156 §2): *Senior Leader* is what AB is, *Associate
+ * Leader* what AAB is, no tier an Agent. A rung read before the tier existed reads by its code, as the server's
+ * `tierOfRung` does. For deciding what a screen **offers** — which rungs a role change lists — never what is
+ * allowed: the server derives the class itself and refuses what this reader may not do.
+ */
+export function classOfRung(level: Pick<OrgLevel, 'code' | 'leaderTier'>): HierarchyRole {
+  const tier = level.leaderTier === undefined
+    ? ({ AB: 'senior', AAB: 'associate' } as const)[level.code.toUpperCase() as 'AB' | 'AAB'] ?? null
+    : level.leaderTier;
+  return tier === 'senior' ? 'ab' : tier === 'associate' ? 'aab' : 'agent';
 }
 
 /** The ladder an office stands on, falling back to the seeded one outside an office. */

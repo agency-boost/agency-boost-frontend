@@ -184,9 +184,13 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
         <Card>
           <h2 className="font-display text-lg font-bold text-navy">The file</h2>
           <p className="mt-1 text-md text-muted">
-            One row per person: name, email, the agent code their insurer issued, their rung
-            (<code>ab</code>, <code>aab</code> or <code>agent</code>), and the agent code of
-            whoever they report to. Leave the last one empty for somebody who reports to nobody.
+            One row per person: name, email, the agent code their insurer issued (digits only), their
+            rung by its code on your company&apos;s ladder (<code>AB</code>, <code>AAB</code> or <code>Agent</code>,
+            or a rung the company added), and the agent code of
+            whoever they report to — empty for somebody who reports to nobody. Then their date of
+            birth (<code>YYYY-MM-DD</code>; they must be at least 18), the month they joined the
+            insurer (<code>YYYY-MM</code>), <code>full-time</code> or <code>part-time</code>, and{' '}
+            <code>male</code> or <code>female</code>. Every column but the leader&apos;s is required.
           </p>
           <p className="mt-2 text-md text-muted">
             A leader may be in the file or already in the office; order does not matter, because

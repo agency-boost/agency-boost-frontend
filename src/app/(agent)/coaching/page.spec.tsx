@@ -206,9 +206,10 @@ describe('Coaching Session — the roster (P11-T6)', () => {
     expect(lastOf('Agus Santoso')).toHaveTextContent(/^1 day ago$/);
     expect(lastOf('Rina Wijaya')).toHaveTextContent(/^5 days ago$/);
     expect(lastOf('Rina Wijaya').className).toContain('text-success');
-    // Overdue is the server's verdict, said in words to a screen reader as well as in red.
-    expect(lastOf('Fajar Hidayat')).toHaveTextContent('12 days ago, overdue');
-    expect(within(lastOf('Fajar Hidayat')).getByText(', overdue')).toHaveClass('sr-only');
+    // Overdue is the server's verdict, said in visible words as well as in red (P18.8-T15 AC-7): it was told to a
+    // screen reader alone, and on a phone the hidden *, overdue* wrapped onto a line of its own.
+    expect(lastOf('Fajar Hidayat')).toHaveTextContent(/^12 days ago · overdue$/);
+    expect(lastOf('Fajar Hidayat').querySelector('.sr-only')).toBeNull();
     expect(lastOf('Fajar Hidayat').className).toContain('text-alert');
   });
 

@@ -13,6 +13,11 @@ export interface RouteTab {
   readonly hint?: string;
   /** A count beside the label — an inbox with something in it. */
   readonly badge?: ReactNode;
+  /**
+   * Current on every address beneath its own as well — the catalog's tab over a product's drawer,
+   * `/product-catalog/{code}` (P18.8-T12). A prefix is not a parent: `/product-catalogs` is not beneath it.
+   */
+  readonly nested?: boolean;
 }
 
 /**
@@ -42,6 +47,7 @@ export function RouteTabs({
 }) {
   const pathname = usePathname();
   const TAB = '-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold';
+  const current = (tab: RouteTab) => pathname === tab.href || (tab.nested === true && pathname.startsWith(`${tab.href}/`));
 
   return (
     <nav aria-label={label} className={cn('mb-6 flex flex-wrap gap-6 border-b border-hairline', className)}>
@@ -59,10 +65,10 @@ export function RouteTabs({
           <Link
             key={tab.href}
             href={tab.href}
-            aria-current={pathname === tab.href ? 'page' : undefined}
+            aria-current={current(tab) ? 'page' : undefined}
             className={cn(
               TAB,
-              pathname === tab.href ? 'border-amber text-navy' : 'border-transparent text-muted',
+              current(tab) ? 'border-amber text-navy' : 'border-transparent text-muted',
             )}
           >
             <span className="flex items-center gap-1.5">

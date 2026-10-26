@@ -43,9 +43,11 @@ export function SectionCard({
 /**
  * One row of a `SectionCard`: what it is on the left, the control on the right.
  *
- * **`items-start`, not centred**, because the left side can run to two lines — a label with an italic
- * sub-note — and a stepper dropping to the middle of that stack reads as belonging to the second line.
- * The prototype top-aligns for the same reason (`:118`).
+ * **Centred, at the client's request** (2026-10-26, ADR-0161 §3; `prototype-parity.md`). The prototype
+ * top-aligns (`:118`), for a left side that can run to two lines — a label with an italic sub-note. Topped, a
+ * one-line row left its label at the top of a stepper-tall row with a blank band beneath it, which read as a
+ * missing description; centred, the number, the words and the stepper share one middle with a sub-note or
+ * without, as every settings row already does (I-92).
  */
 export function SectionRow({
   children,
@@ -59,11 +61,11 @@ export function SectionRow({
   return (
     <div
       className={cn(
-        'flex items-start justify-between gap-3 border-b border-hairline px-4 py-3 last:border-b-0',
+        'flex items-center justify-between gap-3 border-b border-hairline px-4 py-3 last:border-b-0',
         className,
       )}
     >
-      <div className="flex min-w-0 items-start gap-2.5">{children}</div>
+      <div className="flex min-w-0 items-center gap-2.5">{children}</div>
       {control}
     </div>
   );

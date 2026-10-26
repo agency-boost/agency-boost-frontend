@@ -3,6 +3,7 @@
 import { use } from 'react';
 import { AttackPlanScreen, type PlanAddress } from '@/components/attack-plan';
 import { Page } from '@/components/page';
+import { SalesToolsTabs } from '@/components/sales-tools-tabs';
 import { briefFromQuery, productFromQuery, PROTOTYPE_COPY } from '@/lib/product-catalog';
 
 type Query = { need?: string | string[]; age?: string | string[]; budget?: string | string[]; product?: string | string[] };
@@ -14,6 +15,9 @@ type Query = { need?: string | string[]; age?: string | string[]; budget?: strin
  * `&product=` one of its alternatives switched to; `?product=` alone is the catalog's deep link; anything
  * else — nothing, or a band out of range — is the brief with nothing chosen (P14-T8 AC-7), never an error
  * page. Gated by `product_catalog:read`, every field member's; the API answers the office's own shelf.
+ *
+ * **Under the tabs *Sales Attack Plan | Product Catalog*** (P18.8-T12, ADR-0161 §5): the sidebar's one *Sales
+ * tools* entry opens here, and the strip reaches the catalog.
  */
 export default function AttackPlanPage({ searchParams }: { searchParams?: Promise<Query> }) {
   const query = searchParams ? use(searchParams) : {};
@@ -26,6 +30,7 @@ export default function AttackPlanPage({ searchParams }: { searchParams?: Promis
       : { kind: 'brief' };
   return (
     <Page title={PROTOTYPE_COPY.planTitle} subtitle={PROTOTYPE_COPY.planSubtitle} permission="product_catalog:read">
+      <SalesToolsTabs />
       <AttackPlanScreen address={address} />
     </Page>
   );

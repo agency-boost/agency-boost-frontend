@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { endImpersonation } from '@/lib/admin';
 import { setAccessToken, setImpersonating, tryRefresh } from '@/lib/api-client';
+import { displayName } from '@/lib/display-name';
 import { useSession } from '@/lib/session';
 
 /**
@@ -40,16 +41,23 @@ export function ImpersonationBanner() {
       className="flex flex-wrap items-center justify-between gap-2 bg-alert px-4 py-2 text-md font-semibold text-card"
     >
       <span>
-        You are acting as {me.user.preferredName ?? me.user.fullName}.{' '}
+        You are acting as {displayName(me.user)}.{' '}
         {/*
           * The half that matters most to the operator (P4-T10, §3.13). Discovering the
           * session is read-only from a 403 halfway through a fix is the worst moment to
           * find out — and a session that *can* write is the one worth saying so about
           * loudly, because a second person approved it and somebody is accountable.
           */}
-        {me.impersonationReadOnly
-          ? 'You can look but not change anything — a second Super Admin has to approve that.'
-          : 'This session can make changes. It was approved by a second Super Admin.'}{' '}
+        {/*
+          * And a setup session says what it may change (ADR-0162): it is read-only for everything
+          * else, so neither of the other two sentences is true of it.
+          */}
+        {!me.impersonationReadOnly
+          ? 'This session can make changes. It was approved by a second Super Admin.'
+          : me.impersonationPurpose === 'setup'
+            ? 'This is a setup session: you can change the office’s settings, import people and upload '
+              + 'production files, and nothing else.'
+            : 'You can look but not change anything — a second Super Admin has to approve that.'}{' '}
         Everything you do is recorded against you as well.
       </span>
       <button

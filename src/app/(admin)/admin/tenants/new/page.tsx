@@ -8,7 +8,8 @@ import {
   Button, ButtonLink, Card, ErrorBanner, Field, ReadOnlyField, Select, TextInput,
 } from '@/components/ui/field';
 import {
-  createTenant, listCompanies, listTemplates, type Company, type NamedTemplate, type StartFrom,
+  createTenant, insurersOf, isTemplateLibrary, listCompanies, listTemplates,
+  type Company, type NamedTemplate, type StartFrom,
 } from '@/lib/admin';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 
@@ -17,14 +18,28 @@ const CODE = /^[A-Za-z0-9-]{2,16}$/;
 /** What each *Start from* choice gives the office, said under the field. */
 const START_HINT = {
   template: 'Its settings are copied from this template’s published sections; a section it has not published starts empty, except Capability Mapping, which starts with AgencyBoost’s standard capability ladder.',
+  library: 'Its settings are copied from the Template library’s published sections, and every role they show must be on this company’s ladder. Changing the Template later changes nothing in this office.',
   defaults: 'Every section as AgencyBoost ships it.',
   empty: 'Nothing but the three activity types the goal plan counts and AgencyBoost’s standard capability ladder. The Owner builds the rest.',
 } as const;
 
-/** `template:<id>`, `defaults` or `empty`: one select's value for the three kinds of source. */
+/**
+ * `template:<id>`, `library:<id>`, `defaults` or `empty`: one select's value for the four kinds of source.
+ * `library:` is the Template library's template (ADR-0164 §5), copied across companies.
+ */
 function startFromOf(value: string): StartFrom {
   if (value === 'defaults' || value === 'empty') return { kind: value };
+  if (value.startsWith('library:')) {
+    return { kind: 'template', templateLibrary: true, templateId: value.slice('library:'.length) };
+  }
   return { kind: 'template', templateId: value.slice('template:'.length) };
+}
+
+/** The hint under *Start from* for one select value. */
+function hintOf(value: string): string {
+  if (value.startsWith('template:') || !value) return START_HINT.template;
+  if (value.startsWith('library:')) return START_HINT.library;
+  return START_HINT[value as 'defaults' | 'empty'];
 }
 
 export default function NewTenantPage() {
@@ -53,6 +68,15 @@ export default function NewTenantPage() {
    */
   const [templatesError, setTemplatesError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
+  /**
+   * **The Template library's default template** (ADR-0164 §5), offered after the company's own as *Template ·
+   * Default template*. Read once; where it cannot be read, or there is no library, it is simply not offered —
+   * the company's own templates stay the choice, and nothing is chosen for the reader that they were not shown.
+   */
+  const [libraryTemplate, setLibraryTemplate] = useState<NamedTemplate | null>(null);
+  const library = companies.find(isTemplateLibrary) ?? null;
+  // The insurers: the Template library holds no office (ADR-0164 §3), and the API refuses one.
+  const insurers = insurersOf(companies);
 
   useEffect(() => {
     if (!form.companyId) return;
@@ -79,10 +103,22 @@ export default function NewTenantPage() {
     void listCompanies()
       .then((cos) => {
         setCompanies(cos);
-        setForm((f) => (f.companyId ? f : { ...f, companyId: cos[0]?._id ?? '' }));
+        setForm((f) => (f.companyId ? f : { ...f, companyId: insurersOf(cos)[0]?._id ?? '' }));
       })
       .catch(() => setCompanies([]));
   }, []);
+
+  const libraryId = library?._id ?? null;
+  useEffect(() => {
+    if (!libraryId) return;
+    let current = true;
+    void listTemplates(libraryId)
+      .then((rows) => {
+        if (current) setLibraryTemplate(rows.find((t) => t.isDefault && t.status === 'active') ?? null);
+      })
+      .catch(() => undefined);
+    return () => { current = false; };
+  }, [libraryId]);
 
   const badCode = form.code.length > 0 && !CODE.test(form.code);
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
@@ -114,7 +150,7 @@ export default function NewTenantPage() {
       subtitle="Its settings are copied from what it starts from; the office owns them afterwards."
     >
       <Card className="max-w-2xl">
-        {companies.length === 0 ? (
+        {insurers.length === 0 ? (
           <div>
             <p className="text-md text-navy">There is no company to attach an office to.</p>
             <Link href="/admin/companies" className="mt-2 inline-block text-md text-navy underline">
@@ -127,7 +163,7 @@ export default function NewTenantPage() {
 
             <Field label="Company" htmlFor="companyId">
               <Select id="companyId" required value={form.companyId} onChange={set('companyId')}>
-                {companies.map((c) => (
+                {insurers.map((c) => (
                   <option key={c._id} value={c._id}>
                     {c.name}
                   </option>
@@ -139,7 +175,7 @@ export default function NewTenantPage() {
               <Field
                 label="Start from"
                 htmlFor="startFrom"
-                hint={templatesError ? undefined : START_HINT[startFrom.startsWith('template:') ? 'template' : (startFrom || 'template') as 'defaults' | 'empty']}
+                hint={templatesError ? undefined : hintOf(startFrom)}
                 error={templatesError ? `This company’s templates could not be read, so there is nothing to start from yet. ${templatesError.message}` : undefined}
               >
                 <Select
@@ -155,6 +191,11 @@ export default function NewTenantPage() {
                       {t.isDefault ? `${t.name} · Default` : t.name}
                     </option>
                   ))}
+                  {templates !== null && library && libraryTemplate && (
+                    <option value={`library:${libraryTemplate.id}`}>
+                      {`${library.name} · ${libraryTemplate.name}`}
+                    </option>
+                  )}
                   {templates !== null && <option value="defaults">AgencyBoost defaults</option>}
                   {templates !== null && <option value="empty">Empty</option>}
                 </Select>

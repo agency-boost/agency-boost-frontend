@@ -242,6 +242,23 @@ export const ADMIN_ME = makeMe({
   permissions: ['member:read_profile', 'kpm_analytics:read'],
 });
 
+/**
+ * **A Core Leader** (ADR-0159, P18.8-T5): Hendra Wibowo, an AB tagged *Core Leader*, holding the analytics' grant as
+ * every AB does — the session's `isCoreLeader` is what lets him read it, in his own field shell.
+ */
+export const CORE_LEADER_ME = makeMe({
+  user: {
+    id: 'u-hendra', email: 'hendra@kpm0417.test', fullName: 'Hendra Wibowo', preferredName: null,
+    pronoun: 'he', initials: 'HW', platformRole: 'none',
+  },
+  membership: {
+    membershipId: 'mem-hendra', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+    isKpmOwner: false, isKpmAdmin: false, directCount: 4, isCoreLeader: true,
+    groups: ['Top Producers 2026'], office: { code: '0417', branch: 'Cempaka Putih' },
+  },
+  permissions: ['member:read_profile', 'kpm_analytics:read', 'org_tree:read', 'leader_meeting:read'],
+});
+
 /** The office shell's own reads, answered so nothing reaches a network. */
 export const SHELL_STUBS = {
   '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },

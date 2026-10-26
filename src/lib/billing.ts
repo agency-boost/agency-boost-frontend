@@ -413,3 +413,78 @@ export function defaultDates(period: BillingPeriod, now: Date = new Date()): { s
   const start = addDays(officeToday(now), START_DAYS_AHEAD);
   return { start: toDmy(start), end: toDmy(planEnd(start, period)) };
 }
+
+// ---- The subscription's cost (ADR-0157 §6; `metrics-and-definitions.md` §B.16b).
+
+/** An input a cost line needs: the price per leader, the maximum leaders, or the start and end dates. */
+export type CostInput = 'price' | 'limit' | 'dates';
+
+/** The *Edit subscription* dialog's three figures, as typed. Nothing is charged from any of them (ADR-0112). */
+export interface SubscriptionCosts {
+  /** Price per leader × maximum leaders, **whatever is used**. `null` without both. */
+  monthlyMinor: number | null;
+  /** Whole months from the start date to the day after the end date, a part month counted whole. `null` without both dates. */
+  months: number | null;
+  /** Monthly × months. `null` without every input. */
+  totalMinor: number | null;
+  /** What each figure lacks, so the line can say so; empty for a figure that is computed. */
+  missing: { monthly: CostInput[]; months: CostInput[]; total: CostInput[] };
+}
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A real calendar day, `YYYY-MM-DD` — 2026-02-30 is not one. */
+const isCalendarDay = (day: string) => DAY.test(day) && isoOf(utcOf(day)) === day;
+
+/**
+ * **The months a subscription runs** (ADR-0157 §6): from the start date to the day after the end date, a part
+ * month counted whole — a year that ends the day before its start's anniversary is 12, the 15th of January to the
+ * 20th of March is 3. `null` without both dates, or with the end before the start.
+ *
+ * Counted by `addMonths`, the day clamped to the shorter month, so 31 January to 27 February is one month.
+ */
+export function subscriptionMonths(startDate: string | null, endDate: string | null): number | null {
+  if (!startDate || !endDate || !isCalendarDay(startDate) || !isCalendarDay(endDate) || endDate < startDate) return null;
+  const after = addDays(endDate, 1);
+  const [sy, sm] = startDate.split('-').map(Number);
+  const [ay, am] = after.split('-').map(Number);
+  let months = (ay * 12 + am) - (sy * 12 + sm);
+  while (months > 0 && addMonths(startDate, months) > after) months -= 1;
+  if (addMonths(startDate, months) < after) months += 1;
+  return months;
+}
+
+/**
+ * **What the subscription costs, as typed** (ADR-0157 §6): the month for the whole quota, the duration, and the
+ * cost over it. One function, so the dialog and its spec read the same arithmetic; integer sen throughout
+ * (invariant §9). A maximum that is not a whole number of at least one is no limit for this purpose.
+ */
+export function subscriptionCosts(input: {
+  pricePerLeaderMinor: number | null;
+  maxLeaders: number | null;
+  startDate: string | null;
+  endDate: string | null;
+}): SubscriptionCosts {
+  const price = input.pricePerLeaderMinor;
+  const max = input.maxLeaders !== null && Number.isInteger(input.maxLeaders) && input.maxLeaders >= 1
+    ? input.maxLeaders : null;
+  const months = subscriptionMonths(input.startDate, input.endDate);
+
+  const monthlyLacks: CostInput[] = [...(price === null ? ['price' as const] : []), ...(max === null ? ['limit' as const] : [])];
+  const monthsLack: CostInput[] = months === null ? ['dates'] : [];
+  const monthlyMinor = monthlyLacks.length === 0 ? (price as number) * (max as number) : null;
+  return {
+    monthlyMinor,
+    months,
+    totalMinor: monthlyMinor !== null && months !== null ? monthlyMinor * months : null,
+    missing: { monthly: monthlyLacks, months: monthsLack, total: [...monthlyLacks, ...monthsLack] },
+  };
+}
+
+/** *— no price per leader*, *— no maximum leaders and no start and end dates*: a line that cannot be worked out. */
+export function costMissingWords(missing: readonly CostInput[]): string {
+  const WORD: Record<CostInput, string> = {
+    price: 'no price per leader', limit: 'no maximum leaders', dates: 'no start and end dates',
+  };
+  return `— ${missing.map((m) => WORD[m]).join(' and ')}`;
+}

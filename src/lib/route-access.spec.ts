@@ -160,6 +160,24 @@ describe('canOpen — by family and role (2026-10-11)', () => {
     expect(canOpen('/notifications', REMOVED)).toBe(false);
   });
 
+  it('P18.8-T5 KPM analytics is the Owner’s, an Admin’s and a Core Leader’s — in their own shell — and no other leader’s', () => {
+    const analytics = ['/kpm/analytics', '/kpm/analytics/compliance?category=training'];
+    // The AB and AAB hold the grant for this (ADR-0159 §2); whether they are one is the session's fact.
+    const withGrant = (me: Me, isCoreLeader: boolean) => makeMe({
+      ...me, membership: { ...me.membership!, isCoreLeader }, permissions: [...me.permissions, 'kpm_analytics:read'],
+    });
+    for (const leader of [AB, AAB]) {
+      expect(opens(withGrant(leader, true), analytics)).toEqual(analytics);
+      expect(opens(withGrant(leader, false), analytics)).toEqual([]);
+    }
+    expect(opens(OWNER, analytics)).toEqual(analytics);
+    expect(opens(ADMIN, analytics)).toEqual(analytics);
+    // An Agent holds no grant, whatever a session claimed; a Super Admin reads it only as a member, in a session.
+    expect(opens(makeMe({ ...AGENT, membership: { ...AGENT.membership!, isCoreLeader: true } }), analytics)).toEqual([]);
+    expect(opens(makeMe({ ...SUPER_ADMIN, permissions: EVERY_GATE }), analytics)).toEqual([]);
+    expect(ROUTES['/kpm/analytics']).toBe('shared');
+  });
+
   it('the screens for somebody not signed in are nowhere to return to', () => {
     for (const me of [SUPER_ADMIN, OWNER, AGENT, NOBODY_S]) {
       expect(opens(me, ['/login', '/register', '/forgot-password', '/reset-password/t', '/verify-email/t'])).toEqual([]);
@@ -218,7 +236,8 @@ describe('canOpen — matching an address to its page', () => {
   });
 
   it('holds a page to its own gate, and to its layouts’ gates, which reach every page beneath them', () => {
-    expect(gatesFor('/kpm/analytics/compliance')).toEqual(['member:read_profile', 'kpm_analytics:read']);
+    // Outside every group since P18.8-T5 (ADR-0159 §3): its layout's gate alone, no console shell's.
+    expect(gatesFor('/kpm/analytics/compliance')).toEqual(['kpm_analytics:read']);
     expect(gatesFor('/kpm/overview')).toEqual(['member:read_profile', 'kpm_overview:read']);
     expect(gatesFor('/coaching/[membershipId]/activity')).toEqual(['coaching_session:read', 'activity_log:read_raw']);
     expect(gatesFor('/training/[categoryCode]/[moduleCode]')).toEqual(['training_progress:read']);

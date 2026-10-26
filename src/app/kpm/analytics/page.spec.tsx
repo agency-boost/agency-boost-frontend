@@ -1,10 +1,9 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import TenantLayout from '@/app/(tenant)/layout';
 import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
 import {
-  ADMIN_ME, analyticsView, NO_AB, OWNER_ME, SHELL_STUBS,
+  ADMIN_ME, analyticsView, CORE_LEADER_ME, NO_AB, OWNER_ME, SHELL_STUBS,
 } from '@test/kpm-analytics-fixtures';
 import KpmAnalyticsLayout from './layout';
 import KpmAnalyticsPage from './page';
@@ -21,8 +20,8 @@ const ANALYTICS = 'GET /kpm/analytics';
 function open(reply: StubReply | StubReply[] = { body: analyticsView() }, { me = OWNER_ME, period }: { me?: typeof OWNER_ME; period?: string } = {}) {
   const stub = stubFetch({ ...SHELL_STUBS, [ANALYTICS]: reply });
   renderInLayout(
-    TenantLayout,
-    <KpmAnalyticsLayout><KpmAnalyticsPage searchParams={routeParams(period ? { period } : {})} /></KpmAnalyticsLayout>,
+    KpmAnalyticsLayout,
+    <KpmAnalyticsPage searchParams={routeParams(period ? { period } : {})} />,
     { me },
   );
   return stub;
@@ -410,7 +409,7 @@ describe('KPM analytics (P18-T2)', () => {
     it('shows a skeleton while the comparison is read', () => {
       stubFetch({ ...SHELL_STUBS, [ANALYTICS]: { body: analyticsView() } });
       vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
-      renderInLayout(TenantLayout, <KpmAnalyticsLayout><KpmAnalyticsPage searchParams={routeParams({})} /></KpmAnalyticsLayout>, { me: OWNER_ME });
+      renderInLayout(KpmAnalyticsLayout, <KpmAnalyticsPage searchParams={routeParams({})} />, { me: OWNER_ME });
       expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Loading the unit comparison…');
     });
 
@@ -452,23 +451,55 @@ describe('KPM analytics (P18-T2)', () => {
     });
 
     it.each([
-      ['an AB in the field', makeMe({
+      // An AB holds the grant since ADR-0159 (the API answers one who is no Core Leader 404); an Agent does not.
+      ['an AB who is no Core Leader', makeMe({
         membership: {
           membershipId: 'mem-ab', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
-          isKpmOwner: false, isKpmAdmin: false, directCount: 3,
+          isKpmOwner: false, isKpmAdmin: false, directCount: 3, isCoreLeader: false,
         },
-        permissions: ['member:read_profile', 'org_tree:read'],
+        permissions: ['member:read_profile', 'org_tree:read', 'kpm_analytics:read'],
       })],
       ['an Agent', makeMe({ permissions: ['member:read_profile'] })],
-    ])('sends %s to their own landing, never into the console, and asks the API for nothing', async (_who, me) => {
-      // They were refused here, inside the Owner's chrome: the product owner's report, 2026-10-11. The console
-      // now admits only the Owner and the Admins (`familyAllows`).
+    ])('P18.8-T5 AC-5 refuses %s as their own field app does, never in the console’s chrome, and asks the API for nothing', async (_who, me) => {
+      // The console's chrome is never drawn round a field member (the product owner's report, 2026-10-11): the route
+      // is outside every group now, and wears the reader's own shell (`RoleShell`).
       nav.replace.mockClear();
       const { calls } = open(undefined, { me });
-      await waitFor(() => expect(nav.replace).toHaveBeenCalledWith(landingFor(me)));
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-      expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+      expect(await screen.findByRole('alert')).toHaveTextContent('Not available to you');
+      expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
+      // A leader holding the grant is refused inside their sidebar; an Agent without it, as on any page they lack.
+      if (me.permissions.includes('kpm_analytics:read')) {
+        expect(screen.getByRole('link', { name: /Activity management/ })).toBeInTheDocument();
+      }
+      expect(screen.queryByRole('table', { name: 'Unit comparison' })).not.toBeInTheDocument();
+      expect(nav.replace).not.toHaveBeenCalledWith(landingFor(me));
       expect(reads(calls)).toEqual([]);
+    });
+
+    describe('P18.8-T5 AC-4, AC-5 a Core Leader (ADR-0159 §2, §3)', () => {
+      it('reads the whole office in their own field shell, the Core leader group’s KPM analytics current', async () => {
+        const { calls } = open(undefined, { me: CORE_LEADER_ME });
+        expect(await table()).toBeInTheDocument();
+        expect(screen.queryByText('KPM OWNER')).not.toBeInTheDocument();
+        expect(screen.getByRole('link', { name: 'KPM analytics' })).toHaveAttribute('aria-current', 'page');
+        expect(screen.getByRole('button', { name: /Core leader/ })).toBeInTheDocument();
+        expect(reads(calls)).toEqual(['http://api.test/api/v1/kpm/analytics?period=this_month']);
+      });
+
+      it('opens no other leader’s Unit Dashboard: their names are plain text, their own unit a link', async () => {
+        open(undefined, { me: CORE_LEADER_ME });
+        await table();
+        expect(screen.queryByRole('link', { name: /Hendra Wibowo \(opens/ })).not.toBeInTheDocument();
+        expect(within(rowOf('Hendra Wibowo')).getByText('Hendra Wibowo')).toBeInTheDocument();
+        // The fixture's reader row, `isReader`, is still theirs to open.
+        expect(screen.getByRole('link', { name: 'Wilson Tanoto (opens your Unit Dashboard in a new tab)' }))
+          .toHaveAttribute('href', '/unit/dashboard');
+      });
+
+      it('is told the API’s 404 as an error, should the session be stale', async () => {
+        open({ status: 404, body: { error: { code: 'NOT_FOUND', message: 'KPM analytics not found.', requestId: 'r' } } }, { me: CORE_LEADER_ME });
+        expect(await screen.findByRole('alert')).toHaveTextContent('KPM analytics not found.');
+      });
     });
 
     it('refuses an Admin without the grant, in the console, and asks the API for nothing', async () => {

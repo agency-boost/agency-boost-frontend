@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { SaveAsTemplateDialog } from '@/components/save-as-template-dialog';
+import { ActivityBindingCard } from '@/components/activity-binding-card';
 import { Button, ButtonLink, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
@@ -29,6 +30,8 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
   const [saved, setSaved] = useState<string | null>(null);
   // Convenience: the API refuses anybody without it (`company_template:write`, the Super Admin's).
   const canSaveTemplate = useCan('company_template:write');
+  // *Open as Owner* (ADR-0162): the API refuses anybody without it, and a setup session into an office that is not active.
+  const canImpersonate = useCan('impersonation:start');
 
   const load = useCallback(async () => {
     try {
@@ -123,9 +126,21 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
               No owner. Nobody can administer this office until one is assigned.
             </p>
           )}
-          <ButtonLink href={`/admin/tenants/${kpm._id}/owner`} variant="secondary" className="mt-3">
-            {kpm.ownerName ? 'Transfer owner' : 'Assign owner'}
-          </ButtonLink>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {/* A setup session as the Owner (ADR-0162): the start screen names them and asks what it is for.
+                Only for an office somebody can use: the API refuses a session into any other. */}
+            {canImpersonate && kpm.ownerUserId && kpm.status === 'active' && (
+              <ButtonLink
+                href={`/admin/impersonate/${kpm.ownerUserId}?purpose=setup&kpmId=${kpm._id}`}
+                variant="secondary"
+              >
+                Open as Owner
+              </ButtonLink>
+            )}
+            <ButtonLink href={`/admin/tenants/${kpm._id}/owner`} variant="secondary">
+              {kpm.ownerName ? 'Transfer owner' : 'Assign owner'}
+            </ButtonLink>
+          </div>
         </Card>
 
         <Card>
@@ -145,6 +160,9 @@ export default function TenantDetailPage({ params }: { params: Promise<{ kpmId: 
         </Card>
 
         <StatusCard kpm={kpm} onChanged={load} />
+
+        {/* P18.9-T2 (ADR-0163): which activities the summary counts at each cascade stage, kept here. */}
+        <ActivityBindingCard kpmId={kpm._id} />
 
         {/* No *Seeded settings* card, and no sign in its place (P10.1-T2). It listed the office's
             ten settings by their raw keys for "a reviewer" to confirm provisioning, under a

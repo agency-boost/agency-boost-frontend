@@ -173,9 +173,9 @@ describe('accessibility', () => {
     await expectNoViolations(
       <CascadeRow
         columns={[
-          { label: 'Leads contacted', chip: 'Activity #3', icon: 'clipboard', month: '67', week: '≈ 16/week' },
-          { label: 'Appointments', chip: 'Activity #4', icon: 'calendar', month: '20', week: '≈ 5/week' },
-          { label: 'Closings', chip: 'Activity #6', icon: 'target', month: '6', week: '≈ 1/week', hero: true },
+          { label: 'Set appointment', chip: 'Activity #3', icon: 'clipboard', month: '40/month', week: '≈ 10/week' },
+          { label: 'Sales meeting', chip: 'Activity #4', icon: 'calendar', month: '20/month', week: '≈ 5/week' },
+          { label: 'Submission polis', chip: 'Activity #6', icon: 'target', month: '6/month', week: '≈ 1.4/week', hero: true },
         ]}
         links={['30%', '30%']}
       />,

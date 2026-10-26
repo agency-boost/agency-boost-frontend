@@ -30,7 +30,7 @@ const TAXONOMY = [
         categoryCode: 'LEADS', description: null, displayOrder: 1, version: 1, status: 'active',
       },
       {
-        id: 't2', code: 'LEADS_CONTACTED', label: 'Menghubungi prospek yang sudah ada',
+        id: 't2', code: 'LEADS_CONTACTED', label: 'Set Appointment',
         categoryCode: 'LEADS', description: null, displayOrder: 2, version: 1, status: 'active',
       },
     ],
@@ -52,7 +52,7 @@ const day = (over: Record<string, unknown> = {}) => ({
   localDate: '2026-03-11',
   entries: [
     { activityTypeId: 't1', activityTypeCode: 'LEADS_GEN_ACTIVITY', label: 'Melakukan aktivitas leads generation', count: 0 },
-    { activityTypeId: 't2', activityTypeCode: 'LEADS_CONTACTED', label: 'Menghubungi prospek yang sudah ada', count: 2 },
+    { activityTypeId: 't2', activityTypeCode: 'LEADS_CONTACTED', label: 'Set Appointment', count: 2 },
     { activityTypeId: 't3', activityTypeCode: 'SELL_SUBMISSION', label: 'Submission polis', count: 1 },
   ],
   totalCount: 3,
@@ -106,7 +106,7 @@ describe('Log activity (P6-T2)', () => {
     expect(await screen.findByRole('heading', { name: 'Leads' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Selling' })).toBeInTheDocument();
     expect(screen.getByLabelText('Count for Submission polis')).toHaveValue(1);
-    expect(screen.getByLabelText('Count for Menghubungi prospek yang sudah ada')).toHaveValue(2);
+    expect(screen.getByLabelText('Count for Set Appointment')).toHaveValue(2);
   });
 
   it('P13.2-T6 AC-8: an office started Empty logs against the three cascade types, and nothing else', async () => {
@@ -116,7 +116,7 @@ describe('Log activity (P6-T2)', () => {
         id: 'c1', code: 'LEADS_GENERATION', label: 'Leads Generation', description: null,
         appliesToOrgLevelCodes: [], displayOrder: 1, version: 1, status: 'active',
         types: [{
-          id: 't1', code: 'LEADS_CONTACTED', label: 'Menghubungi prospek yang sudah ada',
+          id: 't1', code: 'LEADS_CONTACTED', label: 'Set Appointment',
           categoryCode: 'LEADS_GENERATION', description: null, displayOrder: 1, version: 1, status: 'active',
         }],
       },
@@ -523,6 +523,31 @@ describe('Log activity (P6-T2)', () => {
     renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
 
     expect(await screen.findByText('Berkas lengkap masuk ke sistem.')).toBeInTheDocument();
+  });
+
+  it('P18.8-T8 AC-1 centres every row, with a description and without, and leaves no line for a missing one', async () => {
+    // ADR-0161 §3, the client's request of 2026-10-26: the prototype tops its rows (`flex-start`).
+    const described = TAXONOMY.map((c) => ({
+      ...c,
+      types: c.types.map((ty) => (ty.code === 'LEADS_CONTACTED' ? { ...ty, description: 'telepon, WhatsApp, tatap muka, dll' } : ty)),
+    }));
+    stubFetch({
+      ...base,
+      '/kpm/config': { body: { activity: described, ratios: [], leadPipelines: [], version: 1 } },
+      '/activity/log': { body: day() },
+    });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+    const row = (label: string) => screen.getByLabelText(`Count for ${label}`).closest('.border-b')!;
+    await screen.findByText('telepon, WhatsApp, tatap muka, dll');
+    for (const label of ['Set Appointment', 'Melakukan aktivitas leads generation', 'Submission polis']) {
+      expect(row(label).className).toContain('items-center');
+      expect(row(label).className).not.toContain('items-start');
+    }
+    // A row with no description holds its label and nothing under it.
+    const words = screen.getByText('Submission polis', { selector: 'span.block' }).parentElement!;
+    expect(words.children).toHaveLength(1);
+    expect(screen.getByText('Set Appointment', { selector: 'span.block' }).parentElement!.children).toHaveLength(2);
   });
 
   describe('P10.1-T5 AC-8: the save status tells the truth', () => {

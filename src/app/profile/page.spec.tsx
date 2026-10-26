@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
@@ -84,6 +84,118 @@ describe('profile', () => {
       pronoun: 'she',
     });
     expect(await screen.findByText('Saved.')).toBeInTheDocument();
+  });
+
+  /*
+   * P18.8-T15 AC-1 (UI-005): an emptied preferred name is sent as none. It went as `''`, which the API stored,
+   * and every `preferredName ?? fullName` then printed a blank where the name belonged.
+   */
+  it('P18.8-T15 AC-1: sends null for an emptied or blank preferred name, and a real one trimmed', async () => {
+    const { calls } = stubFetch({ '/auth/me': { body: {} }, '/auth/sessions': { body: [] } });
+    renderWithSession(<ProfilePage />, { me: makeMe({ permissions: ['profile:read_self'], user: { ...ME.user, preferredName: 'Rin' } }) });
+
+    await userEvent.clear(screen.getByLabelText('Preferred name'));
+    await userEvent.type(screen.getByLabelText('Preferred name'), '   ');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const blank = calls.filter((c) => c.init.method === 'PATCH').at(-1)!;
+    expect(JSON.parse(blank.init.body as string).preferredName).toBeNull();
+    expect(await screen.findByText('Saved.')).toBeInTheDocument();
+
+    await userEvent.clear(screen.getByLabelText('Preferred name'));
+    await userEvent.type(screen.getByLabelText('Preferred name'), ' Rina ');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const named = calls.filter((c) => c.init.method === 'PATCH').at(-1)!;
+    expect(JSON.parse(named.init.body as string).preferredName).toBe('Rina');
+  });
+
+  /*
+   * P18.8-T4 AC-6 (ADR-0158 §3): what a person records, shown and theirs to complete. Somebody who
+   * arrived before it was asked has none, and fills it in here.
+   */
+  it('P18.8-T4 AC-6: shows the four, Not recorded where somebody has given none', () => {
+    renderWithSession(<ProfilePage />, {
+      me: makeMe({
+        permissions: ['profile:read_self'],
+        user: { ...ME.user, dateOfBirth: '1990-03-15', gender: null, companyJoinMonth: '2021-07', workStatus: null },
+      }),
+    });
+    expect(screen.getByLabelText('Date of birth')).toHaveValue('1990-03-15');
+    expect(screen.getByLabelText('Joined your insurer')).toHaveValue('2021-07');
+    expect(screen.getByLabelText<HTMLSelectElement>('Gender').selectedOptions[0].text).toBe('Not recorded');
+    expect(screen.getByLabelText<HTMLSelectElement>('Status').selectedOptions[0].text).toBe('Not recorded');
+  });
+
+  it('P18.8-T4 AC-6: sends only what changed, so an untouched one is not rewritten', async () => {
+    const { calls } = stubFetch({ '/auth/me': { body: {} }, '/auth/sessions': { body: [] } });
+    renderWithSession(<ProfilePage />, {
+      me: makeMe({
+        permissions: ['profile:read_self'],
+        user: { ...ME.user, dateOfBirth: '1990-03-15', gender: 'female', companyJoinMonth: null, workStatus: null },
+      }),
+    });
+
+    fireEvent.change(screen.getByLabelText('Joined your insurer'), { target: { value: '2019-04' } });
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'part_time');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    const body = JSON.parse(calls.find((c) => c.init.method === 'PATCH')!.init.body as string);
+    expect(body).toMatchObject({ companyJoinMonth: '2019-04', workStatus: 'part_time' });
+    expect(body).not.toHaveProperty('dateOfBirth');
+    expect(body).not.toHaveProperty('gender');
+    expect(await screen.findByText('Saved.')).toBeInTheDocument();
+  });
+
+  it('P18.8-T4 AC-4: says the server\'s refusal under the field it names', async () => {
+    stubFetch({
+      '/auth/sessions': { body: [] },
+      '/auth/me': {
+        status: 400,
+        body: { error: {
+          code: 'VALIDATION_FAILED', message: 'A date of birth must be at least 18 years ago.',
+          details: { field: 'dateOfBirth' }, requestId: 'req-13',
+        } },
+      },
+    });
+    renderWithSession(<ProfilePage />, { me: ME });
+
+    fireEvent.change(screen.getByLabelText('Date of birth'), { target: { value: '2015-01-01' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('A date of birth must be at least 18 years ago.')).toHaveAttribute('id', 'dateOfBirth-error');
+    expect(screen.getByLabelText('Date of birth')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('P18.8-T4 AC-6, P18.9-T1 AC-3: in a support session shows the details and offers none of them, nor a Save', async () => {
+    // ADR-0162 §4: the API refuses `PATCH /auth/me` in any session, elevated or setup included — so the
+    // card offers nothing, rather than the name and pronoun the four used to be locked beside.
+    const { calls } = stubFetch({ '/auth/me': { body: {} }, '/auth/sessions': { body: [] } });
+    renderWithSession(<ProfilePage />, {
+      me: makeMe({
+        permissions: ['profile:read_self'],
+        isImpersonating: true,
+        impersonatedBy: 'u-root',
+        impersonationReadOnly: false,
+        user: { ...ME.user, dateOfBirth: '1990-03-15', gender: 'female', companyJoinMonth: '2021-07', workStatus: 'full_time' },
+      }),
+    });
+    for (const label of ['Full name', 'Preferred name', 'Pronoun', 'Date of birth', 'Gender', 'Joined your insurer', 'Status']) {
+      expect(screen.getByLabelText(label)).toBeDisabled();
+    }
+    expect(screen.getAllByText('Only they can change this, not a support session.')).toHaveLength(7);
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+    expect(calls.some((c) => c.init.method === 'PATCH')).toBe(false);
+  });
+
+  it('P18.8-T4: asks a Super Admin none of the four — they sell for nobody', () => {
+    renderWithSession(<ProfilePage />, {
+      me: makeMe({
+        permissions: ['profile:read_self'],
+        membership: null,
+        user: { ...ME.user, platformRole: 'super_admin' },
+      }),
+    });
+    expect(screen.queryByLabelText('Date of birth')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Status')).not.toBeInTheDocument();
   });
 
   it('signs out', async () => {

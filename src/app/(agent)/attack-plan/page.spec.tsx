@@ -62,10 +62,24 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
     it('P14-T8 AC-1 the nav item is live and current', async () => {
       show();
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
-      const item = screen.getByRole('link', { name: 'Sales Attack Plan' });
+      const item = within(screen.getByRole('navigation', { name: 'Main' })).getByRole('link', { name: 'Sales Attack Plan' });
       expect(item).toHaveAttribute('href', '/attack-plan');
       expect(item).toHaveAttribute('aria-current', 'page');
       expect(within(item).queryByText('Upcoming')).not.toBeInTheDocument();
+    });
+
+    it('P18.8-T12 AC-2 the tabs Sales Attack Plan | Product Catalog under the title, this one current', async () => {
+      show();
+      await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
+      const tabs = screen.getByRole('navigation', { name: 'Sales tools' });
+      const links = within(tabs).getAllByRole('link');
+      expect(links.map((l) => [l.textContent, l.getAttribute('href'), l.getAttribute('aria-current')])).toEqual([
+        ['Sales Attack Plan', '/attack-plan', 'page'], ['Product Catalog', '/product-catalog', null],
+      ]);
+      // Beneath the page's own title and sub-line, as `/activity/*`'s strip is.
+      expect(screen.getByRole('heading', { level: 1 }).compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // Route tabs, not a tablist: a `tab` promises a panel in this document.
+      expect(within(tabs).queryByRole('tab')).not.toBeInTheDocument();
     });
 
     it('P14-T8 AC-2 the title, the sub-line, the step pills, the card and its hint; no plan read yet, the shelf read once', async () => {

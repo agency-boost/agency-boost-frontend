@@ -14,7 +14,7 @@ const AGENT = makeMe({ permissions: ['activity_log:read_raw', 'activity_ratios:r
 const term = (code: string, label: string, displayOrder: number) => ({ code, label, displayOrder });
 const rate = (over: Record<string, unknown>) => ({
   code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate', comparison: 'gte', displayUnit: 'percent',
-  benchmark: 0.15, tag: { code: 'SELLING', label: 'Selling' }, sides: null,
+  benchmark: 0.3, tag: { code: 'SELLING', label: 'Selling' }, sides: null,
   numerator: [term('SELL_SUBMISSION', 'Submission polis', 6)],
   denominator: [term('SELL_PRESENTATION', 'Presentasi penjualan', 4), term('SELL_FOLLOWUP', 'Follow up penjualan', 5)],
   purpose: 'Mengukur tingkat konversi aktivitas selling menjadi submission', divergesFromStandard: false,
@@ -25,20 +25,21 @@ const balance = (over: Record<string, unknown> = {}) => rate({
   code: 'SELLING_VS_RECRUITMENT', label: 'Selling vs Recruitment', comparison: 'band', displayUnit: 'points',
   benchmark: 30, tag: { code: null, label: 'Balance' }, sides: { numerator: 'Selling', denominator: 'Recruitment' },
   numerator: [term('SELL_PRESENTATION', 'Presentasi penjualan', 4)],
-  denominator: [term('RECRUIT_PRESENTATION', 'Proses pendaftaran kode agen', 7)],
+  denominator: [term('RECRUIT_PRESENTATION', 'Melakukan presentasi recruitment', 7)],
   purpose: 'Memantau keseimbangan fokus antara aktivitas selling dan recruitment',
   value: 24.4, share: 62.2, status: 'success', ...over,
 });
 const view = (ratios: unknown[]) => ({ membershipId: 'm-1', from: '2026-08-30', to: '2026-09-28', days: 30, ratios });
 
+/** The seed's three for an agent, at the client's benchmarks (ADR-0160 §2). */
 const AGENT_VIEW = view([
   rate({}),
   rate({
-    code: 'LEADS_PER_ACTIVITY', label: 'Leads per activity', displayUnit: 'decimal', benchmark: 0.3,
-    tag: { code: 'LEADS_GENERATION', label: 'Leads Generation' }, value: 0.375, status: 'success',
+    code: 'LEADS_PER_ACTIVITY', label: 'Leads per activity', displayUnit: 'decimal', benchmark: 1,
+    tag: { code: 'LEADS_GENERATION', label: 'Leads Generation' }, value: 1.375, status: 'success',
   }),
   rate({
-    code: 'MEETING_PER_APPROACH', label: 'Meeting per approach', displayUnit: 'decimal', benchmark: 1.5,
+    code: 'MEETING_PER_APPROACH', label: 'Set appointment to meeting', displayUnit: 'percent', benchmark: 0.5,
     tag: { code: 'LEADS_GENERATION', label: 'Leads Generation' }, value: null, status: 'neutral',
   }),
 ]);
@@ -65,13 +66,13 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
 
     const ssr = await card('Selling success rate');
     expect(ssr).toHaveTextContent('9.1%');
-    expect(ssr).toHaveTextContent('Benchmark: 15.0%');
+    expect(ssr).toHaveTextContent('Benchmark: 30.0%');
     expect(within(ssr).getByText('Below benchmark')).toBeInTheDocument();
     expect(within(ssr).getByText('Selling')).toBeInTheDocument();
 
     const lpa = await card('Leads per activity');
-    expect(lpa).toHaveTextContent('0.38');
-    expect(lpa).toHaveTextContent('Benchmark: 0.30');
+    expect(lpa).toHaveTextContent('1.38');
+    expect(lpa).toHaveTextContent('Benchmark: 1.00');
     expect(within(lpa).getByText('On track')).toBeInTheDocument();
   });
 
@@ -79,11 +80,31 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
     stubFetch({ '/activity/ratios': { body: AGENT_VIEW } });
     renderWithSession(<ActivityRatioPage />, { me: AGENT });
 
-    const mpa = await card('Meeting per approach');
+    const mpa = await card('Set appointment to meeting');
     expect(mpa).toHaveTextContent('–');
     expect(within(mpa).getByText('Not enough data')).toBeInTheDocument();
-    expect(mpa).toHaveTextContent('Benchmark: 1.50');
+    expect(mpa).toHaveTextContent('Benchmark: 50.0%');
     expect(mpa).not.toHaveTextContent('0.00');
+  });
+
+  it('P18.8-T9 AC-1: writes Set appointment to meeting as a percent, against 50%', async () => {
+    // The name, the unit and the benchmark are the office's, as the server sends them; the screen writes them.
+    stubFetch({
+      '/activity/ratios': {
+        body: view([rate({
+          code: 'MEETING_PER_APPROACH', label: 'Set appointment to meeting', displayUnit: 'percent', benchmark: 0.5,
+          tag: { code: 'LEADS_GENERATION', label: 'Leads Generation' }, value: 0.6, numeratorCount: 6, denominatorCount: 10,
+          status: 'success',
+        })]),
+      },
+    });
+    renderWithSession(<ActivityRatioPage />, { me: AGENT });
+
+    const mpa = await card('Set appointment to meeting');
+    expect(mpa).toHaveTextContent('60.0%');
+    expect(mpa).toHaveTextContent('Benchmark: 50.0%');
+    expect(within(mpa).getByText('On track')).toBeInTheDocument();
+    expect(screen.queryByText(/Meeting per approach/)).not.toBeInTheDocument();
   });
 
   it('P10-T3 AC-4: draws only what the server sends — an agent’s three, no balance to show as failed', async () => {

@@ -160,6 +160,9 @@ export const npsFigure = (nps: number | null) => (nps === null ? '—' : String(
  */
 export const ADMIN_COPY = {
   rollCall: 'Roll call',
+  // *View feedback*'s two tabs (P18.8-T13, ADR-0161 §6): *Roll call* above, and this; the strip's name.
+  feedbackSummaryTab: 'Feedback summary',
+  feedbackParts: 'Roll call and feedback',
   name: 'Name',
   role: 'Role',
   response: 'Response',

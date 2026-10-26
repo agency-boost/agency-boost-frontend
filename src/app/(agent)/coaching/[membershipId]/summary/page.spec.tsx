@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -7,8 +7,9 @@ import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '
 import CoachingPersonLayout from '../layout';
 import CoacheeSummaryTab from './page';
 
+const nav = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: nav.replace }),
   usePathname: () => '/coaching/mem-rina/summary',
 }));
 
@@ -52,6 +53,7 @@ const lead = (over: Record<string, unknown>) => ({
 });
 const summary = (over: Record<string, unknown> = {}) => ({
   year: '2026', month: '2026-09', today: '2026-09-14',
+  period: { firstMonth: '2026-01', thisMonth: '2026-09', currentMonth: true, currentYear: true },
   goal: { set: true, savedAt: '2026-09-01T02:00:00.000Z' }, caseSizeMinor: 18 * M,
   monthly: { ...figures(), source: { provenance: 'imported', month: '2026-09' } },
   yearly: { ...figures({ targetMinor: 500 * M }), source: { provenance: 'imported', month: '2026-09' } },
@@ -362,5 +364,66 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     const { calls } = show(summary(), person('she'), { ...LEADER, permissions: ['coaching_session:read'] });
     expect(await screen.findByRole('alert')).toHaveAttribute('data-permission', 'personal_summary:read');
     expect(calls.some((c) => c.url.includes('/summary'))).toBe(false);
+  });
+});
+
+/**
+ * **The coaching tab's period** (P18.8-T11 AC-2): the same month and year selects as `/summary`, in this tab's own
+ * address, read with `for` and the period together.
+ */
+describe('a coachee’s Personal Summary tab — an earlier month or year (P18.8-T11 AC-2)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    nav.replace.mockClear();
+  });
+
+  const OPENED = { firstMonth: '2026-06', thisMonth: '2026-09', currentMonth: true, currentYear: true };
+  const AUGUST = summary({ month: '2026-08', pace: null, period: { ...OPENED, currentMonth: false } });
+  const open = (query: Record<string, string> = {}) => {
+    const stub = stubFetch({
+      ...SHELL, '/coaching/coachees/': { body: person('she') },
+      '/summary?for=mem-rina': { body: summary({ period: OPENED }) },
+      '/summary?for=mem-rina&month=2026-08': { body: AUGUST },
+      '/activity/ratios': { body: RATIOS }, 'GET /campaigns/chasing': { body: RINA_CHASING },
+    });
+    renderInLayout(
+      AgentLayout,
+      <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}>
+        <CoacheeSummaryTab searchParams={routeParams(query)} />
+      </CoachingPersonLayout>,
+      { me: LEADER },
+    );
+    return stub;
+  };
+  const reads = (calls: { url: string }[]) => calls.filter((c) => c.url.includes('/summary')).map((c) => new URL(c.url).search);
+
+  it('P18.8-T11 AC-2 offers the month select /summary has, her office’s months newest first', async () => {
+    open();
+    const select = await screen.findByRole('combobox', { name: 'Month' });
+    expect(within(select).getAllByRole('option').map((o) => o.textContent))
+      .toEqual(['September 2026', 'August 2026', 'July 2026', 'June 2026']);
+    await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
+    expect(within(screen.getByRole('combobox', { name: 'Year' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['2026']);
+  });
+
+  it('P18.8-T11 AC-2 reads her August with for and the month together, the month in this tab’s own address', async () => {
+    const { calls } = open();
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Month' }), 'August 2026');
+
+    expect(nav.replace).toHaveBeenCalledWith('/coaching/mem-rina/summary?month=2026-08', { scroll: false });
+    await waitFor(() => expect(reads(calls)).toEqual(['?for=mem-rina', '?for=mem-rina&month=2026-08']));
+    // Her ratios are the last 30 days whatever the period: read once.
+    expect(calls.filter((c) => c.url.includes('/activity/ratios'))).toHaveLength(1);
+  });
+
+  it('P18.8-T11 AC-3 her August from the address: final figures, no gap and no pace sentence', async () => {
+    const { calls } = open({ month: '2026-08' });
+    const goal = await card('Goal vs. actual (APE)');
+
+    expect(within(goal).getByText('August 2026')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'The gap' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/current pace/)).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('August 2026');
+    expect(reads(calls)).toEqual(['?for=mem-rina&month=2026-08']);
   });
 });

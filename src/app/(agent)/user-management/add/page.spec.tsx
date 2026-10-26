@@ -696,4 +696,107 @@ describe('inviting people (P3-T4)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Nope.');
   });
+
+/*
+ * P18.8-T2 (ADR-0157): past the limit a leader's role change, or a pending leader tagged into their unit, may wait
+ * for AgencyBoost — *Ask AgencyBoost to approve* asks for exactly what was refused, and the row says it is waiting.
+ * And OD-50: the team's role select is the company's ladder, a rung it added included, none that makes an AB.
+ */
+describe('P18.8-T2 — a leader past the limit waits for AgencyBoost', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const ASKER = makeMe({
+    membership: LEADER.membership,
+    permissions: [...LEADER.permissions, 'leader_limit_request:create', 'leader_limit_request:read'],
+  });
+  const teamMember = (over: Record<string, unknown> = {}) => ({
+    membershipId: 'mem-t1', fullName: 'Rina Wijaya', initials: 'RW', agentCode: '88003', role: 'agent',
+    orgLevelCode: 'AGENT', directCount: 0, canChangeRole: true, ...over,
+  });
+  const LIMIT = {
+    status: 409,
+    body: {
+      error: {
+        code: 'LEADER_LIMIT_REACHED', message: 'x', requestId: 'r-1',
+        details: { maxLeaders: 10, leadersUsed: 10, canRequest: true },
+      },
+    },
+  };
+  const ask = (over: Record<string, unknown> = {}) => ({
+    requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch',
+    subjectMembershipId: 'mem-t1', subjectName: 'Rina Wijaya', subjectAgentCode: '88003', action: 'promote',
+    fromOrgLevelCode: 'AGENT', toOrgLevelCode: 'AAB', reason: null, requestedByMembershipId: 'mem-ab',
+    requestedByName: 'Agus', status: 'pending', requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null,
+    declineReason: null, maxLeaders: 10, leadersUsed: 10, ...over,
+  });
+
+  it('AC-6 asks AgencyBoost for the role change the limit refused, with its reason', async () => {
+    const { calls } = stubFetch({
+      '/join/my-code': { body: MY_CODE },
+      '/join/untagged': { body: [] },
+      '/members/my-team': { body: [teamMember()] },
+      '/members/mem-t1/role': LIMIT,
+      'POST /members/mem-t1/leader-limit-request': { status: 201, body: ask() },
+      '/members/leader-limit-requests': [{ body: [] }, { body: [] }, { body: [ask()] }],
+    });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: ASKER });
+
+    await userEvent.selectOptions(await screen.findByLabelText('Role'), 'aab');
+    await userEvent.type(screen.getByLabelText('Why?'), 'Ready to lead');
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Ask AgencyBoost to approve this one past the limit');
+    await userEvent.click(screen.getByRole('button', { name: 'Ask AgencyBoost to approve' }));
+
+    const posted = calls.find((c) => c.init.method === 'POST');
+    expect(JSON.parse(String(posted?.init.body))).toEqual({ action: 'promote', orgLevelCode: 'aab', reason: 'Ready to lead' });
+    expect(await screen.findByText("Waiting for AgencyBoost's approval")).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel request' })).toBeInTheDocument();
+  });
+
+  it('AC-6 asks to let in a pending leader the tag was refused for', async () => {
+    const { calls } = stubFetch({
+      '/join/my-code': { body: MY_CODE },
+      '/join/untagged/mem-un': LIMIT,
+      '/join/untagged': { body: [{ membershipId: 'mem-un', fullName: 'Tono', initials: 'T', email: 't@k.test', agentCode: '88009', role: 'aab' }] },
+      '/members/my-team': { body: [] },
+      'POST /members/mem-un/leader-limit-request': { status: 201, body: ask({ subjectMembershipId: 'mem-un', action: 'activate' }) },
+      '/members/leader-limit-requests': { body: [] },
+    });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: ASKER });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add to my unit' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Ask AgencyBoost to approve' }));
+    const posted = calls.find((c) => c.url.includes('/members/mem-un/leader-limit-request'));
+    expect(JSON.parse(String(posted?.init.body))).toEqual({ action: 'activate' });
+  });
+
+  it('OD-50 offers the company’s own rungs that a leader may place somebody on, never one that makes an AB', async () => {
+    const ladder = [
+      { orgLevelId: 'l1', companyId: 'c', code: 'AGENT', label: 'Agent', displayOrder: 1, leaderTier: null, status: 'active' },
+      { orgLevelId: 'l2', companyId: 'c', code: 'AAB', label: 'Associate Agency Builder', displayOrder: 2, leaderTier: 'associate', status: 'active' },
+      { orgLevelId: 'l3', companyId: 'c', code: 'AB', label: 'Agency Builder', displayOrder: 3, leaderTier: 'senior', status: 'active' },
+      { orgLevelId: 'l4', companyId: 'c', code: 'UM', label: 'Unit Manager', displayOrder: 4, leaderTier: 'associate', status: 'active' },
+      { orgLevelId: 'l5', companyId: 'c', code: 'SM', label: 'Senior Manager', displayOrder: 5, leaderTier: 'senior', status: 'active' },
+    ];
+    const { calls } = stubFetch({
+      '/join/my-code': { body: MY_CODE },
+      '/join/untagged': { body: [] },
+      '/members/my-team': { body: [teamMember()] },
+      '/members/mem-t1/role': { body: [] },
+      '/kpm/org-levels': { body: ladder },
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], training: [], activationChecklist: null, eventTypes: [], capability: null } },
+    });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+    await vi.waitFor(() => expect(screen.getByRole('option', { name: 'Unit Manager' })).toBeInTheDocument());
+    const options = [...screen.getByLabelText('Role').querySelectorAll('option')].map((o) => o.textContent);
+    expect(options).toEqual(['Agent', 'Associate Agency Builder', 'Unit Manager']);
+    await userEvent.selectOptions(screen.getByLabelText('Role'), 'um');
+    expect(screen.getByText(/will change from Agent to Unit Manager/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
+    expect(JSON.parse(String(calls.find((c) => c.init.method === 'PATCH')?.init.body))).toEqual({ toRole: 'um' });
+  });
+});
 });

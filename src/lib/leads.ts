@@ -75,6 +75,9 @@ export interface LeadQuery {
    * ladder, blank first, ties broken by type and then registration — so a sales rank 2 and a
    * recruitment rank 2 sit together by a stated rule rather than by accident. `nextActionDate`
    * stays for the coaching card; `/leads` no longer offers it.
+   *
+   * **None is the owner's own order** (P18.8-T7, ADR-0161 §1): where `reorderLeads` put each lead, a new
+   * one on top. `dir` means nothing without a key.
    */
   sort?: 'dateRegistered' | 'name' | 'nextActionDate' | 'type' | 'status';
   dir?: 'asc' | 'desc';
@@ -260,3 +263,14 @@ export const setLeadOutcome = (id: string, outcome: LeadOutcome | null, version?
 
 export const deleteLead = (id: string) =>
   api<{ id: string; deletedAt: string }>(`/leads/${id}`, { method: 'DELETE' });
+
+/**
+ * **The reader's open leads, every one, in the order they dragged them into** (P18.8-T7, ADR-0161 §1) —
+ * top first. `GET /leads` without a sort then answers in it.
+ *
+ * The whole list, never *move this one*: the server refuses a list that leaves one of the reader's open
+ * leads out, names a lead twice, or names one that is not theirs and open, with `400 VALIDATION_FAILED`
+ * and nothing written. A leader sends their own leads only, though their list shows their agents' too.
+ */
+export const reorderLeads = (ids: readonly string[]) =>
+  api<{ ids: string[] }>('/leads/order', { method: 'PATCH', body: { ids } });

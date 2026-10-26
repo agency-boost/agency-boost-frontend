@@ -7,11 +7,11 @@ import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import {
-  Button, Card, ErrorBanner, Field, FieldRow, ReadOnlyField, Switch, TextInput,
+  Button, Card, ErrorBanner, Field, FieldRow, ReadOnlyField, Select, TextInput,
 } from '@/components/ui/field';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import {
-  createCompany, listCompanies, setCompanyStatus, updateCompany, type Company,
+  createCompany, isTemplateLibrary, listCompanies, setCompanyStatus, updateCompany, type Company,
 } from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
 import { SLUG_MAX, toSlug } from '@/lib/slug';
@@ -47,13 +47,13 @@ export default function CompaniesPage() {
    */
   const [slugTouched, setSlugTouched] = useState(false);
   /**
-   * Whether the new company starts from the platform's presets.
+   * **Start from** (ADR-0164 §4): a copy of the Template library, or *Empty*.
    *
-   * **On by default, because it is right almost every time** — an insurer being onboarded
-   * wants the twelve activity types and the five ratios to edit, not a blank screen. Off is
-   * for a company whose presets are being authored from scratch, and it has to be a choice
-   * made *here*: the eight template kinds are computed on read, so a company that took the
-   * defaults by accident cannot later be told it did not want them.
+   * **The Template by default, because it is right almost every time** — an insurer being onboarded
+   * wants the twelve activity types and the five ratios to edit, not a blank screen. *Empty* is for a
+   * company whose presets are being authored from scratch, and it has to be a choice made *here*: the
+   * eight template kinds are computed on read, so a company that took the defaults by accident cannot
+   * later be told it did not want them.
    */
   const [withDefaults, setWithDefaults] = useState(true);
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
@@ -67,6 +67,8 @@ export default function CompaniesPage() {
   }, []);
 
   const badSlug = slug.length > 0 && !SLUG.test(slug);
+  /** The Template library, which a new company copies. Absent where no migration has made it. */
+  const library = companies?.find(isTemplateLibrary) ?? null;
   // A slug already in use comes back as its own code, so it belongs on the field that
   // caused it rather than only in the banner above the form.
   const takenSlug = error?.code === 'COMPANY_SLUG_TAKEN' ? error.message : undefined;
@@ -195,6 +197,10 @@ export default function CompaniesPage() {
                       {!c.usesPlatformDefaults && (
                         <ConfigBadge tone="open">Started blank</ConfigBadge>
                       )}
+                      {/* ADR-0164 §3: it holds the templates new companies and offices copy, and no office. */}
+                      {isTemplateLibrary(c) && (
+                        <ConfigBadge tone="navy">Template library</ConfigBadge>
+                      )}
                     </span>
                   </Cell>
                   <Cell>
@@ -281,25 +287,32 @@ export default function CompaniesPage() {
                 single-currency and single-timezone (ADR-0016). Shown rather than offered,
                 because a form field nobody can vary is worse than a stated fact. */}
             {/*
-              * **On by default, and a choice rather than a fact.** The eight Company template
+              * **The Template by default, and a choice rather than a fact.** The eight Company template
               * kinds are computed when a tab is opened, not written at creation — so a company
               * that did not want the platform's presets has to say so here, or it will find the
               * twelve activity types waiting for it with no way to decline them.
               */}
-            <Switch
-              id="with-defaults"
-              label="Start from the AgencyBoost defaults"
-              checked={withDefaults}
-              disabled={busy}
-              describedBy="with-defaults-hint"
-              onChange={setWithDefaults}
-            />
-            <p id="with-defaults-hint" className="-mt-2 text-sm text-muted">
-              On: the activity taxonomy, ratios, lead ladders, training tree, activation
-              checklist, capability ladder, event types, carrier rules and product catalog
-              arrive ready to edit. Off: every one of them starts empty. The role ladder is
-              seeded either way — an office whose company has none is one nobody can join.
-            </p>
+            <Field
+              label="Start from"
+              htmlFor="start-from"
+              hint={withDefaults
+                ? (library
+                  ? 'A copy of the Template library: its role ladder, products, carrier rules, recruitment playbook and Default template — activity taxonomy, ratios, lead ladders, training tree, activation checklist, capability ladder and event types — ready to edit. Changing the Template later changes nothing here.'
+                  : 'The activity taxonomy, ratios, lead ladders, training tree, activation checklist, capability ladder, event types, carrier rules and product catalog arrive ready to edit.')
+                : 'Every one of them starts empty. The role ladder is seeded either way — an office whose company has none is one nobody can join.'}
+            >
+              <Select
+                id="start-from"
+                value={withDefaults ? 'template' : 'empty'}
+                disabled={busy}
+                onChange={(e) => setWithDefaults(e.target.value === 'template')}
+              >
+                <option value="template">
+                  {library ? `${library.name} · Default template` : 'AgencyBoost defaults'}
+                </option>
+                <option value="empty">Empty</option>
+              </Select>
+            </Field>
             <ReadOnlyField
               label="Offices inherit"
               value="IDR · Asia/Jakarta · id-ID"

@@ -346,7 +346,9 @@ describe('the office’s Events screen', () => {
 
     await userEvent.click(buttons[0]);
     const box = await screen.findByRole('dialog', { name: 'Last month' });
+    // Two tabs since P18.8-T13 (ADR-0161 §6): the roll call open, the summary a tab away.
     expect(await within(box).findByRole('heading', { name: 'Roll call' })).toBeInTheDocument();
+    await userEvent.click(within(box).getByRole('tab', { name: 'Feedback summary' }));
     expect(await within(box).findByRole('heading', { name: 'Last month — Feedback Summary' })).toBeInTheDocument();
     await userEvent.click(within(box).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -431,6 +433,37 @@ describe('the office’s Events screen', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/endsAt must be after startsAt/);
     expect(screen.getByLabelText('Title')).toHaveValue('Kickoff');
+  });
+
+  it('P18.8-T13 AC-2 the events are one bordered list, a row each, the row’s actions one group with View feedback first', async () => {
+    render([type()], [
+      event(),
+      event({ id: 'e3', code: 'LAST', title: 'Last month', phase: 'past' }),
+    ]);
+    await screen.findByText('Last month');
+
+    const lists = screen.getAllByRole('list');
+    expect(lists).toHaveLength(1);
+    expect(lists[0]).toHaveClass('divide-y', 'divide-hairline');
+    expect(within(lists[0]).getAllByRole('listitem')).toHaveLength(2);
+    const past = screen.getByText('Last month').closest('li')!;
+    const actions = within(past).getAllByRole('button').map((b) => b.textContent);
+    expect(actions).toEqual(['View feedback', 'Edit', 'Archive']);
+    expect(within(past).getByRole('button', { name: 'View feedback' }).parentElement)
+      .toBe(within(past).getByRole('button', { name: 'Edit' }).parentElement);
+  });
+
+  it('P18.8-T13 AC-2 the toolbar: Show archived and the tab’s add button together, above the list, on both tabs', async () => {
+    render([type()], [event()]);
+    const toggle = await screen.findByRole('checkbox', { name: 'Show archived' });
+    const add = screen.getByRole('button', { name: 'Add an event' });
+    expect(toggle.closest('div')).toBe(add.parentElement);
+    expect(add.compareDocumentPosition(screen.getByRole('list')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await userEvent.click(screen.getByRole('link', { name: 'Event types' }));
+    const addType = await screen.findByRole('button', { name: 'Add an event type' });
+    expect(screen.getByRole('checkbox', { name: 'Show archived' }).closest('div')).toBe(addType.parentElement);
+    expect(screen.queryByRole('button', { name: 'Add an event' })).not.toBeInTheDocument();
   });
 
   it('hides archived rows until asked', async () => {

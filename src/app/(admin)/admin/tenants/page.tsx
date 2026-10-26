@@ -10,7 +10,7 @@ import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import {
-  leadersWord, listTenants, tenantStatusTone, tenantStatusWord, type TenantRow,
+  leadersOver, leadersSaid, leadersWord, listTenants, tenantStatusTone, tenantStatusWord, type TenantRow,
 } from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
 import { formatShortDay } from '@/lib/format';
@@ -111,7 +111,17 @@ export default function TenantsPage() {
               <Cell className="whitespace-nowrap">
                 {t.subscription?.endDate ? formatShortDay(t.subscription.endDate, { year: true }) : '—'}
               </Cell>
-              <Cell className="whitespace-nowrap">{leadersWord(t)}</Cell>
+              <Cell className="whitespace-nowrap">
+                {/* ADR-0157 §4: past the limit — AgencyBoost approved leaders beyond it — the count reads above
+                    it, and *3 over* says by how much in the warning paint. Said once, whole, to a screen reader. */}
+                <span aria-hidden="true">
+                  {leadersWord(t)}
+                  {leadersOver(t) > 0 && (
+                    <StatusPill status="watch" label={`${leadersOver(t)} over`} className="ml-2" />
+                  )}
+                </span>
+                <span className="sr-only">{leadersSaid(t)}</span>
+              </Cell>
               <Cell>
                 <Button
                   variant="secondary"

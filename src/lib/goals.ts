@@ -28,6 +28,7 @@ export interface GoalProjection {
   remainingApeMinor: number;
   monthlyApeTargetMinor: number;
   policiesPerMonth: number;
+  /** One decimal — `1.4` for six a month — and a whole figure whole (ADR-0160 §5). The other two are whole. */
   policiesPerWeek: number;
   appointmentsPerMonth: number;
   appointmentsPerWeek: number;
@@ -92,7 +93,13 @@ export interface Goal extends Omit<GoalInputs, 'monthsLeft'> {
   snapshot: GoalSnapshot;
   /** `null` when the stored inputs cannot produce a plan — the screen says which of them. */
   projected: GoalProjection | null;
+  /** What a saved plan was first counted against — a record; nothing on screen reads it (ADR-0163). */
   cascadeMapping: { leadsCode: string; appointmentsCode: string; closingsCode: string };
+  /**
+   * **What the plan's three columns count today**: the office's activity binding (ADR-0163), each stage a list of
+   * codes. The *Activity #n* chips are drawn from it.
+   */
+  cascadeBinding: { leads: string[]; appointments: string[]; closings: string[] };
   /**
    * The subject's own rates over the last 30 days. Kept in the payload and no longer on the screen
    * (ADR-0063 §7). **`null` when the subject is not the reader** (D-rates, P11-T7 AC-10): a

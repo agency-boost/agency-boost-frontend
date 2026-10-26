@@ -25,7 +25,20 @@ export interface Company {
    * every Company template tab starts empty rather than from the platform's presets.
    */
   usesPlatformDefaults: boolean;
+  /**
+   * **An insurer, or the Template library** (ADR-0164): the one `template` company holds the templates a
+   * new company and a new office copy. Nobody registers under it and it holds no office, so the screens
+   * that mean *the insurers* leave it out (`insurersOf`).
+   */
+  kind: 'insurer' | 'template';
 }
+
+/** Whether this is the Template library rather than an insurer (ADR-0164). */
+export const isTemplateLibrary = (company: Pick<Company, 'kind'>) => company.kind === 'template';
+
+/** The insurers: every company but the Template library, for a screen that offers a company to work in. */
+export const insurersOf = <T extends Pick<Company, 'kind'>>(companies: T[]): T[] =>
+  companies.filter((c) => !isTemplateLibrary(c));
 
 /**
  * A KPM as the console reads it.
@@ -99,6 +112,13 @@ export interface CompanyCard {
   ladder: string[];
 }
 
+/**
+ * Whether a rung leads, and how (ADR-0156): *Senior Leader* (what AB is), *Associate Leader* (what AAB
+ * is), or `null` — *Not a leader*. The class a member is given on the rung follows it, and the server
+ * refuses a change while anybody stands on the rung (`ORG_LEVEL_TIER_IN_USE`).
+ */
+export type LeaderTier = 'senior' | 'associate';
+
 /** A rung on a company's role ladder (P3.5-T7, ADR-0012). */
 export interface OrgLevel {
   orgLevelId: string;
@@ -107,6 +127,7 @@ export interface OrgLevel {
   code: string;
   label: string;
   displayOrder: number;
+  leaderTier: LeaderTier | null;
   status: 'active' | 'archived';
   archivedAt: string | null;
 }
@@ -118,12 +139,18 @@ export const createOrgLevel = (body: {
   code: string;
   label: string;
   displayOrder: number;
+  leaderTier: LeaderTier | null;
 }) => api<OrgLevel[]>('/admin/org-levels', { method: 'POST', body });
 
 /** No `code`: it is the identity every membership holds and is never updatable. */
 export const updateOrgLevel = (
   orgLevelId: string,
-  body: { label?: string; displayOrder?: number; status?: 'active' | 'archived' },
+  body: {
+    label?: string;
+    displayOrder?: number;
+    leaderTier?: LeaderTier | null;
+    status?: 'active' | 'archived';
+  },
 ) => api<OrgLevel[]>(`/admin/org-levels/${orgLevelId}`, { method: 'PATCH', body });
 
 export interface PlatformOverview {
@@ -179,6 +206,10 @@ export const declineKpmRequest = (requestId: string, reason?: string) =>
 
 export const listCompanies = () => api<Company[]>('/admin/companies');
 
+/**
+ * `usesPlatformDefaults` true, the default, copies the Template library — its ladder, products, carrier
+ * rules, playbook and Default template; false starts the company *Empty* (ADR-0164 §4).
+ */
 export const createCompany = (
   body: { name: string; slug: string; usesPlatformDefaults?: boolean },
 ) => api<Company>('/admin/companies', { method: 'POST', body });
@@ -241,11 +272,13 @@ export const updateSubscription = (kpmId: string, body: SubscriptionInput) =>
   api<TenantRow>(`/admin/tenants/${kpmId}/subscription`, { method: 'PATCH', body });
 
 /**
- * **Start from** (ADR-0115 §4): one of the company's active templates, the AgencyBoost defaults, or
- * *Empty*. Left out, the company's default template — what approving a KPM request uses.
+ * **Start from** (ADR-0115 §4): one of the company's active templates, one of the Template library's
+ * (`templateLibrary`, ADR-0164 §5), the AgencyBoost defaults, or *Empty*. Left out, the company's default
+ * template — what approving a KPM request uses.
  */
 export type StartFrom =
   | { kind: 'template'; templateId: string }
+  | { kind: 'template'; templateLibrary: true; templateId?: string }
   | { kind: 'defaults' }
   | { kind: 'empty' };
 
@@ -272,16 +305,27 @@ export const setTenantStatus = (id: string, status: TenantStatus, reason?: strin
 export const readAudit = (kpmId?: string) =>
   api<AuditEntry[]>(kpmId ? `/admin/audit?kpmId=${encodeURIComponent(kpmId)}` : '/admin/audit');
 
-export const startImpersonation = (userId: string, reason: string, durationMinutes?: number) =>
+/** Why a support session is started (ADR-0162): to look, or to set an office up as its Owner or Admin. */
+export type ImpersonationPurpose = 'support' | 'setup';
+
+export const startImpersonation = (
+  userId: string,
+  reason: string,
+  durationMinutes?: number,
+  purpose: ImpersonationPurpose = 'support',
+) =>
   api<{
     accessToken: string;
     expiresAt: string;
     sessionId: string;
-    /** True until a second Super Admin approves writing (§3.13). */
+    /** True until a second Super Admin approves writing (§3.13) — a setup session's too. */
     readOnly: boolean;
+    purpose: ImpersonationPurpose;
+    /** What a setup session may write besides reading. Empty for a support session. */
+    writeScope: string[];
   }>(`/admin/impersonate/${userId}`, {
     method: 'POST',
-    body: { reason, ...(durationMinutes ? { durationMinutes } : {}) },
+    body: { reason, ...(durationMinutes ? { durationMinutes } : {}), purpose },
   });
 
 export const endImpersonation = () =>
@@ -334,6 +378,24 @@ export function subscriptionLine(row: Pick<TenantRow, 'subscription' | 'subscrip
 export function leadersWord(row: Pick<TenantRow, 'leadersUsed' | 'subscription'>): string {
   const max = row.subscription?.maxLeaders ?? null;
   return max === null ? String(row.leadersUsed) : `${row.leadersUsed} / ${max}`;
+}
+
+/**
+ * **How far past its limit an office is** (ADR-0157 §4): AgencyBoost approved leaders beyond it, and the quota did
+ * not move — so `13 / 10` is a normal state, and the list says *3 over*. `0` at or under the limit, or with none.
+ */
+export function leadersOver(row: Pick<TenantRow, 'leadersUsed' | 'subscription'>): number {
+  const max = row.subscription?.maxLeaders ?? null;
+  return max === null ? 0 : Math.max(0, row.leadersUsed - max);
+}
+
+/** The *Leaders* cell in words, for a screen reader: *13 leaders of a limit of 10, 3 over*. */
+export function leadersSaid(row: Pick<TenantRow, 'leadersUsed' | 'subscription'>): string {
+  const max = row.subscription?.maxLeaders ?? null;
+  const used = `${row.leadersUsed} ${row.leadersUsed === 1 ? 'leader' : 'leaders'}`;
+  if (max === null) return `${used}, no limit`;
+  const over = leadersOver(row);
+  return `${used} of a limit of ${max}${over > 0 ? `, ${over} over` : ''}`;
 }
 
 /** Filling a new office from a spreadsheet (P3.6-T4). */

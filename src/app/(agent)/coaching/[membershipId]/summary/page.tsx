@@ -1,16 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { useCoachee } from '@/components/coaching-person';
 import { Page } from '@/components/page';
 import { SUMMARY_VIEWS, SummaryCards, type SummaryView } from '@/components/personal-summary';
+import { SummaryPeriodSelect, useSummaryPeriod } from '@/components/summary-period';
 import { ErrorBanner } from '@/components/ui/field';
 import { Segmented } from '@/components/ui/segmented';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { readActivityRatios, type ActivityRatios } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { PRONOUN_FORMS, type Coachee } from '@/lib/coaching';
-import { readSummary, type Summary } from '@/lib/summary';
+import { readSummary, summaryPeriodFrom, type Summary, type SummaryPeriodQuery } from '@/lib/summary';
 
 /**
  * A coachee's *Personal Summary* tab (`Overall.html:3998-4162`, P11-T7 AC-4): the agent's own Summary,
@@ -32,33 +33,47 @@ import { readSummary, type Summary } from '@/lib/summary';
  *
  * No *Download* and no page title of its own: the prototype's person view has neither, and the shell
  * above names the person.
+ *
+ * **An earlier month or year** (P18.8-T11 AC-2): the same month and year selects as `/summary`, the choice in this
+ * tab's own address — `/coaching/{id}/summary?month=2026-08` — read with `?for=` and the period together, and
+ * audited as every read of the coachee's Summary is.
  */
-export default function CoacheeSummaryTab() {
+type Query = { month?: string | string[]; year?: string | string[] };
+
+export default function CoacheeSummaryTab({ searchParams }: { searchParams?: Promise<Query> }) {
   const coachee = useCoachee();
+  const query = searchParams ? use(searchParams) : {};
   return (
     <Page permission="personal_summary:read">
-      <CoacheeSummary coachee={coachee} />
+      <CoacheeSummary coachee={coachee} address={summaryPeriodFrom(query)} />
     </Page>
   );
 }
 
-function CoacheeSummary({ coachee }: { coachee: Coachee }) {
-  const [summary, setSummary] = useState<Summary | null>(null);
+function CoacheeSummary({ coachee, address }: { coachee: Coachee; address: SummaryPeriodQuery }) {
+  const { asked, view, chooseView, choose, key } = useSummaryPeriod(address);
+  /** The last Summary read: whose, for which period, and what it said. */
+  const [held, setHeld] = useState<{ membershipId: string; key: string; summary: Summary } | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  const [view, setView] = useState<SummaryView>('month');
   const [ratios, setRatios] = useState<ActivityRatios | null>(null);
   const [ratiosError, setRatiosError] = useState<ApiError | null>(null);
   const { membershipId, pronoun } = coachee;
 
   useEffect(() => {
     let live = true;
-    setSummary(null);
     setError(null);
+    readSummary(membershipId, asked)
+      .then((next) => { if (live) setHeld({ membershipId, key, summary: next }); })
+      .catch((err) => { if (live) setError(toDisplayError(err)); });
+    return () => { live = false; };
+    // `key` is the period, said once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [membershipId, key]);
+
+  useEffect(() => {
+    let live = true;
     setRatios(null);
     setRatiosError(null);
-    readSummary(membershipId)
-      .then((next) => { if (live) setSummary(next); })
-      .catch((err) => { if (live) setError(toDisplayError(err)); });
     // Its own read, failing in its own card: the Summary stands without it.
     readActivityRatios(membershipId)
       .then((next) => { if (live) setRatios(next); })
@@ -66,27 +81,35 @@ function CoacheeSummary({ coachee }: { coachee: Coachee }) {
     return () => { live = false; };
   }, [membershipId]);
 
+  // The period's Summary of this person; another person's, or another period's, only holds the selects meanwhile.
+  const frame = held?.membershipId === membershipId ? held.summary : null;
+  const summary = frame && held?.key === key ? frame : null;
+  const waiting = <SkeletonCards count={2} label={`Putting ${PRONOUN_FORMS[pronoun].possessive} summary together…`} />;
+
   return (
     <div className="mx-auto max-w-[860px]">
       {error && <ErrorBanner {...error} />}
-      {!summary && !error && (
-        <SkeletonCards count={2} label={`Putting ${PRONOUN_FORMS[pronoun].possessive} summary together…`} />
-      )}
-      {summary && (
+      {!frame && !error && waiting}
+      {frame && (
         <Segmented
           label="Period"
           tabs={SUMMARY_VIEWS}
           active={view}
-          onSelect={(id) => setView(id as SummaryView)}
+          onSelect={(id) => chooseView(id as SummaryView)}
           className="w-fit [&_button]:whitespace-nowrap [&_button]:px-3.5"
         >
           {() => (
-            <SummaryCards
-              summary={summary}
-              view={view}
-              pulse={{ ratios, error: ratiosError }}
-              subject={{ membershipId, pronoun }}
-            />
+            <>
+              <SummaryPeriodSelect view={view} frame={frame} asked={asked} onChoose={(value) => choose(value, frame.period)} />
+              {summary ? (
+                <SummaryCards
+                  summary={summary}
+                  view={view}
+                  pulse={{ ratios, error: ratiosError }}
+                  subject={{ membershipId, pronoun }}
+                />
+              ) : !error && waiting}
+            </>
           )}
         </Segmented>
       )}

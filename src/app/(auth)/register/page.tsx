@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
 import { listInsurers, type Insurer } from '@/lib/companies';
+import { GENDER_LABEL, WORK_STATUS_LABEL, type Gender, type WorkStatus } from '@/lib/personal';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { PasswordInput } from '@/components/ui/password-input';
 
@@ -19,12 +20,22 @@ import { PasswordInput } from '@/components/ui/password-input';
  * is the one the insurer issued, and it identifies the person the way their email does —
  * so it belongs to the account, and the account exists before any office admits them.
  * `GET /companies` is the one company question a visitor may ask without a token.
+ *
+ * **And what a person records** (ADR-0158, P18.8-T4): their date of birth, the month they joined the
+ * insurer — the label names it, *Joined Prudential*, once one is chosen — whether they work full-time
+ * or part-time, and their gender. All four required. Whether the birth date is 18 years ago and the
+ * month not still to come is the server's to say, and its sentence is shown under the field it names.
  */
 const MIN_LENGTH = 10;
+
+/** The four `POST /auth/register` refuses by name (`details.field`), shown under their own field. */
+const PERSONAL_FIELDS = ['dateOfBirth', 'companyJoinMonth', 'workStatus', 'gender'] as const;
+type PersonalField = (typeof PERSONAL_FIELDS)[number];
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
     fullName: '', email: '', password: '', confirmPassword: '', companyId: '', agentCode: '',
+    dateOfBirth: '', companyJoinMonth: '', workStatus: '' as WorkStatus | '', gender: '' as Gender | '',
   });
   const [insurers, setInsurers] = useState<Insurer[] | null>(null);
   const [done, setDone] = useState(false);
@@ -50,6 +61,12 @@ export default function RegisterPage() {
   const mismatch = form.confirmPassword.length > 0 && form.confirmPassword !== form.password;
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
     setForm({ ...form, [k]: e.target.value });
+
+  // The insurer's own name in the join month's label — *Joined Prudential* — once one is chosen.
+  const insurerName = insurers?.find((c) => c._id === form.companyId)?.name;
+  // A refusal that names one of the four is said under that field, not over the form.
+  const refusedField = PERSONAL_FIELDS.find((f) => f === error?.details?.field) as PersonalField | undefined;
+  const fieldError = (f: PersonalField) => (refusedField === f ? error?.message : undefined);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -94,7 +111,7 @@ export default function RegisterPage() {
           </div>
         ) : (
           <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
-            {error && <ErrorBanner {...error} />}
+            {error && !refusedField && <ErrorBanner {...error} />}
 
             <Field label="Full name" htmlFor="fullName">
               <TextInput
@@ -105,6 +122,28 @@ export default function RegisterPage() {
                 value={form.fullName}
                 onChange={set('fullName')}
               />
+            </Field>
+
+            <Field label="Date of birth" htmlFor="dateOfBirth" error={fieldError('dateOfBirth')}>
+              <TextInput
+                id="dateOfBirth"
+                name="dateOfBirth"
+                type="date"
+                autoComplete="bday"
+                required
+                value={form.dateOfBirth}
+                onChange={set('dateOfBirth')}
+                invalid={refusedField === 'dateOfBirth'}
+              />
+            </Field>
+
+            <Field label="Gender" htmlFor="gender" error={fieldError('gender')}>
+              <Select id="gender" name="gender" required value={form.gender} onChange={set('gender')}>
+                <option value="">Choose</option>
+                {(Object.keys(GENDER_LABEL) as Gender[]).map((g) => (
+                  <option key={g} value={g}>{GENDER_LABEL[g]}</option>
+                ))}
+              </Select>
             </Field>
 
             <Field
@@ -134,16 +173,44 @@ export default function RegisterPage() {
             <Field
               label="Agent code"
               htmlFor="agentCode"
-              hint="The producer id on your contract. It identifies you, like your email."
+              hint="The producer id on your contract, digits only. It identifies you, like your email."
             >
               <TextInput
                 id="agentCode"
                 name="agentCode"
                 required
+                inputMode="numeric"
                 autoComplete="off"
                 value={form.agentCode}
                 onChange={set('agentCode')}
               />
+            </Field>
+
+            <Field
+              label={`Joined ${insurerName ?? 'your insurer'}`}
+              htmlFor="companyJoinMonth"
+              hint="The month and year you joined them."
+              error={fieldError('companyJoinMonth')}
+            >
+              <TextInput
+                id="companyJoinMonth"
+                name="companyJoinMonth"
+                type="month"
+                required
+                placeholder="YYYY-MM"
+                value={form.companyJoinMonth}
+                onChange={set('companyJoinMonth')}
+                invalid={refusedField === 'companyJoinMonth'}
+              />
+            </Field>
+
+            <Field label="Status" htmlFor="workStatus" error={fieldError('workStatus')}>
+              <Select id="workStatus" name="workStatus" required value={form.workStatus} onChange={set('workStatus')}>
+                <option value="">Choose</option>
+                {(Object.keys(WORK_STATUS_LABEL) as WorkStatus[]).map((w) => (
+                  <option key={w} value={w}>{WORK_STATUS_LABEL[w]}</option>
+                ))}
+              </Select>
             </Field>
 
             <Field label="Email" htmlFor="email" hint="Your verification link goes here.">
@@ -203,6 +270,7 @@ export default function RegisterPage() {
                 busy || tooShort || padded || mismatch || !form.confirmPassword
                 || !form.fullName.trim() || !form.email.trim()
                 || !form.companyId || !form.agentCode.trim()
+                || !form.dateOfBirth || !form.companyJoinMonth || !form.workStatus || !form.gender
               }
             >
               {busy ? 'Creating…' : 'Create account'}

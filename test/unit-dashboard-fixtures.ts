@@ -63,7 +63,7 @@ export function unitRow(membershipId: string, name: string, over: Partial<UnitRo
 }
 
 export const total = (over: Partial<UnitTotal> = {}): UnitTotal => ({
-  goal: { targetMinor: rp(320), actualMinor: rp(262.4), attainmentPct: 82, missing: 0 },
+  goal: { targetMinor: rp(320), actualMinor: rp(262.4), attainmentPct: 82, missing: 0, gapMinor: rp(57.6), overMinor: 0 },
   leadsCounts: { salesOpen: 36, salesClosing: 16, recruitOpen: 2, recruitNominated: 1 },
   touches: { logged: 340, target: 380 },
   potentialActive: { count: 3, of: 4 },
@@ -139,7 +139,7 @@ export const UNITS: UnitGroup[] = [
     members: [BUDI, RINA, YANTI],
     units: [WULAN_UNIT],
     total: total({
-      goal: { targetMinor: rp(240), actualMinor: rp(131.2), attainmentPct: 55, missing: 1 },
+      goal: { targetMinor: rp(240), actualMinor: rp(131.2), attainmentPct: 55, missing: 1, gapMinor: rp(108.8), overMinor: 0 },
       potentialActive: { count: 4, of: 6 },
     }),
   },
@@ -157,7 +157,9 @@ export function dashboard(over: Partial<UnitDashboardView> = {}): UnitDashboardV
     empty: false,
     tiles: {
       team: { total: 16, direct: 4, units: 3, underUnits: 9 },
-      directGroupProduction: { targetMinor: rp(1280), actualMinor: rp(1000), attainmentPct: 78, missing: 2, period: 'month' },
+      directGroupProduction: {
+        targetMinor: rp(1280), actualMinor: rp(1000), attainmentPct: 78, missing: 2, gapMinor: rp(280), overMinor: 0, period: 'month',
+      },
       potentialActive: { count: 12, of: 16 },
       potentialRecruits: { yourUnit: 1, aabs: 1 },
     },
@@ -175,7 +177,9 @@ export const EMPTY = dashboard({
   empty: true,
   tiles: {
     team: { total: 0, direct: 0, units: 0, underUnits: 0 },
-    directGroupProduction: { targetMinor: null, actualMinor: null, attainmentPct: null, missing: 0, period: 'month' },
+    directGroupProduction: {
+      targetMinor: null, actualMinor: null, attainmentPct: null, missing: 0, gapMinor: null, overMinor: null, period: 'month',
+    },
     potentialActive: { count: 0, of: 0 },
     potentialRecruits: { yourUnit: 0, aabs: 0 },
   },
@@ -189,13 +193,15 @@ export const SARI_UNIT = dashboard({
   head: { membershipId: 'mem-sari', name: 'Sari Wulandari', isReader: false },
   tiles: {
     team: { total: 6, direct: 4, units: 1, underUnits: 1 },
-    directGroupProduction: { targetMinor: rp(240), actualMinor: rp(131.2), attainmentPct: 55, missing: 1, period: 'month' },
+    directGroupProduction: {
+      targetMinor: rp(240), actualMinor: rp(131.2), attainmentPct: 55, missing: 1, gapMinor: rp(108.8), overMinor: 0, period: 'month',
+    },
     potentialActive: { count: 4, of: 6 },
     potentialRecruits: { yourUnit: 1, aabs: 0 },
   },
   yourUnit: {
     rows: [{ ...SARI, depth: 0 }, { ...BUDI, depth: 1 }, { ...RINA, depth: 1 }, { ...YANTI, depth: 1 }],
-    total: total({ goal: { targetMinor: rp(160), actualMinor: rp(65.6), attainmentPct: 41, missing: 1 } }),
+    total: total({ goal: { targetMinor: rp(160), actualMinor: rp(65.6), attainmentPct: 41, missing: 1, gapMinor: rp(94.4), overMinor: 0 } }),
   },
   units: [{ ...WULAN_UNIT, head: { ...WULAN, depth: 1 }, members: [{ ...TONO, depth: 2 }] }],
 });

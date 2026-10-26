@@ -47,6 +47,7 @@ const goal = (over: Record<string, unknown> = {}) => ({
   snapshot: { monthlyApeTargetMinor: 100_000_000_00, policiesPerMonth: 6, appointmentsPerMonth: 20, leadsPerMonth: 67 },
   projected: projection(),
   cascadeMapping: { leadsCode: 'LEADS_CONTACTED', appointmentsCode: 'SELL_PRESENTATION', closingsCode: 'SELL_SUBMISSION' },
+  cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
   // A subject's read carries no measured rates (D-rates, P11-T7 AC-10).
   measured: null,
   monthsLeftIsOverride: false,
@@ -135,7 +136,9 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
     show();
     await screen.findByRole('button', { name: 'Save goal' });
     expect(screen.queryByText(/logged rate|measured/i)).not.toBeInTheDocument();
-    expect(screen.getByText('Use your real conversion ratios for accuracy.')).toBeInTheDocument();
+    // The same calculator as `/goals`, so the same screen: no 💡 tip since ADR-0160 §4 (P18.8-T10 AC-4).
+    expect(screen.queryByText('Use your real conversion ratios for accuracy.')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Appointment to Sales meeting')).toBeInTheDocument();
   });
 
   it('P11-T7 AC-5 never tells the leader a goal was set by somebody else: that banner is the coachee’s own', async () => {

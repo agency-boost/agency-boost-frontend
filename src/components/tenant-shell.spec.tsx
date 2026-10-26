@@ -64,6 +64,26 @@ describe('the tenant shell (P3-T10 AC-4)', () => {
     expect(screen.getByText('KPM Admin')).toBeInTheDocument();
   });
 
+  it('P18.8-T6 AC-2 the profile line: KPM Owner · Core Leader · the groups · the office', () => {
+    const owner = tenantAdmin(true, 2);
+    renderWithSession(<TenantShell title="All members">body</TenantShell>, {
+      me: makeMe({
+        ...owner,
+        membership: { ...owner.membership!, isCoreLeader: true, groups: ['Top Producers 2026'], office: { code: '0417', branch: 'Cempaka Putih' } },
+      }),
+    });
+    expect(screen.getByText('KPM Owner · Core Leader · Top Producers 2026 · 0417 · Cempaka Putih'))
+      .toHaveAttribute('title', 'KPM Owner · Core Leader · Top Producers 2026 · 0417 · Cempaka Putih');
+  });
+
+  it('P18.8-T6 AC-2 an Admin in no group, untagged: KPM Admin · the office', () => {
+    const admin = tenantAdmin(false);
+    renderWithSession(<TenantShell title="All members">body</TenantShell>, {
+      me: makeMe({ ...admin, membership: { ...admin.membership!, isCoreLeader: false, groups: [], office: { code: '0417', branch: 'Cempaka Putih' } } }),
+    });
+    expect(screen.getByText('KPM Admin · 0417 · Cempaka Putih')).toBeInTheDocument();
+  });
+
   it('reaches Settings › Activation checklist, which is no longer Upcoming (P5-T3)', () => {
     renderWithSession(<TenantShell title="Activation">body</TenantShell>, { me: tenantAdmin(false) });
     openGroup(/^Settings/);

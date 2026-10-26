@@ -95,6 +95,8 @@ function Join() {
     <RoleShell
       title="Join an office"
       subtitle="With a leader's code, link or QR. All three are the same invite."
+      // Opened from an emailed link by somebody who may have no account yet: it says *Sign in first* itself.
+      allowSignedOut
     >
 
       <Card>

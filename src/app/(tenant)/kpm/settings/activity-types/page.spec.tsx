@@ -337,10 +337,10 @@ describe('the office activity taxonomy (P4-T1)', () => {
         status: 409,
         body: {
           error: {
-            code: 'ACTIVITY_TYPE_RESERVED',
-            message: 'Change 1 (type.archive): “Submission polis” cannot be archived: the goal plan and the summary count it. You can rename it, describe it, reorder it or move it to another section.',
+            code: 'ACTIVITY_TYPE_BOUND',
+            message: 'Change 1 (type.archive): “Submission polis” cannot be archived: the summary and the goal plan count it as Submission polis. A Super Admin can bind another activity in its place first. You can rename it, describe it, reorder it or move it to another section.',
             requestId: 'r-2',
-            details: { codes: ['SELL_SUBMISSION'] },
+            details: { codes: ['SELL_SUBMISSION'], roles: ['Submission polis'] },
           },
         },
       },
@@ -350,7 +350,7 @@ describe('the office activity taxonomy (P4-T1)', () => {
 
     const alerts = await screen.findAllByRole('alert');
     const shown = alerts.find((a) => a.textContent?.includes('cannot be archived'))!;
-    expect(shown).toHaveTextContent(/^“Submission polis” cannot be archived: the goal plan and the summary count it/);
+    expect(shown).toHaveTextContent(/^“Submission polis” cannot be archived: the summary and the goal plan count it/);
     expect(shown.textContent).not.toContain('Change 1');
     expect(shown.textContent).not.toContain('type.archive');
   });
@@ -804,6 +804,43 @@ describe('the office activity taxonomy (P4-T1)', () => {
       // The second section's first row is 2, not 1: the badge is the office's, not the
       // section's.
       expect(numbers()).toEqual(['1', '2']);
+    });
+  });
+
+  /*
+   * P18.9-T2 AC-3 (ADR-0163): the Owner and the Admin read the office's activity binding here, read-only — the
+   * role a bound type counts as, beside its name. The Super Admin keeps it.
+   */
+  describe('the activity binding, read-only (P18.9-T2)', () => {
+    const READER = makeMe({ ...OWNER, permissions: [...OWNER.permissions, 'activity_binding:read'] });
+
+    it('P18.9-T2 AC-3 marks each bound type with the role it counts as, and nothing else', async () => {
+      const stub = stubFetch({
+        '/kpm/settings/activity-types': { body: TAXONOMY },
+        '/kpm/settings/activity-binding': {
+          body: {
+            leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'],
+            version: 1, updatedAt: null,
+          },
+        },
+        '/kpm/config': { body: { activity: TAXONOMY, ratios: [], leadPipelines: [], version: 1 } },
+        '/kpm/org-levels': { body: LADDER },
+      });
+      renderWithSession(<TenantConfigProvider><ActivityTypesPage /></TenantConfigProvider>, { me: READER });
+
+      const meeting = await screen.findByText('Sales meeting');
+      expect(meeting).toHaveAttribute('title', expect.stringContaining('count this as Sales meeting'));
+      expect(meeting.closest('p')).toHaveTextContent('Presentasi penjualanSales meeting');
+      // The type's own name is Submission polis here, so its row says it twice: its name, and its role.
+      expect(screen.getAllByText('Submission polis')).toHaveLength(2);
+      expect(stub.calls.some((c) => c.url.includes('/kpm/settings/activity-binding'))).toBe(true);
+    });
+
+    it('P18.9-T2 AC-3 asks nothing of a reader without the permission', async () => {
+      const { calls } = render(AGENT);
+      await screen.findByText('Submission polis');
+      expect(calls.some((c) => c.url.includes('/kpm/settings/activity-binding'))).toBe(false);
+      expect(screen.queryByText('Sales meeting')).not.toBeInTheDocument();
     });
   });
 });

@@ -6,6 +6,8 @@ import { RequireSession } from '@/components/require-session';
 import { ToastHost } from '@/components/ui/toast';
 import { useLadder } from '@/components/ui/role-badge';
 import { viewSwitchFor } from '@/lib/landing';
+import { displayName } from '@/lib/display-name';
+import { profileLine } from '@/lib/profile-line';
 import { useSession } from '@/lib/session';
 import { useUnreadCount } from '@/lib/use-unread-count';
 import { useSignOut } from '@/lib/use-sign-out';
@@ -148,6 +150,25 @@ function Chrome({
   };
 
   /*
+   * **Core leader** (ADR-0159 §3, P18.8-T5 AC-5; the client's request of 2026-10-26): after *Campaign* and before
+   * *Admin*, to a Core Leader only — `membership.isCoreLeader`, the effective flag the session carries (tagged, on a
+   * leader rung). No prototype draws it. *Strategic Leader Forum* and *KPM analytics* open in this shell (both are
+   * cross-family routes, `RoleShell`); *Advanced analytics* has no screen, so it is disabled and marked *Soon*, the
+   * pill this shell's `upcomingLabel` names — as the console's own item (`tenant-shell.tsx`). The forum and the
+   * analytics refuse anybody this would not offer them to (404); the nav decides what is offered, never what is allowed.
+   */
+  const coreLeader = membership?.isCoreLeader === true;
+  const coreLeaderSection: NavSection = {
+    label: 'Core leader',
+    divider: true,
+    items: [
+      { label: 'Strategic Leader Forum', href: '/leader-meetings', icon: 'megaphone', active: on('/leader-meetings') },
+      { label: 'KPM analytics', href: '/kpm/analytics', icon: 'chart', active: on('/kpm/analytics') },
+      { label: 'Advanced analytics', href: '/kpm/advanced-analytics', icon: 'chartUp', upcoming: true },
+    ],
+  };
+
+  /*
    * Nine sections in the prototype's order, Admin last, **with a line between every two** (client
    * feedback, 2026-09-30; parity I-144). The prototype draws two lines here, before KPM and before
    * Admin (`Overall.html:2660`, `:2672`), where the Owner's and the Super Admin's draw one before
@@ -187,9 +208,13 @@ function Chrome({
       label: 'Sales tools',
       items: [
         // Live for every field role (Phase 14; roles §4.2): the prototype gates neither (`Overall.html:2656-2657`).
-        // The catalog stays current over its drawer's address, `/product-catalog/{code}`.
-        { label: 'Sales Attack Plan', href: '/attack-plan', icon: 'compass', active: on('/attack-plan') },
-        { label: 'Product Catalog', href: '/product-catalog', icon: 'box', active: on('/product-catalog') },
+        // **One entry since P18.8-T12** (ADR-0161 §5, the client's request of 2026-10-26): *Sales Attack Plan* opens the
+        // plan, and the tabs over both pages reach the catalog. It stays current on either address, the catalog's
+        // drawer `/product-catalog/{code}` included.
+        {
+          label: 'Sales Attack Plan', href: '/attack-plan', icon: 'compass',
+          active: on('/attack-plan') || on('/product-catalog'),
+        },
       ],
       divider: true,
     },
@@ -219,6 +244,7 @@ function Chrome({
       items: [{ label: 'Campaign list', href: '/campaigns', icon: 'trophy', active: on('/campaigns') }],
       divider: true,
     },
+    ...(coreLeader ? [coreLeaderSection] : []),
     {
       label: 'Admin',
       items: [
@@ -254,11 +280,14 @@ function Chrome({
     <AppShell
       sections={sections}
       user={{
-        name: me?.user.preferredName ?? me?.user.fullName ?? 'Signed in',
-        role: membership ? shortRung : 'No office yet',
+        name: (me && displayName(me.user)) || 'Signed in',
+        // The profile line (ADR-0159 §5, P18.8-T6 AC-2): the rung · Core Leader · the groups · the office.
+        role: membership ? profileLine(shortRung, membership) : 'No office yet',
         initials: me?.user.initials ?? '??',
         email: me?.user.email,
       }}
+      // *Advanced analytics* under *Core leader* is the one item here with no screen yet: *Soon*, as the client wrote it.
+      upcomingLabel="Soon"
       account={{
         href: '/profile',
         onSignOut: () => void signOut(),

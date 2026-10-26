@@ -6,15 +6,19 @@ import {
 
 /*
  * P4-T25. Each of the five seeded benchmarks written the way `metrics-and-definitions.md`
- * states it — the defect was that the screens printed `0.15` for a success rate.
+ * states it — the defect was that the screens printed `0.15` for a success rate. The client's
+ * benchmarks since ADR-0160 §2, and *Set appointment to meeting* a percent.
  */
 describe('formatBenchmark', () => {
   it.each([
-    ['Selling success rate', 0.15, 'percent', '15.0%'],
-    ['Recruitment success rate', 0.15, 'percent', '15.0%'],
-    ['Leads per activity', 0.3, 'decimal', '0.30'],
-    ['Meeting per approach', 1.5, 'decimal', '1.50'],
+    ['Selling success rate', 0.3, 'percent', '30.0%'],
+    ['Recruitment success rate', 0.3, 'percent', '30.0%'],
+    ['Leads per activity', 1, 'decimal', '1.00'],
+    ['Set appointment to meeting', 0.5, 'percent', '50.0%'],
     ['Selling vs Recruitment', 30, 'points', '±30 points'],
+    // The prototype's, which an office that kept them still holds.
+    ['a success rate at 15%', 0.15, 'percent', '15.0%'],
+    ['Meeting per approach at 1.50', 1.5, 'decimal', '1.50'],
   ] as const)('writes %s as %s', (_, value, unit, text) => {
     expect(formatBenchmark(value, unit)).toBe(text);
   });

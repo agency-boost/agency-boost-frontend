@@ -49,3 +49,58 @@ describe('SubscriptionDialog: the API’s refusals (P13.2 exit review)', () => {
     expect(dialog).not.toHaveTextContent(/pricePerLeaderMinor|maxLeaders|\bsen\b/);
   });
 });
+
+/*
+ * **The subscription's cost** (P18.8-T3 AC-2, ADR-0157 §6): beside the price per leader, the whole quota's month, the
+ * duration and the cost over it, worked out as the fields are typed; *—* naming what is missing where a line cannot be.
+ */
+describe('SubscriptionDialog: the subscription’s cost (P18.8-T3)', () => {
+  /** The value beside a term of the cost list. */
+  const line = (dialog: HTMLElement, term: string | RegExp) =>
+    within(dialog).getByText(term, { selector: 'dt' }).nextElementSibling?.textContent;
+
+  it('AC-2 shows the month for the whole quota, the duration and the cost over it', () => {
+    render(<SubscriptionDialog row={ROW} open onClose={vi.fn()} onSaved={vi.fn()} />);
+    const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
+    expect(line(dialog, 'Per month for 10 leaders')).toBe('Rp 3.500.000');
+    expect(line(dialog, 'Duration')).toBe('12 months');
+    expect(line(dialog, 'Over the duration')).toBe('Rp 42.000.000');
+  });
+
+  it('AC-2 recomputes as the fields change', async () => {
+    render(<SubscriptionDialog row={ROW} open onClose={vi.fn()} onSaved={vi.fn()} />);
+    const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
+    const max = within(dialog).getByLabelText('Maximum leaders');
+    await userEvent.clear(max);
+    await userEvent.type(max, '13');
+    expect(line(dialog, 'Per month for 13 leaders')).toBe('Rp 4.550.000');
+    const end = within(dialog).getByLabelText('End date');
+    await userEvent.clear(end);
+    await userEvent.type(end, '2026-03-20');
+    expect(line(dialog, 'Duration')).toBe('3 months');
+    expect(line(dialog, 'Over the duration')).toBe('Rp 13.650.000');
+  });
+
+  it('AC-2 reads — naming what is missing: no limit, no price, no dates', async () => {
+    render(<SubscriptionDialog row={ROW} open onClose={vi.fn()} onSaved={vi.fn()} />);
+    const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
+    await userEvent.clear(within(dialog).getByLabelText('Maximum leaders'));
+    expect(line(dialog, 'Per month')).toBe('— no maximum leaders');
+    expect(line(dialog, 'Over the duration')).toBe('— no maximum leaders');
+    await userEvent.clear(within(dialog).getByLabelText('Price per leader per month'));
+    expect(line(dialog, 'Per month')).toBe('— no price per leader and no maximum leaders');
+    await userEvent.clear(within(dialog).getByLabelText('Start date'));
+    await userEvent.clear(within(dialog).getByLabelText('End date'));
+    expect(line(dialog, 'Duration')).toBe('— no start and end dates');
+    expect(line(dialog, 'Over the duration')).toBe('— no price per leader and no maximum leaders and no start and end dates');
+  });
+
+  it('P18.8-T2 says a limit below the count demotes nobody, and that each new leader past it waits for AgencyBoost', async () => {
+    render(<SubscriptionDialog row={ROW} open onClose={vi.fn()} onSaved={vi.fn()} />);
+    const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
+    const max = within(dialog).getByLabelText('Maximum leaders');
+    await userEvent.clear(max);
+    await userEvent.type(max, '4');
+    expect(dialog).toHaveTextContent("each new AB or AAB past 4 waits for AgencyBoost's approval");
+  });
+});

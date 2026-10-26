@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { renderWithSession, routeParams, stubFetch } from '@test/harness';
 import SharedLeaderMeetingPage from './page';
 import { CORE_LEADER_ME, FIELD_ME, LINK_CAN, meetingView, notFound, OWNER_ME, SHELL_STUBS } from '../../forum-fixtures';
@@ -71,6 +71,9 @@ describe('/leader-meetings/shared/[token] — a meeting by its link (P18.1-T3)',
   });
 
   it('P18.1-T3 AC-2: a reader not signed in signs in first, and comes back to the link', async () => {
+    // Sent by the shell since P18.8-T15 AC-2, from the address the browser is on.
+    window.history.replaceState(null, '', '/leader-meetings/shared/tok_abc-123');
+    onTestFinished(() => window.history.replaceState(null, '', '/'));
     stubFetch({});
     renderWithSession(page(), { me: null });
     await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login?next=%2Fleader-meetings%2Fshared%2Ftok_abc-123'));

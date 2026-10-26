@@ -9,10 +9,12 @@ import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import {
   createOrgLevel,
+  insurersOf,
   listCompanies,
   listOrgLevels,
   updateOrgLevel,
   type Company,
+  type LeaderTier,
   type OrgLevel,
 } from '@/lib/admin';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -24,7 +26,31 @@ const CODE = /^[A-Za-z][A-Za-z0-9_]{1,31}$/;
  * The skeleton and the table read the same array, so the placeholder is the width of the
  * ladder it stands in for.
  */
-const COLUMNS = ['Order', 'Rung', 'Status', { label: 'Actions', visuallyHidden: true }] as const;
+const COLUMNS = ['Order', 'Rung', 'Leader tier', 'Status', { label: 'Actions', visuallyHidden: true }] as const;
+
+/**
+ * The tiers, in the client's words (ADR-0156, 2026-10-26). *Not a leader* is the empty value:
+ * the wire's `null`, which a `<select>` cannot hold.
+ */
+const TIERS: { value: LeaderTier | ''; label: string }[] = [
+  { value: 'senior', label: 'Senior Leader' },
+  { value: 'associate', label: 'Associate Leader' },
+  { value: '', label: 'Not a leader' },
+];
+
+/**
+ * A refused tier change, in this screen's words: the count from the refusal's details and the rung
+ * by its label. The API's own sentence when the details are missing, so a refusal never goes unsaid.
+ */
+function tierInUse(error: ApiError, level: OrgLevel | undefined): ApiError {
+  const members = Number(error.details?.members);
+  if (!level || !Number.isInteger(members) || members < 1) return error;
+  const who = members === 1 ? '1 person stands' : `${members} people stand`;
+  return {
+    ...error,
+    message: `${who} on ${level.label}, so its leader tier cannot change. Move them to another rung first, or add a new rung.`,
+  };
+}
 
 /**
  * Org role ladder (P3.5-T7, ADR-0012).
@@ -33,6 +59,10 @@ const COLUMNS = ['Order', 'Rung', 'Status', { label: 'Actions', visuallyHidden: 
  * disabled `Soon` link; the only thing the prototype says about a ladder is the company
  * card's meta line, *"Role ladder: Agent → AAB → AB"* (`:311`), which this screen is what
  * finally puts data behind. Registered as a Fill.
+ *
+ * **The Leader tier column and field** (P18.8-T1, ADR-0156) are the client's request of
+ * 2026-10-26 — mark which rungs lead, as *Senior Leader* or *Associate Leader* — in the
+ * table's own select-in-a-cell idiom and the side card's own field. Registered as an Improve.
  *
  * Built in the console's own idiom — the list-plus-side-panel of `/admin/companies` —
  * rather than a new visual language for one screen.
@@ -43,12 +73,16 @@ export default function OrgLevelsPage() {
   const [companyId, setCompanyId] = useState('');
   const [code, setCode] = useState('');
   const [label, setLabel] = useState('');
+  const [tier, setTier] = useState<LeaderTier | ''>('');
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
     void Promise.all([listOrgLevels(), listCompanies()])
-      .then(([ladder, cos]) => {
+      .then(([ladder, all]) => {
+        // The insurers' ladders: the Template library's is the one a new company copies, and is not an
+        // insurer's to edit here (ADR-0164 §3).
+        const cos = insurersOf(all);
         setLevels(ladder);
         setCompanies(cos);
         setCompanyId((c) => c || (cos[0]?._id ?? ''));
@@ -77,10 +111,12 @@ export default function OrgLevelsPage() {
         code: code.trim(),
         label: label.trim(),
         displayOrder: nextOrder,
+        leaderTier: tier || null,
       });
       setLevels((all) => [...(all ?? []).filter((l) => l.companyId !== companyId), ...ladder]);
       setCode('');
       setLabel('');
+      setTier('');
     } catch (err) {
       setError(toDisplayError(err));
     } finally {
@@ -96,6 +132,25 @@ export default function OrgLevelsPage() {
       setLevels((all) => [...(all ?? []).filter((l) => l.companyId !== level.companyId), ...ladder]);
     } catch (err) {
       setError(toDisplayError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /*
+   * **Saved on change**, like Archive beside it: one value, and the server is the one that can say
+   * no — while anybody stands on the rung it refuses, with the count, and the select still shows the
+   * stored tier because it reads the ladder, which only a success replaces.
+   */
+  async function setLeaderTier(level: OrgLevel, value: LeaderTier | '') {
+    setBusy(level.orgLevelId);
+    setError(null);
+    try {
+      const ladder = await updateOrgLevel(level.orgLevelId, { leaderTier: value || null });
+      setLevels((all) => [...(all ?? []).filter((l) => l.companyId !== level.companyId), ...ladder]);
+    } catch (err) {
+      const shown = toDisplayError(err);
+      setError(shown.code === 'ORG_LEVEL_TIER_IN_USE' ? tierInUse(shown, level) : shown);
     } finally {
       setBusy(null);
     }
@@ -144,6 +199,21 @@ export default function OrgLevelsPage() {
                   <Row key={l.orgLevelId}>
                     <Cell className="text-muted">{l.displayOrder}</Cell>
                     <Cell className="font-semibold">{l.label}</Cell>
+                    <Cell>
+                      <Select
+                        density="cell"
+                        aria-label={`Leader tier of ${l.label}`}
+                        value={l.leaderTier ?? ''}
+                        disabled={busy !== null}
+                        onChange={(e) => void setLeaderTier(l, e.target.value as LeaderTier | '')}
+                      >
+                        {TIERS.map((t) => (
+                          <option key={t.value} value={t.value}>
+                            {t.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </Cell>
                     <Cell>
                       <StatusPill
                         status={l.status === 'active' ? 'success' : 'neutral'}
@@ -203,6 +273,19 @@ export default function OrgLevelsPage() {
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
               />
+            </Field>
+            <Field label="Leader tier" htmlFor="leader-tier">
+              <Select
+                id="leader-tier"
+                value={tier}
+                onChange={(e) => setTier(e.target.value as LeaderTier | '')}
+              >
+                {TIERS.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </Select>
             </Field>
             <p className="text-xs text-muted">
               It goes on the end of the ladder, at position {nextOrder}.

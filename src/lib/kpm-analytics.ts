@@ -1,6 +1,7 @@
 import { api } from './api-client';
 import { formatMonth } from './format';
 import { formatRupiah } from './goals';
+import type { Me } from './session';
 
 /**
  * KPM analytics (Phase 18, P18-T2; `docs/02-specs/functional/kpm-analytics.md`): the console's *Unit
@@ -349,6 +350,16 @@ export const headName = (head: AnalyticsHead) => (head.isReader ? `${head.name} 
  */
 export const unitDashboardHref = (head: Pick<AnalyticsHead, 'membershipId' | 'isReader'>) =>
   (head.isReader ? '/unit/dashboard' : `/unit/dashboard/${head.membershipId}`);
+
+/**
+ * **Whether a name in the analytics opens anything for this reader** (ADR-0159 §2, P18.8-T5): the Owner and the Admins
+ * open every leader's Unit Dashboard and every person page; a **Core Leader** — a field member reading the office —
+ * opens their own unit alone (`isReader`), since another leader's Unit Dashboard and every person page are refused to
+ * them. A name that leads them nowhere is plain text rather than a link to a refusal.
+ */
+export function drillsAnywhere(me: Pick<Me, 'membership'> | null, isReader: boolean): boolean {
+  return Boolean(me?.membership?.isKpmOwner || me?.membership?.isKpmAdmin) || isReader;
+}
 
 /**
  * Where a card of the console's Org tree goes (D-drill): somebody with a direct report to their Unit

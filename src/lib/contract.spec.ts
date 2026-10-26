@@ -95,6 +95,8 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['admin.ts', 'CompanyCard', 'CompanyCardDto'],
   ['admin.ts', 'OrgLevel', 'OrgLevelRowDto'],
   ['admin.ts', 'KpmRequestRow', 'KpmRequestRowDto'],
+  // ADR-0157: a leader past the office's limit, read by the office and by AgencyBoost's queue alike.
+  ['leader-limit-requests.ts', 'LeaderLimitRequestRow', 'LeaderLimitRequestRowDto'],
   ['admin.ts', 'PlatformAdminRow', 'PlatformAdminRowDto'],
   ['admin.ts', 'AuditEntry', 'AuditEntryResponseDto'],
   ['org.ts', 'Member', 'DirectoryMemberDto'],
@@ -337,7 +339,9 @@ describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
 
   it('every path the client calls exists in the document', () => {
     const paths = new Set(Object.keys(doc.paths).map((p) => p.replace('/api/v1', '')));
-    const sources = ['admin.ts', 'org.ts', 'join.ts', 'notifications.ts', 'session.ts', 'api.ts', 'coaching.ts'];
+    const sources = [
+      'admin.ts', 'org.ts', 'join.ts', 'notifications.ts', 'session.ts', 'api.ts', 'coaching.ts', 'leader-limit-requests.ts',
+    ];
     const called = new Set<string>();
     for (const file of sources) {
       for (const path of callsIn(readFileSync(join(__dirname, file), 'utf8'))) called.add(path);

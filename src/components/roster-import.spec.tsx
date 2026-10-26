@@ -18,13 +18,13 @@ const SUPER_ADMIN = makeMe({
   permissions: ['kpm:import_roster'],
 });
 
-const HEADER = 'fullName,email,agentCode,role,leaderAgentCode';
-const FILE = `# Examples below are commented out.\n${HEADER}\n# Agus Prasetyo,agus@example.test,PRU-88001,ab,\n`;
-/** The same three rows the template carries, as cells — what the paste box shows. */
+const HEADER = 'fullName,email,agentCode,role,leaderAgentCode,dateOfBirth,companyJoinMonth,workStatus,gender';
+const FILE = `# Examples below are commented out.\n${HEADER}\n# Agus Prasetyo,agus@example.test,88001,AB,,1984-05-12,2012-03,full-time,male\n`;
+/** The same three rows the template carries, as cells — what the paste box shows (P18.8-T4: nine columns). */
 const EXAMPLES = [
-  ['Agus Prasetyo', 'agus@example.test', 'PRU-88001', 'ab', ''],
-  ['Puspita, Sari', 'sari@example.test', 'PRU-88002', 'aab', 'PRU-88001'],
-  ['Rina Wijaya', 'rina@example.test', 'PRU-88003', 'agent', 'PRU-88002'],
+  ['Agus Prasetyo', 'agus@example.test', '88001', 'AB', '', '1984-05-12', '2012-03', 'full-time', 'male'],
+  ['Puspita, Sari', 'sari@example.test', '88002', 'AAB', '88001', '1990-11-02', '2016-08', 'full-time', 'female'],
+  ['Rina Wijaya', 'rina@example.test', '88003', 'Agent', '88002', '1998-07-21', '2024-01', 'part-time', 'female'],
 ];
 const TEMPLATE = {
   '/admin/tenants/roster-template': {
@@ -96,10 +96,24 @@ describe('importing a roster (P3.6-T4)', () => {
     const box = await screen.findByLabelText('Rows from your spreadsheet');
     expect(box).toHaveAttribute(
       'placeholder',
-      'Agus Prasetyo\tagus@example.test\tPRU-88001\tab\t\n'
-      + 'Puspita, Sari\tsari@example.test\tPRU-88002\taab\tPRU-88001\n'
-      + 'Rina Wijaya\trina@example.test\tPRU-88003\tagent\tPRU-88002',
+      'Agus Prasetyo\tagus@example.test\t88001\tAB\t\t1984-05-12\t2012-03\tfull-time\tmale\n'
+      + 'Puspita, Sari\tsari@example.test\t88002\tAAB\t88001\t1990-11-02\t2016-08\tfull-time\tfemale\n'
+      + 'Rina Wijaya\trina@example.test\t88003\tAgent\t88002\t1998-07-21\t2024-01\tpart-time\tfemale',
     );
+  });
+
+  it('P18.8-T4 AC-2: says what each of the nine columns takes, the rungs written AB, AAB and Agent', async () => {
+    render();
+    const said = (await screen.findByText(/One row per person/)).textContent ?? '';
+    expect(said).toContain('(digits only)');
+    expect(said).toContain('AB, AAB or Agent');
+    expect(said).toContain('YYYY-MM-DD');
+    expect(said).toContain('at least 18');
+    expect(said).toContain('YYYY-MM');
+    expect(said).toContain('full-time or part-time');
+    expect(said).toContain('male or female');
+    expect(said).toContain("Every column but the leader's is required.");
+    expect(said).not.toMatch(/\bab, aab or agent\b/);
   });
 
   it('sends pasted rows exactly as they were pasted', async () => {
@@ -107,7 +121,7 @@ describe('importing a roster (P3.6-T4)', () => {
       '/admin/tenants/kpm-1/roster/preview': { body: { issues: [], willCreate: 1, rows: [] } },
     });
 
-    await paste('Rina Wijaya\trina@k.test\tPRU-1\tagent\t');
+    await paste('Rina Wijaya\trina@k.test\t881\tagent\t');
     await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
 
     const call = await screen.findByText(/1 person ready to import/).then(
@@ -116,7 +130,7 @@ describe('importing a roster (P3.6-T4)', () => {
     // Untouched: the server decides the delimiter, and a screen that reformatted the text
     // would be a second parser disagreeing with the first.
     expect(JSON.parse(call.init.body as string)).toEqual({
-      rows: 'Rina Wijaya\trina@k.test\tPRU-1\tagent\t',
+      rows: 'Rina Wijaya\trina@k.test\t881\tagent\t',
     });
   });
 
@@ -124,7 +138,7 @@ describe('importing a roster (P3.6-T4)', () => {
     // Checking a paste and then importing a file chosen earlier is not a thing anybody
     // means to do.
     render();
-    await paste('Rina\trina@k.test\tPRU-1\tagent\t');
+    await paste('Rina\trina@k.test\t881\tagent\t');
     expect(screen.getByRole('button', { name: 'Check the file' })).toBeEnabled();
 
     await userEvent.click(screen.getByLabelText('Upload a CSV file'));
@@ -138,7 +152,7 @@ describe('importing a roster (P3.6-T4)', () => {
       },
     });
 
-    await upload(`${HEADER}\nRina,rina@k.test,PRU-1,ab,\n`);
+    await upload(`${HEADER}\nRina,rina@k.test,881,ab,\n`);
     await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
 
     expect(await screen.findByText(/2 people ready to import/)).toBeInTheDocument();
@@ -148,7 +162,7 @@ describe('importing a roster (P3.6-T4)', () => {
 
   it('will not let the import be clicked before the file has been checked', async () => {
     render();
-    await upload(`${HEADER}\nRina,rina@k.test,PRU-1,ab,\n`);
+    await upload(`${HEADER}\nRina,rina@k.test,881,ab,\n`);
     expect(screen.getByRole('button', { name: 'Import 0' })).toBeDisabled();
   });
 
@@ -168,7 +182,7 @@ describe('importing a roster (P3.6-T4)', () => {
       },
     });
 
-    await upload(`${HEADER}\nA,nope,PRU-1,ab,\n`);
+    await upload(`${HEADER}\nA,nope,881,ab,\n`);
     await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
 
     expect(await screen.findByText(/2 problems — nothing will be created/)).toBeInTheDocument();
@@ -186,14 +200,14 @@ describe('importing a roster (P3.6-T4)', () => {
           created: [{
             fullName: 'Rina Wijaya',
             email: 'rina@k.test',
-            agentCode: 'PRU-1',
+            agentCode: '881',
             temporaryPassword: 'kfmp-3xqz-7bdn-r4vw',
           }],
         },
       },
     });
 
-    await upload(`${HEADER}\nRina Wijaya,rina@k.test,PRU-1,ab,\n`);
+    await upload(`${HEADER}\nRina Wijaya,rina@k.test,881,ab,\n`);
     await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Import 1' }));
 
@@ -223,7 +237,7 @@ describe('importing a roster (P3.6-T4)', () => {
       },
     });
 
-    await upload(`${HEADER}\nRina,rina@k.test,PRU-1,ab,\n`);
+    await upload(`${HEADER}\nRina,rina@k.test,881,ab,\n`);
     await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
     await userEvent.click(await screen.findByRole('button', { name: 'Import 1' }));
 
@@ -241,7 +255,7 @@ describe('importing a roster (P3.6-T4)', () => {
     };
 
     async function importOne() {
-      await upload(`${HEADER}\nRina,rina@k.test,PRU-1,aab,\n`);
+      await upload(`${HEADER}\nRina,rina@k.test,881,aab,\n`);
       await userEvent.click(screen.getByRole('button', { name: 'Check the file' }));
       await userEvent.click(await screen.findByRole('button', { name: 'Import 1' }));
     }
@@ -256,15 +270,19 @@ describe('importing a roster (P3.6-T4)', () => {
       expect(alert).not.toHaveTextContent('LEADER_LIMIT_REACHED');
     });
 
-    it('tells an Owner to import them as Agents, or ask AgencyBoost', async () => {
+    it('P18.8-T2 AC-9: tells an Owner to import them as Agents and promote them, which asks AgencyBoost', async () => {
       stubFetch({ ...TEMPLATE, ...LIMIT });
       renderWithSession(<RosterImport kpmId="kpm-1" backHref="/people/members" />, {
         me: makeMe({ permissions: ['kpm:import_roster'] }),
       });
       await importOne();
       const alert = await screen.findByRole('alert');
-      expect(alert).toHaveTextContent('Import them as Agents, or ask AgencyBoost to raise the limit.');
+      expect(alert).toHaveTextContent(
+        'Import them as Agents, then promote them on their page: past the limit, that asks AgencyBoost to approve it.',
+      );
       expect(within(alert).queryByRole('link')).not.toBeInTheDocument();
+      // A roster row cannot wait: no ask is offered (ADR-0157 §5).
+      expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
     });
   });
 

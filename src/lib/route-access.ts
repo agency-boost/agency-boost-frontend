@@ -21,6 +21,7 @@ import type { Me } from './session';
  * 2. **The gates** — every `permission` a page or a layout above it declares, and the one its group's
  *    shell applies when the layout names none; each must be in `me.permissions`.
  * 3. **Owner-only** — what the console's nav hides from an Admin (`ownerOnly` in `tenant-shell.tsx`).
+ * 4. **Core Leader** — KPM analytics, which a field member reads only as a Core Leader (`CORE_LEADER_ROUTES`).
  *
  * The tables are kept honest by `route-access.spec.ts`, which reads `src/app` and fails when a page, a
  * gate or an owner-only item here and the files disagree. Like every check in this repository, this one
@@ -39,11 +40,11 @@ const PAGES: Readonly<Record<RouteFamily, readonly string[]>> = {
   admin: [
     '/admin', '/admin/analytics', '/admin/audit', '/admin/billing', '/admin/companies',
     '/admin/companies/[companyId]/template', '/admin/impersonate/[userId]', '/admin/impersonation/[sessionId]',
-    '/admin/kpm-requests', '/admin/org-levels', '/admin/tenant-admins', '/admin/tenants', '/admin/tenants/new',
+    '/admin/kpm-requests', '/admin/leader-limit-requests', '/admin/org-levels', '/admin/tenant-admins', '/admin/tenants', '/admin/tenants/new',
     '/admin/tenants/[kpmId]', '/admin/tenants/[kpmId]/owner', '/admin/tenants/[kpmId]/roster',
   ],
   tenant: [
-    '/kpm/analytics', '/kpm/analytics/compliance', '/kpm/data-upload', '/kpm/overview',
+    '/kpm/data-upload', '/kpm/overview',
     '/kpm/settings/activation-checklist', '/kpm/settings/activity-types', '/kpm/settings/branch-info',
     '/kpm/settings/campaigns', '/kpm/settings/capability-mapping', '/kpm/settings/events',
     '/kpm/settings/lead-statuses', '/kpm/settings/products', '/kpm/settings/ratio-benchmarks',
@@ -66,8 +67,9 @@ const PAGES: Readonly<Record<RouteFamily, readonly string[]>> = {
   ],
   auth: ['/forgot-password', '/login', '/register', '/reset-password/[token]', '/verify-email/[token]'],
   shared: [
-    '/', '/choose-a-password', '/join', '/leader-meetings', '/leader-meetings/[meetingId]',
-    '/leader-meetings/shared/[token]', '/notifications', '/profile',
+    // `/kpm/analytics` since P18.8-T5 (ADR-0159 §3): the Owner's, an Admin's and a Core Leader's, each in their own shell.
+    '/', '/choose-a-password', '/join', '/kpm/analytics', '/kpm/analytics/compliance', '/leader-meetings',
+    '/leader-meetings/[meetingId]', '/leader-meetings/shared/[token]', '/notifications', '/profile',
   ],
 };
 
@@ -93,10 +95,11 @@ export const GATES: readonly RouteGate[] = [
   { route: '/admin/billing', on: 'page', permission: 'billing:read_prices' },
   { route: '/admin/companies/[companyId]/template', on: 'page', permission: 'company_template:read' },
   { route: '/admin/impersonation/[sessionId]', on: 'page', permission: 'impersonation:elevate_to_write' },
+  // ADR-0157: deciding a leader past an office's limit is AgencyBoost's alone.
+  { route: '/admin/leader-limit-requests', on: 'page', permission: 'leader_limit_request:decide' },
   { route: '/admin/org-levels', on: 'page', permission: 'org_level:crud' },
   { route: '/admin/tenants/[kpmId]/roster', on: 'page', permission: 'kpm:import_roster' },
   // The office console.
-  { route: '/kpm/analytics', on: 'layout', permission: 'kpm_analytics:read' },
   { route: '/kpm/data-upload', on: 'page', permission: 'data_upload:read' },
   { route: '/kpm/overview', on: 'page', permission: 'kpm_overview:read' },
   { route: '/kpm/settings/activation-checklist', on: 'page', permission: 'activation_settings:read' },
@@ -143,6 +146,7 @@ export const GATES: readonly RouteGate[] = [
   { route: '/user-management/add', on: 'page', permission: 'member:search_untagged_pool' },
   { route: '/user-management/pending', on: 'page', permission: 'leader_request:read_inbox' },
   // Outside every group.
+  { route: '/kpm/analytics', on: 'layout', permission: 'kpm_analytics:read' },
   { route: '/leader-meetings', on: 'page', permission: 'leader_meeting:read' },
   { route: '/leader-meetings/[meetingId]', on: 'page', permission: 'leader_meeting:read' },
   { route: '/leader-meetings/shared/[token]', on: 'page', permission: 'leader_meeting:read_shared_link' },
@@ -173,6 +177,23 @@ export const FAMILY_GATES: Readonly<Partial<Record<RouteFamily, string>>> = Obje
  * admins* alone.
  */
 export const OWNER_ONLY: readonly string[] = ['/people/admins'];
+
+/**
+ * **The pages a field member opens only as a Core Leader** (ADR-0159 §2, P18.8-T5): KPM analytics. The AB and AAB
+ * hold its grant, `kpm_analytics:read`, so that a Core Leader's request passes the guard, and the API answers a leader
+ * who is not one 404 — a fact of the membership the session carries (`membership.isCoreLeader`), not a permission. The
+ * layout draws *Not available to you* for them, and the login page does not send them here.
+ */
+export const CORE_LEADER_ROUTES: readonly string[] = ['/kpm/analytics', '/kpm/analytics/compliance'];
+
+/**
+ * **Whether the reader reads the office's analytics**: the Owner, an Admin, or a Core Leader — tagged, on a leader
+ * rung, as `GET /auth/me` resolves it. Nobody outside an office does, a Super Admin outside a support session included.
+ */
+export function readsOfficeAnalytics(me: Me): boolean {
+  const membership = me.membership;
+  return Boolean(membership && (membership.isKpmOwner || membership.isKpmAdmin || membership.isCoreLeader));
+}
 
 const isDynamic = (segment: string) => /^\[[^\]]+\]$/.test(segment);
 const segmentsOf = (route: string) => (route === '/' ? [] : route.slice(1).split('/'));
@@ -272,5 +293,6 @@ export function canOpen(path: string, me: Me | null): boolean {
   if (route === null) return false;
   if (!familyAdmits(ROUTES[route], pathnameOf(path)!, me)) return false;
   if (OWNER_ONLY.includes(route) && !me.membership?.isKpmOwner) return false;
+  if (CORE_LEADER_ROUTES.includes(route) && !readsOfficeAnalytics(me)) return false;
   return gatesFor(route).every((permission) => me.permissions.includes(permission));
 }

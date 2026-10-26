@@ -219,11 +219,14 @@ export function RatiosPanel({
  * ── Activity ────────────────────────────────────────────────────────────────────────────────────
  */
 
-/** The prototype's three chip labels (`Overall.html:4223-4238`), verbatim — the Summary's. */
+/**
+ * The three chip labels, in the cascade's words (ADR-0160 §4; P18.9-T2's cleanup, 2026-10-26) — the Summary's and
+ * `/goals`'. The prototype reads *Leads contacted*, *Appointments* and *Closings* (`Overall.html:4223-4238`).
+ */
 export const TARGET_LABEL: Record<SubPeriodTarget['key'], string> = {
-  leads: 'Leads contacted',
-  appointments: 'Appointments',
-  closings: 'Closings',
+  leads: 'Set appointment',
+  appointments: 'Sales meeting',
+  closings: 'Submission polis',
 };
 
 export function WeekChip({ target }: { target: SubPeriodTarget }) {

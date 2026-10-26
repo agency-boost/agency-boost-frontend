@@ -159,12 +159,18 @@ export interface ChasedRef {
   title: string;
 }
 
-/** A total's goal: sums of the figures held; `missing` counts the rows holding no actual. */
+/**
+ * A total's goal, **paired** (ADR-0165 §1, P18.8-T15 AC-6): the targets and the production of the rows whose
+ * production is held — every target when nobody's is, beside *Not uploaded yet*. `missing` counts the rows left
+ * out, which the tooltip names; the shortfall and the excess are the server's, from the same pairs.
+ */
 export interface UnitTotalGoal {
   targetMinor: number | null;
   actualMinor: number | null;
   attainmentPct: number | null;
   missing: number;
+  gapMinor: number | null;
+  overMinor: number | null;
 }
 
 export interface PotentialActive {
@@ -195,11 +201,8 @@ export interface TeamTile {
   underUnits: number;
 }
 
-export interface GroupProductionTile {
-  targetMinor: number | null;
-  actualMinor: number | null;
-  attainmentPct: number | null;
-  missing: number;
+/** *Direct Group production*: every row's goal, paired as a unit's total is (ADR-0165 §1). */
+export interface GroupProductionTile extends UnitTotalGoal {
   period: 'month' | 'year';
 }
 
@@ -355,11 +358,14 @@ export const PROTOTYPE_COPY = {
   saveAll: 'Save all',
 } as const;
 
-/** The activity breakdown's three, verbatim (`:7334-7336`) — the Summary's chips' words. */
+/**
+ * The activity breakdown's three, in the cascade's words (ADR-0160 §4; P18.9-T2's cleanup, 2026-10-26) — the
+ * Summary's chips'. The prototype reads *Leads contacted*, *Appointments* and *Closings* (`:7334-7336`).
+ */
 export const ACTIVITY_LABEL = {
-  leads: 'Leads contacted',
-  appointments: 'Appointments',
-  closings: 'Closings',
+  leads: 'Set appointment',
+  appointments: 'Sales meeting',
+  closings: 'Submission polis',
 } as const;
 
 /** The pill's tooltip per status (`:7094-7098`), and ADR-0080's state, which the prototype never draws. */
@@ -388,6 +394,17 @@ export const OWN_COPY = {
   targetMadeNote: 'The year’s target was made before this month began — this month needs nothing more.',
   thisMonth: 'this month',
   proRated: 'pro-rated',
+  /*
+   * **The roster's activity figure is *goal activities*, not *touches*** (ADR-0165 §2, P18.8-T15 AC-5; the client's
+   * UI review, UI-001). It counts only the types a goal's targets are built from — the office's binding for the three
+   * cascade stages (ADR-0163) — while the Activity Dashboard's *Total touches* and the Summary count every item, so
+   * one word stood for two counts. The *Activity* header's tooltip names the three.
+   */
+  goalActivity: 'goal activity',
+  goalActivities: 'goal activities',
+  activityInfo: 'What counts as a goal activity?',
+  activityRule: `The activities a goal is built from: ${ACTIVITY_LABEL.leads}, ${ACTIVITY_LABEL.appointments}, `
+    + `${ACTIVITY_LABEL.closings}. Not every activity logged.`,
   ratiosEmpty: 'There are no ratios for this role yet.',
   loadingRatios: 'Working out the ratios…',
   emptyTitle: 'Nobody is in your unit yet.',
@@ -480,15 +497,17 @@ export const totalRecruitLine = (c: LeadsCounts) =>
     : null);
 
 /**
- * *"{logged} / {target} touches"* (`:7404-7405`), its target labelled *pro-rated* under *Last 7 days*
- * (metrics §B.3); with no target the logged count alone, and no bar — an empty track reads as zero.
+ * *"{logged} / {target} goal activities"* (`:7404-7405`, whose word was *touches* until ADR-0165 §2), its target
+ * labelled *pro-rated* under *Last 7 days* (metrics §B.3); with no target the logged count alone, and no bar — an
+ * empty track reads as zero. Singular at one, by the figure the word follows.
  */
 export function touchesWords(touches: CountAgainst, period: UnitPeriod): { logged: number; rest: string; pct: number | null } {
-  if (touches.target === null) return { logged: touches.logged, rest: 'touches', pct: null };
+  const word = (n: number) => (n === 1 ? OWN_COPY.goalActivity : OWN_COPY.goalActivities);
+  if (touches.target === null) return { logged: touches.logged, rest: word(touches.logged), pct: null };
   const pct = touches.target > 0 ? Math.min(100, Math.round((touches.logged / touches.target) * 100)) : 100;
   return {
     logged: touches.logged,
-    rest: `/ ${touches.target}${period === '7d' ? ` ${OWN_COPY.proRated}` : ''} touches`,
+    rest: `/ ${touches.target}${period === '7d' ? ` ${OWN_COPY.proRated}` : ''} ${word(touches.target)}`,
     pct,
   };
 }

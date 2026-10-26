@@ -14,14 +14,17 @@ const AGENT = makeMe({ permissions: ['goal:read', 'goal:update'] });
 
 const PERIOD = String(new Date().getFullYear());
 
-/** The prototype's defaults over five months: 6 policies, 20 appointments, 67 leads. */
+/**
+ * The prototype's defaults over five months: 6 policies, 20 appointments, 67 leads — policies per week to one
+ * decimal since ADR-0160 §5, as the server answers it.
+ */
 const projection = (over: Record<string, unknown> = {}) => ({
   annualApeTargetMinor: 500_000_000_00,
   apeAchievedMinor: 0,
   remainingApeMinor: 500_000_000_00,
   monthlyApeTargetMinor: 100_000_000_00,
   policiesPerMonth: 6,
-  policiesPerWeek: 2,
+  policiesPerWeek: 1.4,
   appointmentsPerMonth: 20,
   appointmentsPerWeek: 5,
   leadsPerMonth: 67,
@@ -55,6 +58,7 @@ const goal = (over: Record<string, unknown> = {}) => ({
     appointmentsCode: 'SELL_PRESENTATION',
     closingsCode: 'SELL_SUBMISSION',
   },
+  cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
   measured: { from: '2026-08-15', to: '2026-09-13', days: 30, leadToAppointmentRate: 0.25, closingRate: null },
   monthsLeftIsOverride: false,
   savedAt: '2026-09-13T04:00:00.000Z',
@@ -73,7 +77,7 @@ const category = (code: string, label: string, displayOrder: number, types: unkn
 /** The seed's numbering: the cascade's three types are the prototype's #3, #4 and #6 (`Overall.html:3021`, `:3038`, `:3055`). */
 const SEED_ACTIVITY = [
   category('LEADS_GENERATION', 'Leads Generation', 1, [
-    type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Menghubungi prospek yang sudah ada', 3),
+    type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Set Appointment', 3),
   ]),
   category('SELLING', 'Selling', 2, [
     type('SELL_PRESENTATION', 'SELLING', 'Melakukan presentasi penjualan untuk calon atau existing nasabah', 4),
@@ -114,9 +118,31 @@ describe('Goal Settings (P8-T3)', () => {
       // copy of the formula, so there is nothing here that could disagree with the server.
       render({ '/goals': { body: goal() } });
 
-      expect(await screen.findByText('67')).toBeInTheDocument();
-      expect(screen.getByText('20')).toBeInTheDocument();
+      expect(await screen.findByText('67/month')).toBeInTheDocument();
+      expect(screen.getByText('20/month')).toBeInTheDocument();
       expect(screen.getByText('≈ 16/week')).toBeInTheDocument();
+    });
+
+    it('P18.8-T10 AC-2 writes policies per week to one decimal, on step 3 and step 5 alike', async () => {
+      render({ '/goals': { body: goal() } });
+
+      // The server's 1.4, with a decimal point — not *≈ 2*.
+      const tile = (await screen.findByText('Policies per week')).closest('[data-variant]')!;
+      expect(tile).toHaveTextContent('≈ 1.4');
+      const hero = document.querySelector('[data-hero="true"]')!;
+      expect(hero).toHaveTextContent('6/month');
+      expect(hero).toHaveTextContent('≈ 1.4/week');
+      // The two counts to do stay whole.
+      expect(screen.getByText('≈ 5/week')).toBeInTheDocument();
+    });
+
+    it('P18.8-T10 AC-2 writes a whole policies-per-week figure whole', async () => {
+      render({ '/goals': { body: goal({ projected: projection({ policiesPerMonth: 13, policiesPerWeek: 3 }) }) } });
+
+      const tile = (await screen.findByText('Policies per week')).closest('[data-variant]')!;
+      expect(tile).toHaveTextContent('≈ 3');
+      expect(tile).not.toHaveTextContent('3.0');
+      expect(screen.getByText('≈ 3/week')).toBeInTheDocument();
     });
 
     it('AC-2b: shows the recomputed figure, not the stored snapshot', async () => {
@@ -140,8 +166,8 @@ describe('Goal Settings (P8-T3)', () => {
         },
       });
 
-      expect(await screen.findByText('157')).toBeInTheDocument();
-      expect(screen.queryByText('67')).not.toBeInTheDocument();
+      expect(await screen.findByText('157/month')).toBeInTheDocument();
+      expect(screen.queryByText('67/month')).not.toBeInTheDocument();
     });
 
     it('sends the six inputs and renders what comes back', async () => {
@@ -161,8 +187,8 @@ describe('Goal Settings (P8-T3)', () => {
         const sent = calls.filter((c) => c.init.method === 'PUT').at(-1);
         expect(JSON.parse(String(sent?.init.body))).toMatchObject({ caseSizeMinor: 9_000_000_00 });
       });
-      // The Closings column and the policies-per-month figure both read it back.
-      expect((await screen.findAllByText('11')).length).toBeGreaterThan(0);
+      // The Submission polis column and the policies-per-month figure both read it back.
+      expect(await screen.findByText('11/month')).toBeInTheDocument();
     });
   });
 
@@ -212,7 +238,7 @@ describe('Goal Settings (P8-T3)', () => {
 
       await type(/Months left this year/, '2.5');
       await type('APE already produced this year', '120000000');
-      await type('Leads to Appointment', '25');
+      await type('Appointment to Sales meeting', '25');
       await type('Closing rate', '40');
       await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
 
@@ -269,7 +295,7 @@ describe('Goal Settings (P8-T3)', () => {
       });
 
       expect(await screen.findByText(/passed your annual target/)).toBeInTheDocument();
-      expect(screen.queryByText('Leads contacted')).not.toBeInTheDocument();
+      expect(screen.queryByText('Set appointment')).not.toBeInTheDocument();
     });
 
     it('says which numbers it cannot work from, rather than showing nothing', async () => {
@@ -507,15 +533,33 @@ describe('Goal Settings (P8-T3)', () => {
     it('draws the cascade as a cascade — chips, hero and the rate between steps', async () => {
       render({ '/goals': { body: goal() } });
 
-      await screen.findByText('Leads contacted');
+      await screen.findByText('Set appointment');
       // Each column names the activity it counts against, as the log screen numbers it (P10.1-T6 AC-11).
       expect(await screen.findByText('Activity #3')).toBeInTheDocument();
       expect(screen.getByText('Activity #4')).toBeInTheDocument();
       expect(screen.getByText('Activity #6')).toBeInTheDocument();
-      // The closings column is the hero.
-      expect(document.querySelector('[data-hero="true"]')).toHaveTextContent('Closings');
+      // The submissions column is the hero.
+      expect(document.querySelector('[data-hero="true"]')).toHaveTextContent('Submission polis');
       // And the arrow's percentage is spelled out, because the glyph is decorative.
-      expect(screen.getByText('30% of leads contacted become appointments')).toBeInTheDocument();
+      expect(screen.getByText('30% from set appointment to sales meeting')).toBeInTheDocument();
+    });
+
+    it('P18.8-T10 AC-3 names the cascade in the client’s words, each month above its week', async () => {
+      render({ '/goals': { body: goal() } });
+
+      await screen.findByText('Set appointment');
+      expect(screen.getByText('Sales meeting')).toBeInTheDocument();
+      expect(screen.getByLabelText('Appointment to Sales meeting')).toHaveValue(30);
+      for (const old of ['Leads contacted', 'Appointments', 'Closings', 'Leads to Appointment']) {
+        expect(screen.queryByText(old)).not.toBeInTheDocument();
+      }
+      // *n/month* above *≈ n/week*, in each of the three panels.
+      const panels = [...document.querySelectorAll('[class*="text-center"]')].filter((p) => p.textContent?.includes('/month'));
+      expect(panels.map((p) => p.textContent)).toEqual([
+        expect.stringMatching(/Set appointment.*67\/month≈ 16\/week$/),
+        expect.stringMatching(/Sales meeting.*20\/month≈ 5\/week$/),
+        expect.stringMatching(/Submission polis.*6\/month≈ 1\.4\/week$/),
+      ]);
     });
 
     it('inverts the commitment, and paints its figures amber', async () => {
@@ -586,7 +630,7 @@ describe('Goal Settings (P8-T3)', () => {
       // `30 %` and `3.2 months` had the number hard against the left border: the affix supplies the
       // gap on its own side only.
       render({ '/goals': { body: goal() } });
-      const pct = await screen.findByLabelText('Leads to Appointment');
+      const pct = await screen.findByLabelText('Appointment to Sales meeting');
       expect(pct.className).toContain('pl-3');
       // And the side that does have one is not padded twice.
       expect(screen.getByLabelText('Annual APE target').className).not.toContain('pl-3');
@@ -613,7 +657,7 @@ describe('Goal Settings (P8-T3)', () => {
     it('holds the plan to a readable measure', async () => {
       render({ '/goals': { body: goal() } });
 
-      await screen.findByText('Leads contacted');
+      await screen.findByText('Set appointment');
       // 820px, as `.content` has it — five cards across a 1,600px window put a label a hand's
       // width from its input.
       expect(document.querySelector('[class*="max-w-"]')).toBeInTheDocument();
@@ -758,14 +802,26 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
 
   });
 
-  it('AC-9: the measured rates leave the screen, and the prototype’s tip stays', async () => {
+  it('AC-9: the measured rates leave the screen', async () => {
     render({ '/goals': { body: goal() } });
 
-    expect(await screen.findByLabelText('Leads to Appointment'))
-      .toHaveAccessibleDescription('% of contacted leads that become an appointment');
-    expect(screen.getByLabelText('Closing rate')).toHaveAccessibleDescription('% of appointments that become a closing');
+    expect(await screen.findByLabelText('Appointment to Sales meeting')).toBeInTheDocument();
     expect(screen.queryByText(/logged rate/)).not.toBeInTheDocument();
-    expect(screen.getByText('Use your real conversion ratios for accuracy.')).toBeInTheDocument();
+  });
+
+  it('P18.8-T10 AC-4 draws no 💡 tip, and no helper line under the two percentages', async () => {
+    // The client's request of 2026-10-26 (ADR-0160 §4): both tips and both `.field-sub` lines went.
+    render({ '/goals': { body: goal() } });
+
+    expect(await screen.findByLabelText('Appointment to Sales meeting')).not.toHaveAccessibleDescription();
+    expect(screen.getByLabelText('Closing rate')).not.toHaveAccessibleDescription();
+    expect(screen.queryByText('% of contacted leads that become an appointment')).not.toBeInTheDocument();
+    expect(screen.queryByText('% of appointments that become a closing')).not.toBeInTheDocument();
+    expect(screen.queryByText('Use your real conversion ratios for accuracy.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/APE per closing/)).not.toBeInTheDocument();
+    expect(screen.queryByText('💡')).not.toBeInTheDocument();
+    // The 🔗 footnote is no tip: it says where the three columns count.
+    expect(screen.getByText('Maps to activities #3, #4, #6 in Activity Management.')).toBeInTheDocument();
   });
 
   it('AC-10: no history card, and nothing asks for the retired history', async () => {
@@ -796,21 +852,21 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
           type('SELL_PRESENTATION', 'SELLING', 'Melakukan presentasi penjualan untuk calon atau existing nasabah', 2),
         ]),
         category('LEADS_GENERATION', 'Leads Generation', 2, [
-          type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Menghubungi prospek yang sudah ada', 7),
+          type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Set Appointment', 7),
         ]),
       ];
       render({ '/goals': { body: goal() }, ...config(reordered) });
 
       expect(await screen.findByText('Maps to activities #7, #2, #1 in Activity Management.')).toBeInTheDocument();
       const hero = document.querySelector('[data-hero="true"]')!;
-      expect(hero).toHaveTextContent('Closings');
+      expect(hero).toHaveTextContent('Submission polis');
       expect(hero).toHaveTextContent('Activity #1');
     });
 
     it('AC-11: a type the configuration holds no live row for gets no chip and no tip — never a code', async () => {
       const archived = [
         category('LEADS_GENERATION', 'Leads Generation', 1, [
-          type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Menghubungi prospek yang sudah ada', 3),
+          type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Set Appointment', 3),
         ]),
         category('SELLING', 'Selling', 2, [
           type('SELL_PRESENTATION', 'SELLING', 'Melakukan presentasi penjualan', 4, { status: 'archived' }),
@@ -826,10 +882,32 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
       expect(screen.queryByText('SELL_PRESENTATION')).not.toBeInTheDocument();
     });
 
+    it('P18.9-T2 AC-2: a stage bound to a replaced activity and its replacement numbers both, from the API’s binding', async () => {
+      const replaced = [
+        category('LEADS_GENERATION', 'Leads Generation', 1, [
+          type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Set Appointment', 3),
+        ]),
+        category('SELLING', 'Selling', 2, [
+          type('SELL_PRESENTATION', 'SELLING', 'Presentasi', 4),
+          type('SELL_SUBMISSION', 'SELLING', 'Submission polis', 6),
+          type('SALES_MEETING', 'SELLING', 'Sales meeting baru', 13),
+        ]),
+      ];
+      const rebound = goal({
+        cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION', 'SALES_MEETING'], closings: ['SELL_SUBMISSION'] },
+      });
+      render({ '/goals': { body: rebound }, ...config(replaced) });
+
+      expect(await screen.findByText('Activity #4, #13')).toBeInTheDocument();
+      expect(screen.getByText('Maps to activities #3, #4, #13, #6 in Activity Management.')).toBeInTheDocument();
+      // The stored record is not what the chips read: it still names the old code alone.
+      expect(rebound.cascadeMapping).toMatchObject({ appointmentsCode: 'SELL_PRESENTATION' });
+    });
+
     it('AC-11: an archived section numbers none of its types', async () => {
       const retired = [
         category('LEADS_GENERATION', 'Leads Generation', 1, [
-          type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Menghubungi prospek yang sudah ada', 3),
+          type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Set Appointment', 3),
         ]),
         { ...category('SELLING', 'Selling', 2, [type('SELL_PRESENTATION', 'SELLING', 'Presentasi', 4), type('SELL_SUBMISSION', 'SELLING', 'Submission polis', 6)]), status: 'archived' },
       ];

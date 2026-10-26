@@ -6,6 +6,8 @@ import { type NavIconName } from '@/components/ui/nav-icon';
 import { RequireSession } from '@/components/require-session';
 import { useLadder } from '@/components/ui/role-badge';
 import { viewSwitchFor } from '@/lib/landing';
+import { displayName } from '@/lib/display-name';
+import { profileLine } from '@/lib/profile-line';
 import { useSession } from '@/lib/session';
 import { useUnreadCount } from '@/lib/use-unread-count';
 import { useSignOut } from '@/lib/use-sign-out';
@@ -55,8 +57,8 @@ const SECTIONS: readonly {
   },
   {
     label: 'Leader Meetings',
-    // Live since P18.1-T2 (`KPM_Owner.html:887-890`, no pill). The field shell gains no item: a Core Leader
-    // reaches the forum by its address or a shared link (D-coeditors).
+    // Live since P18.1-T2 (`KPM_Owner.html:887-890`, no pill). A Core Leader reaches it from the field shell's own
+    // *Core leader* group since P18.8-T5 (ADR-0159 §3), and by a shared link as anybody does.
     items: [{ label: 'Strategic Leader Forum', href: '/leader-meetings', icon: 'megaphone' }],
     divider: true,
   },
@@ -190,8 +192,9 @@ function TenantChrome({
     <AppShell
       sections={sections}
       user={{
-        name: me?.user.preferredName ?? me?.user.fullName ?? 'Signed in',
-        role: capacity,
+        name: (me && displayName(me.user)) || 'Signed in',
+        // The profile line (ADR-0159 §5, P18.8-T6 AC-2): *KPM Owner* or *KPM Admin* · Core Leader · the groups · the office.
+        role: profileLine(capacity, membership),
         initials: me?.user.initials ?? '??',
         email: me?.user.email,
       }}

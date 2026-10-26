@@ -69,6 +69,8 @@ const PATHS: Record<string, React.ReactNode> = {
   user: <><circle cx="12" cy="8" r="3.6" /><path d="M4.5 20a7.5 7.5 0 0 1 15 0" /></>,
   /** A conversation. */
   chat: <><path d="M20 15a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2z" /><path d="M8 9h8M8 12.5h5" /></>,
+  /** A chat on WhatsApp: a round bubble with a handset in it — the leads table's link (P18.8-T7). */
+  whatsapp: <><path d="M3.5 20.5l1.4-4.1A8.6 8.6 0 1 1 8.3 19.3z" /><path d="M9.2 8.6c-.3 2.6 2.6 5.6 5.4 5.5l.9-1.5-1.8-1-.8.8c-.9-.4-1.7-1.2-2.1-2.1l.8-.8-1-1.8z" /></>,
   /** Working out where to go. */
   compass: <><circle cx="12" cy="12" r="9" /><path d="m15.5 8.5-2 5-5 2 2-5z" /></>,
   /** A shelf of products. */

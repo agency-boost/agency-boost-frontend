@@ -1,12 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { LeaderLimitNotice, isLeaderLimit } from '@/components/leader-limit-notice';
+import { LeaderLimitNotice, LeaderLimitWaiting, isLeaderLimit } from '@/components/leader-limit-notice';
 import { Page } from '@/components/page';
 import { UserManagementTabs } from '@/components/user-management-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
-import { RoleBadge } from '@/components/ui/role-badge';
+import { RoleBadge, rungLabel, useLadder } from '@/components/ui/role-badge';
+import {
+  askLeaderLimitApproval, cancelLeaderLimitRequest, pendingFor, readLeaderLimitRequests, requestedChange,
+  type LeaderLimitRequestRow,
+} from '@/lib/leader-limit-requests';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
@@ -53,17 +57,54 @@ export default function PendingPage() {
   const [reason, setReason] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const ladder = useLadder();
+  /**
+   * ADR-0157: an approval the leader limit refused may be asked of AgencyBoost — `refused` is whose — and the
+   * requests already open say which rows wait for it.
+   */
+  const [refused, setRefused] = useState<string | null>(null);
+  const [asks, setAsks] = useState<LeaderLimitRequestRow[] | null>(null);
+  const mayAsk = me?.permissions.includes('leader_limit_request:read') ?? false;
 
   const load = useCallback(async () => {
     try {
       const [inbox, choices] = await Promise.all([readInbox(), readRoutingChoices()]);
       setRequests(inbox);
       setRouting(choices);
+      if (mayAsk) setAsks(await readLeaderLimitRequests().catch(() => []));
     } catch (err) {
       setError(toDisplayError(err));
       setRequests([]);
     }
-  }, []);
+  }, [mayAsk]);
+
+  /** ADR-0157 §1: letting this pending leader in, asked of AgencyBoost. */
+  async function askApproval() {
+    if (!refused) return;
+    setBusy('ask');
+    try {
+      await askLeaderLimitApproval(refused, { action: 'activate' });
+      setRefused(null);
+      setError(null);
+      setAsks(await readLeaderLimitRequests().catch(() => []));
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function cancelAsk(requestId: string) {
+    setBusy('ask');
+    setError(null);
+    try {
+      setAsks(await cancelLeaderLimitRequest(requestId));
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   useEffect(() => {
     void load();
@@ -72,6 +113,7 @@ export default function PendingPage() {
   async function decide(request: PendingRequest, action: 'approve' | 'decline') {
     setBusy(request.requestId);
     setError(null);
+    setRefused(null);
     try {
       const next =
         action === 'approve'
@@ -83,7 +125,9 @@ export default function PendingPage() {
       setDeclining(null);
       setReason('');
     } catch (err) {
-      setError(toDisplayError(err));
+      const shown = toDisplayError(err);
+      setError(shown);
+      if (action === 'approve' && isLeaderLimit(shown)) setRefused(request.membershipId);
       // A conflict means somebody else got there first; reload rather than leaving a row
       // that no longer exists on screen.
       await load();
@@ -101,7 +145,15 @@ export default function PendingPage() {
       <UserManagementTabs />
       {/* An approval at the leader limit (P13.2 exit review): in the limit's words, never the code. */}
       {error && (isLeaderLimit(error)
-        ? <LeaderLimitNotice error={error} audience="office" action="role" />
+        ? (
+          <LeaderLimitNotice
+            error={error}
+            audience="office"
+            action="role"
+            asking={busy === 'ask'}
+            onAsk={refused ? () => void askApproval() : undefined}
+          />
+        )
         : <ErrorBanner {...error} />)}
 
       <Card>
@@ -142,7 +194,16 @@ export default function PendingPage() {
                 </span>
               </div>
 
-              {declining === request.requestId ? (
+              {pendingFor(asks, request.membershipId) ? (
+                // ADR-0157: letting them in waits for AgencyBoost; nothing about them changes meanwhile.
+                <div className="mt-3">
+                  <LeaderLimitWaiting
+                    what={requestedChange(pendingFor(asks, request.membershipId)!, (code) => rungLabel(code, ladder))}
+                    cancelling={busy === 'ask'}
+                    onCancel={() => void cancelAsk(pendingFor(asks, request.membershipId)!.requestId)}
+                  />
+                </div>
+              ) : declining === request.requestId ? (
                 <div className="mt-3">
                   <Field
                     label="Why?"

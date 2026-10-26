@@ -233,6 +233,10 @@ function briefQuery(brief: AttackPlanBrief, product?: string): string {
   return params.toString();
 }
 
+/** The two Sales tools screens' own addresses: the sidebar's one entry and the tabs over both (P18.8-T12). */
+export const SALES_ATTACK_PLAN_HREF = '/attack-plan';
+export const PRODUCT_CATALOG_HREF = '/product-catalog';
+
 /** `/attack-plan?need=…&age=…&budget=…`, with `&product=` for an alternative. */
 export const planHref = (brief: AttackPlanBrief, product?: string) => `/attack-plan?${briefQuery(brief, product)}`;
 

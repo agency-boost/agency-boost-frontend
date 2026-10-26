@@ -219,7 +219,7 @@ describe('a past session’s archive (P11-T10)', () => {
       ]);
 
       const week = await card(/^Activity/);
-      expect(week).toHaveTextContent('Leads contacted14 / 16 pro-rated');
+      expect(week).toHaveTextContent('Set appointment14 / 16 pro-rated');
       expect(within(week).getByRole('region', { name: 'Development' })).toHaveTextContent('Development2Training attended2');
 
       // A goal, a lead and a day changed after finalize are stubbed above; none of them is read.
@@ -249,9 +249,9 @@ describe('a past session’s archive (P11-T10)', () => {
       const dialog = screen.getByRole('dialog', { name: 'Rina Wijaya — Activity Dashboard' });
       expect(within(dialog).getAllByRole('row').map((r) => [...r.children].map((c) => c.textContent))).toEqual([
         ['Category', 'Logged', 'Target (pro-rated)'],
-        ['Leads contacted', '14', '16'],
-        ['Appointments', '4', '5'],
-        ['Closings', '1', '1'],
+        ['Set appointment', '14', '16'],
+        ['Sales meeting', '4', '5'],
+        ['Submission polis', '1', '1'],
         ['Training attended', '2', '–'],
       ]);
     });

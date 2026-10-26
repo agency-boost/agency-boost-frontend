@@ -1,9 +1,12 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, type ReactNode } from 'react';
 import { AdminShell } from '@/components/admin-shell';
 import { AgentShell } from '@/components/agent-shell';
 import { TenantShell } from '@/components/tenant-shell';
+import { PageSkeleton } from '@/components/ui/skeleton';
+import { signInPathFrom } from '@/lib/return-path';
 import { useSession } from '@/lib/session';
 
 /**
@@ -31,6 +34,7 @@ export function RoleShell({
   subtitle,
   actions,
   permission,
+  allowSignedOut = false,
   children,
 }: {
   title: string;
@@ -38,13 +42,35 @@ export function RoleShell({
   actions?: ReactNode;
   /** What this route needs — not what the chrome's own application needs. */
   permission?: string;
+  /**
+   * **The page renders for nobody signed in** — `/join` alone, opened from an emailed link by somebody who may
+   * have no account yet, and which says *Sign in first* itself. Every other route sends a signed-out reader to
+   * sign in, as `RequireSession` does.
+   */
+  allowSignedOut?: boolean;
   children: ReactNode;
 }) {
-  const { me } = useSession();
+  const { me, loading, signedOut } = useSession();
+  const router = useRouter();
+  const toSignIn = !loading && !me && !allowSignedOut;
 
-  // Nobody signed in. No chrome to wear and no session to read a role from — the page
-  // itself decides what to show, and the shells would only redirect to /login anyway.
-  if (!me) return <>{children}</>;
+  /*
+   * **Signed out, sent to sign in and back** (P18.8-T15 AC-2, the client's UI review, UI-006). This rendered the
+   * page bare for anybody not signed in, so an expired session on `/profile` drew an empty form, no header, a
+   * pronoun of *they / them* and the raw `AUTH_TOKEN_INVALID` of the read that failed — while every page behind a
+   * group layout went to `/login?next=…`. The same redirect as `RequireSession`, by the same `signInPathFrom`:
+   * `next` carries the page, except after the reader signed out themselves.
+   */
+  useEffect(() => {
+    if (toSignIn) router.replace(signInPathFrom(window.location, { signedOut }));
+  }, [toSignIn, signedOut, router]);
+
+  if (!me) {
+    // The one page that opts in decides for itself, loading or not, as it always has.
+    if (allowSignedOut) return <>{children}</>;
+    // While the session is read, and on the way to sign in: the shape of a page, never a page of failed reads.
+    return <PageSkeleton />;
+  }
 
   // Platform first: a Super Admin belongs to no office, so nothing below applies to them.
   if (me.user.platformRole === 'super_admin') {

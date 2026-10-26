@@ -557,8 +557,11 @@ describe('the quote tool (P13.2-T2)', () => {
       const nav = screen.getByRole('navigation', { name: 'Main' });
       const names = within(nav).getAllByRole('link').map((a) => a.textContent?.trim());
       const kpms = names.indexOf('All KPMs');
-      expect(names.slice(kpms, kpms + 3)).toEqual(['All KPMs', 'Pending KPM requests', 'Billing & subscription']);
-      expect(names[kpms + 3]).toBe('KPM Owners & Admins');
+      // P18.8-T2 (ADR-0157): the second queue of the group, *Leaders past the limit*, sits beside the first.
+      expect(names.slice(kpms, kpms + 4)).toEqual([
+        'All KPMs', 'Pending KPM requests', 'Leaders past the limit', 'Billing & subscription',
+      ]);
+      expect(names[kpms + 4]).toBe('KPM Owners & Admins');
       const link = within(nav).getByRole('link', { name: 'Billing & subscription' });
       expect(link).toHaveAttribute('href', '/admin/billing');
       expect(link).toHaveAttribute('aria-current', 'page');

@@ -1,12 +1,13 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import { makeMe, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
 import { detail, NONE_CHASED, RINA_CHASING, serverError, SPRINT } from '@test/campaigns-fixtures';
 import PersonalSummaryPage from './page';
 
+const nav = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: nav.replace }),
   usePathname: () => '/summary',
 }));
 
@@ -19,6 +20,7 @@ const figures = (over: Record<string, unknown> = {}) => ({
 });
 const summary = (over: Record<string, unknown> = {}) => ({
   year: '2026', month: '2026-09', today: '2026-09-14',
+  period: { firstMonth: '2026-01', thisMonth: '2026-09', currentMonth: true, currentYear: true },
   goal: { set: true, savedAt: '2026-09-01T02:00:00.000Z' }, caseSizeMinor: 18 * M,
   monthly: { ...figures(), source: { provenance: 'imported', month: '2026-09' } },
   yearly: {
@@ -122,7 +124,9 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
     expect(goal).toHaveTextContent('of Rp 75.000.000 target40%');
     expect(within(goal).getByText('This month')).toBeInTheDocument();
     expect(within(goal).getByRole('progressbar', { name: 'This month’s target' })).toHaveAttribute('aria-valuenow', '40');
-    expect(screen.getByText('September 2026')).toBeInTheDocument();
+    // The month the figures are for: the select names it on the screen (P18.8-T11), the line on paper.
+    expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('September 2026');
+    expect(screen.getByText('September 2026', { selector: 'p' })).toHaveClass('hidden', 'print:block');
   });
 
   it('AC-1: switches to the year — the annual target against the year to date', async () => {
@@ -284,11 +288,12 @@ describe('the Personal Summary — activity targets, chips and the pulse (P10-T5
     const targets = await card('Your sales activity targets');
 
     expect(within(targets).getByText('This month')).toBeInTheDocument();
-    expect(targets).toHaveTextContent('Leads contacted20 / 57');
-    expect(targets).toHaveTextContent('Appointments6 / 17');
-    expect(targets).toHaveTextContent('Closings2 / 5');
-    expect(within(targets).getByRole('progressbar', { name: 'Closings against target' })).toHaveAttribute('aria-valuenow', '40');
-    expect(within(targets).getByRole('progressbar', { name: 'Leads contacted against target' })).toHaveAttribute('aria-valuetext', '20 of 57');
+    // The cascade's words, as `/goals` names its stages (ADR-0160 §4).
+    expect(targets).toHaveTextContent('Set appointment20 / 57');
+    expect(targets).toHaveTextContent('Sales meeting6 / 17');
+    expect(targets).toHaveTextContent('Submission polis2 / 5');
+    expect(within(targets).getByRole('progressbar', { name: 'Submission polis against target' })).toHaveAttribute('aria-valuenow', '40');
+    expect(within(targets).getByRole('progressbar', { name: 'Set appointment against target' })).toHaveAttribute('aria-valuetext', '20 of 57');
     expect(within(targets).getByRole('link', { name: 'Goal Settings' })).toHaveAttribute('href', '/goals');
     expect(targets).toHaveTextContent('42 total activities logged this month across all categories.');
   });
@@ -301,7 +306,7 @@ describe('the Personal Summary — activity targets, chips and the pulse (P10-T5
 
     const targets = await card('Your sales activity targets');
     expect(within(targets).getByText('This year')).toBeInTheDocument();
-    expect(targets).toHaveTextContent('Closings11 / 28');
+    expect(targets).toHaveTextContent('Submission polis11 / 28');
     expect(targets).toHaveTextContent('310 total activities logged this year across all categories.');
   });
 
@@ -312,7 +317,7 @@ describe('the Personal Summary — activity targets, chips and the pulse (P10-T5
     show(summary({ goal: { set: false, savedAt: null }, pace: null, activity: { monthly: none, yearly: none } }));
     const targets = await card('Your sales activity targets');
 
-    expect(targets).toHaveTextContent('Leads contacted5No target yet');
+    expect(targets).toHaveTextContent('Set appointment5No target yet');
     expect(within(targets).queryByRole('progressbar')).not.toBeInTheDocument();
     expect(targets).not.toHaveTextContent('NaN');
     expect(targets).not.toHaveTextContent('/');
@@ -325,7 +330,7 @@ describe('the Personal Summary — activity targets, chips and the pulse (P10-T5
     show(summary({ activity: { monthly: made, yearly: activity(YEAR) } }));
     const targets = await card('Your sales activity targets');
 
-    expect(targets).toHaveTextContent('Closings2Nothing more needed this month');
+    expect(targets).toHaveTextContent('Submission polis2Nothing more needed this month');
     expect(within(targets).queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
@@ -420,6 +425,27 @@ describe('the Personal Summary — leads that need you (P10-T6)', () => {
 
     expect(leads).toHaveTextContent('No active leads yet — add some in Leads Management.');
     expect(within(leads).queryByRole('list')).not.toBeInTheDocument();
+  });
+
+  /*
+   * P18.8-T15 AC-4 (UI-002): the card counts the reader's own leads, and Leads Management shows a leader their unit's
+   * too — so an AB with 71 there read *No active leads yet* here.
+   */
+  it('P18.8-T15 AC-4: a leader with no open leads of their own is told their unit’s are in Leads Management', async () => {
+    show(summary({ leads: { rows: [], total: 0, unitOpen: 71 } }));
+    const leads = await card('Leads that need you');
+
+    expect(leads).toHaveTextContent('No open leads of your own — your unit’s are in Leads Management.');
+    expect(leads).not.toHaveTextContent('No active leads yet');
+    expect(within(leads).getByRole('link', { name: 'Leads Management' })).toHaveAttribute('href', '/leads');
+  });
+
+  it('P18.8-T15 AC-4: a reader with no open leads anywhere keeps the prototype’s sentence', async () => {
+    show(summary({ leads: { rows: [], total: 0, unitOpen: 0 } }));
+    const leads = await card('Leads that need you');
+
+    expect(leads).toHaveTextContent('No active leads yet — add some in Leads Management.');
+    expect(leads).not.toHaveTextContent('your unit’s');
   });
 });
 
@@ -881,5 +907,160 @@ describe('Campaigns you’re chasing (P18.5-T7 AC-6)', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
     expect(await within(await campaigns()).findByText('Q4 APE Sprint')).toBeInTheDocument();
     expect(calls.filter((c) => c.url.includes('/campaigns/chasing'))).toHaveLength(1);
+  });
+});
+
+/**
+ * **An earlier month or year** (P18.8-T11, ADR-0161 §4): a month select under *Monthly* and a year select under
+ * *Yearly*, from the office's first month to this one, the choice in the address; a closed period shows its final
+ * figures, and the pace sentence and *The gap* only the current one.
+ */
+describe('the Personal Summary — an earlier month or year (P18.8-T11)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    nav.replace.mockClear();
+  });
+
+  const OPENED = { firstMonth: '2025-11', thisMonth: '2026-09', currentMonth: true, currentYear: true };
+  /** August, read whole: a month that has ended, so no pace. */
+  const AUGUST = summary({
+    month: '2026-08', pace: null, period: { ...OPENED, currentMonth: false },
+    activity: { monthly: activity({ from: '2026-08-01', to: '2026-08-31', total: 37 }), yearly: activity(YEAR) },
+  });
+  const summaries = (at: Record<string, unknown> = {}) => ({
+    '/summary': { body: summary({ period: OPENED }) },
+    '/activity/ratios': { body: AGENT_RATIOS },
+    'GET /campaigns/chasing': { body: NONE_CHASED },
+    ...at,
+  });
+  const open = (routes: Record<string, StubReply | StubReply[]>, query: Record<string, string> = {}) => {
+    const stub = stubFetch(routes);
+    renderWithSession(<PersonalSummaryPage searchParams={routeParams(query)} />, { me: AGENT });
+    return stub;
+  };
+  const summaryReads = (calls: { url: string }[]) =>
+    calls.map((c) => new URL(c.url)).filter((u) => u.pathname.endsWith('/summary')).map((u) => u.search);
+  const options = (select: HTMLElement) => within(select).getAllByRole('option').map((o) => o.textContent);
+
+  it('P18.8-T11 AC-2 a month select under Monthly, the office’s months newest first, this one chosen', async () => {
+    open(summaries());
+    const select = await screen.findByRole('combobox', { name: 'Month' });
+
+    expect(options(select)).toEqual([
+      'September 2026', 'August 2026', 'July 2026', 'June 2026', 'May 2026', 'April 2026', 'March 2026',
+      'February 2026', 'January 2026', 'December 2025', 'November 2025',
+    ]);
+    expect(select).toHaveDisplayValue('September 2026');
+    expect(select).toHaveClass('print:hidden');
+    // It stands in the panel the switch controls, beneath it.
+    expect(screen.getByRole('tabpanel')).toContainElement(select);
+  });
+
+  it('P18.8-T11 AC-2 a year select under Yearly, the office’s years newest first', async () => {
+    open(summaries());
+    await screen.findByRole('combobox', { name: 'Month' });
+    await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
+
+    const select = screen.getByRole('combobox', { name: 'Year' });
+    expect(options(select)).toEqual(['2026', '2025']);
+    expect(select).toHaveDisplayValue('2026');
+    expect(screen.queryByRole('combobox', { name: 'Month' })).not.toBeInTheDocument();
+  });
+
+  it('P18.8-T11 AC-2 choosing a month reads it and puts it in the address, the select holding it meanwhile', async () => {
+    const { calls } = open(summaries({ '/summary?month=2026-08': { body: AUGUST } }));
+    const select = await screen.findByRole('combobox', { name: 'Month' });
+
+    await userEvent.selectOptions(select, 'August 2026');
+
+    expect(nav.replace).toHaveBeenCalledWith('/summary?month=2026-08', { scroll: false });
+    expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('August 2026');
+    expect(await screen.findByText(/total activities logged in August 2026 across all categories/)).toBeInTheDocument();
+    expect(summaryReads(calls)).toEqual(['', '?month=2026-08']);
+  });
+
+  it('P18.8-T11 AC-2 the address’s month opens the page on it, and the current month clears the address', async () => {
+    const { calls } = open(summaries({ '/summary?month=2026-08': { body: AUGUST } }), { month: '2026-08' });
+    const select = await screen.findByRole('combobox', { name: 'Month' });
+    await waitFor(() => expect(select).toHaveDisplayValue('August 2026'));
+    await screen.findByText('August 2026', { selector: 'p' });
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Month' }), 'September 2026');
+
+    expect(nav.replace).toHaveBeenLastCalledWith('/summary', { scroll: false });
+    await waitFor(() => expect(summaryReads(calls)).toEqual(['?month=2026-08', '']));
+  });
+
+  it('P18.8-T11 AC-2 ?year= opens on Yearly with that year chosen, and reads it', async () => {
+    const LAST_YEAR = summary({
+      year: '2025', month: '2025-12', pace: null, period: { ...OPENED, currentMonth: false, currentYear: false },
+    });
+    const { calls } = open(summaries({ '/summary?year=2025': { body: LAST_YEAR } }), { year: '2025' });
+
+    const select = await screen.findByRole('combobox', { name: 'Year' });
+    expect(select).toHaveDisplayValue('2025');
+    expect(screen.getByRole('tab', { name: 'Yearly' })).toHaveAttribute('aria-selected', 'true');
+    expect(summaryReads(calls)).toEqual(['?year=2025']);
+  });
+
+  it('P18.8-T11 AC-2 switching views returns to now: Yearly from August reads this year, the address cleared', async () => {
+    const { calls } = open(summaries({ '/summary?month=2026-08': { body: AUGUST } }), { month: '2026-08' });
+    await screen.findByText('August 2026', { selector: 'p' });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
+
+    expect(nav.replace).toHaveBeenCalledWith('/summary', { scroll: false });
+    expect(await screen.findByRole('combobox', { name: 'Year' })).toHaveDisplayValue('2026');
+    await waitFor(() => expect(summaryReads(calls)).toEqual(['?month=2026-08', '']));
+  });
+
+  it('P18.8-T11 AC-2 a malformed month in the address is not sent: the page is this month’s', async () => {
+    const { calls } = open(summaries(), { month: '2026-13' });
+    expect(await screen.findByRole('combobox', { name: 'Month' })).toHaveDisplayValue('September 2026');
+    expect(summaryReads(calls)).toEqual(['']);
+  });
+
+  it('P18.8-T11 AC-3 a month that has ended: its final figures by name, no pace sentence and no The gap', async () => {
+    open(summaries({ '/summary?month=2026-08': { body: AUGUST } }), { month: '2026-08' });
+    const goal = await card('Goal vs. actual (APE)');
+
+    expect(within(goal).getByText('August 2026')).toBeInTheDocument();
+    expect(within(goal).getByRole('progressbar', { name: 'August 2026’s target' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'The gap' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/current pace/)).not.toBeInTheDocument();
+    const targets = await card('Your sales activity targets');
+    expect(within(targets).getByText('August 2026')).toBeInTheDocument();
+    expect(targets).toHaveTextContent('37 total activities logged in August 2026 across all categories.');
+  });
+
+  it('P18.8-T11 AC-3 the current month still has its pace and its gap, under This month', async () => {
+    open(summaries());
+    expect(await card('The gap')).toBeInTheDocument();
+    expect(screen.getByText(/current pace/)).toBeInTheDocument();
+    expect(within(await card('Goal vs. actual (APE)')).getByText('This month')).toBeInTheDocument();
+  });
+
+  it('P18.8-T11 AC-3 a year that has ended with no goal says so, and offers no goal to set', async () => {
+    const NO_GOAL = summary({
+      year: '2025', month: '2025-12', pace: null, goal: { set: false, savedAt: null },
+      period: { ...OPENED, currentMonth: false, currentYear: false },
+    });
+    open(summaries({ '/summary?year=2025': { body: NO_GOAL } }), { year: '2025' });
+
+    expect(await screen.findByText('You didn’t set a goal for 2025, so there is nothing to measure against.')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Set your goal' })).not.toBeInTheDocument();
+  });
+
+  it('P18.8-T11 AC-3 a month that has ended prints and downloads under its own name', async () => {
+    const print = vi.spyOn(window, 'print').mockImplementation(() => undefined);
+    const titles: string[] = [];
+    print.mockImplementation(() => { titles.push(document.title); });
+    open(summaries({ '/summary?month=2026-08': { body: AUGUST } }), { month: '2026-08' });
+    await card('Goal vs. actual (APE)');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+
+    expect(titles).toEqual(['Personal Summary – August 2026']);
+    print.mockRestore();
   });
 });

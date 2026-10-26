@@ -154,6 +154,7 @@ const GOAL = {
   snapshot: { monthlyApeTargetMinor: 80 * M, policiesPerMonth: 5, appointmentsPerMonth: 16, leadsPerMonth: 53 },
   projected: null,
   cascadeMapping: { leadsCode: 'LEADS_CONTACTED', appointmentsCode: 'SELL_PRESENTATION', closingsCode: 'SELL_SUBMISSION' },
+  cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
   measured: null, savedAt: '2026-09-01T02:00:00.000Z', savedByMembershipId: 'mem-rina',
 };
 
@@ -503,10 +504,10 @@ describe('the session workspace (P11-T8)', () => {
       const week = await card(/^Activity → view full dashboard/);
 
       expect(within(week).getByText('Last 7 days')).toBeInTheDocument();
-      await within(week).findByText('Leads contacted');
-      expect(week).toHaveTextContent('Leads contacted14 / 16 pro-rated');
-      expect(week).toHaveTextContent('Appointments4 / 5 pro-rated');
-      expect(week).toHaveTextContent('Closings1 / 1 pro-rated');
+      await within(week).findByText('Set appointment');
+      expect(week).toHaveTextContent('Set appointment14 / 16 pro-rated');
+      expect(week).toHaveTextContent('Sales meeting4 / 5 pro-rated');
+      expect(week).toHaveTextContent('Submission polis1 / 1 pro-rated');
       expect(within(week).getByRole('region', { name: 'Recruitment' })).toHaveTextContent('Recruitment0Candidate leads0Recruitment presentations0');
       expect(within(week).getByRole('region', { name: 'Development' })).toHaveTextContent('Development3Training attended1Coaching sessions1Team activities1');
       expect(sent(calls, 'GET', '/activity/summary').map((c) => c.url))
@@ -532,9 +533,9 @@ describe('the session workspace (P11-T8)', () => {
       const rows = within(dialog).getAllByRole('row').map((r) => [...r.children].map((c) => c.textContent));
       expect(rows).toEqual([
         ['Category', 'Logged', 'Target (pro-rated)'],
-        ['Leads contacted', '14', '16'],
-        ['Appointments', '4', '5'],
-        ['Closings', '1', '1'],
+        ['Set appointment', '14', '16'],
+        ['Sales meeting', '4', '5'],
+        ['Submission polis', '1', '1'],
         ['Candidate leads', '0', '–'],
         ['Recruitment presentations', '0', '–'],
         ['Training attended', '1', '–'],

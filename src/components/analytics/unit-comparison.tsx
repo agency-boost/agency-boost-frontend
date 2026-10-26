@@ -7,8 +7,8 @@ import { cn } from '@/lib/cn';
 import { useSession } from '@/lib/session';
 import { formatRupiah } from '@/lib/goals';
 import {
-  activeWords, agentsSub, headName, leadsWords, manpowerSub, moneyWords, OWN_COPY, PROTOTYPE_COPY, rateWords,
-  unitDashboardHref,
+  activeWords, agentsSub, drillsAnywhere, headName, leadsWords, manpowerSub, moneyWords, OWN_COPY, PROTOTYPE_COPY,
+  rateWords, unitDashboardHref,
   type AabUnitRow, type AgencyRow, type AnalyticsClub, type AnalyticsHead, type AnalyticsMoney, type AnalyticsTotal,
   type KpmAnalyticsView, type UnitFigures,
 } from '@/lib/kpm-analytics';
@@ -309,8 +309,9 @@ function SubRow({
 function LeaderLink({ head, children }: { head: AnalyticsHead; children: ReactNode }) {
   const { me } = useSession();
   const newTab = !me?.isImpersonating;
-  // A head who leads nobody has no Unit Dashboard to open (it answers *not found*): the name is plain text.
-  if (!head.leads) return <span className="font-semibold text-navy">{children}</span>;
+  // A head who leads nobody has no Unit Dashboard to open (it answers *not found*): the name is plain text. So is
+  // another leader's, to a Core Leader (ADR-0159 §2): they read the office's figures, and open no unit but their own.
+  if (!head.leads || !drillsAnywhere(me, head.isReader)) return <span className="font-semibold text-navy">{children}</span>;
   return (
     <Link
       href={unitDashboardHref(head)}

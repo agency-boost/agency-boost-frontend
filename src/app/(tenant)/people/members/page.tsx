@@ -2,20 +2,26 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { LeaderLimitNotice, isLeaderLimit } from '@/components/leader-limit-notice';
+import { LeaderLimitNotice, LeaderLimitWaiting, isLeaderLimit } from '@/components/leader-limit-notice';
 import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   Button, ErrorBanner, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
-import { RoleBadge } from '@/components/ui/role-badge';
+import { RoleBadge, rungLabel, useLadder } from '@/components/ui/role-badge';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { daysAgoWords } from '@/lib/kpm-overview';
+import { CORE_LEADER_LABEL } from '@/lib/profile-line';
+import { displayName } from '@/lib/display-name';
 import { useDebounced } from '@/lib/use-debounced';
 import { declineRequest, readInbox, approveRequest, type PendingRequest } from '@/lib/join';
+import {
+  askLeaderLimitApproval, cancelLeaderLimitRequest, pendingFor, readLeaderLimitRequests, requestedChange,
+  type LeaderLimitRequestRow,
+} from '@/lib/leader-limit-requests';
 import {
   archiveGroup,
   createGroup,
@@ -24,6 +30,7 @@ import {
   MEMBER_STATUS_LABEL,
   readOrgTree,
   readRoleChangeLog,
+  setCoreLeader,
   updateGroup,
   type GroupSummary,
   type HierarchyRole,
@@ -131,6 +138,13 @@ export default function MembersPage() {
   const [counts, setCounts] = useState<MemberPage['counts'] | null>(null);
   const [requests, setRequests] = useState<PendingRequest[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /**
+   * ADR-0157: an approval the leader limit refused may be asked of AgencyBoost — `refusedFor` is whose — and the
+   * office's open requests say which pending rows wait for it.
+   */
+  const [refusedFor, setRefusedFor] = useState<string | null>(null);
+  const [asks, setAsks] = useState<LeaderLimitRequestRow[] | null>(null);
+  const ladder = useLadder();
 
   const load = useCallback(
     async (cursor?: string) => {
@@ -164,13 +178,16 @@ export default function MembersPage() {
           // union: everybody who has registered and not yet joined a unit, plus the open
           // requests among them. Counting only the requests would hide anybody who
           // registered and asked nobody — and they are the ones most in need of finding.
-          const [waiting, queue] = await Promise.all([
+          const [waiting, queue, open] = await Promise.all([
             listMembers({ status: 'pending' }),
             readInbox(),
+            // Who waits for AgencyBoost (ADR-0157). A failed read shows nobody waiting, never a second error.
+            readLeaderLimitRequests().catch(() => []),
           ]);
           setPage(waiting.members);
           setCounts(waiting.counts);
           setRequests(queue);
+          setAsks(open);
         } catch (err) {
           setError(toDisplayError(err));
           setPage([]);
@@ -185,7 +202,7 @@ export default function MembersPage() {
           setGroups(mine);
           setCandidates(
             office.nodes
-              .map((n) => ({ membershipId: n.membershipId, fullName: n.preferredName ?? n.fullName }))
+              .map((n) => ({ membershipId: n.membershipId, fullName: displayName(n) }))
               .sort((a, b) => a.fullName.localeCompare(b.fullName)),
           );
         } catch (err) {
@@ -213,9 +230,38 @@ export default function MembersPage() {
     [query, role, tab],
   );
 
+  /** ADR-0157 §1: letting this pending leader in, asked of AgencyBoost. */
+  async function askApproval() {
+    if (!refusedFor) return;
+    setBusy(true);
+    try {
+      await askLeaderLimitApproval(refusedFor, { action: 'activate' });
+      setRefusedFor(null);
+      setError(null);
+      setAsks(await readLeaderLimitRequests().catch(() => []));
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelAsk(requestId: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      setAsks(await cancelLeaderLimitRequest(requestId));
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function decide(requestId: string, action: 'approve' | 'decline') {
     setBusy(true);
     setError(null);
+    setRefusedFor(null);
     try {
       // The server answers with the queue as it now stands, so two admins deciding at
       // once see the truth rather than their own guess about it.
@@ -227,11 +273,35 @@ export default function MembersPage() {
       setPage(waiting.members);
       setCounts(waiting.counts);
     } catch (err) {
-      setError(toDisplayError(err));
+      const shown = toDisplayError(err);
+      setError(shown);
+      if (action === 'approve' && isLeaderLimit(shown)) {
+        setRefusedFor(requests?.find((r) => r.requestId === requestId)?.membershipId ?? null);
+      }
       // Re-read the queue directly rather than through `load()`, which clears the error
       // on its first line — the refusal would vanish before it could be read. A conflict
       // usually means somebody else decided it first, so the list does need refreshing.
       await readInbox().then(setRequests).catch(() => undefined);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * **The row's Core Leader control** (ADR-0159 §1, P18.8-T5 AC-3): tag or untag a leader, their groups untouched
+   * (`PUT /members/:id/core-leader`). The row is replaced by what the server answers, so the chip says what was
+   * stored. Offered where the row says the viewer may (`canTagCoreLeader`); the API refuses regardless.
+   */
+  async function toggleCoreLeader(member: Member) {
+    setBusy(true);
+    setError(null);
+    try {
+      const tags = await setCoreLeader(member.membershipId, !member.isCoreLeader);
+      setPage((rows) => rows?.map((m) => (m.membershipId === member.membershipId
+        ? { ...m, isCoreLeader: tags.isCoreLeader && (tags.canBeCoreLeader ?? true) }
+        : m)) ?? rows);
+    } catch (err) {
+      setError(toDisplayError(err));
     } finally {
       setBusy(false);
     }
@@ -335,7 +405,15 @@ export default function MembersPage() {
 
       {/* An approval at the leader limit (P13.2 exit review): in the limit's words, never the code. */}
       {error && (isLeaderLimit(error)
-        ? <LeaderLimitNotice error={error} audience="office" action="role" />
+        ? (
+          <LeaderLimitNotice
+            error={error}
+            audience="office"
+            action="role"
+            asking={busy}
+            onAsk={refusedFor ? () => void askApproval() : undefined}
+          />
+        )
         : <ErrorBanner {...error} />)}
 
       {tab === 'rolelog' && (
@@ -411,7 +489,7 @@ export default function MembersPage() {
                 return (
                   <Row key={m.membershipId}>
                     <Cell className="font-semibold">
-                      {m.preferredName ?? m.fullName}
+                      {displayName(m)}
                       <span className="block text-sm font-normal text-muted">
                         {m.agentCode} · {m.email}
                       </span>
@@ -438,7 +516,14 @@ export default function MembersPage() {
                       )}
                     </Cell>
                     <Cell>
-                      {ask ? (
+                      {pendingFor(asks, m.membershipId) ? (
+                        // ADR-0157: letting them in waits for AgencyBoost.
+                        <LeaderLimitWaiting
+                          what={requestedChange(pendingFor(asks, m.membershipId)!, (code) => rungLabel(code, ladder))}
+                          cancelling={busy}
+                          onCancel={() => void cancelAsk(pendingFor(asks, m.membershipId)!.requestId)}
+                        />
+                      ) : ask ? (
                         <span className="flex flex-wrap gap-2">
                           <Button
                             disabled={busy}
@@ -665,7 +750,7 @@ export default function MembersPage() {
                       the roster read as the tree it is, without becoming one. */}
                   <span className={ROLE_INDENT[m.role]}>
                     <Link href={`/people/members/${m.membershipId}`} className="underline">
-                      {m.preferredName ?? m.fullName}
+                      {displayName(m)}
                     </Link>
                     <span className="block text-sm font-normal text-muted">{m.email}</span>
                   </span>
@@ -678,6 +763,24 @@ export default function MembersPage() {
                     <RoleBadge role={m.role} />
                     {m.isKpmOwner && <Tag>Owner</Tag>}
                     {m.isKpmAdmin && <Tag>Admin</Tag>}
+                    {/* The amber chip (`KPM_Owner.html:4508`), and on a leader's row the prototype's *+ Tag* idiom
+                        (`:4512`) for the one tag it sets here (ADR-0159 §1). */}
+                    {m.isCoreLeader && <Tag>{CORE_LEADER_LABEL}</Tag>}
+                    {tab === 'directory' && m.canTagCoreLeader && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void toggleCoreLeader(m)}
+                        aria-label={m.isCoreLeader
+                          ? `Remove the Core Leader tag from ${displayName(m)}`
+                          : `Tag ${displayName(m)} Core Leader`}
+                        title={m.isCoreLeader ? 'Remove the Core Leader tag' : 'Tag as Core Leader'}
+                        className="px-0.5 text-2xs font-semibold text-muted hover:text-amber-deep disabled:opacity-50"
+                      >
+                        {/* Beside the chip it removes, a cross; on an untagged leader, the prototype's words. */}
+                        {m.isCoreLeader ? <span aria-hidden>×</span> : '+ Core Leader'}
+                      </button>
+                    )}
                   </span>
                 </Cell>
                 <Cell className="text-muted">{m.leaderName ?? '—'}</Cell>

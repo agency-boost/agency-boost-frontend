@@ -400,11 +400,58 @@ describe('the sidebar matches the prototype', () => {
     }
   });
 
-  it('P18.1-T2: the field shell gains no forum item — a Core Leader arrives by the address or a link (D-coeditors)', async () => {
+  it('P18.1-T2, P18.8-T5 AC-5: a field member who is no Core Leader has no forum item and no Core leader group', async () => {
     renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
     const items = await everyItem();
-    expect(items.some((a) => /Strategic Leader Forum|Leader Meetings/.test(a.textContent ?? ''))).toBe(false);
+    expect(items.some((a) => /Strategic Leader Forum|Leader Meetings|KPM analytics/.test(a.textContent ?? ''))).toBe(false);
     expect(items.some((a) => a.getAttribute('href')?.startsWith('/leader-meetings'))).toBe(false);
+    expect(navLabels()).not.toContain('Core leader');
+  });
+
+  describe('P18.8-T5 AC-5 the Core leader group (ADR-0159 §3)', () => {
+    const CORE_LEADER = makeMe({ ...AGENT, membership: { ...AGENT.membership!, isCoreLeader: true } });
+
+    it('comes after Campaign and before Admin, to a Core Leader only', () => {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: CORE_LEADER });
+      const sections = navLabels().filter((t) => ['Campaign', 'Core leader', 'Admin'].includes(t));
+      expect(sections).toEqual(['Campaign', 'Core leader', 'Admin']);
+    });
+
+    it('holds the forum and KPM analytics, live, and Advanced analytics disabled and marked Soon', async () => {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: CORE_LEADER });
+      const labels = navLabels();
+      const at = labels.indexOf('Core leader');
+      expect(labels.slice(at + 1, at + 4)).toEqual(['Strategic Leader Forum', 'KPM analytics', 'Advanced analyticsSoon']);
+      const items = await everyItem();
+      const item = (name: string) => items.find((a) => a.textContent?.startsWith(name))!;
+      expect(item('Strategic Leader Forum')).toHaveAttribute('href', '/leader-meetings');
+      expect(item('KPM analytics')).toHaveAttribute('href', '/kpm/analytics');
+      const soon = item('Advanced analytics');
+      expect(soon).not.toHaveAttribute('href');
+      expect(soon).toHaveAttribute('aria-disabled');
+      expect(within(soon).getByText('Soon')).toBeInTheDocument();
+    });
+
+    it.each([
+      ['/leader-meetings/m-14', 'Strategic Leader Forum'],
+      ['/kpm/analytics/compliance', 'KPM analytics'],
+    ])('is current on %s', async (path, name) => {
+      route.path = path;
+      try {
+        renderWithSession(<AgentShell title="x">body</AgentShell>, { me: CORE_LEADER });
+        const items = await everyItem();
+        expect(items.find((a) => a.textContent === name)).toHaveAttribute('aria-current', 'page');
+      } finally {
+        route.path = '/group-tree';
+      }
+    });
+
+    it('an Owner tagged and on a leader rung sees it in their field view too', () => {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, {
+        me: makeMe({ ...OWNER, membership: { ...OWNER.membership!, isCoreLeader: true } }),
+      });
+      expect(navLabels()).toContain('Core leader');
+    });
   });
 
   it('KPM Owner: Ratio benchmarks is not a sidebar item — it is a sub-tab', () => {
@@ -427,6 +474,8 @@ describe('the sidebar matches the prototype', () => {
       .toEqual(['Companies', 'KPMs', 'Platform admin', 'Reporting']);
     expect(labels.indexOf('Overview')).toBeLessThan(labels.indexOf('Companies'));
     expect(screen.getByText('SUPERADMIN')).toBeInTheDocument();
+    // P18.8-T6 AC-2: the platform shell's profile line is the role alone — a Super Admin has no office.
+    expect(screen.getByText('Superadmin')).toHaveAttribute('title', 'Superadmin');
   });
 
   it('P18-T8 AC-4: Cross-platform analytics is live, and the console says Soon nowhere', async () => {

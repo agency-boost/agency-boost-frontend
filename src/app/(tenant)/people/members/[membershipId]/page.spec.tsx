@@ -49,6 +49,47 @@ describe('one member', () => {
     expect(screen.getAllByText('KPM0417-001').length).toBeGreaterThan(0);
   });
 
+  /*
+   * P18.8-T4 AC-6 (ADR-0158 §6): the *Personal* card shows what the person records, read-only, to the
+   * Owner and the Admins — the API serves it to them on this read — and *Not recorded* for each one
+   * somebody who arrived before it was asked has not given.
+   */
+  it('P18.8-T4 AC-6: shows what they record in the Personal card, Not recorded where they have not', async () => {
+    stubFetch({
+      '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false } },
+      '/members/groups': { body: [] },
+      '/members/mem-1': {
+        body: member({ personal: { dateOfBirth: '1990-03-15', gender: 'female', companyJoinMonth: null, workStatus: 'part_time' } }),
+      },
+    });
+    renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+
+    const card = (await screen.findByRole('heading', { name: 'Personal' })).closest('div')!;
+    const row = (term: string) => within(card).getByText(term).nextElementSibling?.textContent;
+    expect(row('Date of birth')).toBe('March 15, 1990');
+    expect(row('Gender')).toBe('Female');
+    expect(row('Company join month')).toBe('Not recorded');
+    expect(row('Work status')).toBe('Part-time');
+    // Read-only: nothing on the card edits them.
+    expect(within(card).queryByRole('textbox')).not.toBeInTheDocument();
+    expect(within(card).queryByRole('combobox')).not.toBeInTheDocument();
+  });
+
+  it('P18.8-T4 AC-6: draws none of the four when the read carries none', async () => {
+    stubFetch({
+      '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false } },
+      '/members/groups': { body: [] },
+      '/members/mem-1': { body: member() },
+    });
+    renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+
+    await screen.findByRole('heading', { name: 'Personal' });
+    expect(screen.queryByText('Date of birth')).not.toBeInTheDocument();
+    expect(screen.queryByText('Not recorded')).not.toBeInTheDocument();
+  });
+
   it('explains an AAB who leads nobody rather than showing an empty unit (OD-23)', async () => {
     stubFetch({
       '/members/mem-1/reports': { body: [] },
@@ -127,11 +168,32 @@ describe('one member', () => {
       expect(await screen.findByText(/changes nothing about who reports to whom/)).toBeInTheDocument();
     });
 
-    it('AC-2: says what Core Leader actually decides, and what it does not', async () => {
-      open();
+    it('AC-2, P18.8-T5: says what Core Leader opens, that it is a leader’s, and what it does not grant', async () => {
+      open(tags({ canBeCoreLeader: true }));
       await userEvent.click(await screen.findByRole('button', { name: 'Edit tags' }));
-      const hint = screen.getByText(/besides the Owner and the Admins, may open and write in the Strategic Leader Forum's meetings, and nothing else/);
-      expect(hint).toHaveTextContent(/It is not a role, and it grants no hierarchy, no unit and no access to anybody's data/);
+      const hint = screen.getByText(/opens the Strategic Leader Forum's meetings and reads the office's KPM analytics, besides the Owner and the Admins/);
+      expect(hint).toHaveTextContent(/It is not a role, and it grants no hierarchy and no unit\. Only a leader can be one\./);
+      expect(screen.getByLabelText('Core Leader')).toBeEnabled();
+    });
+
+    it('P18.8-T5 AC-2 a member who is not a leader cannot be ticked Core Leader, and is told why', async () => {
+      open(tags({ canBeCoreLeader: false }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit tags' }));
+      expect(screen.getByLabelText('Core Leader')).toBeDisabled();
+      expect(screen.getByText(/Only a leader can be one: move them to a leader rung first/)).toBeInTheDocument();
+    });
+
+    it('P18.8-T5 AC-2 a tag kept from before ADR-0159 on a non-leader can still be cleared', async () => {
+      const { calls } = open(tags({ isCoreLeader: true, canBeCoreLeader: false }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit tags' }));
+      const box = screen.getByLabelText('Core Leader');
+      expect(box).toBeEnabled();
+      await userEvent.click(box);
+      // Cleared, it cannot be ticked again: the API would refuse it.
+      expect(box).toBeDisabled();
+      await userEvent.click(screen.getByRole('button', { name: 'Save tags' }));
+      const sent = calls.find((c) => c.init.method === 'PUT')!;
+      expect(JSON.parse(sent.init.body as string)).toEqual({ groupIds: [], isCoreLeader: false });
     });
 
     it('shows the tags somebody carries as chips', async () => {
@@ -369,6 +431,144 @@ describe('one member', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Remove them' }));
 
       expect(await screen.findByRole('alert')).toHaveTextContent('direct leader');
+    });
+  });
+
+  /*
+   * P18.8-T2 (ADR-0157): past the office's leader limit the role change may wait for AgencyBoost instead — the
+   * refusal offers *Ask AgencyBoost to approve* where the API says it may be asked (`canRequest`), the same rung and
+   * reason are asked, and the card says the change is waiting, with *Cancel request*. And OD-50: the select lists
+   * the company's own ladder, a rung it added included.
+   */
+  describe('P18.8-T2 — a leader past the limit waits for AgencyBoost', () => {
+    const LIMIT = {
+      status: 409,
+      body: {
+        error: {
+          code: 'LEADER_LIMIT_REACHED', message: 'x', requestId: 'r',
+          details: { maxLeaders: 10, leadersUsed: 10, canRequest: true },
+        },
+      },
+    };
+    const ask = (over: Record<string, unknown> = {}) => ({
+      requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch',
+      subjectMembershipId: 'mem-1', subjectName: 'Rina Wijaya', subjectAgentCode: '86114', action: 'promote',
+      fromOrgLevelCode: 'AGENT', toOrgLevelCode: 'AAB', reason: 'Ready to lead', requestedByMembershipId: 'mem-owner',
+      requestedByName: 'Hendra Gunawan', status: 'pending', requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null,
+      declineReason: null, maxLeaders: 10, leadersUsed: 10, ...over,
+    });
+    const stub = (extra: Record<string, unknown> = {}) =>
+      stubFetch({
+        '/members/mem-1/reports': { body: [] },
+        '/members/mem-1/tags': { body: { groupIds: [], isCoreLeader: false } },
+        '/members/groups': { body: [] },
+        '/members/mem-1': { body: member({ role: 'agent', orgLevelCode: 'AGENT' }) },
+        '/members/leader-limit-requests': { body: [] },
+        ...extra,
+      });
+
+    it('AC-6 offers Ask AgencyBoost to approve on the refusal, and asks for the same rung and reason', async () => {
+      const { calls } = stub({
+        'PATCH /members/mem-1/role': LIMIT,
+        'POST /members/mem-1/leader-limit-request': { status: 201, body: ask() },
+        '/members/leader-limit-requests': [{ body: [] }, { body: [ask()] }],
+      });
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+
+      await screen.findByText('Rina Wijaya');
+      await userEvent.selectOptions(screen.getByLabelText('New role'), 'aab');
+      await userEvent.type(screen.getByLabelText('Why?'), 'Ready to lead');
+      await userEvent.click(screen.getByRole('button', { name: 'Change role' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('Ask AgencyBoost to approve this one past the limit, or to raise it.');
+      await userEvent.click(within(alert).getByRole('button', { name: 'Ask AgencyBoost to approve' }));
+
+      const posted = calls.find((c) => c.init.method === 'POST');
+      expect(posted?.url).toContain('/members/mem-1/leader-limit-request');
+      expect(JSON.parse(String(posted?.init.body))).toEqual({ action: 'promote', orgLevelCode: 'aab', reason: 'Ready to lead' });
+      expect(await screen.findByText("Waiting for AgencyBoost's approval")).toBeInTheDocument();
+      expect(screen.getByText('Agent → Associate Agency Builder')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('AC-6 offers no ask where the refusal says none may be made', async () => {
+      stub({
+        'PATCH /members/mem-1/role': {
+          ...LIMIT,
+          body: { error: { ...LIMIT.body.error, details: { maxLeaders: 10, leadersUsed: 10, canRequest: false } } },
+        },
+      });
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+      await screen.findByText('Rina Wijaya');
+      await userEvent.selectOptions(screen.getByLabelText('New role'), 'aab');
+      await userEvent.click(screen.getByRole('button', { name: 'Change role' }));
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent('AgencyBoost can raise it.');
+      expect(within(alert).queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('AC-6 says a change is waiting, and Cancel request withdraws it', async () => {
+      const { calls } = stub({
+        '/members/leader-limit-requests': { body: [ask()] },
+        'DELETE /members/leader-limit-requests/llr-1': { body: [ask({ status: 'cancelled' })] },
+      });
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+
+      expect(await screen.findByText("Waiting for AgencyBoost's approval")).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel request' }));
+      expect(calls.find((c) => c.init.method === 'DELETE')?.url).toContain('/members/leader-limit-requests/llr-1');
+      await vi.waitFor(() => expect(screen.queryByText(/Waiting for AgencyBoost/)).not.toBeInTheDocument());
+    });
+
+    it('OD-50 lists the company’s own ladder, a rung it added included, and sends its code', async () => {
+      const ladder = [
+        { orgLevelId: 'l1', companyId: 'c', code: 'AGENT', label: 'Agent', displayOrder: 1, leaderTier: null, status: 'active' },
+        { orgLevelId: 'l2', companyId: 'c', code: 'AAB', label: 'Associate Agency Builder', displayOrder: 2, leaderTier: 'associate', status: 'active' },
+        { orgLevelId: 'l3', companyId: 'c', code: 'AB', label: 'Agency Builder', displayOrder: 3, leaderTier: 'senior', status: 'active' },
+        { orgLevelId: 'l4', companyId: 'c', code: 'UM', label: 'Unit Manager', displayOrder: 4, leaderTier: 'associate', status: 'active' },
+        { orgLevelId: 'l5', companyId: 'c', code: 'SM', label: 'Senior Manager', displayOrder: 5, leaderTier: 'senior', status: 'active' },
+        { orgLevelId: 'l6', companyId: 'c', code: 'OLD', label: 'Retired rung', displayOrder: 6, leaderTier: null, status: 'archived' },
+      ];
+      const { calls } = stub({
+        '/kpm/org-levels': { body: ladder },
+        '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], training: [], activationChecklist: null, eventTypes: [], capability: null } },
+        'PATCH /members/mem-1/role': { body: [] },
+      });
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+      await screen.findByText('Rina Wijaya');
+
+      await vi.waitFor(() => expect(screen.getByRole('option', { name: 'Senior Manager' })).toBeInTheDocument());
+      const options = [...screen.getByLabelText('New role').querySelectorAll('option')].map((o) => o.textContent);
+      expect(options).toEqual([
+        'Agent — no change', 'Associate Agency Builder', 'Agency Builder', 'Unit Manager', 'Senior Manager',
+      ]);
+      await userEvent.selectOptions(screen.getByLabelText('New role'), 'sm');
+      expect(screen.getByText(/will change from Agent to Senior Manager/)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Change role' }));
+      expect(JSON.parse(String(calls.find((c) => c.init.method === 'PATCH')?.init.body))).toEqual({ toRole: 'sm' });
+    });
+
+    it('OD-50 holds a Senior Leader rung, whatever its code, to the office as AB is', async () => {
+      const ladder = [
+        { orgLevelId: 'l1', companyId: 'c', code: 'AGENT', label: 'Agent', displayOrder: 1, leaderTier: null, status: 'active' },
+        { orgLevelId: 'l4', companyId: 'c', code: 'UM', label: 'Unit Manager', displayOrder: 4, leaderTier: 'associate', status: 'active' },
+        { orgLevelId: 'l5', companyId: 'c', code: 'SM', label: 'Senior Manager', displayOrder: 5, leaderTier: 'senior', status: 'active' },
+      ];
+      stubFetch({
+        '/members/mem-1/reports': { body: [] },
+        '/members/mem-1/tags': { body: { groupIds: [], isCoreLeader: false } },
+        '/members/groups': { body: [] },
+        '/members/mem-1': { body: member({ role: 'agent', orgLevelCode: 'AGENT', canPromoteToAb: false }) },
+        '/members/leader-limit-requests': { body: [] },
+        '/kpm/org-levels': { body: ladder },
+        '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], training: [], activationChecklist: null, eventTypes: [], capability: null } },
+      });
+      renderInLayout(TenantLayout, <MemberPage params={params} />, { me: OWNER });
+      await screen.findByText('Rina Wijaya');
+      await vi.waitFor(() => expect(screen.getByRole('option', { name: 'Unit Manager' })).toBeInTheDocument());
+      expect(screen.queryByRole('option', { name: 'Senior Manager' })).not.toBeInTheDocument();
     });
   });
 });

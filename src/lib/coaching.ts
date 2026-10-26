@@ -93,6 +93,17 @@ export function lastOneOnOneText(last: LastOneOnOne | null): string {
 }
 
 /**
+ * **The cell's words, *overdue* among them when it is** (P18.8-T15 AC-7; the client's UI review, UI-011):
+ * *14 days ago · overdue*. Red was the only mark on screen, with *, overdue* told to a screen reader alone — and on a
+ * phone that text wrapped onto a line of its own, *, overdue* with its stray comma. Said in words, the colour is no
+ * longer the only cue. *No 1:1 yet* says it already.
+ */
+export function lastOneOnOneLine(last: LastOneOnOne | null): string {
+  const text = lastOneOnOneText(last);
+  return last !== null && last.overdue ? `${text} · overdue` : text;
+}
+
+/**
  * Red when there has been no 1:1 at all or the last one is overdue, green otherwise — the
  * prototype's `overdue` and `good`. The threshold is the office's, applied by the server.
  */

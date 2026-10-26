@@ -6,6 +6,7 @@ import { ActionMenu, type ActionMenuItem } from '@/components/ui/action-menu';
 import { AutoGrowTextarea } from '@/components/ui/auto-grow-textarea';
 import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
 import { Dialog } from '@/components/ui/dialog';
+import { DragHandle } from '@/components/ui/drag-handle';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Select, TextInput } from '@/components/ui/field';
 import { NavIcon } from '@/components/ui/nav-icon';
@@ -13,8 +14,8 @@ import { Skeleton, SkeletonCards, SkeletonTable, SkeletonText } from '@/componen
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  createLead, deleteLead, listEveryLead, readLead, setLeadOutcome, setLeadStatus, updateLead,
-  LEAD_NAME_MIN, LEAD_ROWS_FIRST_SHOWN, type Lead, type LeadOutcome, type LeadQuery, type LeadType,
+  createLead, deleteLead, listEveryLead, readLead, reorderLeads, setLeadOutcome, setLeadStatus, updateLead,
+  whatsAppLink, LEAD_NAME_MIN, LEAD_ROWS_FIRST_SHOWN, type Lead, type LeadOutcome, type LeadQuery, type LeadType,
 } from '@/lib/leads';
 import { useSession } from '@/lib/session';
 import type { LeadStatusRow } from '@/lib/tenant-config';
@@ -23,25 +24,27 @@ import { useDebounced } from '@/lib/use-debounced';
 
 /**
  * The order the table can be in, as `GET /leads` names it: the three headings that sort
- * (`Overall.html:2805-2813`), and registration, which the table opens on.
+ * (`Overall.html:2805-2813`), and registration, which the closed cards are asked for in.
  */
 type SortKey = Extract<NonNullable<LeadQuery['sort']>, 'name' | 'type' | 'status' | 'dateRegistered'>;
-type Sort = { key: SortKey; dir: 'asc' | 'desc' };
 
 /**
- * Most recently registered on top, which is where the prototype opens (`Overall.html:5432`).
+ * A column sort, **or `null`: the owner's own order** (P18.8-T7, ADR-0161 §1), which the table opens on.
  *
- * **No heading says it since P13.1-T4** — the *Registered* column went into the lead's details
- * (ADR-0108 §4) — so a heading's third press comes back here, and the card layout's sort offers it by
- * name. Without one or the other, the first sort a reader chose would be the last.
+ * `null` asks `GET /leads` for no sort, and the server answers in the order the owner dragged their
+ * leads into, a new one on top. It was the newest registration until then, which is where the prototype
+ * opens (`Overall.html:5432`) and the order migration 0031 filled every list in, so nobody's list moved.
+ * **A heading's third press comes back here**, and the card layout's sort offers it by name — and a sort
+ * is for the visit: it is component state, so leaving the screen and coming back shows the saved order.
  */
-const DEFAULT_SORT: Sort = { key: 'dateRegistered', dir: 'desc' };
+type Sort = { key: SortKey; dir: 'asc' | 'desc' } | null;
 
 /**
  * The narrowest the table is drawn, in rem: below it, each lead is a card (P13.1-T4 AC-7, ADR-0108 §6).
  *
  * The six fixed columns (`WIDTHS`, 42.5rem) and the two that share what is left, at no less than
- * 7.75rem each — the date box with its icon, and a remark of two or three words a line. **Measured
+ * 7.75rem each — the date box with its icon, and a remark of two or three words a line; 43.25rem and
+ * 7.375rem on `/leads`, whose first column holds a drag handle (P18.8-T7). **Measured
  * against the table's own box, not the window**, so the sidebar counts: at 1280px with the sidebar
  * open the box is 59rem and the table stands; at 1024px it is 43rem, or 55.5rem with the sidebar
  * folded, and the leads are cards. In rem, so a reader who has turned their browser's text up gets the
@@ -57,12 +60,21 @@ const TABLE_MIN_REM = 58;
  */
 // *Widened 2026-10-07, after the walk:* at 9rem and 7rem a name such as *Ibu Wiwik Setyaningsih* and the
 // word *Recruitment* were cut off, and the *Actions* heading overflowed its 3rem by 8px — a sideways scroll
-// of its own. 11rem holds a three-word name, 7.5rem *Recruitment* with its chevron, 4.5rem the heading.
+// of its own. 11rem holds a three-word name, 7.5rem *Select type* with its chevron, 4.5rem the heading —
+// and, since P18.8-T7, the WhatsApp link and the ⋮ side by side, 28px each.
 const WIDTHS = ['2rem', '11rem', '7.5rem', '11rem', '6.5rem', 'auto', 'auto', '4.5rem'] as const;
+
+/**
+ * **The same, with room for a drag handle beside the row's number** (P18.8-T7): `/leads`, where the reader
+ * orders their own list. 0.75rem more, taken from the two columns that share what is left — at
+ * `TABLE_MIN_REM` they still have 7.375rem each. Kept while a column sort hides the handles, so pressing a
+ * heading does not move every column.
+ */
+const WIDTHS_WITH_HANDLES = ['2.75rem', ...WIDTHS.slice(1)] as const;
 
 /** The card layout's sort: each order the headings give, said in words, since a card has no heading. */
 const SORT_CHOICES: readonly { sort: Sort; label: string }[] = [
-  { sort: DEFAULT_SORT, label: 'Newest first' },
+  { sort: null, label: 'Saved order' },
   { sort: { key: 'name', dir: 'asc' }, label: 'Lead name, A–Z' },
   { sort: { key: 'name', dir: 'desc' }, label: 'Lead name, Z–A' },
   { sort: { key: 'type', dir: 'asc' }, label: 'Type, ascending' },
@@ -70,7 +82,7 @@ const SORT_CHOICES: readonly { sort: Sort; label: string }[] = [
   { sort: { key: 'status', dir: 'asc' }, label: 'Status, ascending' },
   { sort: { key: 'status', dir: 'desc' }, label: 'Status, descending' },
 ];
-const sortValue = (sort: Sort) => `${sort.key}:${sort.dir}`;
+const sortValue = (sort: Sort) => (sort ? `${sort.key}:${sort.dir}` : 'saved');
 
 /** The table heading's look, on the card's two labels (`Overall.html:413-418`). */
 const CARD_LABEL = 'text-2xs font-semibold uppercase tracking-[0.03em] text-muted';
@@ -124,7 +136,8 @@ const NO_NAME: ApiError = {
 
 /** The coaching card's words for the two outcomes (`Overall.html:10867-10881`). */
 const OUTCOME_WORD: Record<LeadOutcome, string> = { won: 'Won', lost: 'Lost' };
-const TYPE_WORD: Record<LeadType, string> = { sales: 'Sales', recruitment: 'Recruitment' };
+/** *Recruit*, not *Recruitment*, wherever a lead's type is named (ADR-0161 §2). The stored value stays `recruitment`. */
+const TYPE_WORD: Record<LeadType, string> = { sales: 'Sales', recruitment: 'Recruit' };
 
 /** A control on the inline row with nothing to write to yet: there, and plainly not live. */
 const INERT_CONTROL = 'cursor-not-allowed opacity-40';
@@ -143,6 +156,15 @@ const without = <T,>(record: Record<string, T>, ...keys: readonly string[]): Rec
   return next;
 };
 
+/**
+ * `rows` in the order `ids` gives — how a refused drag is put back. A row `ids` does not hold (a lead added
+ * since) stays on top, where a new lead goes.
+ */
+const arranged = (rows: readonly Lead[], ids: readonly string[]): Lead[] => {
+  const at = new Map(ids.map((id, i) => [id, i]));
+  return [...rows].sort((a, b) => (at.get(a.id) ?? -1) - (at.get(b.id) ?? -1));
+};
+
 /** Newest first — how the closed cards are asked for, and where a lead closed here is put. */
 const byRegisteredDesc = (a: Lead, b: Lead) =>
   (b.dateRegistered ?? '').localeCompare(a.dateRegistered ?? '');
@@ -154,7 +176,14 @@ const byRegisteredDesc = (a: Lead, b: Lead) =>
  * ADR-0108). No counts strip, no filter card and nothing under a lead's name (ADR-0062). What used to
  * be four glyphs and a *Registered* column is one ⋮ per lead, opening a menu: *Lead details*, the two
  * outcomes, and *Delete*. The details — phone, email, where they came from, when the lead was
- * registered, who last changed it (ADR-0044) and a WhatsApp button — are a dialog.
+ * registered and who last changed it (ADR-0044) — are a dialog. **WhatsApp sits beside the ⋮** since
+ * 2026-10-26 (ADR-0161 §2), on any lead whose phone number WhatsApp could open.
+ *
+ * **The reader's own order, kept** (P18.8-T7, ADR-0161 §1). On `/leads` each of the reader's own open
+ * leads has a drag handle beside its number — dragged, or moved with ↑ and ↓ — while no column sort is
+ * on; a drop saves the whole order at once and the screen shows it at once, putting it back with the
+ * server's reason if the save is refused. A column sort is a look, never saved. A coaching session's card
+ * shows the coachee's order and has no handles: the order is its owner's.
  *
  * **A table where it fits, and a card per lead where it does not** (P13.1-T4 AC-7). The page body
  * never scrolls sideways, and nor does the table any more: below `TABLE_MIN_REM` of its own box, each
@@ -221,7 +250,7 @@ export function LeadsTable({
   const uid = useId();
   const [frame, cards] = useCardLayout();
 
-  const [sort, setSort] = useState<Sort>(DEFAULT_SORT);
+  const [sort, setSort] = useState<Sort>(null);
   const [term, setTerm] = useState('');
   const search = useDebounced(term.trim());
   const [typeFilter, setTypeFilter] = useState<'' | LeadType>('');
@@ -232,7 +261,7 @@ export function LeadsTable({
    * first 30 again (AC-8) — so the press is remembered against the list it was made on, rather than
    * cleared by an effect after the new list has already drawn in full for a frame.
    */
-  const listKey = [sort.key, sort.dir, search, typeFilter, owner ?? ''].join('\n');
+  const listKey = [sort?.key ?? '', sort?.dir ?? '', search, typeFilter, owner ?? ''].join('\n');
   const [expandedFor, setExpandedFor] = useState<string | null>(null);
   /*
    * **And forgotten once the list changes**, so coming back to the list it was pressed on — a header
@@ -241,9 +270,12 @@ export function LeadsTable({
    * value, so no frame draws the old press against the new list.
    */
   const [seenKey, setSeenKey] = useState(listKey);
+  /** Why the last drag could not be saved, said above the table until the next one is, or the list changes. */
+  const [orderError, setOrderError] = useState<ApiError | null>(null);
   if (seenKey !== listKey) {
     setSeenKey(listKey);
     if (expandedFor !== null) setExpandedFor(null);
+    if (orderError !== null) setOrderError(null);
   }
   const expanded = expandedFor === listKey;
   /** The first lead *Show more* drew, which takes the focus from the button that has just gone. */
@@ -302,8 +334,9 @@ export function LeadsTable({
     void listEveryLead(
       {
         outcome: 'open',
-        sort: sort.key,
-        dir: sort.dir,
+        // No sort is the owner's own order (P18.8-T7 AC-3).
+        sort: sort?.key,
+        dir: sort?.dir,
         search: filters && search ? search : undefined,
         type: filters && typeFilter ? typeFilter : undefined,
         owner,
@@ -349,7 +382,7 @@ export function LeadsTable({
       if (isCurrent()) loadingOpen.current = false;
     });
     return () => { openLoad.current += 1; };
-  }, [sort.key, sort.dir, filters, search, typeFilter, reloads, owner]);
+  }, [sort?.key, sort?.dir, filters, search, typeFilter, reloads, owner]);
 
   /**
    * The two closed cards, loaded the same way (AC-4), once — **each on its own.**
@@ -522,7 +555,7 @@ export function LeadsTable({
       done(saved);
       dropDrafts(id, fields);
       forget(id, ['', ...fields]);
-      if (moves.includes(sort.key)) restartIfLoading();
+      if (sort && moves.includes(sort.key)) restartIfLoading();
       onWrite?.(saved);
       return saved;
     } catch (err) {
@@ -686,16 +719,17 @@ export function LeadsTable({
   }
 
   /**
-   * A heading sorts ascending, then descending, then **back to the newest first** — the order the
-   * table opens on, which no heading names now that *Registered* is not a column (ADR-0108 §4).
-   * A new column starts ascending, as the prototype does (`Overall.html:5694-5707`).
+   * A heading sorts ascending, then descending, then **back to the saved order** — the order the table
+   * opens on, which no heading names (P18.8-T7; the newest registration until then, ADR-0108 §4). A new
+   * column starts ascending, as the prototype does (`Overall.html:5694-5707`). Nothing a heading does
+   * is saved.
    */
   const sortable = (label: string, key: SortKey): Column => ({
     label,
-    sort: sort.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none',
+    sort: sort?.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none',
     onSort: () => setSort((s) => {
-      if (s.key !== key) return { key, dir: 'asc' };
-      return s.dir === 'asc' ? { key, dir: 'desc' } : DEFAULT_SORT;
+      if (s?.key !== key) return { key, dir: 'asc' };
+      return s.dir === 'asc' ? { key, dir: 'desc' } : null;
     }),
   });
 
@@ -725,6 +759,110 @@ export function LeadsTable({
     revealed.current = held[shown.length]?.id ?? null;
     setExpandedFor(listKey);
   }
+
+  /*
+   * ---------------------------------------------- the reader's own order (P18.8-T7, ADR-0161 §1)
+   *
+   * **On `/leads` only, and while no column sort is on.** A coaching session's card (`owner`) shows the
+   * coachee's order and offers no handle: the order is its owner's. Under a sort the rows are in the
+   * sort's order, and a drop there would save an order the reader never saw.
+   *
+   * **Every page first.** The server takes the reader's open leads all at once, so a list still arriving
+   * holds its handles still until the last page lands.
+   */
+  const ordering = !owner && !readOnly && sort === null;
+  const complete = open !== null && open.rows.length >= open.total;
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  /** Saves go one after another, so two quick drags reach the server in the order they were made. */
+  const orderQueue = useRef<Promise<void>>(Promise.resolve());
+  const orderSaves = useRef(0);
+  /** The handle ↑ or ↓ was pressed on, which keeps the focus once its row has moved. */
+  const moved = useRef<string | null>(null);
+  const handleId = (id: string) => `${uid}-handle-${id}`;
+
+  /**
+   * Put the lead at `from` where the lead at `to` is, and save the reader's open leads in the new order.
+   *
+   * **Shown at once, saved behind it.** The table moves on the drop; the save follows, after any still on
+   * its way. A refusal puts the rows back where they were, says why above the table, and reads the list
+   * again — the server's order is the one that stands, and a list that has changed since it was read (a
+   * lead a leader added in a session) is why a save is refused. **A leader sends their own leads only**:
+   * their agents' rows on the same list keep their owners' order.
+   */
+  function place(from: number, to: number) {
+    if (from === to) return;
+    const before = held.map((r) => r.id);
+    const next = [...held];
+    next.splice(to, 0, ...next.splice(from, 1));
+    setOpen((current) => current && { ...current, rows: next });
+    const ids = next.filter((r) => r.ownerMembershipId === myMembership).map((r) => r.id);
+    const save = ++orderSaves.current;
+    orderQueue.current = orderQueue.current.then(async () => {
+      try {
+        await reorderLeads(ids);
+        if (save === orderSaves.current) setOrderError(null);
+      } catch (err) {
+        if (save !== orderSaves.current) return;
+        setOrderError(toDisplayError(err));
+        setOpen((current) => current && { ...current, rows: arranged(current.rows, before) });
+        setReloads((n) => n + 1);
+      }
+    });
+  }
+
+  /** A drop on a row: the dragged lead takes its place. */
+  function dropOn(targetId: string) {
+    const lifted = dragging;
+    setDragging(null);
+    setOver(null);
+    if (!lifted || lifted === targetId) return;
+    const from = held.findIndex((r) => r.id === lifted);
+    const to = held.findIndex((r) => r.id === targetId);
+    if (from < 0 || to < 0) return;
+    place(from, to);
+  }
+
+  /**
+   * ↑ or ↓ on a handle: past the next of the reader's own leads that way, among the rows drawn. An agent's
+   * row on a leader's list is stepped over, since moving past it changes nothing that is saved; the last
+   * row drawn before *Show more* goes no lower until the rest are shown.
+   */
+  function moveBy(id: string, by: -1 | 1) {
+    const at = held.findIndex((r) => r.id === id);
+    let to = at + by;
+    while (to >= 0 && to < shown.length && held[to].ownerMembershipId !== myMembership) to += by;
+    if (at < 0 || to < 0 || to >= shown.length) return;
+    moved.current = id;
+    place(at, to);
+  }
+
+  useEffect(() => {
+    const id = moved.current;
+    if (!id) return;
+    moved.current = null;
+    // A row moved down is taken out and put back by React, and the focus would fall to the page.
+    const handle = document.getElementById(handleId(id));
+    if (handle && document.activeElement !== handle) handle.focus();
+    // `handleId` is fixed for the life of the table.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  /** What a row or a card takes to be a drop target, and how it looks while it is one. */
+  const dropTarget = (id: string, isDraft: boolean) => (ordering && !isDraft ? {
+    'data-row': id,
+    onDragOver: (e: React.DragEvent) => {
+      if (!dragging) return;
+      e.preventDefault();
+      setOver(id);
+    },
+    onDragLeave: () => setOver((now) => (now === id ? null : now)),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      dropOn(id);
+    },
+  } : {});
+  const dropLook = (id: string) => cn(over === id && dragging !== id && 'bg-canvas', dragging === id && 'opacity-40');
 
   useEffect(() => {
     const id = revealed.current;
@@ -834,8 +972,26 @@ export function LeadsTable({
     const monthAction = row.type === 'recruitment' ? 'Recruit this month' : 'Close this month';
     const foreign = !isDraft && row.ownerMembershipId !== myMembership;
     const dateId = `${uid}-date-${keyFor[row.id] ?? row.id}`;
+    const chat = isDraft ? null : whatsAppLink(row.contact.phone);
 
     return {
+      /*
+       * **The reader's own open leads, on `/leads`, while no sort is on** (P18.8-T7 AC-4) — none on the
+       * inline row, which is not a lead yet, and none on an agent's row on their leader's list: the order
+       * of a list is its owner's. Held still until every page has arrived (`complete`).
+       */
+      handle: ordering && !isDraft && !foreign ? (
+        <DragHandle
+          id={handleId(row.id)}
+          label={row.name || 'this lead'}
+          disabled={!complete}
+          className="cursor-grab select-none text-sm leading-none text-muted disabled:cursor-not-allowed"
+          onPick={() => setDragging(row.id)}
+          onDrop={() => { setDragging(null); setOver(null); }}
+          onMove={(by) => moveBy(row.id, by)}
+        />
+      ) : null,
+
       /*
        * **The name, and nothing else** (P10.1-T4 AC-1, `Overall.html:5510-5512`). The prototype gives
        * the box no label; it gets a name a screen reader can say and nothing a reader can see.
@@ -876,11 +1032,17 @@ export function LeadsTable({
        * white and amber-deep 4.34:1, both under the 4.5:1 small text needs. Recruitment is the
        * prototype's navy-soft exactly.
        */
+      /*
+       * **Bordered at rest since 2026-10-26** (ADR-0161 §2): the client could not see it was a choice. The
+       * ground stays transparent, so the word still reads as a word beside Status's tinted box, and the
+       * hover and the focus ring are the cell's own.
+       */
       type: (
         <Select
           aria-label={`Type, row ${n}`}
           density="cell"
           className={cn(
+            'border-hairline',
             row.type === 'sales' && 'font-semibold text-amber-ink',
             row.type === 'recruitment' && 'font-semibold text-navy-soft',
             row.type === null && 'text-muted',
@@ -894,8 +1056,8 @@ export function LeadsTable({
           }}
         >
           <option value="">Select type</option>
-          <option value="sales">Sales</option>
-          <option value="recruitment">Recruitment</option>
+          <option value="sales">{TYPE_WORD.sales}</option>
+          <option value="recruitment">{TYPE_WORD.recruitment}</option>
         </Select>
       ),
 
@@ -960,14 +1122,15 @@ export function LeadsTable({
       /*
        * **Bordered at rest, not only under the pointer** (P13.1-T4 AC-5): the client could not tell
        * where a remark could be written until they hovered it (2026-10-07). The table's other cells
-       * keep the prototype's transparent rest; these two are the boxes a reader writes sentences in.
+       * keep the prototype's transparent rest, *Type* aside; these two are the boxes a reader writes
+       * sentences in. **No placeholder in either since 2026-10-26** (ADR-0161 §2): the border says where
+       * to write, and the grey words read as something already written.
        */
       remarks: (
         <AutoGrowTextarea
           aria-label={`Remarks, row ${n}`}
           className={cn('w-full border-hairline', isDraft && INERT_CONTROL)}
           value={draftOf(row, 'remarks', row.remarks)}
-          placeholder="Notes, hot buttons, life events…"
           readOnly={locked}
           onChange={(e) => setDraftValue(row.id, 'remarks', e.target.value)}
           onKeyDown={finishOnEnter}
@@ -1014,13 +1177,34 @@ export function LeadsTable({
           aria-label={`Next action note, row ${n}`}
           className={cn('w-full border-hairline', isDraft && INERT_CONTROL)}
           value={draftOf(row, 'nextActionNote', row.nextActionNote)}
-          placeholder="e.g. Meet at Starbucks"
           readOnly={locked}
           onChange={(e) => setDraftValue(row.id, 'nextActionNote', e.target.value)}
           onKeyDown={finishOnEnter}
           onBlur={() => commitText(row, 'nextActionNote', row.nextActionNote, (nextActionNote) => ({ nextActionNote }))}
         />
       ),
+
+      /*
+       * **WhatsApp, beside the ⋮** (P18.8-T7 AC-5, ADR-0161 §2), where it was a button in *Lead details*.
+       * The number as `wa.me` takes it (`whatsAppNumber`), in a new tab and with no opener; no number
+       * WhatsApp could open, no link. A finalized session's card keeps it: opening a chat writes nothing.
+       * 28px, the ⋮'s own size, so the two fill the Actions column's 4.5rem and widen nothing.
+       */
+      whatsapp: chat ? (
+        <a
+          href={chat}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Chat with ${row.name || 'this lead'} on WhatsApp (opens in a new tab)`}
+          title="WhatsApp"
+          className={cn(
+            'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-success',
+            'hover:bg-success/[0.12]',
+          )}
+        >
+          <NavIcon name="whatsapp" className="h-4 w-4" />
+        </a>
+      ) : null,
 
       /*
        * **One ⋮ where there were four glyphs and an attribution** (P13.1-T4 AC-3, ADR-0108 §3). The
@@ -1049,9 +1233,11 @@ export function LeadsTable({
     const c = controlsFor(entry, n);
     return (
       <Fragment key={keyFor[entry.lead.id] ?? entry.lead.id}>
-        <Row>
-          {/* `.row-num` is grey and semibold (`Overall.html:451`) — a quiet ordinal. */}
-          <Cell className="font-semibold text-muted">{n}</Cell>
+        <Row {...dropTarget(entry.lead.id, entry.isDraft)} className={dropLook(entry.lead.id)}>
+          {/* `.row-num` is grey and semibold (`Overall.html:451`) — a quiet ordinal, its handle before it. */}
+          <Cell className="font-semibold text-muted">
+            {c.handle ? <span className="flex items-center gap-0.5">{c.handle}{n}</span> : n}
+          </Cell>
           <Cell>{c.name()}</Cell>
           <Cell>{c.type}</Cell>
           <Cell>{c.status}</Cell>
@@ -1063,7 +1249,9 @@ export function LeadsTable({
               {c.note}
             </div>
           </Cell>
-          <Cell>{c.actions}</Cell>
+          <Cell>
+            <div className="flex items-center justify-end">{c.whatsapp}{c.actions}</div>
+          </Cell>
         </Row>
 
         {/*
@@ -1097,11 +1285,14 @@ export function LeadsTable({
     return (
       <li
         key={keyFor[entry.lead.id] ?? entry.lead.id}
-        className="flex flex-col gap-2 border-b border-hairline px-3 py-3 last:border-b-0"
+        {...dropTarget(entry.lead.id, entry.isDraft)}
+        className={cn('flex flex-col gap-2 border-b border-hairline px-3 py-3 last:border-b-0', dropLook(entry.lead.id))}
       >
         <div className="flex items-center gap-1">
+          {c.handle}
           <span className="w-5 shrink-0 text-base font-semibold text-muted">{n}</span>
           <div className="min-w-0 flex-1">{c.name(true)}</div>
+          {c.whatsapp}
           {c.actions}
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -1136,7 +1327,7 @@ export function LeadsTable({
     <Select
       aria-label="Sort leads"
       value={sortValue(sort)}
-      onChange={(e) => setSort(SORT_CHOICES.find((c) => sortValue(c.sort) === e.target.value)?.sort ?? DEFAULT_SORT)}
+      onChange={(e) => setSort(SORT_CHOICES.find((c) => sortValue(c.sort) === e.target.value)?.sort ?? null)}
     >
       {SORT_CHOICES.map((c) => <option key={sortValue(c.sort)} value={sortValue(c.sort)}>{c.label}</option>)}
     </Select>
@@ -1172,8 +1363,8 @@ export function LeadsTable({
               onChange={(e) => setTypeFilter(e.target.value as '' | LeadType)}
             >
               <option value="">All types</option>
-              <option value="sales">Sales</option>
-              <option value="recruitment">Recruitment</option>
+              <option value="sales">{TYPE_WORD.sales}</option>
+              <option value="recruitment">{TYPE_WORD.recruitment}</option>
             </Select>
             {sortChoice}
             {!readOnly && <Button ref={addButton} onClick={addLead}>+ Add lead</Button>}
@@ -1192,6 +1383,8 @@ export function LeadsTable({
         )}
 
         {loadError && <div className="mb-3"><ErrorBanner {...loadError} /></div>}
+        {/* A drag the server refused, said once above the list it was made on (P18.8-T7). */}
+        {orderError && <div className="mb-3"><ErrorBanner {...orderError} /></div>}
 
         {cards ? (
           rows.length === 0 ? (
@@ -1206,7 +1399,7 @@ export function LeadsTable({
            * **Eight widths, no minimum width** (`WIDTHS`). The table fills its box and asks for no more,
            * so there is nothing to scroll sideways; below `TABLE_MIN_REM` the cards take over instead.
            */
-          <DataTable caption={caption} columns={columns} density="compact" widths={WIDTHS}>
+          <DataTable caption={caption} columns={columns} density="compact" widths={owner ? WIDTHS : WIDTHS_WITH_HANDLES}>
             {rows.length === 0 ? (
               <Row>
                 {/* Inside the table card, under its headings, as `.empty-state` is (`Overall.html:2818`). */}
@@ -1452,7 +1645,7 @@ function ClosedLeads({
                         <span className="flex min-w-0 flex-col gap-0.5">
                           <span className="truncate text-md font-semibold text-navy">{row.name || '(unnamed)'}</span>
                           <span className="text-xs text-muted">
-                            {row.type === 'recruitment' ? 'Recruitment' : 'Sales'}
+                            {TYPE_WORD[row.type === 'recruitment' ? 'recruitment' : 'sales']}
                             {stageLabel(row) ? ` · ${stageLabel(row)}` : ''}
                           </span>
                         </span>

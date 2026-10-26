@@ -4,7 +4,9 @@ import { usePathname } from 'next/navigation';
 import { AppShell, type NavSection } from '@/components/app-shell';
 import { type NavIconName } from '@/components/ui/nav-icon';
 import { RequireSession } from '@/components/require-session';
+import { displayName } from '@/lib/display-name';
 import { useSession } from '@/lib/session';
+import { useLeaderLimitPending } from '@/lib/use-leader-limit-pending';
 import { useUnreadCount } from '@/lib/use-unread-count';
 import { useSignOut } from '@/lib/use-sign-out';
 
@@ -17,6 +19,8 @@ import { useSignOut } from '@/lib/use-sign-out';
  */
 type AdminNavItem = {
   label: string; href: string; upcoming?: boolean; icon: NavIconName;
+  /** A live count beside the item — the leaders waiting past their office's limit (ADR-0157). */
+  count?: 'leaderLimitPending';
 };
 
 /**
@@ -65,6 +69,11 @@ const SECTIONS: readonly { label: string | null; divider?: boolean; items: Admin
       // on, and `upcoming` renders an anchor with **no href** — so a shipped surface was
       // reachable from nowhere, while `12-kpm-requests.md` told the reader to click it.
       { label: 'Pending KPM requests', href: '/admin/kpm-requests', icon: 'inbox' },
+      /*
+       * ADR-0157 §3, the client's request of 2026-10-26: a leader an office would add past its limit waits here for
+       * AgencyBoost. Beside the other queue of this group, with its pending count, as that one is drawn.
+       */
+      { label: 'Leaders past the limit', href: '/admin/leader-limit-requests', icon: 'userPlus', count: 'leaderLimitPending' },
       /*
        * The quote tool (P13.2-T2). `Billing_Subscription.html` draws it as the only item of its own
        * sidebar (`:214`, *"Billing & Subscription"*); **last in this group, in the console's sentence
@@ -140,6 +149,7 @@ function AdminChrome({
 }) {
   const { me } = useSession();
   const unread = useUnreadCount();
+  const leaderLimitPending = useLeaderLimitPending();
   const { signOut, busy } = useSignOut();
   const pathname = usePathname();
 
@@ -150,9 +160,10 @@ function AdminChrome({
   const sections: readonly NavSection[] = SECTIONS.map((section) => ({
     label: section.label,
     divider: section.divider,
-    items: section.items.map((i) => ({
+    items: section.items.map(({ count, ...i }) => ({
       ...i,
       active: !i.upcoming && isActive(i.href),
+      ...(count === 'leaderLimitPending' ? { badge: leaderLimitPending } : {}),
     })),
   }));
 
@@ -160,7 +171,7 @@ function AdminChrome({
     <AppShell
       sections={sections}
       user={{
-        name: me?.user.preferredName ?? me?.user.fullName ?? 'Super Admin',
+        name: (me && displayName(me.user)) || 'Super Admin',
         role: 'Superadmin',
         initials: me?.user.initials ?? 'SA',
         email: me?.user.email,

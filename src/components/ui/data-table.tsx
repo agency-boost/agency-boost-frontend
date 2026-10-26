@@ -190,8 +190,12 @@ export function DataTable({
   );
 }
 
-export function Row({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <tr className={cn('border-b border-hairline last:border-b-0', className)}>{children}</tr>;
+/**
+ * One `<tr>`. Anything else a `<tr>` takes passes through — the leads table's drag and drop needs the
+ * row's own `onDragOver` and `onDrop`, and `data-row`, which `DragHandle` lifts as the drag image (P18.8-T7).
+ */
+export function Row({ children, className, ...row }: React.HTMLAttributes<HTMLTableRowElement> & { 'data-row'?: string }) {
+  return <tr {...row} className={cn('border-b border-hairline last:border-b-0', className)}>{children}</tr>;
 }
 
 export function Cell({

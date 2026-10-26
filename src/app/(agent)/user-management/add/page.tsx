@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { LeaderLimitNotice, isLeaderLimit } from '@/components/leader-limit-notice';
+import { LeaderLimitNotice, LeaderLimitWaiting, isLeaderLimit } from '@/components/leader-limit-notice';
 import { Page } from '@/components/page';
 import { UserManagementTabs } from '@/components/user-management-tabs';
 import { CopyableValue } from '@/components/ui/copyable-value';
@@ -11,13 +11,16 @@ import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/component
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useDebounced } from '@/lib/use-debounced';
 import { useSession } from '@/lib/session';
-import { RoleBadge } from '@/components/ui/role-badge';
+import { RoleBadge, classOfRung, rungLabel, useLadder } from '@/components/ui/role-badge';
+import {
+  askLeaderLimitApproval, cancelLeaderLimitRequest, pendingFor, readLeaderLimitRequests, requestedChange,
+  type LeaderLimitRequestRow,
+} from '@/lib/leader-limit-requests';
 import { Skeleton, SkeletonBar, SkeletonPeople } from '@/components/ui/skeleton';
 import {
   changeRole,
   readMyTeam,
   roleChangeExplanation,
-  type HierarchyRole,
   type TeamMember,
 } from '@/lib/org';
 import {
@@ -62,7 +65,21 @@ export default function AddAgentsPage() {
   const poolQuery = useDebounced(pool);
   const [confirming, setConfirming] = useState<string | null>(null);
   const [team, setTeam] = useState<TeamMember[] | null>(null);
-  const [proposal, setProposal] = useState<{ member: TeamMember; toRole: HierarchyRole } | null>(null);
+  // The company's ladder (OD-50): a rung it added is offered by its label, as the defaults are.
+  const ladder = useLadder();
+  // `toRole` is a rung's code lower-cased — `aab`, or a rung the company added.
+  const [proposal, setProposal] = useState<{ member: TeamMember; toRole: string } | null>(null);
+  /**
+   * ADR-0157: what the leader limit just refused, so *Ask AgencyBoost to approve* asks for exactly that — a role
+   * change with its reason, or letting an untagged pending leader into this unit — and the requests already open.
+   */
+  const [refused, setRefused] = useState<
+    { membershipId: string; action: 'promote'; toRole: string; reason?: string }
+    | { membershipId: string; action: 'activate' }
+    | null
+  >(null);
+  const [asks, setAsks] = useState<LeaderLimitRequestRow[] | null>(null);
+  const mayAsk = me?.permissions.includes('leader_limit_request:read') ?? false;
   const [roleReason, setRoleReason] = useState('');
   const [removing, setRemoving] = useState<TeamMember | null>(null);
   const [removeWord, setRemoveWord] = useState('');
@@ -76,23 +93,63 @@ export default function AddAgentsPage() {
       const [mineCode, mine] = await Promise.all([myLeaderCode(), readMyTeam()]);
       setCode(mineCode);
       setTeam(mine);
+      // The requests this leader asked, for the rows waiting on AgencyBoost. A failed read shows none waiting.
+      if (mayAsk) setAsks(await readLeaderLimitRequests().catch(() => []));
     } catch (err) {
       setError(toDisplayError(err));
       setCode(null);
       setTeam([]);
     }
-  }, []);
+  }, [mayAsk]);
+
+  /** ADR-0157 §1: the write the limit refused, asked of AgencyBoost instead. */
+  async function askApproval() {
+    if (!refused) return;
+    setBusy('ask');
+    try {
+      await askLeaderLimitApproval(refused.membershipId, refused.action === 'promote'
+        ? { action: 'promote', orgLevelCode: refused.toRole, ...(refused.reason ? { reason: refused.reason } : {}) }
+        : { action: 'activate' });
+      setRefused(null);
+      setError(null);
+      setAsks(await readLeaderLimitRequests().catch(() => []));
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function cancelAsk(requestId: string) {
+    setBusy('ask');
+    setError(null);
+    try {
+      setAsks(await cancelLeaderLimitRequest(requestId));
+    } catch (err) {
+      setError(toDisplayError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function applyRole() {
     if (!proposal) return;
     setBusy('role');
     setError(null);
+    setRefused(null);
     try {
       setTeam(await changeRole(proposal.member.membershipId, proposal.toRole, roleReason.trim() || undefined));
       setProposal(null);
       setRoleReason('');
     } catch (err) {
-      setError(toDisplayError(err));
+      const shown = toDisplayError(err);
+      setError(shown);
+      if (isLeaderLimit(shown)) {
+        setRefused({
+          membershipId: proposal.member.membershipId, action: 'promote', toRole: proposal.toRole,
+          ...(roleReason.trim() ? { reason: roleReason.trim() } : {}),
+        });
+      }
       // Refused — reload so the select shows what is true rather than what was picked.
       await load();
       setProposal(null);
@@ -160,11 +217,15 @@ export default function AddAgentsPage() {
   async function add(membershipId: string) {
     setBusy(membershipId);
     setError(null);
+    setRefused(null);
     try {
       setUntagged(await tagUntagged(membershipId));
       setConfirming(null);
     } catch (err) {
-      setError(toDisplayError(err));
+      const shown = toDisplayError(err);
+      setError(shown);
+      // A pending leader tagged past the limit: letting them in may be asked of AgencyBoost (ADR-0157 §1).
+      if (isLeaderLimit(shown)) setRefused({ membershipId, action: 'activate' });
     } finally {
       setBusy(null);
     }
@@ -181,7 +242,15 @@ export default function AddAgentsPage() {
     >
       <UserManagementTabs />
       {error && (isLeaderLimit(error)
-        ? <LeaderLimitNotice error={error} audience="office" action="role" />
+        ? (
+          <LeaderLimitNotice
+            error={error}
+            audience="office"
+            action="role"
+            asking={busy === 'ask'}
+            onAsk={refused ? () => void askApproval() : undefined}
+          />
+        )
         : <ErrorBanner {...error} />)}
 
       <Card className="mb-4">
@@ -274,7 +343,16 @@ export default function AddAgentsPage() {
                 </span>
               </span>
 
-              {confirming === member.membershipId ? (
+              {pendingFor(asks, member.membershipId) ? (
+                // ADR-0157: letting this pending leader in waits for AgencyBoost.
+                <div className="basis-full">
+                  <LeaderLimitWaiting
+                    what={requestedChange(pendingFor(asks, member.membershipId)!, (code) => rungLabel(code, ladder))}
+                    cancelling={busy === 'ask'}
+                    onCancel={() => void cancelAsk(pendingFor(asks, member.membershipId)!.requestId)}
+                  />
+                </div>
+              ) : confirming === member.membershipId ? (
                 // Inline, as the prototype does it — a modal for one row is heavier than
                 // the decision.
                 <span className="flex flex-wrap items-center gap-2">
@@ -351,20 +429,34 @@ export default function AddAgentsPage() {
                 >
                   <Select
                     id={`role-${member.membershipId}`}
-                    value={member.role}
+                    value={(member.orgLevelCode ?? member.role).toLowerCase()}
                     disabled={busy !== null}
-                    onChange={(e) =>
-                      setProposal({ member, toRole: e.target.value as HierarchyRole })
-                    }
+                    onChange={(e) => setProposal({ member, toRole: e.target.value })}
                   >
-                    <option value="agent">Agent</option>
-                    <option value="aab">Associate Agency Builder</option>
+                    {/* The company's ladder, junior first, by label (OD-50) — every rung a direct leader may
+                        place somebody on: none that makes an AB, which is the office's to do. */}
+                    {[...ladder]
+                      .filter((l) => l.status === 'active' && classOfRung(l) !== 'ab')
+                      .sort((a, b) => a.displayOrder - b.displayOrder)
+                      .map((l) => (
+                        <option key={l.code} value={l.code.toLowerCase()}>{l.label}</option>
+                      ))}
                   </Select>
                 </Field>
               ) : (
                 // An AB report never gets the control, whoever is looking. The server
                 // decides that and sends the answer; this only renders it.
                 <RoleBadge role={member.role} />
+              )}
+
+              {pendingFor(asks, member.membershipId) && (
+                <div className="basis-full">
+                  <LeaderLimitWaiting
+                    what={requestedChange(pendingFor(asks, member.membershipId)!, (code) => rungLabel(code, ladder))}
+                    cancelling={busy === 'ask'}
+                    onCancel={() => void cancelAsk(pendingFor(asks, member.membershipId)!.requestId)}
+                  />
+                </div>
               )}
 
               <Button
@@ -393,10 +485,11 @@ export default function AddAgentsPage() {
             <p className="mt-1 text-md text-navy">
               {roleChangeExplanation(
                 proposal.member.fullName,
-                proposal.member.role,
+                proposal.member.orgLevelCode ?? proposal.member.role,
                 proposal.toRole,
                 // A leader's own team: the prototype's wording is true here.
                 'their-leader',
+                ladder,
               )}
             </p>
 

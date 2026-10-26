@@ -171,6 +171,10 @@ export interface AppShellAccount {
 
 export interface ShellUser {
   readonly name: string;
+  /**
+   * The line under the name: the role, and since P18.8-T6 the **profile line** after it — *Core Leader*, the groups,
+   * the office (`profileLine`, ADR-0159 §5). The platform shell passes the role alone.
+   */
   readonly role: string;
   readonly initials: string;
   /** Shown in the account menu, so you can confirm who you are before signing out. */
@@ -276,7 +280,8 @@ function SidebarFoot({
       {!rail && (
         <span className="min-w-0">
           <span className="block truncate text-md font-semibold text-white">{user.name}</span>
-          <span className="block truncate text-xs text-white/55">{user.role}</span>
+          {/* One line, truncated; the whole of it on hover (the profile line, ADR-0159 §5). */}
+          <span className="block truncate text-xs text-white/55" title={user.role}>{user.role}</span>
         </span>
       )}
     </div>

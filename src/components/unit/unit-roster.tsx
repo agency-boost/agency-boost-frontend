@@ -5,7 +5,7 @@ import { useId, type MouseEvent, type ReactNode } from 'react';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { cn } from '@/lib/cn';
 import {
-  coachingTabHref, lastOneOnOneOverdue, lastOneOnOneText, ROSTER_STATUS_LABEL, type RosterStatus,
+  coachingTabHref, lastOneOnOneLine, lastOneOnOneOverdue, ROSTER_STATUS_LABEL, type RosterStatus,
 } from '@/lib/coaching';
 import { PROTOTYPE_COPY as CAMPAIGN_COPY } from '@/lib/campaigns';
 import {
@@ -98,9 +98,21 @@ export function UnitRoster({
                   face="h-auto w-auto px-0.5 text-xs font-semibold uppercase tracking-wide text-muted hover:bg-transparent hover:text-navy"
                 />
               </th>
-              {['Leads', 'Activity', 'Last 1:1'].map((name) => (
-                <th key={name} scope="col" className={HEAD}>{name}</th>
-              ))}
+              <th scope="col" className={HEAD}>Leads</th>
+              <th scope="col" className={HEAD}>
+                {/* ADR-0165 §2: the figure is *goal activities*, and the tooltip names the three types it counts. */}
+                <span className="inline-flex items-center gap-1">
+                  Activity
+                  <TippedGlyph
+                    glyph="ⓘ"
+                    name={OWN_COPY.activityInfo}
+                    tip={OWN_COPY.activityRule}
+                    align="fit"
+                    className={STATUS_TIP}
+                  />
+                </span>
+              </th>
+              <th scope="col" className={HEAD}>Last 1:1</th>
               <th scope="col" className={HEAD}>
                 <span className="inline-flex items-center gap-1">
                   Status
@@ -481,9 +493,8 @@ function PersonRow({
           ) : (
             <>
               <span className={cn('text-sm font-semibold', overdue ? 'text-alert' : 'text-success')}>
-                {last === null ? PROTOTYPE_COPY.noOneOnOne : lastOneOnOneText(last)}
-                {/* Red is the only mark of an overdue 1:1 on screen; a screen reader is told in words. */}
-                {last !== null && last.overdue && <span className="sr-only">, overdue</span>}
+                {/* *Overdue* in words, not by colour alone (P18.8-T15 AC-7). */}
+                {last === null ? PROTOTYPE_COPY.noOneOnOne : lastOneOnOneLine(last)}
               </span>
               {last?.coach && <span className="mt-0.5 block text-xs text-muted">by {last.coach.name}</span>}
             </>

@@ -93,6 +93,33 @@ function voiceOf(subject?: CoacheeSubject): Voice {
   };
 }
 
+/**
+ * **How the page names its period** (P18.8-T11, ADR-0161 §4). The current one in the prototype's words — *This
+ * month* on a card's tag, *this month* in a sentence — and a closed one by its name, *August 2026* and *in August
+ * 2026*, since *this month* about August would be false.
+ */
+interface PeriodWords {
+  /** The month or the year the page is about, by name: *September 2026*, *2026*. */
+  named: string;
+  /** The month or year is the office's current one. */
+  current: boolean;
+  /** A card's tag: *This month* · *This year* · *August 2026* · *2025*. */
+  tag: string;
+  /** In a sentence: *this month* · *this year* · *in August 2026* · *in 2025*. */
+  inline: string;
+}
+
+function periodWords(summary: Summary, month: boolean): PeriodWords {
+  const named = month ? formatMonth(summary.month) : summary.year;
+  const current = month ? summary.period.currentMonth : summary.period.currentYear;
+  return {
+    named,
+    current,
+    tag: current ? (month ? 'This month' : 'This year') : named,
+    inline: current ? (month ? 'this month' : 'this year') : `in ${named}`,
+  };
+}
+
 /** Where *Goal Settings* is for this page: the reader's own screen, or the coachee's *Goal Setting* tab. */
 const goalHref = (voice: Voice) =>
   (voice.subject ? coachingTabHref(voice.subject.membershipId, 'goal-setting') : '/goals');
@@ -114,41 +141,56 @@ export function SummaryCards({
   const voice = voiceOf(subject);
   const month = view === 'month';
   const figures = month ? summary.monthly : summary.yearly;
-  const period = month ? 'this month' : 'this year';
+  const when = periodWords(summary, month);
+  const period = when.inline;
 
   return (
     <div className="grid gap-3">
       {/*
         * What the view is about, where the prototype prints *"Week of Aug 24 – Aug 30"* — a label for a
         * weekly digest this page is not; the figures here are the calendar month and year (ADR-0056).
+        * *Amended P18.8-T11:* on the screen the month or year select stands here and names it; on paper, this.
         */}
-      <p className="text-sm text-muted">
-        {month ? formatMonth(summary.month) : summary.year}
+      <p className="hidden text-sm text-muted print:block">
+        {when.named}
       </p>
 
       {!summary.goal.set ? (
         <Card>
           <p className="text-md text-navy">
-            {capitalized(voice.pronoun)} {voice.have}n’t set a goal for {summary.year} yet, so there is nothing to measure against.
+            {summary.period.currentYear
+              ? <>{capitalized(voice.pronoun)} {voice.have}n’t set a goal for {summary.year} yet, so there is nothing to measure against.</>
+              // A year that has ended can no longer be given a goal (P18.8-T11): it is said, and nothing offers it.
+              : <>{capitalized(voice.pronoun)} didn’t set a goal for {summary.year}, so there is nothing to measure against.</>}
           </p>
-          <Link href={goalHref(voice)} className="mt-2 inline-block font-semibold text-navy underline">Set {voice.possessive} goal</Link>
+          {summary.period.currentYear && (
+            <Link href={goalHref(voice)} className="mt-2 inline-block font-semibold text-navy underline">Set {voice.possessive} goal</Link>
+          )}
         </Card>
       ) : summary.yearly.targetMinor === null ? (
         // Saved, but with no APE target to measure against — zero, or inputs that make no plan.
         <Card>
           <p className="text-md text-navy">
-            {capitalized(voice.possessive)} goal for {summary.year} has no APE target to measure against yet.
+            {summary.period.currentYear
+              ? <>{capitalized(voice.possessive)} goal for {summary.year} has no APE target to measure against yet.</>
+              : <>{capitalized(voice.possessive)} goal for {summary.year} had no APE target to measure against.</>}
           </p>
-          <Link href={goalHref(voice)} className="mt-2 inline-block font-semibold text-navy underline">Open Goal Settings</Link>
+          {summary.period.currentYear && (
+            <Link href={goalHref(voice)} className="mt-2 inline-block font-semibold text-navy underline">Open Goal Settings</Link>
+          )}
         </Card>
       ) : (
         <>
-          <GoalCard figures={figures} month={month} source={figures.source} voice={voice} />
-          <GapCard figures={figures} period={period} pace={month ? summary.pace : null} voice={voice} />
+          <GoalCard figures={figures} month={month} source={figures.source} voice={voice} when={when} />
+          {/*
+            * *The gap*, and the pace sentence in it, **for the current period only** (P18.8-T11, ADR-0161 §4):
+            * about a month or a year that has ended, *Remaining* and *still needed* would be false.
+            */}
+          {when.current && <GapCard figures={figures} period={period} pace={month ? summary.pace : null} voice={voice} />}
         </>
       )}
 
-      <TargetsCard activity={month ? summary.activity.monthly : summary.activity.yearly} month={month} period={period} voice={voice} />
+      <TargetsCard activity={month ? summary.activity.monthly : summary.activity.yearly} when={when} voice={voice} />
       {pulse ? (
         <PulseCard pulse={pulse.ratios} error={pulse.error} voice={voice} />
       ) : (
@@ -268,13 +310,15 @@ export function SectionChips({
  * member's own. Before this month's file there is no figure to mark: *Not uploaded yet* says so.
  */
 function GoalCard({
-  figures, month, source, voice,
-}: { figures: PeriodFigures; month: boolean; source: FigureSource | null; voice: Voice }) {
+  figures, month, source, voice, when,
+}: { figures: PeriodFigures; month: boolean; source: FigureSource | null; voice: Voice; when: PeriodWords }) {
   const pct = figures.attainmentPct;
   // The year was made before this month began: the month has no target left to fill (ADR-0047).
   const madeAlready = figures.targetMet && figures.targetMinor === 0;
+  // *This month's target*, or a closed period's by name (P18.8-T11).
+  const targetName = when.current ? (month ? 'This month’s target' : 'This year’s target') : `${when.named}’s target`;
   return (
-    <SummaryCard id="summary-goal" title="Goal vs. actual (APE)" icon="target" tag={month ? 'This month' : 'This year'}>
+    <SummaryCard id="summary-goal" title="Goal vs. actual (APE)" icon="target" tag={when.tag}>
       <div className="mb-2.5 flex flex-wrap items-end justify-between gap-2.5">
         <p className="flex flex-wrap items-baseline gap-1.5">
           {figures.actualMinor === null ? (
@@ -296,13 +340,17 @@ function GoalCard({
         )}
       </div>
       {madeAlready ? (
-        <p className="text-sm text-navy">{capitalized(voice.possessive)} year’s target was made before this month began — this month needs nothing more.</p>
+        <p className="text-sm text-navy">
+          {when.current
+            ? <>{capitalized(voice.possessive)} year’s target was made before this month began — this month needs nothing more.</>
+            : <>{capitalized(voice.possessive)} year’s target was made before {when.named} began — that month needed nothing more.</>}
+        </p>
       ) : pct !== null && (
         // Only a measured figure gets a bar: an empty track under *Not uploaded yet* reads as zero.
         <>
           <div
             role="progressbar"
-            aria-label={month ? 'This month’s target' : 'This year’s target'}
+            aria-label={targetName}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.min(100, pct)}
@@ -313,7 +361,7 @@ function GoalCard({
           </div>
           <div className="mt-1.5 flex justify-between text-xs text-muted">
             <span>Rp 0</span>
-            <span>{month ? 'This month’s target' : 'This year’s target'}</span>
+            <span>{targetName}</span>
           </div>
         </>
       )}
@@ -399,11 +447,14 @@ function PaceNote({ pace, voice }: { pace: Pace; voice: Voice }) {
   );
 }
 
-/** The prototype's three chip labels (`Overall.html:3146-3160`), verbatim. */
+/**
+ * The three chips, in the cascade's words (ADR-0160 §4, 2026-10-26) — the prototype reads *Leads contacted*,
+ * *Appointments* and *Closings* (`Overall.html:3146-3160`). The same three stages `/goals` names.
+ */
 const TARGET_LABEL: Record<ActivityTarget['key'], string> = {
-  leads: 'Leads contacted',
-  appointments: 'Appointments',
-  closings: 'Closings',
+  leads: 'Set appointment',
+  appointments: 'Sales meeting',
+  closings: 'Submission polis',
 };
 
 /**
@@ -419,25 +470,25 @@ const TARGET_LABEL: Record<ActivityTarget['key'], string> = {
  * cascade type. On the seed that is the prototype's two, *Recruitment activities* and *Development
  * activities* (`Overall.html:3164-3183`). The screen draws the chips as they come and regroups nothing.
  */
-function TargetsCard({ activity, month, period, voice }: { activity: SummaryActivity; month: boolean; period: string; voice: Voice }) {
+function TargetsCard({ activity, when, voice }: { activity: SummaryActivity; when: PeriodWords; voice: Voice }) {
   return (
-    <SummaryCard id="summary-targets" title={`${capitalized(voice.possessive)} sales activity targets`} icon="flag" tag={month ? 'This month' : 'This year'}>
+    <SummaryCard id="summary-targets" title={`${capitalized(voice.possessive)} sales activity targets`} icon="flag" tag={when.tag}>
       <p className="-mt-2 mb-3.5 text-xs text-muted">
         From <Link href={goalHref(voice)} className="font-semibold text-navy-soft underline">Goal Settings</Link> — appointments
         and closings are {voice.possessive} {voice.self ? 'Sales' : 'sales'} pipeline targets.
       </p>
       <div className="grid gap-2.5 md:grid-cols-3">
-        {activity.targets.map((target) => <TargetChip key={target.key} target={target} month={month} />)}
+        {activity.targets.map((target) => <TargetChip key={target.key} target={target} when={when} />)}
       </div>
       <p className="mt-3 text-center text-xs text-muted">
-        <strong className="text-navy">{activity.total}</strong> total activities logged {period} across all categories.
+        <strong className="text-navy">{activity.total}</strong> total activities logged {when.inline} across all categories.
       </p>
       <SectionChips sections={activity.sections} idPrefix="summary-section" />
     </SummaryCard>
   );
 }
 
-function TargetChip({ target, month }: { target: ActivityTarget; month: boolean }) {
+function TargetChip({ target, when }: { target: ActivityTarget; when: PeriodWords }) {
   const label = TARGET_LABEL[target.key];
   const pct = target.attainmentPct;
   return (
@@ -452,7 +503,7 @@ function TargetChip({ target, month }: { target: ActivityTarget; month: boolean 
       {target.target === null ? (
         <span className="block text-xs text-muted">No target yet</span>
       ) : target.target === 0 ? (
-        <span className="block text-xs text-muted">Nothing more needed {month ? 'this month' : 'this year'}</span>
+        <span className="block text-xs text-muted">Nothing more needed {when.inline}</span>
       ) : (
         <div
           role="progressbar"
@@ -523,7 +574,8 @@ function PulseCard({ pulse, error, voice }: { pulse: ActivityRatios | null; erro
   );
 }
 
-const LEAD_TYPE: Record<'sales' | 'recruitment', string> = { sales: 'Sales', recruitment: 'Recruitment' };
+/** The Leads screen's words for a lead's type: *Recruit*, not *Recruitment*, since 2026-10-26 (ADR-0161 §2). */
+const LEAD_TYPE: Record<'sales' | 'recruitment', string> = { sales: 'Sales', recruitment: 'Recruit' };
 
 /**
  * *Leads that need you* (`Overall.html:3210-3217`, `:6151-6218`, P10-T6), and *Leads that need her*
@@ -537,6 +589,15 @@ const LEAD_TYPE: Record<'sales' | 'recruitment', string> = { sales: 'Sales', rec
  * change on the client's sign-off list.
  */
 function LeadsCard({ leads, voice }: { leads: Summary['leads']; voice: Voice }) {
+  /*
+   * **A leader's empty card says whose leads it counts** (P18.8-T15 AC-4, the client's UI review, UI-002). The card is
+   * the reader's own leads only, while Leads Management shows a leader their unit's too, so an AB with 71 there read
+   * *No active leads yet* here. A reader with none of their own whose unit holds some — `unitOpen`, the server's count
+   * of what Leads Management lists them besides their own — is told where those are; anybody else keeps the
+   * prototype's sentence.
+   */
+  const unitHasSome = voice.self && (leads.unitOpen ?? 0) > 0;
+  const leadsLink = <Link href="/leads" className="font-semibold text-navy underline">Leads Management</Link>;
   return (
     <SummaryCard
       id="summary-leads"
@@ -547,8 +608,9 @@ function LeadsCard({ leads, voice }: { leads: Summary['leads']; voice: Voice }) 
       {leads.total === 0 ? (
         voice.self ? (
           <p className="text-sm text-muted">
-            No active leads yet — add some in{' '}
-            <Link href="/leads" className="font-semibold text-navy underline">Leads Management</Link>.
+            {unitHasSome
+              ? <>No open leads of your own — your unit’s are in {leadsLink}.</>
+              : <>No active leads yet — add some in {leadsLink}.</>}
           </p>
         ) : (
           // The prototype's own empty line on a coachee's card (`Overall.html:10498`).

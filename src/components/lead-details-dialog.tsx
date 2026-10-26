@@ -3,9 +3,8 @@
 import { useEffect, useId, useRef } from 'react';
 import { Button, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import type { ApiError } from '@/lib/api-client';
-import { cn } from '@/lib/cn';
 import { formatDay } from '@/lib/format';
-import { whatsAppLink, type Lead } from '@/lib/leads';
+import type { Lead } from '@/lib/leads';
 
 /** What the table hands the dialog for the three text fields: its drafts, and its one-field write. */
 export interface DetailsEditor {
@@ -26,14 +25,13 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
  *
  * **What the client asked for on 2026-10-07**, out of what was *Contact details for {name}*: the phone,
  * the email and where they came from as before; *Registered {date}*, moved here from the table's last
- * column; *Last changed by {name}*, moved here from a ✎ in the Actions column (ADR-0044 still decides
- * when it shows — the table works that out and hands it over); and a WhatsApp button. *Why you may hold
- * these* went, with the server rule it answered (ADR-0108 §1). Renamed *Lead details* for what it now
- * holds.
+ * column; and *Last changed by {name}*, moved here from a ✎ in the Actions column (ADR-0044 still
+ * decides when it shows — the table works that out and hands it over). *Why you may hold these* went,
+ * with the server rule it answered (ADR-0108 §1). Renamed *Lead details* for what it now holds.
  *
- * **WhatsApp opens a chat with the number in the box** — what the reader sees, typing included, read by
- * `whatsAppNumber`: digits only, Indonesia's `62` in front. A link, because it navigates, to a new tab,
- * and with no opener: the chat is somebody else's page. No number WhatsApp could open, no button.
+ * **No WhatsApp button since 2026-10-26** (ADR-0161 §2): the client moved it into the table, beside the
+ * row's ⋮, so a chat is one press from the list rather than two. The phone saved here is the number that
+ * link opens.
  *
  * **Its own component, not `ui/dialog.tsx` with a content slot.** That one is confirmations only,
  * deliberately (F-72): a `children` prop is how the two forms I-21 and I-25 moved *out* of modals get
@@ -42,8 +40,7 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
  *
  * Every field saves as it is left, exactly as a cell of the table does, and whatever the server refuses
  * is shown here while the dialog is open and beneath the lead once it is closed. **Read-only** under a
- * finalized coaching session's lock: the boxes hold what is stored and save nothing, and the WhatsApp
- * button still opens the chat — reading a number is not writing one.
+ * finalized coaching session's lock: the boxes hold what is stored and save nothing.
  */
 export function LeadDetailsDialog({
   lead,
@@ -103,33 +100,28 @@ export function LeadDetailsDialog({
   };
 
   const text = (field: DetailsField, label: string, stored: string | null, extra: {
-    type?: string; placeholder?: string; after?: React.ReactNode;
+    type?: string; placeholder?: string;
   } = {}) => (
     <Field label={label} htmlFor={`${id}-${field}`}>
-      <div className={cn(extra.after ? 'flex items-center gap-2' : undefined)}>
-        <TextInput
-          id={`${id}-${field}`}
-          type={extra.type}
-          placeholder={readOnly ? undefined : extra.placeholder}
-          className={cn(extra.after ? 'min-w-0 flex-1' : 'w-full')}
-          value={readOnly ? stored ?? '' : editor.value(field, stored)}
-          // `readOnly`, not `disabled`: a disabled field drops the focus it holds, and a focus that
-          // falls out of a modal lands on the page behind it.
-          readOnly={saving || readOnly}
-          onChange={(e) => {
-            if (!readOnly) editor.change(field, e.target.value);
-          }}
-          onBlur={() => {
-            if (!readOnly) editor.commit(field);
-          }}
-        />
-        {extra.after}
-      </div>
+      <TextInput
+        id={`${id}-${field}`}
+        type={extra.type}
+        placeholder={readOnly ? undefined : extra.placeholder}
+        className="w-full"
+        value={readOnly ? stored ?? '' : editor.value(field, stored)}
+        // `readOnly`, not `disabled`: a disabled field drops the focus it holds, and a focus that
+        // falls out of a modal lands on the page behind it.
+        readOnly={saving || readOnly}
+        onChange={(e) => {
+          if (!readOnly) editor.change(field, e.target.value);
+        }}
+        onBlur={() => {
+          if (!readOnly) editor.commit(field);
+        }}
+      />
     </Field>
   );
 
-  const phone = readOnly ? lead.contact.phone : editor.value('phone', lead.contact.phone);
-  const chat = whatsAppLink(phone);
   const name = lead.name || 'this lead';
 
   return (
@@ -149,23 +141,7 @@ export function LeadDetailsDialog({
           Lead details for {name}
         </h2>
 
-        {text('phone', 'Phone', lead.contact.phone, {
-          type: 'tel',
-          after: chat && (
-            <a
-              href={chat}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Chat with ${name} on WhatsApp (opens in a new tab)`}
-              className={cn(
-                'inline-flex h-10 shrink-0 items-center justify-center rounded-md border border-success/40',
-                'bg-card px-3 text-md font-semibold text-success hover:bg-success/[0.08]',
-              )}
-            >
-              WhatsApp
-            </a>
-          ),
-        })}
+        {text('phone', 'Phone', lead.contact.phone, { type: 'tel' })}
         {text('email', 'Email', lead.contact.email, { type: 'email' })}
         {text('source', 'Where they came from', lead.source, { placeholder: 'e.g. Referral from Desi' })}
 

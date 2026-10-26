@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
 import LeaderMeetingPage from './page';
 import {
@@ -365,6 +365,9 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
     });
 
     it('a reader not signed in is sent to sign in, and back to this meeting after', async () => {
+      // Sent by the shell since P18.8-T15 AC-2, from the address the browser is on.
+      window.history.replaceState(null, '', '/leader-meetings/m-14');
+      onTestFinished(() => window.history.replaceState(null, '', '/'));
       stubFetch({});
       renderWithSession(page(), { me: null });
       await waitFor(() => expect(nav.replace).toHaveBeenCalledWith('/login?next=%2Fleader-meetings%2Fm-14'));

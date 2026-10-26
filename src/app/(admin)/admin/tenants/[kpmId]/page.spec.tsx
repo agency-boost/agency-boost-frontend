@@ -87,6 +87,42 @@ describe('tenant detail', () => {
     expect(screen.getByText(/Nobody can administer this office/)).toBeInTheDocument();
   });
 
+  /*
+   * ADR-0162 (P18.9-T1 AC-5): *Open as Owner* on the Owner card, to the start screen for a setup session as
+   * them. Only where there is an Owner, the office is active and the reader may start a session.
+   */
+  describe('Open as Owner (ADR-0162)', () => {
+    const IMPERSONATOR = { ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'impersonation:start'] };
+
+    it('AC-5 opens the start screen for a setup session as the office’s Owner, in the Owner card', async () => {
+      stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: IMPERSONATOR });
+
+      const link = await screen.findByRole('link', { name: 'Open as Owner' });
+      expect(link).toHaveAttribute('href', '/admin/impersonate/u-owner?purpose=setup&kpmId=kpm-1');
+      const card = screen.getByRole('heading', { name: 'Owner' }).parentElement!;
+      expect(within(card).getByRole('link', { name: 'Open as Owner' })).toBe(link);
+    });
+
+    it.each([
+      ['an office with no Owner', { ...KPM, ownerUserId: null, ownerName: null, ownerEmail: null }],
+      ['a suspended office', { ...KPM, status: 'suspended' }],
+      ['an archived office', { ...KPM, status: 'archived' }],
+    ])('AC-5 is not offered for %s', async (_case, body) => {
+      stubFetch({ '/admin/tenants/kpm-1': { body } });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: IMPERSONATOR });
+      expect(await screen.findByRole('heading', { name: 'Owner' })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Open as Owner' })).not.toBeInTheDocument();
+    });
+
+    it('is not offered to a reader who may not start a session', async () => {
+      stubFetch({ '/admin/tenants/kpm-1': { body: KPM } });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me: SUPER_ADMIN });
+      expect(await screen.findByRole('link', { name: 'Transfer owner' })).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Open as Owner' })).not.toBeInTheDocument();
+    });
+  });
+
   it('sends the reason with a suspension and reloads the office afterwards', async () => {
     const { calls } = stubFetch({
       '/admin/tenants/kpm-1/status': { body: {} },
@@ -309,6 +345,94 @@ describe('tenant detail', () => {
       const dialog = await open();
       await within(dialog).findByRole('combobox', { name: 'Company' });
       expect((await axe(dialog, { rules: { 'color-contrast': { enabled: false } } })).violations ?? []).toHaveLength(0);
+    });
+  });
+
+  /*
+   * P18.9-T2 AC-3 (ADR-0163): the office's activity binding, kept by the Super Admin — which activities each cascade
+   * stage counts, and a replacement added beside the old one.
+   */
+  describe('Activity binding (P18.9-T2)', () => {
+    const KEEPER = { ...SUPER_ADMIN, permissions: [...SUPER_ADMIN.permissions, 'activity_binding:read', 'activity_binding:write'] };
+    const BINDING = {
+      kpmId: 'kpm-1', leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'],
+      version: 1, updatedAt: null,
+      types: [
+        { code: 'LEADS_CONTACTED', label: 'Set Appointment', categoryCode: 'LEADS_GENERATION', displayOrder: 3, status: 'active' },
+        { code: 'SELL_PRESENTATION', label: 'Presentasi', categoryCode: 'SELLING', displayOrder: 4, status: 'active' },
+        { code: 'SALES_MEETING', label: 'Sales meeting baru', categoryCode: 'SELLING', displayOrder: 5, status: 'active' },
+        { code: 'SELL_SUBMISSION', label: 'Submission', categoryCode: 'SELLING', displayOrder: 6, status: 'active' },
+        { code: 'OLD_CALLS', label: 'Telepon lama', categoryCode: 'LEADS_GENERATION', displayOrder: 7, status: 'archived' },
+      ],
+    };
+    const mount = (me = KEEPER, binding: unknown = { body: BINDING }) => {
+      const stub = stubFetch({ '/admin/tenants/kpm-1': { body: KPM }, '/admin/tenants/kpm-1/activity-binding': binding as never });
+      renderInLayout(AdminLayout, <TenantDetailPage params={params} />, { me });
+      return stub;
+    };
+    const card = async () => (await screen.findByRole('heading', { name: 'Activity binding' })).parentElement!;
+
+    it('AC-3 lists what each stage counts, archived types marked, and says old codes keep counting', async () => {
+      mount();
+      const binding = await card();
+      expect(binding).toHaveTextContent('what was logged against the old one keeps counting');
+      const meeting = await within(binding).findByRole('group', { name: 'Sales meeting' });
+      expect(within(meeting).getByRole('list', { name: 'Sales meeting counts' })).toHaveTextContent('Presentasi');
+      // Offered: the types no stage holds, the archived one marked.
+      const add = within(binding).getByRole('combobox', { name: 'Add an activity to Set appointment' });
+      expect([...(add as HTMLSelectElement).options].map((o) => o.textContent))
+        .toEqual(['Add an activity…', 'Sales meeting baru', 'Telepon lama (archived)']);
+      // Nothing changed, nothing to save.
+      expect(within(binding).getByRole('button', { name: 'Save binding' })).toBeDisabled();
+    });
+
+    it('AC-3 adds the replacement beside the old one and saves the whole binding with the version read', async () => {
+      const { calls } = mount(KEEPER, [
+        { body: BINDING },
+        { body: { ...BINDING, appointments: ['SELL_PRESENTATION', 'SALES_MEETING'], version: 2 } },
+      ]);
+      const binding = await card();
+      await userEvent.selectOptions(
+        await within(binding).findByRole('combobox', { name: 'Add an activity to Sales meeting' }), 'SALES_MEETING',
+      );
+      expect(within(within(binding).getByRole('list', { name: 'Sales meeting counts' })).getAllByRole('listitem')
+        .map((item) => item.firstChild?.textContent)).toEqual(['Presentasi', 'Sales meeting baru']);
+      await userEvent.click(within(binding).getByRole('button', { name: 'Save binding' }));
+
+      expect(await within(binding).findByRole('status')).toHaveTextContent('Saved. The summary counts it from now.');
+      const put = calls.find((c) => c.init.method === 'PUT')!;
+      expect(put.url).toContain('/admin/tenants/kpm-1/activity-binding');
+      expect(JSON.parse(put.init.body as string)).toEqual({
+        leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION', 'SALES_MEETING'], closings: ['SELL_SUBMISSION'],
+        expectedVersion: 1,
+      });
+    });
+
+    it('AC-3 shows the server’s refusal, and keeps what was typed', async () => {
+      mount(KEEPER, [
+        { body: BINDING },
+        { status: 400, body: { error: { code: 'VALIDATION_FAILED', message: 'Sales meeting counts no activity type.', requestId: 'r-1' } } },
+      ]);
+      const binding = await card();
+      await userEvent.click(await within(binding).findByRole('button', { name: 'Remove Presentasi from Sales meeting' }));
+      expect(within(binding).getByRole('list', { name: 'Sales meeting counts' })).toHaveTextContent('Counts nothing yet.');
+      await userEvent.click(within(binding).getByRole('button', { name: 'Save binding' }));
+      expect(await within(binding).findByRole('alert')).toHaveTextContent('Sales meeting counts no activity type.');
+      expect(within(binding).getByRole('list', { name: 'Sales meeting counts' })).toHaveTextContent('Counts nothing yet.');
+    });
+
+    it('is not drawn for a reader without activity_binding:read, and asks nothing', async () => {
+      const { calls } = mount(SUPER_ADMIN);
+      expect(await screen.findByRole('heading', { name: 'Lifecycle' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Activity binding' })).not.toBeInTheDocument();
+      expect(calls.some((c) => c.url.includes('/activity-binding'))).toBe(false);
+    });
+
+    it('has no axe violations', async () => {
+      mount();
+      const binding = await card();
+      await within(binding).findByRole('group', { name: 'Submission polis' });
+      expect((await axe(binding, { rules: { 'color-contrast': { enabled: false } } })).violations ?? []).toHaveLength(0);
     });
   });
 });

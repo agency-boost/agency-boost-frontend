@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
 import {
   capitalized, coacheeInitials, coacheeUnitLine, coachingArchiveHref, coachingSessionHref, coachingTabHref, coachingTabOf,
-  finalizeRefusal, finalizeSession, lastOneOnOneOverdue, lastOneOnOneText, pastSessionSummary, PRONOUN_FORMS, readCoachee,
+  finalizeRefusal, finalizeSession, lastOneOnOneLine, lastOneOnOneOverdue, lastOneOnOneText, pastSessionSummary, PRONOUN_FORMS, readCoachee,
   readRoster, readSession, readSessionHistory, reopenSession, reopenWindowClosed, ROSTER_STATUS_LABEL, saveSessionDraft,
   startSession, type LastOneOnOne,
 } from './coaching';
@@ -29,6 +29,14 @@ describe('the roster’s words (P11-T6)', () => {
     expect(lastOneOnOneText(last(0))).toBe('Today');
     expect(lastOneOnOneText(last(1))).toBe('1 day ago');
     expect(lastOneOnOneText(last(12))).toBe('12 days ago');
+  });
+
+  it('P18.8-T15 AC-7 says overdue in the words when the server marks it, and nothing more otherwise', () => {
+    expect(lastOneOnOneLine(last(14, true))).toBe('14 days ago · overdue');
+    expect(lastOneOnOneLine(last(1, true))).toBe('1 day ago · overdue');
+    expect(lastOneOnOneLine(last(30, false))).toBe('30 days ago');
+    // *No 1:1 yet* says it already, and red besides.
+    expect(lastOneOnOneLine(null)).toBe('No 1:1 yet');
   });
 
   it('P11-T6 AC-3 marks red what the server marks overdue, and a member never coached — never by counting days here', () => {

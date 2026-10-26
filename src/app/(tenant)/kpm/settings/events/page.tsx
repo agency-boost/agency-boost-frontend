@@ -186,25 +186,6 @@ export default function EventsSettingsPage() {
 
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className="flex items-center gap-2 text-md text-navy">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />
-            Show archived
-          </label>
-          {canWrite && (
-            <Button
-              disabled={busy || adding !== null || active.length === 0}
-              onClick={() => { setDraft(emptyDraft()); setOriginal(null); setFieldRefusal(null); setAdding('new'); }}
-            >
-              Add an event
-            </Button>
-          )}
-        </div>
-
         {active.length === 0 && (
           <Card>
             <p className="text-md text-navy">
@@ -216,14 +197,19 @@ export default function EventsSettingsPage() {
 
         {adding && addPanel(active)}
 
-        {shown.length === 0 ? (
-          <EmptyState title="No events yet. Anything your office runs goes here — training, launches, recognition nights." />
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {shown.map((event) => (
-              <li key={event.id}>
-                <Card>
-                  <div className="flex flex-wrap items-center gap-3">
+        {/*
+          * The prototype's `config-table` (`KPM_Owner.html:1651-1656`): one bordered list, a row per event, as the
+          * other settings screens draw theirs (P18.8-T13 AC-2, the tidy), where each event was a card of its own.
+          */}
+        <Card className="p-0">
+          {shown.length === 0 ? (
+            <EmptyState title="No events yet. Anything your office runs goes here — training, launches, recognition nights." />
+          ) : (
+            <ul className="flex flex-col divide-y divide-hairline">
+              {shown.map((event) => {
+                const viewable = event.phase === 'past' && mayViewFeedback;
+                return (
+                  <li key={event.id} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
                     <div className="min-w-0 flex-1">
                       <h2 className="text-md font-semibold text-navy">{event.title}</h2>
                       {event.blurb && <p className="mt-0.5 text-sm text-muted">{event.blurb}</p>}
@@ -247,43 +233,48 @@ export default function EventsSettingsPage() {
                         {event.location && <> · {event.location}</>}
                       </p>
                     </div>
-                    {event.phase === 'past' && mayViewFeedback && (
-                      <Button variant="inline" onClick={() => setFeedbackFor(event)}>
-                        {OWNER_PROTOTYPE_COPY.viewFeedback}
-                      </Button>
-                    )}
-                    {canWrite && (
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="inline"
-                          disabled={busy}
-                          onClick={() => {
-                            const opened = draftOf(event);
-                            setDraft(opened);
-                            setOriginal(opened);
-                            setFieldRefusal(null);
-                            setAdding(event.id);
-                          }}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="inlineDanger"
-                          disabled={busy}
-                          onClick={() => void run(() => (event.status === 'archived'
-                            ? restoreEvent(event.id)
-                            : archiveEvent(event.id)))}
-                        >
-                          {event.status === 'archived' ? 'Restore' : 'Archive'}
-                        </Button>
+                    {/* The row's actions in one group, *View feedback* first, as `cfg-actions` holds them (`:1655`). */}
+                    {(viewable || canWrite) && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {viewable && (
+                          <Button variant="inline" onClick={() => setFeedbackFor(event)}>
+                            {OWNER_PROTOTYPE_COPY.viewFeedback}
+                          </Button>
+                        )}
+                        {canWrite && (
+                          <>
+                            <Button
+                              variant="inline"
+                              disabled={busy}
+                              onClick={() => {
+                                const opened = draftOf(event);
+                                setDraft(opened);
+                                setOriginal(opened);
+                                setFieldRefusal(null);
+                                setAdding(event.id);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="inlineDanger"
+                              disabled={busy}
+                              onClick={() => void run(() => (event.status === 'archived'
+                                ? restoreEvent(event.id)
+                                : archiveEvent(event.id)))}
+                            >
+                              {event.status === 'archived' ? 'Restore' : 'Archive'}
+                            </Button>
+                          </>
+                        )}
                       </div>
                     )}
-                  </div>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Card>
       </div>
     );
   }
@@ -449,28 +440,6 @@ export default function EventsSettingsPage() {
 
     return (
       <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <label className="flex items-center gap-2 text-md text-navy">
-            <input
-              type="checkbox"
-              checked={showArchived}
-              onChange={(e) => setShowArchived(e.target.checked)}
-            />
-            Show archived
-          </label>
-          {canWrite && (
-            <Button
-              disabled={busy || addingType !== null}
-              onClick={() => {
-                setTypeDraft({ label: '', code: '', touched: false, emoji: '' });
-                setAddingType('new');
-              }}
-            >
-              Add an event type
-            </Button>
-          )}
-        </div>
-
         {addingType && (
           <Card>
             <FieldRow>
@@ -531,28 +500,28 @@ export default function EventsSettingsPage() {
           </Card>
         )}
 
-        {shown.length === 0 ? (
-          <EmptyState title="No event types yet." />
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {shown.map((type) => (
-              <li key={type.id}>
-                <Card>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span aria-hidden className="text-lg">{type.emoji ?? '📅'}</span>
-                    <div className="min-w-0 flex-1">
-                      <h2 className="text-md font-semibold text-navy">{type.label}</h2>
-                      <p className="mt-1 flex flex-wrap items-center gap-2">
-                        <ConfigBadge tone={type.events > 0 ? 'won' : 'open'}>
-                          {type.events} {type.events === 1 ? 'event' : 'events'}
-                        </ConfigBadge>
-                        {type.status === 'archived' && (
-                          <ConfigBadge tone="open">Archived</ConfigBadge>
-                        )}
-                      </p>
-                    </div>
-                    {canWrite && (
-                      <div className="flex flex-wrap gap-2">
+        {/* One bordered list, a row per type, as the events tab and the other settings screens draw theirs. */}
+        <Card className="p-0">
+          {shown.length === 0 ? (
+            <EmptyState title="No event types yet." />
+          ) : (
+            <ul className="flex flex-col divide-y divide-hairline">
+              {shown.map((type) => (
+                <li key={type.id} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
+                  <span aria-hidden className="text-lg">{type.emoji ?? '📅'}</span>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-md font-semibold text-navy">{type.label}</h2>
+                    <p className="mt-1 flex flex-wrap items-center gap-2">
+                      <ConfigBadge tone={type.events > 0 ? 'won' : 'open'}>
+                        {type.events} {type.events === 1 ? 'event' : 'events'}
+                      </ConfigBadge>
+                      {type.status === 'archived' && (
+                        <ConfigBadge tone="open">Archived</ConfigBadge>
+                      )}
+                    </p>
+                  </div>
+                  {canWrite && (
+                    <div className="flex flex-wrap items-center gap-2">
                       <Button
                         variant="inline"
                         disabled={busy}
@@ -579,17 +548,55 @@ export default function EventsSettingsPage() {
                       >
                         {type.status === 'archived' ? 'Restore' : 'Archive'}
                       </Button>
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        )}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       </div>
     );
   }
+
+  /*
+   * **The toolbar** — the prototype's `config-toolbar` (`:1647-1650`, `:1659-1662`), in `SettingsScreen`'s slot as
+   * the other settings screens hold theirs (P18.8-T13 AC-2): *Show archived*, one box for both tabs, and the tab's
+   * add button on the right, once the lists it adds to are read.
+   */
+  const activeTypes = types?.filter((t) => t.status === 'active') ?? [];
+  const toolbar = types === null || (tab !== '#types' && events === null) ? undefined : {
+    actions: (
+      <>
+        <label className="flex items-center gap-2 text-md text-navy">
+          <input
+            type="checkbox"
+            checked={showArchived}
+            onChange={(e) => setShowArchived(e.target.checked)}
+          />
+          Show archived
+        </label>
+        {canWrite && (tab === '#types' ? (
+          <Button
+            disabled={busy || addingType !== null}
+            onClick={() => {
+              setTypeDraft({ label: '', code: '', touched: false, emoji: '' });
+              setAddingType('new');
+            }}
+          >
+            Add an event type
+          </Button>
+        ) : (
+          <Button
+            disabled={busy || adding !== null || activeTypes.length === 0}
+            onClick={() => { setDraft(emptyDraft()); setOriginal(null); setFieldRefusal(null); setAdding('new'); }}
+          >
+            Add an event
+          </Button>
+        ))}
+      </>
+    ),
+  };
 
   return (
     <SettingsScreen
@@ -602,6 +609,7 @@ export default function EventsSettingsPage() {
       onSelectTab={setTab}
       error={types === null ? error : null}
       bars={<PublishBar />}
+      toolbar={toolbar}
     >
       {error && types !== null && (
         <div role="alert" className="mb-4 rounded-md border border-amber bg-card p-4">

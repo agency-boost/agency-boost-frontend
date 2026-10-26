@@ -15,6 +15,7 @@ import { useCan } from '@/lib/session';
 import { projectStaged, unstageRow, STAGED_LABEL } from '@/lib/staged-projection';
 import { planSummaryTile, summaryGroups, summaryTileName, tileRefusal } from '@/lib/summary-tiles';
 import { reservedRefusal } from '@/lib/reserved-types';
+import { BINDING_ROLE_LABEL, readOwnActivityBinding, rolesByCode, type BindingRole } from '@/lib/activity-binding';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import {
   applyConfigChanges,
@@ -42,6 +43,13 @@ import {
  */
 export default function ActivityTypesPage() {
   const canWrite = useCan('tenant_config:write');
+  /*
+   * **Which types the office's activity binding names** (ADR-0163 §3, P18.9-T2 AC-3): the Owner and the Admin read
+   * it, the Super Admin keeps it. A bound type wears its role beside its name — the explicit request of the product
+   * owner, 2026-10-26 — and is the one an archive refuses. A failed read leaves the names unmarked.
+   */
+  const canReadBinding = useCan('activity_binding:read');
+  const [bound, setBound] = useState<Map<string, BindingRole>>(new Map());
   const [categories, setCategories] = useState<ActivityCategoryRow[] | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -116,6 +124,15 @@ export default function ActivityTypesPage() {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    if (!canReadBinding) return;
+    let live = true;
+    readOwnActivityBinding()
+      .then((binding) => { if (live) setBound(rolesByCode(binding)); })
+      .catch(() => { /* the names stay unmarked; the archive's refusal still says why */ });
+    return () => { live = false; };
+  }, [canReadBinding]);
+
   async function run(key: string, action: () => Promise<unknown>) {
     setBusy(key);
     setError(null);
@@ -125,7 +142,7 @@ export default function ActivityTypesPage() {
       setPublished((n) => n + 1);
     } catch (err) {
       const shown = toDisplayError(err);
-      // One of the three cascade types, or its section, refused archiving (ADR-0115 §2): said plainly.
+      // A bound type, or its section, refused archiving (ADR-0163 §5): said plainly.
       setError(tileRefusal(shown) ?? reservedRefusal(shown) ?? shown);
     } finally {
       setBusy(null);
@@ -789,7 +806,18 @@ export default function ActivityTypesPage() {
                         </div>
                       ) : (
                         <>
-                          <p className="text-md text-navy">{type.label}</p>
+                          <p className="text-md text-navy">
+                            {type.label}
+                            {bound.has(type.code) && (
+                              <span
+                                className="ml-2 rounded-full bg-canvas px-2 py-0.5 text-sm text-muted"
+                                title={`The summary and the goal plan count this as ${BINDING_ROLE_LABEL[bound.get(type.code)!]}. `
+                                  + 'A Super Admin changes which activities count.'}
+                              >
+                                {BINDING_ROLE_LABEL[bound.get(type.code)!]}
+                              </span>
+                            )}
+                          </p>
                           {type.description && (
                             <p className="text-sm text-muted">{type.description}</p>
                           )}

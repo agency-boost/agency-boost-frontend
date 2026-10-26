@@ -14,6 +14,11 @@ export interface OrgLevel {
   code: string;
   label: string;
   displayOrder: number;
+  /**
+   * Whether the rung leads, and how (ADR-0156): *Senior Leader* gives AB's rights, *Associate Leader* AAB's,
+   * `null` none. Absent on a rung read before the field existed, which reads by its code (`classOfRung`).
+   */
+  leaderTier?: 'senior' | 'associate' | null;
   status: 'active' | 'archived';
 }
 
