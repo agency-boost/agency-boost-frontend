@@ -119,8 +119,10 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
       {children}
       {/*
         * Above the modal (`z-50`), which is the whole screen on a phone: every toast the modal raises —
-        * *"You're going to…"*, *"Pick a score from 0–10 first"* — would otherwise land behind it. A
+        * *"Joined ✓ — you're going to…"*, *"Pick a score from 0–10 first"* — would otherwise land behind it. A
         * positioned layer at 60 holds the toast's own fixed region in front of the dialog and its scrim.
+        * Inside the agent shell the toast is the shell's (P18.95-T1 AC-6), whose region is at 60 itself, and
+        * this layer stays empty; it is the screen's own only where no shell holds one.
         */}
       <div data-layer="toast" className="relative z-[60]">
         <Toast toast={toast} />

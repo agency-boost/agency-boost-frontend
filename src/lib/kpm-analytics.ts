@@ -1,6 +1,7 @@
 import { api } from './api-client';
-import { formatMonth } from './format';
-import { formatRupiah } from './goals';
+import {
+  formatMonth, formatMonthName, formatNumber, formatPercent, formatRupiah, formatRupiahCompact,
+} from './format';
 import type { Me } from './session';
 
 /**
@@ -299,7 +300,7 @@ export interface MoneyWords {
 
 /**
  * An APE cell (`apeCellHtml`, `:3229-3231`): the figure, *"of {target} target"* and the pill — *success* at or
- * above the server's split, *alert* below it (`:3150`, `:3220`).
+ * above the server's split, *alert* below it (`:3150`, `:3220`). **In full**: a table's cell (ADR-0167 §1).
  */
 export function moneyWords(money: AnalyticsMoney, splitPct: number): MoneyWords {
   return {
@@ -308,14 +309,14 @@ export function moneyWords(money: AnalyticsMoney, splitPct: number): MoneyWords 
     of: money.targetMinor === null ? OWN_COPY.noGoal : `of ${formatRupiah(money.targetMinor)} target`,
     pill: money.pct === null
       ? null
-      : { text: `${money.pct}%`, tone: money.pct >= splitPct ? 'success' : 'alert' },
+      : { text: formatPercent(money.pct), tone: money.pct >= splitPct ? 'success' : 'alert' },
   };
 }
 
 /** *Coached (7d)*: *"{n} / {m}"* and its percentage, *—* over nobody. */
 export const rateWords = (rate: AnalyticsRate) => ({
   main: `${rate.count} / ${rate.of}`,
-  pct: rate.pct === null ? '—' : `${rate.pct}%`,
+  pct: rate.pct === null ? '—' : formatPercent(rate.pct),
 });
 
 /**
@@ -324,7 +325,7 @@ export const rateWords = (rate: AnalyticsRate) => ({
  */
 export function activeWords(active: number | null, manpower: number): { main: string; pct: string | null } {
   if (active === null) return { main: OWN_COPY.notUploaded, pct: null };
-  return { main: `${active} / ${manpower}`, pct: manpower > 0 ? `${Math.round((active / manpower) * 100)}%` : '—' };
+  return { main: `${active} / ${manpower}`, pct: manpower > 0 ? formatPercent(Math.round((active / manpower) * 100)) : '—' };
 }
 
 /** *Total leads* (`:3343`): the open sales and recruitment leads, and the line under them. */
@@ -383,12 +384,16 @@ export function mocButtonName(moc: Moc, name: string): string {
 /**
  * A criterion's figure or threshold, in the criterion's own unit: rupiah for Net APE, a percentage for
  * persistency, a count for the rest (`:3301-3313`). *—* for an input not uploaded.
+ *
+ * **Compact, and lossless** (ADR-0167 §1): the dialog is a list, not a table, so *Rp 200 jt*; but a figure
+ * that compact writing would round is written in full, so *Rp 199.960.000 / Rp 200 jt — Gap* can never read
+ * *Rp 200 jt / Rp 200 jt — Gap*. A persistency keeps the decimals it has, at least one.
  */
 export function criterionValue(code: string, value: number | null): string {
   if (value === null) return '—';
-  if (/APE/.test(code)) return formatRupiah(value);
-  if (/PERSISTENCY/.test(code)) return `${value}%`;
-  return String(value);
+  if (/APE/.test(code)) return formatRupiahCompact(value, { lossless: true });
+  if (/PERSISTENCY/.test(code)) return formatPercent(value, { maxDecimals: 2 });
+  return formatNumber(value, { maxDecimals: 2 });
 }
 
 /** *Met*, *Gap*, or *Not uploaded yet* — never *Gap* for a figure nobody has (D-moc). */
@@ -398,8 +403,8 @@ export const criterionVerdict = (met: boolean | null) =>
 const MONTH = /^(\d{4})-(\d{2})$/;
 
 /**
- * The period a criterion was read over, as a sentence names it: a month (*September 2026*), a run of them
- * (*August – September 2026*, *December 2025 – January 2026*), or the server's words as they came.
+ * The period a criterion was read over, as a sentence names it: a month (*Sep 2026*), a run of them
+ * (*Agu – Sep 2026*, *Des 2025 – Jan 2026*), or the server's words as they came.
  */
 export function periodWords(period: string): string {
   if (MONTH.test(period)) return formatMonth(period);
@@ -416,11 +421,9 @@ export function periodWords(period: string): string {
  * ── Monthly production ──────────────────────────────────────────────────────────────────────────
  */
 
-/** A bar's label under it: *Mar* (`:3433`). */
+/** A bar's label under it: *Mar*, *Okt* (`:3433`; `id-ID`, ADR-0167 §1). */
 export function shortMonth(month: string): string {
-  const m = MONTH.exec(month);
-  if (!m) return month;
-  return new Date(Number(m[1]), Number(m[2]) - 1, 1).toLocaleDateString('en-US', { month: 'short' });
+  return MONTH.test(month) ? formatMonthName(month) : month;
 }
 
 export interface ChartBar {
@@ -437,6 +440,7 @@ export function chartBars(monthly: readonly MonthlyProduction[]): ChartBar[] {
   return monthly.map(({ month, apeMinor }) => ({
     month,
     height: apeMinor === null ? null : top > 0 ? Math.round((apeMinor / top) * 100) : 0,
-    value: apeMinor === null ? OWN_COPY.notUploaded : formatRupiah(apeMinor),
+    // A bar's label is a chart's, compact (ADR-0167 §1): `Rp 1,2 M` fits over a bar where a full figure ran on.
+    value: apeMinor === null ? OWN_COPY.notUploaded : formatRupiahCompact(apeMinor),
   }));
 }

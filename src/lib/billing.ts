@@ -1,5 +1,5 @@
 import { api } from './api-client';
-import { dayInZone, OFFICE_TIME_ZONE } from './format';
+import { dayInZone, formatCalendarDay, formatPercent, OFFICE_TIME_ZONE } from './format';
 import { formatRupiah, groupDigits, MINOR_UNITS_PER_MAJOR } from './goals';
 
 /**
@@ -83,7 +83,7 @@ export interface Pricing {
 /** **The prototype's own strings, verbatim** (`AgencyBoost_Billing_Subscription.html`; ADR-0062). */
 export const BILLING_COPY = {
   title: 'Billing & subscription',
-  launch: 'Launch pricing — locked in for signups before March 2027.',
+  launch: 'Launch pricing — locked in for signups before Mar 2027.',
   leadersSuffix: ' leaders',
   perLeaderMonth: ' /leader/mo',
   perMonth: '/mo',
@@ -147,7 +147,7 @@ export const BILLING_COPY = {
   total: 'Total',
   footer:
     'This quote is valid for the plan period shown above. Rate is locked for the duration of the '
-    + "subscription under AgencyBoost's launch pricing, valid for signups before March 2027.",
+    + "subscription under AgencyBoost's launch pricing, valid for signups before Mar 2027.",
   print: 'Print / save as PDF',
   back: 'Back to editor',
 } as const;
@@ -354,11 +354,24 @@ export function addMonths(day: string, n: number): string {
 export const planEnd = (start: string, period: BillingPeriod) =>
   addDays(addMonths(start, period === 'annual' ? 12 : 6), -1);
 
-/** `YYYY-MM-DD` as the dialog and the quote write it, `DD/MM/YYYY` (`formatDMY`, `:580`). */
+/** `YYYY-MM-DD` as the dialog's date fields are typed, `DD/MM/YYYY` (`formatDMY`, `:580`). */
 export function toDmy(day: string): string {
   const [y, m, d] = day.split('-');
   return `${d}/${m}/${y}`;
 }
+
+/**
+ * A date **as the quote prints it**: `8 Okt 2026` (ADR-0167 §1), from what the dialog's field holds, `08/10/2026`.
+ * The field keeps the typed form; the paper writes the date the way every screen does. What is not a day is printed
+ * as it was typed — `validateQuote` refuses it before a quote exists, so that is never on paper.
+ */
+export function quoteDay(typed: string): string {
+  const day = parseDmy(typed);
+  return day ? formatCalendarDay(day) : typed.trim();
+}
+
+/** The card's *Save 20,0%*: `savePct`'s whole percent, written to one decimal (ADR-0167 §1). */
+export const saveWords = (tier: Pick<BillingTier, 'standardMinor' | 'sixMonthMinor'>) => `Save ${formatPercent(savePct(tier))}`;
 
 /**
  * `DD/MM/YYYY` as a calendar day, or `null` when it is not one — **an impossible date included**, where

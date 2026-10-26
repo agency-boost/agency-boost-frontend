@@ -341,7 +341,7 @@ function DayColumn({
 }
 
 /**
- * An entry on the grid: its title and its time, `9:00 AM–9:30 AM` (`:611`). **A button**, named by its
+ * An entry on the grid: its title and its time, `09.00–09.30` (`:611`). **A button**, named by its
  * type, title and time, so colour is never the only thing that says what it is (H-18; P12-T2 AC-11).
  * A compared member's busy block reads *Busy* and its time, and opens nothing.
  *

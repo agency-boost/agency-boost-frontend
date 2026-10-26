@@ -8,7 +8,9 @@ import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/compo
 import { RoleBadge } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
+import { Toast, useToast } from '@/components/ui/toast';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { CONFIRMED } from '@/lib/confirmations';
 import {
   cancelLeaderRequest,
   readJoinState,
@@ -34,6 +36,7 @@ export default function FindLeaderPage() {
   const [leaders, setLeaders] = useState<LeaderChoice[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const { toast, show } = useToast();
 
   const refresh = useCallback(async () => {
     const next = await readJoinState();
@@ -57,11 +60,17 @@ export default function FindLeaderPage() {
       });
   }, [q, registered]);
 
+  /**
+   * *Send request*, and *Request sent ✓* once the request is in (P18.95-T1 AC-6, ADR-0167 §5; UI-008), whether
+   * or not the list read after it answers; the row's own *Request sent* pill follows with the list. A
+   * refusal toasts nothing and stays in the banner.
+   */
   async function ask(membershipId: string) {
     setBusy(membershipId);
     setError(null);
     try {
       setState(await requestLeader(membershipId));
+      show(CONFIRMED.requestSent);
       setLeaders(await searchLeaders(q || undefined));
     } catch (err) {
       setError(toDisplayError(err));
@@ -227,6 +236,7 @@ export default function FindLeaderPage() {
           )}
         </>
       )}
+      <Toast toast={toast} />
     </Page>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Switch } from '@/components/ui/field';
+import { InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { OWN_COPY, readCalendarSettings, saveCalendarSettings } from '@/lib/calendar';
@@ -12,6 +13,8 @@ export interface HideDetails {
   /** The last save the server refused, which put the switch back; `null` once another is made. */
   error: ApiError | null;
   change: (next: boolean) => void;
+  /** *Saving… → Saved ✓*, or *Couldn't save — retry* (P18.95-T1 AC-5), beside the switch. */
+  status: InlineSaveStatusProps;
 }
 
 /**
@@ -23,11 +26,15 @@ export interface HideDetails {
  * a save still on its way could overturn; it is not disabled meanwhile, which would take the focus from
  * it. `enabled` is false where the reader may not save it — a read-only support session, a role with no
  * calendar write — and then nothing is read and nothing is drawn.
+ *
+ * **It says its save beside it** (P18.95-T1 AC-5, ADR-0167 §5; UI-007), and a refused one offers the retry,
+ * which switches it to the same side again and saves; the banner still says why.
  */
 export function useHideDetails(enabled: boolean): HideDetails {
   const [on, setOn] = useState<boolean | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const saving = useRef(false);
+  const { save: track, statusOf } = useInlineSave();
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -42,19 +49,24 @@ export function useHideDetails(enabled: boolean): HideDetails {
   const change = (next: boolean) => {
     if (on === null || saving.current) return;
     const before = on;
-    saving.current = true;
-    setOn(next);
-    setError(null);
-    saveCalendarSettings({ hideDetails: next })
-      .then((settings) => setOn(settings.hideDetails))
-      .catch((err) => {
+    void track('hideDetails', async () => {
+      saving.current = true;
+      setOn(next);
+      setError(null);
+      try {
+        setOn((await saveCalendarSettings({ hideDetails: next })).hideDetails);
+        return true;
+      } catch (err) {
         setOn(before);
         setError(toDisplayError(err));
-      })
-      .finally(() => { saving.current = false; });
+        return false;
+      } finally {
+        saving.current = false;
+      }
+    });
   };
 
-  return { on, error, change };
+  return { on, error, change, status: statusOf('hideDetails') };
 }
 
 /**
@@ -62,13 +74,21 @@ export function useHideDetails(enabled: boolean): HideDetails {
  * on does — leaders see only *Busy*, and the people invited still see the details (ADR-0062 §2's second
  * form). The same words are the switch's description, so a screen reader hears them with it.
  */
-export function HideDetailsSwitch({ on, onChange }: { on: boolean; onChange: (next: boolean) => void }) {
+export function HideDetailsSwitch({
+  on, onChange, status = { state: 'idle' },
+}: {
+  on: boolean;
+  onChange: (next: boolean) => void;
+  /** Its save confirmation, after the ⓘ on the toolbar's line (P18.95-T1 AC-5). */
+  status?: InlineSaveStatusProps;
+}) {
   const id = useId();
   return (
     <span className="inline-flex items-center gap-1">
       <Switch id={`${id}-switch`} label={OWN_COPY.hideDetails} checked={on} describedBy={`${id}-tip`} onChange={onChange} />
       <span id={`${id}-tip`} className="sr-only">{OWN_COPY.hideDetailsTip}</span>
       <TippedGlyph glyph="ⓘ" name={OWN_COPY.hideDetailsTip} tip={OWN_COPY.hideDetailsTip} align="fit" className="-my-1.5" />
+      <InlineSaveStatus {...status} label={OWN_COPY.hideDetails} className="ml-1" />
     </span>
   );
 }

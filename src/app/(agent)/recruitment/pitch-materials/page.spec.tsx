@@ -122,7 +122,7 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
     render();
     await screen.findByRole('article', { name: 'FAQ' });
     expect(within(card('Opportunity Overview')).getByText('Opportunity_Overview_v3.pdf')).toBeInTheDocument();
-    expect(within(card('Opportunity Overview')).getByText('2.4 MB · updated Sep 12, 2026')).toBeInTheDocument();
+    expect(within(card('Opportunity Overview')).getByText('2,4 MB · updated 12 Sep 2026')).toBeInTheDocument();
     expect(within(card('FAQ')).getByText('No PDF uploaded yet — candidates can\'t be shown this document.')).toBeInTheDocument();
     expect(card('FAQ').className).toContain('border-dashed');
   });

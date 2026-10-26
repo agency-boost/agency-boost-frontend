@@ -11,15 +11,23 @@ import {
 
 describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
   it('P18.5-T7 AC-3 money is rupiah from sen, never raw sen (invariant §9, X-68’s rule)', () => {
-    expect(figureWords(50_000_000_000, 'idr_minor')).toBe('Rp 500.000.000');
-    expect(figureWords(90, 'percentage')).toBe('90%');
+    expect(figureWords(50_000_000_000, 'idr_minor')).toBe('Rp 500 jt');
+    expect(figureWords(90, 'percentage')).toBe('90,0%');
     expect(figureWords(3, 'count')).toBe('3');
-    expect(figureWords(0.15, 'ratio')).toBe('0.15');
+    expect(figureWords(0.15, 'ratio')).toBe('0,15');
+  });
+
+  it('P18.95-T1 AC-2, AC-3 a requirement is compact, never rounded into another rule, and in id-ID', () => {
+    // Rp 2,45 M would round to Rp 2,5 M: a different requirement. It is written in full instead.
+    expect(figureWords(245_000_000_000, 'idr_minor')).toBe('Rp 2.450.000.000');
+    expect(figureWords(240_000_000_000, 'idr_minor')).toBe('Rp 2,4 M');
+    expect(figureWords(92.5, 'percentage')).toBe('92,5%');
+    expect(figureWords(1_250, 'count')).toBe('1.250');
   });
 
   it('P18.5-T7 AC-3 the card’s line is each requirement in words, joined by " | " (`:8031-8034`)', () => {
-    expect(requirementsLine([APE(500), NEW_HIRE(1)])).toBe('APE achieved Rp 500.000.000 | New Hire 1');
-    expect(requirementWords(PERSISTENCY)).toBe('Rolling persistency 90%');
+    expect(requirementsLine([APE(500), NEW_HIRE(1)])).toBe('APE achieved Rp 500 jt | New Hire 1');
+    expect(requirementWords(PERSISTENCY)).toBe('Rolling persistency 90,0%');
     expect(requirementWords({ ...NEW_HIRE(2), comparator: 'lt' })).toBe('New Hire under 2');
     expect(requirementsLine([])).toBe('');
   });
@@ -36,7 +44,7 @@ describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
     expect(kindLabel(CHALLENGE)).toBe('Upcoming');
     expect(kindLabel(PROMO_AGENT)).toBe('Promotion path');
     expect(kindLabel(MDRT)).toBe('Ongoing incentive');
-    expect(rowSubline(chased(SPRINT))).toBe('Running · Oct 1 – Dec 31, 2026');
+    expect(rowSubline(chased(SPRINT))).toBe('Running · 1 Okt – 31 Des 2026');
   });
 
   it('P18.5-T7 AC-5 the two toasts, verbatim (`:8144`)', () => {
@@ -46,8 +54,10 @@ describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
 
   it('P18.5-T8 AC-6 progress: "{current} of {target}", met only when met, and never ✕ for a month not held', () => {
     const row = { metricKey: 'APE_ACHIEVED', current: 62_000_000_000, target: 50_000_000_000, unit: 'idr_minor' };
-    expect(progressWords({ ...row, state: 'met' })).toEqual({ text: 'Rp 620.000.000 of Rp 500.000.000', met: true, figure: true });
-    expect(progressWords({ ...row, state: 'in_progress' })).toEqual({ text: 'Rp 620.000.000 of Rp 500.000.000', met: false, figure: true });
+    expect(progressWords({ ...row, state: 'met' })).toEqual({ text: 'Rp 620 jt of Rp 500 jt', met: true, figure: true });
+    expect(progressWords({ ...row, state: 'in_progress' })).toEqual({ text: 'Rp 620 jt of Rp 500 jt', met: false, figure: true });
+    // A current figure compact writing would round is written in full, so it never reads as the target it misses.
+    expect(progressWords({ ...row, current: 49_996_000_000, state: 'in_progress' })?.text).toBe('Rp 499.960.000 of Rp 500 jt');
     expect(progressWords({ ...row, state: 'not_met' })?.met).toBe(false);
     expect(progressWords({ ...row, current: null, state: 'not_uploaded' })).toEqual({ text: 'Not uploaded yet', met: false, figure: false });
     expect(progressWords({ ...row, current: null, state: 'not_measured' })).toEqual({ text: 'Not measured yet', met: false, figure: false });

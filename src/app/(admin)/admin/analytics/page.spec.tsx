@@ -108,7 +108,7 @@ describe('Cross-platform analytics (P18-T8)', () => {
       const { table, calls } = await renderLoaded();
       expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
         'Code', 'Branch', 'Company', 'Status', 'Members', 'By rung',
-        'Joined in October 2026', 'Left in October 2026', 'Signed in within 7 days', 'Signed in within 30 days',
+        'Joined in Okt 2026', 'Left in Okt 2026', 'Signed in within 7 days', 'Signed in within 30 days',
       ]);
       expect(screen.getAllByRole('table')).toHaveLength(1);
       // One request, whatever the number of offices.
@@ -119,8 +119,8 @@ describe('Cross-platform analytics (P18-T8)', () => {
       const { table } = await renderLoaded();
       const row = within(table).getByRole('row', { name: /^0417/ });
       expect(cells(row)).toEqual([
-        '0417', 'BSD City Branch', 'Prudential', 'Active', '1,340', 'Agent 1,300 · AAB 28 · AB 12',
-        '14', '2', '1,072 (80%)', '1,206 (90%)',
+        '0417', 'BSD City Branch', 'Prudential', 'Active', '1.340', 'Agent 1.300 · AAB 28 · AB 12',
+        '14', '2', '1.072 (80,0%)', '1.206 (90,0%)',
       ]);
       expect(within(row).getByRole('link', { name: '0417' })).toHaveAttribute('href', '/admin/tenants/kpm-0417');
     });
@@ -129,7 +129,7 @@ describe('Cross-platform analytics (P18-T8)', () => {
       const { table } = await renderLoaded();
       const suspended = within(table).getByRole('row', { name: /^0555/ });
       expect(within(suspended).getByText('Suspended')).toBeInTheDocument();
-      expect(cells(suspended).slice(4)).toEqual(['20', 'Agent 16 · AAB 3 · AB 1', '0', '1', '0 (0%)', '4 (20%)']);
+      expect(cells(suspended).slice(4)).toEqual(['20', 'Agent 16 · AAB 3 · AB 1', '0', '1', '0 (0,0%)', '4 (20,0%)']);
       const ended = within(table).getByRole('row', { name: /^0601/ });
       expect(within(ended).getByText('Ended')).toBeInTheDocument();
       // Its own company's ladder, in that company's words.
@@ -145,13 +145,13 @@ describe('Cross-platform analytics (P18-T8)', () => {
       ]);
       const pru = body[2];
       expect(cells(pru)).toEqual([
-        'Prudential — Total (2 branches)', '1,360', 'Agent 1,316 · AAB 31 · AB 13', '14', '3', '1,072 (79%)', '1,210 (89%)',
+        'Prudential — Total (2 branches)', '1.360', 'Agent 1.316 · AAB 31 · AB 13', '14', '3', '1.072 (79,0%)', '1.210 (89,0%)',
       ]);
       expect(within(pru).getAllByRole('cell')[0]).toHaveAttribute('colspan', '4');
       const platform = body[5];
       expect(cells(platform)).toEqual([
-        'Platform — Total (2 companies, 3 branches)', '1,369',
-        'Agent 1,316 · AAB 31 · AB 13 · Financial Consultant 8 · Unit Manager 1', '15', '3', '1,072 (78%)', '1,210 (88%)',
+        'Platform — Total (2 companies, 3 branches)', '1.369',
+        'Agent 1.316 · AAB 31 · AB 13 · Financial Consultant 8 · Unit Manager 1', '15', '3', '1.072 (78,0%)', '1.210 (88,0%)',
       ]);
     });
 
@@ -174,9 +174,9 @@ describe('Cross-platform analytics (P18-T8)', () => {
   describe('AC-3: nothing on it names a member', () => {
     it('renders only the aggregates: every figure is a count, every label the office’s or a total’s', async () => {
       const { table } = await renderLoaded();
-      const COUNT = /^[\d,]+$/;
-      const SHARE = /^[\d,]+( \(\d+%\))?$/;
-      const RUNGS = /^(—|[^·]+ [\d,]+( · [^·]+ [\d,]+)*)$/;
+      const COUNT = /^[\d.]+$/;
+      const SHARE = /^[\d.]+( \(\d+,\d%\))?$/;
+      const RUNGS = /^(—|[^·]+ [\d.]+( · [^·]+ [\d.]+)*)$/;
       const labels = new Set([
         ...VIEW.offices.flatMap((o) => [o.code, o.branch, o.company.name, officeState(o.state).word]),
       ]);
@@ -306,7 +306,7 @@ describe('Cross-platform analytics (P18-T8)', () => {
       expect(shareOf(4, 5)).toBe(80);
       expect(shareOf(0, 0)).toBeNull();
       expect(signedInWords(0, 0)).toBe('0');
-      expect(signedInWords(1, 3)).toBe('1 (33%)');
+      expect(signedInWords(1, 3)).toBe('1 (33,0%)');
       expect(rungWords([])).toBe('—');
     });
 

@@ -10,9 +10,11 @@ import { useLadder } from '@/components/ui/role-badge';
 import { Button, Card, Field, Select, Textarea, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { officeDay, officeDayEdge, POSTER_COLORS, type PosterColor } from '@/lib/campaigns';
+import { figureWords, officeDay, officeDayEdge, POSTER_COLORS, type PosterColor } from '@/lib/campaigns';
 import { cn } from '@/lib/cn';
 import { suggestCode } from '@/lib/config-code';
+import { parseDecimal } from '@/lib/format';
+import { parseDigits, toMinor } from '@/lib/goals';
 import { useCan } from '@/lib/session';
 import { useHashTab } from '@/lib/use-hash-tab';
 import {
@@ -42,15 +44,11 @@ const COMPARATOR: Record<string, string> = {
  *
  * `idr_minor` is integer sen, rendered as rupiah — the prototype stores *"Rp 600,000,000"* as a
  * display string and one campaign's reward in **pesos**, so neither can be compared or totalled.
+ * Written as the campaign cards write it (`figureWords`, ADR-0167 §1): *Rp 600 jt*, in full where
+ * compact writing would round the rule.
  */
 function readRequirement(r: RequirementView): string {
-  if (r.unit === 'idr_minor') {
-    const rupiah = r.value / 100;
-    return `${r.metricName} ${COMPARATOR[r.comparator] ?? r.comparator} `
-      + `Rp ${rupiah.toLocaleString('id-ID')}`;
-  }
-  if (r.unit === 'percentage') return `${r.metricName} ${COMPARATOR[r.comparator]} ${r.value}%`;
-  return `${r.metricName} ${COMPARATOR[r.comparator] ?? r.comparator} ${r.value}`;
+  return `${r.metricName} ${COMPARATOR[r.comparator] ?? r.comparator} ${figureWords(r.value, r.unit)}`;
 }
 
 /**
@@ -99,8 +97,9 @@ function requirementBody(row: RequirementDraft, metrics: readonly MetricDefiniti
   return {
     metricKey: row.metricKey,
     comparator: row.comparator,
-    // Rupiah in, integer sen stored: money is never a float (invariant §9). By the metric's unit.
-    value: unit === 'idr_minor' ? Math.round(Number(row.value || 0) * 100) : Number(row.value || 0),
+    // Rupiah in, integer sen stored: money is never a float (invariant §9). By the metric's unit — whole rupiah
+    // as digits, anything else a decimal typed with a comma or a point (ADR-0167 §1).
+    value: unit === 'idr_minor' ? toMinor(parseDigits(row.value)) : (row.value.trim() === '' ? 0 : parseDecimal(row.value)),
   };
 }
 
@@ -520,7 +519,9 @@ export default function CampaignsSettingsPage() {
                   >
                     <TextInput
                       id={`c-value-${row.key}`}
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
                       value={row.value}
                       disabled={busy}
                       onChange={(e) => setRow(row.key, { value: e.target.value })}

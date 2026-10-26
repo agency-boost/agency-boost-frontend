@@ -101,7 +101,7 @@ describe('the Activity Dashboard (P10-T1)', () => {
 
     // After the table: while it loads, the skeleton is the screen's one live region.
     await screen.findByText('Menghubungi prospek');
-    expect(screen.getByRole('status')).toHaveTextContent('7 days · Sep 22 – Sep 28, 2026');
+    expect(screen.getByRole('status')).toHaveTextContent('7 days · 22 Sep – 28 Sep 2026');
     expect(dashboardCalls(calls)[0].url).toContain('range=ROLLING_7D');
     // The reader's own days: no subject is named (P13.1-T9 — `for` is coaching's Activity tab's).
     expect(dashboardCalls(calls)[0].url).not.toContain('for=');
@@ -113,7 +113,7 @@ describe('the Activity Dashboard (P10-T1)', () => {
     render();
 
     const headers = (await screen.findAllByRole('columnheader')).map((h) => h.textContent);
-    expect(headers.slice(0, 4)).toEqual(['Activity', 'Total', 'Mon28', 'Sun27']);
+    expect(headers.slice(0, 4)).toEqual(['Activity', 'Total', 'Sen28', 'Min27']);
   });
 
   it('AC-2: heads the last 30 days as weeks with their dates, and the two days left over', async () => {
@@ -127,8 +127,8 @@ describe('the Activity Dashboard (P10-T1)', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Last 30 days' }));
 
-    expect(await screen.findByRole('columnheader', { name: 'Week 1 Sep 22–Sep 28' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Remaining 2 days Aug 30–Aug 31' })).toBeInTheDocument();
+    expect(await screen.findByRole('columnheader', { name: 'Week 1 22 Sep–28 Sep' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Remaining 2 days 30 Agu–31 Agu' })).toBeInTheDocument();
     expect(dashboardCalls(calls).at(-1)!.url).toContain('range=ROLLING_30D');
   });
 
@@ -145,8 +145,8 @@ describe('the Activity Dashboard (P10-T1)', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Last 30 days' }));
 
-    await screen.findByRole('columnheader', { name: 'Week 1 Sep 22–Sep 28' });
-    expect(screen.getByRole('status')).toHaveTextContent(/^30 days · Aug 30 – Sep 28, 2026$/);
+    await screen.findByRole('columnheader', { name: 'Week 1 22 Sep–28 Sep' });
+    expect(screen.getByRole('status')).toHaveTextContent(/^30 days · 30 Agu – 28 Sep 2026$/);
     expect(screen.queryByText(/corrected/)).toBeNull();
   });
 
@@ -195,7 +195,7 @@ describe('the Activity Dashboard (P10-T1)', () => {
     expect(within(week).queryByText('Total — all categories')).toBeNull();
 
     await userEvent.click(screen.getByRole('tab', { name: 'Last 30 days' }));
-    await screen.findByRole('columnheader', { name: 'Week 1 Sep 22–Sep 28' });
+    await screen.findByRole('columnheader', { name: 'Week 1 22 Sep–28 Sep' });
 
     const month = screen.getByRole('table', { name: 'Your activity' });
     expect(within(month).getAllByRole('row')[1]).toHaveTextContent('Total — all categories4');

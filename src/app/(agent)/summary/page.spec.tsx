@@ -120,13 +120,13 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
     show(summary());
     const goal = await card('Goal vs. actual (APE)');
 
-    expect(within(goal).getByText('Rp 30.000.000')).toBeInTheDocument();
-    expect(goal).toHaveTextContent('of Rp 75.000.000 target40%');
+    expect(within(goal).getByText('Rp 30 jt')).toBeInTheDocument();
+    expect(goal).toHaveTextContent('of Rp 75 jt target40,0%');
     expect(within(goal).getByText('This month')).toBeInTheDocument();
     expect(within(goal).getByRole('progressbar', { name: 'This month’s target' })).toHaveAttribute('aria-valuenow', '40');
     // The month the figures are for: the select names it on the screen (P18.8-T11), the line on paper.
-    expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('September 2026');
-    expect(screen.getByText('September 2026', { selector: 'p' })).toHaveClass('hidden', 'print:block');
+    expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('Sep 2026');
+    expect(screen.getByText('Sep 2026', { selector: 'p' })).toHaveClass('hidden', 'print:block');
   });
 
   it('AC-1: switches to the year — the annual target against the year to date', async () => {
@@ -136,10 +136,10 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
     await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
 
     const goal = await card('Goal vs. actual (APE)');
-    expect(within(goal).getByText('Rp 230.000.000')).toBeInTheDocument();
-    expect(goal).toHaveTextContent('of Rp 500.000.000 target46%');
+    expect(within(goal).getByText('Rp 230 jt')).toBeInTheDocument();
+    expect(goal).toHaveTextContent('of Rp 500 jt target46,0%');
     expect(within(goal).getByText('This year')).toBeInTheDocument();
-    expect(await card('The gap')).toHaveTextContent('Remaining this yearRp 270.000.000');
+    expect(await card('The gap')).toHaveTextContent('Remaining this yearRp 270 jt');
   });
 
   it('AC-1: says this month is not uploaded yet — no zero, no attainment, no gap made up', async () => {
@@ -148,7 +148,7 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
     }));
     const goal = await card('Goal vs. actual (APE)');
 
-    expect(goal).toHaveTextContent('Not uploaded yetof Rp 75.000.000 target');
+    expect(goal).toHaveTextContent('Not uploaded yetof Rp 75 jt target');
     expect(goal).not.toHaveTextContent('%');
     // No bar: an empty track under *Not uploaded yet* reads as zero.
     expect(within(goal).queryByRole('progressbar')).not.toBeInTheDocument();
@@ -172,7 +172,7 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
 
   it('AC-3: the gap in rupiah and in policies, one of which is singular', async () => {
     show(summary({ monthly: { ...figures({ policiesNeeded: 1 }), source: null } }));
-    expect(await card('The gap')).toHaveTextContent('Remaining this monthRp 45.000.000≈ Policies still needed1 policy');
+    expect(await card('The gap')).toHaveTextContent('Remaining this monthRp 45 jt≈ Policies still needed1 policy');
   });
 
   it('AC-3: a target reached says so, and asks for nothing (ADR-0047)', async () => {
@@ -181,7 +181,7 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
       pace: { closingTarget: 5, closingsLast30Days: 6, dayOfMonth: 20, daysInMonth: 30, weeksLeft: 2, policiesNeeded: 0, neededPerWeek: 0, targetMet: true },
     }));
     const gap = await card('The gap');
-    expect(gap).toHaveTextContent('Reached — Rp 20.000.000 over');
+    expect(gap).toHaveTextContent('Reached — Rp 20 jt over');
     expect(gap).toHaveTextContent('≈ Policies still neededNone');
     expect(gap).toHaveTextContent('You’ve already reached this month’s target — nice work. Keep the pace to stay ahead.');
     // P13.1-T5 AC-1: the prototype's `.pace-note.on-track` (`Overall.html:1144`), with its ✅.
@@ -250,7 +250,7 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
     const goal = await card('Goal vs. actual (APE)');
     expect(goal).toHaveTextContent('Your year’s target was made before this month began — this month needs nothing more.');
     expect(goal).not.toHaveTextContent('of Rp 0 target');
-    expect(await card('The gap')).toHaveTextContent('Reached — Rp 30.000.000 over');
+    expect(await card('The gap')).toHaveTextContent('Reached — Rp 30 jt over');
   });
 
   it('AC-5: a saved goal with no APE target says so, rather than measuring against nothing', async () => {
@@ -267,6 +267,8 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
     show(summary({ goal: { set: false, savedAt: null }, pace: null }));
     expect(await screen.findByText(/You haven’t set a goal for 2026 yet/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Set your goal' })).toHaveAttribute('href', '/goals');
+    // P18.95-T1 AC-10: a link on its own line is 44px tall on a phone (UI-029); wider, the inline block it was.
+    expect(screen.getByRole('link', { name: 'Set your goal' })).toHaveClass('inline-block', 'max-md:inline-flex', 'max-md:min-h-11', 'max-md:items-center');
     expect(screen.queryByRole('region', { name: 'Goal vs. actual (APE)' })).not.toBeInTheDocument();
   });
 
@@ -351,9 +353,9 @@ describe('the Personal Summary — activity targets, chips and the pulse (P10-T5
 
     expect(within(pulse).getByText('Last 30 days')).toBeInTheDocument();
     expect(await within(pulse).findByText('Selling success rate')).toBeInTheDocument();
-    expect(pulse).toHaveTextContent('9.1%');
+    expect(pulse).toHaveTextContent('9,1%');
     expect(within(pulse).getByText('Below benchmark')).toBeInTheDocument();
-    expect(pulse).toHaveTextContent('Leads per activity0.38');
+    expect(pulse).toHaveTextContent('Leads per activity0,38');
     expect(within(pulse).getByText('Not enough data')).toBeInTheDocument();
     // Once, whichever period is showing.
     await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
@@ -397,7 +399,7 @@ describe('the Personal Summary — leads that need you (P10-T6)', () => {
 
     expect(rows.map((row) => within(row).getByText(/^(Pak|Ibu)/).textContent)).toEqual(['Pak Hendro Gunawan', 'Ibu Wulan Sari', 'Pak Bambang']);
     expect(rows[0]).toHaveTextContent('Sales · Follow-up');
-    expect(rows[0]).toHaveTextContent('Sep 8 — Chase the illustration.');
+    expect(rows[0]).toHaveTextContent('8 Sep — Chase the illustration.');
     expect(rows[1]).toHaveTextContent('Sales · Policy submitted');
     expect(rows[2]).toHaveTextContent('Unassigned · No status yet');
     expect(rows[2]).toHaveTextContent('No date set');
@@ -481,7 +483,7 @@ describe('the Personal Summary — insight cards, named rules over your own numb
     show(summary({ insights: INSIGHTS }));
     const improve = await card('How you can improve your performance');
 
-    expect(improve).toHaveTextContent('Selling success rate is 9.1% over the last 30 days, below its benchmark of 15.0%');
+    expect(improve).toHaveTextContent('Selling success rate is 9,1% over the last 30 days, below its benchmark of 15,0%');
     expect(within(improve).getByRole('link', { name: 'Activity Ratios' })).toHaveAttribute('href', '/activity/ratio');
   });
 
@@ -497,10 +499,10 @@ describe('the Personal Summary — insight cards, named rules over your own numb
     }));
 
     const next = await card('What to do next');
-    expect(next).toHaveTextContent('Nothing logged in the last 7 days — your last entry was Sep 1.');
+    expect(next).toHaveTextContent('Nothing logged in the last 7 days — your last entry was 1 Sep.');
     expect(within(next).getByRole('link', { name: 'Log Activity' })).toHaveAttribute('href', '/activity/log');
     expect(await card('How you can improve your performance')).toHaveTextContent(
-      'Leads per activity is a genuine strength — 0.60 over the last 30 days, well above its benchmark of 0.30.',
+      'Leads per activity is a genuine strength — 0,60 over the last 30 days, well above its benchmark of 0,30.',
     );
   });
 
@@ -573,9 +575,9 @@ describe('the Personal Summary — Download (P10-T8, ADR-0061; P10.1-T8, ADR-006
 
     await userEvent.click(screen.getByRole('button', { name: 'Download' }));
 
-    expect(titles).toEqual(['Personal Summary – September 2026']);
+    expect(titles).toEqual(['Personal Summary – Sep 2026']);
     // Until the print window closes, the title stays the period's.
-    expect(document.title).toBe('Personal Summary – September 2026');
+    expect(document.title).toBe('Personal Summary – Sep 2026');
     window.dispatchEvent(new Event('afterprint'));
     expect(document.title).toBe(ORIGINAL_TITLE);
     // Once: a later print elsewhere does not put back a title from this one.
@@ -594,7 +596,7 @@ describe('the Personal Summary — Download (P10-T8, ADR-0061; P10.1-T8, ADR-006
 
     await userEvent.click(screen.getByRole('button', { name: 'Download' }));
 
-    expect(titles).toEqual(['Personal Summary – September 2026']);
+    expect(titles).toEqual(['Personal Summary – Sep 2026']);
     expect(document.title).toBe(ORIGINAL_TITLE);
   });
 
@@ -618,7 +620,7 @@ describe('the Personal Summary — Download (P10-T8, ADR-0061; P10.1-T8, ADR-006
     await card('Goal vs. actual (APE)');
 
     await userEvent.click(screen.getByRole('button', { name: 'Download' }));
-    expect(document.title).toBe('Personal Summary – September 2026');
+    expect(document.title).toBe('Personal Summary – Sep 2026');
     unmount();
 
     expect(document.title).toBe(ORIGINAL_TITLE);
@@ -665,10 +667,10 @@ describe('the Personal Summary, trimmed to the prototype (P10.1-T6, ADR-0063)', 
       show(summary());
       const goal = await card('Goal vs. actual (APE)');
 
-      const marker = within(goal).getByRole('button', { name: 'From your office’s upload, September 2026' });
+      const marker = within(goal).getByRole('button', { name: 'From your office’s upload, Sep 2026' });
       expect(marker.querySelector('[aria-hidden="true"]')).toHaveTextContent('ⓘ');
       // The words show on focus and on a tap, not only to a mouse — and are said once, by the name.
-      const tip = within(goal).getByText('From your office’s upload, September 2026', { selector: '[role="tooltip"]' });
+      const tip = within(goal).getByText('From your office’s upload, Sep 2026', { selector: '[role="tooltip"]' });
       expect(tip).not.toBeVisible();
       fireEvent.click(marker);
       expect(tip).toBeVisible();
@@ -690,7 +692,7 @@ describe('the Personal Summary, trimmed to the prototype (P10.1-T6, ADR-0063)', 
       await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
 
       const goal = await card('Goal vs. actual (APE)');
-      expect(within(goal).getByRole('button', { name: 'Corrected by hand, year to date as of August 2026' }))
+      expect(within(goal).getByRole('button', { name: 'Corrected by hand, year to date as of Agu 2026' }))
         .toBeInTheDocument();
     });
 
@@ -708,7 +710,7 @@ describe('the Personal Summary, trimmed to the prototype (P10.1-T6, ADR-0063)', 
       await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
 
       const goal = await card('Goal vs. actual (APE)');
-      expect(within(goal).getByRole('button', { name: 'Corrected by Sari Puspita, year to date as of October 2026' }))
+      expect(within(goal).getByRole('button', { name: 'Corrected by Sari Puspita, year to date as of Okt 2026' }))
         .toBeInTheDocument();
     });
 
@@ -851,8 +853,8 @@ describe('Campaigns you’re chasing (P18.5-T7 AC-6)', () => {
     const section = await campaigns();
     const rows = await within(section).findAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
-      '🚀Q4 APE SprintRunning · Oct 1 – Dec 31, 2026View →',
-      '🏆MDRT QualificationOngoing incentive · Standing — evaluated per calendar year (Jan 1 – Dec 31)View →',
+      '🚀Q4 APE SprintRunning · 1 Okt – 31 Des 2026View →',
+      '🏆MDRT QualificationOngoing incentive · Standing — evaluated per calendar year (1 Jan – 31 Des)View →',
     ]);
     expect(calls.filter((c) => c.url.includes('/campaigns')).map((c) => c.url))
       .toEqual(['http://api.test/api/v1/campaigns/chasing']);
@@ -887,7 +889,7 @@ describe('Campaigns you’re chasing (P18.5-T7 AC-6)', () => {
     expect(await screen.findByText('Removed "Q4 APE Sprint" from your chase list')).toBeInTheDocument();
     // The card's own rows: the dialog, drawn over it, keeps its requirement rows inside the same section.
     await waitFor(() => expect([...section.querySelectorAll(':scope > ul > li')].map((li) => li.textContent))
-      .toEqual(['🏆MDRT QualificationOngoing incentive · Standing — evaluated per calendar year (Jan 1 – Dec 31)View →']));
+      .toEqual(['🏆MDRT QualificationOngoing incentive · Standing — evaluated per calendar year (1 Jan – 31 Des)View →']));
     expect(calls.filter((c) => c.init.method === 'DELETE')).toHaveLength(1);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -947,10 +949,10 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11)', () => 
     const select = await screen.findByRole('combobox', { name: 'Month' });
 
     expect(options(select)).toEqual([
-      'September 2026', 'August 2026', 'July 2026', 'June 2026', 'May 2026', 'April 2026', 'March 2026',
-      'February 2026', 'January 2026', 'December 2025', 'November 2025',
+      'Sep 2026', 'Agu 2026', 'Jul 2026', 'Jun 2026', 'Mei 2026', 'Apr 2026', 'Mar 2026',
+      'Feb 2026', 'Jan 2026', 'Des 2025', 'Nov 2025',
     ]);
-    expect(select).toHaveDisplayValue('September 2026');
+    expect(select).toHaveDisplayValue('Sep 2026');
     expect(select).toHaveClass('print:hidden');
     // It stands in the panel the switch controls, beneath it.
     expect(screen.getByRole('tabpanel')).toContainElement(select);
@@ -971,21 +973,21 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11)', () => 
     const { calls } = open(summaries({ '/summary?month=2026-08': { body: AUGUST } }));
     const select = await screen.findByRole('combobox', { name: 'Month' });
 
-    await userEvent.selectOptions(select, 'August 2026');
+    await userEvent.selectOptions(select, 'Agu 2026');
 
     expect(nav.replace).toHaveBeenCalledWith('/summary?month=2026-08', { scroll: false });
-    expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('August 2026');
-    expect(await screen.findByText(/total activities logged in August 2026 across all categories/)).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('Agu 2026');
+    expect(await screen.findByText(/total activities logged in Agu 2026 across all categories/)).toBeInTheDocument();
     expect(summaryReads(calls)).toEqual(['', '?month=2026-08']);
   });
 
   it('P18.8-T11 AC-2 the address’s month opens the page on it, and the current month clears the address', async () => {
     const { calls } = open(summaries({ '/summary?month=2026-08': { body: AUGUST } }), { month: '2026-08' });
     const select = await screen.findByRole('combobox', { name: 'Month' });
-    await waitFor(() => expect(select).toHaveDisplayValue('August 2026'));
-    await screen.findByText('August 2026', { selector: 'p' });
+    await waitFor(() => expect(select).toHaveDisplayValue('Agu 2026'));
+    await screen.findByText('Agu 2026', { selector: 'p' });
 
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Month' }), 'September 2026');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Month' }), 'Sep 2026');
 
     expect(nav.replace).toHaveBeenLastCalledWith('/summary', { scroll: false });
     await waitFor(() => expect(summaryReads(calls)).toEqual(['?month=2026-08', '']));
@@ -1005,7 +1007,7 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11)', () => 
 
   it('P18.8-T11 AC-2 switching views returns to now: Yearly from August reads this year, the address cleared', async () => {
     const { calls } = open(summaries({ '/summary?month=2026-08': { body: AUGUST } }), { month: '2026-08' });
-    await screen.findByText('August 2026', { selector: 'p' });
+    await screen.findByText('Agu 2026', { selector: 'p' });
 
     await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
 
@@ -1016,7 +1018,7 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11)', () => 
 
   it('P18.8-T11 AC-2 a malformed month in the address is not sent: the page is this month’s', async () => {
     const { calls } = open(summaries(), { month: '2026-13' });
-    expect(await screen.findByRole('combobox', { name: 'Month' })).toHaveDisplayValue('September 2026');
+    expect(await screen.findByRole('combobox', { name: 'Month' })).toHaveDisplayValue('Sep 2026');
     expect(summaryReads(calls)).toEqual(['']);
   });
 
@@ -1024,13 +1026,13 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11)', () => 
     open(summaries({ '/summary?month=2026-08': { body: AUGUST } }), { month: '2026-08' });
     const goal = await card('Goal vs. actual (APE)');
 
-    expect(within(goal).getByText('August 2026')).toBeInTheDocument();
-    expect(within(goal).getByRole('progressbar', { name: 'August 2026’s target' })).toBeInTheDocument();
+    expect(within(goal).getByText('Agu 2026')).toBeInTheDocument();
+    expect(within(goal).getByRole('progressbar', { name: 'Agu 2026’s target' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'The gap' })).not.toBeInTheDocument();
     expect(screen.queryByText(/current pace/)).not.toBeInTheDocument();
     const targets = await card('Your sales activity targets');
-    expect(within(targets).getByText('August 2026')).toBeInTheDocument();
-    expect(targets).toHaveTextContent('37 total activities logged in August 2026 across all categories.');
+    expect(within(targets).getByText('Agu 2026')).toBeInTheDocument();
+    expect(targets).toHaveTextContent('37 total activities logged in Agu 2026 across all categories.');
   });
 
   it('P18.8-T11 AC-3 the current month still has its pace and its gap, under This month', async () => {
@@ -1060,7 +1062,7 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11)', () => 
 
     await userEvent.click(screen.getByRole('button', { name: 'Download' }));
 
-    expect(titles).toEqual(['Personal Summary – August 2026']);
+    expect(titles).toEqual(['Personal Summary – Agu 2026']);
     print.mockRestore();
   });
 });

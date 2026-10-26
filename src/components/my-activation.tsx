@@ -9,6 +9,7 @@ import {
 } from '@/components/activation-parts';
 import { Dialog } from '@/components/ui/dialog';
 import { Button, Card, ErrorBanner, TextInput } from '@/components/ui/field';
+import { InlineSaveField, InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Toast, useHostToast, useToast } from '@/components/ui/toast';
 import {
   attributionOf, correctionOf, graduateMyActivation, isComplete, isManual, isTickedByHandLink, ITEM_NOTE_MAX, MY_COACHING_ACTIVATION_HREF, OWN_COPY,
@@ -19,6 +20,9 @@ import { cn } from '@/lib/cn';
 import { formatOfficeDay, formatShortDay } from '@/lib/format';
 import { landingFor } from '@/lib/landing';
 import { useCan, useSession } from '@/lib/session';
+
+/** Which of a row's three fields a write came from, for its own save confirmation. */
+type ItemField = 'done' | 'note' | 'date';
 
 /**
  * **The hire's own *90-Day Activation*** (`/activation`, `Overall.html:3270-3352`, logic `:6430-6694`;
@@ -54,6 +58,11 @@ export function MyActivation() {
   const hostToast = useHostToast();
   const local = useToast();
   const queue = useWriteQueue();
+  /**
+   * The tick, the note and the date each say *Saving… → Saved ✓* beside them, or *Couldn't save — retry*
+   * (P18.95-T1 AC-5, ADR-0167 §5; UI-007), above the row's *Not saved.* which still says why.
+   */
+  const { save: track, statusOf } = useInlineSave();
 
   const [view, setView] = useState<ActivationView | null>(null);
   const [missing, setMissing] = useState(false);
@@ -88,12 +97,12 @@ export function MyActivation() {
     return () => { live = false; };
   }, [attempt]);
 
-  const save = useCallback((code: string, patch: MyItemInput) => {
+  const write = useCallback((code: string, patch: MyItemInput): Promise<boolean> => {
     const ask = (asked.current[code] ?? 0) + 1;
     asked.current[code] = ask;
     setPending((p) => ({ ...p, [code]: { ...p[code], ...patch } }));
     setFailed(({ [code]: _gone, ...rest }) => rest);
-    void queue(async () => {
+    return queue(async () => {
       try {
         const next = await saveMyItem(code, patch);
         setView(next);
@@ -103,15 +112,22 @@ export function MyActivation() {
           navComplete.current = complete;
           void reload();
         }
+        return true;
       } catch (err) {
         setFailed((f) => ({ ...f, [code]: toDisplayError(err).message }));
         setResets((r) => ({ ...r, [code]: (r[code] ?? 0) + 1 }));
+        return false;
       } finally {
         // A later write to the same row keeps its own pending state until its own answer.
         if (asked.current[code] === ask) setPending(({ [code]: _done, ...rest }) => rest);
       }
     });
   }, [queue, reload]);
+
+  /** One field's write, with its confirmation; a retry sends the same patch again (AC-5). */
+  const save = useCallback((code: string, patch: MyItemInput, field: ItemField) => {
+    void track(`${code}\n${field}`, () => write(code, patch));
+  }, [track, write]);
 
   const graduate = async () => {
     setAsking(false);
@@ -176,7 +192,8 @@ export function MyActivation() {
                   item={{ ...item, ...pending[item.code] }}
                   reader={me?.membership?.membershipId}
                   writable={mayTick}
-                  onSave={(patch) => save(item.code, patch)}
+                  onSave={(patch, field) => save(item.code, patch, field)}
+                  status={(field) => statusOf(`${item.code}\n${field}`)}
                   error={failed[item.code]}
                   resetKey={resets[item.code] ?? 0}
                 />
@@ -228,12 +245,14 @@ function StartDate({ view, reader }: { view: ActivationView; reader: string | nu
  * with the chevron opening the hire's own note and date.
  */
 function MyItemRow({
-  item, reader, writable, onSave, error, resetKey,
+  item, reader, writable, onSave, status, error, resetKey,
 }: {
   item: ActivationItemProgress;
   reader: string | null | undefined;
   writable: boolean;
-  onSave: (patch: MyItemInput) => void;
+  onSave: (patch: MyItemInput, field: ItemField) => void;
+  /** Each field's save confirmation (P18.95-T1 AC-5). */
+  status: (field: ItemField) => InlineSaveStatusProps;
   error: string | undefined;
   resetKey: number;
 }) {
@@ -271,13 +290,15 @@ function MyItemRow({
               type="checkbox"
               checked={item.done}
               disabled={!writable}
-              onChange={(e) => onSave({ done: e.target.checked })}
+              onChange={(e) => onSave({ done: e.target.checked }, 'done')}
               className={ITEM_CHECKBOX}
             />
             <span>{item.label}</span>
           </label>
           {isTickedByHandLink(item) && <ByHandBadge />}
           <AttributionMark words={words} />
+          {/* Beside the box it confirms, on the row's own line. */}
+          <InlineSaveStatus {...status('done')} label={item.label} />
         </div>
         <button
           type="button"
@@ -297,15 +318,19 @@ function MyItemRow({
       </div>
       {/* `hidden` alone loses to Tailwind's `flex`, which sets `display`: the class goes with the state. */}
       <div id={metaId} hidden={!open} className={cn('ml-[26px] mt-2.5 flex-wrap gap-2', open ? 'flex' : 'hidden')}>
-        <NoteInput item={item} writable={writable} onSave={onSave} resetKey={resetKey} />
-        <DateField
-          value={item.date}
-          clearable
-          readOnly={!writable}
-          resetKey={resetKey}
-          aria-label={OWN_COPY.itemDateName(item.label)}
-          onCommit={(date) => onSave({ done: item.done, date })}
-        />
+        <InlineSaveField status={status('note')} label={OWN_COPY.itemNoteName(item.label)} className="min-w-0 flex-[1_1_170px]">
+          <NoteInput item={item} writable={writable} onSave={(patch) => onSave(patch, 'note')} resetKey={resetKey} />
+        </InlineSaveField>
+        <InlineSaveField status={status('date')} label={OWN_COPY.itemDateName(item.label)}>
+          <DateField
+            value={item.date}
+            clearable
+            readOnly={!writable}
+            resetKey={resetKey}
+            aria-label={OWN_COPY.itemDateName(item.label)}
+            onCommit={(date) => onSave({ done: item.done, date }, 'date')}
+          />
+        </InlineSaveField>
       </div>
       <RowError message={error} />
     </div>
@@ -335,7 +360,8 @@ function NoteInput({
         if (next === (item.note ?? '')) return;
         onSave({ done: item.done, note: next === '' ? null : next });
       }}
-      className="h-[34px] min-w-0 flex-[1_1_170px] text-base"
+      // The row's flex share is its save confirmation's box's now (P18.95-T1 AC-5); the box fills it.
+      className="h-[34px] w-full min-w-0 text-base"
     />
   );
 }

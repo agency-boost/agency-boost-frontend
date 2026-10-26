@@ -8,25 +8,25 @@ import { goalInputsOf, producedFrom, saveGoal, type Goal } from './goals';
  */
 describe('producedFrom', () => {
   it('names the office’s upload and the month it is for', () => {
-    expect(producedFrom({ provenance: 'imported', month: '2026-09' }, 'month')).toBe('From your office’s upload, September 2026');
+    expect(producedFrom({ provenance: 'imported', month: '2026-09' }, 'month')).toBe('From your office’s upload, Sep 2026');
   });
 
   it('names a correction by hand, and who made it when the payload says (ADR-0121, F-156)', () => {
-    expect(producedFrom({ provenance: 'corrected', month: '2026-09' }, 'month')).toBe('Corrected by hand, September 2026');
+    expect(producedFrom({ provenance: 'corrected', month: '2026-09' }, 'month')).toBe('Corrected by hand, Sep 2026');
     expect(producedFrom({ provenance: 'corrected', month: '2026-09', correctedBy: { name: 'Sari Puspita' } }, 'month'))
-      .toBe('Corrected by Sari Puspita, September 2026');
+      .toBe('Corrected by Sari Puspita, Sep 2026');
     expect(producedFrom({ provenance: 'corrected', month: '2026-09', correctedBy: null }, 'month'))
-      .toBe('Corrected by hand, September 2026');
+      .toBe('Corrected by hand, Sep 2026');
     // A name rides on a correction only: the file's own figure names nobody.
     expect(producedFrom({ provenance: 'imported', month: '2026-09', correctedBy: { name: 'Sari Puspita' } }, 'month'))
-      .toBe('From your office’s upload, September 2026');
+      .toBe('From your office’s upload, Sep 2026');
   });
 
   it('says a year’s figure is the year to date as of its month', () => {
     expect(producedFrom({ provenance: 'imported', month: '2026-08' }, 'year'))
-      .toBe('From your office’s upload, year to date as of August 2026');
+      .toBe('From your office’s upload, year to date as of Agu 2026');
     expect(producedFrom({ provenance: 'corrected', month: '2026-08' }, 'year'))
-      .toBe('Corrected by hand, year to date as of August 2026');
+      .toBe('Corrected by hand, year to date as of Agu 2026');
   });
 
   it('names the agent’s own figure, which has no month — and whose it is when a leader reads it', () => {
@@ -60,12 +60,12 @@ describe('producedFrom, about a coachee', () => {
       producedFrom({ provenance: 'imported', month: null }, 'year', 'they'),
     ];
     expect(words).toEqual([
-      'From the production upload, September 2026',
-      'Corrected after the production upload, year to date as of August 2026',
+      'From the production upload, Sep 2026',
+      'Corrected after the production upload, year to date as of Agu 2026',
       'From the production upload',
     ]);
     expect(producedFrom({ provenance: 'corrected', month: '2026-08', correctedBy: { name: 'Sari Puspita' } }, 'year', 'they'))
-      .toBe('Corrected after the production upload, year to date as of August 2026, by Sari Puspita');
+      .toBe('Corrected after the production upload, year to date as of Agu 2026, by Sari Puspita');
     for (const w of words) expect(w).not.toMatch(/office|KPM|reports to|tagged to|untagged|unassigned/i);
   });
 });

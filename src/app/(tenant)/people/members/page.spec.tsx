@@ -208,7 +208,7 @@ describe('members directory (P3-T1 AC-3)', () => {
     const table = await screen.findByRole('table');
     expect(within(table).getByRole('columnheader', { name: 'Removed' })).toBeInTheDocument();
     expect(within(table).queryByRole('columnheader', { name: 'Status' })).not.toBeInTheDocument();
-    expect(within(table).getByRole('row', { name: /Rina/ })).toHaveTextContent('19/07/2026');
+    expect(within(table).getByRole('row', { name: /Rina/ })).toHaveTextContent('19 Jul 2026');
 
     // Their code and their leader are still there — the row is kept, not blanked.
     expect(within(table).getByRole('row', { name: /Rina/ })).toHaveTextContent('KPM0417-001');

@@ -1,5 +1,5 @@
 import { api } from './api-client';
-import { formatMonth } from './format';
+import { formatMonth, formatNumber, formatPercent } from './format';
 import { tenantStatusTone, tenantStatusWord, type TenantRow } from './admin';
 
 /**
@@ -75,10 +75,10 @@ export interface PlatformAnalyticsView {
 export const readPlatformAnalytics = () => api<PlatformAnalyticsView>('/admin/analytics');
 
 /**
- * A count as the console writes one: `1,340`, as the Platform Overview's tiles do
- * (`Superadmin.html:313`). Counts of people, not money, so not `formatRupiah`'s Indonesian grouping.
+ * A count as the console writes one: `1.340` — `id-ID`'s grouping since ADR-0167 §1, where the Platform
+ * Overview's tiles wrote `1,340` (`Superadmin.html:313`). One grouping for every number on every screen.
  */
-export const formatCount = (n: number) => n.toLocaleString('en-GB');
+export const formatCount = (n: number) => formatNumber(n);
 
 /**
  * The share of `of` that `part` is, rounded to a whole percent; `null` over nobody, which the screen
@@ -88,10 +88,10 @@ export function shareOf(part: number, of: number): number | null {
   return of > 0 ? Math.round((part / of) * 100) : null;
 }
 
-/** *Signed in within …*: the count, and what share of the row's members it is (*"12 (80%)"*). */
+/** *Signed in within …*: the count, and what share of the row's members it is (*"12 (80,0%)"*). */
 export function signedInWords(signedIn: number, members: number): string {
   const pct = shareOf(signedIn, members);
-  return pct === null ? formatCount(signedIn) : `${formatCount(signedIn)} (${pct}%)`;
+  return pct === null ? formatCount(signedIn) : `${formatCount(signedIn)} (${formatPercent(pct)})`;
 }
 
 /**

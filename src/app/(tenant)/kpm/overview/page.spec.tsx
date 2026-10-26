@@ -152,14 +152,14 @@ describe('KPM Overview (P18-T1)', () => {
       await loaded();
       const card = within(section('Engagement')).getByRole('heading', { name: 'Agents who logged activity this month' }).parentElement!;
       expect(within(card).getByText('Logged at least one activity this month')).toBeInTheDocument();
-      expect(card).toHaveTextContent('142/ 18776%');
+      expect(card).toHaveTextContent('142/ 18776,0%');
       expect(screen.queryByText('Monthly active agents')).not.toBeInTheDocument();
     });
 
     it('AC-4: the trend is against last month to the same day, Up with its rise', async () => {
       render();
       await loaded();
-      expect(within(section('Engagement')).getByText(/^Up from 138 last month/)).toHaveTextContent('Up from 138 last month (+3%)');
+      expect(within(section('Engagement')).getByText(/^Up from 138 last month/)).toHaveTextContent('Up from 138 last month (+3,0%)');
     });
 
     it('AC-4: Down, with its fall, when fewer have logged than by this day last month', async () => {
@@ -167,7 +167,7 @@ describe('KPM Overview (P18-T1)', () => {
         engagement: { loggedThisMonth: { count: 120, of: 187, pct: 64, lastMonthToDate: 150 }, loggedThisWeek: { logged: 1, notLogged: 0, pct: 100 } },
       }));
       await loaded();
-      expect(within(section('Engagement')).getByText(/^Down from 150 last month/)).toHaveTextContent('Down from 150 last month (−20%)');
+      expect(within(section('Engagement')).getByText(/^Down from 150 last month/)).toHaveTextContent('Down from 150 last month (−20,0%)');
     });
 
     it('AC-4: no trend line when there is nothing to compare against', async () => {
@@ -181,7 +181,7 @@ describe('KPM Overview (P18-T1)', () => {
       await loaded();
       const card = within(section('Engagement')).getByRole('heading', { name: 'Activity logging — this week' }).parentElement!;
       expect(within(card).getByText("Who has and hasn't logged in the last 7 days")).toBeInTheDocument();
-      expect(card).toHaveTextContent('118logged · 69 not logged63%');
+      expect(card).toHaveTextContent('118logged · 69 not logged63,0%');
     });
 
     it('AC-4 (D-audit): the list is read only when the reveal is opened, and once', async () => {
@@ -266,10 +266,10 @@ describe('KPM Overview (P18-T1)', () => {
       const coverage = within(section('Coaching coverage'));
       const seven = coverage.getByText('Coached in last 7 days').nextElementSibling!;
       const thirty = coverage.getByText('Coached in last 30 days').nextElementSibling!;
-      expect(seven).toHaveTextContent('112/ 18760%');
-      expect(thirty).toHaveTextContent('148/ 18779%');
-      expect(within(seven as HTMLElement).getByText('60%').className).toContain('text-alert');
-      expect(within(thirty as HTMLElement).getByText('79%').className).toContain('text-success');
+      expect(seven).toHaveTextContent('112/ 18760,0%');
+      expect(thirty).toHaveTextContent('148/ 18779,0%');
+      expect(within(seven as HTMLElement).getByText('60,0%').className).toContain('text-alert');
+      expect(within(thirty as HTMLElement).getByText('79,0%').className).toContain('text-success');
     });
 
     it('AC-5: AB coaching frequency, lowest first, four shown, with each AB’s team and share', async () => {
@@ -279,10 +279,10 @@ describe('KPM Overview (P18-T1)', () => {
       expect(board.getByRole('heading', { name: 'AB coaching frequency' })).toBeInTheDocument();
       const rows = board.getAllByRole('listitem');
       expect(rows.map((r) => r.textContent)).toEqual([
-        'Hendra Wibowo · 31 in team6/31 · 19%',
-        'Budi Santoso · 18 in team5/18 · 28%',
-        'Fajar Nugroho · 22 in team9/22 · 41%',
-        'Lina Chandra · 15 in team8/15 · 53%',
+        'Hendra Wibowo · 31 in team6/31 · 19,0%',
+        'Budi Santoso · 18 in team5/18 · 28,0%',
+        'Fajar Nugroho · 22 in team9/22 · 41,0%',
+        'Lina Chandra · 15 in team8/15 · 53,0%',
       ]);
       expect(board.getByText(/^Showing 4 of 8 ABs/)).toBeInTheDocument();
     });
@@ -299,7 +299,7 @@ describe('KPM Overview (P18-T1)', () => {
       expect(more).toHaveAttribute('aria-expanded', 'true');
       expect(board.getAllByRole('listitem')).toHaveLength(8);
       expect(board.getByText(/^Showing 8 of 8 ABs/)).toBeInTheDocument();
-      expect(board.getByText('Wilson Tanoto').closest('li')).toHaveTextContent('23/28 · 82%');
+      expect(board.getByText('Wilson Tanoto').closest('li')).toHaveTextContent('23/28 · 82,0%');
       expect(calls.length).toBe(before);
 
       await userEvent.click(board.getByRole('button', { name: 'show fewer' }));
@@ -312,7 +312,7 @@ describe('KPM Overview (P18-T1)', () => {
       const coverage = within(section('Coaching coverage'));
       expect(coverage.getByText('No AB leads a team yet.')).toBeInTheDocument();
       expect(coverage.getAllByText('No rate: nobody to count')).toHaveLength(2);
-      expect(section('Coaching coverage').textContent).not.toContain('0%');
+      expect(section('Coaching coverage').textContent).not.toMatch(/(^|[^\d,])0,0%/);
     });
   });
 
@@ -452,14 +452,127 @@ describe('KPM Overview (P18-T1)', () => {
     });
   });
 
+  describe('P18.95-T1 AC-5 — the Target says it is saved, beside it', () => {
+    /** The save confirmation in the field's own box: the nearest ancestor with a status for a child. */
+    const besides = (el: HTMLElement) => {
+      for (let box = el.parentElement; box; box = box.parentElement) {
+        const own = [...box.children].find((c) => c.getAttribute('role') === 'status');
+        if (own) return own as HTMLElement;
+        if (box.tagName === 'SECTION') break;
+      }
+      return null;
+    };
+    const refused = {
+      status: 500,
+      body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-9' } },
+    };
+
+    it('P18.95-T1 AC-5: says Saving… while the target is on its way, then Saved ✓ beside the box', async () => {
+      const { mock } = stubFetch({ '/kpm/overview': { body: overviewView() } });
+      let release: () => void = () => {};
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+        if (init.method !== 'PUT') return mock(url, init);
+        await new Promise<void>((resolve) => { release = resolve; });
+        return { ok: true, status: 200, json: async () => ({ month: '2026-10', target: 18 }) } as Response;
+      }));
+      renderWithSession(<KpmOverviewPage />, { me: OWNER });
+      await loaded();
+      const input = screen.getByLabelText('Target');
+      expect(screen.queryByText('Saved ✓')).not.toBeInTheDocument();
+
+      await userEvent.clear(input);
+      await userEvent.type(input, '18');
+      await userEvent.tab();
+
+      await waitFor(() => expect(besides(input)).toHaveTextContent('Saving…'));
+      // Inside the Target's own tile, not elsewhere on the card.
+      expect(within(section('Recruitment pipeline')).getByText('Target').parentElement).toContainElement(besides(input));
+      await act(async () => { release(); });
+      await waitFor(() => expect(besides(input)).toHaveTextContent('Saved ✓'));
+      expect(besides(input)).toHaveClass('text-success');
+      expect(screen.getAllByText('Saved ✓')).toHaveLength(1);
+    });
+
+    it('P18.95-T1 AC-5: a refused target says Couldn’t save — retry, and the retry sends the same target again', async () => {
+      const { calls } = render(OWNER, {
+        'PUT /kpm/overview/recruit-target': [refused, (call) => ({ body: call.body })],
+      });
+      await loaded();
+      const input = screen.getByLabelText('Target');
+      await userEvent.clear(input);
+      await userEvent.type(input, '20');
+      await userEvent.tab();
+
+      const retry = await screen.findByRole('button', { name: "Couldn't save — retry: Target" });
+      expect(besides(input)).toContainElement(retry);
+      // What the screen said before still stands where it did, and the box still goes back to what is kept.
+      expect(screen.getByRole('alert')).toHaveTextContent('The target was not saved. Something went wrong.');
+      await waitFor(() => expect(input).toHaveValue(15));
+
+      await userEvent.click(retry);
+
+      await waitFor(() => expect(writes(calls)).toHaveLength(2));
+      expect(JSON.parse(writes(calls)[1].init.body as string)).toEqual({ month: '2026-10', target: 20 });
+      await waitFor(() => expect(besides(input)).toHaveTextContent('Saved ✓'));
+      // What the retry kept is what the box shows, and the refusal's sentence has gone with it.
+      expect(input).toHaveValue(20);
+      expect(input).toHaveFocus();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+      // The pause after the retry finds 20 kept, and sends nothing more.
+      await act(() => new Promise((r) => { setTimeout(r, 700); }));
+      expect(writes(calls)).toHaveLength(2);
+    });
+
+    it('P18.95-T1 AC-5: a newer target typed after a refusal is saved in its place, and the retry goes', async () => {
+      const { calls } = render(OWNER, {
+        'PUT /kpm/overview/recruit-target': [refused, (call) => ({ body: call.body })],
+      });
+      await loaded();
+      const input = screen.getByLabelText('Target');
+      await userEvent.clear(input);
+      await userEvent.type(input, '20');
+      await userEvent.tab();
+      await screen.findByRole('button', { name: "Couldn't save — retry: Target" });
+      await waitFor(() => expect(input).toHaveValue(15));
+
+      await userEvent.clear(input);
+      await userEvent.type(input, '17');
+      await userEvent.tab();
+
+      await waitFor(() => expect(besides(input)).toHaveTextContent('Saved ✓'));
+      expect(writes(calls).map((c) => JSON.parse(c.init.body as string).target)).toEqual([20, 17]);
+      expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+    });
+
+    it('P18.95-T1 AC-5: leaving the page before typing settles still sends the target, with nothing drawn for it', async () => {
+      const { calls } = stubFetch({
+        '/kpm/overview': { body: overviewView() },
+        'PUT /kpm/overview/recruit-target': (call) => ({ body: call.body }),
+      });
+      const { unmount } = renderWithSession(<KpmOverviewPage />, { me: OWNER });
+      await loaded();
+      const input = screen.getByLabelText('Target');
+      await userEvent.clear(input);
+      await userEvent.type(input, '30');
+      expect(writes(calls)).toHaveLength(0);
+
+      unmount();
+
+      await waitFor(() => expect(writes(calls)).toHaveLength(1));
+      expect(JSON.parse(writes(calls)[0].init.body as string)).toEqual({ month: '2026-10', target: 30 });
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Production — this year (AC-7)', () => {
     it('AC-7: Rp achieved of Rp target, in the product’s money formatter, and its percentage', async () => {
       render();
       await loaded();
       const production = within(section('Production — this year'));
-      expect(production.getByText('Rp 8.400.000.000')).toBeInTheDocument();
-      expect(production.getByText('of Rp 12.500.000.000 target')).toBeInTheDocument();
-      expect(production.getAllByText('67%')[0].className).toContain('text-alert');
+      expect(production.getByText('Rp 8,4 M')).toBeInTheDocument();
+      expect(production.getByText('of Rp 12,5 M target')).toBeInTheDocument();
+      expect(production.getAllByText('67,0%')[0].className).toContain('text-alert');
       expect(section('Production — this year').textContent).not.toMatch(/\d(\.\d)?[BM]\b/);
     });
 
@@ -467,8 +580,8 @@ describe('KPM Overview (P18-T1)', () => {
       render();
       await loaded();
       const production = within(section('Production — this year'));
-      expect(production.getByText('Projected: Rp 11.900.000.000')).toBeInTheDocument();
-      expect(production.getByText('Target: Rp 12.500.000.000')).toBeInTheDocument();
+      expect(production.getByText('Projected: Rp 11,9 M')).toBeInTheDocument();
+      expect(production.getByText('Target: Rp 12,5 M')).toBeInTheDocument();
       expect(production.getByText('0')).toBeInTheDocument();
       const marker = section('Production — this year').querySelector('span.absolute.w-0\\.5[aria-hidden="true"]') as HTMLElement;
       expect(marker.style.left).toBe(`${(11900 / 12500) * 100}%`);
@@ -485,7 +598,7 @@ describe('KPM Overview (P18-T1)', () => {
       render();
       await loaded();
       expect(within(section('Production — this year')).getByRole('button', {
-        name: 'Not uploaded yet for August 2026, so not counted in this total. 3 members have no goal set, so the target leaves them out.',
+        name: 'Not uploaded yet for Agu 2026, so not counted in this total. 3 members have no goal set, so the target leaves them out.',
       })).toBeInTheDocument();
     });
 
@@ -497,10 +610,10 @@ describe('KPM Overview (P18-T1)', () => {
       expect(production.getByText('Tap a row to see the AABs inside that unit')).toBeInTheDocument();
       const rows = production.getAllByRole('button', { expanded: false }).filter((b) => b.closest('li'));
       expect(rows.map((r) => r.textContent)).toEqual([
-        '▸Hendra Wibowo AB41%Rp 620.000.000 / Rp 1.500.000.000 unit target',
-        '▸Budi Santoso AB60%Rp 540.000.000 / Rp 900.000.000 unit target',
-        '▸Fajar Nugroho AB64%Rp 700.000.000 / Rp 1.100.000.000 unit target',
-        '▸Lina Chandra AB69%Rp 480.000.000 / Rp 700.000.000 unit target',
+        '▸Hendra Wibowo AB41,0%Rp 620 jt / 1,5 M unit target',
+        '▸Budi Santoso AB60,0%Rp 540 jt / 900 jt unit target',
+        '▸Fajar Nugroho AB64,0%Rp 700 jt / 1,1 M unit target',
+        '▸Lina Chandra AB69,0%Rp 480 jt / 700 jt unit target',
       ]);
     });
 
@@ -514,8 +627,8 @@ describe('KPM Overview (P18-T1)', () => {
       const panel = document.getElementById(hendra.getAttribute('aria-controls')!)!;
       expect(panel).toBeVisible();
       expect(within(panel).getAllByRole('listitem').map((r) => r.textContent)).toEqual([
-        'Ika Wirawan AAB42%Rp 210.000.000 / Rp 500.000.000',
-        'Yoga Pratama AAB45%Rp 180.000.000 / Rp 400.000.000',
+        'Ika Wirawan AAB42,0%Rp 210 jt / 500 jt',
+        'Yoga Pratama AAB45,0%Rp 180 jt / 400 jt',
       ]);
 
       const lina = production.getByRole('button', { name: /^Lina Chandra/ });
@@ -530,9 +643,9 @@ describe('KPM Overview (P18-T1)', () => {
       expect(production.getByText(/^Showing 4 of 6 ABs/)).toBeInTheDocument();
       await userEvent.click(production.getByRole('button', { name: 'view full ranking →' }));
       const rudi = production.getByRole('button', { name: /^Rudi Hartono/ });
-      expect(rudi).toHaveTextContent('Not uploaded yet / Rp 600.000.000 unit target');
+      expect(rudi).toHaveTextContent('Not uploaded yet / Rp 600 jt unit target');
       expect(rudi).toHaveTextContent('—');
-      expect(rudi.textContent).not.toMatch(/\b0%/);
+      expect(rudi.textContent).not.toMatch(/\b0(,0)?%/);
     });
 
     it('AC-9: a year with no file, and nobody with a goal, says so — no figure is 0', async () => {
@@ -585,7 +698,7 @@ describe('KPM Overview (P18-T1)', () => {
       render(OWNER, {}, NOBODY);
       await loaded();
       expect(within(section('Team composition')).getByText('+0 new this month')).toBeInTheDocument();
-      expect(section('Engagement').textContent).not.toMatch(/NaN|Infinity|\b0%/);
+      expect(section('Engagement').textContent).not.toMatch(/NaN|Infinity|(^|[^\d,])0(,0)?%/);
       expect(within(section('Engagement')).getAllByText('No rate: nobody to count')).toHaveLength(2);
     });
   });

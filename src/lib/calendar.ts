@@ -1,4 +1,5 @@
 import { api } from './api-client';
+import { formatNumber } from './format';
 
 /**
  * The calendar (Phase 12, `docs/02-specs/functional/calendar.md`): the shapes the API answers, the
@@ -345,7 +346,8 @@ export const PROTOTYPE_COPY = {
   today: 'Today',
   week: 'Week',
   month: 'Month',
-  dayNames: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+  // The month's column heads in `id-ID`, as the week's are (`formatWeekday`, ADR-0167 §1): the prototype's *Mon … Sun*.
+  dayNames: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'],
   inviting: 'Inviting',
   toThisSlot: 'to this slot',
   type: 'Type',
@@ -421,9 +423,9 @@ export const OWN_COPY = {
   returnAfterDeparture: 'Choose a return date on or after the departure date.',
   // Built from the limits above (m3), so a limit changed in one place changes the sentence with it.
   tripTooLong: `A trip can be at most ${TRIP_DAYS_MAX} days.`,
-  titleTooLong: `Keep the title to ${TITLE_MAX.toLocaleString('en-US')} characters.`,
-  notesTooLong: `Keep the notes to ${NOTES_MAX.toLocaleString('en-US')} characters.`,
-  tooManyInvitees: `You can invite at most ${INVITEES_MAX.toLocaleString('en-US')} people.`,
+  titleTooLong: `Keep the title to ${formatNumber(TITLE_MAX)} characters.`,
+  notesTooLong: `Keep the notes to ${formatNumber(NOTES_MAX)} characters.`,
+  tooManyInvitees: `You can invite at most ${formatNumber(INVITEES_MAX)} people.`,
   loadFailed: 'The calendar couldn\'t be loaded.',
   tryAgain: 'Try again',
   conflict: 'This entry was changed somewhere else, so it has been read again.',

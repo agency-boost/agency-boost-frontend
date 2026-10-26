@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef } from 'react';
 import { Button, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { InlineSaveField, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import type { ApiError } from '@/lib/api-client';
 import { formatDay } from '@/lib/format';
 import type { Lead } from '@/lib/leads';
@@ -39,7 +40,8 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
  * stays inside, and Escape or the backdrop closes it.
  *
  * Every field saves as it is left, exactly as a cell of the table does, and whatever the server refuses
- * is shown here while the dialog is open and beneath the lead once it is closed. **Read-only** under a
+ * is shown here while the dialog is open and beneath the lead once it is closed. **And says so under the
+ * box** — *Saving…*, *Saved ✓*, *Couldn't save — retry* — as a cell does (P18.95-T1 AC-5). **Read-only** under a
  * finalized coaching session's lock: the boxes hold what is stored and save nothing.
  */
 export function LeadDetailsDialog({
@@ -49,6 +51,7 @@ export function LeadDetailsDialog({
   editor,
   editedBy,
   readOnly = false,
+  status,
   onClose,
 }: {
   lead: Lead;
@@ -61,6 +64,8 @@ export function LeadDetailsDialog({
   editedBy: string | null;
   /** A finalized session's lock: nothing here writes. */
   readOnly?: boolean;
+  /** Each box's save confirmation, the table's own for this lead (AC-5). */
+  status?: (field: DetailsField) => InlineSaveStatusProps;
   onClose: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -103,22 +108,24 @@ export function LeadDetailsDialog({
     type?: string; placeholder?: string;
   } = {}) => (
     <Field label={label} htmlFor={`${id}-${field}`}>
-      <TextInput
-        id={`${id}-${field}`}
-        type={extra.type}
-        placeholder={readOnly ? undefined : extra.placeholder}
-        className="w-full"
-        value={readOnly ? stored ?? '' : editor.value(field, stored)}
-        // `readOnly`, not `disabled`: a disabled field drops the focus it holds, and a focus that
-        // falls out of a modal lands on the page behind it.
-        readOnly={saving || readOnly}
-        onChange={(e) => {
-          if (!readOnly) editor.change(field, e.target.value);
-        }}
-        onBlur={() => {
-          if (!readOnly) editor.commit(field);
-        }}
-      />
+      <InlineSaveField status={status?.(field) ?? { state: 'idle' }} label={label}>
+        <TextInput
+          id={`${id}-${field}`}
+          type={extra.type}
+          placeholder={readOnly ? undefined : extra.placeholder}
+          className="w-full"
+          value={readOnly ? stored ?? '' : editor.value(field, stored)}
+          // `readOnly`, not `disabled`: a disabled field drops the focus it holds, and a focus that
+          // falls out of a modal lands on the page behind it.
+          readOnly={saving || readOnly}
+          onChange={(e) => {
+            if (!readOnly) editor.change(field, e.target.value);
+          }}
+          onBlur={() => {
+            if (!readOnly) editor.commit(field);
+          }}
+        />
+      </InlineSaveField>
     </Field>
   );
 

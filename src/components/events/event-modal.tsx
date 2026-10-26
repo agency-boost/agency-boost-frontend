@@ -2,8 +2,10 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { TAP_AREA } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import {
   audienceLine, cancelledToast, cancelRsvp, dayOf, goingToast, isGoing, OWN_COPY, pastBlockOf, PROTOTYPE_COPY,
   readEvent, refusalOf, rsvpEvent, timeOf, type EventsMeta, type GuestEvent,
@@ -208,7 +210,8 @@ function EventDetail({ event, meta, titleId, busy, writeError, onJoin, onCancel,
         <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">{audienceLine(event.audience, meta.companyName)}</p>
         <h2 id={titleId} className="mb-1.5 break-words text-2xl font-extrabold text-navy">{event.title}</h2>
         <div className="mb-3.5 flex flex-col gap-[3px] text-md text-muted">
-          <span><span aria-hidden="true">📅 </span><strong className="text-navy">{dayOf(event)}</strong> · {timeOf(event)}</span>
+          {/* One date and time, written as every screen writes one: *24 Okt 2026, 18.00* (ADR-0167 §1). */}
+          <span><span aria-hidden="true">📅 </span><strong className="text-navy">{dayOf(event)}</strong>, {timeOf(event)}</span>
           <span><span aria-hidden="true">📍 </span><EventLocation event={event} /></span>
         </div>
         {event.description && (
@@ -259,11 +262,13 @@ function CloseButton({ onClose, onPoster }: { onClose: () => void; onPoster: boo
       type="button"
       aria-label={OWN_COPY.closeModal}
       onClick={onClose}
-      className={
+      className={cn(
         onPoster
           ? 'absolute right-3 top-3 z-10 flex h-[30px] w-[30px] items-center justify-center rounded-full bg-navy/[0.28] text-lg text-white hover:bg-navy/[0.42]'
-          : 'absolute right-3 top-3 z-10 flex h-[30px] w-[30px] items-center justify-center rounded-full border border-hairline bg-base text-lg text-navy'
-      }
+          : 'absolute right-3 top-3 z-10 flex h-[30px] w-[30px] items-center justify-center rounded-full border border-hairline bg-base text-lg text-navy',
+        // A 44px square on a phone, the 30px circle as drawn (ADR-0167; UI-029).
+        TAP_AREA,
+      )}
     >
       <span aria-hidden="true">{PROTOTYPE_COPY.close}</span>
     </button>

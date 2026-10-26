@@ -1,6 +1,7 @@
 import { api } from './api-client';
-import { dayInZone, OFFICE_TIME_ZONE, zoneOffsetMs } from './format';
-import { formatRupiah } from './goals';
+import {
+  dayInZone, formatNumber, formatPercent, formatRupiahCompact, OFFICE_TIME_ZONE, zoneOffsetMs,
+} from './format';
 import { formatBenchmark } from './ratio-format';
 
 /**
@@ -64,7 +65,7 @@ export interface CampaignCard {
   phase: CampaignPhase;
   startsAt: string;
   endsAt: string | null;
-  /** The window in words, composed by the server in the office's calendar: *Jul 1 – Sep 30, 2026*. */
+  /** The window in words, composed by the server in the office's calendar: *1 Jul – 30 Sep 2026*. */
   duration: string;
   poster: CampaignPoster;
   blurb: string;
@@ -240,16 +241,20 @@ const COMPARATOR: Record<Comparator, string> = { gte: '', gt: 'more than ', lte:
 /**
  * A figure in its unit: rupiah from sen (X-68's rule, invariant §9), a percentage, a ratio as the ratio card
  * writes it, or a count.
+ *
+ * **Compact and lossless** (ADR-0167 §1): a card's line and the dialog's rows are not a table, so *Rp 500 jt*;
+ * but a requirement is a rule, and *Rp 2,5 M* for 2.450.000.000 would state a different one — so a figure that
+ * compact writing would round is written in full. A percentage to one decimal, or the two a threshold was set to.
  */
 export function figureWords(value: number, unit: string): string {
-  if (unit === 'idr_minor') return formatRupiah(value);
-  if (unit === 'percentage') return `${value.toLocaleString('id-ID')}%`;
+  if (unit === 'idr_minor') return formatRupiahCompact(value, { lossless: true });
+  if (unit === 'percentage') return formatPercent(value, { maxDecimals: 2 });
   if (unit === 'ratio') return formatBenchmark(value, 'decimal');
   if (unit === 'percentage_points') return formatBenchmark(value, 'points');
-  return value.toLocaleString('id-ID');
+  return formatNumber(value, { maxDecimals: 2 });
 }
 
-/** *APE achieved Rp 500.000.000*, as the card's line prints `{label} {target}` (`reqRowHtml`, `:8031-8034`). */
+/** *APE achieved Rp 500 jt*, as the card's line prints `{label} {target}` (`reqRowHtml`, `:8031-8034`). */
 export const requirementWords = (r: Pick<CampaignRequirement, 'metricName' | 'comparator' | 'value' | 'unit'>) =>
   `${r.metricName} ${COMPARATOR[r.comparator] ?? ''}${figureWords(r.value, r.unit)}`;
 

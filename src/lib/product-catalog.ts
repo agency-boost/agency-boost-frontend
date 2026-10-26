@@ -1,4 +1,5 @@
 import { api } from './api-client';
+import { formatPercent } from './format';
 
 /**
  * **Sales tools** (`docs/02-specs/functional/sales-tools.md`, Phase 14): the shapes the field reads
@@ -163,13 +164,18 @@ export const AGE_CHOICES: readonly Choice<number>[] = [
   { value: 5, label: '65+' },
 ];
 
+/**
+ * The monthly budget bands, **compact** as a chip's money is (ADR-0167 §1, parity I-394): the prototype's
+ * *Rp500K–Rp2M* wrote a million *M*, which in Indonesian is *miliar* — a thousand times more. Keyed by `value`;
+ * nothing matches on the words.
+ */
 export const BUDGET_CHOICES: readonly Choice<number>[] = [
-  { value: 1, label: '< Rp500K' },
-  { value: 2, label: 'Rp500K–Rp2M' },
-  { value: 3, label: 'Rp2M–Rp5M' },
-  { value: 4, label: 'Rp5M–Rp10M' },
-  { value: 5, label: 'Rp10M–Rp20M' },
-  { value: 6, label: '> Rp20M' },
+  { value: 1, label: '< Rp 500 rb' },
+  { value: 2, label: 'Rp 500 rb–Rp 2 jt' },
+  { value: 3, label: 'Rp 2 jt–Rp 5 jt' },
+  { value: 4, label: 'Rp 5 jt–Rp 10 jt' },
+  { value: 5, label: 'Rp 10 jt–Rp 20 jt' },
+  { value: 6, label: '> Rp 20 jt' },
   { value: 7, label: 'Lump-sum' },
 ];
 
@@ -273,8 +279,11 @@ export const drawerHref = (code: string, filters: CatalogFilters) =>
 
 // ------------------------------------------------------------------------------------------ words
 
-/** A proportion as the drawer prints it: `0.4` is `40%`, `0.125` is `12.5%`. */
-export const formatRate = (rate: number) => `${Number((rate * 100).toFixed(2))}%`;
+/**
+ * A proportion as the drawer prints it: `0.4` is `40,0%`, `0.125` is `12,5%`, `0.0725` is `7,25%` — one decimal
+ * (ADR-0167 §1), and the second a rate was stored with, so the rate an agent reads is the rate stored.
+ */
+export const formatRate = (rate: number) => formatPercent(Number((rate * 100).toFixed(2)), { maxDecimals: 2 });
 
 /** `{n} product` or `{n} products` (`Overall.html:10170`). */
 export const productCount = (n: number) => `${n} product${n === 1 ? '' : 's'}`;

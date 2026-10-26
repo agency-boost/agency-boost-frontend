@@ -9,6 +9,7 @@ import { RoleBadge } from '@/components/ui/role-badge';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { displayName } from '@/lib/display-name';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { formatOfficeMonth } from '@/lib/format';
 import {
   grantAdmin,
   listAdmins,
@@ -177,10 +178,7 @@ export default function AdminsPage() {
                 <Cell className="whitespace-nowrap text-muted">
                   {admin.grantedAt ? (
                     <time dateTime={admin.grantedAt}>
-                      {new Date(admin.grantedAt).toLocaleDateString('en-GB', {
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {formatOfficeMonth(admin.grantedAt)}
                     </time>
                   ) : (
                     '—'

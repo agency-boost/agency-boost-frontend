@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
+import { TAB_PHONE, TAB_ROW_PHONE, UNDERLINED_ROW_PHONE } from '@/components/ui/phone';
+import { useTabRow } from '@/components/ui/use-tab-row';
 
 export interface RouteTab {
   readonly href: string;
@@ -34,6 +36,10 @@ export interface RouteTab {
  * A locked tab **stays visible and says why**, rather than disappearing: the four User Management
  * screens are one journey, and a rung vanishing from a chain reads as a step you already missed
  * (`Overall.html:8824`).
+ *
+ * **On a phone it is one row that scrolls sideways** (ADR-0167; UI-013: User Management's four rungs on
+ * two lines), fading on the side that has more, with the current tab brought into view. Below 768px
+ * only; wider, it wraps exactly as it did (`phone.ts`, `use-tab-row.ts`).
  */
 export function RouteTabs({
   label,
@@ -46,11 +52,17 @@ export function RouteTabs({
   className?: string;
 }) {
   const pathname = usePathname();
-  const TAB = '-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold';
+  const row = useTabRow<HTMLElement>(pathname);
+  const TAB = cn('-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold', TAB_PHONE);
   const current = (tab: RouteTab) => pathname === tab.href || (tab.nested === true && pathname.startsWith(`${tab.href}/`));
 
   return (
-    <nav aria-label={label} className={cn('mb-6 flex flex-wrap gap-6 border-b border-hairline', className)}>
+    <nav
+      ref={row.ref}
+      aria-label={label}
+      data-fade={row.fade}
+      className={cn('mb-6 flex flex-wrap gap-6 border-b border-hairline', TAB_ROW_PHONE, UNDERLINED_ROW_PHONE, className)}
+    >
       {tabs.map((tab) =>
         tab.locked ? (
           <span

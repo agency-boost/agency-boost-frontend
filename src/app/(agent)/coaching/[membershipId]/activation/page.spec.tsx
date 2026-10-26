@@ -49,7 +49,7 @@ describe('/coaching/[membershipId]/activation, a coachee’s Activation tab (P13
   it('P13-T9 AC-1 the card: 90-Day Activation, “{pct}% complete” and a mini bar, from the leader’s read of this person', async () => {
     const { calls } = show();
     const record = await card();
-    expect(within(record).getByText('31% complete')).toBeInTheDocument();
+    expect(within(record).getByText('31,0% complete')).toBeInTheDocument();
     expect(within(record).getByRole('progressbar')).toHaveAttribute('aria-valuenow', '31');
     // The read a leader's detail makes, once — the same one computation the hire is served (exit criterion 2).
     expect(calls.filter((c) => c.url.includes('/new-hires/')).map((c) => c.url)).toEqual(['http://api.test/api/v1/new-hires/mem-rina']);

@@ -9,6 +9,7 @@ import { InviteQr } from '@/components/ui/invite-qr';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { CONFIRMED } from '@/lib/confirmations';
 import { useDebounced } from '@/lib/use-debounced';
 import { useSession } from '@/lib/session';
 import { RoleBadge, classOfRung, rungLabel, useLadder } from '@/components/ui/role-badge';
@@ -273,10 +274,11 @@ export default function AddAgentsPage() {
                 value={code.url}
                 action="Copy link"
                 border="dashed"
+                copied={CONFIRMED.linkCopied}
               />
             </div>
             <div className="min-w-[170px]">
-              <CopyableValue label="Leader code" value={code.code} mono action="Copy code" />
+              <CopyableValue label="Leader code" value={code.code} mono action="Copy code" copied={CONFIRMED.codeCopied} />
             </div>
             {/* The third artefact (`:454`). The prototype's is a static tile; ours draws
                 the real code, which is the whole point of offering one. */}

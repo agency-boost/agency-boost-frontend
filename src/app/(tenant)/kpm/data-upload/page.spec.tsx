@@ -248,7 +248,7 @@ describe('Data upload — the month table (P9-T1)', () => {
     // Wait for the table: the loading skeleton is itself a live region, and `findByRole` resolves
     // on the first match. The two never coexist, which is why a screen has exactly one `status`.
     await screen.findByText('Rina Wijaya');
-    expect(screen.getByRole('status')).toHaveTextContent('Nothing has been uploaded for September 2026 yet');
+    expect(screen.getByRole('status')).toHaveTextContent('Nothing has been uploaded for Sep 2026 yet');
     expect(screen.getAllByRole('row')).toHaveLength(4); // two heading rows + two members
   });
 
@@ -547,13 +547,13 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
     it('says a month is open, and until when', async () => {
       stubFetch(everything());
       renderWithSession(<DataUploadPage />, { me: EVERYTHING });
-      expect(await screen.findByText('Open for imports and corrections until October 7, 2026, when it locks.')).toBeInTheDocument();
+      expect(await screen.findByText('Open for imports and corrections until 7 Okt 2026, when it locks.')).toBeInTheDocument();
     });
 
     it.each([
-      [{ locked: true, reason: 'schedule', editableUntil: '2026-09-07' }, 'Locked — its window closed after September 7, 2026. Reopen it to change its figures.'],
-      [{ locked: true, reason: 'locked_by_hand', changedBy: 'Maya Halim', changedAt: '2026-09-20T03:00:00.000Z' }, 'Locked by Maya Halim on September 20, 2026. Reopen it to change its figures.'],
-      [{ locked: false, reason: 'reopened', changedBy: 'Wilson Tanoto', changedAt: '2026-09-21T03:00:00.000Z' }, 'Reopened by Wilson Tanoto on September 21, 2026. It stays open until somebody locks it again.'],
+      [{ locked: true, reason: 'schedule', editableUntil: '2026-09-07' }, 'Locked — its window closed after 7 Sep 2026. Reopen it to change its figures.'],
+      [{ locked: true, reason: 'locked_by_hand', changedBy: 'Maya Halim', changedAt: '2026-09-20T03:00:00.000Z' }, 'Locked by Maya Halim on 20 Sep 2026. Reopen it to change its figures.'],
+      [{ locked: false, reason: 'reopened', changedBy: 'Wilson Tanoto', changedAt: '2026-09-21T03:00:00.000Z' }, 'Reopened by Wilson Tanoto on 21 Sep 2026. It stays open until somebody locks it again.'],
     ])('says why: %j', async (over, sentence) => {
       stubFetch(everything({ '/kpm/data-upload/': { body: month([rina()], 1, '2026-09', state('2026-09', over)) } }));
       renderWithSession(<DataUploadPage />, { me: EVERYTHING });
@@ -567,10 +567,10 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
       renderWithSession(<DataUploadPage />, { me: EVERYTHING });
 
       fireEvent.click(await screen.findByRole('button', { name: 'Lock month' }));
-      expect(screen.getByRole('dialog')).toHaveTextContent('Lock September 2026? Imports, reverts and corrections to it will be refused');
+      expect(screen.getByRole('dialog')).toHaveTextContent('Lock Sep 2026? Imports, reverts and corrections to it will be refused');
       fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Lock month' }));
 
-      expect(await screen.findByText('September 2026 is locked.')).toBeInTheDocument();
+      expect(await screen.findByText('Sep 2026 is locked.')).toBeInTheDocument();
       expect(calls.find((c) => c.url.includes('/months/2026-09/lock'))!.init.method).toBe('POST');
     });
 
@@ -597,7 +597,7 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
 
       fireEvent.click(await screen.findByRole('button', { name: 'Confirm import' }));
 
-      const notice = await screen.findByText('Imported 2 agent records for September 2026.');
+      const notice = await screen.findByText('Imported 2 agent records for Sep 2026.');
       await waitFor(() => expect(notice).toHaveFocus());
       const sent = calls.find((c) => c.url.includes('/kpm/data-upload/commit'))!;
       const form = sent.init.body as FormData;
@@ -611,7 +611,7 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
       stubFetch(everything({
         '/kpm/data-upload/commit': {
           status: 409,
-          body: { error: { code: 'VERSION_CONFLICT', message: 'September 2026 has changed since you looked at it.', requestId: 'r' } },
+          body: { error: { code: 'VERSION_CONFLICT', message: 'Sep 2026 has changed since you looked at it.', requestId: 'r' } },
         },
       }));
       renderWithSession(<DataUploadPage />, { me: EVERYTHING });
@@ -619,7 +619,7 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
       fireEvent.click(await screen.findByRole('button', { name: 'Confirm import' }));
 
       const card = screen.getByRole('region', { name: /ready to import/ });
-      expect(await within(card).findByRole('alert')).toHaveTextContent('September 2026 has changed since you looked at it.');
+      expect(await within(card).findByRole('alert')).toHaveTextContent('Sep 2026 has changed since you looked at it.');
       expect(within(card).getByRole('button', { name: 'Confirm import' })).toBeEnabled();
     });
 
@@ -629,7 +629,7 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
       await choose();
       const card = await screen.findByRole('region', { name: /ready to import/ });
       expect(within(card).getByRole('button', { name: 'Confirm import' })).toBeDisabled();
-      expect(card).toHaveTextContent('September 2026 is locked — reopen it to import.');
+      expect(card).toHaveTextContent('Sep 2026 is locked — reopen it to import.');
     });
 
     it('is unavailable when the file would change nothing, saying so', async () => {
@@ -648,12 +648,12 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
       stubFetch(everything());
       renderWithSession(<DataUploadPage />, { me: EVERYTHING });
 
-      const section = await screen.findByRole('region', { name: 'Imports for September 2026' });
+      const section = await screen.findByRole('region', { name: 'Imports for Sep 2026' });
       const items = await within(section).findAllByRole('listitem');
       expect(items[0]).toHaveTextContent('KPM0417-agent-data-Sep-2026-corrected.csv');
-      expect(items[0]).toHaveTextContent('Imported by Wilson Tanoto on September 26, 2026 · 6 agents, 72 figures');
+      expect(items[0]).toHaveTextContent('Imported by Wilson Tanoto on 26 Sep 2026 · 6 agents, 72 figures');
       expect(items[0]).toHaveTextContent('Standing');
-      expect(items[1]).toHaveTextContent('Reverted by Maya Halim on September 25, 2026 — 96 figures put back.');
+      expect(items[1]).toHaveTextContent('Reverted by Maya Halim on 25 Sep 2026 — 96 figures put back.');
       expect(within(items[1]).queryByRole('button', { name: 'Revert' })).not.toBeInTheDocument();
     });
 
@@ -664,7 +664,7 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
       renderWithSession(<DataUploadPage />, { me: EVERYTHING });
 
       fireEvent.click(await screen.findByRole('button', { name: 'Revert' }));
-      expect(screen.getByRole('dialog')).toHaveTextContent('Every figure it wrote into September 2026 goes back to what it was before — empty where it was empty.');
+      expect(screen.getByRole('dialog')).toHaveTextContent('Every figure it wrote into Sep 2026 goes back to what it was before — empty where it was empty.');
       fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Revert import' }));
 
       expect(await screen.findByText(
@@ -677,13 +677,13 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
       stubFetch(everything({ '/kpm/data-upload/': { body: month([rina()], 1, '2026-09', state('2026-09', { locked: true, reason: 'schedule' })) } }));
       renderWithSession(<DataUploadPage />, { me: EVERYTHING });
       expect(await screen.findByRole('button', { name: 'Revert' })).toBeDisabled();
-      expect(screen.getByText('September 2026 is locked — reopen it to revert an import.')).toBeInTheDocument();
+      expect(screen.getByText('Sep 2026 is locked — reopen it to revert an import.')).toBeInTheDocument();
     });
 
     it('says so when nothing has been imported', async () => {
       stubFetch(everything({ '/kpm/data-upload/history': { body: { month: '2026-09', batches: [] } } }));
       renderWithSession(<DataUploadPage />, { me: EVERYTHING });
-      expect(await screen.findByText('Nothing has been imported for September 2026 yet.')).toBeInTheDocument();
+      expect(await screen.findByText('Nothing has been imported for Sep 2026 yet.')).toBeInTheDocument();
     });
 
     it('is neither shown nor asked for without its grant', async () => {
@@ -744,7 +744,7 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
     renderWithSession(<DataUploadPage />, { me: CORRECTOR });
     const panel = await openApe();
 
-    expect(panel).toHaveTextContent('PRU-001 · September 2026 · Now: Rp 1.500.000 (from the carrier’s file)');
+    expect(panel).toHaveTextContent('PRU-001 · Sep 2026 · Now: Rp 1.500.000 (from the carrier’s file)');
     const input = within(panel).getByLabelText('New figure');
     await waitFor(() => expect(input).toHaveFocus());
     expect(input).toHaveValue('1.500.000');
@@ -819,14 +819,14 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
       ...routes(month([withApe()], 1)),
       '/kpm/data-upload/cell': {
         status: 409,
-        body: { error: { code: 'VERSION_CONFLICT', message: 'September 2026 has changed since you looked at it.', requestId: 'r' } },
+        body: { error: { code: 'VERSION_CONFLICT', message: 'Sep 2026 has changed since you looked at it.', requestId: 'r' } },
       },
     });
     renderWithSession(<DataUploadPage />, { me: CORRECTOR });
     const panel = await openApe();
     fireEvent.change(within(panel).getByLabelText('Why is it being corrected?'), { target: { value: 'x' } });
     fireEvent.click(within(panel).getByRole('button', { name: 'Save correction' }));
-    expect(await within(panel).findByText('September 2026 has changed since you looked at it.')).toBeInTheDocument();
+    expect(await within(panel).findByText('Sep 2026 has changed since you looked at it.')).toBeInTheDocument();
   });
 
   it('AC-4: clears a figure after asking, sending an explicit null', async () => {
@@ -839,7 +839,7 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
     fireEvent.change(within(panel).getByLabelText('Why is it being corrected?'), { target: { value: 'Belongs to August' } });
     fireEvent.click(within(panel).getByRole('button', { name: 'Clear figure' }));
 
-    expect(screen.getByRole('dialog')).toHaveTextContent('Clear APE this month for Rina Wijaya in September 2026?');
+    expect(screen.getByRole('dialog')).toHaveTextContent('Clear APE this month for Rina Wijaya in Sep 2026?');
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Clear figure' }));
 
     expect(await screen.findByText('Corrected APE this month for Rina Wijaya: Rp 1.500.000 → nothing reported.')).toBeInTheDocument();
@@ -904,7 +904,7 @@ describe('Data upload — a correction the file would change (ADR-0053)', () => 
 
     const list = (await screen.findByRole('heading', { name: 'Corrected by hand (1)' })).closest('div')!.parentElement!;
     expect(list).toHaveTextContent(
-      'Corrected to Rp 2.000.000 by Maya Halim on September 26, 2026 — “Carrier restated it”. '
+      'Corrected to Rp 2.000.000 by Maya Halim on 26 Sep 2026 — “Carrier restated it”. '
       + 'The file says Rp 1.500.000 — the figure the correction replaced, so this is probably the old file.',
     );
     expect(choice()).not.toBeChecked();
@@ -920,7 +920,7 @@ describe('Data upload — a correction the file would change (ADR-0053)', () => 
     expect(within(table).getAllByRole('cell')[2]).toHaveTextContent('Rp 2.000.000correction kept');
     fireEvent.click(screen.getByRole('button', { name: 'Confirm import' }));
 
-    expect(await screen.findByText('Imported 1 agent record for September 2026. 1 correction kept.')).toBeInTheDocument();
+    expect(await screen.findByText('Imported 1 agent record for Sep 2026. 1 correction kept.')).toBeInTheDocument();
     const form = calls.find((c) => c.url.includes('/commit'))!.init.body as FormData;
     expect(form.get('replace')).toBeNull();
   });
@@ -936,7 +936,7 @@ describe('Data upload — a correction the file would change (ADR-0053)', () => 
     expect(within(table).getAllByRole('cell')[2]).toHaveTextContent('Rp 1.500.000replaces a correction');
     fireEvent.click(screen.getByRole('button', { name: 'Confirm import' }));
 
-    expect(await screen.findByText('Imported 1 agent record for September 2026. 1 correction replaced with the file’s figure.')).toBeInTheDocument();
+    expect(await screen.findByText('Imported 1 agent record for Sep 2026. 1 correction replaced with the file’s figure.')).toBeInTheDocument();
     const form = calls.find((c) => c.url.includes('/commit'))!.init.body as FormData;
     expect(form.get('replace')).toBe('mem-rina:apeMonthly');
   });
@@ -1001,8 +1001,8 @@ describe('Data upload — whose each figure is (P9-T6)', () => {
     const row = (await screen.findByText('Rina Wijaya')).closest('tr')!;
     const cells = within(row).getAllByRole('cell');
 
-    expect(cells[2]).toHaveTextContent('Rp 2.000.000✎, corrected by hand by Maya Halim on September 26, 2026 — “Carrier restated it”');
-    expect(within(cells[2]).getByTitle('corrected by hand by Maya Halim on September 26, 2026 — “Carrier restated it”')).toBeInTheDocument();
+    expect(cells[2]).toHaveTextContent('Rp 2.000.000✎, corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”');
+    expect(within(cells[2]).getByTitle('corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”')).toBeInTheDocument();
     // A carrier figure is plain.
     expect(cells[8]).toHaveTextContent('Rp 9.000.000');
     expect(cells[8]).not.toHaveTextContent('✎');
@@ -1013,7 +1013,7 @@ describe('Data upload — whose each figure is (P9-T6)', () => {
     renderWithSession(<DataUploadPage />, { me: OWNER });
     const row = (await screen.findByText('Rina Wijaya')).closest('tr')!;
     const cells = within(row).getAllByRole('cell');
-    expect(cells[6]).toHaveTextContent('—✎, emptied by hand by Maya Halim on September 26, 2026 — “Belongs to October”');
+    expect(cells[6]).toHaveTextContent('—✎, emptied by hand by Maya Halim on 26 Sep 2026 — “Belongs to October”');
     expect(within(cells[12]).getByLabelText('nothing reported')).toBeInTheDocument();
   });
 
@@ -1021,11 +1021,11 @@ describe('Data upload — whose each figure is (P9-T6)', () => {
     stubFetch(routes(month([withCorrections()], 1)));
     renderWithSession(<DataUploadPage />, { me: CORRECTOR });
     const button = await screen.findByRole('button', {
-      name: 'Correct APE this month for Rina Wijaya, now Rp 2.000.000, corrected by hand by Maya Halim on September 26, 2026 — “Carrier restated it”',
+      name: 'Correct APE this month for Rina Wijaya, now Rp 2.000.000, corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”',
     });
     fireEvent.click(button);
     expect(screen.getByRole('region', { name: 'Correct APE this month for Rina Wijaya' })).toHaveTextContent(
-      'Now: Rp 2.000.000 (corrected by hand by Maya Halim on September 26, 2026 — “Carrier restated it”)',
+      'Now: Rp 2.000.000 (corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”)',
     );
   });
 });
@@ -1056,7 +1056,7 @@ describe('Data upload — the Active (MAA) column (OD-21, ADR-0054)', () => {
     expect(within(await mark('Budi Santoso')).getByRole('img', { name: 'Not active' })).toHaveTextContent('✕');
     expect(within(await mark('Sari Dewi')).getByRole('img', { name: 'Not reported' })).toHaveTextContent('—');
     // The last heading of the first row, spanning both: the prototype's place for it (`:4843`).
-    const [groups] = within(screen.getByRole('table', { name: 'Data for September 2026' })).getAllByRole('row');
+    const [groups] = within(screen.getByRole('table', { name: 'Data for Sep 2026' })).getAllByRole('row');
     expect(within(groups).getAllByRole('columnheader').at(-1)).toHaveTextContent('Active (MAA)');
   });
 
@@ -1087,7 +1087,7 @@ describe('Data upload — the Active (MAA) column (OD-21, ADR-0054)', () => {
 
     const preview = await screen.findByRole('table', { name: 'What “filled.csv” would change' });
     expect(within(preview).queryByRole('columnheader', { name: 'Active (MAA)' })).not.toBeInTheDocument();
-    expect(within(screen.getByRole('table', { name: 'Data for September 2026' }))
+    expect(within(screen.getByRole('table', { name: 'Data for Sep 2026' }))
       .getByRole('columnheader', { name: 'Active (MAA)' })).toBeInTheDocument();
   });
 });
@@ -1098,7 +1098,7 @@ describe('Data upload — the prototype’s order (P13.1-T7)', () => {
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
   const SIX = ['APE', 'Rolling Persistency (%)', 'Recruitment', 'New Active Agents', 'FYP', '# of Policy'];
-  const monthTable = () => screen.findByRole('table', { name: 'Data for September 2026' });
+  const monthTable = () => screen.findByRole('table', { name: 'Data for Sep 2026' });
   const texts = (els: HTMLElement[]) => els.map((el) => el.textContent);
   /** What a cell's `headers` attribute names, in order — what a screen reader says before the figure. */
   const headingsOf = (cell: HTMLElement) =>

@@ -3,7 +3,7 @@
 import { useEffect, useId } from 'react';
 import { Button, Select, TextInput } from '@/components/ui/field';
 import {
-  BILLING_COPY as COPY, BILLING_OWN_COPY as OWN, maskAmount, money, perLeaderDiscount, savePct, tierLabel,
+  BILLING_COPY as COPY, BILLING_OWN_COPY as OWN, maskAmount, money, perLeaderDiscount, saveWords, tierLabel,
   type BillingPeriod, type BillingTier, type CalculatorInput, type DiscountType, type Pricing,
 } from '@/lib/billing';
 import { cn } from '@/lib/cn';
@@ -59,7 +59,7 @@ export function TierCards({
                   <span className="font-body text-xs font-medium text-muted">{COPY.perLeaderMonth}</span>
                 </span>
                 <span className="self-start rounded-pill bg-success/10 px-[9px] py-[3px] text-xs font-bold text-success">
-                  Save {savePct(tier)}%
+                  {saveWords(tier)}
                 </span>
               </>
             )}

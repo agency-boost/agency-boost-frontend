@@ -176,10 +176,10 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       await listReady();
       const card = cardOf('Q4 APE Sprint');
       expect(within(card).getByRole('heading', { level: 3 })).toHaveTextContent(/^Q4 APE Sprint$/);
-      expect(within(card).getByText('Oct 1 – Dec 31, 2026')).toBeInTheDocument();
+      expect(within(card).getByText('1 Okt – 31 Des 2026')).toBeInTheDocument();
       expect(within(card).getByText('Push for APE this quarter — top 10 unit-wide win a trip.')).toBeInTheDocument();
       expect(card).toHaveTextContent('🏆Top 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus');
-      expect(card).toHaveTextContent('Requirements: APE achieved Rp 500.000.000 | New Hire 1');
+      expect(card).toHaveTextContent('Requirements: APE achieved Rp 500 jt | New Hire 1');
     });
 
     it('P18.5-T7 AC-3 Promotion path over a promotion’s title, and nowhere else', async () => {
@@ -365,7 +365,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(within(box).getByText('KPM')).toBeInTheDocument();
     expect(within(box).getByText('Running')).toBeInTheDocument();
     expect(within(box).getByRole('heading', { level: 2, name: 'Q4 APE Sprint' })).toBeInTheDocument();
-    expect(box).toHaveTextContent('📅 Oct 1 – Dec 31, 2026');
+    expect(box).toHaveTextContent('📅 1 Okt – 31 Des 2026');
     expect(within(box).getByText(/^Office-wide APE sprint for Q4\./)).toHaveClass('whitespace-pre-line');
     expect(box).toHaveTextContent('PrizeTop 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus');
   });
@@ -381,10 +381,10 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     dialogAt('APE_SPRINT');
     const box = await dialog();
     const requirements = within(box).getByRole('region', { name: /^Requirements/ });
-    expect(within(requirements).getByRole('heading', { level: 3 })).toHaveTextContent('RequirementsOct – Dec 2026');
+    expect(within(requirements).getByRole('heading', { level: 3 })).toHaveTextContent('RequirementsOkt – Des 2026');
     const rows = within(requirements).getAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
-      'APE achievedRp 620.000.000 of Rp 500.000.000 ✓, met',
+      'APE achievedRp 620 jt of Rp 500 jt ✓, met',
       'New Hire1Not uploaded yet',
     ]);
     expect(within(rows[0]).getByText('✓')).toHaveAttribute('aria-hidden', 'true');
@@ -397,7 +397,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
         body: detail({
           requirements: [APE(500), { ...APE(1), metricKey: 'OLD_METRIC', metricName: 'Old metric', unit: 'count', value: 3, measured: false }],
           progress: {
-            windowLabel: 'Oct – Dec 2026', final: false,
+            windowLabel: 'Okt – Des 2026', final: false,
             rows: [
               { metricKey: 'APE_ACHIEVED', current: 32_000_000_000, target: 50_000_000_000, unit: 'idr_minor', state: 'in_progress' },
               { metricKey: 'OLD_METRIC', current: null, target: 3, unit: 'count', state: 'not_measured' },
@@ -408,7 +408,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     });
     const rows = within(await dialog()).getAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
-      'APE achievedRp 320.000.000 of Rp 500.000.000',
+      'APE achievedRp 320 jt of Rp 500 jt',
       'Old metric3Not measured yet',
     ]);
   });
@@ -422,21 +422,21 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
         body: detail({
           requirements: [ratio],
           progress: {
-            windowLabel: 'Oct 1 – Oct 10, 2026', final: false,
+            windowLabel: '1 Okt – 10 Okt 2026', final: false,
             rows: [{ metricKey: 'SELLING_SUCCESS_RATE', current: null, target: 0.15, unit: 'ratio', state: 'nothing_logged' }],
           },
         }),
       },
     });
     const rows = within(await dialog()).getAllByRole('listitem');
-    expect(rows.map((r) => r.textContent)).toEqual(['Selling success rate0.15Nothing logged yet']);
+    expect(rows.map((r) => r.textContent)).toEqual(['Selling success rate0,15Nothing logged yet']);
     expect(rows[0]).not.toHaveTextContent('Not uploaded yet');
   });
 
   it('P18.5-T8 AC-6 an upcoming campaign’s rows are their targets alone, as drawn', async () => {
     dialogAt('APE_CHALLENGE_NEXT', { 'GET /campaigns/APE_CHALLENGE_NEXT': { body: detail({ ...CHALLENGE, progress: null }) } });
     const box = await dialog('Q1 APE Challenge');
-    expect(within(box).getAllByRole('listitem').map((r) => r.textContent)).toEqual(['APE achievedRp 300.000.000']);
+    expect(within(box).getAllByRole('listitem').map((r) => r.textContent)).toEqual(['APE achievedRp 300 jt']);
     expect(within(box).getByRole('heading', { level: 3 })).toHaveTextContent(/^Requirements$/);
   });
 
@@ -529,7 +529,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
         body: detail({
           requirements: [APE(500), APE(1000)],
           progress: {
-            windowLabel: 'Oct – Dec 2026', final: false,
+            windowLabel: 'Okt – Des 2026', final: false,
             rows: [
               { metricKey: 'APE_ACHIEVED', current: 62_000_000_000, target: 50_000_000_000, unit: 'idr_minor', state: 'met' },
               { metricKey: 'APE_ACHIEVED', current: 62_000_000_000, target: 100_000_000_000, unit: 'idr_minor', state: 'in_progress' },
@@ -540,8 +540,8 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     });
     const rows = within(await dialog()).getAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
-      'APE achievedRp 620.000.000 of Rp 500.000.000 ✓, met',
-      'APE achievedRp 620.000.000 of Rp 1.000.000.000',
+      'APE achievedRp 620 jt of Rp 500 jt ✓, met',
+      'APE achievedRp 620 jt of Rp 1 M',
     ]);
   });
 

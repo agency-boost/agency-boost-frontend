@@ -1,6 +1,5 @@
 import { api } from './api-client';
-import { formatMonth } from './format';
-import { formatRupiah } from './goals';
+import { formatMonth, formatPercent, formatRupiahCompact, formatRupiahCompactPair } from './format';
 
 /**
  * The KPM Overview (P18-T1, `KPM_Owner.html:936-1222`): the whole office in one scroll — Team composition,
@@ -279,8 +278,8 @@ export const officeLine = (office: OverviewOffice) => `${office.companyName} · 
 /** *"+6 new this month"* (`:946`). */
 export const newThisMonth = (n: number) => `+${n} new this month`;
 
-/** A percentage the server computed, or *—* over nobody. */
-export const pctText = (pct: number | null) => (pct === null ? '—' : `${pct}%`);
+/** A percentage the server computed, to one decimal (ADR-0167 §1), or *—* over nobody. */
+export const pctText = (pct: number | null) => (pct === null ? '—' : formatPercent(pct));
 
 /**
  * How a percentage is painted: the prototype's 70% split (`:3150`, `:3220`), which every status class on
@@ -303,8 +302,8 @@ export interface TrendWords {
 }
 
 /**
- * *"Up from 138 last month (+3%)"* (`:977`) or *"Down from …"*; the change is relative to last month's
- * figure, rounded — 142 against 138 is +3%. With nothing logged by this day last month there is no
+ * *"Up from 138 last month (+3,0%)"* (`:977`) or *"Down from …"*; the change is relative to last month's
+ * figure, rounded — 142 against 138 is +3% — and written to one decimal (ADR-0167 §1). With nothing logged by this day last month there is no
  * percentage to give, so the line stops at the figure. `null` — nothing to compare against — draws no line.
  */
 export function trendWords(now: number, lastMonthToDate: number | null): TrendWords | null {
@@ -314,7 +313,7 @@ export function trendWords(now: number, lastMonthToDate: number | null): TrendWo
   const lead = `${direction === 'up' ? 'Up' : 'Down'} from ${lastMonthToDate} last month`;
   if (lastMonthToDate === 0) return { direction, lead, change: null };
   const pct = Math.round((Math.abs(now - lastMonthToDate) / lastMonthToDate) * 100);
-  return { direction, lead, change: `${direction === 'up' ? '+' : '−'}${pct}%` };
+  return { direction, lead, change: `${direction === 'up' ? '+' : '−'}${formatPercent(pct)}` };
 }
 
 /**
@@ -336,7 +335,7 @@ export const moreWords = (n: number) => `+ ${n} more — full list on the People
 /** *"· 31 in team"* (`:1027`). */
 export const inTeam = (n: number) => `· ${n} in team`;
 
-/** *"6/31 · 19%"* (`:1029`). */
+/** *"6/31 · 19,0%"* (`:1029`). */
 export const coachedWords = (row: Pick<LeaderboardRow, 'coached' | 'teamSize' | 'pct'>) =>
   `${row.coached}/${row.teamSize} · ${pctText(row.pct)}`;
 
@@ -370,14 +369,14 @@ export function parseTarget(typed: string): number | null {
   return /^\d+$/.test(trimmed) ? Number(trimmed) : null;
 }
 
-/** *"of Rp 12.500.000.000 target"* (`:1081`), the year's figure's sub-line. */
-export const ofTarget = (targetMinor: number) => `of ${formatRupiah(targetMinor)} target`;
+/** *"of Rp 12,5 M target"* (`:1081`), the year's figure's sub-line — compact, as a card's figures are (ADR-0167 §1). */
+export const ofTarget = (targetMinor: number) => `of ${formatRupiahCompact(targetMinor)} target`;
 
-/** *"Projected: Rp 11.900.000.000"* (`:1087`). */
-export const projectedWords = (minor: number) => `Projected: ${formatRupiah(minor)}`;
+/** *"Projected: Rp 11,9 M"* (`:1087`). */
+export const projectedWords = (minor: number) => `Projected: ${formatRupiahCompact(minor)}`;
 
-/** *"Target: Rp 12.500.000.000"* (`:1090`). */
-export const targetLegend = (minor: number) => `Target: ${formatRupiah(minor)}`;
+/** *"Target: Rp 12,5 M"* (`:1090`). */
+export const targetLegend = (minor: number) => `Target: ${formatRupiahCompact(minor)}`;
 
 /**
  * Where the projection marker sits along the bar, as a percentage of the target, clamped to the bar — a
@@ -389,13 +388,18 @@ export function markerAt(projectionMinor: number | null, targetMinor: number | n
 }
 
 /**
- * A unit's line (`:1107`, `:1121`): *"Rp 620.000.000 / Rp 1.500.000.000 unit target"* on an agency,
- * *"Rp 210.000.000 / Rp 500.000.000"* on an AAB unit. No figure becomes 0: a missing one says so.
+ * A unit's line (`:1107`, `:1121`): *"Rp 620 jt / 1,5 M unit target"* on an agency, *"Rp 210 jt / 500 jt"* on
+ * an AAB unit — compact, one `Rp` for the pair (UI-030, ADR-0167 §1). No figure becomes 0: a missing one says so.
  */
 export function unitNums(money: Pick<OverviewMoney, 'achievedMinor' | 'targetMinor'>, agency: boolean): string {
-  const achieved = money.achievedMinor === null ? OWN_COPY.notUploaded : formatRupiah(money.achievedMinor);
-  if (money.targetMinor === null) return `${achieved} · ${OWN_COPY.noGoal}`;
-  return `${achieved} / ${formatRupiah(money.targetMinor)}${agency ? ' unit target' : ''}`;
+  const unit = agency ? ' unit target' : '';
+  if (money.achievedMinor === null) {
+    return money.targetMinor === null
+      ? `${OWN_COPY.notUploaded} · ${OWN_COPY.noGoal}`
+      : `${OWN_COPY.notUploaded} / ${formatRupiahCompact(money.targetMinor)}${unit}`;
+  }
+  if (money.targetMinor === null) return `${formatRupiahCompact(money.achievedMinor)} · ${OWN_COPY.noGoal}`;
+  return `${formatRupiahCompactPair(money.achievedMinor, money.targetMinor, '/')}${unit}`;
 }
 
 /** `a`, `a and b`, `a, b and c`. */

@@ -297,6 +297,51 @@ describe('the Leader Notes tab (P11-T9)', () => {
       expect(screen.queryByText('Capability mapping updated.')).not.toBeInTheDocument();
     });
 
+    it('P18.95-T1 AC-5: a tick says Saved ✓ under its own box, in the stage it was ticked in, and keeps its toast', async () => {
+      show();
+      const mapping = await card('Capability mapping');
+      const box = within(mapping).getAllByRole('checkbox', { name: 'Recruits quality agents' })[0];
+      await userEvent.click(box);
+
+      const said = await within(mapping).findByText('Saved ✓');
+      expect(said).toHaveAttribute('role', 'status');
+      expect(box.closest('label')!.nextElementSibling).toBe(said);
+      // Not in the label: the box's name stays its words.
+      expect(box).toHaveAccessibleName('Recruits quality agents');
+      expect(within(mapping).getAllByText('Saved ✓')).toHaveLength(1);
+      await toastSays('Capability mapping updated.');
+    });
+
+    it('P18.95-T1 AC-5: a refused tick is put back and offers the retry, which ticks it again and saves it', async () => {
+      const { calls } = show({
+        'PUT /coaching/coachees/mem-rina/profile': [refused(500, 'INTERNAL_ERROR', 'Something went wrong.'), echoProfile()],
+      });
+      const tracker = await card('Skill tracker');
+      await userEvent.click(within(tracker).getByRole('checkbox', { name: 'Objection handling & closing' }));
+      const retry = await within(tracker).findByRole('button', { name: "Couldn't save — retry: Objection handling & closing" });
+      expect(within(tracker).getByRole('checkbox', { name: 'Objection handling & closing' })).not.toBeChecked();
+
+      await userEvent.click(retry);
+
+      await waitFor(() => expect(sent(calls, 'PUT', '/coaching/coachees/mem-rina/profile')).toHaveLength(2));
+      const [first, second] = sent(calls, 'PUT', '/coaching/coachees/mem-rina/profile').map(bodyOf);
+      expect(second).toEqual(first);
+      expect(within(tracker).getByRole('checkbox', { name: 'Objection handling & closing' })).toBeChecked();
+      expect(await within(tracker).findByText('Saved ✓')).toBeInTheDocument();
+    });
+
+    it('P18.95-T1 AC-5: a save another coach moved past is read again, with nothing to retry', async () => {
+      show({
+        'PUT /coaching/coachees/mem-rina/profile': refused(409, 'VERSION_CONFLICT', 'Somebody saved first.'),
+        'GET /coaching/coachees/mem-rina/profile': [{ body: profile() }, { body: profile({ version: 4 }) }],
+      });
+      const mapping = await card('Capability mapping');
+      await userEvent.click(within(mapping).getAllByRole('checkbox', { name: 'Recruits quality agents' })[0]);
+
+      expect(await screen.findByText('The capability mapping was changed somewhere else, so it has been read again.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+    });
+
     it('locks every box for a reader who may read the profile and not tick it', async () => {
       show({}, withPermissions(PERMISSIONS.filter((p) => p !== 'coaching_profile:update')));
       const mapping = await card('Capability mapping');

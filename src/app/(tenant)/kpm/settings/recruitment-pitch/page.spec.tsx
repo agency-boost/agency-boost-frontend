@@ -143,8 +143,8 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       render();
       const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
       expect(within(opp).getByText('Opportunity_Overview_v3.pdf')).toBeInTheDocument();
-      expect(within(opp).getByText('2.4 MB · updated Sep 12, 2026')).toBeInTheDocument();
-      expect(within(card('Proof & Credibility')).getByText('1.1 MB · updated Aug 30, 2026')).toBeInTheDocument();
+      expect(within(opp).getByText('2,4 MB · updated 12 Sep 2026')).toBeInTheDocument();
+      expect(within(card('Proof & Credibility')).getByText('1,1 MB · updated 30 Agu 2026')).toBeInTheDocument();
       expect(within(card('FAQ')).getByText('No PDF uploaded yet — candidates can\'t be shown this document.')).toBeInTheDocument();
       expect(card('FAQ').className).toContain('border-dashed');
       expect(opp.className).not.toContain('border-dashed');
@@ -287,6 +287,83 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
       expect(screen.queryByText('Confirm this PDF actually includes')).not.toBeInTheDocument();
     });
+
+    describe('P18.95-T1 AC-5 — each tick says it is saved, beside its box', () => {
+      /** The save confirmation in the box's own row: the nearest ancestor with a status for a child. */
+      const besides = (el: HTMLElement) => {
+        for (let box = el.parentElement; box; box = box.parentElement) {
+          const own = [...box.children].find((c) => c.getAttribute('role') === 'status');
+          if (own) return own as HTMLElement;
+          if (box.tagName === 'FIELDSET') break;
+        }
+        return null;
+      };
+      const ticked = opportunity({
+        state: 'partial', file: file('Opportunity_Overview_v3.pdf'), checklist: checklist(['career-path', 'support', 'income']), version: 1,
+      });
+      const RETRY = `Couldn't save — retry: ${LABELS.income}, Opportunity Overview`;
+
+      it('P18.95-T1 AC-5: a tick says Saved ✓ beside its box once it is kept, and nowhere else', async () => {
+        render([{ body: DEMO }, { body: view([ticked, ...DEMO.slots.slice(1)]) }], OWNER, {
+          'PUT /confirmations/income': { body: ticked },
+        });
+        const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
+        const box = within(opp).getByRole('checkbox', { name: LABELS.income });
+
+        await userEvent.click(box);
+
+        await waitFor(() => expect(besides(box)).toHaveTextContent('Saved ✓'));
+        expect(besides(box)).toHaveClass('text-success');
+        expect(screen.getAllByText('Saved ✓')).toHaveLength(1);
+        expect(besides(within(opp).getByRole('checkbox', { name: LABELS.support }))).toBeNull();
+      });
+
+      it('P18.95-T1 AC-5: a tick that fails says Couldn’t save — retry, and the retry sends the same tick again', async () => {
+        const stub = render([{ body: DEMO }, { body: view([ticked, ...DEMO.slots.slice(1)]) }], OWNER, {
+          'PUT /confirmations/income': [
+            { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something broke.', requestId: 'r-3' } } },
+            { body: ticked },
+          ],
+        });
+        const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
+        const box = within(opp).getByRole('checkbox', { name: LABELS.income });
+        await userEvent.click(box);
+
+        const retry = await within(opp).findByRole('button', { name: RETRY });
+        expect(besides(box)).toContainElement(retry);
+        // What the card said before still stands where it did, and the box still goes back.
+        expect(within(opp).getByText('Could not save that tick.')).toBeInTheDocument();
+        expect(box).not.toBeChecked();
+
+        await userEvent.click(retry);
+
+        await waitFor(() => expect(calls(stub, '/confirmations/income', 'PUT')).toHaveLength(2));
+        const [first, again] = calls(stub, '/confirmations/income', 'PUT');
+        expect(JSON.parse(again.init.body as string)).toEqual({ ticked: true, version: 1 });
+        expect(again.init.body).toBe(first.init.body);
+        await waitFor(() => expect(besides(box)).toHaveTextContent('Saved ✓'));
+        expect(box).toBeChecked();
+        expect(box).toHaveFocus();
+        expect(within(opp).queryByText('Could not save that tick.')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+      });
+
+      it('P18.95-T1 AC-5: a tick refused because the file was replaced (409) leaves nothing to retry', async () => {
+        const replaced = opportunity({ state: 'partial', file: file('Opportunity_Overview_v4.pdf'), version: 2 });
+        render([{ body: DEMO }, { body: view([replaced, ...DEMO.slots.slice(1)]) }], OWNER, {
+          'PUT /confirmations/income': {
+            status: 409, body: { error: { code: 'VERSION_CONFLICT', message: 'The slot changed.', requestId: 'r-4' } },
+          },
+        });
+        const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
+        await userEvent.click(within(opp).getByRole('checkbox', { name: LABELS.income }));
+
+        expect(await within(opp).findByText(/This PDF was replaced while the page was open/)).toBeInTheDocument();
+        expect(await within(opp).findByText('Opportunity_Overview_v4.pdf')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+        expect(besides(within(opp).getByRole('checkbox', { name: LABELS.income }))).toBeNull();
+      });
+    });
   });
 
   describe('uploading and replacing (AC-4)', () => {
@@ -295,7 +372,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       await screen.findByRole('article', { name: 'FAQ' });
       await userEvent.upload(picker('FAQ'), pdf('huge.pdf', 26 * 1024 * 1024));
 
-      expect(await within(card('FAQ')).findByText('“huge.pdf” is 26.0 MB. A PDF can be 25 MB at most.')).toBeInTheDocument();
+      expect(await within(card('FAQ')).findByText('“huge.pdf” is 26,0 MB. A PDF can be 25 MB at most.')).toBeInTheDocument();
       expect(calls(stub, '/uploads', 'POST')).toEqual([]);
     });
 
@@ -319,7 +396,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       await userEvent.upload(picker('FAQ'), pdf('faq.pdf', 14_336));
 
       expect(await within(card('FAQ')).findByText('faq.pdf')).toBeInTheDocument();
-      expect(within(card('FAQ')).getByText('14 KB · updated Oct 9, 2026')).toBeInTheDocument();
+      expect(within(card('FAQ')).getByText('14 KB · updated 9 Okt 2026')).toBeInTheDocument();
       expect(JSON.parse(calls(stub, '/recruitment-pitch/uploads', 'POST')[0].init.body as string))
         .toEqual({ filename: 'faq.pdf', mimeType: 'application/pdf', bytes: 14_336 });
       // The signed policy's own fields, then the file — what storage checks the upload against.

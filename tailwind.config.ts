@@ -82,12 +82,18 @@ const config: Config = {
       },
       // Nine steps replacing the prototype's 18 sizes, several separated by half a
       // pixel. Declared in rem so browser zoom and OS text sizing work.
+      //
+      // **The five steps under 16px are custom properties** (`globals.css`), at the same rem they
+      // always had, so a phone can move them and nothing wider does (ADR-0167, the client's UI review
+      // of 2026-10-26): below 768px `2xs` and `xs` read 12px, the floor (UI-029), and inside a field all
+      // five read 16px, so iOS does not zoom the page on focus (UI-014). One rule each, rather than a
+      // `max-md:` class on 244 call sites. `theme.spec.ts` pins the values.
       fontSize: {
-        '2xs': ['0.625rem', '1.4'],
-        xs: ['0.6875rem', '1.4'],
-        sm: ['0.75rem', '1.45'],
-        base: ['0.8125rem', '1.45'],
-        md: ['0.875rem', '1.45'],
+        '2xs': ['var(--text-2xs)', '1.4'],
+        xs: ['var(--text-xs)', '1.4'],
+        sm: ['var(--text-sm)', '1.45'],
+        base: ['var(--text-base)', '1.45'],
+        md: ['var(--text-md)', '1.45'],
         lg: ['1rem', '1.45'],
         xl: ['1.125rem', '1.2'],
         '2xl': ['1.25rem', '1.2'],

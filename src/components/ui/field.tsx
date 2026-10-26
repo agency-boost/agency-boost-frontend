@@ -1,6 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/cn';
+import { TAP_TARGET } from '@/components/ui/phone';
 
 /** One place, so `FieldRow.Actions`'s spacer is the same height as a label by construction. */
 const LABEL_CLASS = 'text-sm font-semibold text-navy';
@@ -323,8 +324,12 @@ export function TextInput({
  * `aria-hidden`, because the label already names the field and the unit is either implied by it or
  * carried by the hint. A screen reader announcing "Rp" as a second unnamed thing beside the input is
  * noise.
+ *
+ * **On a phone the unit is 16px, as the number beside it is** (`globals.css` raises a field's text there
+ * so iOS does not zoom, UI-014): the prototype's affix is the input's own size, and a 13px *Rp* beside a
+ * 16px figure read as a footnote.
  */
-const AFFIX = 'shrink-0 select-none px-3 text-base font-semibold text-muted';
+const AFFIX = 'shrink-0 select-none px-3 text-base font-semibold text-muted max-md:text-lg';
 /**
  * Inside the group the input owns no border, no ground and **no focus ring of its own**.
  *
@@ -528,7 +533,15 @@ const BUTTON_BASE =
  * accessible role all stay. `inline-flex` with no height or padding so it sits on the text
  * baseline of the row it belongs to.
  */
-const INLINE_BASE = 'inline-flex items-center rounded-sm text-sm font-semibold';
+const INLINE_BASE = cn(
+  'inline-flex items-center rounded-sm text-sm font-semibold',
+  /*
+   * **44 × 44px on a phone, its words centred in it** (ADR-0167; UI-029: the text links were 17–20px
+   * tall). Below 768px only; wider, it sits on the row's baseline as it always did.
+   */
+  TAP_TARGET,
+  'max-md:justify-center',
+);
 const BUTTON_VARIANT = {
   /*
    * **Orange is an action; navy is where you are** (ADR-0137, the client's request of 2026-10-10).
@@ -597,9 +610,15 @@ export function buttonClass(
     className,
   );
 }
-/** 19×19 in the prototype; 28px here, because 19px is not a tap target on a phone. */
-const ICON_BASE =
-  'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-sm leading-none';
+/**
+ * 19×19 in the prototype; 28px here, because 19px is not a tap target on a phone — **and 44px on one**
+ * (ADR-0167; UI-029: the ⌄ and ⋮ were 28px), the glyph the same size in the middle of it. Below 768px
+ * only. A glyph inside a line of words keeps its box and grows an area instead (`TippedGlyph`).
+ */
+const ICON_BASE = cn(
+  'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-sm leading-none',
+  TAP_TARGET,
+);
 
 /**
  * `type="button"` by default, which is **not** what a bare `<button>` does.

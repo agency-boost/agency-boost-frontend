@@ -3,6 +3,7 @@
 import { useId, useState } from 'react';
 import { PdfUploadNotice, usePdfUpload } from '@/components/recruitment/pdf-upload';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { InlineSaveStatus, useInlineSave, type InlineSaveOutcome } from '@/components/ui/inline-save-status';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatShortDay } from '@/lib/format';
@@ -146,22 +147,39 @@ export function PitchCard({
     }
   };
 
-  const tick = async (item: string, ticked: boolean) => {
+  /** Each box's *Saving… → Saved ✓*, or *Couldn't save — retry* (P18.95-T1 AC-5). */
+  const inline = useInlineSave();
+  const saveKey = (item: string) => `${slot.slot}\n${item}`;
+
+  const tick = (item: string, ticked: boolean) => {
     // A second press on a box whose first is still being written is ignored rather than refused:
     // disabling the box would drop the keyboard's focus with it.
     if (item in pending) return;
+    // Pinned to the file it was made against: a retry after the file was replaced is refused 409, as the
+    // first press would have been.
+    const version = slot.version;
+    void inline.save(saveKey(item), () => confirm(item, ticked, version));
+  };
+
+  /**
+   * One write of a tick, answering how it went — and **the retry sends the same tick again**. A `409` is the
+   * file replaced since: the slots are read again, so there is nothing left to retry (`null`).
+   */
+  const confirm = async (item: string, ticked: boolean, version: number): Promise<InlineSaveOutcome> => {
     setPending((now) => ({ ...now, [item]: ticked }));
     setNotice(null);
     setSaid('');
     try {
-      onChanged?.(await setPitchConfirmation(slot.slot, item, ticked, slot.version));
+      onChanged?.(await setPitchConfirmation(slot.slot, item, ticked, version));
+      return true;
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 409) {
         setNotice({ kind: 'stale' });
         onStale?.();
-      } else {
-        setNotice({ kind: 'tick', error: toDisplayError(err) });
+        return null;
       }
+      setNotice({ kind: 'tick', error: toDisplayError(err) });
+      return false;
     } finally {
       setPending(({ [item]: _done, ...rest }) => rest);
     }
@@ -209,50 +227,62 @@ export function PitchCard({
           {slot.checklist.map((item) => {
             const id = `${boxId}-${item.code}`;
             const checked = pending[item.code] ?? item.ticked;
+            const status = inline.statusOf(saveKey(item.code));
             return (
-              <label
-                key={item.code}
-                htmlFor={id}
-                className={cn(
-                  'flex items-center gap-2.5 py-1.5',
-                  writes ? 'cursor-pointer' : 'cursor-not-allowed',
-                )}
-              >
-                <span className="relative flex shrink-0">
-                  <input
-                    id={id}
-                    type="checkbox"
-                    checked={checked}
-                    disabled={!writes}
-                    aria-busy={item.code in pending || undefined}
-                    onChange={(e) => void tick(item.code, e.target.checked)}
-                    className="peer absolute inset-0 m-0 h-[18px] w-[18px] cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                  />
-                  <span
-                    aria-hidden="true"
-                    className={cn(
-                      'flex h-[18px] w-[18px] items-center justify-center rounded-sm border-[1.5px] transition-colors',
-                      checked ? 'border-success bg-success' : 'border-hairline bg-card',
-                      // The amber ring the project keeps, on the visible box: the input is transparent.
-                      'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-amber',
-                      'peer-disabled:opacity-40',
-                    )}
-                  >
-                    {checked && (
-                      <svg viewBox="0 0 24 24" fill="none" className="h-[11px] w-[11px] text-white">
-                        <path
-                          d="M4 12.5L9.5 18L20 6"
-                          stroke="currentColor"
-                          strokeWidth="3"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    )}
+              // The box's status beside it, at the row's end and outside the label, so the box's name stays the
+              // server's words (AC-5). A retry gives the focus back to the box, as a cell's does.
+              <div key={item.code} className="flex items-center gap-2.5">
+                <label
+                  htmlFor={id}
+                  className={cn(
+                    'flex min-w-0 flex-1 items-center gap-2.5 py-1.5',
+                    writes ? 'cursor-pointer' : 'cursor-not-allowed',
+                  )}
+                >
+                  <span className="relative flex shrink-0">
+                    <input
+                      id={id}
+                      type="checkbox"
+                      checked={checked}
+                      disabled={!writes}
+                      aria-busy={item.code in pending || undefined}
+                      onChange={(e) => tick(item.code, e.target.checked)}
+                      className="peer absolute inset-0 m-0 h-[18px] w-[18px] cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        'flex h-[18px] w-[18px] items-center justify-center rounded-sm border-[1.5px] transition-colors',
+                        checked ? 'border-success bg-success' : 'border-hairline bg-card',
+                        // The amber ring the project keeps, on the visible box: the input is transparent.
+                        'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-1 peer-focus-visible:outline-amber',
+                        'peer-disabled:opacity-40',
+                      )}
+                    >
+                      {checked && (
+                        <svg viewBox="0 0 24 24" fill="none" className="h-[11px] w-[11px] text-white">
+                          <path
+                            d="M4 12.5L9.5 18L20 6"
+                            stroke="currentColor"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+                    </span>
                   </span>
-                </span>
-                <span className="text-md leading-snug text-navy">{item.label}</span>
-              </label>
+                  <span className="text-md leading-snug text-navy">{item.label}</span>
+                </label>
+                <InlineSaveStatus
+                  state={status.state}
+                  label={`${item.label}, ${slot.title}`}
+                  onRetry={() => {
+                    status.onRetry?.();
+                    document.getElementById(id)?.focus();
+                  }}
+                />
+              </div>
             );
           })}
         </fieldset>

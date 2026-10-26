@@ -9,6 +9,7 @@ import {
   COMPARE_MAX, entryDate, initialsOf, OWN_COPY, peopleOn, PROTOTYPE_COPY, readCalendar, readEntry,
   type CalendarDownlinePerson, type CalendarEntry, type CalendarNow, type CalendarRead, type CalendarView,
 } from '@/lib/calendar';
+import { CONFIRMED } from '@/lib/confirmations';
 import { HOUR_PX, nextHalfHour, OPEN_AT_HOUR } from '@/lib/calendar-layout';
 import { DEFAULT_END, DEFAULT_START, type Slot } from '@/lib/calendar-form';
 import { formatMonth, formatWeekRange } from '@/lib/format';
@@ -37,8 +38,9 @@ const TILE = 'overflow-hidden rounded-lg border border-hairline';
  *
  * The prototype's four `alert('Mockup: …')` stand-ins are built as they describe (contradiction 3):
  * *Today* returns to the office's today, scrolled to 7 AM; ‹ and › step a week, or a month in Month;
- * a save is saved — with **no toast**, because the grid moves to the week holding the entry and draws
- * it, which says it was saved where it matters.
+ * a save is saved, and the grid moves to the week holding the entry and draws it. **A new entry also says
+ * *Event created ✓*** (P18.95-T1 AC-6, ADR-0167 §5; UI-008) — *+ New event*, a slot taken on the grid and
+ * *Block time* alike; an edit says nothing more than the entry it redraws, as before.
  *
  * **From a notice** the address carries `?entry=&date=` (ADR-0095): the entry is read, and its week
  * opens with its detail; if it no longer reads — deleted, or the reader taken off it — the week of
@@ -216,6 +218,8 @@ export function CalendarScreen({
     setGone(false);
     setDate(entryDate(entry));
     wrote(peopleOn(entry, before));
+    // A create has no entry before it (P18.95-T1 AC-6); a refusal never reaches here, and stays in the dialog.
+    if (before === null) show(CONFIRMED.eventCreated);
   };
 
   const forget = (membershipId: string) => {
@@ -256,7 +260,7 @@ export function CalendarScreen({
           <span aria-live="polite" className="whitespace-nowrap font-display text-xl font-bold text-navy">{label}</span>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2.5">
-          {hiding.on !== null && <HideDetailsSwitch on={hiding.on} onChange={hiding.change} />}
+          {hiding.on !== null && <HideDetailsSwitch on={hiding.on} onChange={hiding.change} status={hiding.status} />}
           <div role="group" aria-label={OWN_COPY.view} className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
             {(['week', 'month'] as const).map((v) => (
               <button

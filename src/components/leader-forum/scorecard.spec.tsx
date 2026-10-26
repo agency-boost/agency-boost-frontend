@@ -48,16 +48,16 @@ describe('P18.1-T2 AC-4 Overview & Stats', () => {
     expect(screen.getByText('Activation')).toHaveAttribute('colspan', '7');
   });
 
-  it('each figure rounded for display: APE in billions, case size in millions, averages whole, % whole', () => {
+  it('each figure rounded for display: APE in billions, case size in millions, averages whole, % to one decimal (ADR-0167 §1)', () => {
     renderTab(Scorecard);
     const cells = (label: string) =>
       [...screen.getByRole('rowheader', { name: label }).parentElement!.children].slice(1, 6).map((c) => c.textContent);
-    expect(cells('APE (IDR B)')).toEqual(['12.1', expect.stringMatching(/^8\.4/), '0.75', 'pending data', 'pending data']);
+    expect(cells('APE (IDR B)')).toEqual(['12,1', expect.stringMatching(/^8,4/), '0,75', 'pending data', 'pending data']);
     expect(cells('Manpower')).toEqual(['201', '187', '196', '181', '187']);
     expect(cells('New AA (avg. monthly)')).toEqual(['3', '3', '4', 'pending data', 'pending data']);
     expect(cells('Avg. Monthly AA')).toEqual(['14', '11', '10', 'pending data', 'pending data']);
-    expect(cells('3M new agent %*').slice(0, 2)).toEqual(['30%', 'pending data']);
-    expect(cells('Average Case Size (IDR M)')[0]).toBe('19.8');
+    expect(cells('3M new agent %*').slice(0, 2)).toEqual(['30,0%', 'pending data']);
+    expect(cells('Average Case Size (IDR M)')[0]).toBe('19,8');
   });
 
   it('*pending data* grey and italic (`:698`), never 0 — FLC in every computed column (OD-26)', () => {
@@ -89,11 +89,11 @@ describe('P18.1-T2 AC-4 Overview & Stats', () => {
 
   it('a figure over part of its period names the months it leaves out, as its name and its bubble', () => {
     renderTab(Scorecard);
-    const marks = screen.getAllByRole('button', { name: 'Without August 2026: no figures uploaded for them yet.' });
+    const marks = screen.getAllByRole('button', { name: 'Without Agu 2026: no figures uploaded for them yet.' });
     // *YTD* of APE, of *Producing agents* and of *Case submission*.
     expect(marks).toHaveLength(3);
     const apeYtd = screen.getByRole('rowheader', { name: 'APE (IDR B)' }).parentElement!.children[2] as HTMLElement;
-    expect(within(apeYtd).getByRole('tooltip', { hidden: true })).toHaveTextContent('Without August 2026: no figures uploaded for them yet.');
+    expect(within(apeYtd).getByRole('tooltip', { hidden: true })).toHaveTextContent('Without Agu 2026: no figures uploaded for them yet.');
     // On the first row the bubble opens below, where the table's scroll box leaves it room.
     expect(within(apeYtd).getByRole('tooltip', { hidden: true }).parentElement!.className).toContain('[&>[role=tooltip]]:top-full');
     const caseYtd = screen.getByRole('rowheader', { name: 'Case submission' }).parentElement!.children[2] as HTMLElement;

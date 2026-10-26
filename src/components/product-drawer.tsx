@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 import { ProductTags, useCatalogDrawerHost } from '@/components/product-catalog';
 import { ProductScript } from '@/components/product-script';
 import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
+import { TAP_AREA, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
@@ -115,7 +116,7 @@ export function ProductDrawer({ code }: { code: string }) {
               type="button"
               aria-label={OWN_COPY.closeDrawer}
               onClick={close}
-              className="flex h-[30px] w-[30px] items-center justify-center rounded-full border border-hairline bg-base text-md text-navy"
+              className={cn('flex h-[30px] w-[30px] items-center justify-center rounded-full border border-hairline bg-base text-md text-navy', 'max-md:relative', TAP_AREA)}
             >
               <span aria-hidden="true">{PROTOTYPE_COPY.close}</span>
             </button>
@@ -138,7 +139,7 @@ export function ProductDrawer({ code }: { code: string }) {
             <div data-state="not-found">
               <p className="m-0 text-md font-semibold text-navy">{OWN_COPY.notFound}</p>
               <p className="m-0 mt-1 text-base text-muted">{OWN_COPY.notFoundHint}</p>
-              <button type="button" onClick={close} className="mt-3 rounded-sm text-base font-semibold text-amber-ink hover:underline">
+              <button type="button" onClick={close} className={cn('mt-3 rounded-sm text-base font-semibold text-amber-ink hover:underline', TEXT_TAP)}>
                 {OWN_COPY.backToCatalog}
               </button>
             </div>
@@ -306,7 +307,7 @@ function PlanTab({ product }: { product: CatalogProduct }) {
       <ProductScript script={product.script} place="drawer" />
       <Link
         href={productPlanHref(product.code)}
-        className="mt-4 inline-block rounded-sm text-sm font-semibold text-amber-ink hover:underline"
+        className={cn('mt-4 inline-block rounded-sm text-sm font-semibold text-amber-ink hover:underline', TEXT_TAP)}
       >
         {PROTOTYPE_COPY.openInPlan}
       </Link>
@@ -363,7 +364,7 @@ function DocumentRow({ code, doc }: { code: string; doc: CatalogDocument }) {
           onClick={() => void open()}
           aria-disabled={busy || undefined}
           aria-describedby={labelId}
-          className="rounded-sm text-base font-semibold text-amber-ink hover:underline aria-disabled:opacity-60"
+          className={cn('rounded-sm text-base font-semibold text-amber-ink hover:underline aria-disabled:opacity-60', TEXT_TAP)}
         >
           {busy ? OWN_COPY.openingDocument : PROTOTYPE_COPY.openLink}
         </button>

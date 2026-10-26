@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@/components/ui/field';
+import { TAP_AREA } from '@/components/ui/phone';
 import { cn } from '@/lib/cn';
 
 /** A glyph with nothing to act on: there, and plainly not live — at the prototype's 30% (`Overall.html:497`). */
@@ -49,6 +50,11 @@ type Fit = { side: 'start' | 'end'; maxWidth: number };
  *
  * `face` paints the button as something other than a 28px glyph — the activation's *Auto* chip
  * (`Overall.html:6580`, P13-T4 AC-4), whose words are its face and whose tooltip says what it waits for.
+ *
+ * **On a phone the tap lands on a 44 × 44px square centred on the glyph** (ADR-0167; UI-029: the ⓘ was
+ * 28px), while the glyph keeps its 28px box. It sits in a line of words — beside a figure, a heading, a
+ * name — and an icon button's grown box would push that line apart and move the figure; the wrapper is
+ * positioned already, so the square hangs from it and nothing reflows. Below 768px only.
  */
 export function TippedGlyph({
   glyph,
@@ -119,7 +125,7 @@ export function TippedGlyph({
         variant="icon"
         aria-disabled={unavailable || undefined}
         aria-describedby={describes ? tipId : undefined}
-        className={cn(face, unavailable && INERT_GLYPH)}
+        className={cn('max-md:min-h-0 max-md:min-w-0', TAP_AREA, face, unavailable && INERT_GLYPH)}
         onFocus={show}
         onBlur={() => setShown(false)}
         onClick={show}

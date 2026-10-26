@@ -30,7 +30,7 @@ describe('P18.1-T3 AC-4 the print layout (`:2662-2695`)', () => {
     for (const cell of within(stats).getAllByText('pending data')) expect(cell).not.toHaveClass('italic');
     expect(stats.querySelectorAll('td.bg-navy')).toHaveLength(12);
     expect(within(stats).getByText('22 (3 @ unit)')).toBeInTheDocument();
-    expect(within(stats).getByText('12.1')).toBeInTheDocument();
+    expect(within(stats).getByText('12,1')).toBeInTheDocument();
     expect(within(stats).getByText('Activation')).toBeInTheDocument();
   });
 
@@ -38,13 +38,13 @@ describe('P18.1-T3 AC-4 the print layout (`:2662-2695`)', () => {
     draw();
     const [stats] = tables();
     const ape = within(stats).getByRole('rowheader', { name: 'APE (IDR B)' }).parentElement!;
-    expect(ape.children[1]).toHaveTextContent(/^12\.1$/);
-    expect(ape.children[2]).toHaveTextContent(/^8\.4†$/);
+    expect(ape.children[1]).toHaveTextContent(/^12,1$/);
+    expect(ape.children[2]).toHaveTextContent(/^8,4†$/);
     // *YTD* of APE, of *Producing agents* and of *Case submission* leave August out.
     expect(stats.querySelectorAll('td')).toSatisfy((cells: NodeListOf<HTMLElement>) =>
       [...cells].filter((c) => c.textContent?.endsWith('†')).length === 3);
     const line = screen.getByText(/^† Without/);
-    expect(line).toHaveTextContent('† Without August 2026: no figures uploaded for them yet.');
+    expect(line).toHaveTextContent('† Without Agu 2026: no figures uploaded for them yet.');
     expect(stats.closest('div')!.nextElementSibling).toBe(line);
   });
 
@@ -60,7 +60,7 @@ describe('P18.1-T3 AC-4 the print layout (`:2662-2695`)', () => {
       },
     });
     expect(screen.getByText(/^† Without/))
-      .toHaveTextContent('† Without January 2025, March 2025 and August 2026: no figures uploaded for them yet.');
+      .toHaveTextContent('† Without Jan 2025, Mar 2025 and Agu 2026: no figures uploaded for them yet.');
   });
 
   it('a scorecard that leaves nothing out prints no † and no line', () => {

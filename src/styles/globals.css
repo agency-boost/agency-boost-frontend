@@ -87,6 +87,20 @@
   --font-display: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
+  /*
+   * The type scale's five steps under 16px (`text-2xs` … `text-md`), as properties so that a phone
+   * can move them and nothing wider does — see *On a phone* below. These are the values every size
+   * at and above 768px has always had; `theme.spec.ts` pins them.
+   */
+  --text-2xs: 0.625rem; /* 10px */
+  --text-xs: 0.6875rem; /* 11px */
+  --text-sm: 0.75rem; /* 12px */
+  --text-base: 0.8125rem; /* 13px */
+  --text-md: 0.875rem; /* 14px */
+
+  /* The width of a scrolling tab row's edge fade on a phone: the sub-tab gap, `--space-6`. */
+  --tab-fade: 1.5rem;
+
   /* Elevation. Surfaces separate by hairline and contrast, not by depth. */
   --shadow-modal: 0 20px 50px rgba(27, 43, 75, 0.3);
 
@@ -127,6 +141,75 @@ h3 {
 :focus-visible {
   outline: 2px solid var(--color-amber);
   outline-offset: 1px;
+}
+
+/**
+ * On a phone (ADR-0167, the client's UI review of 2026-10-26).
+ *
+ * **Below 768px only, and in Tailwind's own words for it** — `not all and (min-width: 768px)` is
+ * exactly what a `max-md:` class compiles to, so this sheet and the components draw the line in the
+ * same place. A tablet and a desktop are untouched: the client has reviewed the phone alone, and the
+ * sizes it has not seen do not change underneath it (§12, OD-207). `theme.spec.ts` holds the query to
+ * Tailwind's.
+ */
+@media not all and (min-width: 768px) {
+  /*
+   * **No text under 12px** (UI-029: the all-caps card headers, badges and helper text at 10–11px).
+   * The two steps under it read 12px, the scale's `sm`; nothing else moves. A glyph that is not text
+   * may stay smaller — the roster's ▸ is sized in its own unit.
+   */
+  :root {
+    --text-2xs: 0.75rem;
+    --text-xs: 0.75rem;
+  }
+
+  /*
+   * **A field's text is 16px, so iOS does not zoom the page on focus** (UI-014: the leads' selects and
+   * remarks, the log's date and counts, the registration form, all at 13px). Safari zooms into any
+   * field under 16px and leaves the page zoomed after it.
+   *
+   * Two declarations, and neither outranks a class. The properties are set **on the field itself**, so
+   * whichever of the five small steps the field's class names — `text-base` from `TextInput`, a
+   * caller's `text-xs` — reads 1rem there and nowhere else; a field drawn larger (`text-xl`) keeps its
+   * size. And a field with no size class of its own, which would inherit its parent's 13px through
+   * preflight's `font-size: 100%`, is raised to at least 16px. Both selectors weigh one element (`:where`
+   * adds nothing), so preflight's rule is overridden by order and every utility still wins over this
+   * one. A box with nothing to type into — a checkbox, a radio, a colour or a file — is left alone.
+   */
+  input:where(:not([type='checkbox'], [type='radio'], [type='range'], [type='color'], [type='file'],
+      [type='button'], [type='submit'], [type='reset'], [type='image'], [type='hidden'])),
+  select,
+  textarea {
+    --text-2xs: 1rem;
+    --text-xs: 1rem;
+    --text-sm: 1rem;
+    --text-base: 1rem;
+    --text-md: 1rem;
+    font-size: max(1rem, 100%);
+  }
+
+  /*
+   * **A tab row that scrolls fades on the side that has more** (UI-013). `useTabRow` names the side in
+   * `data-fade`. A mask rather than a gradient laid over the row: it fades the row's own pixels toward
+   * whatever ground is behind it, card or base, so it needs no colour of its own and cannot be the
+   * wrong one. A mask is alpha only; `black` here is *opaque*, not a colour anybody sees.
+   */
+  [data-fade='end'] {
+    -webkit-mask-image: linear-gradient(to left, transparent, black var(--tab-fade));
+    mask-image: linear-gradient(to left, transparent, black var(--tab-fade));
+  }
+
+  [data-fade='start'] {
+    -webkit-mask-image: linear-gradient(to right, transparent, black var(--tab-fade));
+    mask-image: linear-gradient(to right, transparent, black var(--tab-fade));
+  }
+
+  [data-fade='both'] {
+    -webkit-mask-image: linear-gradient(to right, transparent, black var(--tab-fade),
+        black calc(100% - var(--tab-fade)), transparent);
+    mask-image: linear-gradient(to right, transparent, black var(--tab-fade),
+        black calc(100% - var(--tab-fade)), transparent);
+  }
 }
 
 /**

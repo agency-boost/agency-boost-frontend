@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from 'react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
-import { formatDayLong } from '@/lib/format';
+import { formatDayLong, formatNumber, formatPercent, parseDecimal } from '@/lib/format';
 import { formatRupiah, groupDigits, parseDigits, toMajor, toMinor } from '@/lib/goals';
 import {
   correctCell, figureLabel, MONEY_METRICS, type Cadence, type CorrectionResult, type MetricCell,
@@ -28,12 +28,16 @@ const SOURCE: Record<string, string> = {
   self_reported: 'reported by the agent',
 };
 
-/** A figure in the table's own format, or *nothing reported*. */
+/**
+ * A figure in the table's own format, or *nothing reported*: money in full, as a table's is (ADR-0167 §1),
+ * a persistency to at least one decimal **and every decimal it was filed with** — a figure checked against the
+ * carrier's file is never rounded on its way to the reader — and a count as it is.
+ */
 export function showFigure(metric: ProductionMetric, value: number | null): string {
   if (value === null) return 'nothing reported';
   if (MONEY_METRICS.includes(metric)) return formatRupiah(value);
-  if (metric === 'persistency') return `${value}%`;
-  return String(value);
+  if (metric === 'persistency') return formatPercent(value, { maxDecimals: 4 });
+  return formatNumber(value, { maxDecimals: 4 });
 }
 
 /**
@@ -68,7 +72,7 @@ export function CorrectionPanel({
 
   const [typed, setTyped] = useState(() => {
     if (current.value === null) return '';
-    return money ? groupDigits(toMajor(current.value)) : String(current.value);
+    return money ? groupDigits(toMajor(current.value)) : String(current.value).replace('.', ',');
   });
   const [reason, setReason] = useState('');
   const [figureError, setFigureError] = useState<string | undefined>();
@@ -111,7 +115,8 @@ export function CorrectionPanel({
       ? 'Type the figure.'
       : 'Type the new figure — to empty it, use Clear figure.');
     if (needReason() || blank) return;
-    const value = money ? toMinor(parseDigits(typed)) : Number(typed.replace(',', '.'));
+    // A decimal with a comma or a point (`parseDecimal`, ADR-0167 §1); money in whole rupiah, digits only.
+    const value = money ? toMinor(parseDigits(typed)) : parseDecimal(typed);
     if (Number.isNaN(value)) {
       setFigureError(`${label} is not a number.`);
       return;

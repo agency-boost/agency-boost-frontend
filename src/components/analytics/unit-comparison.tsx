@@ -5,7 +5,7 @@ import { useId, type MouseEvent, type ReactNode } from 'react';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/lib/session';
-import { formatRupiah } from '@/lib/goals';
+import { formatRupiahCompact } from '@/lib/format';
 import {
   activeWords, agentsSub, drillsAnywhere, headName, leadsWords, manpowerSub, moneyWords, OWN_COPY, PROTOTYPE_COPY,
   rateWords, unitDashboardHref,
@@ -125,8 +125,8 @@ function TotalRow({ total, split }: { total: AnalyticsTotal; split: number }) {
           {total.leaversExcludedMinor !== null && total.leaversExcludedMinor > 0 && (
             <TippedGlyph
               glyph="ⓘ"
-              name={OWN_COPY.leaversLeftOut(formatRupiah(total.leaversExcludedMinor))}
-              tip={OWN_COPY.leaversLeftOut(formatRupiah(total.leaversExcludedMinor))}
+              name={OWN_COPY.leaversLeftOut(formatRupiahCompact(total.leaversExcludedMinor))}
+              tip={OWN_COPY.leaversLeftOut(formatRupiahCompact(total.leaversExcludedMinor))}
               align="fit"
               // Below the row, as the MOC rules' bubble opens: the table's scroll box would clip it above.
               className={cn('-my-1', BELOW_TIP)}

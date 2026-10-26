@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { ChasingCampaigns } from '@/components/campaigns/chasing-card';
 import { ComingInPhaseSection } from '@/components/coming-in-phase';
 import { Card, ErrorBanner } from '@/components/ui/field';
+import { TEXT_TAP } from '@/components/ui/phone';
 import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
@@ -14,8 +15,8 @@ import type { ApiError } from '@/lib/api-client';
 import { PROTOTYPE_COPY as CAMPAIGN_COPY } from '@/lib/campaigns';
 import { cn } from '@/lib/cn';
 import { capitalized, coachingTabHref, PRONOUN_FORMS, type CoacheeSubject } from '@/lib/coaching';
-import { formatMonth, formatShortDay } from '@/lib/format';
-import { formatRupiah, producedFrom } from '@/lib/goals';
+import { formatMonth, formatPercent, formatRupiahCompact, formatShortDay } from '@/lib/format';
+import { producedFrom } from '@/lib/goals';
 import { flagLabel } from '@/lib/leads';
 import { formatBenchmark, formatRatioForStatus } from '@/lib/ratio-format';
 import type {
@@ -99,7 +100,7 @@ function voiceOf(subject?: CoacheeSubject): Voice {
  * 2026*, since *this month* about August would be false.
  */
 interface PeriodWords {
-  /** The month or the year the page is about, by name: *September 2026*, *2026*. */
+  /** The month or the year the page is about, by name: *Sep 2026*, *2026*. */
   named: string;
   /** The month or year is the office's current one. */
   current: boolean;
@@ -164,7 +165,7 @@ export function SummaryCards({
               : <>{capitalized(voice.pronoun)} didn’t set a goal for {summary.year}, so there is nothing to measure against.</>}
           </p>
           {summary.period.currentYear && (
-            <Link href={goalHref(voice)} className="mt-2 inline-block font-semibold text-navy underline">Set {voice.possessive} goal</Link>
+            <Link href={goalHref(voice)} className={cn('mt-2 inline-block font-semibold text-navy underline', TEXT_TAP)}>Set {voice.possessive} goal</Link>
           )}
         </Card>
       ) : summary.yearly.targetMinor === null ? (
@@ -176,7 +177,7 @@ export function SummaryCards({
               : <>{capitalized(voice.possessive)} goal for {summary.year} had no APE target to measure against.</>}
           </p>
           {summary.period.currentYear && (
-            <Link href={goalHref(voice)} className="mt-2 inline-block font-semibold text-navy underline">Open Goal Settings</Link>
+            <Link href={goalHref(voice)} className={cn('mt-2 inline-block font-semibold text-navy underline', TEXT_TAP)}>Open Goal Settings</Link>
           )}
         </Card>
       ) : (
@@ -325,18 +326,18 @@ function GoalCard({
             <strong className="font-body text-2xl font-bold text-muted">Not uploaded yet</strong>
           ) : (
             <>
-              <strong className="font-body text-2xl font-bold text-navy">{formatRupiah(figures.actualMinor)}</strong>
+              <strong className="font-body text-2xl font-bold text-navy">{formatRupiahCompact(figures.actualMinor)}</strong>
               {source && (
                 <ProducedMarker words={producedFrom(source, month ? 'month' : 'year', voice.subject?.pronoun)} />
               )}
             </>
           )}
           {figures.targetMinor !== null && !madeAlready && (
-            <span className="text-sm text-muted">of {formatRupiah(figures.targetMinor)} target</span>
+            <span className="text-sm text-muted">of {formatRupiahCompact(figures.targetMinor)} target</span>
           )}
         </p>
         {pct !== null && (
-          <span className="rounded-pill bg-amber/15 px-3 py-1 text-sm font-bold text-navy">{pct}%</span>
+          <span className="rounded-pill bg-amber/15 px-3 py-1 text-sm font-bold text-navy">{formatPercent(pct)}</span>
         )}
       </div>
       {madeAlready ? (
@@ -354,7 +355,7 @@ function GoalCard({
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.min(100, pct)}
-            aria-valuetext={`${pct}%`}
+            aria-valuetext={formatPercent(pct)}
             className="h-3 overflow-hidden rounded-md border border-hairline bg-base"
           >
             <div className="h-full rounded-md bg-gradient-to-r from-amber to-amber-dark" style={{ width: `${Math.min(100, pct)}%` }} />
@@ -385,8 +386,8 @@ function GapCard({ figures, period, pace, voice }: { figures: PeriodFigures; per
           label={`Remaining ${period}`}
           value={figures.gapMinor === null ? '—'
             : figures.targetMet
-              ? (figures.overMinor ? `Reached — ${formatRupiah(figures.overMinor)} over` : 'Reached')
-              : formatRupiah(figures.gapMinor)}
+              ? (figures.overMinor ? `Reached — ${formatRupiahCompact(figures.overMinor)} over` : 'Reached')
+              : formatRupiahCompact(figures.gapMinor)}
         />
         <GapTile
           label="≈ Policies still needed"

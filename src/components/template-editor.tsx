@@ -11,7 +11,7 @@ import {
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { DragHandle } from '@/components/ui/drag-handle';
 import { suggestCode } from '@/lib/config-code';
-import { formatRupiah } from '@/lib/goals';
+import { formatNumber, formatRupiahCompact, parseDecimal } from '@/lib/format';
 import { planSummaryTile, summaryGroups, summaryTileName } from '@/lib/summary-tiles';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { OWN_COPY as LINK_OWN_COPY, PROTOTYPE_COPY as LINK_PROTOTYPE_COPY } from '@/lib/activation';
@@ -1163,7 +1163,7 @@ export function RatioSetEditor({
                 label: ratio.comparison === 'band' ? 'Within, either side' : 'On track at or above',
                 hint: ratio.comparison === 'band'
                   ? 'Percentage points either side of an even split.'
-                  : 'Typed the way it is shown — 15 for 15.0% as a percentage, 0.30 as a number.',
+                  : 'Typed the way it is shown — 15 for 15,0% as a percentage, 0,30 as a number.',
               },
               // A band is points and has no other way to be written, so it gets no choice.
               ...(ratio.comparison === 'band' ? [] : [{
@@ -2310,7 +2310,10 @@ export function CampaignKindsEditor({
                                     criteria: gr.criteria.map((cr, ci) => (ci === c ? {
                                       metricKey: next.metricKey,
                                       comparator: next.comparator,
-                                      value: Number(next.value) || 0,
+                                      // A sum in whole digits; anything else a decimal, comma or point (ADR-0167 §1).
+                                      value: (metrics.find((m) => m.key === next.metricKey)?.unit === 'idr_minor'
+                                        ? Number(next.value.replace(/\D/g, ''))
+                                        : parseDecimal(next.value)) || 0,
                                     } : cr)),
                                   } : gr)),
                                 })}
@@ -2321,9 +2324,10 @@ export function CampaignKindsEditor({
                                   {COMPARATORS.find((o) => o.value === criterion.comparator)?.label
                                     ?? criterion.comparator}
                                   {' '}
+                                  {/* A rule in words: compact where that loses nothing (ADR-0167 §1). */}
                                   {metrics.find((m) => m.key === criterion.metricKey)?.unit === 'idr_minor'
-                                    ? formatRupiah(criterion.value)
-                                    : criterion.value.toLocaleString('id-ID')}
+                                    ? formatRupiahCompact(criterion.value, { lossless: true })
+                                    : formatNumber(criterion.value, { maxDecimals: 2 })}
                                 </p>
                               </EditableRow>
                             </li>

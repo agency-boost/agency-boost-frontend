@@ -1,7 +1,7 @@
 import { api } from './api-client';
 import type { LastOneOnOne, RosterStatus } from './coaching';
-import { formatMonth, formatOfficeDay } from './format';
-import { formatRupiah, groupDigits, parseDigits, producedFrom, toMajor, toMinor } from './goals';
+import { formatMonth, formatOfficeDay, formatPercent, formatRupiahCompact, formatRupiahCompactPair } from './format';
+import { groupDigits, parseDigits, producedFrom, toMajor, toMinor } from './goals';
 import type { MonthState } from './production';
 
 /**
@@ -451,6 +451,10 @@ export interface GoalWords {
  * The goal line and its sub-line (`:7364-7367`, `:7383-7386`): *"{pct}% · +{over} over"* or *"{pct}% ·
  * {short} short"* over *"{achieved} of {target}"*. **No figure is shown as 0** (D-figures): no target is
  * *No goal set* (ADR-0080), and no actual *Not uploaded yet*.
+ *
+ * **Compact, by the client's own example** (UI-030, ADR-0167 §1): *"Rp 357,5 jt of 712,7 jt"*, one `Rp` for the
+ * pair, where *"Rp 357.500.000 of Rp 712.666.667"* wrapped in the cell. The one table cell written compact: it is
+ * a two-line summary of the row's goal, not a column of figures read against each other.
  */
 export function goalWords(figures: {
   targetMinor: number | null;
@@ -463,24 +467,25 @@ export function goalWords(figures: {
 }): GoalWords {
   const { targetMinor: target, actualMinor: actual } = figures;
   if (figures.set === false || target === null) {
-    return { tone: 'none', line: OWN_COPY.noGoal, sub: actual === null ? null : formatRupiah(actual) };
+    return { tone: 'none', line: OWN_COPY.noGoal, sub: actual === null ? null : formatRupiahCompact(actual) };
   }
   // A target of 0 is only ever a month made already (ADR-0047; `periodFigures` answers `null` for no
   // target), on a row or on a total whose rows were all made: nothing to measure a percentage against.
   if (target === 0) {
-    return { tone: 'over', line: OWN_COPY.targetMade, sub: actual === null ? OWN_COPY.notUploaded : formatRupiah(actual) };
+    return { tone: 'over', line: OWN_COPY.targetMade, sub: actual === null ? OWN_COPY.notUploaded : formatRupiahCompact(actual) };
   }
   if (actual === null) {
     // The Summary's own phrase beside its figure, *of {target} target*, under the missing one.
-    return { tone: 'missing', line: OWN_COPY.notUploaded, sub: `of ${formatRupiah(target)} target` };
+    return { tone: 'missing', line: OWN_COPY.notUploaded, sub: `of ${formatRupiahCompact(target)} target` };
   }
-  const pct = figures.attainmentPct ?? 0;
+  const pct = formatPercent(figures.attainmentPct ?? 0);
   const met = figures.targetMet ?? actual >= target;
   const over = figures.overMinor ?? Math.max(0, actual - target);
   const short = figures.gapMinor ?? Math.max(0, target - actual);
+  const sub = formatRupiahCompactPair(actual, target, 'of');
   return met
-    ? { tone: 'over', line: `${pct}% · +${formatRupiah(over)} over`, sub: `${formatRupiah(actual)} of ${formatRupiah(target)}` }
-    : { tone: 'short', line: `${pct}% · ${formatRupiah(short)} short`, sub: `${formatRupiah(actual)} of ${formatRupiah(target)}` };
+    ? { tone: 'over', line: `${pct} · +${formatRupiahCompact(over)} over`, sub }
+    : { tone: 'short', line: `${pct} · ${formatRupiahCompact(short)} short`, sub };
 }
 
 /** *"Sales: {n} · {m} closing"* (`:7399`). */
@@ -525,10 +530,10 @@ export function gapWords(goal: GoalCell): { value: string; note: string | null }
   if (goal.gapMinor === null) return { value: OWN_COPY.notUploaded, note: null };
   const policies = goal.policiesNeeded;
   return {
-    value: `${formatRupiah(goal.gapMinor)} remaining`,
+    value: `${formatRupiahCompact(goal.gapMinor)} remaining`,
     note: policies === null
       ? null
-      : `≈ ${policies} polic${policies === 1 ? 'y' : 'ies'} needed at their avg case size of ${formatRupiah(goal.caseSizeMinor)}.`,
+      : `≈ ${policies} polic${policies === 1 ? 'y' : 'ies'} needed at their avg case size of ${formatRupiahCompact(goal.caseSizeMinor)}.`,
   };
 }
 

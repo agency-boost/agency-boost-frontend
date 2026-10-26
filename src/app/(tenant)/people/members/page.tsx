@@ -18,6 +18,7 @@ import { CORE_LEADER_LABEL } from '@/lib/profile-line';
 import { displayName } from '@/lib/display-name';
 import { useDebounced } from '@/lib/use-debounced';
 import { declineRequest, readInbox, approveRequest, type PendingRequest } from '@/lib/join';
+import { formatDateTime, formatOfficeDay } from '@/lib/format';
 import {
   askLeaderLimitApproval, cancelLeaderLimitRequest, pendingFor, readLeaderLimitRequests, requestedChange,
   type LeaderLimitRequestRow,
@@ -435,7 +436,7 @@ export default function MembersPage() {
                 <Row key={`${entry.membershipId}-${entry.changedAt}`}>
                   <Cell className="whitespace-nowrap text-muted">
                     <time dateTime={entry.changedAt}>
-                      {new Date(entry.changedAt).toLocaleString('en-GB')}
+                      {formatDateTime(entry.changedAt)}
                     </time>
                   </Cell>
                   <Cell className="font-semibold">
@@ -501,7 +502,7 @@ export default function MembersPage() {
                           <span className="block text-sm">
                             Asked{' '}
                             <time dateTime={ask.requestedAt}>
-                              {new Date(ask.requestedAt).toLocaleDateString('en-GB')}
+                              {formatOfficeDay(ask.requestedAt)}
                             </time>
                           </span>
                         </>
@@ -805,7 +806,7 @@ export default function MembersPage() {
                   {tab === 'removed' ? (
                     m.removedAt ? (
                       <time dateTime={m.removedAt}>
-                        {new Date(m.removedAt).toLocaleDateString('en-GB')}
+                        {formatOfficeDay(m.removedAt)}
                       </time>
                     ) : (
                       '—'

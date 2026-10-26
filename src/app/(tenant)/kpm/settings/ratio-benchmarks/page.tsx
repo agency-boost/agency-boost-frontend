@@ -151,7 +151,7 @@ export default function RatioBenchmarksPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   /*
-   * The unit the draft is typed in (P4-T25). The field takes `15` for 15.0%, so the text
+   * The unit the draft is typed in (P4-T25). The field takes `15` for 15,0%, so the text
    * alone does not say what it means — changing the unit re-expresses it rather than
    * reinterpreting it, which is what `reexpress` is for.
    */
@@ -449,14 +449,16 @@ export default function RatioBenchmarksPage() {
                   hint={form.comparison === 'band'
                     ? bandHint(form.benchmark)
                     : form.displayUnit === 'percent'
-                      ? 'As a percentage — type 15 for 15.0%.'
+                      ? 'As a percentage — type 15 for 15,0%.'
                       : undefined}
                   className="min-w-40"
                 >
+                  {/* Text with a decimal keypad, not `type="number"`: a number field refuses the comma
+                      `id-ID` writes a decimal with (ADR-0167 §1, AC-3), and `benchmarkFromInput` takes both. */}
                   <TextInput
                     id="new-ratio-benchmark"
-                    type="number"
-                    step="0.01"
+                    type="text"
+                    inputMode="decimal"
                     value={form.benchmark}
                     onChange={(e) => setForm((f) => ({ ...f, benchmark: e.target.value }))}
                   />
@@ -747,14 +749,14 @@ export default function RatioBenchmarksPage() {
                       hint={ratio.comparison === 'band'
                         ? bandHint(draft)
                         : draftUnit === 'percent'
-                          ? 'On track at or above this, as a percentage — 15 means 15.0%.'
+                          ? 'On track at or above this, as a percentage — 15 means 15,0%.'
                           : 'On track at or above this.'}
                       className="min-w-40"
                     >
                       <TextInput
                         id={`benchmark-${ratio.id}`}
-                        type="number"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
                       />

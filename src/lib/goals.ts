@@ -1,6 +1,6 @@
 import { api } from '@/lib/api-client';
 import { capitalized, PRONOUN_FORMS, type Pronoun } from '@/lib/coaching';
-import { formatMonth } from '@/lib/format';
+import { formatMonth, formatNumber } from '@/lib/format';
 
 /**
  * An agent's agreed plan for a period (P8).
@@ -175,21 +175,13 @@ export function goalInputsOf(goal: Goal): GoalInputs {
   };
 }
 
-/** IDR sen per rupiah. One place, so a screen cannot hold a second opinion about the unit. */
-export const MINOR_UNITS_PER_MAJOR = 100;
-
-export const toMajor = (minor: number) => Math.round(minor / MINOR_UNITS_PER_MAJOR);
-export const toMinor = (major: number) => Math.round(major * MINOR_UNITS_PER_MAJOR);
-
-/**
- * `500000000` as `Rp 500.000.000`.
- *
- * **Indonesian grouping**, which the prototype's `toLocaleString('en-US')` gets wrong for its own
- * audience — and its compact formatter renders `1.2e9` as `Rp1.2M+`, which is neither a number nor
- * a unit anybody uses.
+/*
+ * **Money's unit and its two formatters live in `lib/format.ts`** since ADR-0167 §1 (parity I-394): the full
+ * `formatRupiah`, `Rp 500.000.000`, for a table, an input and an export, and `formatRupiahCompact`, `Rp 500 jt`,
+ * for everything else. Re-exported here because a goal's screens, and many others, have always imported them
+ * from this module.
  */
-export const formatRupiah = (minor: number) =>
-  `Rp ${toMajor(minor).toLocaleString('id-ID')}`;
+export { formatRupiah, formatRupiahCompact, MINOR_UNITS_PER_MAJOR, toMajor, toMinor } from '@/lib/format';
 
 /**
  * The same grouping, for what somebody is **typing**: `500000000` shows as `500.000.000`.
@@ -202,7 +194,7 @@ export const formatRupiah = (minor: number) =>
  * No `Rp` here: the prefix is the field's own affix, and repeating it inside the value would put it
  * twice in the box.
  */
-export const groupDigits = (major: number) => major.toLocaleString('id-ID');
+export const groupDigits = (major: number) => formatNumber(major);
 
 /**
  * What was typed, back to a number: everything that is not a digit goes.

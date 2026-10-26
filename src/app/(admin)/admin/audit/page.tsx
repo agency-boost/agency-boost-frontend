@@ -8,6 +8,7 @@ import { Button, ErrorBanner, Field, Select } from '@/components/ui/field';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { listTenants, readAudit, type AuditEntry, type Kpm } from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
+import { formatDateTime } from '@/lib/format';
 
 /**
  * The skeleton and the table read the same array, so a column added to one cannot
@@ -95,7 +96,7 @@ export default function AuditPage() {
           {entries.map((e) => (
             <Row key={e._id}>
               <Cell className="whitespace-nowrap text-muted">
-                <time dateTime={e.createdAt}>{new Date(e.createdAt).toLocaleString('en-GB')}</time>
+                <time dateTime={e.createdAt}>{formatDateTime(e.createdAt)}</time>
               </Cell>
               <Cell className="font-semibold">{renamed(e.action)}</Cell>
               <Cell>

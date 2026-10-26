@@ -105,17 +105,17 @@ describe('the small readings', () => {
     });
 
     it('names who ticked it, the reader as you, on the office’s day', () => {
-      expect(attributionOf(item('A', 'a', { done: true, doneAt: at, source: 'hire', doneBy: RINA }), 'mem-rina')).toBe('Ticked by you · Oct 1, 2026');
-      expect(attributionOf(item('A', 'a', { done: true, doneAt: at, source: 'leader', doneBy: SARI }), 'mem-rina')).toBe('Ticked by Sari Puspita · Oct 1, 2026');
+      expect(attributionOf(item('A', 'a', { done: true, doneAt: at, source: 'hire', doneBy: RINA }), 'mem-rina')).toBe('Ticked by you · 1 Okt 2026');
+      expect(attributionOf(item('A', 'a', { done: true, doneAt: at, source: 'leader', doneBy: SARI }), 'mem-rina')).toBe('Ticked by Sari Puspita · 1 Okt 2026');
     });
 
     it('names the link that completed it, and who wrote the record when it is known', () => {
       expect(attributionOf(item('A', 'a', { link: LINK, done: true, doneAt: at, source: 'link', doneBy: SARI }), 'mem-rina'))
-        .toBe('Completed from Goal Settings by Sari Puspita · Oct 1, 2026');
+        .toBe('Completed from Goal Settings by Sari Puspita · 1 Okt 2026');
       expect(attributionOf(item('A', 'a', { link: LINK, done: true, doneAt: at, source: 'link', doneBy: null }), 'mem-rina'))
-        .toBe('Completed from Goal Settings · Oct 1, 2026');
+        .toBe('Completed from Goal Settings · 1 Okt 2026');
       expect(attributionOf(item('A', 'a', { done: true, doneAt: at, source: 'link', doneBy: null }), 'mem-rina'))
-        .toBe('Completed automatically · Oct 1, 2026');
+        .toBe('Completed automatically · 1 Okt 2026');
     });
 
     it('a manual tick with nobody named says nothing rather than guessing', () => {
@@ -124,8 +124,8 @@ describe('the small readings', () => {
 
     it('says who corrected a start date, or nothing when nobody did', () => {
       expect(correctionOf(activationView(), 'mem-rina')).toBeNull();
-      expect(correctionOf(activationView({ startCorrected: { by: SARI, at } }), 'mem-sari')).toBe('Start date corrected by you · Oct 1, 2026');
-      expect(correctionOf(activationView({ startCorrected: { by: SARI, at } }), 'mem-rina')).toBe('Start date corrected by Sari Puspita · Oct 1, 2026');
+      expect(correctionOf(activationView({ startCorrected: { by: SARI, at } }), 'mem-sari')).toBe('Start date corrected by you · 1 Okt 2026');
+      expect(correctionOf(activationView({ startCorrected: { by: SARI, at } }), 'mem-rina')).toBe('Start date corrected by Sari Puspita · 1 Okt 2026');
     });
   });
 
@@ -141,7 +141,7 @@ describe('the small readings', () => {
       expect(startDateAllowed('2026-10-04', '2026-10-03')).toBe(false);
       expect(startDateAllowed('2025-10-02', '2026-10-03')).toBe(false);
       expect(startDateAllowed('0202-10-02', '2026-10-03')).toBe(false);
-      expect(startDateRangeText('2026-10-03')).toBe('Choose a date from Oct 3, 2025 to today.');
+      expect(startDateRangeText('2026-10-03')).toBe('Choose a date from 3 Okt 2025 to today.');
     });
 
     it('a date half-typed is not whole', () => {

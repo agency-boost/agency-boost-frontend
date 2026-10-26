@@ -15,32 +15,33 @@ describe('P18.1-T2 AC-4 the scorecard as written: rounded for display, the serve
   const count = { key: 'avg_monthly_aa', unit: 'count' } as const;
   const pct = { key: 'new_agent_3m', unit: 'percentage' } as const;
 
-  it('APE in billions to one decimal, two below 1 (`:2488` draws 0.75)', () => {
-    expect(formatFigure(ape, billions(12.1))).toBe('12.1');
-    expect(formatFigure(ape, billions(8.44))).toBe('8.4');
-    expect(formatFigure(ape, billions(12))).toBe('12.0');
-    expect(formatFigure(ape, billions(0.75))).toBe('0.75');
-    expect(formatFigure(ape, billions(0.5))).toBe('0.50');
-    expect(formatFigure(ape, 0)).toBe('0.00');
+  it('APE in billions to one decimal, two below 1 (`:2488` draws 0.75), with a comma (ADR-0167 §1)', () => {
+    expect(formatFigure(ape, billions(12.1))).toBe('12,1');
+    expect(formatFigure(ape, billions(8.44))).toBe('8,4');
+    expect(formatFigure(ape, billions(12))).toBe('12,0');
+    expect(formatFigure(ape, billions(0.75))).toBe('0,75');
+    expect(formatFigure(ape, billions(0.5))).toBe('0,50');
+    expect(formatFigure(ape, 0)).toBe('0,00');
   });
 
   it('rounds to two before choosing, so a figure just under 1 reads 1.0, never 1.00', () => {
-    expect(formatFigure(ape, billions(0.996))).toBe('1.0');
-    expect(formatFigure(ape, billions(0.994))).toBe('0.99');
+    expect(formatFigure(ape, billions(0.996))).toBe('1,0');
+    expect(formatFigure(ape, billions(0.994))).toBe('0,99');
   });
 
   it('Average Case Size in millions, by the same rule', () => {
-    expect(formatFigure(caseSize, millions(19.8))).toBe('19.8');
-    expect(formatFigure(caseSize, millions(20.46))).toBe('20.5');
-    expect(formatFigure(caseSize, millions(0.85))).toBe('0.85');
+    expect(formatFigure(caseSize, millions(19.8))).toBe('19,8');
+    expect(formatFigure(caseSize, millions(20.46))).toBe('20,5');
+    expect(formatFigure(caseSize, millions(0.85))).toBe('0,85');
   });
 
-  it('counts and the averages whole (`:2470`); a percentage whole, with its sign', () => {
+  it('counts and the averages whole (`:2470`), a thousand with a dot; a percentage to one decimal, with its sign (ADR-0167 §1)', () => {
     expect(formatFigure(count, 14.4)).toBe('14');
     expect(formatFigure(count, 14.5)).toBe('15');
     expect(formatFigure({ key: 'manpower', unit: 'count' }, 187)).toBe('187');
-    expect(formatFigure(pct, 24.4)).toBe('24%');
-    expect(formatFigure(pct, 30)).toBe('30%');
+    expect(formatFigure({ key: 'manpower', unit: 'count' }, 1250)).toBe('1.250');
+    expect(formatFigure(pct, 24.4)).toBe('24,4%');
+    expect(formatFigure(pct, 30)).toBe('30,0%');
   });
 
   it('*pending data* where no source holds it, *—* over nothing, nothing in a blocked cell — never 0', () => {
@@ -65,21 +66,21 @@ describe('P18.1-T2 AC-4 the scorecard as written: rounded for display, the serve
     expect(leftOutLine({ kind: 'figure', value: 1, leavesOut: [] })).toBeNull();
     expect(leftOutLine({ kind: 'pending' })).toBeNull();
     expect(leftOutLine({ kind: 'figure', value: 1, leavesOut: ['2026-08'] }))
-      .toBe('Without August 2026: no figures uploaded for them yet.');
+      .toBe('Without Agu 2026: no figures uploaded for them yet.');
     expect(leftOutLine({ kind: 'figure', value: 1, leavesOut: ['2026-07', '2026-08'] }))
-      .toBe('Without July 2026 and August 2026: no figures uploaded for them yet.');
+      .toBe('Without Jul 2026 and Agu 2026: no figures uploaded for them yet.');
     expect(leftOutLine({ kind: 'figure', value: 1, leavesOut: ['2025-01', '2025-02', '2025-03'] }))
-      .toBe('Without January 2025, February 2025 and March 2025: no figures uploaded for them yet.');
+      .toBe('Without Jan 2025, Feb 2025 and Mar 2025: no figures uploaded for them yet.');
   });
 });
 
 describe('P18.1-T3 AC-4 the print’s line for what its figures leave out', () => {
   it('every month any figure leaves out, once each, in month order, in the tooltip’s words after a †', () => {
-    expect(printLeftOutLine(makeScorecard())).toBe('† Without August 2026: no figures uploaded for them yet.');
+    expect(printLeftOutLine(makeScorecard())).toBe('† Without Agu 2026: no figures uploaded for them yet.');
     const rows = makeScorecard().rows.map((r) => (r.key === 'flc'
       ? { ...r, cells: { ...r.cells, fy: { kind: 'figure' as const, value: 1, leavesOut: ['2025-02', '2026-08'] } } }
       : r));
-    expect(printLeftOutLine({ rows })).toBe('† Without February 2025 and August 2026: no figures uploaded for them yet.');
+    expect(printLeftOutLine({ rows })).toBe('† Without Feb 2025 and Agu 2026: no figures uploaded for them yet.');
   });
 
   it('nothing when no figure is partial', () => {

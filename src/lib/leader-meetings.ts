@@ -1,4 +1,6 @@
 import { api } from './api-client';
+import { CONFIRMED } from './confirmations';
+import { formatMonthName } from './format';
 
 /**
  * **The Strategic Leader Forum's client** (Phase 18.1, `functional/leader-forum.md`): the office's biweekly
@@ -294,7 +296,8 @@ export const FORUM_COPY = {
   shareDialog: {
     title: 'Share this MOM',
     copy: 'Copy link',
-    copied: 'Link copied to clipboard',
+    /** The copy controls' one wording since 2026-10-26 (P18.95-T1 AC-6, ADR-0167 §5); `:2764` said *Link copied to clipboard*. */
+    copied: CONFIRMED.linkCopied,
     stop: 'Stop sharing',
     stopped: 'Sharing stopped',
     failed: "Couldn't make a link. Try again.",
@@ -374,12 +377,12 @@ export const filterMeetings = (meetings: MeetingCard[], filter: MeetingFilter): 
 /** A rung as the forum draws it: the code when it reads as one (*AB*, *AAB*), the label otherwise (*Agent*). */
 export const rungShort = (rung: ForumPerson['rung']) => (rung.code.length <= 4 ? rung.code : rung.label);
 
-/** The card's date block: the month's three letters over the day (`:2597`), from the office date's own numbers. */
+/** The card's date block: the month's three letters over the day (`:2597`) — *Okt* over *13*, `id-ID` (ADR-0167 §1). */
 export function dateBlock(date: string): { month: string; day: string } {
   const [y, m, d] = date.split('-').map(Number);
   if (!y || !m || !d) return { month: '', day: '' };
   return {
-    month: new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short' }),
+    month: formatMonthName(date),
     day: String(d),
   };
 }

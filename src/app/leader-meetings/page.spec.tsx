@@ -46,12 +46,12 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
       'Strategic Check-in — #14', 'Strategic Check-in — #13', 'Strategic Check-in — #12',
     ]);
     const [upcoming, past, clear] = rows.map((r) => within(r));
-    expect(upcoming.getByText('Oct 13, 2026 · Upcoming · 3 core leaders tagged')).toBeInTheDocument();
-    expect(past.getByText('Sep 26, 2026 · Completed · 2 core leaders tagged')).toBeInTheDocument();
+    expect(upcoming.getByText('13 Okt 2026 · Upcoming · 3 core leaders tagged')).toBeInTheDocument();
+    expect(past.getByText('26 Sep 2026 · Completed · 2 core leaders tagged')).toBeInTheDocument();
     // F-186: singular for one.
-    expect(clear.getByText('Sep 12, 2026 · Completed · 1 core leader tagged')).toBeInTheDocument();
+    expect(clear.getByText('12 Sep 2026 · Completed · 1 core leader tagged')).toBeInTheDocument();
 
-    expect(upcoming.getByText('Oct')).toBeInTheDocument();
+    expect(upcoming.getByText('Okt')).toBeInTheDocument();
     expect(upcoming.getByText('13')).toBeInTheDocument();
     expect(rows[0].querySelector('[aria-hidden="true"]')).toHaveClass('bg-navy');
     // Grey once Completed (`:630`).
@@ -79,7 +79,7 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
       meetings: [card({ editors: editors({ admins: [{ ...MAYA, tagged: true }], coreLeaderCount: 4 }) })],
     }));
     renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    expect(await screen.findByText('Oct 13, 2026 · Upcoming · 4 core leaders tagged')).toBeInTheDocument();
+    expect(await screen.findByText('13 Okt 2026 · Upcoming · 4 core leaders tagged')).toBeInTheDocument();
     const avatars = within(cards()[0]).getAllByRole('img');
     expect(avatars.map((a) => a.getAttribute('aria-label'))).toEqual([
       'Maya Halim (AAB)', 'Agus Santoso (AB)', 'Sari Dewanti (AAB)', 'Yosef Pratama (AB)',
@@ -293,7 +293,7 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
   it('the core leaders drawn are the meeting’s own — the frozen list on a past one (F-186)', async () => {
     list(listView({ meetings: [card({ state: 'completed', editors: editors({ coreLeaders: [], coreLeaderCount: 0, frozen: true }) })] }));
     renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
-    expect(await screen.findByText('Oct 13, 2026 · Completed · 0 core leaders tagged')).toBeInTheDocument();
+    expect(await screen.findByText('13 Okt 2026 · Completed · 0 core leaders tagged')).toBeInTheDocument();
     expect(main().queryByRole('img')).not.toBeInTheDocument();
   });
 });

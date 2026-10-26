@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AdminLayout from '@/app/(admin)/layout';
@@ -258,6 +258,91 @@ describe('org role ladder (P3.5-T7)', () => {
       expect(JSON.parse(String(post?.init.body))).toMatchObject({ code: 'UM', leaderTier: 'associate' });
       // The form resets to the default, so the next rung is not marked a leader by accident.
       expect(await screen.findByLabelText('Leader tier')).toHaveDisplayValue('Not a leader');
+    });
+
+    describe('P18.95-T1 AC-5 — the tier says it is saved, beside its select', () => {
+      /** The save confirmation in the select's own cell: the nearest ancestor with a status for a child. */
+      const besides = (el: HTMLElement) => {
+        for (let box = el.parentElement; box; box = box.parentElement) {
+          const own = [...box.children].find((c) => c.getAttribute('role') === 'status');
+          if (own) return own as HTMLElement;
+          if (box.tagName === 'TD') break;
+        }
+        return null;
+      };
+      const RETAGGED = [LADDER[0], LADDER[1], { ...LADDER[2], leaderTier: 'associate' }];
+      const patches = (calls: { url: string; init: RequestInit }[]) =>
+        calls.filter((c) => c.init.method === 'PATCH').map((c) => [c.url.split('/admin/org-levels/')[1], JSON.parse(String(c.init.body))]);
+
+      it('P18.95-T1 AC-5: says Saved ✓ under the select once the tier is kept, inside its own cell', async () => {
+        stubFetch({
+          '/admin/org-levels/lvl-3': { body: RETAGGED },
+          '/admin/org-levels': { body: LADDER },
+          '/admin/companies': { body: COMPANIES },
+        });
+        renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+
+        await userEvent.selectOptions(await tierOf('AB'), 'Associate Leader');
+
+        await waitFor(() => expect(besides(screen.getByRole('combobox', { name: 'Leader tier of AB' }))).toHaveTextContent('Saved ✓'));
+        expect(besides(screen.getByRole('combobox', { name: 'Leader tier of AB' }))).toHaveClass('text-success');
+        expect(await tierOf('AB')).toHaveDisplayValue('Associate Leader');
+        expect(besides(await tierOf('AAB'))).toBeNull();
+        expect(screen.getAllByText('Saved ✓')).toHaveLength(1);
+      });
+
+      it('P18.95-T1 AC-5: a failed tier says Couldn’t save — retry, and the retry sends the same tier again', async () => {
+        const { calls } = stubFetch({
+          '/admin/org-levels/lvl-3': [
+            { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'req-9' } } },
+            { body: RETAGGED },
+          ],
+          '/admin/org-levels': { body: LADDER },
+          '/admin/companies': { body: COMPANIES },
+        });
+        renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+        await userEvent.selectOptions(await tierOf('AB'), 'Associate Leader');
+
+        const retry = await screen.findByRole('button', { name: "Couldn't save — retry: Leader tier, AB" });
+        expect(besides(await tierOf('AB'))).toContainElement(retry);
+        // The reason stays in the banner at the top, where it always was; the select still shows the stored tier.
+        expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong.');
+        expect(await tierOf('AB')).toHaveDisplayValue('Senior Leader');
+
+        await userEvent.click(retry);
+
+        await waitFor(() => expect(patches(calls)).toEqual([
+          ['lvl-3', { leaderTier: 'associate' }],
+          ['lvl-3', { leaderTier: 'associate' }],
+        ]));
+        await waitFor(() => expect(besides(screen.getByRole('combobox', { name: 'Leader tier of AB' }))).toHaveTextContent('Saved ✓'));
+        expect(await tierOf('AB')).toHaveDisplayValue('Associate Leader');
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+      });
+
+      it('P18.95-T1 AC-5: a tier refused while people stand on the rung (409) leaves no retry, the banner saying why', async () => {
+        const { calls } = stubFetch({
+          '/admin/org-levels/lvl-3': {
+            status: 409,
+            body: {
+              error: {
+                code: 'ORG_LEVEL_TIER_IN_USE', message: 'The API’s sentence.',
+                details: { orgLevelId: 'lvl-3', code: 'AB', members: 12 }, requestId: 'req-10',
+              },
+            },
+          },
+          '/admin/org-levels': { body: LADDER },
+          '/admin/companies': { body: COMPANIES },
+        });
+        renderInLayout(AdminLayout, <OrgLevelsPage />, { me: SUPER_ADMIN });
+        await userEvent.selectOptions(await tierOf('AB'), 'Associate Leader');
+
+        expect(await screen.findByRole('alert')).toHaveTextContent('12 people stand on AB, so its leader tier cannot change.');
+        await waitFor(() => expect(besides(screen.getByRole('combobox', { name: 'Leader tier of AB' }))).toBeNull());
+        expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+        expect(patches(calls)).toHaveLength(1);
+      });
     });
   });
 

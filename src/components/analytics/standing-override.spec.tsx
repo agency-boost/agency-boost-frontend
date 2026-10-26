@@ -22,7 +22,7 @@ const OVERRIDE: StandingOverride = {
   by: { membershipId: 'mem-owner', name: 'Wilson Tanoto' },
   at: '2026-10-09T18:30:00.000Z',
 };
-const MARKER = `Overridden by Wilson Tanoto on Oct 10, 2026: ${OVERRIDE.reason}`;
+const MARKER = `Overridden by Wilson Tanoto on 10 Okt 2026: ${OVERRIDE.reason}`;
 
 function renderCell(cell: AchievedCellData, { canOverride = true, onChanged = vi.fn() } = {}) {
   render(
@@ -362,7 +362,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
     it('P18.6-T2 AC-8 an authored reason is drawn as text, never as markup', () => {
       const reason = '<b>bold</b> <img src=x onerror=alert(1)>';
       renderCell({ second: 'qualified', overridable: true, override: { ...OVERRIDE, reason } });
-      expect(screen.getByRole('button', { name: `Overridden by Wilson Tanoto on Oct 10, 2026: ${reason}` })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: `Overridden by Wilson Tanoto on 10 Okt 2026: ${reason}` })).toBeInTheDocument();
       expect(document.querySelector('b')).toBeNull();
       expect(document.querySelector('img')).toBeNull();
     });
@@ -404,7 +404,7 @@ describe('the override’s own copy (P18.6-T2)', () => {
     const said = [
       ...Object.values(OVERRIDE_COPY).flatMap((v) => (typeof v === 'string' ? [v] : [])),
       OVERRIDE_COPY.overrideFor('Budi Santoso', 'Persistency Push'),
-      OVERRIDE_COPY.overriddenBy('Wilson Tanoto', 'Oct 10, 2026', 'checked'),
+      OVERRIDE_COPY.overriddenBy('Wilson Tanoto', '10 Okt 2026', 'checked'),
     ];
     expect(said.filter((text) => FORBIDDEN.test(text))).toEqual([]);
   });

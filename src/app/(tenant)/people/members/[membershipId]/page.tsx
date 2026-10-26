@@ -12,6 +12,7 @@ import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { displayName } from '@/lib/display-name';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { formatOfficeDay } from '@/lib/format';
 import { personalLines, type PersonalDetails } from '@/lib/personal';
 import {
   askLeaderLimitApproval, cancelLeaderLimitRequest, pendingFor, readLeaderLimitRequests, requestedChange,
@@ -231,7 +232,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
             <Detail term="Reports to" detail={member.leaderName ?? 'Nobody — top of the tree'} />
             <Detail
               term="Joined"
-              detail={member.joinedAt ? new Date(member.joinedAt).toLocaleDateString('en-GB') : '—'}
+              detail={member.joinedAt ? formatOfficeDay(member.joinedAt) : '—'}
             />
             {/* What the person records (ADR-0158, P18.8-T4 AC-6): the API serves it to the Owner and the
                 Admins on this read only, read-only here — the person's own to change, on their profile. */}

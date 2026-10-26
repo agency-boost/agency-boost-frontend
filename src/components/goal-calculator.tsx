@@ -3,18 +3,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CascadeRow } from '@/components/ui/cascade-row';
 import { ConfigBadge } from '@/components/ui/config-badge';
+import { DecimalInput } from '@/components/ui/decimal-input';
 import {
   Button, Card, ErrorBanner, Field, FieldRow, ReadOnlyField, TextInput,
 } from '@/components/ui/field';
 import { KpiTile } from '@/components/ui/kpi-tile';
 import { NumberBadge } from '@/components/ui/number-badge';
 import { SaveStatus } from '@/components/ui/save-status';
+import { Toast, useToast } from '@/components/ui/toast';
 import { Segmented } from '@/components/ui/segmented';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { CONFIRMED } from '@/lib/confirmations';
 import { capitalized, PRONOUN_FORMS, type CoacheeSubject } from '@/lib/coaching';
-import { formatDay, formatDayLong } from '@/lib/format';
+import { formatDay, formatDayLong, formatNumber, formatPercent, formatRupiahCompact } from '@/lib/format';
 import {
   formatRupiah, goalInputsOf, groupDigits, parseDigits, producedFrom, readGoal, saveGoal, toMajor, toMinor,
   type Goal, type GoalInputs, type GoalMode,
@@ -84,6 +87,8 @@ export function GoalCalculator({
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  /** *Goal saved ✓* once *Save goal* lands (P18.95-T1 AC-6), beside the *Saved* it always showed. */
+  const { toast, show } = useToast();
 
   const load = useCallback(async () => {
     if (period === null) return;
@@ -118,6 +123,7 @@ export function GoalCalculator({
       setGoal(result);
       setDraft(goalInputsOf(result));
       setSaved(true);
+      show(CONFIRMED.goalSaved);
     } catch (err) {
       setError(toDisplayError(err));
       setSaved(false);
@@ -250,7 +256,7 @@ export function GoalCalculator({
                     className="mt-3"
                     variant="insight"
                     label="That is an APE target of"
-                    value={formatRupiah(projected.annualApeTargetMinor)}
+                    value={formatRupiahCompact(projected.annualApeTargetMinor)}
                   />
                 )}
               </>
@@ -294,18 +300,13 @@ export function GoalCalculator({
                 * number appended to it: `3.1` became `3.12`. An empty box that says what it will
                 * fall back to is the honest control.
                 */}
-              <TextInput
+              <DecimalInput
                 id="goal-months"
-                type="number"
-                step="0.1"
-                min="0.1"
                 suffix="months"
                 className="w-full"
-                placeholder={String(goal.monthsLeft)}
-                value={draft.monthsLeft ?? ''}
-                onChange={(e) => set({
-                  monthsLeft: e.target.value === '' ? null : Number(e.target.value),
-                })}
+                placeholder={formatNumber(goal.monthsLeft, { maxDecimals: 1 })}
+                value={draft.monthsLeft}
+                onValueChange={(monthsLeft) => set({ monthsLeft })}
               />
             </Field>
             {/*
@@ -382,9 +383,9 @@ export function GoalCalculator({
                       />
                     </>
                   )}
-                  value={formatRupiah(projected.apeAchievedMinor)}
+                  value={formatRupiahCompact(projected.apeAchievedMinor)}
                 />
-                <KpiTile label="Remaining needed" value={formatRupiah(projected.remainingApeMinor)} />
+                <KpiTile label="Remaining needed" value={formatRupiahCompact(projected.remainingApeMinor)} />
               </div>
               {/*
                 * **The one number this card is for.** It was the third of three identical figures, so
@@ -394,7 +395,7 @@ export function GoalCalculator({
                 className="mt-2.5"
                 variant="insight"
                 label="This month's APE target"
-                value={formatRupiah(projected.monthlyApeTargetMinor)}
+                value={formatRupiahCompact(projected.monthlyApeTargetMinor)}
               />
             </>
           )}
@@ -421,7 +422,7 @@ export function GoalCalculator({
                 * comes back whole, so six a month reads *≈ 1.4* where it read *≈ 2*. The 💡 tip under this
                 * step went at the client's request.
                 */}
-              <KpiTile label="Policies per week" value={`≈ ${projected.policiesPerWeek}`} />
+              <KpiTile label="Policies per week" value={`≈ ${formatNumber(projected.policiesPerWeek, { maxDecimals: 1 })}`} />
             </div>
           )}
         </Step>
@@ -487,26 +488,26 @@ export function GoalCalculator({
                   label: 'Set appointment',
                   chip: chipOf(numbers.leads),
                   icon: 'clipboard',
-                  month: `${projected.leadsPerMonth}/month`,
-                  week: `≈ ${projected.leadsPerWeek}/week`,
+                  month: `${formatNumber(projected.leadsPerMonth)}/month`,
+                  week: `≈ ${formatNumber(projected.leadsPerWeek, { maxDecimals: 1 })}/week`,
                 },
                 {
                   label: 'Sales meeting',
                   chip: chipOf(numbers.appointments),
                   icon: 'calendar',
-                  month: `${projected.appointmentsPerMonth}/month`,
-                  week: `≈ ${projected.appointmentsPerWeek}/week`,
+                  month: `${formatNumber(projected.appointmentsPerMonth)}/month`,
+                  week: `≈ ${formatNumber(projected.appointmentsPerWeek, { maxDecimals: 1 })}/week`,
                 },
                 {
                   label: 'Submission polis',
                   chip: chipOf(numbers.closings),
                   icon: 'target',
-                  month: `${projected.policiesPerMonth}/month`,
-                  week: `≈ ${projected.policiesPerWeek}/week`,
+                  month: `${formatNumber(projected.policiesPerMonth)}/month`,
+                  week: `≈ ${formatNumber(projected.policiesPerWeek, { maxDecimals: 1 })}/week`,
                   hero: true,
                 },
               ]}
-              links={[`${draft.leadsToApptPct}%`, `${draft.closingRatePct}%`]}
+              links={[formatPercent(draft.leadsToApptPct), formatPercent(draft.closingRatePct)]}
             />
           ) : (
             <p className="text-md text-alert">
@@ -550,12 +551,12 @@ export function GoalCalculator({
           </h2>
           {projected && !projected.targetMet && (
             <p className="mt-2 text-lg leading-relaxed text-white">
-              To reach APE <Figure>{formatRupiah(projected.annualApeTargetMinor)}</Figure> this year
-              ({goal.monthsLeft} months left), this month&apos;s target is APE{' '}
-              <Figure>{formatRupiah(projected.monthlyApeTargetMinor)}</Figure> — {mine ? 'I' : voice.pronoun} will contact{' '}
-              <Figure>{projected.leadsPerMonth} leads</Figure>, get{' '}
-              <Figure>{projected.appointmentsPerMonth} appointments</Figure>, and close{' '}
-              <Figure>{projected.policiesPerMonth} policies</Figure> this month.
+              To reach APE <Figure>{formatRupiahCompact(projected.annualApeTargetMinor)}</Figure> this year
+              ({formatNumber(goal.monthsLeft, { maxDecimals: 1 })} months left), this month&apos;s target is APE{' '}
+              <Figure>{formatRupiahCompact(projected.monthlyApeTargetMinor)}</Figure> — {mine ? 'I' : voice.pronoun} will contact{' '}
+              <Figure>{formatNumber(projected.leadsPerMonth)} leads</Figure>, get{' '}
+              <Figure>{formatNumber(projected.appointmentsPerMonth)} appointments</Figure>, and close{' '}
+              <Figure>{formatNumber(projected.policiesPerMonth)} policies</Figure> this month.
             </p>
           )}
           {/*
@@ -579,6 +580,7 @@ export function GoalCalculator({
           </p>
         )}
       </div>
+      <Toast toast={toast} />
     </>
   );
 }
@@ -715,7 +717,10 @@ export function Rupiah({
   );
 }
 
-/** A percentage, with decimals — which the prototype's parser cannot read (I-108). */
+/**
+ * A percentage, with decimals — which the prototype's parser cannot read (I-108) — typed with a comma or a
+ * point (ADR-0167 §1). An emptied box is 0, as the number field it replaces read one.
+ */
 function Percent({
   label, id, value, onChange, hint, className,
 }: {
@@ -725,16 +730,12 @@ function Percent({
 }) {
   return (
     <Field label={label} htmlFor={id} hint={hint} className={className}>
-      <TextInput
+      <DecimalInput
         id={id}
-        type="number"
-        step="0.1"
-        min="0"
-        max="100"
         suffix="%"
         className="w-full"
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
+        onValueChange={(pct) => onChange(pct ?? 0)}
       />
     </Field>
   );

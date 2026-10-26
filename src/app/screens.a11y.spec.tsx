@@ -1110,8 +1110,8 @@ describe('screens have no axe violations', () => {
         stubFetch(routes(draft));
         inSession();
         await screen.findByDisplayValue('Desi Pratama');
-        await screen.findByText('Rp 340.000.000 remaining this year.');
-        await screen.findByText('18.0%');
+        await screen.findByText('Rp 340 jt remaining this year.');
+        await screen.findByText('18,0%');
         const drill = await screen.findByRole('button', { name: '→ view full dashboard' });
         await waitFor(() => expect(drill).toBeEnabled());
         await expectClean('coaching/[membershipId]/session (a draft)');
@@ -1127,7 +1127,7 @@ describe('screens have no axe violations', () => {
         ));
         inSession();
         await screen.findByDisplayValue('Desi Pratama');
-        await screen.findByText('✓ Finalized Friday, October 2, 2026');
+        await screen.findByText('✓ Finalized Jumat, 2 Okt 2026');
         await expectClean('coaching/[membershipId]/session (finalized)');
         await userEvent.click(screen.getByRole('button', { name: 'Edit again' }));
         await screen.findByRole('dialog', { name: 'Edit this session again?' });
@@ -2315,7 +2315,7 @@ describe('screens have no axe violations', () => {
       stubFetch(calendarRoutes);
       nav.pathname = '/calendar';
       renderInLayout(AgentLayout, <CalendarPage />, { me });
-      return screen.findByRole('region', { name: 'Calendar, Sep 28 – Oct 4, 2026' });
+      return screen.findByRole('region', { name: 'Calendar, 28 Sep – 4 Okt 2026' });
     };
 
     it('the week, filled: overlapping entries, a trip, a pending invitation and the now-line', async () => {
@@ -2327,14 +2327,14 @@ describe('screens have no axe violations', () => {
       stubFetch({ ...SHELL_STUBS, '/calendar/entries?view=week': { body: weekRead({ entries: [] }) } });
       nav.pathname = '/calendar';
       renderInLayout(AgentLayout, <CalendarPage />, { me: RINA });
-      await screen.findByRole('region', { name: 'Calendar, Sep 28 – Oct 4, 2026' });
+      await screen.findByRole('region', { name: 'Calendar, 28 Sep – 4 Okt 2026' });
       await expectClean('calendar (empty week)');
     });
 
     it('the month', async () => {
       await open();
       await userEvent.click(screen.getByRole('button', { name: 'Month' }));
-      await screen.findByText('September 2026');
+      await screen.findByText('Sep 2026');
       await expectClean('calendar (month)');
     });
 
@@ -2356,7 +2356,7 @@ describe('screens have no axe violations', () => {
       });
       nav.pathname = '/calendar';
       renderInLayout(AgentLayout, <CalendarPage />, { me: AGUS });
-      await screen.findByRole('region', { name: 'Calendar, Sep 28 – Oct 4, 2026' });
+      await screen.findByRole('region', { name: 'Calendar, 28 Sep – 4 Okt 2026' });
       await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
       const dialog = screen.getByRole('dialog', { name: 'New event' });
       const field = within(dialog).getByRole('combobox', { name: 'Invite (optional) — anyone in your KPM' });
@@ -2407,7 +2407,7 @@ describe('screens have no axe violations', () => {
       await open();
       await userEvent.click(screen.getByRole('button', { name: '+ Compare with downline' }));
       await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
-      await screen.findByRole('region', { name: 'Calendar, Indah Permata, Sep 28 – Oct 4, 2026' });
+      await screen.findByRole('region', { name: 'Calendar, Indah Permata, 28 Sep – 4 Okt 2026' });
       await expectClean('calendar (compare)');
     });
 

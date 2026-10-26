@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import {
   Button, Card, CodeField, Field, Switch, Textarea, TextInput,
 } from '@/components/ui/field';
+import { InlineSaveStatus, useInlineSave } from '@/components/ui/inline-save-status';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
@@ -44,6 +45,9 @@ const REVIEW: Record<string, { tone: 'won' | 'open'; text: string }> = {
 };
 
 const asText = (value: string | string[]) => (Array.isArray(value) ? value.join('\n') : value);
+
+/** A product's *Agents sell it* switch, in its *Saving… → Saved ✓* (P18.95-T1 AC-5). */
+const sellKey = (productId: string) => `${productId}\nactive`;
 
 /**
  * A product document's upload (P17-T9, D-productdocs): the office's own PDF for one slot, through the
@@ -153,6 +157,7 @@ export default function KpmProductsPage() {
   const [queue, setQueue] = useState<KpmProductRow[] | null>(null);
   /** What agents are reading **right now**, per product — the comparison a decision needs. */
   const [served, setServed] = useState<Record<string, { source: 'kpm' | 'company' }>>({});
+  const inline = useInlineSave();
 
   const load = useCallback(async () => {
     try {
@@ -293,14 +298,26 @@ export default function KpmProductsPage() {
                         * A reader who cannot write still sees it, disabled — the shelf is worth
                         * reading even when it is not yours to change.
                         */
-                      <Switch
-                        id={`sell-${product.productId}`}
-                        label="Agents sell it"
-                        checked={product.active.value}
-                        disabled={busy || !canWrite}
-                        onChange={(next) => void run(() =>
-                          setKpmProductActive(product.productId, next))}
-                      />
+                      <>
+                        <Switch
+                          id={`sell-${product.productId}`}
+                          label="Agents sell it"
+                          checked={product.active.value}
+                          disabled={busy || !canWrite}
+                          // It saves itself, and says so beside it (P18.95-T1 AC-5): a retry sends this same value
+                          // again. The reason for a refusal stays in the alert above the shelf, where it was.
+                          onChange={(next) => void inline.save(sellKey(product.productId), async () =>
+                            (await run(() => setKpmProductActive(product.productId, next))) !== null)}
+                        />
+                        <InlineSaveStatus
+                          state={inline.stateOf(sellKey(product.productId))}
+                          label={`Agents sell it, ${product.displayName.value}`}
+                          onRetry={() => {
+                            inline.retry(sellKey(product.productId));
+                            document.getElementById(`sell-${product.productId}`)?.focus();
+                          }}
+                        />
+                      </>
                     )}
                     <Button
                       variant="inline"

@@ -2,7 +2,7 @@
 
 import type { ReactNode, Ref } from 'react';
 import {
-  BILLING_COPY as COPY, money, perLeaderDiscount, tierLabel, type Pricing, type QuoteDetails,
+  BILLING_COPY as COPY, money, perLeaderDiscount, quoteDay, tierLabel, type Pricing, type QuoteDetails,
 } from '@/lib/billing';
 import { cn } from '@/lib/cn';
 
@@ -62,8 +62,8 @@ export function QuoteSheet({
   const meta: [string, string][] = [
     [COPY.kpm, details.kpm.trim()],
     [COPY.pic, details.pic.trim()],
-    [COPY.planStart, details.start.trim()],
-    [COPY.planEnd, details.end.trim()],
+    [COPY.planStart, quoteDay(details.start)],
+    [COPY.planEnd, quoteDay(details.end)],
     [COPY.salesBy, details.sales.trim()],
   ];
 

@@ -9,6 +9,7 @@ import {
 } from '@/components/training/training-catalog';
 import { FormatIcon, SkillTag, TrainingStatusPill } from '@/components/training/training-parts';
 import { Card, ErrorBanner } from '@/components/ui/field';
+import { TAP_HEIGHT } from '@/components/ui/phone';
 import { Toast, useToast } from '@/components/ui/toast';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
@@ -153,7 +154,7 @@ function BackLink({ href, title }: { href: string; title: string }) {
   return (
     <Link
       href={href}
-      className="mb-3.5 inline-flex items-center gap-1.5 py-1.5 text-base font-semibold text-navy-soft hover:text-navy"
+      className={cn('mb-3.5 inline-flex items-center gap-1.5 py-1.5 text-base font-semibold text-navy-soft hover:text-navy', TAP_HEIGHT)}
     >
       <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
         <path d="M15 18l-6-6 6-6" />

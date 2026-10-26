@@ -10,6 +10,7 @@ import {
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { suggestCode } from '@/lib/config-code';
+import { parseDecimal } from '@/lib/format';
 import {
   closeProductToNewBusiness, COMMISSION_MAX_YEARS, createProduct, readProducts, reopenProduct, reorderProducts,
   updateProduct, withdrawProduct,
@@ -39,9 +40,10 @@ const AGE_BANDS = [
   { band: 1, label: '< 25' }, { band: 2, label: '25–34' }, { band: 3, label: '35–49' },
   { band: 4, label: '50–64' }, { band: 5, label: '65+' },
 ];
+/** Compact, as the catalog's own chips write them (`BUDGET_CHOICES`, ADR-0167 §1): the prototype's *M* was a million. */
 const BUDGET_BANDS = [
-  { band: 1, label: '< Rp500K' }, { band: 2, label: 'Rp500K–Rp2M' }, { band: 3, label: 'Rp2M–Rp5M' },
-  { band: 4, label: 'Rp5M–Rp10M' }, { band: 5, label: 'Rp10M–Rp20M' }, { band: 6, label: '> Rp20M' },
+  { band: 1, label: '< Rp 500 rb' }, { band: 2, label: 'Rp 500 rb–Rp 2 jt' }, { band: 3, label: 'Rp 2 jt–Rp 5 jt' },
+  { band: 4, label: 'Rp 5 jt–Rp 10 jt' }, { band: 5, label: 'Rp 10 jt–Rp 20 jt' }, { band: 6, label: '> Rp 20 jt' },
   { band: 7, label: 'Lump-sum' },
 ];
 
@@ -84,15 +86,16 @@ const move = <T,>(rows: T[], from: number, to: number): T[] => {
 const linesToList = (value: string) => value.split('\n').map((l) => l.trim()).filter(Boolean);
 
 /**
- * A stored proportion as the percentage typed and read on screen: `0.125` is `12.5`.
+ * A stored proportion as the percentage typed and read on screen: `0.125` is `12,5` — a comma, as the
+ * figure is written (ADR-0167 §1).
  *
  * Through `toFixed`, because `0.07 * 100` is `7.000000000000001` and a Super Admin who typed 7
  * should read 7 back.
  */
-const percentOf = (rate: number) => String(Number((rate * 100).toFixed(4)));
+const percentOf = (rate: number) => String(Number((rate * 100).toFixed(4))).replace('.', ',');
 
-/** A typed percentage as the proportion the API stores (`commissionSchedule`, parity F-15). */
-const proportionOf = (percent: string) => Number(percent) / 100;
+/** A typed percentage — a comma or a point (`parseDecimal`) — as the proportion the API stores (`commissionSchedule`, parity F-15). */
+const proportionOf = (percent: string) => parseDecimal(percent) / 100;
 
 /**
  * Why a typed rate cannot be saved, or `null` when it can: a number from 0 to 100, **to at most two
@@ -101,9 +104,9 @@ const proportionOf = (percent: string) => Number(percent) / 100;
  */
 function rateError(percent: string): string | null {
   const typed = percent.trim();
-  const value = Number(typed);
+  const value = parseDecimal(typed);
   if (typed === '' || !Number.isFinite(value) || value < 0 || value > 100) return 'Enter a rate from 0 to 100.';
-  const [, decimals = ''] = typed.split('.');
+  const [, decimals = ''] = typed.split(/[.,]/);
   return decimals.length > 2 ? 'Use at most two decimal places.' : null;
 }
 
@@ -768,10 +771,9 @@ function CommissionEditor({
                       id={id}
                       aria-label={`Rate for year ${year}`}
                       aria-describedby={shown ? `${id}-error` : undefined}
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="100"
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
                       suffix="%"
                       className="w-28"
                       value={rate}

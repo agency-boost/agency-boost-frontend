@@ -72,6 +72,8 @@ describe('the person shell (P11-T7)', () => {
     const heading = await screen.findByRole('heading', { level: 2, name: 'Rina Wijaya' });
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Coaching Session$/);
     expect(screen.getByRole('link', { name: '← Back to Coaching Session' })).toHaveAttribute('href', '/coaching');
+    // P18.95-T1 AC-10: 44px tall on a phone (UI-029), and the same line at 768px and wider.
+    expect(screen.getByRole('link', { name: '← Back to Coaching Session' })).toHaveClass('inline-flex', 'items-center', 'max-md:min-h-11');
     expect(heading.nextElementSibling).toHaveTextContent(/^Agent · Direct unit$/);
     expect(screen.getByText('RW')).toBeInTheDocument();
     // One read of the person, by their membership.

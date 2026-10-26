@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/app-shell';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, buttonClass, Card, ErrorBanner } from '@/components/ui/field';
+import { TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
@@ -243,8 +244,8 @@ function NobodyYet() {
           <div className="text-md text-muted">
             <p>{OWN_COPY.emptyLine}</p>
             <p className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1">
-              <Link href="/summary" className="font-semibold text-navy underline-offset-2 hover:underline">Personal summary</Link>
-              <Link href="/activity/log" className="font-semibold text-navy underline-offset-2 hover:underline">Activity management</Link>
+              <Link href="/summary" className={cn('font-semibold text-navy underline-offset-2 hover:underline', TEXT_TAP)}>Personal summary</Link>
+              <Link href="/activity/log" className={cn('font-semibold text-navy underline-offset-2 hover:underline', TEXT_TAP)}>Activity management</Link>
             </p>
           </div>
         )}
@@ -266,7 +267,7 @@ function UnitNotFound() {
         <h2 className="font-display text-lg font-bold text-navy">{OWN_COPY.notFoundTitle}</h2>
         <p className="mt-1 text-md text-muted">{OWN_COPY.notFoundLine}</p>
         <p className="mt-3">
-          <Link href="/unit/dashboard" className="text-md font-semibold text-navy underline-offset-2 hover:underline">
+          <Link href="/unit/dashboard" className={cn('text-md font-semibold text-navy underline-offset-2 hover:underline', TEXT_TAP)}>
             {OWN_COPY.backToYours}
           </Link>
         </p>

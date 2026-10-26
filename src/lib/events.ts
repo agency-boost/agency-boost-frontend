@@ -1,5 +1,6 @@
 import { api, toDisplayError, type ApiError } from './api-client';
-import { formatClock, formatShortDay } from './format';
+import { CONFIRMED, withDetail } from './confirmations';
+import { formatClock, formatDayClock, formatShortDay } from './format';
 
 /**
  * **KPM Events, as a member reads them** (`docs/02-specs/functional/events.md`, P18.5-T5 and T6): the
@@ -204,9 +205,11 @@ export function pastBlockOf(event: GuestEvent): PastBlock {
   return event.me.feedback ? 'thanks' : 'form';
 }
 
-/** *"Sep 20, 2026 · 6:00 PM"* (`:8534`), in the office's calendar and clock as the server resolved them. */
-export const whenLine = (event: Pick<GuestEvent, 'startsOn' | 'startTime'>) =>
-  `${formatShortDay(event.startsOn, { year: true })} · ${formatClock(event.startTime)}`;
+/**
+ * *"20 Sep 2026, 18.00"* (`:8534`, where the prototype wrote *Sep 20, 2026 · 6:00 PM*), in the office's calendar and
+ * clock as the server resolved them — one date and time, written as every screen writes one (ADR-0167 §1).
+ */
+export const whenLine = (event: Pick<GuestEvent, 'startsOn' | 'startTime'>) => formatDayClock(event.startsOn, event.startTime);
 
 /** The modal's date alone, bolded before its time (`:8643`). */
 export const dayOf = (event: Pick<GuestEvent, 'startsOn'>) => formatShortDay(event.startsOn, { year: true });
@@ -271,8 +274,11 @@ export const PROTOTYPE_COPY = {
   claimed: 'Marked as attended — you can now leave feedback',
 } as const;
 
-/** *"You're going to {title}"* (`:8718`). */
-export const goingToast = (title: string) => `You're going to ${title}`;
+/**
+ * *"Joined ✓ — you're going to {title}"*: the client's *Joined ✓* (P18.95-T1 AC-6, ADR-0167 §5; UI-008), then the
+ * prototype's *"You're going to {title}"* (`:8718`), so the toast still says which event.
+ */
+export const goingToast = (title: string) => withDetail(CONFIRMED.joined, `you're going to ${title}`);
 /** *"RSVP cancelled for {title}"* (`:8728`). */
 export const cancelledToast = (title: string) => `RSVP cancelled for ${title}`;
 

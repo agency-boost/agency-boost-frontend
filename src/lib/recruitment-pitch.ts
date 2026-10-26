@@ -1,4 +1,5 @@
 import { api } from './api-client';
+import { formatNumber } from './format';
 import type { SignedUpload } from './tenant-config';
 
 /**
@@ -96,11 +97,14 @@ export const setPitchConfirmation = (
  */
 export const PDF_MAX_BYTES = 25 * 1024 * 1024;
 
-/** `2.4 MB`, as the prototype writes a file's size (`:768`); a small file in KB rather than `0.0 MB`. */
+/**
+ * `2,4 MB`, as the prototype writes a file's size (`:768`) with `id-ID`'s comma (ADR-0167 §1); a small file in KB
+ * rather than `0,0 MB`. The one size formatter: the training modules' files use it too.
+ */
 export function formatFileSize(bytes: number): string {
   return bytes >= 1024 * 1024
-    ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
-    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    ? `${formatNumber(bytes / 1024 / 1024, { decimals: 1 })} MB`
+    : `${formatNumber(Math.max(1, Math.round(bytes / 1024)))} KB`;
 }
 
 /** The pitch's words, verbatim (`Recruitment_Section.html:681-818`; D-copy). */

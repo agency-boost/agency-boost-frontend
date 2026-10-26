@@ -247,8 +247,8 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     it('draws Completed with the day done — with its year when not this one — In progress and Not started', async () => {
       open();
       await tree();
-      expect(row('mem-hendra')).toHaveTextContent(/Completed\s*Sep 1$/);
-      expect(row('mem-ika')).toHaveTextContent(/Completed\s*Dec 20, 2025$/);
+      expect(row('mem-hendra')).toHaveTextContent(/Completed\s*1 Sep$/);
+      expect(row('mem-ika')).toHaveTextContent(/Completed\s*20 Des 2025$/);
       expect(row('mem-rina')).toHaveTextContent(/In progress\s*—$/);
       expect(row('mem-dedy')).toHaveTextContent(/Not started\s*—$/);
     });
@@ -266,21 +266,21 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     it('Goal Setting: Set with the day saved, Not set', async () => {
       open(undefined, { query: { category: 'goals' } });
       await tree();
-      expect(row('mem-rina')).toHaveTextContent(/Set\s*Jan 10$/);
+      expect(row('mem-rina')).toHaveTextContent(/Set\s*10 Jan$/);
       expect(row('mem-dedy')).toHaveTextContent(/Not set\s*—$/);
     });
 
     it('Activity Mgmt: Logged with the last day, Missed', async () => {
       open(undefined, { query: { category: 'activity' } });
       await tree();
-      expect(row('mem-rina')).toHaveTextContent(/Logged\s*Oct 10$/);
+      expect(row('mem-rina')).toHaveTextContent(/Logged\s*10 Okt$/);
       expect(row('mem-dedy')).toHaveTextContent(/Missed\s*—$/);
     });
 
     it('Activation: Completed with the graduation day, In progress, Overdue and —', async () => {
       open(undefined, { query: { category: 'activation' } });
       await tree();
-      expect(row('mem-sinta')).toHaveTextContent(/Completed\s*Aug 1$/);
+      expect(row('mem-sinta')).toHaveTextContent(/Completed\s*1 Agu$/);
       expect(row('mem-agus')).toHaveTextContent(/In progress\s*—$/);
       expect(row('mem-dedy')).toHaveTextContent(/Overdue\s*—$/);
       expect(row('mem-rina')).toHaveTextContent(/—\s*—$/);
@@ -290,7 +290,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     it('Activation: an expired one’s Overdue names its end once, the tooltip saying the same (OD-159)', async () => {
       open(undefined, { query: { category: 'activation' } });
       await tree();
-      const sentence = 'Overdue: ended on Sep 30 without being marked complete';
+      const sentence = 'Overdue: ended on 30 Sep without being marked complete';
       const overdue = within(row('mem-yoga')).getByRole('button', { name: sentence });
       // Not read twice: the bubble is no description of the button, and is hidden from a screen reader.
       expect(overdue).not.toHaveAttribute('aria-describedby');
@@ -440,7 +440,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       open();
       await tree();
       const dateOf = (id: string) => row(id).lastElementChild!;
-      expect(dateOf('mem-ika')).toHaveTextContent('Dec 20, 2025');
+      expect(dateOf('mem-ika')).toHaveTextContent('20 Des 2025');
       for (const id of ['mem-ika', 'mem-hendra', 'mem-rina']) expect(dateOf(id)).toHaveClass('w-[84px]', 'shrink-0', 'text-right');
     });
 
@@ -572,12 +572,12 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       const picker = screen.getByRole('combobox', { name: 'Event' });
       const groups = [...picker.querySelectorAll('optgroup')].map((g) => [g.label, [...g.querySelectorAll('option')].map((o) => o.textContent)]);
       expect(groups).toEqual([
-        ['Upcoming', ['Leaders’ huddle — Oct 10', 'Kickoff 2026 — Oct 24']],
-        ['Past', ['PRULink briefing — Sep 19', 'August Town Hall — Aug 15']],
+        ['Upcoming', ['Leaders’ huddle — 10 Okt', 'Kickoff 2026 — 24 Okt']],
+        ['Past', ['PRULink briefing — 19 Sep', 'August Town Hall — 15 Agu']],
       ]);
       // The read's default: the first, the running huddle, its tag the phase word.
       expect(picker).toHaveValue('ev-huddle');
-      expect(picker.parentElement).toHaveTextContent(/Running\s*Oct 10$/);
+      expect(picker.parentElement).toHaveTextContent(/Running\s*10 Okt$/);
     });
 
     it('reads the event picked, and tags a past one Past', async () => {
@@ -586,7 +586,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Event' }), 'ev-townhall');
       expect(nav.replace).toHaveBeenLastCalledWith('/kpm/analytics/compliance?category=events&item=ev-townhall', { scroll: false });
       await waitFor(() => expect(reads(calls)).toContain('/kpm/analytics/compliance?category=events&item=ev-townhall'));
-      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Event' }).parentElement).toHaveTextContent(/Past\s*Aug 15$/));
+      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Event' }).parentElement).toHaveTextContent(/Past\s*15 Agu$/));
     });
   });
 
@@ -664,8 +664,8 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       const groups = [...picker.querySelectorAll('optgroup')].map((g) => [g.label, [...g.querySelectorAll('option')].map((o) => o.textContent)]);
       expect(groups).toEqual([
         ['Structural', ['MDRT Qualification — Always on']],
-        ['Seasonal — Ongoing', ['Q4 APE Push — Since Sep 1', 'Year-End Star Club Drive — Starts Nov 1']],
-        ['Seasonal — Past', ['Persistency Push — Ended Aug 31']],
+        ['Seasonal — Ongoing', ['Q4 APE Push — Since 1 Sep', 'Year-End Star Club Drive — Starts 1 Nov']],
+        ['Seasonal — Past', ['Persistency Push — Ended 31 Agu']],
       ]);
       expect(picker.parentElement).toHaveTextContent(/Structural\s*Always on$/);
     });
@@ -677,9 +677,9 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       await tree();
       const picker = screen.getByRole('combobox', { name: 'Campaign' });
       const ongoing = picker.querySelector('optgroup[label="Seasonal — Ongoing"]')!;
-      expect([...ongoing.querySelectorAll('option')].map((o) => o.textContent)).toContain('New Year Dash — Starts Jan 1, 2027');
+      expect([...ongoing.querySelectorAll('option')].map((o) => o.textContent)).toContain('New Year Dash — Starts 1 Jan 2027');
       expect(picker).toHaveValue('NEW_YEAR_DASH');
-      expect(picker.parentElement).toHaveTextContent(/Upcoming\s*Starts Jan 1, 2027$/);
+      expect(picker.parentElement).toHaveTextContent(/Upcoming\s*Starts 1 Jan 2027$/);
     });
 
     it('tags the structural tag with its token, never a raw colour (contradiction 19)', async () => {
@@ -690,9 +690,9 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     });
 
     it.each([
-      ['APE_SPRINT', /Ongoing\s*Since Sep 1$/],
-      ['APE_CHALLENGE_NEXT', /Upcoming\s*Starts Nov 1$/],
-      ['PERSISTENCY_PUSH', /Past\s*Ended Aug 31$/],
+      ['APE_SPRINT', /Ongoing\s*Since 1 Sep$/],
+      ['APE_CHALLENGE_NEXT', /Upcoming\s*Starts 1 Nov$/],
+      ['PERSISTENCY_PUSH', /Past\s*Ended 31 Agu$/],
     ])('tags %s and dates it', async (code, words) => {
       open(undefined, { query: { category: 'campaigns', item: code } });
       await tree();

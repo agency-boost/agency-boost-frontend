@@ -8,7 +8,9 @@ import {
 } from '@/components/activation-parts';
 import { PageHeader } from '@/components/app-shell';
 import { Button, Card, ErrorBanner, Textarea } from '@/components/ui/field';
+import { TAP_HEIGHT } from '@/components/ui/phone';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Toast, useToast } from '@/components/ui/toast';
 import {
   ACTIVATION_NOTE_MAX, attributionOf, correctionOf, correctStartDate, dayShown, earliestStart, groupTitle, isManual, isTickedByHandLink,
@@ -18,7 +20,7 @@ import {
 } from '@/lib/activation';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { formatOfficeDay, formatShortDay } from '@/lib/format';
+import { formatOfficeDay, formatPercent, formatShortDay } from '@/lib/format';
 import { useCan, useSession } from '@/lib/session';
 
 /*
@@ -120,7 +122,7 @@ function GroupCard({ group }: { group: NewHireGroup }) {
                       <div aria-hidden="true" className="h-1.5 w-[90px] shrink-0 overflow-hidden rounded-sm border border-hairline bg-base">
                         <div className="h-full rounded-sm bg-gradient-to-r from-amber to-amber-dark" style={{ width: `${width}%` }} />
                       </div>
-                      <span>{row.pct}%</span>
+                      <span>{formatPercent(row.pct)}</span>
                     </div>
                   </td>
                   <td className={cn(TD, 'text-center', row.overdue && 'font-bold text-alert')} data-overdue={row.overdue || undefined}>
@@ -186,6 +188,11 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
   const reader = me?.membership?.membershipId;
   const { toast, show } = useToast();
   const queue = useWriteQueue();
+  /**
+   * A tick and the start date each say *Saving… → Saved ✓* beside them, or *Couldn't save — retry*
+   * (P18.95-T1 AC-5, ADR-0167 §5; UI-007), and keep the prototype's toast once they land.
+   */
+  const { save: track, statusOf } = useInlineSave();
 
   const [view, setView] = useState<ActivationView | null>(null);
   const [missing, setMissing] = useState(false);
@@ -211,36 +218,46 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
     return () => { live = false; };
   }, [membershipId, attempt]);
 
+  /** A tick; `null` for a hire who has gone (404), where there is nothing left to retry. */
   const tick = useCallback((code: string, done: boolean) => {
-    const ask = (asked.current[code] ?? 0) + 1;
-    asked.current[code] = ask;
-    setPending((p) => ({ ...p, [code]: done }));
-    setFailed(({ [code]: _gone, ...rest }) => rest);
-    void queue(async () => {
-      try {
-        setView(await saveHireItem(membershipId, code, done));
-        show(PROTOTYPE_COPY.statusUpdated);
-      } catch (err) {
-        if (err instanceof ApiRequestError && err.status === 404) setMissing(true);
-        setFailed((f) => ({ ...f, [code]: toDisplayError(err).message }));
-      } finally {
-        if (asked.current[code] === ask) setPending(({ [code]: _done, ...rest }) => rest);
-      }
+    void track(`${code}\ndone`, () => {
+      const ask = (asked.current[code] ?? 0) + 1;
+      asked.current[code] = ask;
+      setPending((p) => ({ ...p, [code]: done }));
+      setFailed(({ [code]: _gone, ...rest }) => rest);
+      return queue(async () => {
+        try {
+          setView(await saveHireItem(membershipId, code, done));
+          show(PROTOTYPE_COPY.statusUpdated);
+          return true;
+        } catch (err) {
+          const gone = err instanceof ApiRequestError && err.status === 404;
+          if (gone) setMissing(true);
+          setFailed((f) => ({ ...f, [code]: toDisplayError(err).message }));
+          return gone ? null : false;
+        } finally {
+          if (asked.current[code] === ask) setPending(({ [code]: _done, ...rest }) => rest);
+        }
+      });
     });
-  }, [membershipId, queue, show]);
+  }, [membershipId, queue, show, track]);
 
   const correct = useCallback((startDate: string) => {
-    setStartError(null);
-    void queue(async () => {
-      try {
-        setView(await correctStartDate(membershipId, startDate));
-        show(OWN_COPY.startSaved);
-      } catch (err) {
-        setStartError(toDisplayError(err).message);
-        setStartReset((n) => n + 1);
-      }
+    void track('startDate', () => {
+      setStartError(null);
+      return queue(async () => {
+        try {
+          setView(await correctStartDate(membershipId, startDate));
+          show(OWN_COPY.startSaved);
+          return true;
+        } catch (err) {
+          setStartError(toDisplayError(err).message);
+          setStartReset((n) => n + 1);
+          return false;
+        }
+      });
     });
-  }, [membershipId, queue, show]);
+  }, [membershipId, queue, show, track]);
 
   if (missing) return <HireNotFound />;
 
@@ -276,6 +293,7 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
                 reader={reader}
                 writable={mayCorrect && open}
                 onCommit={correct}
+                status={statusOf('startDate')}
                 error={startError}
                 resetKey={startReset}
               />
@@ -292,6 +310,7 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
                   reader={reader}
                   writable={mayTick && open}
                   onTick={(done) => tick(item.code, done)}
+                  status={statusOf(`${item.code}\ndone`)}
                   error={failed[item.code]}
                 />
               ))}
@@ -321,7 +340,7 @@ function BackToRoster() {
   return (
     <Link
       href="/new-hires"
-      className="mb-3.5 inline-flex items-center gap-1.5 py-1.5 text-base font-semibold text-navy-soft hover:text-navy"
+      className={cn('mb-3.5 inline-flex items-center gap-1.5 py-1.5 text-base font-semibold text-navy-soft hover:text-navy', TAP_HEIGHT)}
     >
       <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
         <path d="M15 18l-6-6 6-6" />
@@ -337,12 +356,14 @@ function BackToRoster() {
  * no more than a year before it. Beside it, who last corrected it and when.
  */
 function StartDateField({
-  view, reader, writable, onCommit, error, resetKey,
+  view, reader, writable, onCommit, status, error, resetKey,
 }: {
   view: ActivationView;
   reader: string | null | undefined;
   writable: boolean;
   onCommit: (startDate: string) => void;
+  /** Its save confirmation (P18.95-T1 AC-5), under the field where the refusal is. */
+  status: InlineSaveStatusProps;
   error: string | null;
   resetKey: number;
 }) {
@@ -376,6 +397,7 @@ function StartDateField({
         />
         <AttributionMark words={corrected} />
       </div>
+      <InlineSaveStatus {...status} label={PROTOTYPE_COPY.startDate} className="mt-1" />
       <RowError message={error ?? undefined} />
     </div>
   );
@@ -393,12 +415,14 @@ function closedLine(view: ActivationView, reader: string | null | undefined): st
 
 /** A leader's row (`:6823-6840`): a box to tick for a manual item, *Auto* and inert for a live link. */
 function HireItemRow({
-  item, reader, writable, onTick, error,
+  item, reader, writable, onTick, status, error,
 }: {
   item: ActivationItemProgress;
   reader: string | null | undefined;
   writable: boolean;
   onTick: (done: boolean) => void;
+  /** The tick's save confirmation, beside the box (P18.95-T1 AC-5). */
+  status: InlineSaveStatusProps;
   error: string | undefined;
 }) {
   const manual = isManual(item);
@@ -419,6 +443,7 @@ function HireItemRow({
         {/* D-orphan (P18.5-T3 AC-4): a link that does not complete the item now — ticked by hand, as Settings says. */}
         {isTickedByHandLink(item) && <ByHandBadge />}
         <AttributionMark words={attributionOf(item, reader)} />
+        <InlineSaveStatus {...status} label={item.label} />
       </div>
       <RowError message={error} />
     </div>

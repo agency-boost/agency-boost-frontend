@@ -9,6 +9,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { DragHandle } from '@/components/ui/drag-handle';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Select, TextInput } from '@/components/ui/field';
+import { InlineSaveField, useInlineSave, type InlineSaveOutcome } from '@/components/ui/inline-save-status';
 import { NavIcon } from '@/components/ui/nav-icon';
 import { Skeleton, SkeletonCards, SkeletonTable, SkeletonText } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -150,6 +151,25 @@ const blankLead = (id: string, name: string): Lead => ({
   source: null, dateRegistered: null, version: 0, flags: [], overdueDays: null,
 });
 
+/**
+ * Every field of a lead that saves itself, each with its own *Saving… → Saved ✓* (P18.95-T1 AC-5): the
+ * row's cells, the card's lines and the details dialog's three boxes.
+ */
+const SAVING_FIELDS = [
+  'name', 'type', 'status', 'thisMonth', 'remarks', 'nextActionDate', 'nextActionNote', 'source', 'phone', 'email',
+] as const;
+
+/** What one write on a row carries besides itself (`run`). */
+interface RunOptions {
+  /** The draft fields this write carries — cleared, with their refusals, once it lands. */
+  fields?: readonly string[];
+  done?: (lead: Lead) => void;
+  /** The sorts under which this write can move the row, and so shift the pages still to come. */
+  moves?: readonly SortKey[];
+  /** The refusal re-read the row and threw the typing away: there is nothing left to send again. */
+  replaced?: () => void;
+}
+
 const without = <T,>(record: Record<string, T>, ...keys: readonly string[]): Record<string, T> => {
   const next = { ...record };
   for (const key of keys) delete next[key];
@@ -200,7 +220,8 @@ const byRegisteredDesc = (a: Lead, b: Lead) =>
  *
  * **Every write is one field, and the server is its only judge.** Which ladder a stage belongs to,
  * whether a lead may be won here — the row shows exactly what the server said, beneath the lead, for
- * as long as it stands (F-65).
+ * as long as it stands (F-65). **And each field says its save beside it** (P18.95-T1 AC-5, `saveField`):
+ * *Saving…*, *Saved ✓*, or *Couldn't save — retry*.
  */
 export function LeadsTable({
   filters = false,
@@ -302,6 +323,27 @@ export function LeadsTable({
    * would lose its focus — leaving them to find the Type select again with the mouse.
    */
   const [keyFor, setKeyFor] = useState<Record<string, string>>({});
+  /**
+   * **Each field that saves itself says so beside it** (P18.95-T1 AC-5, ADR-0167 §5; UI-007): *Saving…*,
+   * *Saved ✓* for two seconds, or *Couldn't save — retry*, which sends the same value again. Keyed by the
+   * row's own key and the field, so the inline row's name keeps its *Saved ✓* once it is a lead.
+   */
+  const inline = useInlineSave();
+  const saveKey = (row: Lead, field: string) => `${keyFor[row.id] ?? row.id}\n${field}`;
+  /** The open rows as last drawn: a retry sends at the version the row holds now, not the one it failed at. */
+  const openRows = useRef<readonly Lead[]>([]);
+  /** `keyFor` as last drawn, so `forgetSaves` stays one function for the load below to call. */
+  const keysNow = useRef(keyFor);
+  useEffect(() => { keysNow.current = keyFor; }, [keyFor]);
+  const { clear: clearSave } = inline;
+  /**
+   * Every field's *Saving…*, *Saved ✓* and *Couldn't save* on a lead, gone — with the row, or with the typing
+   * a re-read threw away: a retry left standing would send words the screen no longer shows.
+   */
+  const forgetSaves = useCallback((id: string) => {
+    const key = keysNow.current[id] ?? id;
+    for (const field of SAVING_FIELDS) clearSave(`${key}\n${field}`);
+  }, [clearSave]);
 
   const [detailsFor, setDetailsFor] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Lead | null>(null);
@@ -323,6 +365,7 @@ export function LeadsTable({
   const shownAt = useRef(new Map<string, number>());
   useEffect(() => {
     for (const row of open?.rows ?? []) shownAt.current.set(row.id, row.version);
+    openRows.current = open?.rows ?? [];
   }, [open]);
 
   useEffect(() => {
@@ -361,6 +404,7 @@ export function LeadsTable({
         if (changed.length > 0) {
           setDrafts((d) => without(d, ...changed));
           setRowError((e) => without(e, ...changed));
+          for (const id of changed) forgetSaves(id);
         }
         if (first) {
           setOpen({ rows, total });
@@ -382,7 +426,7 @@ export function LeadsTable({
       if (isCurrent()) loadingOpen.current = false;
     });
     return () => { openLoad.current += 1; };
-  }, [sort?.key, sort?.dir, filters, search, typeFilter, reloads, owner]);
+  }, [sort?.key, sort?.dir, filters, search, typeFilter, reloads, owner, forgetSaves]);
 
   /**
    * The two closed cards, loaded the same way (AC-4), once — **each on its own.**
@@ -475,6 +519,7 @@ export function LeadsTable({
      */
     setDrafts((d) => without(d, id));
     forget(id);
+    forgetSaves(id);
     // Its dialog goes with it, rather than reappearing if the lead is ever reopened.
     setDetailsFor((shown) => (shown === id ? null : shown));
     restartIfLoading();
@@ -541,13 +586,7 @@ export function LeadsTable({
   async function run(
     id: string,
     write: () => Promise<Lead>,
-    { fields = [], done = replaceRow, moves = [] }: {
-      /** The draft fields this write carries — cleared, with their refusals, once it lands. */
-      fields?: readonly string[];
-      done?: (lead: Lead) => void;
-      /** The sorts under which this write can move the row, and so shift the pages still to come. */
-      moves?: readonly SortKey[];
-    } = {},
+    { fields = [], done = replaceRow, moves = [], replaced }: RunOptions = {},
   ): Promise<Lead | null> {
     setBusy((b) => ({ ...b, [id]: true }));
     try {
@@ -567,6 +606,8 @@ export function LeadsTable({
           if (fresh.outcome) moveToClosed(fresh);
           else replaceRow(fresh);
           setDrafts((d) => without(d, id));
+          forgetSaves(id);
+          replaced?.();
           // The typing has gone, so what refused it has nothing left to point at.
           setRowError((e) => ({ ...e, [id]: { '': shown } }));
         } catch { /* the row beneath it already says what happened */ }
@@ -575,6 +616,35 @@ export function LeadsTable({
     } finally {
       setBusy((b) => ({ ...b, [id]: false }));
     }
+  }
+
+  /**
+   * One field's write **with its save confirmation** (P18.95-T1 AC-5): `run`, inside *Saving… → Saved ✓*.
+   *
+   * **The retry sends the same value**, at the version the row holds when it is pressed — a field saved
+   * meanwhile has moved it on. A row that has gone, or a refusal that re-read the row and threw the typing
+   * away (`VERSION_CONFLICT`, `LEAD_ALREADY_CLOSED`), leaves nothing to retry: the status goes, and the
+   * reason beneath the lead says what happened, as it always has.
+   */
+  function saveField(
+    row: Lead,
+    field: (typeof SAVING_FIELDS)[number],
+    write: (version: number) => Promise<Lead>,
+    options: RunOptions = {},
+    after?: (lead: Lead) => void,
+  ) {
+    const { id } = row;
+    let first = true;
+    return inline.save(saveKey(row, field), async (): Promise<InlineSaveOutcome> => {
+      const current = first ? row : openRows.current.find((r) => r.id === id);
+      first = false;
+      if (!current) return null;
+      let gone = false;
+      const saved = await run(id, () => write(current.version), { ...options, replaced: () => { gone = true; } });
+      if (!saved) return gone ? null : false;
+      after?.(saved);
+      return true;
+    });
   }
 
   const draftOf = (row: Lead, field: string, stored: string | null) =>
@@ -586,7 +656,7 @@ export function LeadsTable({
   /** Commit a text field as it is left, and only when it actually changed. */
   function commitText(
     row: Lead,
-    field: string,
+    field: 'name' | 'remarks' | 'nextActionNote' | DetailsField,
     stored: string | null,
     body: (value: string | null) => Record<string, unknown>,
     moves: readonly SortKey[] = [],
@@ -595,14 +665,14 @@ export function LeadsTable({
     if (typed === undefined) return;
     const trimmed = typed.trim();
     if (trimmed === (stored ?? '')) {
-      // Back to what is stored: nothing to write, and nothing refused is on the screen any more.
+      // Back to what is stored: nothing to write, and nothing refused or unsaved is on the screen any more.
       dropDrafts(row.id, [field]);
       forget(row.id, [field]);
+      inline.clear(saveKey(row, field));
       return;
     }
-    void run(row.id, () => updateLead(row.id, body(trimmed === '' ? null : trimmed), row.version), {
-      fields: [field], moves,
-    });
+    const value = trimmed === '' ? null : trimmed;
+    void saveField(row, field, (version) => updateLead(row.id, body(value), version), { fields: [field], moves });
   }
 
   /**
@@ -624,15 +694,17 @@ export function LeadsTable({
 
   /** The type, and the prototype's *"{name} moved to Sales."* once it lands (`Overall.html:10837`). */
   async function writeType(row: Lead, type: LeadType | null) {
-    const saved = await run(row.id, () => updateLead(row.id, { type }, row.version), { moves: ['type', 'status'] });
-    if (saved?.type) onNotice?.(`${saved.name} moved to ${TYPE_WORD[saved.type]}.`);
+    await saveField(row, 'type', (version) => updateLead(row.id, { type }, version), { moves: ['type', 'status'] }, (saved) => {
+      if (saved.type) onNotice?.(`${saved.name} moved to ${TYPE_WORD[saved.type]}.`);
+    });
   }
 
   /** The stage, and *"{name}'s status updated to "{stage}"."* once it lands (`Overall.html:10835`). */
   async function writeStatus(row: Lead, code: string) {
-    const saved = await run(row.id, () => setLeadStatus(row.id, code, row.version), { moves: ['status'] });
-    const label = saved && ladderFor(saved.type).find((s) => s.code === saved.statusCode)?.label;
-    if (saved && label) onNotice?.(`${saved.name}'s status updated to "${label}".`);
+    await saveField(row, 'status', (version) => setLeadStatus(row.id, code, version), { moves: ['status'] }, (saved) => {
+      const label = ladderFor(saved.type).find((s) => s.code === saved.statusCode)?.label;
+      if (label) onNotice?.(`${saved.name}'s status updated to "${label}".`);
+    });
   }
 
   /** `+ Add lead`: a row at the top, or back to the one already there. */
@@ -666,6 +738,7 @@ export function LeadsTable({
       if (how === 'blur') {
         setDraft(null);
         forget(draft.key);
+        inline.clear(`${draft.key}\nname`);
       } else if (owner) {
         // Enter on an empty name, in the session: the coaching card's own sentence.
         refuse(draft.key, ['name'], NO_NAME);
@@ -676,9 +749,16 @@ export function LeadsTable({
       refuse(draft.key, ['name'], SHORT_NAME);
       return;
     }
-    posting.current = true;
     const { key } = draft;
-    setDraft({ ...draft, posting: true });
+    // The name's own *Saving… → Saved ✓* (AC-5): the lead it becomes keeps the inline row's key, and so its status.
+    await inline.save(`${key}\nname`, () => postDraft(key, name));
+  }
+
+  /** The inline row's one write: the lead, under the name typed. Sent again, as it was, by a retry. */
+  async function postDraft(key: string, name: string): Promise<boolean> {
+    if (posting.current) return false;
+    posting.current = true;
+    setDraft((d) => d && d.key === key ? { ...d, posting: true } : d);
     try {
       const created = await createLead({ name }, owner);
       setKeyFor((k) => ({ ...k, [created.id]: key }));
@@ -690,9 +770,11 @@ export function LeadsTable({
       forget(key);
       onNotice?.(`${created.name} added.`);
       onWrite?.(created);
+      return true;
     } catch (err) {
       refuse(key, [''], toDisplayError(err));
       setDraft((d) => d && { ...d, posting: false });
+      return false;
     } finally {
       posting.current = false;
     }
@@ -997,29 +1079,31 @@ export function LeadsTable({
        * the box no label; it gets a name a screen reader can say and nothing a reader can see.
        */
       name: (heading = false) => (
-        <TextInput
-          id={isDraft ? draftInputId : nameId(row.id)}
-          aria-label={`Lead name, row ${n}`}
-          density="cell"
-          className={cn('w-full', heading && 'text-md font-semibold')}
-          value={isDraft ? row.name : draftOf(row, 'name', row.name)}
-          placeholder="First Last"
-          readOnly={isDraft ? draft?.posting : saving || readOnly}
-          onChange={(e) => {
-            // A finalized session's card is inert (P11-T8 AC-10): nothing typed, nothing saved.
-            if (readOnly && !isDraft) return;
-            if (isDraft) changeDraftName(e.target.value);
-            else setDraftValue(row.id, 'name', e.target.value);
-          }}
-          onBlur={() => {
-            if (readOnly && !isDraft) return;
-            if (isDraft) void submitDraft('blur');
-            else commitText(row, 'name', row.name, (name) => ({ name }), ['name']);
-          }}
-          onKeyDown={(e) => {
-            if (isDraft && e.key === 'Enter') void submitDraft('enter');
-          }}
-        />
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'name'))} label={`Lead name, row ${n}`}>
+          <TextInput
+            id={isDraft ? draftInputId : nameId(row.id)}
+            aria-label={`Lead name, row ${n}`}
+            density="cell"
+            className={cn('w-full', heading && 'text-md font-semibold')}
+            value={isDraft ? row.name : draftOf(row, 'name', row.name)}
+            placeholder="First Last"
+            readOnly={isDraft ? draft?.posting : saving || readOnly}
+            onChange={(e) => {
+              // A finalized session's card is inert (P11-T8 AC-10): nothing typed, nothing saved.
+              if (readOnly && !isDraft) return;
+              if (isDraft) changeDraftName(e.target.value);
+              else setDraftValue(row.id, 'name', e.target.value);
+            }}
+            onBlur={() => {
+              if (readOnly && !isDraft) return;
+              if (isDraft) void submitDraft('blur');
+              else commitText(row, 'name', row.name, (name) => ({ name }), ['name']);
+            }}
+            onKeyDown={(e) => {
+              if (isDraft && e.key === 'Enter') void submitDraft('enter');
+            }}
+          />
+        </InlineSaveField>
       ),
 
       /*
@@ -1038,27 +1122,29 @@ export function LeadsTable({
        * hover and the focus ring are the cell's own.
        */
       type: (
-        <Select
-          aria-label={`Type, row ${n}`}
-          density="cell"
-          className={cn(
-            'border-hairline',
-            row.type === 'sales' && 'font-semibold text-amber-ink',
-            row.type === 'recruitment' && 'font-semibold text-navy-soft',
-            row.type === null && 'text-muted',
-            isDraft && INERT_CONTROL,
-          )}
-          value={row.type ?? ''}
-          aria-disabled={locked || undefined}
-          onChange={(e) => {
-            if (locked) return;
-            changeType(row, e.target.value as '' | LeadType);
-          }}
-        >
-          <option value="">Select type</option>
-          <option value="sales">{TYPE_WORD.sales}</option>
-          <option value="recruitment">{TYPE_WORD.recruitment}</option>
-        </Select>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'type'))} label={`Type, row ${n}`}>
+          <Select
+            aria-label={`Type, row ${n}`}
+            density="cell"
+            className={cn(
+              'border-hairline',
+              row.type === 'sales' && 'font-semibold text-amber-ink',
+              row.type === 'recruitment' && 'font-semibold text-navy-soft',
+              row.type === null && 'text-muted',
+              isDraft && INERT_CONTROL,
+            )}
+            value={row.type ?? ''}
+            aria-disabled={locked || undefined}
+            onChange={(e) => {
+              if (locked) return;
+              changeType(row, e.target.value as '' | LeadType);
+            }}
+          >
+            <option value="">Select type</option>
+            <option value="sales">{TYPE_WORD.sales}</option>
+            <option value="recruitment">{TYPE_WORD.recruitment}</option>
+          </Select>
+        </InlineSaveField>
       ),
 
       /*
@@ -1068,27 +1154,29 @@ export function LeadsTable({
        * option says why (`Overall.html:5447-5455`); the server refuses a stage without one either way.
        */
       status: (
-        <Select
-          aria-label={`Status, row ${n}`}
-          density="cell"
-          className={cn('font-semibold', stageTint(row, ladder))}
-          value={row.statusCode ?? ''}
-          disabled={!row.type}
-          aria-disabled={locked || undefined}
-          onChange={(e) => {
-            if (locked || !e.target.value) return;
-            const code = e.target.value;
-            void writeStatus(row, code);
-          }}
-        >
-          {row.type ? <option value="">Select status</option> : <option value="">Select type first</option>}
-          {/*
-            * A stage the office has since retired. The snapshot carries **active** stages only, so the
-            * code is the truthful fallback — it is what the lead holds (invariant §3).
-            */}
-          {retired && <option value={row.statusCode!}>{row.statusCode} (retired)</option>}
-          {ladder.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
-        </Select>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'status'))} label={`Status, row ${n}`}>
+          <Select
+            aria-label={`Status, row ${n}`}
+            density="cell"
+            className={cn('font-semibold', stageTint(row, ladder))}
+            value={row.statusCode ?? ''}
+            disabled={!row.type}
+            aria-disabled={locked || undefined}
+            onChange={(e) => {
+              if (locked || !e.target.value) return;
+              const code = e.target.value;
+              void writeStatus(row, code);
+            }}
+          >
+            {row.type ? <option value="">Select status</option> : <option value="">Select type first</option>}
+            {/*
+              * A stage the office has since retired. The snapshot carries **active** stages only, so the
+              * code is the truthful fallback — it is what the lead holds (invariant §3).
+              */}
+            {retired && <option value={row.statusCode!}>{row.statusCode} (retired)</option>}
+            {ladder.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
+          </Select>
+        </InlineSaveField>
       ),
 
       /*
@@ -1097,26 +1185,28 @@ export function LeadsTable({
        * AC-7): a promise has to say which of the two it is.
        */
       month: (
-        <label
-          className={cn(
-            'flex items-start gap-1.5 text-xs leading-tight',
-            row.type ? 'text-muted' : 'text-muted/40',
-          )}
-        >
-          <input
-            type="checkbox"
-            className="mt-px h-[13px] w-[13px] shrink-0 accent-success disabled:cursor-not-allowed"
-            checked={row.thisMonth}
-            disabled={!row.type}
-            aria-disabled={locked || undefined}
-            onChange={(e) => {
-              if (locked) return;
-              const thisMonth = e.target.checked;
-              void run(row.id, () => updateLead(row.id, { thisMonth }, row.version));
-            }}
-          />
-          {monthAction}
-        </label>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'thisMonth'))} label={`${monthAction}, row ${n}`}>
+          <label
+            className={cn(
+              'flex items-start gap-1.5 text-xs leading-tight',
+              row.type ? 'text-muted' : 'text-muted/40',
+            )}
+          >
+            <input
+              type="checkbox"
+              className="mt-px h-[13px] w-[13px] shrink-0 accent-success disabled:cursor-not-allowed"
+              checked={row.thisMonth}
+              disabled={!row.type}
+              aria-disabled={locked || undefined}
+              onChange={(e) => {
+                if (locked) return;
+                const thisMonth = e.target.checked;
+                void saveField(row, 'thisMonth', (version) => updateLead(row.id, { thisMonth }, version));
+              }}
+            />
+            {monthAction}
+          </label>
+        </InlineSaveField>
       ),
 
       /*
@@ -1127,61 +1217,67 @@ export function LeadsTable({
        * to write, and the grey words read as something already written.
        */
       remarks: (
-        <AutoGrowTextarea
-          aria-label={`Remarks, row ${n}`}
-          className={cn('w-full border-hairline', isDraft && INERT_CONTROL)}
-          value={draftOf(row, 'remarks', row.remarks)}
-          readOnly={locked}
-          onChange={(e) => setDraftValue(row.id, 'remarks', e.target.value)}
-          onKeyDown={finishOnEnter}
-          onBlur={() => commitText(row, 'remarks', row.remarks, (remarks) => ({ remarks }))}
-        />
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'remarks'))} label={`Remarks, row ${n}`}>
+          <AutoGrowTextarea
+            aria-label={`Remarks, row ${n}`}
+            className={cn('w-full border-hairline', isDraft && INERT_CONTROL)}
+            value={draftOf(row, 'remarks', row.remarks)}
+            readOnly={locked}
+            onChange={(e) => setDraftValue(row.id, 'remarks', e.target.value)}
+            onKeyDown={finishOnEnter}
+            onBlur={() => commitText(row, 'remarks', row.remarks, (remarks) => ({ remarks }))}
+          />
+        </InlineSaveField>
       ),
 
       date: (
-        <div className="relative">
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-hidden="true"
-            className={cn(
-              'absolute inset-y-0 left-0 flex w-6 items-center justify-center text-muted hover:text-navy',
-              locked && 'cursor-not-allowed hover:text-muted',
-            )}
-            onClick={() => openPicker(dateId, locked)}
-          >
-            <NavIcon name="calendar" className="h-3.5 w-3.5" />
-          </button>
-          <TextInput
-            id={dateId}
-            type="date"
-            aria-label={`Next action date, row ${n}`}
-            density="cell"
-            className={cn('w-full pl-6', NO_NATIVE_PICKER, isDraft && INERT_CONTROL)}
-            value={draftOf(row, 'nextActionDate', row.nextActionDate)}
-            readOnly={locked}
-            onChange={(e) => {
-              if (locked) return;
-              setDraftValue(row.id, 'nextActionDate', e.target.value);
-              const value = e.target.value || null;
-              void run(row.id, () => updateLead(row.id, { nextActionDate: value }, row.version), {
-                fields: ['nextActionDate'],
-              });
-            }}
-          />
-        </div>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'nextActionDate'))} label={`Next action date, row ${n}`}>
+          <div className="relative">
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-hidden="true"
+              className={cn(
+                'absolute inset-y-0 left-0 flex w-6 items-center justify-center text-muted hover:text-navy',
+                locked && 'cursor-not-allowed hover:text-muted',
+              )}
+              onClick={() => openPicker(dateId, locked)}
+            >
+              <NavIcon name="calendar" className="h-3.5 w-3.5" />
+            </button>
+            <TextInput
+              id={dateId}
+              type="date"
+              aria-label={`Next action date, row ${n}`}
+              density="cell"
+              className={cn('w-full pl-6', NO_NATIVE_PICKER, isDraft && INERT_CONTROL)}
+              value={draftOf(row, 'nextActionDate', row.nextActionDate)}
+              readOnly={locked}
+              onChange={(e) => {
+                if (locked) return;
+                setDraftValue(row.id, 'nextActionDate', e.target.value);
+                const value = e.target.value || null;
+                void saveField(row, 'nextActionDate', (version) => updateLead(row.id, { nextActionDate: value }, version), {
+                  fields: ['nextActionDate'],
+                });
+              }}
+            />
+          </div>
+        </InlineSaveField>
       ),
 
       note: (
-        <AutoGrowTextarea
-          aria-label={`Next action note, row ${n}`}
-          className={cn('w-full border-hairline', isDraft && INERT_CONTROL)}
-          value={draftOf(row, 'nextActionNote', row.nextActionNote)}
-          readOnly={locked}
-          onChange={(e) => setDraftValue(row.id, 'nextActionNote', e.target.value)}
-          onKeyDown={finishOnEnter}
-          onBlur={() => commitText(row, 'nextActionNote', row.nextActionNote, (nextActionNote) => ({ nextActionNote }))}
-        />
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'nextActionNote'))} label={`Next action note, row ${n}`}>
+          <AutoGrowTextarea
+            aria-label={`Next action note, row ${n}`}
+            className={cn('w-full border-hairline', isDraft && INERT_CONTROL)}
+            value={draftOf(row, 'nextActionNote', row.nextActionNote)}
+            readOnly={locked}
+            onChange={(e) => setDraftValue(row.id, 'nextActionNote', e.target.value)}
+            onKeyDown={finishOnEnter}
+            onBlur={() => commitText(row, 'nextActionNote', row.nextActionNote, (nextActionNote) => ({ nextActionNote }))}
+          />
+        </InlineSaveField>
       ),
 
       /*
@@ -1435,6 +1531,7 @@ export function LeadsTable({
             errors={refusalsOf(detailsLead.id)}
             editedBy={editedByOf(detailsLead)}
             readOnly={readOnly}
+            status={(field) => inline.statusOf(saveKey(detailsLead, field))}
             editor={{
               value: (field, stored) => draftOf(detailsLead, field, stored),
               change: (field, value) => setDraftValue(detailsLead.id, field, value),

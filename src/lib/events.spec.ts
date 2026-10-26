@@ -53,9 +53,9 @@ describe('KPM Events: what the screen derives, and nothing more (P18.5-T5, T6)',
     expect(pastBlockOf(BOOTCAMP)).toBe('thanks');
   });
 
-  it('P18.5-T5 AC-4 "{date} · {time}" from the office’s day and clock as served, never the browser’s', () => {
-    expect(whenLine({ startsOn: '2026-09-20', startTime: '18:00' })).toBe('Sep 20, 2026 · 6:00 PM');
-    expect(whenLine({ startsOn: '2026-10-02', startTime: '00:30' })).toBe('Oct 2, 2026 · 12:30 AM');
+  it('P18.5-T5 AC-4, P18.95-T1 AC-1 "{date}, {time}" from the office’s day and clock as served, never the browser’s', () => {
+    expect(whenLine({ startsOn: '2026-09-20', startTime: '18:00' })).toBe('20 Sep 2026, 18.00');
+    expect(whenLine({ startsOn: '2026-10-02', startTime: '00:30' })).toBe('2 Okt 2026, 00.30');
   });
 
   it('P18.5-T5 AC-4 the audience line in the prototype’s words, composed from the two fields (F-44)', () => {
@@ -84,7 +84,8 @@ describe('KPM Events: what the screen derives, and nothing more (P18.5-T5, T6)',
   });
 
   it('the prototype’s toasts and words, verbatim (`Overall.html:8656-8764`, `:10413`)', () => {
-    expect(goingToast('Kickoff 2026')).toBe("You're going to Kickoff 2026");
+    // Led by the client's *Joined ✓* since 2026-10-26 (P18.95-T1 AC-6), the prototype's sentence after it.
+    expect(goingToast('Kickoff 2026')).toBe("Joined ✓ — you're going to Kickoff 2026");
     expect(cancelledToast('Kickoff 2026')).toBe('RSVP cancelled for Kickoff 2026');
     expect(PROTOTYPE_COPY.title).toBe('KPM Events');
     expect(PROTOTYPE_COPY.sub).toBe('Browse upcoming and past events from your KPM — join, and share feedback once they wrap up.');

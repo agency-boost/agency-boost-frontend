@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Card, ErrorBanner } from '@/components/ui/field';
+import { TAB_PHONE, TAB_ROW_PHONE, TAP_HEIGHT, UNDERLINED_ROW_PHONE } from '@/components/ui/phone';
+import { useTabRow } from '@/components/ui/use-tab-row';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
@@ -214,7 +216,7 @@ export function BackLink({ href = '/coaching', to = 'Coaching Session' }: { href
   return (
     <Link
       href={href}
-      className="mb-3.5 inline-flex items-center gap-1 text-sm font-semibold text-navy-soft hover:underline"
+      className={cn('mb-3.5 inline-flex items-center gap-1 text-sm font-semibold text-navy-soft hover:underline', TAP_HEIGHT)}
     >
       ← Back to {to}
     </Link>
@@ -349,11 +351,20 @@ export interface CoachingTabItem {
  * disabled idiom, `.nav a.disabled` (`:63`): muted text and a plain cursor, nothing else, its sidebar
  * tint carried to a light ground. Each is a `link` that is `aria-disabled`, so assistive technology hears
  * the tab by its name and that it is not available, and names no phase.
+ *
+ * **On a phone, one row that scrolls sideways**, as `RouteTabs` is (ADR-0167; UI-013: a session's seven
+ * tabs took three lines), the current tab in view. Below 768px only.
  */
 export function CoachingTabBar({ items }: { items: readonly CoachingTabItem[] }) {
-  const TAB = '-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold';
+  const TAB = cn('-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold', TAB_PHONE);
+  const row = useTabRow<HTMLElement>(items.find((t) => t.current)?.key);
   return (
-    <nav aria-label="Coaching" className="mb-6 flex flex-wrap gap-x-6 gap-y-2 border-b border-hairline">
+    <nav
+      ref={row.ref}
+      aria-label="Coaching"
+      data-fade={row.fade}
+      className={cn('mb-6 flex flex-wrap gap-x-6 gap-y-2 border-b border-hairline', TAB_ROW_PHONE, UNDERLINED_ROW_PHONE)}
+    >
       {items.map((t) => {
         if (t.href === null) {
           return (

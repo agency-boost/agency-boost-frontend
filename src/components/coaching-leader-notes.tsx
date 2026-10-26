@@ -1,12 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useCoacheeNotFound } from '@/components/coaching-person';
 import { SummaryCard } from '@/components/personal-summary';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Textarea } from '@/components/ui/field';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Toast, useToast } from '@/components/ui/toast';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
@@ -79,6 +80,10 @@ interface Held {
  *
  * A save another coach has moved past is `VERSION_CONFLICT`: the profile is read again and one line
  * says so. An item archived since it was read is `CONFIG_ARCHIVED`: read again, with the server's words.
+ *
+ * **Each tick says its save beside it** (P18.95-T1 AC-5, ADR-0167 §5; UI-007): *Saving… → Saved ✓*, or
+ * *Couldn't save — retry*. A refused save puts the boxes back, so the retry ticks the box again and saves;
+ * a re-read leaves nothing to retry. The milestone's toast stays.
  */
 function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (message: string) => void }) {
   const { membershipId } = coachee;
@@ -92,8 +97,9 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
   /** The one line a version conflict leaves: the profile changed somewhere else and was read again. */
   const [reread, setReread] = useState(false);
   const held = useRef<Held | null>(null);
-  const inFlight = useRef<Promise<void> | null>(null);
+  const inFlight = useRef<Promise<boolean | null> | null>(null);
   const again = useRef(false);
+  const { save: track, statusOf } = useInlineSave();
   /** A milestone moved since the last save: the next one that lands says so (`Overall.html:11228`). */
   const announce = useRef(false);
 
@@ -128,14 +134,15 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
     }
   }, [membershipId, open, refused]);
 
-  const save = useCallback(() => {
+  /** Every unsaved tick, one save at a time: `true` saved, `false` refused and put back, `null` read again or gone. */
+  const save = useCallback((): Promise<boolean | null> => {
     if (inFlight.current) {
       again.current = true;
-      return;
+      return inFlight.current;
     }
-    const run = async () => {
+    const run = async (): Promise<boolean | null> => {
       const mine = held.current;
-      if (!mine) return;
+      if (!mine) return null;
       do {
         again.current = false;
         const sent = mine.ticks;
@@ -147,51 +154,60 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
             version: mine.version, milestoneCodes: sent.milestones, skillCodes: sent.skills,
           });
           // Read again meanwhile: this answer belongs to the profile that was replaced.
-          if (held.current !== mine) return;
+          if (held.current !== mine) return null;
           mine.version = saved.version;
           mine.saved = sent;
           setStageCode(saved.stageCode);
           setSaveError(null);
           if (says) onToast('Capability mapping updated.');
         } catch (err) {
-          if (held.current !== mine) return;
+          if (held.current !== mine) return null;
           // Nothing that was waiting goes out after a refusal, so nothing is left to announce.
           announce.current = false;
           const shown = toDisplayError(err);
           if (err instanceof ApiRequestError && err.status === 404) {
             gone();
+            return null;
           } else if (shown.code === 'VERSION_CONFLICT') {
             await readAgain();
             setReread(true);
+            return null;
           } else if (shown.code === 'CONFIG_ARCHIVED') {
             await readAgain();
             setSaveError(shown);
-          } else {
-            // Back to what the server holds, so the boxes never claim a tick it refused.
-            mine.ticks = mine.saved;
-            setTicks(mine.saved);
-            setSaveError(shown);
+            return null;
           }
-          return;
+          // Back to what the server holds, so the boxes never claim a tick it refused.
+          mine.ticks = mine.saved;
+          setTicks(mine.saved);
+          setSaveError(shown);
+          return false;
         }
       } while (again.current);
       // Everything is saved; a milestone moved and moved back says nothing.
       announce.current = false;
+      return true;
     };
     inFlight.current = run().finally(() => { inFlight.current = null; });
+    return inFlight.current;
   }, [membershipId, gone, onToast, readAgain]);
 
-  const toggle = useCallback((part: 'milestone' | 'skill', code: string, on: boolean) => {
-    const mine = held.current;
-    if (!mine) return;
-    const key = part === 'milestone' ? 'milestones' : 'skills';
-    const rest = mine.ticks[key].filter((c) => c !== code);
-    mine.ticks = { ...mine.ticks, [key]: on ? [...rest, code] : rest };
-    setTicks(mine.ticks);
-    setReread(false);
-    if (part === 'milestone') announce.current = true;
-    save();
-  }, [save]);
+  /** Tick or untick one box, and save; `where` tells apart the same milestone listed under two stages. */
+  const toggle = useCallback((part: 'milestone' | 'skill', code: string, on: boolean, where = '') => {
+    const tick = (): Promise<boolean | null> => {
+      const mine = held.current;
+      if (!mine) return Promise.resolve(null);
+      const key = part === 'milestone' ? 'milestones' : 'skills';
+      const rest = mine.ticks[key].filter((c) => c !== code);
+      mine.ticks = { ...mine.ticks, [key]: on ? [...rest, code] : rest };
+      setTicks(mine.ticks);
+      setReread(false);
+      if (part === 'milestone') announce.current = true;
+      return save();
+    };
+    // A retry ticks the box again — a refusal put it back — and saves (AC-5).
+    void track(`${part}:${where}:${code}`, tick);
+  }, [save, track]);
 
   if (error) return <ErrorBanner {...error} />;
   if (!profile || !ticks) return <ProfileSkeleton />;
@@ -227,7 +243,8 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
               milestones={stageMilestones(stage, profile.catalog, milestoneTicks)}
               ticked={milestoneTicks}
               canTick={canTick}
-              onTick={(code, on) => toggle('milestone', code, on)}
+              onTick={(code, on) => toggle('milestone', code, on, stage.code)}
+              status={(code) => statusOf(`milestone:${stage.code}:${code}`)}
             />
           ))}
         </ol>
@@ -246,6 +263,7 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
               ticked={skillTicks}
               canTick={canTick}
               onTick={(code, on) => toggle('skill', code, on)}
+              status={(code) => statusOf(`skill::${code}`)}
             />
           ))}
         </div>
@@ -273,7 +291,7 @@ function ArchivedBadge() {
  * because the same milestone is a checkbox in every stage that lists it.
  */
 function Stage({
-  n, label, current, milestones, ticked, canTick, onTick,
+  n, label, current, milestones, ticked, canTick, onTick, status,
 }: {
   n: number;
   label: string;
@@ -282,6 +300,8 @@ function Stage({
   ticked: ReadonlySet<string>;
   canTick: boolean;
   onTick: (code: string, on: boolean) => void;
+  /** Each box's save confirmation (P18.95-T1 AC-5), on the line under it — never inside its label. */
+  status: (code: string) => InlineSaveStatusProps;
 }) {
   const titleId = useId();
   return (
@@ -307,26 +327,28 @@ function Stage({
           const archived = m.status === 'archived';
           const locked = !canTick || archived;
           return (
-            <label
-              key={m.code}
-              className={cn(
-                'flex items-start gap-1.5 text-sm leading-snug',
-                on ? 'font-medium text-navy' : 'text-muted',
-                locked ? 'cursor-default' : 'cursor-pointer',
-              )}
-            >
-              <input
-                type="checkbox"
-                checked={on}
-                disabled={locked}
-                onChange={(e) => onTick(m.code, e.target.checked)}
-                className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-success disabled:cursor-not-allowed"
-              />
-              <span>
-                {m.label}
-                {archived && <ArchivedBadge />}
-              </span>
-            </label>
+            <Fragment key={m.code}>
+              <label
+                className={cn(
+                  'flex items-start gap-1.5 text-sm leading-snug',
+                  on ? 'font-medium text-navy' : 'text-muted',
+                  locked ? 'cursor-default' : 'cursor-pointer',
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={on}
+                  disabled={locked}
+                  onChange={(e) => onTick(m.code, e.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-success disabled:cursor-not-allowed"
+                />
+                <span>
+                  {m.label}
+                  {archived && <ArchivedBadge />}
+                </span>
+              </label>
+              <InlineSaveStatus {...status(m.code)} label={m.label} className="-mt-1 pl-5" />
+            </Fragment>
           );
         })}
       </div>
@@ -348,13 +370,15 @@ function Stage({
  * only because an item of it is ticked. What was ticked stays ticked either way.
  */
 function SkillSection({
-  grid, notApplicable, ticked, canTick, onTick,
+  grid, notApplicable, ticked, canTick, onTick, status,
 }: {
   grid: CapabilityGridRow;
   notApplicable: string | null;
   ticked: ReadonlySet<string>;
   canTick: boolean;
   onTick: (code: string, on: boolean) => void;
+  /** Each box's save confirmation (P18.95-T1 AC-5), on the line under it. */
+  status: (code: string) => InlineSaveStatusProps;
 }) {
   const titleId = useId();
   const noteId = useId();
@@ -376,27 +400,29 @@ function SkillSection({
           const archived = item.status === 'archived';
           const locked = !canTick || off || archived;
           return (
-            <label
-              key={item.code}
-              className={cn(
-                'flex items-center gap-[9px] py-1 text-base',
-                off ? 'text-navy/[0.45]' : 'text-navy',
-                on && 'font-semibold',
-                locked ? 'cursor-default' : 'cursor-pointer',
-              )}
-            >
-              <input
-                type="checkbox"
-                checked={on}
-                disabled={locked}
-                onChange={(e) => onTick(item.code, e.target.checked)}
-                className="h-4 w-4 shrink-0 accent-success disabled:cursor-not-allowed disabled:opacity-50"
-              />
-              <span>
-                {item.label}
-                {archived && <ArchivedBadge />}
-              </span>
-            </label>
+            <Fragment key={item.code}>
+              <label
+                className={cn(
+                  'flex items-center gap-[9px] py-1 text-base',
+                  off ? 'text-navy/[0.45]' : 'text-navy',
+                  on && 'font-semibold',
+                  locked ? 'cursor-default' : 'cursor-pointer',
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={on}
+                  disabled={locked}
+                  onChange={(e) => onTick(item.code, e.target.checked)}
+                  className="h-4 w-4 shrink-0 accent-success disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <span>
+                  {item.label}
+                  {archived && <ArchivedBadge />}
+                </span>
+              </label>
+              <InlineSaveStatus {...status(item.code)} label={item.label} className="pl-[25px]" />
+            </Fragment>
           );
         })}
       </div>

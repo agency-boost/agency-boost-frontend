@@ -1,4 +1,5 @@
 import { cn } from '@/lib/cn';
+import { TAP_HEIGHT } from '@/components/ui/phone';
 
 /**
  * A table, rendered as a table.
@@ -168,7 +169,8 @@ export function DataTable({
                     <button
                       type="button"
                       onClick={column.onSort}
-                      className="inline-flex items-center gap-1 rounded-sm uppercase tracking-wide hover:text-navy"
+                      // 44px tall on a phone (ADR-0167; UI-029): a heading that sorts is a control.
+                      className={cn('inline-flex items-center gap-1 rounded-sm uppercase tracking-wide hover:text-navy', TAP_HEIGHT)}
                     >
                       {label}
                       <span aria-hidden="true" className="text-2xs">{SORT_GLYPH[column.sort]}</span>

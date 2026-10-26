@@ -1,4 +1,5 @@
 import { cn } from '@/lib/cn';
+import { formatPercent } from '@/lib/format';
 import type { Status } from './status-pill';
 
 /**
@@ -45,7 +46,7 @@ export function ProgressBar({
       </div>
       {showLabel && (
         <p className="mt-1 text-xs text-muted">
-          {pct === null ? 'No target set' : `${pct}%`}
+          {pct === null ? 'No target set' : formatPercent(pct)}
         </p>
       )}
     </div>

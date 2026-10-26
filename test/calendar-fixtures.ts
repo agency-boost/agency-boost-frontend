@@ -5,7 +5,7 @@ import { makeMe } from './harness';
 
 /**
  * The calendar's doubles, shared by its page spec and the screens' axe pass. The week is the
- * prototype's own — Monday, Sep 28 to Sunday, Oct 4, 2026, today the Monday — and the people are the
+ * prototype's own — Monday, 28 Sep to Minggu, 4 Okt 2026, today the Monday — and the people are the
  * seed's (`functional/calendar.md`, *Seed*): Agus the AB, Sari the AAB, Rina and Indah his and her
  * agents.
  */
@@ -118,7 +118,7 @@ export function weekRead(over: Partial<CalendarRead> = {}): CalendarRead {
   };
 }
 
-/** September 2026 as the office's month: Monday Aug 31 to Sunday Oct 4, five rows. */
+/** Sep 2026 as the office's month: Monday 31 Agu to Sunday 4 Okt, five rows. */
 export const MONTH_DAYS = (() => {
   const days = ['2026-08-31'];
   for (let d = 1; d <= 30; d += 1) days.push(`2026-09-${String(d).padStart(2, '0')}`);

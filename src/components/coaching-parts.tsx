@@ -3,14 +3,14 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { SectionChips, SummaryCard } from '@/components/personal-summary';
 import { Button, ErrorBanner, Textarea } from '@/components/ui/field';
+import { TEXT_TAP } from '@/components/ui/phone';
 import { Modal } from '@/components/ui/modal';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import type { ActivitySection, SubPeriodTarget } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { reopenSession, type CoachingSession } from '@/lib/coaching';
-import { formatCalendarDayLong, formatShortDay } from '@/lib/format';
-import { formatRupiah } from '@/lib/goals';
+import { formatCalendarDayLong, formatPercent, formatRupiahCompact, formatShortDay } from '@/lib/format';
 import { balanceSideNames, formatBalanceBand, formatBalanceSplit } from '@/lib/ratio-balance';
 import { formatBenchmark, formatRatioForStatus, type RatioDisplayUnit } from '@/lib/ratio-format';
 import type { PeriodFigures } from '@/lib/summary';
@@ -91,10 +91,10 @@ export function GoalRow({
         <span className="font-body text-[1.1875rem] font-bold text-navy">
           {figures.actualMinor === null
             ? <span className="text-muted">Not uploaded yet</span>
-            : formatRupiah(figures.actualMinor)}
+            : formatRupiahCompact(figures.actualMinor)}
           {target !== null && <> / {target}</>}
         </span>
-        {pct !== null && <span className="text-md font-bold text-navy-soft">{pct}%</span>}
+        {pct !== null && <span className="text-md font-bold text-navy-soft">{formatPercent(pct)}</span>}
       </div>
       {editor && <div className="mb-2">{editor}</div>}
       {pct !== null && (
@@ -104,7 +104,7 @@ export function GoalRow({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.min(100, pct)}
-          aria-valuetext={`${pct}%`}
+          aria-valuetext={formatPercent(pct)}
           className="h-1.5 overflow-hidden rounded bg-navy/[0.08]"
         >
           <div className="h-full rounded bg-navy-soft" style={{ width: `${Math.min(100, pct)}%` }} />
@@ -112,7 +112,7 @@ export function GoalRow({
       )}
       {figures.gapMinor !== null && (
         <p className="mt-2 text-sm text-muted">
-          {formatRupiah(figures.gapMinor)} remaining this {period}.
+          {formatRupiahCompact(figures.gapMinor)} remaining this {period}.
         </p>
       )}
     </div>
@@ -290,7 +290,7 @@ export function ActivityPanel({ name, week, error }: { name: string; week: Activ
             type="button"
             disabled={!week}
             onClick={() => setDrill(true)}
-            className="rounded-sm text-xs font-medium text-navy-soft hover:underline disabled:cursor-default"
+            className={cn('rounded-sm text-xs font-medium text-navy-soft hover:underline disabled:cursor-default', TEXT_TAP)}
           >
             → view full dashboard
           </button>

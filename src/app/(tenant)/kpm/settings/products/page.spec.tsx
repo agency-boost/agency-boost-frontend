@@ -164,6 +164,62 @@ describe('the office’s Products screen', () => {
       .toEqual({ active: false });
   });
 
+  describe('P18.95-T1 AC-5 — the switch says it is saved, beside it', () => {
+    /** The save confirmation in the switch's own row: the nearest ancestor with a status for a child. */
+    const besides = (el: HTMLElement) => {
+      for (let box = el.parentElement; box; box = box.parentElement) {
+        const own = [...box.children].find((c) => c.getAttribute('role') === 'status');
+        if (own) return own as HTMLElement;
+        if (box.tagName === 'LI') break;
+      }
+      return null;
+    };
+    const ACTIVE = 'PUT /kpm/settings/products/p1/active';
+    const sends = (stub: ReturnType<typeof stubFetch>) =>
+      stub.calls.filter((c) => c.url.includes('/p1/active')).map((c) => JSON.parse(String(c.init.body)));
+
+    it('P18.95-T1 AC-5: says Saved ✓ beside the switch once it is kept, and beside no other', async () => {
+      render([product(), product({ productId: 'p2', code: 'PRUSMART', companyName: 'PRUSmart', displayName: field('PRUSmart') })], OWNER, {
+        [ACTIVE]: { body: product({ active: field(false) }) },
+      });
+      await screen.findByText('PRUSmart');
+      const [first, second] = screen.getAllByRole('switch', { name: 'Agents sell it' });
+
+      await userEvent.click(first);
+
+      await waitFor(() => expect(besides(first)).toHaveTextContent('Saved ✓'));
+      expect(besides(first)).toHaveClass('text-success');
+      expect(first).not.toBeChecked();
+      expect(besides(second)).toBeNull();
+      expect(screen.getAllByText('Saved ✓')).toHaveLength(1);
+    });
+
+    it('P18.95-T1 AC-5: a refused switch says Couldn’t save — retry, and the retry sends the same value again', async () => {
+      const stub = render([product()], OWNER, {
+        [ACTIVE]: [
+          { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-1' } } },
+          { body: product({ active: field(false) }) },
+        ],
+      });
+      const toggle = await screen.findByRole('switch', { name: 'Agents sell it' });
+      await userEvent.click(toggle);
+
+      const retry = await screen.findByRole('button', { name: "Couldn't save — retry: Agents sell it, PRUMapan" });
+      expect(besides(toggle)).toContainElement(retry);
+      // The reason stays in the alert above the shelf, where it always was; the switch still shows what is kept.
+      expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong.');
+      expect(toggle).toBeChecked();
+
+      await userEvent.click(retry);
+
+      await waitFor(() => expect(sends(stub)).toEqual([{ active: false }, { active: false }]));
+      await waitFor(() => expect(besides(toggle)).toHaveTextContent('Saved ✓'));
+      expect(toggle).not.toBeChecked();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+    });
+  });
+
   it('says which fields are the office’s and which follow the company', async () => {
     render([product({
       displayName: field('Mapan Kami', true),

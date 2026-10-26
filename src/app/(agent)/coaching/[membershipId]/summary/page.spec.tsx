@@ -174,12 +174,12 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     show(summary());
     const goal = await card('Goal vs. actual (APE)');
 
-    expect(within(goal).getByText('Rp 30.000.000')).toBeInTheDocument();
+    expect(within(goal).getByText('Rp 30 jt')).toBeInTheDocument();
     // Never the prototype's input (`#producedInput-cs`, contradiction #7).
     expect(within(goal).queryByRole('textbox')).not.toBeInTheDocument();
-    const marker = within(goal).getByRole('button', { name: 'From the production upload, September 2026' });
+    const marker = within(goal).getByRole('button', { name: 'From the production upload, Sep 2026' });
     fireEvent.click(marker);
-    expect(screen.getByText('From the production upload, September 2026', { selector: '[role="tooltip"]' })).toBeVisible();
+    expect(screen.getByText('From the production upload, Sep 2026', { selector: '[role="tooltip"]' })).toBeVisible();
   });
 
   it('P11-T7 AC-4 names her own figure as hers', async () => {
@@ -196,7 +196,7 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     const next = await card('What to do next');
     expect(within(next).getByText('AI-powered')).toBeInTheDocument();
     expect(next).toHaveTextContent(
-      'Nothing logged in the last 7 days — her last entry was Sep 4. Every number on this page is made of what she logs.',
+      'Nothing logged in the last 7 days — her last entry was 4 Sep. Every number on this page is made of what she logs.',
     );
     expect(next).toHaveTextContent(
       'Desi Pratama’s next action is 6 days overdue — reschedule it or set a new date this week. 2 more of her leads are overdue too.',
@@ -214,7 +214,7 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
 
     const pulse = await card('Activity pulse');
     expect(pulse).toHaveTextContent('Last 30 days');
-    expect(await within(pulse).findByText('18.0%')).toBeInTheDocument();
+    expect(await within(pulse).findByText('18,0%')).toBeInTheDocument();
     expect(within(pulse).getByText('Selling success rate')).toBeInTheDocument();
     expect(within(pulse).queryByText('Upcoming')).not.toBeInTheDocument();
   });
@@ -401,14 +401,14 @@ describe('a coachee’s Personal Summary tab — an earlier month or year (P18.8
     open();
     const select = await screen.findByRole('combobox', { name: 'Month' });
     expect(within(select).getAllByRole('option').map((o) => o.textContent))
-      .toEqual(['September 2026', 'August 2026', 'July 2026', 'June 2026']);
+      .toEqual(['Sep 2026', 'Agu 2026', 'Jul 2026', 'Jun 2026']);
     await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
     expect(within(screen.getByRole('combobox', { name: 'Year' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['2026']);
   });
 
   it('P18.8-T11 AC-2 reads her August with for and the month together, the month in this tab’s own address', async () => {
     const { calls } = open();
-    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Month' }), 'August 2026');
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Month' }), 'Agu 2026');
 
     expect(nav.replace).toHaveBeenCalledWith('/coaching/mem-rina/summary?month=2026-08', { scroll: false });
     await waitFor(() => expect(reads(calls)).toEqual(['?for=mem-rina', '?for=mem-rina&month=2026-08']));
@@ -420,10 +420,10 @@ describe('a coachee’s Personal Summary tab — an earlier month or year (P18.8
     const { calls } = open({ month: '2026-08' });
     const goal = await card('Goal vs. actual (APE)');
 
-    expect(within(goal).getByText('August 2026')).toBeInTheDocument();
+    expect(within(goal).getByText('Agu 2026')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'The gap' })).not.toBeInTheDocument();
     expect(screen.queryByText(/current pace/)).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('August 2026');
+    expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('Agu 2026');
     expect(reads(calls)).toEqual(['?for=mem-rina&month=2026-08']);
   });
 });

@@ -116,3 +116,51 @@ describe('ToastHost (P13-T7 AC-3)', () => {
     expect(seen).toBeNull();
   });
 });
+
+/**
+ * **One toast region per shell** (P18.95-T1 AC-6; ADR-0167 §5; UI-008). A screen's `useToast` and `<Toast>`
+ * speak through the shell's host when there is one, so two of them never stack.
+ */
+describe('one toast region per shell (P18.95-T1 AC-6)', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('P18.95-T1 AC-6: a screen’s own toast inside a shell is the shell’s, and draws no region of its own', () => {
+    render(<ToastHost><Harness /></ToastHost>);
+    // No region before the first toast, as the host has always drawn it.
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+    act(() => screen.getByRole('button', { name: 'first' }).click());
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(screen.getByRole('status')).toHaveTextContent('Session started.');
+  });
+
+  it('P18.95-T1 AC-6: two screens’ toasts in one shell replace each other rather than stack', () => {
+    render(<ToastHost><Harness /><Harness /></ToastHost>);
+    act(() => screen.getAllByRole('button', { name: 'first' })[0].click());
+    act(() => screen.getAllByRole('button', { name: 'second' })[1].click());
+
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(screen.getByRole('status')).toHaveTextContent('Goal updated — reflected across both tabs.');
+    act(() => { vi.advanceTimersByTime(TOAST_MS); });
+    expect(screen.getByRole('status')).toBeEmptyDOMElement();
+  });
+
+  it('P18.95-T1 AC-6: a host inside a host is the outer one, so a cell’s own host adds no second region', () => {
+    function Raise() {
+      const raise = useHostToast();
+      return <button type="button" onClick={() => raise?.('Saved')}>raise</button>;
+    }
+    render(<ToastHost><Harness /><ToastHost><Raise /></ToastHost></ToastHost>);
+    act(() => screen.getByRole('button', { name: 'raise' }).click());
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(screen.getByRole('status')).toHaveTextContent('Saved');
+  });
+
+  it('P18.95-T1 AC-6: the region stands above a dialog and takes no pointer', () => {
+    render(<Harness />);
+    const region = screen.getByRole('status');
+    expect(region).toHaveClass('z-[60]', 'pointer-events-none', 'fixed');
+    expect(region).toHaveAttribute('data-layer', 'toast');
+  });
+});

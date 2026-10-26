@@ -44,7 +44,7 @@ describe('the forum’s words and helpers (P18.1-T2)', () => {
 
   it('the date block is the month’s three letters over the day, from the date’s own numbers (`:2597`)', () => {
     expect(dateBlock('2026-09-12')).toEqual({ month: 'Sep', day: '12' });
-    expect(dateBlock('2026-10-01')).toEqual({ month: 'Oct', day: '1' });
+    expect(dateBlock('2026-10-01')).toEqual({ month: 'Okt', day: '1' });
     expect(dateBlock('not a date')).toEqual({ month: '', day: '' });
   });
 
@@ -74,8 +74,8 @@ describe('the forum’s words and helpers (P18.1-T2)', () => {
 
   it('P18.1-T3 AC-1: the share address and the hint in OD-146’s answered words (I-256)', () => {
     expect(sharedAddress('https://app.example', 'abc_DEF-123')).toBe('https://app.example/leader-meetings/shared/abc_DEF-123');
-    expect(shareHint('BSD City Branch', 'Oct 24, 2026')).toBe(
-      "Anyone signed in to AgencyBoost at BSD City Branch can open this meeting's minutes with this link, read-only, until Oct 24, 2026.",
+    expect(shareHint('BSD City Branch', '24 Okt 2026')).toBe(
+      "Anyone signed in to AgencyBoost at BSD City Branch can open this meeting's minutes with this link, read-only, until 24 Okt 2026.",
     );
   });
 

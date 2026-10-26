@@ -6,6 +6,7 @@ import { ConfigBadge } from '@/components/ui/config-badge';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import { InlineSaveField, useInlineSave, type InlineSaveOutcome } from '@/components/ui/inline-save-status';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import {
@@ -19,10 +20,13 @@ import {
   type LeaderTier,
   type OrgLevel,
 } from '@/lib/admin';
-import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 
 /** The server's own rule, so the form cannot offer a code the API will refuse. */
 const CODE = /^[A-Za-z][A-Za-z0-9_]{1,31}$/;
+
+/** A rung's *Leader tier* select, in its *Saving… → Saved ✓* (P18.95-T1 AC-5): by its id, unique across companies. */
+const tierKey = (orgLevelId: string) => `${orgLevelId}\ntier`;
 
 /**
  * The skeleton and the table read the same array, so the placeholder is the width of the
@@ -83,6 +87,7 @@ export default function OrgLevelsPage() {
   const [tier, setTier] = useState<LeaderTier | ''>('');
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const inline = useInlineSave();
 
   useEffect(() => {
     void Promise.all([listOrgLevels(), listCompanies()])
@@ -147,16 +152,22 @@ export default function OrgLevelsPage() {
    * **Saved on change**, like Archive beside it: one value, and the server is the one that can say
    * no — while anybody stands on the rung it refuses, with the count, and the select still shows the
    * stored tier because it reads the ladder, which only a success replaces.
+   *
+   * **And it says so beside the select** (P18.95-T1 AC-5): *Saving… → Saved ✓*, or *Couldn't save —
+   * retry*, which sends this same tier again. A `409` — the rung is held, or it changed — is a refusal
+   * sending the same tier again cannot change, so it leaves no retry (`null`): the banner says why.
    */
-  async function setLeaderTier(level: OrgLevel, value: LeaderTier | '') {
+  async function setLeaderTier(level: OrgLevel, value: LeaderTier | ''): Promise<InlineSaveOutcome> {
     setBusy(level.orgLevelId);
     setError(null);
     try {
       const ladder = await updateOrgLevel(level.orgLevelId, { leaderTier: value || null });
       setLevels((all) => [...(all ?? []).filter((l) => l.companyId !== level.companyId), ...ladder]);
+      return true;
     } catch (err) {
       const shown = toDisplayError(err);
       setError(shown.code === 'ORG_LEVEL_TIER_IN_USE' ? tierInUse(shown, level) : shown);
+      return err instanceof ApiRequestError && err.status === 409 ? null : false;
     } finally {
       setBusy(null);
     }
@@ -222,19 +233,25 @@ export default function OrgLevelsPage() {
                     <Cell className="text-muted">{l.displayOrder}</Cell>
                     <Cell className="font-semibold">{l.label}</Cell>
                     <Cell>
-                      <Select
-                        density="cell"
-                        aria-label={`Leader tier of ${l.label}`}
-                        value={l.leaderTier ?? ''}
-                        disabled={busy !== null}
-                        onChange={(e) => void setLeaderTier(l, e.target.value as LeaderTier | '')}
-                      >
-                        {TIERS.map((t) => (
-                          <option key={t.value} value={t.value}>
-                            {t.label}
-                          </option>
-                        ))}
-                      </Select>
+                      {/* Its status on the line under it, inside the cell (AC-5), as a lead's cells have theirs. */}
+                      <InlineSaveField status={inline.statusOf(tierKey(l.orgLevelId))} label={`Leader tier, ${l.label}`}>
+                        <Select
+                          density="cell"
+                          aria-label={`Leader tier of ${l.label}`}
+                          value={l.leaderTier ?? ''}
+                          disabled={busy !== null}
+                          onChange={(e) => {
+                            const value = e.target.value as LeaderTier | '';
+                            void inline.save(tierKey(l.orgLevelId), () => setLeaderTier(l, value));
+                          }}
+                        >
+                          {TIERS.map((t) => (
+                            <option key={t.value} value={t.value}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </Select>
+                      </InlineSaveField>
                     </Cell>
                     <Cell>
                       <StatusPill

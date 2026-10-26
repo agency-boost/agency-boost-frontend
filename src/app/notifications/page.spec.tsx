@@ -70,7 +70,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     expect(await screen.findByText('You are in')).toBeInTheDocument();
     expect(screen.getByText('Your request was approved. You now have a leader.')).toBeInTheDocument();
     // P12.1-T3 AC-6: a short date — the day and month, on the office's calendar.
-    expect(screen.getByText('Sep 1')).toHaveAttribute('dateTime', '2026-09-01T00:00:00.000Z');
+    expect(screen.getByText('1 Sep')).toHaveAttribute('dateTime', '2026-09-01T00:00:00.000Z');
   });
 
   it('P12.1-T3 AC-6: a compact row, named by its title with Unread: in front while it is, and described by its detail and date', async () => {
@@ -78,7 +78,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     renderWithSession(<NotificationsPage />, { me: READER });
 
     const unread = await screen.findByRole('button', { name: 'Unread: You are in' });
-    expect(unread).toHaveAccessibleDescription('Your request was approved. You now have a leader. Sep 1');
+    expect(unread).toHaveAccessibleDescription('Your request was approved. You now have a leader. 1 Sep');
     // The dot is drawn; its words are the name's.
     expect(screen.getByText('Unread:')).toHaveClass('sr-only');
     // One line each, cut with an ellipsis.
@@ -100,7 +100,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     const modal = screen.getByRole('dialog', { name: 'You are in' });
     expect(within(modal).getByText('Your request was approved. You now have a leader.')).toBeInTheDocument();
     // Its date and time in full, in the office's timezone: 01:05 UTC is 8:05 in Jakarta.
-    expect(within(modal).getByText('October 3, 2026 · 8:05 AM')).toBeInTheDocument();
+    expect(within(modal).getByText('3 Okt 2026, 08.05')).toBeInTheDocument();
     expect(calls.filter((c) => c.init.method === 'POST').map((c) => c.url))
       .toEqual(['http://api.test/api/v1/notifications/n-1/read']);
 
@@ -261,8 +261,10 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     try {
       renderWithSession(<NotificationsPage />, { me: READER });
       await userEvent.click(await screen.findByRole('button', { name: 'Mark as read' }));
-      await vi.waitFor(() => expect(heard).toHaveLength(1));
-      expect(heard[0].unread).toBe(4);
+      // The badge's move as it is clicked (P18.95-T1 AC-7), then the answer's count.
+      await vi.waitFor(() => expect(heard).toHaveLength(2));
+      expect(heard[0]).toMatchObject({ delta: -1, local: true });
+      expect(heard[1].unread).toBe(4);
     } finally {
       window.removeEventListener(INBOX_CHANGED, listen);
     }
@@ -445,7 +447,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     const row = await screen.findByRole('button', { name: 'Unread: You are in' });
     expect(screen.queryByText('Your request was approved. You now have a leader.')).toBeNull();
     // Described by its date alone.
-    expect(row).toHaveAccessibleDescription('Sep 1');
+    expect(row).toHaveAccessibleDescription('1 Sep');
     await userEvent.click(row);
     // The date and time, and nothing above them.
     expect(screen.getByRole('dialog').querySelectorAll('p')).toHaveLength(1);

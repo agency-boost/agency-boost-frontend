@@ -59,7 +59,7 @@ export const PERSISTENCY: CampaignRequirement = {
 export function campaign(over: Partial<CampaignCard> & { code: string }): CampaignCard {
   return {
     title: over.code, kind: 'seasonal', subtype: null, window: 'campaign_dates', phase: 'running',
-    startsAt: '2026-09-30T17:00:00.000Z', endsAt: '2026-12-31T16:59:59.999Z', duration: 'Oct 1 – Dec 31, 2026',
+    startsAt: '2026-09-30T17:00:00.000Z', endsAt: '2026-12-31T16:59:59.999Z', duration: '1 Okt – 31 Des 2026',
     poster: { emoji: '🎯', color: 'navy' }, blurb: '', reward: '', requirements: [],
     chasing: false, eligible: true, chaseBlocked: null, ...over,
   };
@@ -73,17 +73,17 @@ export const SPRINT = campaign({
 });
 export const BLITZ = campaign({
   code: 'NEW_HIRE_BLITZ', title: 'October New Hire Blitz', poster: { emoji: '🧲', color: 'navy-soft' },
-  duration: 'Oct 1 – Oct 31, 2026', endsAt: '2026-10-31T16:59:59.999Z', requirements: [NEW_HIRE(3)],
+  duration: '1 Okt – 31 Okt 2026', endsAt: '2026-10-31T16:59:59.999Z', requirements: [NEW_HIRE(3)],
   blurb: 'Recruit fast — 3 confirmed hires this month unlocks a cash bonus.', reward: 'Rp 3.000.000 cash bonus per qualifying agent',
 });
 export const CHALLENGE = campaign({
   code: 'APE_CHALLENGE_NEXT', title: 'Q1 APE Challenge', phase: 'upcoming', poster: { emoji: '📊', color: 'navy' },
-  duration: 'Jan 1 – Mar 31, 2027', startsAt: '2026-12-31T17:00:00.000Z', endsAt: '2027-03-31T16:59:59.999Z',
+  duration: '1 Jan – 31 Mar 2027', startsAt: '2026-12-31T17:00:00.000Z', endsAt: '2027-03-31T16:59:59.999Z',
   requirements: [APE(300)], reward: 'To be announced',
 });
 export const PUSH = campaign({
   code: 'PERSISTENCY_PUSH', title: 'Mid-Year Persistency Push', phase: 'ended', poster: { emoji: '📉', color: 'muted' },
-  duration: 'Apr 1 – Jun 30, 2026', requirements: [PERSISTENCY], reward: 'Rp 2.000.000 cash bonus',
+  duration: '1 Apr – 30 Jun 2026', requirements: [PERSISTENCY], reward: 'Rp 2.000.000 cash bonus',
   chasing: true, chaseBlocked: 'ended',
 });
 export const PROMO_AGENT = campaign({
@@ -99,7 +99,7 @@ export const PROMO_AAB = campaign({
 });
 export const MDRT = campaign({
   code: 'MDRT_QUALIFICATION', title: 'MDRT Qualification', kind: 'structural', subtype: 'ongoing', window: 'calendar_year',
-  endsAt: null, duration: 'Standing — evaluated per calendar year (Jan 1 – Dec 31)', poster: { emoji: '🏆', color: 'gold' },
+  endsAt: null, duration: 'Standing — evaluated per calendar year (1 Jan – 31 Des)', poster: { emoji: '🏆', color: 'gold' },
   requirements: [APE(2400)], chasing: true, reward: 'MDRT membership',
 });
 
@@ -115,7 +115,7 @@ export function detail(over: Partial<CampaignDetail> = {}): CampaignDetail {
     description: 'Office-wide APE sprint for Q4.\nAll agents hitting the threshold plus one new hire get a cash bonus.',
     can: { chase: true },
     progress: {
-      windowLabel: 'Oct – Dec 2026',
+      windowLabel: 'Okt – Des 2026',
       final: false,
       rows: [
         { metricKey: 'APE_ACHIEVED', current: rp(620), target: rp(500), unit: 'idr_minor', state: 'met' },

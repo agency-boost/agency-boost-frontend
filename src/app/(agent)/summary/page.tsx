@@ -36,7 +36,7 @@ import { readSummary, summaryPeriodFrom, type Summary } from '@/lib/summary';
  * **Download** (P10-T8, ADR-0061; P10.1-T8, ADR-0068): the prototype's *⬇ Download*, its label and its
  * handler both — `window.print()` (`Overall.html:2705`, `:6145`). The page as you see it, on paper or as
  * the browser's PDF, and no file through the API; while the print window is open the document is titled
- * for the period on the page, so the PDF is saved as *Personal Summary – September 2026* rather than
+ * for the period on the page, so the PDF is saved as *Personal Summary – Sep 2026* rather than
  * *AgencyBoost*. The app around the page, the period switch and the button itself stay off the paper,
  * and no card breaks across two sheets.
  *

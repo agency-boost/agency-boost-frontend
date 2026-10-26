@@ -106,7 +106,7 @@ describe('the words', () => {
 
   it('P12-T6 AC-7 / ADR-0096: none of the strings the calendar writes itself uses the six words, a phase or a code', () => {
     const strings = Object.values(OWN_COPY).map((value) => (typeof value === 'function'
-      ? (value as (...args: string[]) => string)('Rina Wijaya', 'Sep 28 – Oct 4, 2026')
+      ? (value as (...args: string[]) => string)('Rina Wijaya', '28 Sep – 4 Okt 2026')
       : value));
     expect(strings.length).toBeGreaterThan(30);
     for (const text of strings) {
@@ -119,13 +119,15 @@ describe('the words', () => {
   it('m3 builds each limit’s sentence from its limit, never from the number written again', () => {
     expect(OWN_COPY.tripTooLong).toBe(`A trip can be at most ${TRIP_DAYS_MAX} days.`);
     expect(OWN_COPY.titleTooLong).toBe(`Keep the title to ${TITLE_MAX} characters.`);
-    expect(OWN_COPY.notesTooLong).toBe(`Keep the notes to ${NOTES_MAX.toLocaleString('en-US')} characters.`);
+    expect(OWN_COPY.notesTooLong).toBe('Keep the notes to 1.000 characters.');
+    expect(NOTES_MAX).toBe(1000);
     expect(OWN_COPY.tooManyInvitees).toBe(`You can invite at most ${INVITEES_MAX} people.`);
     // In the source, each sentence names its constant and holds no digit of its own.
     const source = readFileSync(join(__dirname, 'calendar.ts'), 'utf8').split('\n');
     for (const key of ['tripTooLong', 'titleTooLong', 'notesTooLong', 'tooManyInvitees']) {
       const line = source.find((l) => l.trim().startsWith(`${key}:`)) ?? '';
-      expect(line, key).toMatch(/\$\{[A-Z_]+_MAX\b/);
+      // Through `formatNumber` where the limit can reach a thousand, so it is grouped `1.000` (ADR-0167 §1).
+      expect(line, key).toMatch(/\$\{(?:formatNumber\()?[A-Z_]+_MAX\b/);
       expect(line, key).not.toMatch(/\d/);
     }
   });

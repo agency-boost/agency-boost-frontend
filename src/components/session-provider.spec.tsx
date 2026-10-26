@@ -109,7 +109,7 @@ describe('SessionProvider', () => {
         message: 'This office’s subscription ended on 2026-09-25.',
         details: { endDate: '2026-09-25', ...OFFICE },
         heading: 'Your office’s subscription has ended',
-        says: /ended on September 25, 2026.*Contact AgencyBoost/,
+        says: /ended on 25 Sep 2026.*Contact AgencyBoost/,
       },
       {
         code: 'TENANT_SUSPENDED',

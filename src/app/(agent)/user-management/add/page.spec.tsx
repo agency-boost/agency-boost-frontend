@@ -134,6 +134,40 @@ describe('inviting people (P3-T4)', () => {
     expect(screen.getByRole('button', { name: 'Copy code' })).toBeInTheDocument();
   });
 
+  it('P18.95-T1 AC-6: says Link copied ✓ and Code copied ✓ in the shell’s toast, beside each box’s Copied.', async () => {
+    const writeText = vi.fn(async () => undefined);
+    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Copy link' }));
+    expect(writeText).toHaveBeenLastCalledWith('https://agencyboost.app/join?code=JOR417');
+    const toast = await screen.findByText('Link copied ✓');
+    expect(toast.closest('[role="status"]')).toHaveAttribute('aria-live', 'polite');
+    expect(screen.getByText('Copied.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Copy code' }));
+    expect(writeText).toHaveBeenLastCalledWith('JOR417');
+    // The later toast replaces the earlier one: one region, nothing stacked.
+    expect(await screen.findByText('Code copied ✓')).toBeInTheDocument();
+    expect(screen.queryByText('Link copied ✓')).not.toBeInTheDocument();
+  });
+
+  it('P18.95-T1 AC-6: a copy that fails toasts nothing, and says so under its button', async () => {
+    vi.stubGlobal('navigator', { ...navigator, clipboard: undefined });
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Copy link' }));
+
+    expect(await screen.findByText(/Could not copy/)).toBeInTheDocument();
+    expect(screen.queryByText('Link copied ✓')).not.toBeInTheDocument();
+  });
+
   it('AC-2: hides the team card from somebody who cannot act on a team', async () => {
     // The prototype hides this card for an Agent alongside the Pending tab
     // (`User_Management_Section.html:999`). It gives the reason as "an Agent has no

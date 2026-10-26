@@ -6,6 +6,8 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { Page } from '@/components/page';
 import { SkillCards } from '@/components/training/training-parts';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
+import { TAB_PHONE, TAB_ROW_PHONE, TEXT_TAP, UNDERLINED_ROW_PHONE } from '@/components/ui/phone';
+import { useTabRow } from '@/components/ui/use-tab-row';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
@@ -121,6 +123,9 @@ export function TrainingCategory({ code }: { code: string }) {
  * `.subtabs` (`:81-89`, `:3709-3716`): the office's active categories in its order, each an address, so
  * links in a `nav` with the current one marked — on a category's list and on each of its modules' pages,
  * as the prototype keeps the strip above the module it opens (`:3709`, `:3733`).
+ *
+ * On a phone, one row that scrolls sideways, as `RouteTabs` is (ADR-0167; UI-013: the categories took
+ * three lines). Below 768px only.
  */
 export function TrainingSubtabs({
   categories, current, currentAs = 'page',
@@ -130,9 +135,15 @@ export function TrainingSubtabs({
   /** `page` on the category's own list; `location` on one of its modules' pages, which the tab is not. */
   currentAs?: 'page' | 'location';
 }) {
-  const TAB = '-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold';
+  const TAB = cn('-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold', TAB_PHONE);
+  const row = useTabRow<HTMLElement>(current);
   return (
-    <nav aria-label={PROTOTYPE_COPY.tab} className="mb-6 flex flex-wrap gap-x-6 gap-y-2 border-b border-hairline">
+    <nav
+      ref={row.ref}
+      aria-label={PROTOTYPE_COPY.tab}
+      data-fade={row.fade}
+      className={cn('mb-6 flex flex-wrap gap-x-6 gap-y-2 border-b border-hairline', TAB_ROW_PHONE, UNDERLINED_ROW_PHONE)}
+    >
       {categories.map((c) => (
         <Link
           key={c.code}
@@ -174,7 +185,7 @@ export function NotFoundCard({ title }: { title: string }) {
     <Card>
       <h2 className="font-display text-lg font-bold text-navy">{title}</h2>
       <p className="mt-1 text-md text-muted">{OWN_COPY.notFoundSub}</p>
-      <Link href="/training" className="mt-3 inline-block text-md font-semibold text-navy-soft hover:underline">
+      <Link href="/training" className={cn('mt-3 inline-block text-md font-semibold text-navy-soft hover:underline', TEXT_TAP)}>
         {OWN_COPY.trainingModules}
       </Link>
     </Card>

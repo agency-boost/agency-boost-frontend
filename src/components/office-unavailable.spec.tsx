@@ -22,7 +22,7 @@ describe('OfficeUnavailable', () => {
     await waitFor(() => expect(heading).toHaveFocus());
     expect(screen.getByText('KPM 0601 · Cikarang Branch')).toBeInTheDocument();
     expect(screen.getByRole('main')).toHaveTextContent(
-      'Its subscription ended on September 25, 2026. Nobody in the office can use AgencyBoost until it is renewed. '
+      'Its subscription ended on 25 Sep 2026. Nobody in the office can use AgencyBoost until it is renewed. '
       + 'Contact AgencyBoost to renew it.',
     );
   });
@@ -30,7 +30,7 @@ describe('OfficeUnavailable', () => {
   it('reads the date as the office’s day, never shifted by the browser’s zone', () => {
     // Built from its three numbers: parsed as an instant, a browser west of Greenwich shows the 24th.
     render(<OfficeUnavailable error={{ ...ended, details: { ...ended.details, endDate: '2026-01-01' } }} onSignOut={vi.fn()} />);
-    expect(screen.getByRole('main')).toHaveTextContent('ended on January 1, 2026');
+    expect(screen.getByRole('main')).toHaveTextContent('ended on 1 Jan 2026');
   });
 
   it('gives a suspended or an archived office the server’s own sentence', () => {

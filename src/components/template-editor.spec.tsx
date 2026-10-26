@@ -346,8 +346,8 @@ describe('RatioSetEditor writes benchmarks in their unit (P4-T25)', () => {
       ] }}
     />);
 
-    expect(screen.getByText('15.0%')).toBeInTheDocument();
-    expect(screen.getByText('0.30')).toBeInTheDocument();
+    expect(screen.getByText('15,0%')).toBeInTheDocument();
+    expect(screen.getByText('0,30')).toBeInTheDocument();
     expect(screen.getByText('±30 points')).toBeInTheDocument();
   });
 
@@ -1008,7 +1008,8 @@ describe('CampaignKindsEditor (P5-T9)', () => {
       onChange={vi.fn()}
     />);
 
-    expect(screen.getByText(/APE achieved/).closest('p')).toHaveTextContent(/Rp 600\.000\.000$/);
+    // A rule in words, compact where that loses nothing (ADR-0167 §1).
+    expect(screen.getByText(/APE achieved/).closest('p')).toHaveTextContent(/Rp 600 jt$/);
     expect(screen.getByText(/APE achieved/).closest('p')).not.toHaveTextContent('60.000.000.000');
     expect(screen.getByText(/New active agents/).closest('p')).toHaveTextContent(/1\.200$/);
     expect(screen.getByText(/New active agents/).closest('p')).not.toHaveTextContent('Rp');

@@ -78,10 +78,18 @@ export const INBOX_CHANGED = 'agencyboost:inbox-changed';
  *   reading its notice) makes the badge read the count itself.
  * - `origin`: which list made the change, so that list does not read itself again on hearing its own
  *   announcement, while the other one (the popover over the page, or the page under the popover) does.
+ * - `delta`: how far the count moves, **said before the server has answered** (P18.95-T1 AC-7; the client's
+ *   UI review of 2026-10-26, UI-008: the bell's count stayed as it was after notices were marked read). The
+ *   badge moves by it at once; `-1` for one read, `+1` for one unread, and the opposite to put it back.
+ * - `local`: the change is the screen's own, not yet the server's — the badge moving ahead of an answer, or
+ *   back after a refusal. **No list reads again on it**: the server has nothing new to say, and a read that
+ *   overtook the write would show the row as it was. The answer follows, and is announced without it.
  */
 export interface InboxChange {
   unread?: number;
   origin?: string;
+  delta?: number;
+  local?: boolean;
 }
 
 export function announceInboxChanged(change: InboxChange = {}): void {

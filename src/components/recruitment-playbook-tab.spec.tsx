@@ -107,7 +107,7 @@ describe('the Company template’s Recruitment tab (P17-T8)', () => {
   it('reads the company’s playbook: a card per candidate type, the answers, and who saved which version', async () => {
     mount();
     expect(await screen.findByText('This playbook is live.')).toBeInTheDocument();
-    expect(screen.getByRole('status')).toHaveTextContent('Version 3 · saved by Root on October 9, 2026 · 2:05 PM');
+    expect(screen.getByRole('status')).toHaveTextContent('Version 3 · saved by Root on 9 Okt 2026, 14.05');
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
       'Fresh grad', 'Career switcher', 'Business owner', 'Retiree', 'Agent (other insurer)', 'Objections', 'Next action',
     ]);
@@ -157,7 +157,7 @@ describe('the Company template’s Recruitment tab (P17-T8)', () => {
       ...DEFAULTS,
       profiles: { ...DEFAULTS.profiles, 'fresh-grad': { ...DEFAULTS.profiles['fresh-grad'], label: 'Fresh graduate, new words' } },
     });
-    expect(await screen.findByText('Version 4 · saved by Root on October 9, 2026 · 3:00 PM')).toBeInTheDocument();
+    expect(await screen.findByText('Version 4 · saved by Root on 9 Okt 2026, 15.00')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save playbook' })).toBeDisabled();
   });
 
@@ -327,7 +327,7 @@ describe('the Company template’s Recruitment tab (P17-T8)', () => {
       const alert = await screen.findByText('This playbook was changed somewhere else.');
       const notice = alert.closest('[role="alert"]') as HTMLElement;
       expect(notice).toHaveTextContent(
-        'It is now version 4, saved by Asih on October 9, 2026 · 2:10 PM. Your edits are still here, and saving them replaces that version.',
+        'It is now version 4, saved by Asih on 9 Okt 2026, 14.10. Your edits are still here, and saving them replaces that version.',
       );
       expect(fresh.getByLabelText('Label')).toHaveValue('My new label');
       expect(screen.getByRole('status')).toHaveTextContent('Version 4 · saved by Asih');

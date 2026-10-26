@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addDays, addMonths, BILLING_OWN_COPY, START_DAYS_AHEAD, costMissingWords, defaultDates, leaderCountOf, maskAmount,
-  maskDate, money, officeToday, parseDmy, perLeaderDiscount, planEnd, priceQuote, savePct, subscriptionCosts,
+  maskDate, money, officeToday, parseDmy, perLeaderDiscount, planEnd, priceQuote, quoteDay, savePct, saveWords, subscriptionCosts,
   subscriptionMonths, tierFor, tierLabel, toDmy, validateQuote,
   type BillingTier, type CalculatorInput,
 } from './billing';
@@ -296,5 +296,23 @@ describe('the subscription’s cost (P18.8-T3)', () => {
     expect(costMissingWords(['price'])).toBe('— no price per leader');
     expect(costMissingWords(['price', 'limit', 'dates']))
       .toBe('— no price per leader and no maximum leaders and no start and end dates');
+  });
+});
+
+/** ADR-0167 §1: the quote's paper writes dates as every screen does; the card's saving to one decimal. */
+describe('the quote’s dates and the cards’ saving in id-ID (P18.95-T1 AC-1, AC-3)', () => {
+  it('prints a typed DD/MM/YYYY date as `15 Okt 2026`, and what is not a day as it was typed', () => {
+    expect(quoteDay('15/10/2026')).toBe('15 Okt 2026');
+    expect(quoteDay(' 14/04/2027 ')).toBe('14 Apr 2027');
+    expect(quoteDay('31/02/2027')).toBe('31/02/2027');
+  });
+
+  it('writes the six-month saving as `Save 20,0%`, from the registry’s whole percent', () => {
+    expect(TIERS.slice(0, 4).map(saveWords)).toEqual(['Save 20,0%', 'Save 21,0%', 'Save 22,0%', 'Save 29,0%']);
+  });
+
+  it('keeps every price in full: a price is exact, and the quote is a document', () => {
+    expect(money(40_000_000)).toBe('Rp 400.000');
+    expect(perLeaderDiscount(1_875_000)).toBe('-Rp 18.750/leader/mo');
   });
 });

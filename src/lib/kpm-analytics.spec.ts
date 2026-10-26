@@ -36,7 +36,7 @@ describe('KPM analytics’ client (P18-T2)', () => {
       actual: 'Rp 620.000.000',
       uploaded: true,
       of: 'of Rp 1.500.000.000 target',
-      pill: { text: '41%', tone: 'alert' },
+      pill: { text: '41,0%', tone: 'alert' },
     });
   });
 
@@ -60,8 +60,8 @@ describe('KPM analytics’ client (P18-T2)', () => {
   });
 
   it('P18-T2 AC-3 writes Coached, Active, Total leads and Manpower as the prototype does (:3240, :3341-3343)', () => {
-    expect(rateWords({ count: 6, of: 31, pct: 19 })).toEqual({ main: '6 / 31', pct: '19%' });
-    expect(activeWords(21, 31)).toEqual({ main: '21 / 31', pct: '68%' });
+    expect(rateWords({ count: 6, of: 31, pct: 19 })).toEqual({ main: '6 / 31', pct: '19,0%' });
+    expect(activeWords(21, 31)).toEqual({ main: '21 / 31', pct: '68,0%' });
     expect(leadsWords({ sales: 15, salesPotential: 9, recruit: 8, recruitPotential: 5 })).toEqual({
       total: 23,
       sub: '15 sales (9 potential) · 8 recruit (5 potential)',
@@ -106,8 +106,11 @@ describe('KPM analytics’ client (P18-T2)', () => {
   });
 
   it('P18-T2 AC-4 writes each criterion in its own unit, and never Gap for a figure nobody has', () => {
-    expect(criterionValue('NET_APE', rp(600))).toBe('Rp 600.000.000');
-    expect(criterionValue('MOC_PERSISTENCY', 75)).toBe('75%');
+    expect(criterionValue('NET_APE', rp(600))).toBe('Rp 600 jt');
+    // Compact only where that loses nothing: a figure it would round is written in full (ADR-0167 §1).
+    expect(criterionValue('NET_APE', rp(599.96))).toBe('Rp 599.960.000');
+    expect(criterionValue('MOC_PERSISTENCY', 75)).toBe('75,0%');
+    expect(criterionValue('MOC_PERSISTENCY', 75.55)).toBe('75,55%');
     expect(criterionValue('MONTHLY2_AA_DU', 4)).toBe('4');
     expect(criterionValue('DIRECT_AB_COUNT', 0)).toBe('0');
     expect(criterionValue('MOC_PERSISTENCY', null)).toBe('—');
@@ -117,10 +120,10 @@ describe('KPM analytics’ client (P18-T2)', () => {
   });
 
   it('P18-T2 AC-4 says the period a criterion was read over as a sentence would', () => {
-    expect(periodWords('2026-09')).toBe('September 2026');
-    expect(periodWords('2026-08..2026-09')).toBe('August – September 2026');
-    expect(periodWords('2025-12/2026-01')).toBe('December 2025 – January 2026');
-    expect(periodWords('2026-09..2026-09')).toBe('September 2026');
+    expect(periodWords('2026-09')).toBe('Sep 2026');
+    expect(periodWords('2026-08..2026-09')).toBe('Agu – Sep 2026');
+    expect(periodWords('2025-12/2026-01')).toBe('Des 2025 – Jan 2026');
+    expect(periodWords('2026-09..2026-09')).toBe('Sep 2026');
     expect(periodWords('Year to date')).toBe('Year to date');
   });
 
@@ -132,10 +135,11 @@ describe('KPM analytics’ client (P18-T2)', () => {
       { month: '2026-10', apeMinor: 0 },
     ]);
     expect(bars.map((b) => b.height)).toEqual([50, null, 100, 0]);
-    expect(bars.map((b) => b.value)).toEqual(['Rp 400.000.000', 'Not uploaded yet', 'Rp 800.000.000', 'Rp 0']);
+    expect(bars.map((b) => b.value)).toEqual(['Rp 400 jt', 'Not uploaded yet', 'Rp 800 jt', 'Rp 0']);
     expect(chartBars([{ month: '2026-08', apeMinor: null }])[0].height).toBeNull();
     expect(shortMonth('2026-03')).toBe('Mar');
-    expect(shortMonth('2025-12')).toBe('Dec');
+    expect(shortMonth('2025-12')).toBe('Des');
+    expect(shortMonth('2026-10')).toBe('Okt');
   });
 
   it('D-copy: the strings this module writes itself use none of OD-39’s six words and name no phase', () => {

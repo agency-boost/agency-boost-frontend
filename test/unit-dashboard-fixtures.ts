@@ -11,7 +11,7 @@ import { makeMe } from './harness';
  */
 
 /** *Chasing MDRT*'s header tooltip as the server composes it from 0417's MDRT campaign (OD-152). */
-export const MDRT_TOOLTIP = 'Chasing MDRT (Million Dollar Round Table) this year — APE achieved ≥ Rp 2.400.000.000.';
+export const MDRT_TOOLTIP = 'Chasing MDRT (Million Dollar Round Table) this year — APE achieved ≥ Rp 2,4 M.';
 
 /** Rupiah in minor units: `rp(80)` is Rp 80.000.000. */
 export const rp = (millions: number) => Math.round(millions * 1_000_000 * 100);

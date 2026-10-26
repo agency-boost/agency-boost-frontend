@@ -67,7 +67,7 @@ describe('one member', () => {
 
     const card = (await screen.findByRole('heading', { name: 'Personal' })).closest('div')!;
     const row = (term: string) => within(card).getByText(term).nextElementSibling?.textContent;
-    expect(row('Date of birth')).toBe('March 15, 1990');
+    expect(row('Date of birth')).toBe('15 Mar 1990');
     expect(row('Gender')).toBe('Female');
     expect(row('Company join month')).toBe('Not recorded');
     expect(row('Work status')).toBe('Part-time');

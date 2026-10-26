@@ -4,13 +4,15 @@
  * The API answers a `band` ratio with `share`, the first side's percent of both, beside the lean in
  * points (`metrics-and-definitions.md`, `SELLING_RECRUITMENT_BALANCE`). The client read the lean and the
  * prototype's `100% / 0% / 100%` ticks as ambiguous (2026-10-07): two selling and three recruiting is
- * *40% Selling · 60% Recruitment*, and that is how a balance is written now, on the agent's card and on
- * a coaching session's. **The benchmark stays in points** — stored, typed and edited as ±30 — and is
+ * *40,0% Selling · 60,0% Recruitment*, and that is how a balance is written now, on the agent's card and on
+ * a coaching session's — to one decimal since ADR-0167 §1 (parity I-395), the comma `id-ID`'s. **The benchmark stays in points** — stored, typed and edited as ±30 — and is
  * read as the shares it allows: ±30 points is each side between 35% and 65%.
  *
  * Nothing here is a constant (invariant §7). The band's edges are `(100 ∓ b) ÷ 2`, the share a side has
  * when the lean is exactly ±b — the registry's `lean = (share − 50) × 2` solved for the share.
  */
+
+import { formatPercent } from '@/lib/format';
 
 type Status = 'success' | 'alert' | 'neutral';
 
@@ -24,20 +26,20 @@ export function balanceBand(benchmark: number): { low: number; high: number } {
   return { low: (100 - b) / 2, high: (100 + b) / 2 };
 }
 
-/** The band's edges as written: `{ low: '35%', high: '65%' }`, `37.5%` for a ±25 band. */
+/** The band's edges as written: `{ low: '35,0%', high: '65,0%' }`, `37,5%` for a ±25 band, `37,25%` for ±25.5. */
 export function formatBalanceBand(benchmark: number): { low: string; high: string } {
   const { low, high } = balanceBand(benchmark);
-  return { low: `${rounded(low, 2)}%`, high: `${rounded(high, 2)}%` };
+  return { low: formatPercent(rounded(low, 2), { maxDecimals: 2 }), high: formatPercent(rounded(high, 2), { maxDecimals: 2 }) };
 }
 
 /**
- * The split, **summing to 100**: `{ first: '40%', second: '60%' }` for a 40% share.
+ * The split, **summing to 100**: `{ first: '40,0%', second: '60,0%' }` for a 40% share.
  *
- * Whole percent, the second side written as 100 less the first so the two never add up to 99 or 101.
- * **A split never rounds onto the other side of its status**, as `formatRatioForStatus` keeps a rate from
- * doing: a 65.2% share misses a 35–65% band, and written `65% · 35%` it would read as inside it, so it
- * is written `65.2% · 34.8%`. **A side with any activity on it never reads 0%**, either — the zero the
- * client asked to have taken off the bar is not put back in the sentence.
+ * One decimal (ADR-0167 §1), the second side written as 100 less the first so the two never add up to 99,9
+ * or 100,1. **A split never rounds onto the other side of its status**, as `formatRatioForStatus` keeps a
+ * rate from doing: a 65.04% share misses a 35–65% band, and written `65,0% · 35,0%` it would read as inside
+ * it, so it is written `65,04% · 34,96%`. **A side with any activity on it never reads 0,0%**, either — the
+ * zero the client asked to have taken off the bar is not put back in the sentence.
  */
 export function formatBalanceSplit(share: number, benchmark: number, status: Status): { first: string; second: string } {
   const { high } = balanceBand(benchmark);
@@ -51,8 +53,12 @@ export function formatBalanceSplit(share: number, benchmark: number, status: Sta
     const bothSeen = share <= 0 || share >= 100 || (first > 0 && second > 0);
     return agrees && bothSeen;
   };
-  const split = [0, 1].map(write).find(honest) ?? write(2);
-  return { first: `${split.first}%`, second: `${split.second}%` };
+  const places = [1, 2].find((p) => honest(write(p))) ?? 3;
+  const split = write(places);
+  return {
+    first: formatPercent(split.first, { maxDecimals: places }),
+    second: formatPercent(split.second, { maxDecimals: places }),
+  };
 }
 
 /**

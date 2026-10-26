@@ -82,6 +82,24 @@ describe('find your leader (P3-T3)', () => {
     expect(await screen.findByText('Request sent')).toBeInTheDocument();
   });
 
+  it('P18.95-T1 AC-6: says Request sent ✓ in the shell’s toast once the request is in', async () => {
+    stubFetch({
+      '/join/leader-request': { body: { ...REGISTERED, pendingRequestTo: 'mem-ab' } },
+      '/join/leaders': [
+        { body: LEADERS },
+        { body: [{ ...LEADERS[0], requestSent: true }, LEADERS[1]] },
+      ],
+      '/join/me': { body: REGISTERED },
+    });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Send request' }))[0]);
+
+    const toast = await screen.findByText('Request sent ✓');
+    expect(toast.closest('[role="status"]')).toHaveAttribute('aria-live', 'polite');
+    // The row keeps its own pill: the toast is added, nothing is taken away.
+    expect(await screen.findByText('Request sent')).toBeInTheDocument();
+  });
+
   it('explains that asking somebody else replaces the request', async () => {
     stubFetch({
       '/join/me': { body: { ...REGISTERED, pendingRequestTo: 'mem-ab' } },
@@ -148,5 +166,7 @@ describe('find your leader (P3-T3)', () => {
 
     await userEvent.click((await screen.findAllByRole('button', { name: 'Send request' }))[0]);
     expect(await screen.findByRole('alert')).toHaveTextContent('not available in this office');
+    // P18.95-T1 AC-6: a refusal toasts nothing.
+    expect(screen.queryByText('Request sent ✓')).not.toBeInTheDocument();
   });
 });

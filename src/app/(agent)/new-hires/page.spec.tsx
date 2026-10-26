@@ -48,7 +48,7 @@ describe('/new-hires, the leader’s roster (P13-T5)', () => {
     const rows = within(table).getAllByRole('row').slice(1);
     // By day, highest first, as the server orders them; *Joined* is the start date, `MMM d, yyyy`.
     expect(rows.map((r) => within(r).getByRole('rowheader').textContent)).toEqual(['Indah Permata', 'Dimas Saputra']);
-    expect(within(rows[0]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['Jun 28, 2026', '94%', '90+ /90, overdue', '']);
+    expect(within(rows[0]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['28 Jun 2026', '94,0%', '90+ /90, overdue', '']);
   });
 
   it('Phase 13 exit review: an overdue Day says so in words to a screen reader, and adds nothing visible', async () => {

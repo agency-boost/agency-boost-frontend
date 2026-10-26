@@ -120,7 +120,7 @@ describe('the office’s Campaigns screen', () => {
     // The prototype stores "Rp 600,000,000" as a display string and one campaign's reward in pesos.
     render();
 
-    expect(await screen.findByText(/APE achieved at least Rp 500\.000\.000/)).toBeInTheDocument();
+    expect(await screen.findByText(/APE achieved at least Rp 500 jt/)).toBeInTheDocument();
   });
 
   it('shows the phase worked out from the dates', async () => {
@@ -339,7 +339,7 @@ describe('the office’s Campaigns screen', () => {
         }],
       });
       const stub = render([old]);
-      const row = (await screen.findByText(/Training completion more than 80%/)).closest('li')!;
+      const row = (await screen.findByText(/Training completion more than 80,0%/)).closest('li')!;
       expect(within(row).getByText('Not measured yet')).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
       const select = screen.getByLabelText('Requirement 1');
@@ -367,10 +367,10 @@ describe('the office’s Campaigns screen', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
       expect(screen.getByLabelText('Requirement 1')).toHaveValue('APE_ACHIEVED');
       expect(screen.getByLabelText('Requirement 1 Comparison')).toHaveValue('gte');
-      expect(screen.getByLabelText('Requirement 1 Target (Rp)')).toHaveValue(500000000);
+      expect(screen.getByLabelText('Requirement 1 Target (Rp)')).toHaveValue('500000000');
       expect(screen.getByLabelText('Requirement 2')).toHaveValue('NEW_HIRES');
       expect(screen.getByLabelText('Requirement 2 Comparison')).toHaveValue('gt');
-      expect(screen.getByLabelText('Requirement 2 Target')).toHaveValue(1);
+      expect(screen.getByLabelText('Requirement 2 Target')).toHaveValue('1');
       await userEvent.clear(screen.getByLabelText('Card line'));
       await userEvent.type(screen.getByLabelText('Card line'), 'A new line.');
       await userEvent.click(screen.getByRole('button', { name: 'Save the campaign' }));
@@ -421,7 +421,7 @@ describe('the office’s Campaigns screen', () => {
     it('P18.5-T7 AC-9 editing reads back the office’s days and the fields as stored', async () => {
       render([campaign({ startsAt: '2026-09-30T17:00:00.000Z', endsAt: '2026-12-31T16:59:59.999Z', appliesToOrgLevelCodes: ['AGENT'] })]);
       await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-      // It read the UTC day of the instant: Sep 30 for a campaign that starts on Oct 1 in Jakarta.
+      // It read the UTC day of the instant: 30 Sep for a campaign that starts on 1 Okt in Jakarta.
       expect(screen.getByLabelText('Starts')).toHaveValue('2026-10-01');
       expect(screen.getByLabelText('Ends')).toHaveValue('2026-12-31');
       expect(screen.getByLabelText('Poster emoji')).toHaveValue('⭐');

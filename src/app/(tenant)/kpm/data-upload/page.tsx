@@ -7,8 +7,7 @@ import { Button, buttonClass, Card, ErrorBanner, Field, TextInput } from '@/comp
 import { SkeletonBar, SkeletonTable } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { formatDayLong, monthInZone } from '@/lib/format';
-import { formatRupiah } from '@/lib/goals';
+import { formatDayLong, formatNumber, formatPercent, formatRupiah, monthInZone } from '@/lib/format';
 import { useCan } from '@/lib/session';
 import {
   CADENCE_GROUP_LABEL, commitUpload, FIGURE_COLUMNS, figureLabel, METRIC_COLUMN_LABEL, MONEY_METRICS, previewUpload,
@@ -419,7 +418,7 @@ function ActiveMark({ active }: { active: boolean | null | undefined }) {
   );
 }
 
-/** `corrected by hand by Maya Halim on September 26, 2026 — “Carrier restated it”` */
+/** `corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”` */
 function correctedNote(cell: MetricCell): string {
   const c = cell.correction;
   const verb = cell.value === null ? 'emptied by hand' : 'corrected by hand';
@@ -427,11 +426,14 @@ function correctedNote(cell: MetricCell): string {
   return `${verb}${c.by ? ` by ${c.by}` : ''}${c.at ? ` on ${formatDayLong(c.at)}` : ''}${c.reason ? ` — “${c.reason}”` : ''}`;
 }
 
-/** Money in full rupiah, persistency with its sign, counts as they are — the table's own formats. */
+/**
+ * Money in full rupiah, persistency with its sign, counts as they are — the table's own formats, in `id-ID`
+ * (ADR-0167 §1): a persistency to at least one decimal and every decimal the file had, never rounded.
+ */
 function formatFigure(metric: ProductionMetric, value: number): string {
   if (MONEY_METRICS.includes(metric)) return formatRupiah(value);
-  if (metric === 'persistency') return `${value}%`;
-  return String(value);
+  if (metric === 'persistency') return formatPercent(value, { maxDecimals: 4 });
+  return formatNumber(value, { maxDecimals: 4 });
 }
 
 type UploadState =

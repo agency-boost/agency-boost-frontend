@@ -2,6 +2,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
+/** The shell's `show`, for every screen and component beneath it (`ToastHost`). */
+const HostContext = createContext<((message: string) => void) | null>(null);
+
 /**
  * How long a toast stays (`Overall.html:6125-6129`, `showToast`): 2600 ms, as
  * `components-and-patterns.md` *Toast* specifies it.
@@ -19,8 +22,20 @@ export interface ToastMessage {
  *
  * **A later toast replaces an earlier one** and restarts the clock, as the prototype's single element
  * does: two saves in a row leave the second on screen for its full time, not the first's remainder.
+ *
+ * **Inside a shell, the shell's** (P18.95-T1 AC-6): within a `ToastHost`, `show` is the host's and
+ * `toast` stays `null`, and the screen's own `<Toast>` draws nothing — so a shell has **one** toast
+ * region, whichever screen or component beneath it speaks, and two toasts never stack. Outside one (a
+ * component's own spec) the screen keeps a slot of its own, as before.
  */
 export function useToast(duration = TOAST_MS) {
+  const host = useContext(HostContext);
+  const own = useOwnToast(duration);
+  return host ? { toast: null, show: host } : own;
+}
+
+/** One toast slot of its own — a screen outside any shell, and the shell's host itself. */
+function useOwnToast(duration: number) {
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -55,12 +70,24 @@ export function useToast(duration = TOAST_MS) {
  * less movement and everybody who did not.
  */
 export function Toast({ toast }: { toast: ToastMessage | null }) {
+  // Inside a shell the shell's region speaks for it (`useToast`); a second one would stack.
+  if (useContext(HostContext)) return null;
+  return <ToastRegion toast={toast} />;
+}
+
+/**
+ * The region itself. **Above a dialog** (`z-[60]`, over `Modal`'s and the event modal's `z-50`), where
+ * the action that raised it often is — an event's *Join* on a phone, where the modal is the whole screen;
+ * it takes no pointer, so it never stands between a finger and the dialog.
+ */
+function ToastRegion({ toast }: { toast: ToastMessage | null }) {
   return (
     <div
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4 print:hidden"
+      data-layer="toast"
+      className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center px-4 print:hidden"
     >
       {toast && (
         <p
@@ -74,8 +101,6 @@ export function Toast({ toast }: { toast: ToastMessage | null }) {
     </div>
   );
 }
-
-const HostContext = createContext<((message: string) => void) | null>(null);
 
 /**
  * A toast that outlives the page that raised it: held by the shell, which stays mounted while the
@@ -91,7 +116,13 @@ const HostContext = createContext<((message: string) => void) | null>(null);
  * render later, so even that first toast is announced (`Toast`, above, says why that matters).
  */
 export function ToastHost({ children }: { children: ReactNode }) {
-  const { toast, show } = useToast();
+  // A host inside a host is the outer one's: one region per shell (P18.95-T1 AC-6).
+  if (useContext(HostContext)) return <>{children}</>;
+  return <RootToastHost>{children}</RootToastHost>;
+}
+
+function RootToastHost({ children }: { children: ReactNode }) {
+  const { toast, show } = useOwnToast(TOAST_MS);
   const [asked, setAsked] = useState(0);
   const waiting = useRef<string | null>(null);
 
@@ -110,7 +141,7 @@ export function ToastHost({ children }: { children: ReactNode }) {
   return (
     <HostContext.Provider value={raise}>
       {children}
-      {asked > 0 && <Toast toast={toast} />}
+      {asked > 0 && <ToastRegion toast={toast} />}
     </HostContext.Provider>
   );
 }

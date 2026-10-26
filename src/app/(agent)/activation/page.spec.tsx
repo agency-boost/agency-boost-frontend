@@ -55,7 +55,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     await ready();
     const term = screen.getByText('Start date');
     expect(term.tagName).toBe('DT');
-    expect(term.nextElementSibling).toHaveTextContent('Aug 6, 2026');
+    expect(term.nextElementSibling).toHaveTextContent('6 Agu 2026');
     expect(screen.queryByLabelText('Start date')).not.toBeInTheDocument();
   });
 
@@ -69,7 +69,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     expect(completed).toHaveTextContent('Completed5/16');
     expect(completed).toHaveAttribute('data-variant', 'plain');
     expect(screen.getByRole('progressbar', { name: 'Your activation progress' })).toHaveAttribute('aria-valuenow', '31');
-    expect(screen.getByText('31% complete')).toBeInTheDocument();
+    expect(screen.getByText('31,0% complete')).toBeInTheDocument();
 
     const table = screen.getByRole('table', { name: 'Your activation progress' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Aspect', 'Items', 'Status']);
@@ -86,7 +86,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     show({ 'GET /activation/me': { body: completeView() } });
     await ready();
     expect(screen.getByText('Completed').parentElement).toHaveAttribute('data-variant', 'complete');
-    expect(screen.getByText('100% complete')).toBeInTheDocument();
+    expect(screen.getByText('100,0% complete')).toBeInTheDocument();
   });
 
   it('P13-T4 AC-6 prints the window it is served and “{window}+” past it, computing no day of its own', async () => {
@@ -147,9 +147,9 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     const box = within(row('CRM_SETUP')).getByRole('checkbox', { name: 'Set up company CRM system' });
     await userEvent.click(box);
     expect(box).toBeChecked();
-    await screen.findByText('38% complete');
+    await screen.findByText('38,0% complete');
     expect(box).toBeChecked();
-    expect(within(row('CRM_SETUP')).getByRole('button', { name: 'Ticked by you · Oct 3, 2026' })).toBeInTheDocument();
+    expect(within(row('CRM_SETUP')).getByRole('button', { name: 'Ticked by you · 3 Okt 2026' })).toBeInTheDocument();
     expect(writes(calls)).toEqual([['PUT', '/activation/me/items/CRM_SETUP', { done: true }]]);
   });
 
@@ -176,9 +176,9 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     await ready();
     await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox'));
     expect(within(row('CRM_SETUP')).getByRole('checkbox')).toBeChecked();
-    expect(screen.getByText('31% complete')).toBeInTheDocument();
+    expect(screen.getByText('31,0% complete')).toBeInTheDocument();
     await act(async () => { release(); });
-    expect(await screen.findByText('38% complete')).toBeInTheDocument();
+    expect(await screen.findByText('38,0% complete')).toBeInTheDocument();
   });
 
   it('P13-T4 AC-7 a refused tick puts the box back and says why', async () => {
@@ -192,6 +192,54 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     await userEvent.click(box);
     expect(await within(row('CRM_SETUP')).findByRole('alert')).toHaveTextContent('Not saved. This activation is closed.');
     expect(box).not.toBeChecked();
+  });
+
+  it('P18.95-T1 AC-5: a tick says Saved ✓ beside its box once it lands', async () => {
+    show({ 'PUT /activation/me/items/': () => ({ body: crmTicked() }) });
+    await ready();
+    await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox', { name: 'Set up company CRM system' }));
+
+    const said = await within(row('CRM_SETUP')).findByText('Saved ✓');
+    expect(said).toHaveAttribute('role', 'status');
+    // On the box's own line, beside it.
+    expect(said.parentElement).toContainElement(within(row('CRM_SETUP')).getByRole('checkbox'));
+  });
+
+  it('P18.95-T1 AC-5: a refused tick says Couldn’t save — retry, and the retry sends the same tick again', async () => {
+    const { calls } = show({
+      'PUT /activation/me/items/': [
+        { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-1' } } },
+        { body: crmTicked() },
+      ],
+    });
+    await ready();
+    await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox'));
+    const retry = await within(row('CRM_SETUP')).findByRole('button', { name: "Couldn't save — retry: Set up company CRM system" });
+    // The row's own *Not saved.* still says why.
+    expect(within(row('CRM_SETUP')).getByRole('alert')).toHaveTextContent('Not saved. Something went wrong.');
+
+    await userEvent.click(retry);
+
+    await waitFor(() => expect(writes(calls)).toEqual([
+      ['PUT', '/activation/me/items/CRM_SETUP', { done: true }],
+      ['PUT', '/activation/me/items/CRM_SETUP', { done: true }],
+    ]));
+    expect(await within(row('CRM_SETUP')).findByText('Saved ✓')).toBeInTheDocument();
+    expect(within(row('CRM_SETUP')).getByRole('checkbox')).toBeChecked();
+  });
+
+  it('P18.95-T1 AC-5: the note says Saved ✓ under its own box, and the date has none of its own', async () => {
+    show({ 'PUT /activation/me/items/': () => ({ body: activationView() }) });
+    await ready();
+    const crm = within(row('CRM_SETUP'));
+    await userEvent.click(crm.getByRole('button', { name: 'Show note and date' }));
+    const note = crm.getByRole('textbox');
+    await userEvent.type(note, 'Asked IT');
+    await userEvent.tab();
+
+    const said = await crm.findByText('Saved ✓');
+    expect(note.parentElement).toContainElement(said);
+    expect(crm.getAllByText('Saved ✓')).toHaveLength(1);
   });
 
   it('P13-T4 AC-3 the note is saved when the field is left, once, and only when it changed', async () => {
@@ -294,10 +342,10 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
   it('P13-T4 AC-5 every done row says who ticked it and when, or which link completed it', async () => {
     show();
     await ready();
-    expect(within(row('INSURANCE_BASICS')).getByRole('button', { name: 'Ticked by you · Aug 10, 2026' })).toBeInTheDocument();
-    expect(within(row('CAREER_MINDSET')).getByRole('button', { name: 'Ticked by Sari Puspita · Aug 12, 2026' })).toBeInTheDocument();
-    expect(within(row('GOAL_SETTING')).getByRole('button', { name: 'Completed from Goal Settings by you · Aug 15, 2026' })).toBeInTheDocument();
-    expect(within(row('ADD_PROSPECTS')).getByRole('button', { name: 'Completed from Leads Management by Sari Puspita · Aug 16, 2026' })).toBeInTheDocument();
+    expect(within(row('INSURANCE_BASICS')).getByRole('button', { name: 'Ticked by you · 10 Agu 2026' })).toBeInTheDocument();
+    expect(within(row('CAREER_MINDSET')).getByRole('button', { name: 'Ticked by Sari Puspita · 12 Agu 2026' })).toBeInTheDocument();
+    expect(within(row('GOAL_SETTING')).getByRole('button', { name: 'Completed from Goal Settings by you · 15 Agu 2026' })).toBeInTheDocument();
+    expect(within(row('ADD_PROSPECTS')).getByRole('button', { name: 'Completed from Leads Management by Sari Puspita · 16 Agu 2026' })).toBeInTheDocument();
     // An item not done carries none.
     expect(within(row('CRM_SETUP')).queryByText('ⓘ')).not.toBeInTheDocument();
   });
@@ -305,7 +353,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
   it('P13-T4 AC-5 a correction of the start date is said beside it', async () => {
     show({ 'GET /activation/me': { body: activationView({ startCorrected: { by: SARI, at: '2026-09-01T02:00:00.000Z' } }) } });
     await ready();
-    expect(screen.getByRole('button', { name: 'Start date corrected by Sari Puspita · Sep 1, 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start date corrected by Sari Puspita · 1 Sep 2026' })).toBeInTheDocument();
   });
 
   it('P13-T6 AC-3 the leader’s coaching note is read here, read-only, with who wrote it and when', async () => {
@@ -313,7 +361,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     await ready();
     const card = screen.getByRole('region', { name: 'Coaching note' });
     expect(card).toHaveTextContent('Great pace on prospecting — let’s book your first JFW this week.');
-    expect(card).toHaveTextContent('From Sari Puspita · Sep 30, 2026');
+    expect(card).toHaveTextContent('From Sari Puspita · 30 Sep 2026');
     expect(within(card).queryByRole('textbox')).not.toBeInTheDocument();
     expect(within(card).queryByRole('button')).not.toBeInTheDocument();
   });
@@ -427,7 +475,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
   it('P13-T7 AC-4 a graduated activation is not offered here, and says where the checklist now lives', async () => {
     show({ 'GET /activation/me': { body: completeView({ state: 'graduated', graduatedAt: '2026-09-29T03:00:00.000Z', graduatedBy: RINA }) } });
     expect(await screen.findByRole('heading', { level: 2, name: 'Your 90-day activation is complete.' })).toBeInTheDocument();
-    expect(screen.getByText('You marked it complete on Sep 29, 2026.')).toBeInTheDocument();
+    expect(screen.getByText('You marked it complete on 29 Sep 2026.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Your own coaching' })).toHaveAttribute('href', '/coaching/me/activation');
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
@@ -435,7 +483,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
   it('P13-T7 AC-4 an expired activation says when it ended', async () => {
     show({ 'GET /activation/me': { body: activationView({ state: 'expired', endsOn: '2026-09-30' }) } });
     expect(await screen.findByRole('heading', { level: 2, name: 'Your 90-day activation has ended.' })).toBeInTheDocument();
-    expect(screen.getByText('It ran for six months, until Sep 30, 2026.')).toBeInTheDocument();
+    expect(screen.getByText('It ran for six months, until 30 Sep 2026.')).toBeInTheDocument();
   });
 });
 
@@ -456,13 +504,13 @@ describe('Phase 13 exit review — /activation', () => {
 
   it('Phase 13 exit review: an expired activation’s date is the short one every other date on these pages uses', async () => {
     show({ 'GET /activation/me': { body: activationView({ state: 'expired', endsOn: '2027-01-06' }) } });
-    expect(await screen.findByText('It ran for six months, until Jan 6, 2027.')).toBeInTheDocument();
+    expect(await screen.findByText('It ran for six months, until 6 Jan 2027.')).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(/January/);
   });
 
   it('Phase 13 exit review: a graduation with no moment recorded falls back to today, in the short date too', async () => {
     show({ 'GET /activation/me': { body: completeView({ state: 'graduated', graduatedAt: null, today: '2027-01-06' }) } });
-    expect(await screen.findByText('You marked it complete on Jan 6, 2027.')).toBeInTheDocument();
+    expect(await screen.findByText('You marked it complete on 6 Jan 2027.')).toBeInTheDocument();
   });
 
   it('Phase 13 exit review: the hire’s own Day tile has no overdue state, and so no overdue word', async () => {
@@ -480,12 +528,12 @@ describe('Phase 13 exit review — /activation', () => {
     expect(RINA_ME.activation).toEqual({ open: true, complete: false });
 
     await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox'));
-    expect(await screen.findByText('100% complete')).toBeInTheDocument();
+    expect(await screen.findByText('100,0% complete')).toBeInTheDocument();
     expect(session.reload).toHaveBeenCalledTimes(1);
 
     // And back: the untick that takes it below 100% re-reads it too, so the check goes.
     await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox'));
-    expect(await screen.findByText('94% complete')).toBeInTheDocument();
+    expect(await screen.findByText('94,0% complete')).toBeInTheDocument();
     expect(session.reload).toHaveBeenCalledTimes(2);
   });
 
@@ -493,7 +541,7 @@ describe('Phase 13 exit review — /activation', () => {
     const { session } = show({ 'PUT /activation/me/items/': () => ({ body: crmTicked() }) });
     await ready();
     await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox'));
-    expect(await screen.findByText('38% complete')).toBeInTheDocument();
+    expect(await screen.findByText('38,0% complete')).toBeInTheDocument();
     expect(session.reload).not.toHaveBeenCalled();
   });
 
@@ -515,7 +563,7 @@ describe('Phase 13 exit review — /activation', () => {
     }, { ...RINA_ME, activation: null });
     await ready();
     await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox'));
-    expect(await screen.findByText('100% complete')).toBeInTheDocument();
+    expect(await screen.findByText('100,0% complete')).toBeInTheDocument();
     expect(factless.session.reload).not.toHaveBeenCalled();
   });
 });

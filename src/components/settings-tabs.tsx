@@ -3,6 +3,9 @@
 import Link from 'next/link';
 import { useId } from 'react';
 import { usePathname } from 'next/navigation';
+import { cn } from '@/lib/cn';
+import { TAB_PHONE, TAB_ROW_PHONE, UNDERLINED_ROW_PHONE } from '@/components/ui/phone';
+import { useTabRow } from '@/components/ui/use-tab-row';
 
 /**
  * The sub-tabs inside one Settings item.
@@ -64,12 +67,18 @@ export function SettingsTabs({
   const pathname = usePathname();
   const subtabs = variant === 'subtabs';
   const hintId = useId();
+  // On a phone, one row that scrolls sideways, as `RouteTabs` is (ADR-0167; UI-013). Below 768px only.
+  const row = useTabRow<HTMLElement>(activeHref ?? pathname);
 
   return (
     <nav
-      className={subtabs
-        ? 'mb-4 flex flex-wrap gap-1'
-        : 'mb-4 flex flex-wrap gap-1 border-b border-hairline'}
+      ref={row.ref}
+      data-fade={row.fade}
+      className={cn(
+        subtabs ? 'mb-4 flex flex-wrap gap-1' : 'mb-4 flex flex-wrap gap-1 border-b border-hairline',
+        TAB_ROW_PHONE,
+        !subtabs && UNDERLINED_ROW_PHONE,
+      )}
       aria-label={label}
     >
       {tabs.map((tab) => {
@@ -87,6 +96,7 @@ export function SettingsTabs({
             })}
             className={[
               subtabs ? 'rounded-full px-3 py-1 text-sm' : 'border-b-2 px-3 py-2 text-md',
+              TAB_PHONE,
               // The chosen subtab is navy, as every selected chip and filter is: orange is for an action
               // (ADR-0137, the client's request of 2026-10-10), and an amber pill read as a button.
               active && subtabs ? 'bg-navy font-semibold text-white' : '',

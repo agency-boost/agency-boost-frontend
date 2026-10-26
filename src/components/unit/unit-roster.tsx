@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useId, type MouseEvent, type ReactNode } from 'react';
+import { TAP_AREA } from '@/components/ui/phone';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { cn } from '@/lib/cn';
 import {
@@ -510,14 +511,22 @@ function PersonRow({
           />
         </td>
         <td className={cn(CELL, 'text-center')}>
-          {/* `.edit-btn` (`:1734-1735`) as a button: open or closed, named for its person (OD-139). */}
+          {/*
+            * `.edit-btn` (`:1734-1735`) as a button: open or closed, named for its person (OD-139). On a
+            * phone a 44px square centred on it takes the tap while the outlined 28px box stays as drawn
+            * (ADR-0167; UI-029). Alone in its cell, so the square reaches over no other control.
+            */}
           <button
             type="button"
             aria-expanded={open}
             aria-controls={open ? detailId : undefined}
             aria-label={`View details for ${row.isReader ? 'you' : row.name}`}
             onClick={() => onToggle(row.membershipId)}
-            className="mx-auto flex h-7 w-7 items-center justify-center rounded-[6px] border border-hairline bg-transparent text-sm text-muted hover:bg-navy/[0.05] hover:text-navy"
+            className={cn(
+              'mx-auto flex h-7 w-7 items-center justify-center rounded-[6px] border border-hairline bg-transparent text-sm text-muted hover:bg-navy/[0.05] hover:text-navy',
+              'max-md:relative',
+              TAP_AREA,
+            )}
           >
             <span aria-hidden="true" className={cn('leading-none transition-transform', open && 'rotate-180')}>⌄</span>
           </button>

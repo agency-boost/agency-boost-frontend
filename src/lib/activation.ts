@@ -1,5 +1,5 @@
 import { api } from './api-client';
-import { formatOfficeDay, formatShortDay } from './format';
+import { formatOfficeDay, formatPercent, formatShortDay } from './format';
 
 /**
  * The 90-day activation (Phase 13, `docs/02-specs/functional/activation.md`): the shapes the API
@@ -220,7 +220,7 @@ export const PROTOTYPE_COPY = {
   graduate: 'Mark activation complete →',
   day: 'Day',
   completed: 'Completed',
-  pctComplete: (pct: number) => `${pct}% complete`,
+  pctComplete: (pct: number) => `${formatPercent(pct)} complete`,
   aspect: 'Aspect',
   items: 'Items',
   status: 'Status',

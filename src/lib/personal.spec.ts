@@ -7,7 +7,7 @@ describe('personalLines', () => {
     expect(personalLines({
       dateOfBirth: '1990-03-15', gender: 'female', companyJoinMonth: '2021-07', workStatus: 'part_time',
     })).toEqual({
-      dateOfBirth: 'March 15, 1990', gender: 'Female', companyJoinMonth: 'July 2021', workStatus: 'Part-time',
+      dateOfBirth: '15 Mar 1990', gender: 'Female', companyJoinMonth: 'Jul 2021', workStatus: 'Part-time',
     });
   });
 

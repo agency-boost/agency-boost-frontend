@@ -225,8 +225,8 @@ describe('the session workspace (P11-T8)', () => {
 
       await screen.findByRole('button', { name: 'Start coaching session' });
       const header = headerLine();
-      expect(header).toHaveTextContent("Today's session — Friday, October 2, 2026 Draft");
-      expect(within(header).getByText('Friday, October 2, 2026').tagName).toBe('STRONG');
+      expect(header).toHaveTextContent("Today's session — Jumat, 2 Okt 2026 Draft");
+      expect(within(header).getByText('Jumat, 2 Okt 2026').tagName).toBe('STRONG');
     });
 
     it('P11-T8 AC-1 lists past sessions behind View past sessions ▾, each a row that opens its archive', async () => {
@@ -234,7 +234,7 @@ describe('the session workspace (P11-T8)', () => {
       const toggle = await screen.findByRole('button', { name: 'View past sessions' });
       expect(toggle).toHaveTextContent('View past sessions ▾');
       expect(toggle).toHaveAttribute('aria-expanded', 'false');
-      expect(screen.queryByRole('link', { name: /Sep 24, 2026/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /24 Sep 2026/ })).not.toBeInTheDocument();
 
       await userEvent.click(toggle);
 
@@ -242,12 +242,12 @@ describe('the session workspace (P11-T8)', () => {
       expect(toggle).toHaveTextContent('Hide past sessions ▴');
       const rows = within(document.getElementById(toggle.getAttribute('aria-controls')!)!).getAllByRole('link');
       expect(rows.map((r) => [r.textContent, r.getAttribute('href')])).toEqual([
-        ['Sep 24, 2026 — 3 action items · 1 completedView →', '/coaching/mem-rina/archive/s-0924'],
-        ['Sep 17, 2026 — 1 action item · 1 completedView →', '/coaching/mem-rina/archive/s-0917'],
+        ['24 Sep 2026 — 3 action items · 1 completedView →', '/coaching/mem-rina/archive/s-0924'],
+        ['17 Sep 2026 — 1 action item · 1 completedView →', '/coaching/mem-rina/archive/s-0917'],
       ]);
 
       await userEvent.click(toggle);
-      expect(screen.queryByRole('link', { name: /Sep 24, 2026/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /24 Sep 2026/ })).not.toBeInTheDocument();
     });
 
     it('P11-T8 AC-1 says so when there is no past session yet', async () => {
@@ -275,7 +275,8 @@ describe('the session workspace (P11-T8)', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Start coaching session' }));
 
-      await toastSays('Session started — unfinished items and tips from last week carried forward.');
+      // *Session started ✓* first since 2026-10-26 (P18.95-T1 AC-6), the prototype's sentence after it.
+      await toastSays('Session started ✓ — unfinished items and tips from last week carried forward.');
       expect(sent(calls, 'POST', '/coaching/coachees/mem-rina/sessions')).toHaveLength(1);
       expect(screen.queryByRole('button', { name: 'Start coaching session' })).not.toBeInTheDocument();
       expect(screen.getByLabelText('Action item 1')).toHaveValue('Practice a tighter close for the Rp30M+ segment');
@@ -291,7 +292,7 @@ describe('the session workspace (P11-T8)', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: 'Start coaching session' }));
 
-      await toastSays('Session started.');
+      await toastSays('Session started ✓');
       expect(screen.queryByText(/carried forward/)).not.toBeInTheDocument();
       expect(screen.queryByRole('region', { name: "Last week's action items" })).not.toBeInTheDocument();
     });
@@ -323,7 +324,7 @@ describe('the session workspace (P11-T8)', () => {
       show();
       const lastWeek = await card("Last week's action items");
 
-      expect(within(lastWeek).getByText('From Sep 24 session')).toBeInTheDocument();
+      expect(within(lastWeek).getByText('From 24 Sep session')).toBeInTheDocument();
       const done = within(lastWeek).getByRole('checkbox', { name: 'Confirm submission paperwork with Bp. Andi' });
       expect(done).toBeChecked();
       expect(within(lastWeek).getByText('Confirm submission paperwork with Bp. Andi')).toHaveClass('line-through');
@@ -374,17 +375,17 @@ describe('the session workspace (P11-T8)', () => {
       const { calls } = show();
       const goal = await card('Goal');
 
-      await within(goal).findByText(/Rp 65\.600\.000/);
-      expect(goal).toHaveTextContent('Rp 65.600.000 / Rp 80.000.000');
-      expect(goal).toHaveTextContent('82%');
-      expect(goal).toHaveTextContent('Rp 14.400.000 remaining this month.');
-      expect(goal).toHaveTextContent('Rp 620.000.000 / Rp 960.000.000');
-      expect(goal).toHaveTextContent('65%');
-      expect(goal).toHaveTextContent('Rp 340.000.000 remaining this year.');
+      await within(goal).findByText(/Rp 65,6 jt/);
+      expect(goal).toHaveTextContent('Rp 65,6 jt / Rp 80 jt');
+      expect(goal).toHaveTextContent('82,0%');
+      expect(goal).toHaveTextContent('Rp 14,4 jt remaining this month.');
+      expect(goal).toHaveTextContent('Rp 620 jt / Rp 960 jt');
+      expect(goal).toHaveTextContent('65,0%');
+      expect(goal).toHaveTextContent('Rp 340 jt remaining this year.');
       expect(within(goal).getByRole('progressbar', { name: 'This month’s target' })).toHaveAttribute('aria-valuenow', '82');
       expect(within(goal).getByText('Click this year’s target to edit')).toBeInTheDocument();
       // One control on the card: the annual target. This month's target is a figure.
-      expect(within(goal).getAllByRole('button').map((b) => b.textContent)).toEqual(['Rp 960.000.000, this year’s target — edit']);
+      expect(within(goal).getAllByRole('button').map((b) => b.textContent)).toEqual(['Rp 960 jt, this year’s target — edit']);
       expect(calls.filter((c) => c.url.includes('/summary?for=mem-rina')).map((c) => c.url))
         .toEqual(['http://api.test/api/v1/summary?for=mem-rina']);
     });
@@ -479,16 +480,16 @@ describe('the session workspace (P11-T8)', () => {
       const ratios = await card('Ratios');
 
       expect(within(ratios).getByText('Last 30 days')).toBeInTheDocument();
-      await within(ratios).findByText('18.0%');
+      await within(ratios).findByText('18,0%');
       const lines = within(ratios).getAllByRole('listitem').map((li) => li.textContent);
       expect(lines).toEqual([
-        'Selling success rate18.0%Benchmark: 15.0%',
-        'Leads per activity0.35Benchmark: 0.30',
-        'Recruitment success rate–Benchmark: 15.0%',
+        'Selling success rate18,0%Benchmark: 15,0%',
+        'Leads per activity0,35Benchmark: 0,30',
+        'Recruitment success rate–Benchmark: 15,0%',
         // Each side's share of the two, as her own Activity Ratios card writes it (P13.1-T6 AC-7).
-        'Sales vs. Recruitment70% Selling · 30% RecruitmentBenchmark: 35%–65% each side',
+        'Sales vs. Recruitment70,0% Selling · 30,0% RecruitmentBenchmark: 35,0%–65,0% each side',
       ]);
-      expect(within(ratios).getByText('18.0%')).toHaveClass('text-success');
+      expect(within(ratios).getByText('18,0%')).toHaveClass('text-success');
       expect(within(ratios).getByText('–')).toHaveClass('text-muted');
       expect(sent(calls, 'GET', '/activity/ratios').map((c) => c.url)).toEqual(['http://api.test/api/v1/activity/ratios?for=mem-rina']);
     });
@@ -650,8 +651,8 @@ describe('the session workspace (P11-T8)', () => {
       expect(within(next).getByRole('heading', { name: 'From leads (automatic)' })).toBeInTheDocument();
       const fromLeads = within(next).getAllByRole('list')[0];
       expect(within(fromLeads).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-        'Oct 5Leads · Desi PratamaConfirm submission paperwork',
-        'Oct 7Leads · Hana PermataFollow up with Hana Permata',
+        '5 OktLeads · Desi PratamaConfirm submission paperwork',
+        '7 OktLeads · Hana PermataFollow up with Hana Permata',
       ]);
     });
 
@@ -725,7 +726,7 @@ describe('the session workspace (P11-T8)', () => {
       expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(1);
       expect(bodyOf(sent(calls, 'POST', '/finalize')[0])).toEqual({ version: 2 });
 
-      expect(screen.getByText('✓ Finalized Friday, October 2, 2026')).toBeInTheDocument();
+      expect(screen.getByText('✓ Finalized Jumat, 2 Okt 2026')).toBeInTheDocument();
       expect(headerLine()).toHaveTextContent('Finalized');
       // The lock (`Overall.html:1389-1417`): no add, no remove, inputs as text, the target not a control.
       for (const name of ['Add tip', 'Add action', '+ Add lead', 'Remove tip 1', 'Finalize this session']) {
@@ -789,7 +790,7 @@ describe('the session workspace (P11-T8)', () => {
       await toastSays('Reopened for editing — finalize again when you’re done.');
       expect(bodyOf(sent(calls, 'POST', '/reopen')[0])).toEqual({ version: 3, reason: 'Wrong date on the follow-up' });
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(headerLine()).toHaveTextContent('Friday, October 2, 2026 Draft');
+      expect(headerLine()).toHaveTextContent('Jumat, 2 Okt 2026 Draft');
       expect(screen.getByLabelText('Tip 1')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Finalize this session' })).toBeInTheDocument();
     });
@@ -819,12 +820,12 @@ describe('the session workspace (P11-T8)', () => {
 
       const edit = await screen.findByRole('button', { name: 'Edit again' });
       expect(edit).toHaveAttribute('aria-disabled', 'true');
-      expect(edit).toHaveAttribute('title', 'This session could be reopened until Oct 9, 2026.');
-      expect(edit).toHaveAccessibleDescription('This session could be reopened until Oct 9, 2026.');
+      expect(edit).toHaveAttribute('title', 'This session could be reopened until 9 Okt 2026.');
+      expect(edit).toHaveAccessibleDescription('This session could be reopened until 9 Okt 2026.');
       await userEvent.click(edit);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       // The header names the session's own date, not the office's today (a Fix).
-      expect(headerLine()).toHaveTextContent('Friday, October 2, 2026');
+      expect(headerLine()).toHaveTextContent('Jumat, 2 Okt 2026');
     });
 
     it('P11-T8 AC-10 a finalized session still opens its past sessions, its closed leads and the Activity drill', async () => {
@@ -837,7 +838,7 @@ describe('the session workspace (P11-T8)', () => {
       expect(screen.queryByRole('button', { name: 'Edit again' })).not.toBeInTheDocument();
 
       await userEvent.click(screen.getByRole('button', { name: 'View past sessions' }));
-      expect(screen.getByRole('link', { name: /Sep 24, 2026/ })).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: /24 Sep 2026/ })).toBeInTheDocument();
       const drill = within(week).getByRole('button', { name: '→ view full dashboard' });
       await waitFor(() => expect(drill).toBeEnabled());
       await userEvent.click(drill);
@@ -878,6 +879,94 @@ describe('the session workspace (P11-T8)', () => {
       await userEvent.type(within(tips).getByLabelText('Tip 1'), '!');
       await userEvent.tab();
       expect(await screen.findByRole('alert')).toHaveTextContent('At most 50 tips.');
+    });
+  });
+
+  /**
+   * **A field that saves itself says so** (P18.95-T1 AC-5; ADR-0167 §5; the client's UI review of 2026-10-26, UI-007):
+   * the draft is saved as it is edited, and each field — a tip, an action item, last week's tick and date — says
+   * *Saving… → Saved ✓* beside it, or *Couldn't save — retry*.
+   */
+  describe('P18.95-T1 AC-5 — the draft’s fields say their save', () => {
+    const tip = 'Slow down on the opening line — let the client finish before pitching.';
+
+    it('P18.95-T1 AC-5: a tip left changed says Saved ✓ under it; one left untouched says nothing', async () => {
+      const { calls } = show();
+      const tips = await card('Coaching tips');
+      const box = within(tips).getByLabelText('Tip 1');
+      await userEvent.click(box);
+      await userEvent.tab();
+      expect(within(tips).queryByRole('status')).not.toBeInTheDocument();
+      expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(0);
+
+      await userEvent.type(box, '!');
+      await userEvent.tab();
+
+      const said = await within(tips).findByText('Saved ✓');
+      expect(box.parentElement).toContainElement(said);
+      expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(1);
+    });
+
+    it('P18.95-T1 AC-5: a refused save offers the retry beside the tip, which sends the same words again', async () => {
+      const { calls } = show({
+        'PUT /coaching/sessions/s-1': [refused(500, 'INTERNAL_ERROR', 'Something went wrong.'), echoSave],
+      });
+      const tips = await card('Coaching tips');
+      await userEvent.type(within(tips).getByLabelText('Tip 1'), '!');
+      await userEvent.tab();
+
+      const retry = await within(tips).findByRole('button', { name: "Couldn't save — retry: Tip 1" });
+      // The banner above the session still says why.
+      expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong.');
+      await userEvent.click(retry);
+
+      await waitFor(() => expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(2));
+      const [first, second] = sent(calls, 'PUT', '/coaching/sessions/s-1').map(bodyOf);
+      expect(second.tips[0].text).toBe(`${tip}!`);
+      expect(second.tips).toEqual(first.tips);
+      expect(await within(tips).findByText('Saved ✓')).toBeInTheDocument();
+      expect(within(tips).getByLabelText('Tip 1')).toHaveFocus();
+    });
+
+    it('P18.95-T1 AC-5: the draft is saved whole, so a later save that lands takes an earlier failure’s retry away', async () => {
+      show({ 'PUT /coaching/sessions/s-1': [refused(500, 'INTERNAL_ERROR', 'Something went wrong.'), echoSave] });
+      const tips = await card('Coaching tips');
+      await userEvent.type(within(tips).getByLabelText('Tip 1'), '!');
+      await userEvent.tab();
+      expect(await within(tips).findByRole('button', { name: "Couldn't save — retry: Tip 1" })).toBeInTheDocument();
+
+      const lastWeek = await card("Last week's action items");
+      await userEvent.click(within(lastWeek).getByRole('checkbox', { name: 'Follow up with Alvin Sanjaya — no contact in 8 days' }));
+
+      expect(await within(lastWeek).findByText('Saved ✓')).toBeInTheDocument();
+      expect(within(tips).queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+    });
+
+    it('P18.95-T1 AC-5: last week’s tick says Saved ✓ at its row’s end', async () => {
+      show();
+      const lastWeek = await card("Last week's action items");
+      const box = within(lastWeek).getByRole('checkbox', { name: 'Follow up with Alvin Sanjaya — no contact in 8 days' });
+      await userEvent.click(box);
+
+      const said = await within(lastWeek).findByText('Saved ✓');
+      expect(box.closest('li')).toContainElement(said);
+    });
+
+    it('P18.95-T1 AC-5: a stale save reads the session again and leaves nothing to retry', async () => {
+      show({
+        'PUT /coaching/sessions/s-1': refused(409, 'VERSION_CONFLICT', 'Somebody saved first.'),
+        'GET /coaching/sessions/s-1': [
+          { body: session() },
+          { body: session({ version: 5, tips: [{ tipId: 't-1', text: 'Saved on the other device' }] }) },
+        ],
+      });
+      const tips = await card('Coaching tips');
+      await userEvent.type(within(tips).getByLabelText('Tip 1'), ' more');
+      await userEvent.tab();
+
+      expect(await screen.findByText('This session was changed somewhere else, so it has been read again.')).toBeInTheDocument();
+      await waitFor(() => expect(within(tips).getByLabelText('Tip 1')).toHaveValue('Saved on the other device'));
+      expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
     });
   });
 
@@ -989,7 +1078,7 @@ describe('the session workspace (P11-T8)', () => {
       await waitFor(() => expect(print).toHaveBeenCalledTimes(1));
       expect(calls.filter((c) => c.url.endsWith('/coaching/sessions/s-1/print'))).toHaveLength(1);
       // Its coach printed it: the paper does not name them.
-      expect(document.querySelector('[data-print-view] p')).toHaveTextContent(/^Friday, October 2, 2026 · Finalized$/);
+      expect(document.querySelector('[data-print-view] p')).toHaveTextContent(/^Jumat, 2 Okt 2026 · Finalized$/);
       act(() => { window.dispatchEvent(new Event('afterprint')); });
     });
 
@@ -1030,7 +1119,7 @@ describe('the session workspace (P11-T8)', () => {
       await reread.open();
       await toastSays('Goal updated — reflected across both tabs.');
       expect(within(goal).queryByLabelText('Annual APE target')).not.toBeInTheDocument();
-      expect(goal).toHaveTextContent('Rp 620.000.000 / Rp 1.200.000.000');
+      expect(goal).toHaveTextContent('Rp 620 jt / Rp 1,2 M');
     });
 
     it('P11-T8’s walk: reads the last 7 days again once the annual target is saved, since its pro-rated targets follow the goal', async () => {
@@ -1061,7 +1150,7 @@ describe('the session workspace (P11-T8)', () => {
       await userEvent.click(within(goal).getByRole('button', { name: 'Save' }));
 
       expect(await within(goal).findByRole('alert')).toHaveTextContent('Summary down');
-      expect(goal).not.toHaveTextContent('Rp 960.000.000');
+      expect(goal).not.toHaveTextContent('Rp 960 jt');
       await toastSays('Goal updated — reflected across both tabs.');
     });
   });

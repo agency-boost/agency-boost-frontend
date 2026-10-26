@@ -50,24 +50,26 @@ describe('the words a row is drawn in', () => {
     expect(rowName(DIMAS)).toBe('Dimas Pratama');
   });
 
-  it('P15-T2 AC-3 writes the goal line over or short, over its achieved-of-target', () => {
-    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14.400.000 short', sub: 'Rp 65.600.000 of Rp 80.000.000' });
+  it('P15-T2 AC-3 writes the goal line over or short, over its achieved-of-target — compact, one Rp (UI-030, ADR-0167 §1)', () => {
+    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82,0% · Rp 14,4 jt short', sub: 'Rp 65,6 jt of 80 jt' });
     expect(goalWords(goalCell({ actualMinor: rp(108), attainmentPct: 135, targetMet: true, overMinor: rp(28) })))
-      .toEqual({ tone: 'over', line: '135% · +Rp 28.000.000 over', sub: 'Rp 108.000.000 of Rp 80.000.000' });
+      .toEqual({ tone: 'over', line: '135,0% · +Rp 28 jt over', sub: 'Rp 108 jt of 80 jt' });
+    // The client's own example (UI-030): it wrapped as *Rp 357.500.000 of Rp 712.666.667*.
+    expect(goalWords({ targetMinor: rp(712.666667), actualMinor: rp(357.5), attainmentPct: 50 }).sub).toBe('Rp 357,5 jt of 712,7 jt');
   });
 
   it('P15-T2 AC-3 never shows a missing figure as 0: Not uploaded yet, and No goal set', () => {
     expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null })))
-      .toEqual({ tone: 'missing', line: 'Not uploaded yet', sub: 'of Rp 80.000.000 target' });
+      .toEqual({ tone: 'missing', line: 'Not uploaded yet', sub: 'of Rp 80 jt target' });
     expect(goalWords(goalCell({ set: false, targetMinor: null, attainmentPct: null })))
-      .toEqual({ tone: 'none', line: 'No goal set', sub: 'Rp 65.600.000' });
+      .toEqual({ tone: 'none', line: 'No goal set', sub: 'Rp 65,6 jt' });
     expect(goalWords({ targetMinor: null, actualMinor: null, attainmentPct: null }))
       .toEqual({ tone: 'none', line: 'No goal set', sub: null });
   });
 
   it('P15-T2 AC-3 says a month made before it began is made, never 0% of Rp 0 (ADR-0047)', () => {
     const made = goalCell({ targetMinor: 0, actualMinor: rp(12), attainmentPct: null, gapMinor: 0, overMinor: rp(12), policiesNeeded: 0, targetMet: true });
-    expect(goalWords(made)).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'Rp 12.000.000' });
+    expect(goalWords(made)).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'Rp 12 jt' });
     expect(goalWords({ ...made, actualMinor: null })).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'Not uploaded yet' });
     // A total whose target-holding rows were all made sums to a target of 0, and says the same.
     expect(goalWords({ targetMinor: 0, actualMinor: rp(30), attainmentPct: null }).line).toBe('Year’s target made');
@@ -78,10 +80,10 @@ describe('the words a row is drawn in', () => {
   });
 
   it('P15-T2 AC-4 works a total’s over and short from its two sums, when the server sends no gap', () => {
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(120), attainmentPct: 120 }).line).toBe('120% · +Rp 20.000.000 over');
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: 40 }).line).toBe('40% · Rp 60.000.000 short');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(120), attainmentPct: 120 }).line).toBe('120,0% · +Rp 20 jt over');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: 40 }).line).toBe('40,0% · Rp 60 jt short');
     // A percentage with nothing to show is the cell's own zero, not a missing one.
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: null }).line).toBe('0% · Rp 60.000.000 short');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: null }).line).toBe('0,0% · Rp 60 jt short');
   });
 
   it('P15-T2 AC-3 writes the leads lines, the recruit line a dash when there is nothing to recruit', () => {
@@ -125,9 +127,9 @@ describe('the words a row is drawn in', () => {
 
   it('P15-T2 AC-5 writes the gap and the policies it needs, singular at one', () => {
     expect(gapWords(goalCell())).toEqual({
-      value: 'Rp 14.400.000 remaining', note: '≈ 1 policy needed at their avg case size of Rp 18.000.000.',
+      value: 'Rp 14,4 jt remaining', note: '≈ 1 policy needed at their avg case size of Rp 18 jt.',
     });
-    expect(gapWords(goalCell({ policiesNeeded: 3 })).note).toBe('≈ 3 policies needed at their avg case size of Rp 18.000.000.');
+    expect(gapWords(goalCell({ policiesNeeded: 3 })).note).toBe('≈ 3 policies needed at their avg case size of Rp 18 jt.');
     expect(gapWords(goalCell({ policiesNeeded: null })).note).toBeNull();
     expect(gapWords(goalCell({ set: false }))).toEqual({ value: 'No goal set', note: null });
     expect(gapWords(goalCell({ gapMinor: null }))).toEqual({ value: 'Not uploaded yet', note: null });
@@ -139,11 +141,11 @@ describe('the words a row is drawn in', () => {
       correctedBy: { membershipId: 'mem-owner', name: 'Ibu Ratna' }, correctedAt: '2026-10-05T18:00:00.000Z',
     };
     // 18:00 UTC is the next morning in Jakarta: the day is the office's.
-    expect(provenanceWords(corrected, 'month', false)).toBe('Corrected after the production upload, October 2026, by Ibu Ratna on Oct 6, 2026');
+    expect(provenanceWords(corrected, 'month', false)).toBe('Corrected after the production upload, Okt 2026, by Ibu Ratna on 6 Okt 2026');
     expect(provenanceWords(corrected, 'year', true))
-      .toBe('Corrected after the production upload, year to date as of October 2026, by Ibu Ratna on Oct 6, 2026');
-    expect(provenanceWords({ ...corrected, correctedAt: null }, 'month', false)).toBe('Corrected after the production upload, October 2026, by Ibu Ratna');
-    expect(provenanceWords({ ...corrected, correctedBy: null }, 'month', false)).toBe('Corrected after the production upload, October 2026');
+      .toBe('Corrected after the production upload, year to date as of Okt 2026, by Ibu Ratna on 6 Okt 2026');
+    expect(provenanceWords({ ...corrected, correctedAt: null }, 'month', false)).toBe('Corrected after the production upload, Okt 2026, by Ibu Ratna');
+    expect(provenanceWords({ ...corrected, correctedBy: null }, 'month', false)).toBe('Corrected after the production upload, Okt 2026');
     const own = { provenance: 'self_reported' as const, month: null, correctedBy: null, correctedAt: null };
     expect(provenanceWords(own, 'month', true)).toBe('Your own figure, entered in Goal Settings');
     expect(provenanceWords(own, 'month', false)).toBe('Their own figure, entered in Goal Settings');
@@ -167,7 +169,7 @@ describe('the words a row is drawn in', () => {
 
   it('P15-T3 says the month is locked and who reopens it, with none of the six words', () => {
     const words = lockedWords('2026-10');
-    expect(words).toBe('Production for October 2026 is locked. The Owner or Admin can reopen it.');
+    expect(words).toBe('Production for Okt 2026 is locked. The Owner or Admin can reopen it.');
     expect(words).not.toMatch(/office|KPM|reports to|tagged to|untagged|unassigned/i);
   });
 });

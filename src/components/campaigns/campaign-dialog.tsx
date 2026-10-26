@@ -2,9 +2,11 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { TAP_AREA } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { useCampaignDialogHost, toggleChase } from '@/components/campaigns/campaign-list';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import {
   figureWords, isReservedCode, OWN_COPY, progressWords, PROTOTYPE_COPY, readCampaign,
   type CampaignCard, type CampaignDetail, type CampaignRequirement, type ProgressRow,
@@ -129,7 +131,7 @@ export function CampaignDialog({
       type="button"
       aria-label={OWN_COPY.close}
       onClick={onClose}
-      className="absolute right-3 top-3 flex h-[30px] w-[30px] items-center justify-center rounded-full bg-navy/50 text-md text-white hover:bg-navy/70"
+      className={cn('absolute right-3 top-3 flex h-[30px] w-[30px] items-center justify-center rounded-full bg-navy/50 text-md text-white hover:bg-navy/70', TAP_AREA)}
     >
       <span aria-hidden="true">✕</span>
     </button>

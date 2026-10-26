@@ -13,6 +13,7 @@ import {
 } from '@/components/coaching-person';
 import { SummaryCard } from '@/components/personal-summary';
 import { ButtonLink, Card, ErrorBanner } from '@/components/ui/field';
+import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { useRoleLabel } from '@/components/ui/role-badge';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
@@ -25,8 +26,7 @@ import {
 } from '@/lib/coaching';
 import { MY_COACHING_ACTIVATION_HREF } from '@/lib/activation';
 import { MY_COACHING_TRAINING_HREF } from '@/lib/training';
-import { formatCalendarDayLong, formatDay, formatShortDay } from '@/lib/format';
-import { formatRupiah } from '@/lib/goals';
+import { formatCalendarDayLong, formatDay, formatRupiahCompact, formatShortDay } from '@/lib/format';
 import { useCan, useSession } from '@/lib/session';
 
 /**
@@ -94,7 +94,7 @@ function RecordHeader({
             aria-expanded={showPast}
             aria-controls={listId}
             onClick={() => setShowPast((v) => !v)}
-            className="rounded-sm text-sm font-semibold text-navy-soft hover:underline"
+            className={cn('rounded-sm text-sm font-semibold text-navy-soft hover:underline', TEXT_TAP)}
           >
             {showPast ? 'Hide past sessions' : 'View past sessions'}
             <span aria-hidden="true">{showPast ? ' ▴' : ' ▾'}</span>
@@ -122,6 +122,7 @@ function HistoryRow({
         aria-current={current ? 'true' : undefined}
         className={cn(
           'flex items-center justify-between gap-3 rounded-sm py-[7px] text-sm hover:text-navy',
+          TAP_HEIGHT,
           current ? 'text-navy' : 'text-muted',
         )}
       >
@@ -219,9 +220,9 @@ function FrozenGoalCard({ goal }: { goal: SnapshotGoal | null }) {
           <GoalRow
             figures={goal.monthly}
             period="month"
-            target={goal.monthly.targetMinor === null ? '—' : formatRupiah(goal.monthly.targetMinor)}
+            target={goal.monthly.targetMinor === null ? '—' : formatRupiahCompact(goal.monthly.targetMinor)}
           />
-          <GoalRow figures={goal.yearly} period="year" className="mt-3.5" target={formatRupiah(goal.yearly.targetMinor)} />
+          <GoalRow figures={goal.yearly} period="year" className="mt-3.5" target={formatRupiahCompact(goal.yearly.targetMinor)} />
         </>
       ) : (
         <p className="font-body text-[1.1875rem] font-bold text-navy">No goal set</p>
@@ -321,7 +322,7 @@ function EarlierVersionRow({ version }: { version: EarlierVersion }) {
         aria-expanded={open}
         aria-controls={bodyId}
         onClick={() => setOpen((v) => !v)}
-        className="mt-1.5 rounded-sm text-sm font-semibold text-navy-soft hover:underline"
+        className={cn('mt-1.5 rounded-sm text-sm font-semibold text-navy-soft hover:underline', TEXT_TAP)}
       >
         {open ? 'Hide what it agreed' : 'View what it agreed'}
         <span aria-hidden="true">{open ? ' ▴' : ' ▾'}</span>

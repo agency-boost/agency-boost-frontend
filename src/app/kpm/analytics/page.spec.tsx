@@ -86,8 +86,8 @@ describe('KPM analytics (P18-T2)', () => {
       await table();
       const rules = screen.getByRole('button', { name: 'How is MOC decided?' });
       expect(rules).toHaveAccessibleDescription(
-        'AAB: Net APE ≥ Rp200M AND Monthly2 AA ≥ 2 AND Rolling Persistency DU ≥ 75%.\n'
-        + 'AB: (Net APE ≥ Rp600M AND Monthly2 AA DU ≥ 4 / DG ≥ 6 AND Rolling Persistency DU/DG ≥ 75%) OR Direct AB (AB on AB) ≥ 5.',
+        'AAB: Net APE ≥ Rp 200 jt AND Monthly2 AA ≥ 2 AND Rolling Persistency DU ≥ 75,0%.\n'
+        + 'AB: (Net APE ≥ Rp 600 jt AND Monthly2 AA DU ≥ 4 / DG ≥ 6 AND Rolling Persistency DU/DG ≥ 75,0%) OR Direct AB (AB on AB) ≥ 5.',
       );
     });
 
@@ -162,15 +162,15 @@ describe('KPM analytics (P18-T2)', () => {
       const row = rowOf('Hendra Wibowo');
       expect(within(row).getByText('Rp 62.000.000')).toBeInTheDocument();
       expect(within(row).getByText(/^of Rp 150\.000\.000 target/)).toBeInTheDocument();
-      expect(within(row).getByText('41%')).toHaveClass('text-alert');
-      expect(within(row).getByText('87%')).toHaveClass('text-success');
+      expect(within(row).getByText('41,0%')).toHaveClass('text-alert');
+      expect(within(row).getByText('87,0%')).toHaveClass('text-success');
     });
 
     it('colours the pill by the split the server sends, keeping no copy of its own (invariant §7)', async () => {
       open({ body: analyticsView('this_month', { thresholds: { statusSplitPct: 90 } }) });
       await table();
-      expect(within(rowOf('Hendra Wibowo')).getByText('87%')).toHaveClass('text-alert');
-      expect(within(rowOf('Wilson Tanoto (you)')).getByText('100%')).toHaveClass('text-success');
+      expect(within(rowOf('Hendra Wibowo')).getByText('87,0%')).toHaveClass('text-alert');
+      expect(within(rowOf('Wilson Tanoto (you)')).getByText('100,0%')).toHaveClass('text-success');
     });
 
     it('writes Coached (7d), Active and Total leads as the prototype does', async () => {
@@ -178,9 +178,9 @@ describe('KPM analytics (P18-T2)', () => {
       await table();
       const row = rowOf('Hendra Wibowo');
       expect(within(row).getByText('6 / 31')).toBeInTheDocument();
-      expect(within(row).getByText('19%')).toBeInTheDocument();
+      expect(within(row).getByText('19,0%')).toBeInTheDocument();
       expect(within(row).getByText('21 / 31')).toBeInTheDocument();
-      expect(within(row).getByText('68%')).toBeInTheDocument();
+      expect(within(row).getByText('68,0%')).toBeInTheDocument();
       expect(within(row).getByText('23')).toBeInTheDocument();
       expect(within(row).getByText('15 sales (9 potential) · 8 recruit (5 potential)')).toBeInTheDocument();
     });
@@ -244,7 +244,7 @@ describe('KPM analytics (P18-T2)', () => {
     open([{ body: { ...view, total: { ...view.total, leaversExcludedMinor: 12_500_000_00 } } }]);
     await table();
     expect(screen.getByRole('button', {
-      name: /^Leaves out Rp\s?12\.500\.000 produced this year by members who have since left; the Overview’s year counts it\.$/,
+      name: /^Leaves out Rp 12,5 jt produced this year by members who have since left; the Overview’s year counts it\.$/,
     })).toBeInTheDocument();
   });
 
@@ -265,9 +265,9 @@ describe('KPM analytics (P18-T2)', () => {
       expect(within(dialog).getByText('Requirements met')).toBeInTheDocument();
       const rows = within(dialog).getAllByRole('listitem');
       expect(rows[0]).toHaveTextContent('Net APE');
-      expect(rows[0]).toHaveTextContent('January – September 2026');
-      expect(rows[0]).toHaveTextContent('Rp 1.300.000.000 / Rp 600.000.000 — Met');
-      expect(rows[3]).toHaveTextContent('82% / 75% — Met');
+      expect(rows[0]).toHaveTextContent('Jan – Sep 2026');
+      expect(rows[0]).toHaveTextContent('Rp 1,3 M / Rp 600 jt — Met');
+      expect(rows[3]).toHaveTextContent('82,0% / 75,0% — Met');
       expect(rows[4]).toHaveTextContent('— OR — Direct AB (AB on AB)');
       expect(rows[4]).toHaveTextContent('1 / 5 — Gap');
       expect(within(dialog).getByText('Met via the standard three-criteria path.')).toBeInTheDocument();
@@ -299,7 +299,7 @@ describe('KPM analytics (P18-T2)', () => {
       const dialog = screen.getByRole('dialog', { name: 'Wilson Tanoto — Maintenance of Contract' });
       expect(dialog).toHaveAccessibleDescription('Not uploaded yet: Rolling Persistency — DU/DG.');
       expect(within(dialog).queryByText('Not yet met')).not.toBeInTheDocument();
-      expect(within(dialog).getAllByRole('listitem')[1]).toHaveTextContent('— / 75% — Not uploaded yet');
+      expect(within(dialog).getAllByRole('listitem')[1]).toHaveTextContent('— / 75,0% — Not uploaded yet');
     });
 
     it('says "See {name} above" on a (Direct) row and gives an AAB row its own verdict', async () => {
@@ -341,12 +341,13 @@ describe('KPM analytics (P18-T2)', () => {
       expect(screen.getByText('Last 6 months, combined APE — whole group')).toBeInTheDocument();
       const months = within(screen.getByRole('list', { name: 'Monthly production' })).getAllByRole('listitem');
       expect(months.map((m) => m.textContent)).toEqual([
-        'April 2026: Rp 520.000.000Apr',
-        'May 2026: Rp 610.000.000May',
-        'June 2026: Rp 580.000.000Jun',
-        'July 2026: Rp 700.000.000Jul',
-        'August 2026: Not uploaded yetAug',
-        'September 2026: Rp 800.000.000Sep',
+        // A bar's label is compact (ADR-0167 §1), its month `id-ID`'s.
+        'Apr 2026: Rp 520 jtApr',
+        'Mei 2026: Rp 610 jtMei',
+        'Jun 2026: Rp 580 jtJun',
+        'Jul 2026: Rp 700 jtJul',
+        'Agu 2026: Not uploaded yetAgu',
+        'Sep 2026: Rp 800 jtSep',
       ]);
       // The gap has no bar with a height: an outline, never a zero-height bar.
       expect(months[4].querySelector('[style*="height"]')).toBeNull();

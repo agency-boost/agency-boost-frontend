@@ -7,6 +7,7 @@ import { Card, ErrorBanner } from '@/components/ui/field';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { formatNumber } from '@/lib/format';
 import { readPlatformOverview, type AttentionItem, type PlatformOverview } from '@/lib/admin';
 
 /**
@@ -151,7 +152,7 @@ function Tile({ label, value, lead }: { label: string; value: number; lead?: boo
       <p
         className={`mt-1 font-display text-3xl font-bold ${lead ? 'text-amber-deep' : 'text-navy'}`}
       >
-        {value.toLocaleString('en-GB')}
+        {formatNumber(value)}
       </p>
     </Card>
   );
@@ -163,7 +164,7 @@ function Figure({ label, value }: { label: string; value: number }) {
       <span className="block text-2xs font-semibold uppercase tracking-wide text-muted">
         {label}
       </span>
-      <span className="block text-md font-bold text-navy">{value.toLocaleString('en-GB')}</span>
+      <span className="block text-md font-bold text-navy">{formatNumber(value)}</span>
     </span>
   );
 }

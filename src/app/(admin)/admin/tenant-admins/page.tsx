@@ -8,6 +8,7 @@ import { Card, ErrorBanner } from '@/components/ui/field';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { formatOfficeDay } from '@/lib/format';
 import { readTenantAdmins, type PlatformAdminRow } from '@/lib/admin';
 
 /**
@@ -87,7 +88,7 @@ export default function TenantAdminsPage() {
                 <Cell className="text-muted">
                   {r.grantedAt ? (
                     <time dateTime={r.grantedAt}>
-                      {new Date(r.grantedAt).toLocaleDateString('en-GB')}
+                      {formatOfficeDay(r.grantedAt)}
                     </time>
                   ) : (
                     // An Owner's rights arrive with the office, not from a grant, so

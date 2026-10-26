@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { TextInput } from '@/components/ui/field';
+import { InlineSaveField, useInlineSave, type InlineSaveOutcome } from '@/components/ui/inline-save-status';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
@@ -16,6 +17,9 @@ import { OverviewCard } from './parts';
  * *1* on its way, short enough that leaving the page a moment after typing has kept it.
  */
 export const TARGET_SAVE_DELAY_MS = 600;
+
+/** The *Target*'s own *Saving… → Saved ✓* (P18.95-T1 AC-5): the one field on this card that saves itself. */
+const TARGET_KEY = 'target';
 
 /**
  * *Recruitment pipeline* (`KPM_Owner.html:1049-1073`, CSS `:516-528`): four tiles and the pill.
@@ -56,33 +60,55 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
   typedNow.current = typed;
   const inputId = useId();
   const errorId = useId();
+  /** *Saving… → Saved ✓* beside the box, or *Couldn't save — retry* (P18.95-T1 AC-5). */
+  const inline = useInlineSave();
+  const saveInline = inline.save;
+  /** Unmounted: the save that leaving the page sends goes without a status, there being nowhere to draw one. */
+  const gone = useRef(false);
+  useEffect(() => {
+    gone.current = false;
+    return () => { gone.current = true; };
+  }, []);
 
   const parsed = parseTarget(typed);
   const invalid = typed.trim() !== '' && parsed === null;
 
   const send = useCallback((value: number) => {
-    inFlight.current = true;
-    setError(null);
-    saveRecruitTarget({ month, target: value })
-      .then((written) => {
+    let tries = 0;
+    /**
+     * One write of `value`, answering how it went: the box's status, and **its retry, which sends this same
+     * value again** (AC-5). A newer value typed meanwhile is a new `send`, and its status takes over.
+     */
+    const attempt = async (): Promise<InlineSaveOutcome> => {
+      const retried = tries++ > 0;
+      const before = confirmed.current;
+      inFlight.current = true;
+      setError(null);
+      try {
+        const written = await saveRecruitTarget({ month, target: value });
         confirmed.current = written.target;
         setSaved(written.target);
-      })
-      .catch((err) => {
+        // A retry lands after the refusal put the box back to what was kept: it shows what is kept now.
+        if (retried && parseTarget(typedNow.current) === before) setTyped(String(written.target));
+        return true;
+      } catch (err) {
         setError(toDisplayError(err));
         // What is on screen goes back to what is kept — but only if the box still shows the value refused: a
         // newer value typed meanwhile is the reader's, and is saved in its turn.
         if (parseTarget(typedNow.current) === value) {
           setTyped(confirmed.current === null ? '' : String(confirmed.current));
         }
-      })
-      .finally(() => {
+        return false;
+      } finally {
         inFlight.current = false;
         const next = queued.current;
         queued.current = null;
         if (next !== null && next !== confirmed.current) send(next);
-      });
-  }, [month]);
+      }
+    };
+    if (gone.current) void attempt();
+    else void saveInline(TARGET_KEY, attempt);
+  }, [month, saveInline]);
 
   /** Ask for a value to be kept: now, or after the save in flight. A value already kept asks nothing. */
   const request = useCallback((value: number | null) => {
@@ -108,28 +134,30 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
         </RecruitTile>
         <RecruitTile label={PROTOTYPE_COPY.target} htmlFor={showInput ? inputId : undefined}>
           {showInput ? (
-            <TextInput
-              id={inputId}
-              disabled={readOnly}
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1}
-              value={typed}
-              invalid={invalid}
-              aria-describedby={invalid || error ? errorId : undefined}
-              onChange={(e) => setTyped(e.target.value)}
-              // A field left empty or half-typed goes back to what is kept; nothing is cleared by leaving it.
-              // Leaving the box saves at once what it holds, without waiting for the pause; a box left empty or
-              // half-typed goes back to what is kept — nothing is cleared by leaving it.
-              onBlur={() => {
-                const value = parseTarget(typed);
-                if (value === null) setTyped(saved === null ? '' : String(saved));
-                else request(value);
-              }}
-              // `.rt-target-input` (`:524-527`): Inter 20px bold in a 7px box, inside the tile.
-              className="h-auto w-full rounded-[7px] px-1.5 py-px font-body text-2xl font-bold"
-            />
+            // Its status on the line under it, inside the tile (AC-5); the refusal's reason stays below the tiles.
+            <InlineSaveField status={inline.statusOf(TARGET_KEY)} label={PROTOTYPE_COPY.target}>
+              <TextInput
+                id={inputId}
+                disabled={readOnly}
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                value={typed}
+                invalid={invalid}
+                aria-describedby={invalid || error ? errorId : undefined}
+                onChange={(e) => setTyped(e.target.value)}
+                // Leaving the box saves at once what it holds, without waiting for the pause; a box left empty or
+                // half-typed goes back to what is kept — nothing is cleared by leaving it.
+                onBlur={() => {
+                  const value = parseTarget(typed);
+                  if (value === null) setTyped(saved === null ? '' : String(saved));
+                  else request(value);
+                }}
+                // `.rt-target-input` (`:524-527`): Inter 20px bold in a 7px box, inside the tile.
+                className="h-auto w-full rounded-[7px] px-1.5 py-px font-body text-2xl font-bold"
+              />
+            </InlineSaveField>
           ) : saved === null ? (
             <Value>
               <span aria-hidden="true">—</span>

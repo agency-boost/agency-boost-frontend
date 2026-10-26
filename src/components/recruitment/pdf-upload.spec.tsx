@@ -68,7 +68,7 @@ describe('usePdfUpload', () => {
     render(<Harness sign={sign} />);
 
     await userEvent.upload(input(), pdf('over.pdf', PDF_MAX_BYTES + 1));
-    expect(await screen.findByText(/“over\.pdf” is 25\.0 MB\. A PDF can be 25 MB at most\./)).toBeInTheDocument();
+    expect(await screen.findByText(/“over\.pdf” is 25,0 MB\. A PDF can be 25 MB at most\./)).toBeInTheDocument();
     expect(sign).not.toHaveBeenCalled();
 
     await userEvent.upload(input(), pdf('exact.pdf', PDF_MAX_BYTES));

@@ -88,6 +88,12 @@ const SEEDED = [
   }],
 }));
 
+/** The save status under the date (`SaveStatus`), whatever else on the page is a live region. */
+const saveStatus = () => screen.getByLabelText('Date').parentElement!.nextElementSibling!;
+
+/** The shell's toast region: the status region that is neither the save status nor a skeleton. */
+const toastText = () => screen.queryAllByRole('status').map((r) => r.textContent).join(' | ');
+
 /** The strip's tiles, label and value each, read off the page. */
 function strip() {
   const row = screen.getByText(/^Total touches/).closest('[data-total]')!.parentElement!;
@@ -557,6 +563,58 @@ describe('Log activity (P6-T2)', () => {
       ...over,
     });
 
+    it('P18.95-T1 AC-6: a save that lands says Activity logged ✓, and keeps Saved · n touches under the date', async () => {
+      stubFetch({
+        ...base,
+        '/activity/log': [
+          { body: unsaved() },
+          { body: day({ version: 1, totalCount: 1, entries: unsaved().entries.map((e) => (
+            e.activityTypeCode === 'SELL_SUBMISSION' ? { ...e, count: 1 } : e)) }) },
+        ],
+      });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      await userEvent.click(await screen.findByLabelText('Increase Submission polis'));
+      expect(toastText()).not.toContain('Activity logged ✓');
+      await userEvent.click(screen.getByRole('button', { name: 'Save activity' }));
+
+      await waitFor(() => expect(toastText()).toContain('Activity logged ✓'));
+      expect(saveStatus()).toHaveTextContent('Saved · 1 touches');
+    });
+
+    it('P18.95-T1 AC-6: a refused save toasts nothing, and its reason stays in the banner', async () => {
+      stubFetch({
+        ...base,
+        '/activity/log': [
+          { body: unsaved() },
+          { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r' } } },
+        ],
+      });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      await userEvent.click(await screen.findByLabelText('Increase Submission polis'));
+      await userEvent.click(screen.getByRole('button', { name: 'Save activity' }));
+
+      expect(await screen.findByText('Something went wrong.')).toBeInTheDocument();
+      expect(toastText()).not.toContain('Activity logged ✓');
+      expect(saveStatus()).toHaveTextContent('Not yet saved');
+    });
+
+    it('P18.95-T1 AC-6: a correction of a closed day is the log’s save too, and says Activity logged ✓', async () => {
+      const closed = day({ editable: false, frozenAt: '2026-03-08T00:00:00Z', correctionCount: 0 });
+      stubFetch({
+        ...base,
+        '/activity/log': { body: closed },
+        '/activity/log/correction': { body: { ...closed, correctionCount: 1 } },
+      });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      await userEvent.type(await screen.findByLabelText('Why is this being corrected?'), 'Forgot one');
+      await userEvent.click(screen.getByRole('button', { name: 'Save the correction' }));
+
+      await waitFor(() => expect(toastText()).toContain('Activity logged ✓'));
+    });
+
     it('AC-8: opens a saved day as saved, with the touches it was saved with', async () => {
       // It opened every day as *Not yet saved*: the status was a message Save set, and nothing
       // else ever did (`Overall.html:4937-4958` reads the day's own entry).
@@ -591,11 +649,12 @@ describe('Log activity (P6-T2)', () => {
       await userEvent.click(await screen.findByLabelText('Increase Submission polis'));
       expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
       await userEvent.click(screen.getByRole('button', { name: 'Save activity' }));
-      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved · 1 touches'));
+      // The save's toast is a status region of its own now (P18.95-T1 AC-6): the one under the date is read.
+      await waitFor(() => expect(saveStatus()).toHaveTextContent('Saved · 1 touches'));
 
       fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-03-10' } });
       await waitFor(() => expect(screen.getByLabelText('Date')).toHaveValue('2026-03-10'));
-      expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
+      expect(saveStatus()).toHaveTextContent('Not yet saved');
     });
 
     it('AC-8: opens another saved day as saved, with that day’s touches', async () => {

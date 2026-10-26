@@ -11,7 +11,9 @@ import { StepPills } from '@/components/plan/step-pills';
 import { EmptyShelf } from '@/components/product-catalog';
 import { ProductScript } from '@/components/product-script';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { cn } from '@/lib/cn';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   AGE_CHOICES, ageLabel, BUDGET_CHOICES, budgetLabel, fitNote, moreLine, NEED_CHOICES, needLabel, OWN_COPY,
@@ -140,7 +142,7 @@ export function AttackPlanScreen({ address }: { address: PlanAddress }) {
       <button
         type="button"
         onClick={backToBrief}
-        className="mb-3.5 inline-flex items-center gap-1.5 rounded-sm py-1.5 text-base font-semibold text-navy-soft hover:text-navy"
+        className={cn('mb-3.5 inline-flex items-center gap-1.5 rounded-sm py-1.5 text-base font-semibold text-navy-soft hover:text-navy', TAP_HEIGHT)}
       >
         <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
           <path d="M15 18l-6-6 6-6" />
@@ -226,7 +228,7 @@ function PlanResult({ address, focusResult, onShelf, onSwitch, onAddProfile }: {
             {PROTOTYPE_COPY.bannerLead}<strong className="font-bold">{PROTOTYPE_COPY.bannerStrong}</strong>{PROTOTYPE_COPY.bannerTail}
           </span>
           {/* Navy and underlined on the wash, where amber-dark — and even amber-ink — miss 4.5:1 (`product-catalog.spec.ts`). */}
-          <button type="button" onClick={onAddProfile} className="whitespace-nowrap rounded-sm font-semibold text-navy underline">
+          <button type="button" onClick={onAddProfile} className={cn('whitespace-nowrap rounded-sm font-semibold text-navy underline', TEXT_TAP)}>
             {PROTOTYPE_COPY.addProfile}
           </button>
         </div>
@@ -253,7 +255,7 @@ function PlanResult({ address, focusResult, onShelf, onSwitch, onAddProfile }: {
         <div ref={landing} tabIndex={-1} className="rounded-lg border border-hairline bg-card px-6 py-[22px]" data-state="not-found">
           <p className="m-0 text-md font-semibold text-navy">{OWN_COPY.notFound}</p>
           <p className="m-0 mt-1 text-base text-muted">{OWN_COPY.notFoundHint}</p>
-          <Link href="/product-catalog" className="mt-2 inline-block rounded-sm text-base font-semibold text-amber-ink hover:underline">
+          <Link href="/product-catalog" className={cn('mt-2 inline-block rounded-sm text-base font-semibold text-amber-ink hover:underline', TEXT_TAP)}>
             {OWN_COPY.backToCatalog}
           </Link>
         </div>

@@ -7,9 +7,10 @@ import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  BILLING_COPY as COPY, BILLING_OWN_COPY as OWN, defaultDates, officeToday, priceQuote, readBillingPrices, toDmy,
+  BILLING_COPY as COPY, BILLING_OWN_COPY as OWN, defaultDates, officeToday, priceQuote, readBillingPrices,
   type BillingPrices, type CalculatorInput, type QuoteDetails,
 } from '@/lib/billing';
+import { formatCalendarDay } from '@/lib/format';
 import { printAs, restorePrintTitle } from '@/lib/print';
 import { Estimate, TierCards } from './editor';
 import { QuoteDialog } from './quote-dialog';
@@ -121,7 +122,7 @@ function QuoteTool({ prices }: { prices: BillingPrices }) {
   };
 
   const generate = (details: QuoteDetails) => {
-    setQuote({ pricing, details, generatedOn: toDmy(officeToday()) });
+    setQuote({ pricing, details, generatedOn: formatCalendarDay(officeToday()) });
     setDialog(null);
   };
 

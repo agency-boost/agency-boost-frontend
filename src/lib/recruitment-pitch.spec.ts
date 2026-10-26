@@ -48,9 +48,9 @@ describe('the pitch documents’ client (P17-T4 routes)', () => {
 });
 
 describe('formatFileSize', () => {
-  it('writes a megabyte file as the prototype does, to one decimal', () => {
-    expect(formatFileSize(2.4 * 1024 * 1024)).toBe('2.4 MB');
-    expect(formatFileSize(1024 * 1024)).toBe('1.0 MB');
+  it('writes a megabyte file as the prototype does, to one decimal, with a comma (ADR-0167 §1)', () => {
+    expect(formatFileSize(2.4 * 1024 * 1024)).toBe('2,4 MB');
+    expect(formatFileSize(1024 * 1024)).toBe('1,0 MB');
   });
 
   it('writes a small file in KB rather than as 0.0 MB, and never as 0 KB', () => {
@@ -59,7 +59,7 @@ describe('formatFileSize', () => {
   });
 
   it('names the bound the API signs up to', () => {
-    expect(formatFileSize(PDF_MAX_BYTES)).toBe('25.0 MB');
+    expect(formatFileSize(PDF_MAX_BYTES)).toBe('25,0 MB');
   });
 });
 
@@ -67,7 +67,7 @@ describe('the pitch’s words', () => {
   it('are the prototype’s, verbatim (`Recruitment_Section.html:681-818`)', () => {
     expect(PITCH_COPY.confirmed(2, 4)).toBe('2/4 confirmed');
     expect(PITCH_COPY.noFile).toBe('No PDF uploaded yet — candidates can\'t be shown this document.');
-    expect(PITCH_COPY.updated('2.4 MB', 'Sep 12, 2026')).toBe('2.4 MB · updated Sep 12, 2026');
+    expect(PITCH_COPY.updated('2.4 MB', '12 Sep 2026')).toBe('2.4 MB · updated 12 Sep 2026');
     expect(PITCH_COPY.completeLine(4))
       .toBe('All 4 documents are uploaded and fully confirmed — ready to show or send to a candidate.');
     expect(`${PITCH_COPY.notUploaded(2)}, ${PITCH_COPY.notConfirmed(1)}${PITCH_COPY.notReady}`)

@@ -76,14 +76,14 @@ describe('the quote tool (P13.2-T2)', () => {
       renderPage();
 
       expect(screen.getByRole('heading', { level: 1, name: 'Billing & subscription' })).toBeInTheDocument();
-      expect(screen.getByText('Launch pricing — locked in for signups before March 2027.')).toBeInTheDocument();
+      expect(screen.getByText('Launch pricing — locked in for signups before Mar 2027.')).toBeInTheDocument();
       await screen.findByText('Estimate your price');
 
       expect(cards().map((c) => c.textContent)).toEqual([
-        '1–10 leadersRp 500.000/moRp 400.000 /leader/moSave 20%Your tier',
-        '11–20 leadersRp 475.000/moRp 375.000 /leader/moSave 21%',
-        '21–50 leadersRp 450.000/moRp 350.000 /leader/moSave 22%',
-        '51–100 leadersRp 425.000/moRp 300.000 /leader/moSave 29%',
+        '1–10 leadersRp 500.000/moRp 400.000 /leader/moSave 20,0%Your tier',
+        '11–20 leadersRp 475.000/moRp 375.000 /leader/moSave 21,0%',
+        '21–50 leadersRp 450.000/moRp 350.000 /leader/moSave 22,0%',
+        '51–100 leadersRp 425.000/moRp 300.000 /leader/moSave 29,0%',
         "101+ leadersCustom pricing based on your unit's structure.Talk to us",
       ]);
       // The 101+ tier's rates are never on a card.
@@ -380,10 +380,11 @@ describe('the quote tool (P13.2-T2)', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(screen.getByText('Estimate your price')).not.toBeVisible();
       expect(within(quote).getByRole('heading', { name: 'Subscription quote' })).toHaveFocus();
-      expect(quote).toHaveTextContent('Generated 08/10/2026');
+      // The paper writes its dates as every screen does (ADR-0167 §1); the dialog's fields keep DD/MM/YYYY.
+      expect(quote).toHaveTextContent('Generated 8 Okt 2026');
       for (const [label, value] of [
-        ['KPM', 'Jakarta Selatan'], ['Person in charge (PIC)', 'Andi Wijaya'], ['Plan start date', '15/10/2026'],
-        ['Plan end date', '14/04/2027'], ['Sales input by', 'Maya'],
+        ['KPM', 'Jakarta Selatan'], ['Person in charge (PIC)', 'Andi Wijaya'], ['Plan start date', '15 Okt 2026'],
+        ['Plan end date', '14 Apr 2027'], ['Sales input by', 'Maya'],
       ]) {
         expect(within(quote).getByText(label).nextElementSibling).toHaveTextContent(value);
       }
@@ -400,7 +401,7 @@ describe('the quote tool (P13.2-T2)', () => {
       expect(within(quote).getByText('Monthly total (all leaders)').nextElementSibling).toHaveTextContent('Rp 3.200.000');
       expect(within(quote).getByText('6-month total (all leaders)').nextElementSibling).toHaveTextContent('Rp 19.200.000');
       expect(quote).toHaveTextContent(
-        "This quote is valid for the plan period shown above. Rate is locked for the duration of the subscription under AgencyBoost's launch pricing, valid for signups before March 2027.",
+        "This quote is valid for the plan period shown above. Rate is locked for the duration of the subscription under AgencyBoost's launch pricing, valid for signups before Mar 2027.",
       );
     });
 
@@ -467,7 +468,7 @@ describe('the quote tool (P13.2-T2)', () => {
       // Off the screen, on the paper.
       expect(paper).toHaveClass('hidden', 'print:block');
       expect(paper).toHaveTextContent('Billing & subscription');
-      expect(paper).toHaveTextContent('Launch pricing — locked in for signups before March 2027.');
+      expect(paper).toHaveTextContent('Launch pricing — locked in for signups before Mar 2027.');
       expect(paper).toHaveTextContent('Subscription quote');
       expect(paper).toHaveTextContent('Rp 19.200.000');
       expect(within(paper).queryAllByRole('button', { hidden: true })).toEqual([]);

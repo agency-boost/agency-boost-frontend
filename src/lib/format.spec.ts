@@ -2,21 +2,25 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
-  clockMinutes, endMinutes, formatCalendarDay, formatCalendarDayLong, formatClock, formatDay, formatDayHeader, formatDayLong,
-  formatHour, formatMonth, formatMonthSpan, formatNoticeFull, formatNoticeShort, formatOfficeDay, formatShortDay, formatTimeSpan,
-  formatTripWhen, formatWeekday, formatWeekdayDay, formatWeekRange, formatWhen, monthInZone, OFFICE_TIME_ZONE,
+  clockMinutes, endMinutes, formatCalendarDay, formatCalendarDayLong, formatClock, formatDateTime, formatDay, formatDayClock, formatDayHeader,
+  formatDayLong, formatHour, formatMonth, formatMonthName, formatMonthSpan, formatNoticeFull, formatNoticeShort, formatNumber,
+  formatOfficeDay, formatOfficeMonth, formatOfficeTime, formatPercent, formatRupiah, formatRupiahCompact, formatRupiahCompactPair, formatShortDay, formatTimeSpan, formatTripWhen,
+  formatWeekday, formatWeekdayDay, formatWeekRange, formatWhen, MINOR_UNITS_PER_MAJOR, monthInZone, OFFICE_TIME_ZONE, parseDecimal,
+  toMajor, toMinor,
 } from './format';
 
 describe('formatDay', () => {
-  it('writes a date the way the prototype does', () => {
-    // `Overall.html:5457-5461`. It had drifted to en-GB — `4 Sep 2026`.
-    expect(formatDay('2026-09-04')).toBe('Sep 4, 2026');
+  it('P18.95-T1 AC-1 writes a date in id-ID, `4 Sep 2026`', () => {
+    expect(formatDay('2026-09-04')).toBe('4 Sep 2026');
   });
 
-  it('is the same shape whatever the reader’s language is', () => {
+  it('P18.95-T1 AC-1 uses id-ID’s own month names, whatever the reader’s language is', () => {
     // A date that changes shape with the browser's locale cannot be lined up in a column.
-    expect(formatDay('2026-01-31')).toBe('Jan 31, 2026');
-    expect(formatDay('2026-12-01')).toBe('Dec 1, 2026');
+    expect(formatDay('2026-01-31')).toBe('31 Jan 2026');
+    expect(formatDay('2026-12-01')).toBe('1 Des 2026');
+    expect(formatDay('2026-05-02')).toBe('2 Mei 2026');
+    expect(formatDay('2026-08-17')).toBe('17 Agu 2026');
+    expect(formatDay('2026-10-26')).toBe('26 Okt 2026');
   });
 
   it('answers empty for something that is not a date, rather than "Invalid Date"', () => {
@@ -26,8 +30,8 @@ describe('formatDay', () => {
 });
 
 describe('formatDayLong', () => {
-  it('spells the month out, for a sentence rather than a column', () => {
-    expect(formatDayLong('2026-09-13')).toBe('September 13, 2026');
+  it('P18.95-T1 AC-1 writes a sentence’s date in the one shape, `13 Sep 2026`', () => {
+    expect(formatDayLong('2026-09-13')).toBe('13 Sep 2026');
   });
 
   it('answers empty for something that is not a date', () => {
@@ -36,13 +40,13 @@ describe('formatDayLong', () => {
 });
 
 describe('formatCalendarDay', () => {
-  it('spells an office calendar day for a sentence', () => {
-    expect(formatCalendarDay('2026-10-07')).toBe('October 7, 2026');
+  it('P18.95-T1 AC-1 writes an office calendar day `7 Okt 2026`', () => {
+    expect(formatCalendarDay('2026-10-07')).toBe('7 Okt 2026');
   });
 
   it('never slips a day, whatever zone the browser is in — it is not an instant', () => {
     // Built from its numbers: there is no midnight-UTC to fall back across.
-    expect(formatCalendarDay('2026-01-01')).toBe('January 1, 2026');
+    expect(formatCalendarDay('2026-01-01')).toBe('1 Jan 2026');
   });
 
   it('gives nothing for something that is not a day', () => {
@@ -52,9 +56,15 @@ describe('formatCalendarDay', () => {
 });
 
 describe('formatMonth', () => {
-  it('names an office calendar month', () => {
-    expect(formatMonth('2026-09')).toBe('September 2026');
-    expect(formatMonth('2027-01')).toBe('January 2027');
+  it('P18.95-T1 AC-1 names an office calendar month `Okt 2026`', () => {
+    expect(formatMonth('2026-10')).toBe('Okt 2026');
+    expect(formatMonth('2027-01')).toBe('Jan 2027');
+  });
+
+  it('names a month alone for an axis or a date block', () => {
+    expect(formatMonthName('2026-10')).toBe('Okt');
+    expect(formatMonthName('2026-08-13')).toBe('Agu');
+    expect(formatMonthName('soon')).toBe('');
   });
 
   it('hands back what is not a month', () => {
@@ -64,15 +74,15 @@ describe('formatMonth', () => {
 
 describe('formatShortDay and formatWeekday (P10-T1)', () => {
   it('writes a column’s day, and a range’s last one with its year', () => {
-    expect(formatShortDay('2026-09-22')).toBe('Sep 22');
-    expect(formatShortDay('2026-09-28', { year: true })).toBe('Sep 28, 2026');
+    expect(formatShortDay('2026-09-22')).toBe('22 Sep');
+    expect(formatShortDay('2026-09-28', { year: true })).toBe('28 Sep 2026');
   });
 
   it('names the weekday from the calendar day, not from an instant', () => {
     // 2026-09-28 is a Monday wherever the browser is; parsing it as UTC midnight would make it a
     // Sunday west of Greenwich.
-    expect(formatWeekday('2026-09-28')).toBe('Mon');
-    expect(formatWeekday('2026-03-01')).toBe('Sun');
+    expect(formatWeekday('2026-09-28')).toBe('Sen');
+    expect(formatWeekday('2026-03-01')).toBe('Min');
   });
 
   it('writes nothing for something that is not a day', () => {
@@ -91,13 +101,19 @@ describe('monthInZone (invariant §9)', () => {
 });
 
 describe('formatCalendarDayLong', () => {
-  it('P11-T8 AC-1 writes the session header’s date as the prototype does, weekday first', () => {
-    // `fmtToday()`, `Overall.html:10584`: en-US, weekday and month long.
-    expect(formatCalendarDayLong('2026-10-02')).toBe('Friday, October 2, 2026');
+  it('P11-T8 AC-1, P18.95-T1 AC-1 writes the session header’s date weekday first, `Jumat, 2 Okt 2026`', () => {
+    expect(formatCalendarDayLong('2026-10-02')).toBe('Jumat, 2 Okt 2026');
+    expect(formatCalendarDayLong('2026-10-26')).toBe('Senin, 26 Okt 2026');
+  });
+
+  it('names every weekday as id-ID does', () => {
+    expect(['2026-10-25', '2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31']
+      .map((d) => formatCalendarDayLong(d).split(',')[0]))
+      .toEqual(['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']);
   });
 
   it('builds the day from its numbers, so no zone can move it', () => {
-    expect(formatCalendarDayLong('2026-01-01')).toBe('Thursday, January 1, 2026');
+    expect(formatCalendarDayLong('2026-01-01')).toBe('Kamis, 1 Jan 2026');
     expect(formatCalendarDayLong('not a day')).toBe('');
   });
 });
@@ -112,39 +128,40 @@ describe.each(['UTC', 'Asia/Jakarta', 'America/New_York'])('the calendar’s for
   beforeAll(() => { process.env.TZ = zone; });
   afterAll(() => { process.env.TZ = original; });
 
-  it('labels a week `Sep 28 – Oct 4, 2026`, and one across a year with both years (`:285`)', () => {
-    expect(formatWeekRange('2026-09-28', '2026-10-04')).toBe('Sep 28 – Oct 4, 2026');
-    expect(formatWeekRange('2026-12-28', '2027-01-03')).toBe('Dec 28, 2026 – Jan 3, 2027');
-    expect(formatWeekRange('2026-08-31', '2026-09-06')).toBe('Aug 31 – Sep 6, 2026');
+  it('labels a week `28 Sep – 4 Okt 2026`, and one across a year with both years (`:285`)', () => {
+    expect(formatWeekRange('2026-09-28', '2026-10-04')).toBe('28 Sep – 4 Okt 2026');
+    expect(formatWeekRange('2026-12-28', '2027-01-03')).toBe('28 Des 2026 – 3 Jan 2027');
+    expect(formatWeekRange('2026-08-31', '2026-09-06')).toBe('31 Agu – 6 Sep 2026');
     expect(formatWeekRange('nope', '2026-09-06')).toBe('');
   });
 
-  it('heads a column with its weekday and number, `Oct 1` on the first (`:327-333`)', () => {
-    expect(formatDayHeader('2026-09-28')).toEqual({ weekday: 'Mon', number: '28' });
-    expect(formatDayHeader('2026-10-01')).toEqual({ weekday: 'Thu', number: 'Oct 1' });
-    expect(formatDayHeader('2027-01-01')).toEqual({ weekday: 'Fri', number: 'Jan 1' });
+  it('heads a column with its weekday and number, `1 Okt` on the first (`:327-333`)', () => {
+    expect(formatDayHeader('2026-09-28')).toEqual({ weekday: 'Sen', number: '28' });
+    expect(formatDayHeader('2026-10-01')).toEqual({ weekday: 'Kam', number: '1 Okt' });
+    expect(formatDayHeader('2027-01-01')).toEqual({ weekday: 'Jum', number: '1 Jan' });
     expect(formatDayHeader('')).toEqual({ weekday: '', number: '' });
   });
 
-  it('labels the hours `12 AM` … `11 PM` (`:590`)', () => {
-    expect([0, 1, 11, 12, 13, 23].map(formatHour)).toEqual(['12 AM', '1 AM', '11 AM', '12 PM', '1 PM', '11 PM']);
+  it('P18.95-T1 AC-1 labels the hours `00.00` … `23.00`, 24-hour (`:590`)', () => {
+    expect([0, 1, 11, 12, 13, 23, 24].map(formatHour)).toEqual(['00.00', '01.00', '11.00', '12.00', '13.00', '23.00', '00.00']);
   });
 
-  it('writes the week’s time `9:00 AM–9:30 AM`, an en dash with no spaces (`:611`)', () => {
-    expect(formatTimeSpan('09:00', '09:30')).toBe('9:00 AM–9:30 AM');
-    expect(formatTimeSpan('12:00', '13:30')).toBe('12:00 PM–1:30 PM');
-    expect(formatTimeSpan('23:00', '00:00')).toBe('11:00 PM–12:00 AM');
+  it('P18.95-T1 AC-1 writes the week’s time `09.00–09.30`, an en dash with no spaces (`:611`)', () => {
+    expect(formatTimeSpan('09:00', '09:30')).toBe('09.00–09.30');
+    expect(formatTimeSpan('12:00', '13:05')).toBe('12.00–13.05');
+    expect(formatTimeSpan('23:00', '00:00')).toBe('23.00–00.00');
+    expect(formatClock('13:05')).toBe('13.05');
     expect(formatClock('nope')).toBe('');
   });
 
-  it('writes the detail’s *When* `Monday, Sep 28, 2026 · 9:00 AM – 9:30 AM` (`:827`)', () => {
-    expect(formatWhen('2026-09-28', '09:00', '09:30')).toBe('Monday, Sep 28, 2026 · 9:00 AM – 9:30 AM');
+  it('writes the detail’s *When* `Senin, 28 Sep 2026 · 09.00 – 09.30` (`:827`)', () => {
+    expect(formatWhen('2026-09-28', '09:00', '09:30')).toBe('Senin, 28 Sep 2026 · 09.00 – 09.30');
     expect(formatWeekdayDay('bad')).toBe('');
   });
 
   it('writes a trip’s two dates joined by an en dash, or one for a one-day trip', () => {
-    expect(formatTripWhen('2026-09-28', '2026-09-29')).toBe('Monday, Sep 28, 2026 – Tuesday, Sep 29, 2026');
-    expect(formatTripWhen('2026-10-02', '2026-10-02')).toBe('Friday, Oct 2, 2026');
+    expect(formatTripWhen('2026-09-28', '2026-09-29')).toBe('Senin, 28 Sep 2026 – Selasa, 29 Sep 2026');
+    expect(formatTripWhen('2026-10-02', '2026-10-02')).toBe('Jumat, 2 Okt 2026');
   });
 
   it('writes the month’s time `9-9.30`, `14-15`, 24-hour with an ASCII hyphen (`:1036-1040`)', () => {
@@ -156,9 +173,9 @@ describe.each(['UTC', 'Asia/Jakarta', 'America/New_York'])('the calendar’s for
     expect(formatMonthSpan('x', 'y')).toBe('-');
   });
 
-  it('labels the month `September 2026` (`:1013`)', () => {
-    expect(formatMonth('2026-09')).toBe('September 2026');
-    expect(formatMonth('2027-02')).toBe('February 2027');
+  it('labels the month `Sep 2026` (`:1013`)', () => {
+    expect(formatMonth('2026-09')).toBe('Sep 2026');
+    expect(formatMonth('2027-02')).toBe('Feb 2027');
   });
 });
 
@@ -187,20 +204,28 @@ describe.each(['UTC', 'Asia/Jakarta', 'America/New_York'])('a notification’s t
 
   it('P12.1-T3 AC-6 gives the time for one from the office’s today', () => {
     // 07:05 in Jakarta: still 2 October in UTC and New York, but today in the office.
-    expect(formatNoticeShort('2026-10-03T00:05:00Z', now)).toBe('7:05 AM');
-    expect(formatNoticeShort('2026-10-03T07:30:00Z', now)).toBe('2:30 PM');
+    expect(formatNoticeShort('2026-10-03T00:05:00Z', now)).toBe('07.05');
+    expect(formatNoticeShort('2026-10-03T07:30:00Z', now)).toBe('14.30');
   });
 
   it('P12.1-T3 AC-6 gives the day and month for an earlier one, and the year only when it is not this one', () => {
     // 23:30 on 2 October in Jakarta is yesterday there, whatever day it is in UTC.
-    expect(formatNoticeShort('2026-10-02T16:30:00Z', now)).toBe('Oct 2');
-    expect(formatNoticeShort('2026-09-01T00:00:00Z', now)).toBe('Sep 1');
-    expect(formatNoticeShort('2025-10-03T03:00:00Z', now)).toBe('Oct 3, 2025');
+    expect(formatNoticeShort('2026-10-02T16:30:00Z', now)).toBe('2 Okt');
+    expect(formatNoticeShort('2026-09-01T00:00:00Z', now)).toBe('1 Sep');
+    expect(formatNoticeShort('2025-10-03T03:00:00Z', now)).toBe('3 Okt 2025');
   });
 
   it('P12.1-T3 AC-4 writes the date and time in full for the modal, in the office’s zone', () => {
-    expect(formatNoticeFull('2026-09-30T18:05:00Z')).toBe('October 1, 2026 · 1:05 AM');
-    expect(formatNoticeFull('2026-10-03T07:30:00Z')).toBe('October 3, 2026 · 2:30 PM');
+    expect(formatNoticeFull('2026-09-30T18:05:00Z')).toBe('1 Okt 2026, 01.05');
+    expect(formatNoticeFull('2026-10-03T07:30:00Z')).toBe('3 Okt 2026, 14.30');
+  });
+
+  it('P18.95-T1 AC-1 writes any instant’s date and time `26 Okt 2026, 13.05`, and its time alone, in the office’s zone', () => {
+    expect(formatDateTime('2026-10-26T06:05:00Z')).toBe('26 Okt 2026, 13.05');
+    expect(formatDateTime('2026-10-26T06:05:00Z', 'UTC')).toBe('26 Okt 2026, 06.05');
+    expect(formatOfficeTime('2026-10-26T06:05:00Z')).toBe('13.05');
+    expect(formatDateTime('nope')).toBe('');
+    expect(formatOfficeTime('')).toBe('');
   });
 
   it('answers empty for something that is not an instant', () => {
@@ -219,8 +244,8 @@ describe.each(['UTC', 'Asia/Jakarta', 'America/New_York'])('formatOfficeDay, wit
   afterAll(() => { process.env.TZ = original; });
 
   it('P13-T4 AC-5 gives the office’s day for an instant: 23:30 UTC is the next day in Jakarta', () => {
-    expect(formatOfficeDay('2026-09-30T23:30:00Z')).toBe('Oct 1, 2026');
-    expect(formatOfficeDay('2026-10-03T03:00:00Z')).toBe('Oct 3, 2026');
+    expect(formatOfficeDay('2026-09-30T23:30:00Z')).toBe('1 Okt 2026');
+    expect(formatOfficeDay('2026-10-03T03:00:00Z')).toBe('3 Okt 2026');
   });
 
   it('answers empty for something that is not an instant', () => {
@@ -235,5 +260,200 @@ describe('OFFICE_TIME_ZONE (ADR-0016, invariant §7)', () => {
     );
     const declared = /export const DEFAULT_TENANT_TIMEZONE = '([^']+)';/.exec(constants);
     expect(declared?.[1]).toBe(OFFICE_TIME_ZONE);
+  });
+});
+
+/** Rupiah in sen, for the money specs: `rp(500_000_000)` is Rp 500.000.000. */
+const rp = (rupiah: number) => rupiah * MINOR_UNITS_PER_MAJOR;
+
+/** ADR-0167 §1, AC-2: the full form, for a table's cell, an input and an export. */
+describe('formatRupiah, in full (P18.95-T1 AC-2)', () => {
+  it('writes whole rupiah from sen, grouped with dots', () => {
+    expect(formatRupiah(rp(500_000_000))).toBe('Rp 500.000.000');
+    expect(formatRupiah(rp(1_250))).toBe('Rp 1.250');
+    expect(formatRupiah(rp(999))).toBe('Rp 999');
+    expect(formatRupiah(0)).toBe('Rp 0');
+  });
+
+  it('keeps a negative’s minus in front of Rp', () => {
+    expect(formatRupiah(rp(-20_000))).toBe('-Rp 20.000');
+    expect(formatRupiah(-10)).toBe('Rp 0');
+  });
+
+  it('writes nothing for what is not a sum, in either form', () => {
+    expect(formatRupiah(Number.NaN)).toBe('');
+    expect(formatRupiahCompact(Number.POSITIVE_INFINITY)).toBe('');
+  });
+
+  it('converts sen through the one unit', () => {
+    expect(MINOR_UNITS_PER_MAJOR).toBe(100);
+    expect(toMajor(150_000)).toBe(1_500);
+    expect(toMinor(1_500)).toBe(150_000);
+  });
+});
+
+/** ADR-0167 §1, AC-2: the compact form, at each threshold and edge (`metrics-and-definitions.md`, *Compact money*). */
+describe('formatRupiahCompact (P18.95-T1 AC-2)', () => {
+  it.each([
+    [0, 'Rp 0'],
+    [999, 'Rp 999'],
+    [1_000, 'Rp 1 rb'],
+    [750_000, 'Rp 750 rb'],
+    [999_999, 'Rp 1 jt'],
+    [1_000_000, 'Rp 1 jt'],
+    [500_000_000, 'Rp 500 jt'],
+    [357_500_000, 'Rp 357,5 jt'],
+    [712_666_667, 'Rp 712,7 jt'],
+    [999_949_999, 'Rp 999,9 jt'],
+    [999_950_000, 'Rp 1 M'],
+    [1_000_000_000, 'Rp 1 M'],
+    [1_200_000_000, 'Rp 1,2 M'],
+    [2_450_000_000, 'Rp 2,5 M'],
+    [1_500_000_000_000, 'Rp 1.500 M'],
+  ])('writes Rp %i as %s', (rupiah, text) => {
+    expect(formatRupiahCompact(rp(rupiah))).toBe(text);
+  });
+
+  it('rounds half up on the digit shown, in integers — 1.150 is never the float’s 1,1 rb', () => {
+    expect(formatRupiahCompact(rp(1_150))).toBe('Rp 1,2 rb');
+    expect(formatRupiahCompact(rp(1_149))).toBe('Rp 1,1 rb');
+    expect(formatRupiahCompact(rp(1_050_000))).toBe('Rp 1,1 jt');
+    expect(formatRupiahCompact(rp(1_049_999))).toBe('Rp 1 jt');
+  });
+
+  it('never writes a trailing ,0, nor more than one decimal', () => {
+    expect(formatRupiahCompact(rp(2_000_000))).toBe('Rp 2 jt');
+    expect(formatRupiahCompact(rp(2_040_000))).toBe('Rp 2 jt');
+    expect(formatRupiahCompact(rp(2_345_678))).toBe('Rp 2,3 jt');
+  });
+
+  it('keeps a negative’s minus in front', () => {
+    expect(formatRupiahCompact(rp(-750_000))).toBe('-Rp 750 rb');
+    expect(formatRupiahCompact(rp(-1_200_000_000))).toBe('-Rp 1,2 M');
+    expect(formatRupiahCompact(rp(-999))).toBe('-Rp 999');
+  });
+
+  it('`lossless` writes a threshold in full rather than round it into a different rule', () => {
+    expect(formatRupiahCompact(rp(2_400_000_000), { lossless: true })).toBe('Rp 2,4 M');
+    expect(formatRupiahCompact(rp(2_450_000_000), { lossless: true })).toBe('Rp 2.450.000.000');
+    expect(formatRupiahCompact(rp(999_950_000), { lossless: true })).toBe('Rp 999.950.000');
+    expect(formatRupiahCompact(rp(500), { lossless: true })).toBe('Rp 500');
+  });
+});
+
+/** ADR-0167 §1, AC-3: numbers and percentages in id-ID. */
+describe('formatNumber and formatPercent (P18.95-T1 AC-3)', () => {
+  it('groups a thousand with a dot and writes a decimal with a comma', () => {
+    expect(formatNumber(1_250)).toBe('1.250');
+    expect(formatNumber(1_250_000)).toBe('1.250.000');
+    expect(formatNumber(999)).toBe('999');
+    expect(formatNumber(2.13, { decimals: 2 })).toBe('2,13');
+    expect(formatNumber(2.1, { decimals: 2 })).toBe('2,10');
+    expect(formatNumber(1.4, { maxDecimals: 1 })).toBe('1,4');
+    expect(formatNumber(2, { maxDecimals: 1 })).toBe('2');
+    expect(formatNumber(1_234.56, { maxDecimals: 1 })).toBe('1.234,6');
+  });
+
+  it('writes a figure that rounds to nothing without a sign, and nothing for what is not a number', () => {
+    expect(formatNumber(-0.04, { maxDecimals: 1 })).toBe('0');
+    expect(formatNumber(Number.NaN)).toBe('');
+  });
+
+  it('writes a percentage to one decimal, with a comma', () => {
+    expect(formatPercent(15)).toBe('15,0%');
+    expect(formatPercent(57.5)).toBe('57,5%');
+    expect(formatPercent(9.14)).toBe('9,1%');
+    expect(formatPercent(100)).toBe('100,0%');
+    expect(formatPercent(0)).toBe('0,0%');
+    expect(formatPercent(-12.5)).toBe('-12,5%');
+    expect(formatPercent(1_250)).toBe('1.250,0%');
+    expect(formatPercent(Number.POSITIVE_INFINITY)).toBe('');
+  });
+
+  it('keeps a second decimal only where it is asked for, and never fewer than one', () => {
+    expect(formatPercent(7.25, { maxDecimals: 2 })).toBe('7,25%');
+    expect(formatPercent(40, { maxDecimals: 2 })).toBe('40,0%');
+    expect(formatPercent(29.63, { maxDecimals: 2 })).toBe('29,63%');
+    expect(formatPercent(-0.01)).toBe('0,0%');
+  });
+});
+
+/** ADR-0167 §1, AC-3: a decimal typed with a comma or a point. */
+describe('parseDecimal (P18.95-T1 AC-3)', () => {
+  it('reads a comma or a point as the decimal', () => {
+    expect(parseDecimal('1,4')).toBe(1.4);
+    expect(parseDecimal('1.4')).toBe(1.4);
+    expect(parseDecimal('15')).toBe(15);
+    expect(parseDecimal(' 0,30 ')).toBe(0.3);
+    expect(parseDecimal(',5')).toBe(0.5);
+    expect(parseDecimal('-2,5')).toBe(-2.5);
+  });
+
+  it('reads one point without a comma as a decimal — `1.250` is 1,25, the small value a rate is', () => {
+    expect(parseDecimal('1.250')).toBe(1.25);
+  });
+
+  it('reads points as thousands once a comma is the decimal, or when there are two of them', () => {
+    expect(parseDecimal('1.250,5')).toBe(1250.5);
+    expect(parseDecimal('1.250.000')).toBe(1_250_000);
+  });
+
+  it('is NaN for what is not a number, and for an empty field', () => {
+    expect(parseDecimal('')).toBeNaN();
+    expect(parseDecimal('   ')).toBeNaN();
+    expect(parseDecimal('1,2,3')).toBeNaN();
+    expect(parseDecimal('1,2.3')).toBeNaN();
+    expect(parseDecimal('abc')).toBeNaN();
+    expect(parseDecimal('1e3')).toBeNaN();
+  });
+});
+
+/** ADR-0167 §1: the remaining shapes — a day and an office clock, an instant's month, a pair of sums. */
+describe('formatDayClock, formatOfficeMonth and formatRupiahCompactPair (P18.95-T1 AC-1, AC-2)', () => {
+  it('writes an office day and wall-clock time as one moment, `20 Sep 2026, 18.00`', () => {
+    expect(formatDayClock('2026-09-20', '18:00')).toBe('20 Sep 2026, 18.00');
+    expect(formatDayClock('2026-09-20', 'later')).toBe('20 Sep 2026');
+    expect(formatDayClock('soon', '18:00')).toBe('18.00');
+  });
+
+  it('names the office’s month an instant fell in, not the browser’s', () => {
+    // 18:00 on 30 September in UTC is 1 October in Jakarta.
+    expect(formatOfficeMonth('2026-09-30T18:00:00Z')).toBe('Okt 2026');
+    expect(formatOfficeMonth('2026-09-30T18:00:00Z', 'UTC')).toBe('Sep 2026');
+    expect(formatOfficeMonth('nope')).toBe('');
+  });
+
+  it('writes two sums with one Rp between them, in the word the screen uses (UI-030)', () => {
+    expect(formatRupiahCompactPair(rp(357_500_000), rp(712_666_667), 'of')).toBe('Rp 357,5 jt of 712,7 jt');
+    expect(formatRupiahCompactPair(rp(620_000_000), rp(1_500_000_000), '/')).toBe('Rp 620 jt / 1,5 M');
+    expect(formatRupiahCompactPair(rp(-5_000), rp(-750_000), '/')).toBe('-Rp 5 rb / -750 rb');
+  });
+});
+
+/**
+ * **One rule in two places, pinned to each other** (ADR-0167 §1, invariant §7): the API writes its own sentences
+ * through `backend/src/common/format/format.ts`, which mirrors this module. Read from its source, as
+ * `OFFICE_TIME_ZONE` is, so the month names and the compact units cannot drift between a refusal and a screen.
+ */
+describe('the backend formatter writes what this one writes (P18.95-T1 AC-4)', () => {
+  const source = readFileSync(
+    join(__dirname, '..', '..', '..', 'backend', 'src', 'common', 'format', 'format.ts'), 'utf8',
+  );
+
+  it('names the months as this module does', () => {
+    const months = /const MONTHS = \[([^\]]+)\]/.exec(source)?.[1].match(/'([^']+)'/g)?.map((m) => m.slice(1, -1));
+    expect(months).toEqual(Array.from({ length: 12 }, (_, i) => formatMonthName(`2026-${String(i + 1).padStart(2, '0')}`)));
+  });
+
+  it('names the weekdays as this module does', () => {
+    const days = /const WEEKDAYS = \[([^\]]+)\]/.exec(source)?.[1].match(/'([^']+)'/g)?.map((d) => d.slice(1, -1));
+    // 2026-10-25 is a Sunday, the first in both tables.
+    expect(days).toEqual(['25', '26', '27', '28', '29', '30', '31'].map((d) => formatCalendarDayLong(`2026-10-${d}`).split(',')[0]));
+  });
+
+  it('holds the same compact units, each written as this module writes it', () => {
+    const units = [...source.matchAll(/\{ value: ([\d_]+), suffix: '([^']+)' \}/g)].map((m) => ({ size: Number(m[1].replace(/_/g, '')), mark: m[2] }));
+    expect(units.map((u) => u.mark)).toEqual(['M', 'jt', 'rb']);
+    for (const { size, mark } of units) expect(formatRupiahCompact(rp(size))).toBe(`Rp 1 ${mark}`);
   });
 });

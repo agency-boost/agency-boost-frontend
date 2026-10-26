@@ -12,7 +12,9 @@ import { ResultHead } from '@/components/plan/result-head';
 import { BulletList, NextAction, ScriptBlock, ScriptText } from '@/components/plan/script-blocks';
 import { StepPills } from '@/components/plan/step-pills';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { cn } from '@/lib/cn';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   ATTACK_PLAN_HREF, briefQuery, codesOf, completeBrief, labels, OWN_COPY, PITCH_MATERIALS_HREF, planHref,
@@ -186,7 +188,7 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
       <button
         type="button"
         onClick={backToBrief}
-        className="mb-4 inline-flex items-center gap-1 rounded-sm text-base font-semibold text-amber-ink hover:underline"
+        className={cn('mb-4 inline-flex items-center gap-1 rounded-sm text-base font-semibold text-amber-ink hover:underline', TAP_HEIGHT)}
       >
         <span aria-hidden="true">←</span>
         {PROTOTYPE_COPY.back}
@@ -320,7 +322,7 @@ function NoPlaybook() {
     <div className="rounded-lg border border-hairline bg-card px-6 py-[22px]" data-state="no-playbook">
       <p className="m-0 text-md font-semibold text-navy">{OWN_COPY.noPlaybook}</p>
       <p className="m-0 mt-1 text-base text-muted">{OWN_COPY.noPlaybookHint}</p>
-      <Link href={PITCH_MATERIALS_HREF} className="mt-2 inline-block rounded-sm text-base font-semibold text-amber-ink hover:underline">
+      <Link href={PITCH_MATERIALS_HREF} className={cn('mt-2 inline-block rounded-sm text-base font-semibold text-amber-ink hover:underline', TEXT_TAP)}>
         {OWN_COPY.toPitchMaterials}
       </Link>
     </div>

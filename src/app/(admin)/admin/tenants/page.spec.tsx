@@ -131,7 +131,7 @@ describe('tenants list', () => {
       expect(within(table).getByRole('columnheader', { name: 'End date' })).toBeInTheDocument();
       expect(within(table).getByRole('columnheader', { name: 'Leaders' })).toBeInTheDocument();
       const limited = within(table).getByRole('row', { name: /^0417/ });
-      expect(within(limited).getByText('Jan 5, 2027')).toBeInTheDocument();
+      expect(within(limited).getByText('5 Jan 2027')).toBeInTheDocument();
       expect(within(limited).getByText('6 / 10')).toBeInTheDocument();
       const unlimited = within(table).getByRole('row', { name: /^0555/ });
       expect(within(unlimited).getByText('2')).toBeInTheDocument();
@@ -219,7 +219,7 @@ describe('tenants list', () => {
       const end = within(dialog).getByLabelText('End date');
       await userEvent.clear(end);
       await userEvent.type(end, '2020-01-31');
-      expect(dialog).toHaveTextContent('This end date, January 31, 2020, has passed. Once you save, nobody in this office');
+      expect(dialog).toHaveTextContent('This end date, 31 Jan 2020, has passed. Once you save, nobody in this office');
       await userEvent.click(within(dialog).getByRole('switch', { name: 'Keep active after the end date' }));
       expect(dialog).toHaveTextContent('The office stays open because it is kept active.');
     });

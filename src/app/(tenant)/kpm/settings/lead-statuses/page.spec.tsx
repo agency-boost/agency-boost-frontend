@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
@@ -207,6 +207,75 @@ describe('the office lead pipelines (P4-T3)', () => {
 
       expect(await screen.findByText('Expected to close')).toBeInTheDocument();
       expect(screen.queryByRole('switch')).toBeNull();
+    });
+
+    describe('P18.95-T1 AC-5 — the switch says it is saved, beside it', () => {
+      /** The save confirmation in the switch's own row: the nearest ancestor with a status for a child. */
+      const besides = (el: HTMLElement) => {
+        for (let box = el.parentElement; box; box = box.parentElement) {
+          const own = [...box.children].find((c) => c.getAttribute('role') === 'status');
+          if (own) return own as HTMLElement;
+          if (box.tagName === 'LI') break;
+        }
+        return null;
+      };
+      const lateOn = [
+        { ...withLate[0], statuses: withLate[0].statuses.map((s) => (s.id === 's0' ? { ...s, isLateStage: true } : s)) },
+        withLate[1],
+      ];
+      const PATCH = 'PATCH /kpm/settings/lead-statuses/s0/late-stage';
+      /** Nothing waiting to publish: the bar draws nothing, so the screen's one alert is the write's. */
+      const PUBLISHED = { body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null } };
+      const sends = (stub: ReturnType<typeof stubFetch>) =>
+        stub.calls.filter((c) => c.url.includes('/s0/late-stage')).map((c) => JSON.parse(String(c.init.body)));
+
+      it('P18.95-T1 AC-5: says Saved ✓ beside the switch once it is kept, and beside no other', async () => {
+        stubFetch({
+          '/kpm/settings/lead-statuses': [{ body: withLate }, { body: lateOn }],
+          '/kpm/settings/publish-state': PUBLISHED,
+          [PATCH]: { body: lateOn[0].statuses[0] },
+        });
+        renderWithSession(<LeadStatusesPage />, { me: OWNER });
+        await screen.findByText('Not yet approached');
+        const [first, second] = screen.getAllByRole('switch', { name: 'Expected to close' });
+
+        await userEvent.click(first);
+
+        await waitFor(() => expect(besides(first)).toHaveTextContent('Saved ✓'));
+        expect(besides(first)).toHaveClass('text-success');
+        expect(first).toBeChecked();
+        expect(besides(second)).toBeNull();
+        expect(screen.getAllByText('Saved ✓')).toHaveLength(1);
+      });
+
+      it('P18.95-T1 AC-5: a refused switch says Couldn’t save — retry, and the retry sends the same value again', async () => {
+        const stub = stubFetch({
+          '/kpm/settings/lead-statuses': [{ body: withLate }, { body: lateOn }],
+          '/kpm/settings/publish-state': PUBLISHED,
+          [PATCH]: [
+            { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-1' } } },
+            { body: lateOn[0].statuses[0] },
+          ],
+        });
+        renderWithSession(<LeadStatusesPage />, { me: OWNER });
+        await screen.findByText('Not yet approached');
+        const toggle = screen.getAllByRole('switch', { name: 'Expected to close' })[0];
+        await userEvent.click(toggle);
+
+        const retry = await screen.findByRole('button', { name: "Couldn't save — retry: Expected to close, Not yet approached" });
+        expect(besides(toggle)).toContainElement(retry);
+        // The reason stays in the banner above the ladder, where it always was; the switch still shows what is kept.
+        expect(screen.getByRole('alert')).toHaveTextContent('Something went wrong.');
+        expect(toggle).not.toBeChecked();
+
+        await userEvent.click(retry);
+
+        await waitFor(() => expect(sends(stub)).toEqual([{ isLateStage: true }, { isLateStage: true }]));
+        await waitFor(() => expect(besides(toggle)).toHaveTextContent('Saved ✓'));
+        expect(toggle).toBeChecked();
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+      });
     });
   });
 

@@ -130,7 +130,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       const refresh = card('Product refresh briefing');
       expect(within(refresh).getByText('Going', { selector: '[data-tag]' })).toBeInTheDocument();
       expect(within(refresh).getByText('Prudential Event | All agents')).toBeInTheDocument();
-      expect(within(refresh).getByText(/Oct 15, 2026 · 2:00 PM/)).toBeInTheDocument();
+      expect(within(refresh).getByText(/15 Okt 2026, 14.00/)).toBeInTheDocument();
       const where = within(refresh).getByRole('link', { name: /Online — Zoom/ });
       expect(where).toHaveAttribute('href', 'https://zoom.us/j/1234567890');
       expect(where).toHaveAttribute('target', '_blank');
@@ -223,8 +223,8 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       const box = await dialog('Kickoff 2026');
       expect(within(box).getByText('Not Joined')).toBeInTheDocument();
       expect(within(box).getByText('KPM | All agents')).toBeInTheDocument();
-      expect(within(box).getByText('Oct 24, 2026', { selector: 'strong' })).toBeInTheDocument();
-      expect(within(box).getByText(/· 6:00 PM/)).toBeInTheDocument();
+      expect(within(box).getByText('24 Okt 2026', { selector: 'strong' })).toBeInTheDocument();
+      expect(within(box).getByText(/, 18.00/)).toBeInTheDocument();
       expect(within(box).getByText('BSD City Branch')).toBeInTheDocument();
       expect(within(box).getByText('About ev-kickoff.')).toBeInTheDocument();
       expect(box).toHaveAttribute('aria-modal', 'true');
@@ -263,12 +263,12 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(behind).toContainElement(screen.getByRole('group', { name: 'Show events', hidden: true }));
     });
 
-    it('P18.5-T5 AC-5 Join event → "You\'re going to {title}", the card moves to Going', async () => {
+    it('P18.5-T5 AC-5, P18.95-T1 AC-6 Join event → "Joined ✓ — you\'re going to {title}", the card moves to Going', async () => {
       const going = { ...KICKOFF, me: { ...KICKOFF.me, rsvp: 'going' as const } };
       const { calls } = modal(KICKOFF, { 'POST /events/ev-kickoff/rsvp': { status: 201, body: going } });
       const box = await dialog('Kickoff 2026');
       await userEvent.click(within(box).getByRole('button', { name: 'Join event' }));
-      expect(await screen.findByText("You're going to Kickoff 2026")).toBeInTheDocument();
+      expect(await screen.findByText("Joined ✓ — you're going to Kickoff 2026")).toBeInTheDocument();
       expect(within(box).getByText("You're going")).toBeInTheDocument();
       expect(within(box).getByRole('button', { name: 'Cancel RSVP' })).toBeInTheDocument();
       expect(within(box).queryByRole('button', { name: 'Join event' })).not.toBeInTheDocument();
@@ -334,7 +334,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
         modal(KICKOFF, { 'POST /events/ev-kickoff/rsvp': { status: 201, body: going } });
         const box = await dialog('Kickoff 2026');
         await userEvent.click(within(box).getByRole('button', { name: 'Join event' }));
-        const toast = await screen.findByText("You're going to Kickoff 2026");
+        const toast = await screen.findByText("Joined ✓ — you're going to Kickoff 2026");
         const z = (el: Element | null) => Number(/(?:^|\s)z-(?:\[)?(\d+)/.exec(el?.className ?? '')?.[1] ?? 0);
         const toastLayer = toast.closest('[data-layer="toast"]');
         const modalLayer = box.closest('.fixed');

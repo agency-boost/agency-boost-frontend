@@ -168,7 +168,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
     expect(status).toHaveValue('FOLLOW_UP');
     expect(within(status).getByRole('option', { name: 'Follow-up' })).toBeInTheDocument();
     // P13.1-T4 AC-4: the registration date is in the lead's details now, not on the row.
-    expect(screen.queryByText('Sep 4, 2026')).not.toBeInTheDocument();
+    expect(screen.queryByText('4 Sep 2026')).not.toBeInTheDocument();
   });
 
   describe('AC-1 — what went', () => {
@@ -594,7 +594,8 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       }
       await waitFor(() => expect(screen.getAllByText(refused)).toHaveLength(2));
 
-      await userEvent.click(screen.getByRole('button', { name: /Lead name/ }));
+      // The heading, not a refused name's *Couldn't save — retry: Lead name, row 1* (P18.95-T1 AC-5).
+      await userEvent.click(screen.getByRole('button', { name: /^Lead name/ }));
 
       expect(await screen.findByDisplayValue('Bu Rina Sari')).toBeInTheDocument();
       // Pak Budi came back as he was: the B is still in his box, and still refused beneath it.
@@ -960,8 +961,8 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       render({ '/leads': { body: page([lead({ lastEditedBy: { membershipId: 'mem-aab', name: 'Ibu Sari' } })]) } });
       const dialog = await openDetails();
 
-      expect(within(dialog).getByText('Registered', { exact: false })).toHaveTextContent('Registered Sep 4, 2026');
-      expect(within(dialog).getByText('Sep 4, 2026').closest('time')).toHaveAttribute('dateTime', '2026-09-04T03:00:00.000Z');
+      expect(within(dialog).getByText('Registered', { exact: false })).toHaveTextContent('Registered 4 Sep 2026');
+      expect(within(dialog).getByText('4 Sep 2026').closest('time')).toHaveAttribute('dateTime', '2026-09-04T03:00:00.000Z');
       expect(within(dialog).getByText('Last changed by Ibu Sari')).toBeInTheDocument();
       // ADR-0044's ✎ moved here: the row carries no attribution of its own.
       expect(screen.queryByRole('button', { name: /Last changed by/ })).not.toBeInTheDocument();
@@ -1446,8 +1447,9 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       }
       expect(card.getByLabelText('Close this month')).toBeInTheDocument();
       expect(card.getByLabelText('Lead name, row 1').className).toContain('font-semibold');
+      // The name sits in its save confirmation's box (P18.95-T1 AC-5), and that box in the line.
       expect(card.getByRole('button', { name: 'Actions for Pak Budi' }).parentElement)
-        .toBe(card.getByLabelText('Lead name, row 1').parentElement!.parentElement);
+        .toBe(card.getByLabelText('Lead name, row 1').parentElement!.parentElement!.parentElement);
 
       await choose('Lead details');
       expect(await screen.findByRole('dialog', { name: 'Lead details for Pak Budi' })).toBeInTheDocument();
@@ -2166,8 +2168,9 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       const list = await screen.findByRole('list', { name: 'Your leads' });
 
       const card = within(list).getAllByRole('listitem')[1];
+      // The name sits in its save confirmation's box (P18.95-T1 AC-5), and that box in the line.
       expect(within(card).getByRole('button', { name: /^Reorder Ibu Wati/ }).parentElement)
-        .toBe(within(card).getByLabelText('Lead name, row 2').parentElement!.parentElement);
+        .toBe(within(card).getByLabelText('Lead name, row 2').parentElement!.parentElement!.parentElement);
       fireEvent.dragStart(handle('Ibu Wati'), { dataTransfer: { setDragImage: vi.fn(), effectAllowed: '' } });
       fireEvent.dragOver(within(list).getAllByRole('listitem')[0]);
       fireEvent.drop(within(list).getAllByRole('listitem')[0]);
@@ -2229,6 +2232,210 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
 
       const { violations } = await axe(document.body, { rules: { 'color-contrast': { enabled: false } } });
       expect(violations.map((v) => v.id)).toEqual([]);
+    });
+  });
+  /**
+   * **A field that saves itself says so** (P18.95-T1 AC-5, AC-12; ADR-0167 §5; the client's UI review of 2026-10-26,
+   * UI-007: *"inline lead edits save silently"*). Beside the field, in its own box: *Saving…*, *Saved ✓*, or
+   * *Couldn't save — retry*, which sends the same value again.
+   */
+  describe('P18.95-T1 AC-5 — each field that saves itself says so beside it', () => {
+    /** The save confirmation in the field's own box: the nearest ancestor with a status for a child. */
+    const besides = (el: HTMLElement) => {
+      for (let box = el.parentElement; box; box = box.parentElement) {
+        const own = [...box.children].find((c) => c.getAttribute('role') === 'status');
+        if (own) return own as HTMLElement;
+        if (box.tagName === 'TD' || box.tagName === 'LI' || box.getAttribute('role') === 'dialog') break;
+      }
+      return null;
+    };
+    const bare = lead({ statusCode: null, thisMonth: false });
+
+    const fields: [string, Record<string, unknown>, (calls: Call[]) => Promise<HTMLElement>][] = [
+      ['the name', lead({ name: 'Pak Budi S' }), async () => {
+        const box = screen.getByLabelText('Lead name, row 1');
+        await userEvent.type(box, ' S');
+        await userEvent.tab();
+        return box;
+      }],
+      ['the remarks', lead({ remarks: 'Hobi tenis' }), async () => {
+        const box = screen.getByLabelText('Remarks, row 1');
+        await userEvent.clear(box);
+        await userEvent.type(box, 'Hobi tenis');
+        await userEvent.tab();
+        return box;
+      }],
+      ['the next action note', lead({ nextActionNote: 'Call' }), async () => {
+        const box = screen.getByLabelText('Next action note, row 1');
+        await userEvent.type(box, 'Call');
+        await userEvent.tab();
+        return box;
+      }],
+      ['the next action date', lead({ nextActionDate: '2026-10-09' }), async () => {
+        const box = screen.getByLabelText('Next action date, row 1');
+        fireEvent.change(box, { target: { value: '2026-10-09' } });
+        return box;
+      }],
+      ['the stage', lead({ statusCode: 'PAID_AND_ISSUED' }), async () => {
+        const box = screen.getByLabelText('Status, row 1');
+        await userEvent.selectOptions(box, 'PAID_AND_ISSUED');
+        return box;
+      }],
+      ['the type', lead({ type: 'recruitment', statusCode: null }), async () => {
+        const box = screen.getByLabelText('Type, row 1');
+        await userEvent.selectOptions(box, 'recruitment');
+        return box;
+      }],
+      ['the month’s commitment', lead({ statusCode: null, thisMonth: true }), async () => {
+        const box = screen.getByLabelText('Close this month');
+        await userEvent.click(box);
+        return box;
+      }],
+    ];
+
+    for (const [what, answer, edit] of fields) {
+      it(`P18.95-T1 AC-5: ${what} says Saved ✓ beside it once its write lands`, async () => {
+        render({
+          '/leads': { body: page([bare]) },
+          '/leads/l1': { body: { ...answer, version: 3 } },
+          '/leads/l1/status': { body: { ...answer, version: 3 } },
+        });
+        await screen.findByDisplayValue('Pak Budi');
+        expect(screen.queryByText('Saved ✓')).not.toBeInTheDocument();
+
+        const box = await edit([]);
+
+        await waitFor(() => expect(besides(box)).toHaveTextContent('Saved ✓'));
+        expect(besides(box)).toHaveClass('text-success');
+        // One field's confirmation, not the row's: nothing else on the row says it.
+        expect(screen.getAllByText('Saved ✓')).toHaveLength(1);
+      });
+    }
+
+    it('P18.95-T1 AC-5: says Saving… while the write is out', async () => {
+      const { mock } = stubFetch({ ...BASE, '/leads': { body: page([lead()]) } } as Parameters<typeof stubFetch>[0]);
+      let release: () => void = () => {};
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
+        if (init.method !== 'PATCH') return mock(url, init);
+        await new Promise<void>((resolve) => { release = resolve; });
+        return { ok: true, status: 200, json: async () => lead({ remarks: 'Hobi tenis', version: 3 }) } as Response;
+      }));
+      renderInLayout(AgentLayout, <LeadsPage />, { me: AGENT });
+      const box = await screen.findByLabelText('Remarks, row 1');
+
+      await userEvent.clear(box);
+      await userEvent.type(box, 'Hobi tenis');
+      await userEvent.tab();
+
+      await waitFor(() => expect(besides(box)).toHaveTextContent('Saving…'));
+      await act(async () => { release(); });
+      await waitFor(() => expect(besides(box)).toHaveTextContent('Saved ✓'));
+    });
+
+    it('P18.95-T1 AC-5: a failure says Couldn’t save — retry, and the retry sends the same value at the row’s version now', async () => {
+      const { calls } = render({
+        '/leads': { body: page([lead()]) },
+        'PATCH /leads/l1': [
+          error(500, 'INTERNAL_ERROR', 'Something went wrong.'),
+          { body: lead({ thisMonth: true, version: 3 }) },
+          { body: lead({ thisMonth: true, remarks: 'Hobi tenis', version: 4 }) },
+        ],
+      });
+      const box = await screen.findByLabelText('Remarks, row 1');
+      await userEvent.clear(box);
+      await userEvent.type(box, 'Hobi tenis');
+      await userEvent.tab();
+
+      const retry = await screen.findByRole('button', { name: "Couldn't save — retry: Remarks, row 1" });
+      expect(besides(box)).toContainElement(retry);
+      // The reason still stands beneath the lead, where it always has.
+      expect(screen.getByText('Something went wrong.')).toBeInTheDocument();
+      // Another field saved meanwhile moves the row on to version 3.
+      await userEvent.click(screen.getByLabelText('Close this month'));
+      await waitFor(() => expect(lastBody(calls)).toEqual({ thisMonth: true, version: 2 }));
+
+      await userEvent.click(screen.getByRole('button', { name: "Couldn't save — retry: Remarks, row 1" }));
+
+      await waitFor(() => expect(writes(calls)).toHaveLength(3));
+      expect(lastBody(calls)).toEqual({ remarks: 'Hobi tenis', version: 3 });
+      await waitFor(() => expect(besides(screen.getByLabelText('Remarks, row 1'))).toHaveTextContent('Saved ✓'));
+      expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+    });
+
+    it('P18.95-T1 AC-5: a conflict that re-reads the row leaves nothing to retry, and its reason says what happened', async () => {
+      render({
+        '/leads': { body: page([lead()]) },
+        'PATCH /leads/l1': error(409, 'VERSION_CONFLICT', 'This record changed since you loaded it. Reload and try again.'),
+        'GET /leads/l1': { body: lead({ remarks: 'Changed elsewhere', version: 5 }) },
+      });
+      const box = await screen.findByLabelText('Remarks, row 1');
+      await userEvent.clear(box);
+      await userEvent.type(box, 'Hobi tenis');
+      await userEvent.tab();
+
+      expect(await screen.findByDisplayValue('Changed elsewhere')).toBeInTheDocument();
+      expect(screen.getByText(/This record changed since you loaded it/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+      expect(besides(screen.getByLabelText('Remarks, row 1'))).toBeNull();
+    });
+
+    it('P18.95-T1 AC-5: back to what is stored, a failed field has nothing unsaved and its retry goes', async () => {
+      render({
+        '/leads': { body: page([lead()]) },
+        'PATCH /leads/l1': error(500, 'INTERNAL_ERROR', 'Something went wrong.'),
+      });
+      const box = await screen.findByLabelText('Remarks, row 1');
+      await userEvent.type(box, '!');
+      await userEvent.tab();
+      expect(await screen.findByRole('button', { name: "Couldn't save — retry: Remarks, row 1" })).toBeInTheDocument();
+
+      await userEvent.type(screen.getByLabelText('Remarks, row 1'), '{Backspace}');
+      await userEvent.tab();
+
+      expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+    });
+
+    it('P18.95-T1 AC-5: the inline row’s name says Saved ✓ once it is a lead, on the same row', async () => {
+      render({
+        '/leads': [{ body: page([]) }, { status: 201, body: lead({ id: 'l9', name: 'Pak Andi', type: null, statusCode: null }) }],
+      });
+      await screen.findByText('0 active leads');
+      await userEvent.click(screen.getByRole('button', { name: '+ Add lead' }));
+      await userEvent.type(screen.getByLabelText('Lead name, row 1'), 'Pak Andi{Enter}');
+
+      await waitFor(() => expect(besides(screen.getByLabelText('Lead name, row 1'))).toHaveTextContent('Saved ✓'));
+      expect(screen.getByLabelText('Lead name, row 1')).toHaveValue('Pak Andi');
+    });
+
+    it('P18.95-T1 AC-5: each of the lead’s details says Saved ✓ under its box, inside the dialog', async () => {
+      render({
+        '/leads': { body: page([lead()]) },
+        '/leads/l1': { body: lead({ contact: { phone: '0811', email: null }, version: 3 }) },
+      });
+      await screen.findByDisplayValue('Pak Budi');
+      await choose('Lead details');
+      const dialog = within(screen.getByRole('dialog', { name: 'Lead details for Pak Budi' }));
+
+      await userEvent.type(dialog.getByLabelText('Phone'), '0811');
+      await userEvent.tab();
+
+      await waitFor(() => expect(besides(dialog.getByLabelText('Phone'))).toHaveTextContent('Saved ✓'));
+      expect(besides(dialog.getByLabelText('Email'))).toBeNull();
+    });
+
+    it('P18.95-T1 AC-5: a card says it too, below 768px of table, beside the same field', async () => {
+      boxWidth(360);
+      render({
+        '/leads': { body: page([lead()]) },
+        '/leads/l1': { body: lead({ remarks: 'Hobi tenis', version: 3 }) },
+      });
+      const card = within(within(await screen.findByRole('list', { name: 'Your leads' })).getByRole('listitem'));
+      const box = card.getByLabelText('Remarks, row 1');
+      await userEvent.clear(box);
+      await userEvent.type(box, 'Hobi tenis');
+      await userEvent.tab();
+
+      await waitFor(() => expect(besides(box)).toHaveTextContent('Saved ✓'));
     });
   });
 });

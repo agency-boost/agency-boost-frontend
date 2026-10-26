@@ -12,7 +12,9 @@ import { NumberBadge } from '@/components/ui/number-badge';
 import { SaveStatus } from '@/components/ui/save-status';
 import { SectionCard } from '@/components/ui/section-card';
 import { Stepper } from '@/components/ui/stepper';
+import { Toast, useToast } from '@/components/ui/toast';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { CONFIRMED } from '@/lib/confirmations';
 import { useSession } from '@/lib/session';
 import { isShownTo, summaryTiles } from '@/lib/summary-tiles';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
@@ -49,6 +51,8 @@ export default function LogActivityPage() {
   const [error, setError] = useState<ApiError | null>(null);
   /** The date a pending confirmation would move to, or `null` when nothing is pending. */
   const [confirmDate, setConfirmDate] = useState<string | null>(null);
+  /** *Activity logged ✓* once a save lands (P18.95-T1 AC-6); the shell's toast, beneath its chrome. */
+  const { toast, show } = useToast();
 
   const load = useCallback(async (on?: string) => {
     setError(null);
@@ -85,6 +89,11 @@ export default function LogActivityPage() {
     void load(next);
   }
 
+  /**
+   * Save the day, or correct a closed one. **Either is the log's whole-form save**, so either says
+   * *Activity logged ✓* when it lands (P18.95-T1 AC-6), beside the *Saved · {n} touches* it has always
+   * shown under the date; a refusal toasts nothing and stays in the banner.
+   */
   async function run(action: () => Promise<ActivityDay>) {
     setBusy(true);
     setError(null);
@@ -94,6 +103,7 @@ export default function LogActivityPage() {
       setCounts(Object.fromEntries(next.entries.map((e) => [e.activityTypeCode, e.count])));
       setDirty(false);
       setReason('');
+      show(CONFIRMED.activityLogged);
     } catch (err) {
       setError(toDisplayError(err));
     } finally {
@@ -322,6 +332,7 @@ export default function LogActivityPage() {
         }}
         onCancel={() => setConfirmDate(null)}
       />
+      <Toast toast={toast} />
     </Page>
   );
 }

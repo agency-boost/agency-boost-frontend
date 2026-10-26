@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { ApiRequestError } from './api-client';
-import { formatMonth } from './format';
+import { formatMonth, formatNumber, formatPercent } from './format';
 import { MINOR_UNITS_PER_MAJOR } from './goals';
 import type {
   ActionItem, ActionStatus, AgendaItem, AgendaSection, ColumnKey, MeetingView, MeetingWriter, RowKey, Scorecard,
@@ -143,23 +143,25 @@ export const SECTION_BEFORE: Partial<Record<RowKey, string>> = {
 const MONEY_SCALE: Partial<Record<RowKey, number>> = { ape: 1e9, average_case_size: 1e6 };
 
 /**
- * One decimal, two below 1 (`:2488` draws *0.75*). Rounded to two first, so 0.996 is *1.0*, never *1.00*.
- * A point for the decimal, as the prototype writes it and as the product's other figures do (`0.30`, `15.0%`).
+ * One decimal, two below 1 (`:2488` draws *0.75*). Rounded to two first, so 0.996 is *1,0*, never *1,00*.
+ * **A comma for the decimal** since ADR-0167 §1 (`0,75`, `1,2`), as every other figure is written (`0,30`, `15,0%`).
+ * The table's money stays in the unit its label names — *APE (IDR B)* — rather than in full rupiah: the
+ * heading carries the unit, and the column is the prototype's.
  */
 function scaled(value: number): string {
   const two = Math.round(value * 100) / 100;
-  return Math.abs(two) < 1 ? two.toFixed(2) : value.toFixed(1);
+  return Math.abs(two) < 1 ? formatNumber(two, { decimals: 2 }) : formatNumber(value, { decimals: 1 });
 }
 
 /**
  * A figure as the table writes it — **for display only**; the served value is exact. Money from minor units,
- * through the one conversion (`MINOR_UNITS_PER_MAJOR`); counts and the averages whole (`:2470`); a percentage
- * whole, with its sign.
+ * through the one conversion (`MINOR_UNITS_PER_MAJOR`); counts and the averages whole (`:2470`), a thousand
+ * with a dot; a percentage to one decimal (ADR-0167 §1), with its sign.
  */
 export function formatFigure(row: Pick<ScorecardRow, 'key' | 'unit'>, value: number): string {
   if (row.unit === 'idr_minor') return scaled(value / MINOR_UNITS_PER_MAJOR / (MONEY_SCALE[row.key] ?? 1e9));
-  if (row.unit === 'percentage') return `${Math.round(value)}%`;
-  return String(Math.round(value));
+  if (row.unit === 'percentage') return formatPercent(value);
+  return formatNumber(Math.round(value));
 }
 
 /** A cell's words: the figure, *pending data*, *—*, or nothing for a blocked cell. */

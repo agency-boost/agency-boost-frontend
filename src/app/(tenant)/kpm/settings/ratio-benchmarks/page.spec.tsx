@@ -146,16 +146,17 @@ describe('the office ratio benchmarks (P4-T2)', () => {
      */
     render();
     await screen.findByRole('heading', { name: 'Selling success rate' });
-    expect(screen.getByText('15.0%')).toBeInTheDocument();
+    expect(screen.getByText('15,0%')).toBeInTheDocument();
     expect(screen.getByText('±30 points')).toBeInTheDocument();
-    expect(screen.getByText('0.50')).toBeInTheDocument();
+    expect(screen.getByText('0,50')).toBeInTheDocument();
+    expect(screen.queryByText('0,15')).not.toBeInTheDocument();
     expect(screen.queryByText('0.15')).not.toBeInTheDocument();
   });
 
   it('asks for a percentage the way it is shown: 15 for 15.0%', async () => {
     render();
     await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
-    expect(screen.getByLabelText('Benchmark')).toHaveValue(15);
+    expect(screen.getByLabelText('Benchmark')).toHaveValue('15');
   });
 
   it('re-expresses what was typed when the unit changes, rather than reinterpreting it', async () => {
@@ -164,16 +165,33 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     const { calls } = render();
     await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[2]);
     await userEvent.selectOptions(screen.getByLabelText('Shown as'), 'percent');
-    expect(screen.getByLabelText('Benchmark')).toHaveValue(50);
+    expect(screen.getByLabelText('Benchmark')).toHaveValue('50');
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     const card = screen.getByRole('heading', { name: /Referral rate/ }).closest('div')!.parentElement!;
-    expect(within(card).getByText('50.0%')).toBeInTheDocument();
+    expect(within(card).getByText('50,0%')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
     expect(JSON.parse(post.init.body as string).ops[0].body)
       .toMatchObject({ benchmark: 0.5, displayUnit: 'percent' });
+  });
+
+  it('P18.95-T1 AC-3 takes a benchmark typed with a comma, as the card writes it, and shows it back with one', async () => {
+    const { calls } = render();
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
+    const field = screen.getByLabelText('Benchmark');
+    // Text with a decimal keypad: a number field would refuse the comma and answer an empty value.
+    expect(field).toHaveAttribute('type', 'text');
+    expect(field).toHaveAttribute('inputmode', 'decimal');
+    await userEvent.clear(field);
+    await userEvent.type(field, '17,5');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('17,5%')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
+    expect(JSON.parse(post.init.body as string).ops[0].body).toMatchObject({ benchmark: 0.175 });
   });
 
   it('offers no unit on a band ratio, which is judged in points and nothing else', async () => {
@@ -248,8 +266,8 @@ describe('the office ratio benchmarks (P4-T2)', () => {
 
     const card = screen.getByRole('heading', { name: /Selling success rate/ }).closest('div')!
       .parentElement!;
-    expect(within(card).getByText('25.0%')).toBeInTheDocument();
-    expect(within(card).queryByText('15.0%')).not.toBeInTheDocument();
+    expect(within(card).getByText('25,0%')).toBeInTheDocument();
+    expect(within(card).queryByText('15,0%')).not.toBeInTheDocument();
     expect(within(card).getByText('Edited — not saved yet')).toBeInTheDocument();
   });
 
@@ -268,7 +286,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     expect(screen.queryByText(/not saved yet/)).not.toBeInTheDocument();
     const card = screen.getByRole('heading', { name: /Selling success rate/ }).closest('div')!
       .parentElement!;
-    expect(within(card).getByText('15.0%')).toBeInTheDocument();
+    expect(within(card).getByText('15,0%')).toBeInTheDocument();
   });
 
   it('collapses repeated edits to one row into a single change', async () => {
@@ -534,11 +552,11 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       expect(benchmark).toHaveAccessibleDescription('Percentage points either side of an even split.');
       await userEvent.type(benchmark, '30');
       expect(benchmark).toHaveAccessibleDescription(
-        'Percentage points either side of an even split: each side between 35% and 65%.',
+        'Percentage points either side of an even split: each side between 35,0% and 65,0%.',
       );
       await userEvent.clear(benchmark);
       await userEvent.type(benchmark, '25');
-      expect(benchmark).toHaveAccessibleDescription(/each side between 37\.5% and 62\.5%\.$/);
+      expect(benchmark).toHaveAccessibleDescription(/each side between 37,5% and 62,5%\.$/);
 
       await userEvent.click(screen.getByRole('button', { name: 'Add the ratio' }));
       const post = calls.find((c) => c.init.method === 'POST')!;
@@ -566,9 +584,9 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       expect(within(balance).getByText('Recruitment')).toBeInTheDocument();
       expect(within(balance).queryByText(/Selling side|Recruitment side/)).not.toBeInTheDocument();
       expect(balance).toHaveTextContent(
-        'Agents see each side’s share of the two — on track while each side is between 35% and 65%.',
+        'Agents see each side’s share of the two — on track while each side is between 35,0% and 65,0%.',
       );
-      expect(balance).not.toHaveTextContent(/−100%/);
+      expect(balance).not.toHaveTextContent(/−100,0%/);
     });
 
     it('AC-9: calls an office’s own balance’s sides Side A and Side B when both count one section', async () => {
@@ -581,7 +599,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       const balance = await cardOf('Presenting vs submitting');
       expect(within(balance).getByText('Side A')).toBeInTheDocument();
       expect(within(balance).getByText('Side B')).toBeInTheDocument();
-      expect(balance).toHaveTextContent('between 40% and 60%');
+      expect(balance).toHaveTextContent('between 40,0% and 60,0%');
     });
 
     it('AC-9: calls a side whose section this office no longer has Side B, never Recruitment by default', async () => {
@@ -599,7 +617,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       expect(within(balance).getByRole('group', { name: 'Side A' })).toBeInTheDocument();
       expect(within(balance).getByRole('group', { name: 'Side B' })).toBeInTheDocument();
       expect(within(balance).getByLabelText('Benchmark')).toHaveAccessibleDescription(
-        'Percentage points either side of an even split: each side between 35% and 65%.',
+        'Percentage points either side of an even split: each side between 35,0% and 65,0%.',
       );
     });
   });

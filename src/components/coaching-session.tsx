@@ -11,21 +11,24 @@ import { useSessionHistoryPrefetch } from '@/components/coaching-person';
 import { LeadsTable } from '@/components/leads-table';
 import { SummaryCard } from '@/components/personal-summary';
 import { Button, ErrorBanner, TextInput } from '@/components/ui/field';
+import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { InlineSaveField, InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Toast, useToast } from '@/components/ui/toast';
 import {
   readActivityRatios, readActivitySummary, type ActivityRatios, type ActivitySummary,
 } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { CONFIRMED, withDetail } from '@/lib/confirmations';
 import { cn } from '@/lib/cn';
 import {
   capitalized, coachingArchiveHref, finalizeRefusal, finalizeSession, pastSessionSummary, PRONOUN_FORMS,
   readSession, readSessionHistory, reopenWindowClosed, saveSessionDraft, startSession,
   type Coachee, type CoachingSession, type LeadAction, type SessionDraftBody, type SessionHistory,
 } from '@/lib/coaching';
-import { formatCalendarDayLong, formatShortDay } from '@/lib/format';
+import { formatCalendarDayLong, formatRupiahCompact, formatShortDay } from '@/lib/format';
 import {
-  formatRupiah, goalInputsOf, groupDigits, parseDigits, readGoal, saveGoal, toMajor, toMinor,
+  goalInputsOf, groupDigits, parseDigits, readGoal, saveGoal, toMajor, toMinor,
 } from '@/lib/goals';
 import type { Lead } from '@/lib/leads';
 import { useCan, useSession } from '@/lib/session';
@@ -151,10 +154,14 @@ export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; openi
       const started = await startSession(membershipId);
       setOpeningId(started.sessionId);
       open(started);
-      // The prototype's toast says what was carried; with no session before this one, nothing was.
-      show(started.lastWeek
-        ? 'Session started — unfinished items and tips from last week carried forward.'
-        : 'Session started.');
+      /*
+       * *Session started ✓* (P18.95-T1 AC-6, ADR-0167 §5; UI-008), and the prototype's own sentence after it
+       * for what was carried; with no session before this one, nothing was.
+       */
+      show(withDetail(
+        CONFIRMED.sessionStarted,
+        started.lastWeek ? 'unfinished items and tips from last week carried forward.' : null,
+      ));
     } catch (err) {
       setStartError(toDisplayError(err));
     } finally {
@@ -337,10 +344,21 @@ export interface SessionDraft {
   reset: (session: CoachingSession) => void;
   /** Change the draft on screen, without saving: typing. */
   change: (fn: (draft: Draft) => Draft) => void;
-  /** Change it and save: a tick, a date, a row removed. */
-  commit: (fn: (draft: Draft) => Draft) => void;
-  /** Save whatever is unsaved, one save at a time. Resolves `false` when a save was refused. */
-  save: () => Promise<boolean>;
+  /**
+   * Change it and save: a tick, a date, a row removed. With `field`, that field's row says *Saving… →
+   * Saved ✓* (P18.95-T1 AC-5); a row removed has no field left to say it beside.
+   */
+  commit: (fn: (draft: Draft) => Draft, field?: string) => void;
+  /**
+   * Save whatever is unsaved, one save at a time. Resolves `true` once saved, `false` when a save was
+   * refused (the banner says why), `null` when the session was read again under it (a conflict, a finalize
+   * elsewhere) and the draft it held is gone.
+   */
+  save: () => Promise<boolean | null>;
+  /** A text field left: saved, with its confirmation, **when anything is unsaved** — an untouched box says nothing. */
+  saveField: (field: string) => void;
+  /** A field's *Saving…*, *Saved ✓* or *Couldn't save — retry* (P18.95-T1 AC-5). */
+  status: (field: string) => InlineSaveStatusProps;
   version: () => number;
   onConflict: (handler: () => void) => void;
 }
@@ -354,9 +372,18 @@ function useSessionDraft(): SessionDraft {
   const [state, setState] = useState<Draft | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const held = useRef<Held | null>(null);
-  const inFlight = useRef<Promise<boolean> | null>(null);
+  const inFlight = useRef<Promise<boolean | null> | null>(null);
   const again = useRef(false);
   const conflict = useRef<() => void>(() => undefined);
+  /**
+   * **Each field says its save** (P18.95-T1 AC-5, ADR-0167 §5; UI-007). The draft is saved whole, so a save
+   * that lands has saved every field: one that failed before it has nothing unsaved left, and its
+   * *Couldn't save — retry* goes. Its retry is a save of the draft as it is now, which still holds the
+   * value that failed.
+   */
+  const { save: track, clear, statusOf } = useInlineSave();
+  const failedFields = useRef(new Set<string>());
+  const trackedFields = useRef(new Set<string>());
 
   const reset = useCallback((session: CoachingSession) => {
     const draft = draftOf(session);
@@ -364,7 +391,11 @@ function useSessionDraft(): SessionDraft {
     again.current = false;
     setError(null);
     setState(draft);
-  }, []);
+    // A session read again is a new draft: nothing said about the old one's fields still stands.
+    for (const field of trackedFields.current) clear(field);
+    trackedFields.current.clear();
+    failedFields.current.clear();
+  }, [clear]);
 
   const change = useCallback((fn: (draft: Draft) => Draft) => {
     const current = held.current;
@@ -373,12 +404,12 @@ function useSessionDraft(): SessionDraft {
     setState(current.draft);
   }, []);
 
-  const save = useCallback((): Promise<boolean> => {
+  const save = useCallback((): Promise<boolean | null> => {
     if (inFlight.current) {
       again.current = true;
       return inFlight.current;
     }
-    const run = async (): Promise<boolean> => {
+    const run = async (): Promise<boolean | null> => {
       const mine = held.current;
       if (!mine) return true;
       do {
@@ -389,7 +420,7 @@ function useSessionDraft(): SessionDraft {
         try {
           const saved = await saveSessionDraft(mine.sessionId, { version: mine.version, ...bodyOf(sent) });
           // A session read again meanwhile is a new draft; this answer belongs to the old one.
-          if (held.current !== mine) return false;
+          if (held.current !== mine) return null;
           mine.version = saved.version;
           mine.saved = snapshot;
           // The server names the rows it was sent, in the order it was sent them.
@@ -404,8 +435,11 @@ function useSessionDraft(): SessionDraft {
           setError(null);
         } catch (err) {
           const shown = toDisplayError(err);
-          if (shown.code === 'VERSION_CONFLICT' || shown.code === 'COACHING_SESSION_FINALIZED') conflict.current();
-          else setError(shown);
+          if (shown.code === 'VERSION_CONFLICT' || shown.code === 'COACHING_SESSION_FINALIZED') {
+            conflict.current();
+            return null;
+          }
+          setError(shown);
           return false;
         }
       } while (again.current);
@@ -415,15 +449,37 @@ function useSessionDraft(): SessionDraft {
     return inFlight.current;
   }, []);
 
-  const commit = useCallback((fn: (draft: Draft) => Draft) => {
+  /** A save with `field`'s confirmation; a landed one takes every earlier failure's retry away (see above). */
+  const saveTracked = useCallback((field: string) => {
+    trackedFields.current.add(field);
+    void track(field, async () => {
+      const outcome = await save();
+      if (outcome === false) {
+        failedFields.current.add(field);
+        return false;
+      }
+      for (const other of failedFields.current) if (other !== field) clear(other);
+      failedFields.current.clear();
+      return outcome;
+    });
+  }, [clear, save, track]);
+
+  const commit = useCallback((fn: (draft: Draft) => Draft, field?: string) => {
     change(fn);
-    void save();
-  }, [change, save]);
+    if (field) saveTracked(field);
+    else void save();
+  }, [change, save, saveTracked]);
+
+  const saveField = useCallback((field: string) => {
+    const current = held.current;
+    if (!current || snapshotOf(current.draft) === current.saved) return;
+    saveTracked(field);
+  }, [saveTracked]);
 
   const version = useCallback(() => held.current?.version ?? 0, []);
   const onConflict = useCallback((handler: () => void) => { conflict.current = handler; }, []);
 
-  return { state, error, reset, change, commit, save, version, onConflict };
+  return { state, error, reset, change, commit, save, saveField, status: statusOf, version, onConflict };
 }
 
 /*
@@ -467,7 +523,7 @@ function SessionHeader({ coachee, history, session }: { coachee: Coachee; histor
           aria-expanded={showPast}
           aria-controls={listId}
           onClick={() => setShowPast((v) => !v)}
-          className="rounded-sm text-sm font-semibold text-navy-soft hover:underline"
+          className={cn('rounded-sm text-sm font-semibold text-navy-soft hover:underline', TEXT_TAP)}
         >
           {showPast ? 'Hide past sessions' : 'View past sessions'}
           <span aria-hidden="true">{showPast ? ' ▴' : ' ▾'}</span>
@@ -482,7 +538,7 @@ function SessionHeader({ coachee, history, session }: { coachee: Coachee; histor
               <li key={past.sessionId}>
                 <Link
                   href={coachingArchiveHref(coachee.membershipId, past.sessionId)}
-                  className="flex items-center justify-between gap-3 rounded-sm py-[7px] text-sm text-muted hover:text-navy"
+                  className={cn('flex items-center justify-between gap-3 rounded-sm py-[7px] text-sm text-muted hover:text-navy', TAP_HEIGHT)}
                 >
                   <span>
                     <strong className="text-navy">{formatShortDay(past.date, { year: true })}</strong> — {pastSessionSummary(past)}
@@ -566,7 +622,7 @@ function LastWeekCard({ session, draft, locked }: { session: CoachingSession; dr
                 className={cn('h-4 w-4 shrink-0 accent-success', locked ? 'opacity-70' : 'cursor-pointer')}
                 onChange={(e) => {
                   const done = e.target.checked;
-                  draft.commit((d) => ({ ...d, lastWeek: d.lastWeek.map((r) => (r.itemId === item.itemId ? { ...r, done } : r)) }));
+                  draft.commit((d) => ({ ...d, lastWeek: d.lastWeek.map((r) => (r.itemId === item.itemId ? { ...r, done } : r)) }), `lastWeek:${item.itemId}`);
                 }}
               />
               {locked ? (
@@ -580,7 +636,7 @@ function LastWeekCard({ session, draft, locked }: { session: CoachingSession; dr
                   value={row.dueDate ?? ''}
                   onChange={(e) => {
                     const dueDate = e.target.value || null;
-                    draft.commit((d) => ({ ...d, lastWeek: d.lastWeek.map((r) => (r.itemId === item.itemId ? { ...r, dueDate } : r)) }));
+                    draft.commit((d) => ({ ...d, lastWeek: d.lastWeek.map((r) => (r.itemId === item.itemId ? { ...r, dueDate } : r)) }), `lastWeek:${item.itemId}`);
                   }}
                 />
               )}
@@ -589,6 +645,8 @@ function LastWeekCard({ session, draft, locked }: { session: CoachingSession; dr
               <span id={textId} className={cn('min-w-[10rem] flex-1 text-md', row.done ? 'text-muted line-through' : 'text-navy')}>
                 {item.text}
               </span>
+              {/* The row's tick and date say their save at its end (P18.95-T1 AC-5). */}
+              <InlineSaveStatus {...draft.status(`lastWeek:${item.itemId}`)} label={item.text || `item ${i + 1}`} />
             </li>
           );
         })}
@@ -612,9 +670,10 @@ function LastWeekCard({ session, draft, locked }: { session: CoachingSession; dr
  * answers, set to a direct target. This month's target moves only by its formula (ADR-0056), so it is
  * a figure here like the others. The hint says only what is true.
  *
- * **One money formatter** (F-02, contradiction #13): `formatRupiah` everywhere on the card, the
- * *remaining* lines included, where the prototype had a compact second formatter that wrote a
- * billion as *Rp1.2M+*.
+ * **One money formatter** (F-02, contradiction #13): `formatRupiahCompact` everywhere on the card, the
+ * *remaining* lines included — a card's figures are compact (ADR-0167 §1, `Rp 1,2 M`), where the
+ * prototype had a second formatter that wrote a billion as *Rp1.2M+*. The editor's box holds the target
+ * in full, as every input does.
  *
  * **It says so once the card shows it** (P11-T8's browser walk): the figures are read again first, the
  * box stays open on what was saved meanwhile, and only then does it close and the toast say the goal
@@ -745,7 +804,7 @@ function GoalCard({
       ) : (
         <>
           <GoalRow figures={summary.monthly} period="month" target={
-            summary.monthly.targetMinor === null ? '—' : formatRupiah(summary.monthly.targetMinor)
+            summary.monthly.targetMinor === null ? '—' : formatRupiahCompact(summary.monthly.targetMinor)
           } />
           <GoalRow
             figures={summary.yearly}
@@ -758,10 +817,10 @@ function GoalCard({
                 onClick={edit}
                 className="rounded-[3px] border-b-[1.5px] border-dashed border-hairline px-px hover:border-amber focus:border-amber"
               >
-                {formatRupiah(summary.yearly.targetMinor!)}
+                {formatRupiahCompact(summary.yearly.targetMinor!)}
                 <span className="sr-only">, this year’s target — edit</span>
               </button>
-            ) : formatRupiah(summary.yearly.targetMinor!)}
+            ) : formatRupiahCompact(summary.yearly.targetMinor!)}
             editor={editing ? editor : null}
           />
         </>
@@ -918,18 +977,20 @@ function TipsCard({ draft, locked }: { draft: SessionDraft; locked: boolean }) {
                 <span className="min-w-0 flex-1">{tip.text}</span>
               ) : (
                 <>
-                  <TextInput
-                    id={idOf(tip.key)}
-                    aria-label={`Tip ${i + 1}`}
-                    placeholder="Type the tip…"
-                    className="h-8 min-w-0 flex-1"
-                    value={tip.text}
-                    onChange={(e) => {
-                      const text = e.target.value;
-                      draft.change((d) => ({ ...d, tips: d.tips.map((t) => (t.key === tip.key ? { ...t, text } : t)) }));
-                    }}
-                    onBlur={() => void draft.save()}
-                  />
+                  <InlineSaveField status={draft.status(`tip:${tip.key}`)} label={`Tip ${i + 1}`} className="min-w-0 flex-1">
+                    <TextInput
+                      id={idOf(tip.key)}
+                      aria-label={`Tip ${i + 1}`}
+                      placeholder="Type the tip…"
+                      className="h-8 w-full min-w-0"
+                      value={tip.text}
+                      onChange={(e) => {
+                        const text = e.target.value;
+                        draft.change((d) => ({ ...d, tips: d.tips.map((t) => (t.key === tip.key ? { ...t, text } : t)) }));
+                      }}
+                      onBlur={() => draft.saveField(`tip:${tip.key}`)}
+                    />
+                  </InlineSaveField>
                   <RemoveButton
                     label={`Remove tip ${i + 1}`}
                     onClick={() => draft.commit((d) => ({ ...d, tips: d.tips.filter((t) => t.key !== tip.key) }))}
@@ -1023,22 +1084,25 @@ function NextActionsCard({
                     value={item.dueDate ?? ''}
                     onChange={(e) => {
                       const dueDate = e.target.value || null;
-                      draft.commit((d) => ({ ...d, actions: d.actions.map((a) => (a.key === item.key ? { ...a, dueDate } : a)) }));
+                      draft.commit((d) => ({ ...d, actions: d.actions.map((a) => (a.key === item.key ? { ...a, dueDate } : a)) }), `action:${item.key}`);
                     }}
                   />
-                  <TextInput
-                    id={idOf(item.key)}
-                    aria-label={`Action item ${i + 1}`}
-                    placeholder="What needs to happen…"
-                    className="h-8 min-w-[140px] flex-1"
-                    value={item.text}
-                    onChange={(e) => {
-                      const text = e.target.value;
-                      if (text.trim()) setGuard(false);
-                      draft.change((d) => ({ ...d, actions: d.actions.map((a) => (a.key === item.key ? { ...a, text } : a)) }));
-                    }}
-                    onBlur={() => void draft.save()}
-                  />
+                  {/* The row's date and words say their save under the words (P18.95-T1 AC-5). */}
+                  <InlineSaveField status={draft.status(`action:${item.key}`)} label={`Action item ${i + 1}`} className="min-w-[140px] flex-1">
+                    <TextInput
+                      id={idOf(item.key)}
+                      aria-label={`Action item ${i + 1}`}
+                      placeholder="What needs to happen…"
+                      className="h-8 w-full"
+                      value={item.text}
+                      onChange={(e) => {
+                        const text = e.target.value;
+                        if (text.trim()) setGuard(false);
+                        draft.change((d) => ({ ...d, actions: d.actions.map((a) => (a.key === item.key ? { ...a, text } : a)) }));
+                      }}
+                      onBlur={() => draft.saveField(`action:${item.key}`)}
+                    />
+                  </InlineSaveField>
                   <RemoveButton
                     label={`Remove action item ${i + 1}`}
                     onClick={() => {

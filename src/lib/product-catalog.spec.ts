@@ -100,7 +100,9 @@ describe('sales tools: the words and the addresses (Phase 14)', () => {
     });
 
     it('P14-T7 AC-5 prints a stored proportion as the percentage (OD-135)', () => {
-      expect([formatRate(0.4), formatRate(0.125), formatRate(0.025), formatRate(0)]).toEqual(['40%', '12.5%', '2.5%', '0%']);
+      expect([formatRate(0.4), formatRate(0.125), formatRate(0.025), formatRate(0)]).toEqual(['40,0%', '12,5%', '2,5%', '0,0%']);
+      // One decimal (ADR-0167 §1), and the second a rate was stored with: the rate read is the rate stored.
+      expect(formatRate(0.0725)).toBe('7,25%');
     });
 
     it('D-copy: the strings these screens write themselves use none of the six words (ADR-0084)', () => {

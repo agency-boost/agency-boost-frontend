@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
+import { InlineSaveStatus, useInlineSave } from '@/components/ui/inline-save-status';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
 import {
@@ -28,6 +29,9 @@ const TITLE: Record<LeadPipeline, string> = {
   sales: 'Sales',
   recruitment: 'Recruitment',
 };
+
+/** A stage's *Expected to close* switch, in its *Saving… → Saved ✓* (P18.95-T1 AC-5). */
+const lateKey = (stageId: string) => `${stageId}\nlate`;
 
 /**
  * The two lead pipelines (P4-T3, `KPM_Owner.html` Lead statuses).
@@ -67,6 +71,7 @@ export default function LeadStatusesPage() {
   const [draft, setDraft] = useState({ code: '', label: '' });
   const [editing, setEditing] = useState<string | null>(null);
   const [editLabel, setEditLabel] = useState('');
+  const inline = useInlineSave();
 
   /*
    * Always read the archived rows, and filter for display — the same rule the activity
@@ -121,15 +126,18 @@ export default function LeadStatusesPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  async function run(action: () => Promise<unknown>) {
+  /** A write, then the ladder read again. Answers whether the write landed — a switch's status says so (AC-5). */
+  async function run(action: () => Promise<unknown>): Promise<boolean> {
     setBusy(true);
     setError(null);
     try {
       await action();
       await load();
       setPublished((n) => n + 1);
+      return true;
     } catch (err) {
       setError(toDisplayError(err));
+      return false;
     } finally {
       setBusy(false);
     }
@@ -319,16 +327,28 @@ export default function LeadStatusesPage() {
                           Edit
                         </Button>
                         {!stage.isTerminal && stage.status === 'active' && (
-                          <Switch
-                            id={`late-${stage.id}`}
-                            label="Expected to close"
-                            checked={stage.isLateStage}
-                            disabled={busy}
-                            describedBy="late-stage-hint"
-                            onChange={(next) => void run(
-                              () => setLateStageLeadStatus(stage.id, next),
-                            )}
-                          />
+                          <>
+                            <Switch
+                              id={`late-${stage.id}`}
+                              label="Expected to close"
+                              checked={stage.isLateStage}
+                              disabled={busy}
+                              describedBy="late-stage-hint"
+                              // It saves itself, and says so beside it (P18.95-T1 AC-5): a retry sends this same
+                              // value again. The reason for a refusal stays in the banner above, where it was.
+                              onChange={(next) => void inline.save(lateKey(stage.id), () => run(
+                                () => setLateStageLeadStatus(stage.id, next),
+                              ))}
+                            />
+                            <InlineSaveStatus
+                              state={inline.stateOf(lateKey(stage.id))}
+                              label={`Expected to close, ${stage.label}`}
+                              onRetry={() => {
+                                inline.retry(lateKey(stage.id));
+                                document.getElementById(`late-${stage.id}`)?.focus();
+                              }}
+                            />
+                          </>
                         )}
                         {!stage.isTerminal && stage.status === 'active' && (
                           <Button

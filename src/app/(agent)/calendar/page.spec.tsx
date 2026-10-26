@@ -40,7 +40,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-const RANGE = 'Sep 28 – Oct 4, 2026';
+const RANGE = '28 Sep – 4 Okt 2026';
 const WEEK_READ = '/calendar/entries?view=week';
 const MONTH_READ = '/calendar/entries?view=month';
 /** The reader's own setting, *Hide my personal activities* (ADR-0110): off, as a new member's is. */
@@ -77,7 +77,7 @@ function drag(column: HTMLElement, from: number, to: number) {
   fireEvent.pointerUp(column, { clientY: y(to), pointerId: 1, pointerType: 'mouse' });
 }
 
-const standup = () => screen.getByRole('button', { name: 'Meeting: Weekly unit standup, 9:00 AM–9:30 AM' });
+const standup = () => screen.getByRole('button', { name: 'Meeting: Weekly unit standup, 09.00–09.30' });
 
 /**
  * The *Drag to block* pill's name: its visible words, then *": Block time — {name}"*, read and not drawn
@@ -116,23 +116,23 @@ describe('P12-T2 — my calendar, week view', () => {
     const pane = region.closest('section')!;
     expect(within(pane).getByText('Agus Santoso')).toBeInTheDocument();
     expect(within(pane).getByText('Agency Builder · You')).toBeInTheDocument();
-    for (const [weekday, number] of [['Mon', '28'], ['Wed', '30'], ['Thu', 'Oct 1'], ['Sun', '4']]) {
+    for (const [weekday, number] of [['Sen', '28'], ['Rab', '30'], ['Kam', '1 Okt'], ['Min', '4']]) {
       expect(within(pane).getByText(number).parentElement).toHaveTextContent(`${weekday}${number}`);
     }
-    for (const hour of ['12 AM', '7 AM', '12 PM', '11 PM']) expect(within(region).getByText(hour)).toBeInTheDocument();
+    for (const hour of ['00.00', '07.00', '12.00', '23.00']) expect(within(region).getByText(hour)).toBeInTheDocument();
     // A half-hour entry has room for its title alone (P13.1-T8 AC-1): the time is in its name.
     expect(standup()).toHaveTextContent(/^Weekly unit standup$/);
-    expect(screen.getByRole('button', { name: 'Task: Prospecting call block, 10:00 AM–11:30 AM' }))
-      .toHaveTextContent('Prospecting call block10:00 AM–11:30 AM');
-    // Opened scrolled to 7 AM (`DEFAULT_SCROLL_HOUR`, `:455`).
+    expect(screen.getByRole('button', { name: 'Task: Prospecting call block, 10.00–11.30' }))
+      .toHaveTextContent('Prospecting call block10.00–11.30');
+    // Opened scrolled to 07.00 (`DEFAULT_SCROLL_HOUR`, `:455`).
     expect(region.scrollTop).toBe(7 * HOUR_PX);
   });
 
   it('P12-T2 AC-2 tints today and the weekend, and today’s number is amber-ink (H-19)', async () => {
     show();
-    const monday = await day('Monday, Sep 28, 2026');
+    const monday = await day('Senin, 28 Sep 2026');
     expect(monday.className).toContain('bg-amber/[0.08]');
-    expect((await day('Saturday, Oct 3, 2026')).className).toContain('bg-navy/[0.015]');
+    expect((await day('Sabtu, 3 Okt 2026')).className).toContain('bg-navy/[0.015]');
     expect(screen.getByText('28').className).toContain('text-amber-ink');
     expect(screen.getByText('29').className).toContain('text-navy');
   });
@@ -146,7 +146,7 @@ describe('P12-T2 — my calendar, week view', () => {
 
     it('draws the now-line in today’s column only, at the read’s minute', async () => {
       show();
-      const monday = await day('Monday, Sep 28, 2026');
+      const monday = await day('Senin, 28 Sep 2026');
       const line = monday.querySelector<HTMLElement>('[data-now]')!;
       expect(parseFloat(line.style.top)).toBeCloseTo((585 / 60) * HOUR_PX);
       expect(document.querySelectorAll('[data-now]')).toHaveLength(1);
@@ -162,7 +162,7 @@ describe('P12-T2 — my calendar, week view', () => {
       vi.useFakeTimers({ toFake: ['setInterval', 'Date'] });
       const late = weekRead({ now: { at: '2026-09-28T16:58:00.000Z', minute: 1438 } });
       const stub = show({ [WEEK_READ]: { body: late } });
-      const monday = await day('Monday, Sep 28, 2026');
+      const monday = await day('Senin, 28 Sep 2026');
       const top = () => parseFloat(monday.querySelector<HTMLElement>('[data-now]')!.style.top);
       expect(top()).toBeCloseTo((1438 / 60) * HOUR_PX);
       await act(async () => { vi.advanceTimersByTime(60_000); });
@@ -225,14 +225,14 @@ describe('P12-T2 — my calendar, week view', () => {
 
     it('a tap on an empty slot opens it at the prototype’s half hour; a drag snaps to a quarter', async () => {
       show();
-      tap(await day('Tuesday, Sep 29, 2026'), 14 * 60 + 5);
+      tap(await day('Selasa, 29 Sep 2026'), 14 * 60 + 5);
       const dialog = await screen.findByRole('dialog', { name: 'New event' });
       expect(within(dialog).getByLabelText('Date')).toHaveValue('2026-09-29');
       expect(within(dialog).getByLabelText('Start')).toHaveValue('14:00');
       expect(within(dialog).getByLabelText('End')).toHaveValue('14:30');
       await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
-      drag(await day('Wednesday, Sep 30, 2026'), 10 * 60, 11 * 60 + 25);
+      drag(await day('Rabu, 30 Sep 2026'), 10 * 60, 11 * 60 + 25);
       expect(screen.getByLabelText('Date')).toHaveValue('2026-09-30');
       expect(screen.getByLabelText('Start')).toHaveValue('10:00');
       expect(screen.getByLabelText('End')).toHaveValue('11:30');
@@ -240,14 +240,14 @@ describe('P12-T2 — my calendar, week view', () => {
 
     it('P12-T2 AC-5 a drag to the grid’s foot ends at 00:00, never 24:00', async () => {
       show();
-      drag(await day('Thursday, Oct 1, 2026'), 23 * 60, 24 * 60);
+      drag(await day('Kamis, 1 Okt 2026'), 23 * 60, 24 * 60);
       expect(screen.getByLabelText('Start')).toHaveValue('23:00');
       expect(screen.getByLabelText('End')).toHaveValue('00:00');
     });
 
     it('draws the selection while dragging, takes no slot from a press on an entry, and drops a cancelled drag', async () => {
       show();
-      const monday = await day('Monday, Sep 28, 2026');
+      const monday = await day('Senin, 28 Sep 2026');
       fireEvent.pointerDown(monday, { clientY: 600, pointerId: 1, pointerType: 'pen', button: 0 });
       fireEvent.pointerMove(monday, { clientY: 700, pointerId: 1, pointerType: 'pen' });
       expect(monday.querySelector('[data-selection]')).not.toBeNull();
@@ -259,7 +259,7 @@ describe('P12-T2 — my calendar, week view', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    it('saves a new entry and moves the grid to its week, with no toast', async () => {
+    it('saves a new entry and moves the grid to its week, and says Event created ✓ (P18.95-T1 AC-6)', async () => {
       const saved = entry({ entryId: 'e-new', title: 'Call list', date: '2026-10-06', start: '10:00', end: '10:30' });
       const stub = show({ 'POST /calendar/entries': { status: 201, body: saved } });
       await grid();
@@ -273,7 +273,21 @@ describe('P12-T2 — my calendar, week view', () => {
         type: 'meeting', title: 'Call list', notes: 'Desk', date: '2026-10-06', start: '10:00', end: '10:30', inviteeIds: [],
       });
       await waitFor(() => expect(calls(stub, `${WEEK_READ}&date=2026-10-06`)).toHaveLength(1));
+      // The toast said nothing until 2026-10-26; the client's UI review asked for it (UI-008).
+      expect(screen.getByText('Event created ✓').closest('[role="status"]')).toHaveAttribute('aria-live', 'polite');
       expect(screen.queryByText(/saved/i)).not.toBeInTheDocument();
+    });
+
+    it('P18.95-T1 AC-6: a refused new entry toasts nothing; its reason stays in the dialog', async () => {
+      show({ 'POST /calendar/entries': refusal(500, 'INTERNAL_ERROR') });
+      await grid();
+      await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
+      await userEvent.type(screen.getByLabelText('Title'), 'Call list');
+      await userEvent.click(screen.getByRole('button', { name: 'Save event' }));
+
+      const dialog = screen.getByRole('dialog', { name: 'New event' });
+      expect(await within(dialog).findByText('Refused: INTERNAL_ERROR')).toBeInTheDocument();
+      expect(screen.queryByText('Event created ✓')).not.toBeInTheDocument();
     });
   });
 
@@ -352,7 +366,7 @@ describe('P12-T2 — my calendar, week view', () => {
       await userEvent.click(standup());
       const dialog = screen.getByRole('dialog', { name: 'Weekly unit standup' });
       expect(within(dialog).getByText('Meeting')).toBeInTheDocument();
-      expect(within(dialog).getByText('Monday, Sep 28, 2026 · 9:00 AM – 9:30 AM')).toBeInTheDocument();
+      expect(within(dialog).getByText('Senin, 28 Sep 2026 · 09.00 – 09.30')).toBeInTheDocument();
       expect(within(dialog).getByText('Zoom — zoom.us/j/91827364')).toBeInTheDocument();
       expect(within(dialog).getByText('No one else invited')).toBeInTheDocument();
       expect(within(dialog).getAllByRole('button').map((b) => b.textContent)).toEqual(['Delete', 'Close', 'Edit']);
@@ -372,7 +386,7 @@ describe('P12-T2 — my calendar, week view', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Travel: Client trip — Surabaya' }));
       const dialog = screen.getByRole('dialog', { name: 'Client trip — Surabaya' });
       expect(within(dialog).getByText('Travel')).toBeInTheDocument();
-      expect(within(dialog).getByText('Monday, Sep 28, 2026 – Tuesday, Sep 29, 2026')).toBeInTheDocument();
+      expect(within(dialog).getByText('Senin, 28 Sep 2026 – Selasa, 29 Sep 2026')).toBeInTheDocument();
       await userEvent.click(within(dialog).getByRole('button', { name: 'Edit' }));
       expect(screen.getByRole('dialog', { name: 'Edit event' })).toBeInTheDocument();
       expect(screen.getByLabelText('Departure date')).toHaveValue('2026-09-28');
@@ -408,6 +422,8 @@ describe('P12-T2 — my calendar, week view', () => {
       expect(bodyOf(calls(stub, '/calendar/entries/e-standup', 'PATCH')[0])).toMatchObject({
         version: 1, title: 'Unit standup', date: '2026-09-28', start: '09:00', end: '09:30', inviteeIds: [],
       });
+      // An edit creates nothing: the entry it redraws is its answer (P18.95-T1 AC-6).
+      expect(screen.queryByText('Event created ✓')).not.toBeInTheDocument();
     });
 
     it('reads a stale entry again, and says so (409 VERSION_CONFLICT)', async () => {
@@ -496,7 +512,7 @@ describe('P12-T2 — my calendar, week view', () => {
   });
 
   describe('P12-T2 AC-10 moving about', () => {
-    it('steps a week with ‹ and ›, by the dates the server named, and Today returns to 7 AM', async () => {
+    it('steps a week with ‹ and ›, by the dates the server named, and Today returns to 07.00', async () => {
       const stub = show();
       const region = await grid();
       await userEvent.click(screen.getByRole('button', { name: 'Next week' }));
@@ -515,7 +531,7 @@ describe('P12-T2 — my calendar, week view', () => {
     const region = await grid();
     expect(region).toHaveAttribute('tabindex', '0');
     expect(standup().tagName).toBe('BUTTON');
-    expect(screen.getByRole('button', { name: 'Task: Prospecting call block, 10:00 AM–11:30 AM' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Task: Prospecting call block, 10.00–11.30' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Travel: Client trip — Surabaya' })).toBeInTheDocument();
   });
 
@@ -589,15 +605,15 @@ describe('P12-T3 — month view', () => {
     ...routes,
   });
 
-  it('P12-T3 AC-1 switches to the month, labelled *September 2026*, Mon to Sun, a month at a time', async () => {
+  it('P12-T3 AC-1 switches to the month, labelled *Sep 2026*, Mon to Sun, a month at a time', async () => {
     const stub = showMonth();
     await grid();
     await userEvent.click(screen.getByRole('button', { name: 'Month' }));
-    expect(await screen.findByText('September 2026')).toBeInTheDocument();
+    expect(await screen.findByText('Sep 2026')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Month' })).toHaveAttribute('aria-pressed', 'true');
     expect(calls(stub, MONTH_READ)[0].url).toMatch(/\?view=month$/);
-    for (const name of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) expect(screen.getByText(name)).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /, 2026$/ })).toHaveLength(35);
+    for (const name of ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']) expect(screen.getByText(name)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^\S+, \d{1,2} \S+ 2026$/ })).toHaveLength(35);
     await userEvent.click(screen.getByRole('button', { name: 'Next month' }));
     await waitFor(() => expect(calls(stub, `${MONTH_READ}&date=2026-10-01`)).toHaveLength(1));
     await userEvent.click(screen.getByRole('button', { name: 'Previous month' }));
@@ -608,7 +624,7 @@ describe('P12-T3 — month view', () => {
     const stub = show({ [MONTH_READ]: { body: monthRead() } }, AGUS, { view: 'month', date: '2026-09-14' });
     // The toast's live region is always in the page too, so the skeleton is found by what it says.
       expect(screen.getAllByRole('status').some((r) => r.textContent?.includes('Loading the calendar…'))).toBe(true);
-    expect(await screen.findByText('September 2026')).toBeInTheDocument();
+    expect(await screen.findByText('Sep 2026')).toBeInTheDocument();
     expect(calls(stub, MONTH_READ)[0].url).toMatch(/\?view=month&date=2026-09-14$/);
   });
 
@@ -616,7 +632,7 @@ describe('P12-T3 — month view', () => {
     showMonth();
     await grid();
     await userEvent.click(screen.getByRole('button', { name: 'Month' }));
-    await screen.findByText('September 2026');
+    await screen.findByText('Sep 2026');
     const cell = document.querySelector<HTMLElement>('[data-date="2026-09-28"]')!;
     const lines = within(cell).getAllByRole('listitem').map((li) => li.textContent);
     expect(lines).toEqual(['9-9.30Weekly unit standup', '11-121:1 Coaching — Rina Wijaya', '14-15Client review — Hartono family', '+1 more…']);
@@ -634,12 +650,12 @@ describe('P12-T3 — month view', () => {
     showMonth();
     await grid();
     await userEvent.click(screen.getByRole('button', { name: 'Month' }));
-    await screen.findByText('September 2026');
+    await screen.findByText('Sep 2026');
     const number = (date: string) => document.querySelector(`[data-date="${date}"] > span`)!;
     expect(number('2026-08-31').className).toContain('text-muted');
     expect(number('2026-09-28').className).toContain('text-amber-ink');
     expect(number('2026-09-15').className).toContain('text-navy');
-    expect(screen.getByRole('button', { name: 'Monday, Sep 28, 2026' })).toHaveAttribute('aria-current', 'date');
+    expect(screen.getByRole('button', { name: 'Senin, 28 Sep 2026' })).toHaveAttribute('aria-current', 'date');
   });
 
   it('F4 draws *+{n} more…* as its count alone on a phone, the whole phrase read, and keeps it in its cell', async () => {
@@ -662,7 +678,7 @@ describe('P12-T3 — month view', () => {
       const stub = showMonth();
       await grid();
       await userEvent.click(screen.getByRole('button', { name: 'Month' }));
-      await userEvent.click(await screen.findByRole('button', { name: 'Wednesday, Sep 16, 2026' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Rabu, 16 Sep 2026' }));
       await waitFor(() => expect(calls(stub, `${WEEK_READ}&date=2026-09-16`)).toHaveLength(1));
       expect(screen.getByRole('button', { name: 'Week' })).toHaveAttribute('aria-pressed', 'true');
       await userEvent.click(screen.getByRole('button', { name: 'Month' }));
@@ -685,7 +701,7 @@ describe('P12-T3 — month view', () => {
       await userEvent.click(await screen.findByRole('button', { name: /Indah Permata/ }));
       expect(screen.getByRole('button', { name: 'Remove Indah Permata' })).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Month' }));
-      await screen.findByText('September 2026');
+      await screen.findByText('Sep 2026');
       expect(screen.queryByRole('button', { name: '+ Compare with downline' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Remove Indah Permata' })).not.toBeInTheDocument();
       expect(screen.getByText('Viewing:')).toBeInTheDocument();
@@ -698,7 +714,7 @@ describe('P12-T3 — month view', () => {
     showMonth();
     await grid();
     await userEvent.click(screen.getByRole('button', { name: 'Month' }));
-    await screen.findByText('September 2026');
+    await screen.findByText('Sep 2026');
     expect(document.querySelector('[data-date="2026-09-28"]')!.parentElement!.className).toContain('grid-cols-7');
   });
 });
@@ -1005,7 +1021,7 @@ describe('P12-T4 — invitations and the people picker', () => {
   it('P12-T4 AC-4 names a pending invitation as waiting for the reader’s answer', async () => {
     show({ [WEEK_READ]: { body: weekRead({ entries: [entry({ readerIs: 'invitee', myAnswer: 'pending' })] }) } });
     await grid();
-    expect(screen.getByRole('button', { name: 'Meeting: Weekly unit standup, 9:00 AM–9:30 AM, waiting for your answer' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Meeting: Weekly unit standup, 09.00–09.30, waiting for your answer' })).toBeInTheDocument();
   });
 
   describe('P12-T4 AC-5 answering (ADR-0097)', () => {
@@ -1224,13 +1240,13 @@ describe('P12-T5 — compare and Block time', () => {
     expect(calls(stub, `${COMPARED}mem-indah`)).toHaveLength(1);
     const pane = theirs.closest('section')!;
     expect(within(pane).getByText('Agent')).toBeInTheDocument();
-    expect(within(pane).getByRole('button', { name: 'Task: Prospecting, 9:00 AM–9:30 AM' })).toBeInTheDocument();
+    expect(within(pane).getByRole('button', { name: 'Task: Prospecting, 09.00–09.30' })).toBeInTheDocument();
     const busyBlock = within(theirs).getByText('Busy').parentElement!;
     expect(busyBlock.tagName).toBe('DIV');
-    expect(busyBlock).toHaveTextContent('Busy, 1:00 PM–2:00 PM');
+    expect(busyBlock).toHaveTextContent('Busy, 13.00–14.00');
     expect(within(pane).getAllByText('Busy')).toHaveLength(2);
     // Every stacked pane draws its own hours (contradiction 8): the gutter shows below 980px.
-    expect(within(theirs).getByText('7 AM').parentElement!.className).toContain('max-[979.98px]:block');
+    expect(within(theirs).getByText('07.00').parentElement!.className).toContain('max-[979.98px]:block');
     expect(theirs.scrollTop).toBe(7 * HOUR_PX);
   });
 
@@ -1238,12 +1254,12 @@ describe('P12-T5 — compare and Block time', () => {
     showCompare();
     await openPopover();
     await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
-    await userEvent.click(await screen.findByRole('button', { name: 'Task: Prospecting, 9:00 AM–9:30 AM' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Task: Prospecting, 09.00–09.30' }));
     const dialog = screen.getByRole('dialog', { name: 'Prospecting' });
     expect(within(dialog).getAllByRole('button').map((b) => b.textContent)).toEqual(['★Organiser', 'Close']);
   });
 
-  it('P12-T5 AC-3 moves every pane together, and back to 7 AM when somebody is removed', async () => {
+  it('P12-T5 AC-3 moves every pane together, and back to 07.00 when somebody is removed', async () => {
     showCompare();
     await openPopover();
     await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
@@ -1350,8 +1366,8 @@ describe('P12-T5 — compare and Block time', () => {
       await compareBoth(stub);
 
       await userEvent.click(screen.getByRole('button', { name: 'Next week' }));
-      await screen.findByRole('region', { name: 'Calendar, Indah Permata, Oct 5 – Oct 11, 2026' });
-      await screen.findByRole('region', { name: 'Calendar, Sari Dewi, Oct 5 – Oct 11, 2026' });
+      await screen.findByRole('region', { name: 'Calendar, Indah Permata, 5 Okt – 11 Okt 2026' });
+      await screen.findByRole('region', { name: 'Calendar, Sari Dewi, 5 Okt – 11 Okt 2026' });
       await act(async () => {});
       expect(reads(stub, 'mem-indah', '2026-10-05')).toHaveLength(1);
       expect(reads(stub, 'mem-sari', '2026-10-05')).toHaveLength(1);
@@ -1433,8 +1449,8 @@ describe('P12-T5 — compare and Block time', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
       fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-06' } });
       await userEvent.click(screen.getByRole('button', { name: 'Save event' }));
-      await screen.findByRole('region', { name: 'Calendar, Sari Dewi, Oct 5 – Oct 11, 2026' });
-      await screen.findByRole('region', { name: 'Calendar, Indah Permata, Oct 5 – Oct 11, 2026' });
+      await screen.findByRole('region', { name: 'Calendar, Sari Dewi, 5 Okt – 11 Okt 2026' });
+      await screen.findByRole('region', { name: 'Calendar, Indah Permata, 5 Okt – 11 Okt 2026' });
       await act(async () => {});
       // Sari's week is read once, where the grid went; the week it left is not read on the way out.
       expect(reads(stub, 'mem-sari', '2026-10-05')).toHaveLength(1);
@@ -1448,7 +1464,7 @@ describe('P12-T5 — compare and Block time', () => {
       await compareBoth(stub);
 
       await userEvent.click(screen.getByRole('button', { name: 'Month' }));
-      await screen.findByText('September 2026');
+      await screen.findByText('Sep 2026');
       await userEvent.click(screen.getByRole('button', { name: 'Week' }));
       expect(await screen.findByRole('region', { name: `Calendar, Indah Permata, ${RANGE}` })).toBeInTheDocument();
       await act(async () => {});
@@ -1476,12 +1492,12 @@ describe('P12-T5 — compare and Block time', () => {
       await userEvent.keyboard('{Escape}');
       const theirs = await screen.findByRole('region', { name: `Calendar, Indah Permata, ${RANGE}` });
       const nowIn = (name: string) => within(theirs).getByRole('group', { name }).querySelector('[data-now]');
-      expect(nowIn('Monday, Sep 28, 2026')).not.toBeNull();
+      expect(nowIn('Senin, 28 Sep 2026')).not.toBeNull();
 
       await act(async () => { vi.advanceTimersByTime(60_000); });
       await waitFor(() => expect(calls(stub, WEEK_READ).filter((c) => !c.url.includes('for='))).toHaveLength(2));
-      await waitFor(() => expect(nowIn('Tuesday, Sep 29, 2026')).not.toBeNull());
-      expect(nowIn('Monday, Sep 28, 2026')).toBeNull();
+      await waitFor(() => expect(nowIn('Selasa, 29 Sep 2026')).not.toBeNull());
+      expect(nowIn('Senin, 28 Sep 2026')).toBeNull();
       expect(reads(stub, 'mem-indah')).toHaveLength(1);
     });
   });
@@ -1524,7 +1540,7 @@ describe('P12-T5 — compare and Block time', () => {
       await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
       await userEvent.keyboard('{Escape}');
       const theirs = await screen.findByRole('region', { name: `Calendar, Indah Permata, ${RANGE}` });
-      tap(within(theirs).getByRole('group', { name: 'Friday, Oct 2, 2026' }), 15 * 60);
+      tap(within(theirs).getByRole('group', { name: 'Jumat, 2 Okt 2026' }), 15 * 60);
       expect(screen.getByRole('dialog', { name: 'Block time — Indah Permata' })).toBeInTheDocument();
       expect(screen.getByLabelText('Date')).toHaveValue('2026-10-02');
       expect(screen.getByLabelText('Start')).toHaveValue('15:00');
@@ -1539,7 +1555,7 @@ describe('P12-T5 — compare and Block time', () => {
         },
       }, RINA);
       await grid();
-      const block = screen.getByRole('button', { name: 'Coaching: 1:1 with Indah Permata, 10:00 AM–10:30 AM, placed on your calendar' });
+      const block = screen.getByRole('button', { name: 'Coaching: 1:1 with Indah Permata, 10.00–10.30, placed on your calendar' });
       await userEvent.click(block);
       const dialog = screen.getByRole('dialog', { name: '1:1 with Indah Permata' });
       expect(within(dialog).getAllByRole('button').map((b) => b.textContent)).toEqual(['★Organiser', 'Close']);
@@ -1628,7 +1644,7 @@ describe('P12-T5 — compare and Block time', () => {
     fireEvent.pointerUp(block, { clientY, pointerId: 1, pointerType: 'mouse', button: 0 });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     // A free slot on the same pane still opens *Block time*.
-    tap(within(theirs).getByRole('group', { name: 'Wednesday, Sep 30, 2026' }), 9 * 60);
+    tap(within(theirs).getByRole('group', { name: 'Rabu, 30 Sep 2026' }), 9 * 60);
     expect(screen.getByRole('dialog', { name: 'Block time — Indah Permata' })).toBeInTheDocument();
   });
 
@@ -1645,7 +1661,7 @@ describe('P12-T5 — compare and Block time', () => {
     const expectNoWrite = async (stub: ReturnType<typeof stubFetch>) => {
       const region = await grid();
       expect(screen.queryByRole('button', { name: '+ New event' })).not.toBeInTheDocument();
-      tap(within(region).getByRole('group', { name: 'Tuesday, Sep 29, 2026' }), 15 * 60);
+      tap(within(region).getByRole('group', { name: 'Selasa, 29 Sep 2026' }), 15 * 60);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
       await userEvent.click(standup());
@@ -1657,7 +1673,7 @@ describe('P12-T5 — compare and Block time', () => {
 
       const theirs = await compareIndah();
       expect(screen.queryByRole('button', { name: PILL_INDAH })).not.toBeInTheDocument();
-      tap(within(theirs).getByRole('group', { name: 'Friday, Oct 2, 2026' }), 15 * 60);
+      tap(within(theirs).getByRole('group', { name: 'Jumat, 2 Okt 2026' }), 15 * 60);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(stub.calls.filter((c) => (c.init.method ?? 'GET') !== 'GET')).toEqual([]);
     };
@@ -1762,13 +1778,13 @@ describe('P13.1-T8 — an entry’s words, and Hide my personal activities (ADR-
   it('P13.1-T8 AC-1 lays an entry’s words out from its top, the title on one line cut with an ellipsis, whole in its name and tooltip', async () => {
     show({ [WEEK_READ]: { body: weekRead({ entries: [entry({ title: LONG, start: '09:00', end: '10:00' })] }) } });
     await grid();
-    const block = screen.getByRole('button', { name: `Meeting: ${LONG}, 9:00 AM–10:00 AM` });
+    const block = screen.getByRole('button', { name: `Meeting: ${LONG}, 09.00–10.00` });
     // A button centres what it holds; this one is a column from its top edge, as the prototype's `.event`.
     expect(block.className.split(' ')).toEqual(expect.arrayContaining(['flex', 'flex-col', 'justify-start']));
     const title = within(block).getByText(LONG);
     expect(title.className.split(' ')).toEqual(expect.arrayContaining(['truncate', 'shrink-0']));
-    expect(title).toHaveAttribute('title', `${LONG}, 9:00 AM–10:00 AM`);
-    expect(within(block).getByText('9:00 AM–10:00 AM')).toBeInTheDocument();
+    expect(title).toHaveAttribute('title', `${LONG}, 09.00–10.00`);
+    expect(within(block).getByText('09.00–10.00')).toBeInTheDocument();
   });
 
   it('P13.1-T8 AC-1 draws the time only where the title and the time both fit whole: not on a half hour, on 45 minutes', async () => {
@@ -1785,15 +1801,15 @@ describe('P13.1-T8 — an entry’s words, and Hide my personal activities (ADR-
     });
     await grid();
     for (const [name, title] of [
-      ['Meeting: Weekly unit standup, 9:00 AM–9:30 AM', 'Weekly unit standup'],
-      ['Task: Quick call, 8:00 AM–8:15 AM', 'Quick call'],
+      ['Meeting: Weekly unit standup, 09.00–09.30', 'Weekly unit standup'],
+      ['Task: Quick call, 08.00–08.15', 'Quick call'],
     ]) {
       const block = screen.getByRole('button', { name });
       expect([name, block.textContent]).toEqual([name, title]);
       // What is not drawn is still said, and still shown to a pointer.
       expect(within(block).getByText(title)).toHaveAttribute('title', `${title}, ${name.split(', ').pop()}`);
     }
-    expect(screen.getByRole('button', { name: 'Client: Client call, 11:00 AM–11:45 AM' })).toHaveTextContent('Client call11:00 AM–11:45 AM');
+    expect(screen.getByRole('button', { name: 'Client: Client call, 11.00–11.45' })).toHaveTextContent('Client call11.00–11.45');
   });
 
   it('P13.1-T8 AC-1 a short busy block on a compared pane reads Busy, its time said and not drawn', async () => {
@@ -1812,10 +1828,10 @@ describe('P13.1-T8 — an entry’s words, and Hide my personal activities (ADR-
     await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
     const theirs = await screen.findByRole('region', { name: `Calendar, Indah Permata, ${RANGE}` });
     const [short, long] = within(theirs).getAllByText('Busy').map((b) => b.parentElement!);
-    expect(short).toHaveTextContent('Busy, 1:00 PM–1:30 PM');
-    expect(within(short).getByText('1:00 PM–1:30 PM')).toHaveClass('sr-only');
-    expect(within(short).getByText('Busy')).toHaveAttribute('title', 'Busy, 1:00 PM–1:30 PM');
-    expect(within(long).getByText('9:00 AM–10:00 AM')).not.toHaveClass('sr-only');
+    expect(short).toHaveTextContent('Busy, 13.00–13.30');
+    expect(within(short).getByText('13.00–13.30')).toHaveClass('sr-only');
+    expect(within(short).getByText('Busy')).toHaveAttribute('title', 'Busy, 13.00–13.30');
+    expect(within(long).getByText('09.00–10.00')).not.toHaveClass('sr-only');
   });
 
   it('P13.1-T8 AC-2 draws the switch in the toolbar, as read, with what it does as its description and in its ⓘ', async () => {
@@ -1854,6 +1870,30 @@ describe('P13.1-T8 — an entry’s words, and Hide my personal activities (ADR-
     await waitFor(() => expect(toggle).not.toBeChecked());
     const banner = screen.getByText('Your setting couldn\'t be saved, so it has been put back.').closest('[role="alert"]')!;
     expect(banner).toHaveTextContent('INTERNAL_ERROR · req-1');
+  });
+
+  it('P18.95-T1 AC-5: the switch says Saved ✓ beside it once the setting is saved', async () => {
+    show({ [`PUT ${SETTINGS}`]: { body: { hideDetails: true } } });
+    const toggle = await screen.findByRole('switch', { name: HIDE });
+    fireEvent.click(toggle);
+
+    const said = await screen.findByText('Saved ✓');
+    expect(said).toHaveAttribute('role', 'status');
+    expect(toggle.closest('span.inline-flex.items-center.gap-1')).toContainElement(said);
+  });
+
+  it('P18.95-T1 AC-5: a refused switch offers the retry, which switches it again and sends the same setting', async () => {
+    const stub = show({ [`PUT ${SETTINGS}`]: [refusal(500, 'INTERNAL_ERROR'), { body: { hideDetails: true } }] });
+    const toggle = await screen.findByRole('switch', { name: HIDE });
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle).not.toBeChecked());
+
+    fireEvent.click(await screen.findByRole('button', { name: "Couldn't save — retry: Hide my personal activities" }));
+
+    await waitFor(() => expect(calls(stub, SETTINGS, 'PUT')).toHaveLength(2));
+    expect(calls(stub, SETTINGS, 'PUT').map(bodyOf)).toEqual([{ hideDetails: true }, { hideDetails: true }]);
+    expect(await screen.findByText('Saved ✓')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: HIDE })).toBeChecked();
   });
 
   it('P13.1-T8 AC-2 is not drawn, and not asked for, in a read-only support session or without the edit grant', async () => {

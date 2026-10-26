@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { SkeletonText } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { formatDateTime } from '@/lib/format';
 import { listSessions, logoutEverywhere, revokeSession, type Session } from '@/lib/sessions';
 import { useSignOut } from '@/lib/use-sign-out';
 
@@ -34,7 +35,7 @@ export function describeDevice(userAgent: string | null): string {
 
 function when(iso: string | null): string {
   if (!iso) return 'unknown';
-  return new Date(iso).toLocaleString();
+  return formatDateTime(iso) || 'unknown';
 }
 
 /**

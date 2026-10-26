@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
-import { formatRupiah } from '@/lib/goals';
+import { formatPercent, formatRupiahCompact, formatRupiahCompactPair } from '@/lib/format';
 import {
   agentsCount, candidates, everyRow, missingWords, namesMissing, OWN_COPY, PROTOTYPE_COPY,
   type UnitDashboardView, type UnitPeriod,
@@ -37,13 +37,13 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
               {production.actualMinor === null
                 ? OWN_COPY.notUploaded
                 : production.targetMinor === null || production.targetMinor === 0
-                  ? formatRupiah(production.actualMinor)
-                  : `${formatRupiah(production.actualMinor)} / ${formatRupiah(production.targetMinor)}`}
+                  ? formatRupiahCompact(production.actualMinor)
+                  : formatRupiahCompactPair(production.actualMinor, production.targetMinor, '/')}
             </span>
             {missing && <TippedGlyph glyph="ⓘ" name={missing} tip={missing} align="fit" className="-my-1" />}
           </span>
           {production.attainmentPct !== null && production.actualMinor !== null && (
-            <span className="whitespace-nowrap text-md font-bold text-navy-soft">{production.attainmentPct}%</span>
+            <span className="whitespace-nowrap text-md font-bold text-navy-soft">{formatPercent(production.attainmentPct)}</span>
           )}
         </div>
         {production.attainmentPct !== null && production.actualMinor !== null && (
@@ -53,7 +53,7 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
           </div>
         )}
         {production.actualMinor === null && production.targetMinor !== null && production.targetMinor > 0 && (
-          <p className="text-sm text-muted">of {formatRupiah(production.targetMinor)} target</p>
+          <p className="text-sm text-muted">of {formatRupiahCompact(production.targetMinor)} target</p>
         )}
         {/* Every row with a target made its year before this month began (ADR-0047): no *of Rp 0*. */}
         {production.targetMinor === 0 && <p className="text-sm text-muted">{OWN_COPY.targetMade}</p>}

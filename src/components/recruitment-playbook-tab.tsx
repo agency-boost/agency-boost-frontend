@@ -238,7 +238,7 @@ function cardOf(slot: string): string {
 /** An id for a slot's control: the path, with its dots made dashes. */
 const idOf = (slot: string) => `playbook-${slot.replace(/\./g, '-')}`;
 
-/** ` by Root on October 9, 2026 · 2:05 PM`, or without the name for the one a company was given. */
+/** ` by Root on 9 Okt 2026, 14.05`, or without the name for the one a company was given. */
 const savedBy = (dto: PlaybookDto) =>
   `${dto.updatedBy ? ` by ${dto.updatedBy.name}` : ''} on ${formatNoticeFull(dto.updatedAt)}`;
 

@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, Field, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { formatFileSize } from '@/lib/recruitment-pitch';
 import {
   confirmTrainingUpload, moduleContentUrl, readModuleContent, requestTrainingUpload,
   resetModuleContent, saveModuleContent, signedUploadForm,
@@ -21,9 +22,7 @@ const ALLOWED = [
 ];
 const MAX_BYTES = 25 * 1024 * 1024;
 
-const sizeOf = (bytes: number) => (bytes >= 1024 * 1024
-  ? `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+const sizeOf = formatFileSize;
 
 /** A working copy that has not been saved is the office's, not the server's. */
 const copy = (content: ModuleContent): ModuleContent => ({

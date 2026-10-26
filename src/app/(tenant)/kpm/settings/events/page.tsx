@@ -15,6 +15,7 @@ import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client
 import { suggestCode } from '@/lib/config-code';
 import { useCan } from '@/lib/session';
 import { ADMIN_COPY, officeInstant, officeWallClock, OWNER_PROTOTYPE_COPY } from '@/lib/events-admin';
+import { formatCalendarDay } from '@/lib/format';
 import { useHashTab } from '@/lib/use-hash-tab';
 import {
   archiveEvent, archiveEventType, createEvent, createEventType, listEventTypes, listEvents,
@@ -225,7 +226,7 @@ export default function EventsSettingsPage() {
                         )}
                       </p>
                       <p className="mt-1 text-sm text-muted">
-                        {event.startsOn} · {label(ISSUERS, event.audience.issuer)} ·{' '}
+                        {formatCalendarDay(event.startsOn)} · {label(ISSUERS, event.audience.issuer)} ·{' '}
                         {label(SCOPES, event.audience.scope)}
                         {event.audience.inviteeMembershipIds.length > 0 && (
                           <> · {event.audience.inviteeMembershipIds.length} invited</>

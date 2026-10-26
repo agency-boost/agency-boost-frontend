@@ -202,8 +202,8 @@ describe('the Products tab', () => {
       const table = within(row).getByRole('table', { name: 'Commission rate' });
       expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Year', 'Rate (%)']);
       expect(within(table).getAllByRole('rowheader').map((h) => h.textContent)).toEqual(['Y1', 'Y2']);
-      expect(within(row).getByLabelText('Rate for year 1')).toHaveValue(40);
-      expect(within(row).getByLabelText('Rate for year 2')).toHaveValue(7);
+      expect(within(row).getByLabelText('Rate for year 1')).toHaveValue('40');
+      expect(within(row).getByLabelText('Rate for year 2')).toHaveValue('7');
     });
 
     it('adds a year at the end and sends the whole schedule as proportions with the product', async () => {
@@ -215,7 +215,8 @@ describe('the Products tab', () => {
       await userEvent.click(within(row).getByRole('button', { name: '+ Add year' }));
       await userEvent.type(within(row).getByLabelText('Rate for year 1'), '30');
       await userEvent.click(within(row).getByRole('button', { name: '+ Add year' }));
-      await userEvent.type(within(row).getByLabelText('Rate for year 2'), '12.5');
+      // A comma or a point (ADR-0167 §1, P18.95-T1 AC-3): *12,5* is twelve and a half per cent.
+      await userEvent.type(within(row).getByLabelText('Rate for year 2'), '12,5');
       await userEvent.click(within(row).getByRole('button', { name: 'Save product' }));
 
       await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'PATCH')).toBe(true));
@@ -264,6 +265,9 @@ describe('the Products tab', () => {
 
       await userEvent.clear(field);
       await userEvent.type(field, '12.345');
+      expect(within(row).getByText('Use at most two decimal places.')).toBeInTheDocument();
+      await userEvent.clear(field);
+      await userEvent.type(field, '12,345');
       expect(within(row).getByText('Use at most two decimal places.')).toBeInTheDocument();
       expect(field).toHaveAttribute('aria-invalid', 'true');
       await userEvent.click(within(row).getByRole('button', { name: 'Save product' }));

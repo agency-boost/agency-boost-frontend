@@ -53,11 +53,11 @@ describe('the rules (P12-T2 AC-5)', () => {
     expect(validateForm({ ...travel, endsOn: '' }, 0)).toEqual({ endsOn: 'Choose a return date on or after the departure date.' });
   });
 
-  it('holds the title to 120 characters, the notes to 1,000 and the invitees to 50', () => {
+  it('holds the title to 120 characters, the notes to 1.000 and the invitees to 50', () => {
     expect(validateForm({ ...form, title: 'x'.repeat(120) }, 50)).toEqual({});
     expect(validateForm({ ...form, title: 'x'.repeat(121), notes: 'y'.repeat(1001) }, 51)).toEqual({
       title: 'Keep the title to 120 characters.',
-      notes: 'Keep the notes to 1,000 characters.',
+      notes: 'Keep the notes to 1.000 characters.',
       invitees: 'You can invite at most 50 people.',
     });
   });
@@ -85,7 +85,7 @@ describe('a server refusal, under its fields', () => {
     });
     expect(violationsToErrors({ violations: ['notes is too long', 'inviteeIds must have at most 50', 'date must be a date', 'startsOn is required.'] }))
       .toEqual({
-        notes: 'Keep the notes to 1,000 characters.',
+        notes: 'Keep the notes to 1.000 characters.',
         invitees: 'You can invite at most 50 people.',
         date: 'Choose a date.',
         startsOn: 'Choose a date.',

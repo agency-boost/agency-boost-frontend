@@ -874,7 +874,7 @@ describe('DataTable density and widths', () => {
 describe('ProgressBar', () => {
   it('caps the bar at 100% while the label may exceed it', () => {
     render(<ProgressBar value={200} target={100} />);
-    expect(screen.getByText('200%')).toBeInTheDocument();
+    expect(screen.getByText('200,0%')).toBeInTheDocument();
     expect(screen.getByRole('progressbar').firstElementChild).toHaveStyle({ width: '100%' });
   });
 

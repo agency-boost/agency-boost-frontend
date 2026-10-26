@@ -121,7 +121,7 @@ describe('a coachee’s Activity tab (P13.1-T9)', () => {
     expect(asked).toHaveLength(1);
     expect(asked[0].url).toContain('for=mem-rina');
     expect(asked[0].url).toContain('range=ROLLING_7D');
-    expect(screen.getByRole('status')).toHaveTextContent('7 days · Sep 22 – Sep 28, 2026');
+    expect(screen.getByRole('status')).toHaveTextContent('7 days · 22 Sep – 28 Sep 2026');
     expect(screen.getByRole('tab', { name: 'Last 7 days' })).toHaveAttribute('aria-selected', 'true');
   });
 
@@ -131,7 +131,7 @@ describe('a coachee’s Activity tab (P13.1-T9)', () => {
 
     expect(within(table).getByText('Follow up calon agen')).toBeInTheDocument();
     expect((await within(table).findAllByRole('columnheader')).map((h) => h.textContent).slice(0, 4))
-      .toEqual(['Activity', 'Total', 'Mon28', 'Sun27']);
+      .toEqual(['Activity', 'Total', 'Sen28', 'Min27']);
     // A section moved out of her sections says so in her words, not the reader's.
     expect(within(table).getByText('No longer in her sections')).toBeInTheDocument();
     expect(screen.queryByText(/your sections/)).toBeNull();
@@ -171,7 +171,7 @@ describe('a coachee’s Activity tab (P13.1-T9)', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Last 30 days' }));
 
-    expect(await screen.findByRole('columnheader', { name: 'Week 1 Sep 22–Sep 28' })).toBeInTheDocument();
+    expect(await screen.findByRole('columnheader', { name: 'Week 1 22 Sep–28 Sep' })).toBeInTheDocument();
     const last = dashboardCalls(calls).at(-1)!.url;
     expect(last).toContain('range=ROLLING_30D');
     expect(last).toContain('for=mem-rina');

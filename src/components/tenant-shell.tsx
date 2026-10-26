@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { AppShell, type NavSection } from '@/components/app-shell';
 import { type NavIconName } from '@/components/ui/nav-icon';
 import { RequireSession } from '@/components/require-session';
+import { ToastHost } from '@/components/ui/toast';
 import { useLadder } from '@/components/ui/role-badge';
 import { viewSwitchFor } from '@/lib/landing';
 import { displayName } from '@/lib/display-name';
@@ -129,9 +130,12 @@ export function TenantShell({
 }) {
   return (
     <RequireSession permission={permission} family="tenant">
-      <TenantChrome title={title} subtitle={subtitle} actions={actions}>
-        {children}
-      </TenantChrome>
+      {/* The shell's one toast region, as the agent shell's (P18.95-T1 AC-6): every screen beneath it speaks through it. */}
+      <ToastHost>
+        <TenantChrome title={title} subtitle={subtitle} actions={actions}>
+          {children}
+        </TenantChrome>
+      </ToastHost>
     </RequireSession>
   );
 }
