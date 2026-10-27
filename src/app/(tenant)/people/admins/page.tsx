@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -49,10 +49,22 @@ export default function AdminsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
+  /*
+   * **A read that lands after the page is gone is dropped**, as `TenantConfigProvider`'s is: on CI one arrived after
+   * the spec's environment was torn down and `setAdmins` threw *"window is not defined"*, failing a run whose every
+   * test had passed (2026-10-27). Set in the effect, so React's development remount leaves it true.
+   */
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
   const load = useCallback(async () => {
     setError(null);
     try {
       const [delegated, office] = await Promise.all([listAdmins(), readOrgTree()]);
+      if (!mounted.current) return;
       setAdmins(delegated);
       const already = new Set(delegated.map((a) => a.membershipId));
       setCandidates(
@@ -62,6 +74,7 @@ export default function AdminsPage() {
           .sort((a, b) => a.fullName.localeCompare(b.fullName)),
       );
     } catch (err) {
+      if (!mounted.current) return;
       setError(toDisplayError(err));
       setAdmins([]);
     }

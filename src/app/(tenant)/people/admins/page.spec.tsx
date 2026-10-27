@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
-import { makeMe, renderInLayout, stubFetch } from '@test/harness';
+import { makeMe, renderInLayout, renderWithSession, stubFetch } from '@test/harness';
 import AdminsPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -165,4 +165,39 @@ describe('manage KPM admins (P3-T10)', () => {
     expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'kpm_admin:grant');
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
+});
+
+describe('a read that lands after the page is gone (CI, 2026-10-27)', () => {
+  /*
+   * On CI the answer arrived after the spec's environment was torn down: no `window`, so setting state threw, and
+   * the unhandled error failed a run whose every test had passed. Reproduced as it happened, as
+   * `tenant-config-cache.spec.tsx` does: the page unmounted, `window` taken away, and only then the answer.
+   */
+  for (const outcome of ['answered', 'refused'] as const) {
+    it(`is dropped when ${outcome}, and touches nothing`, async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => { release = resolve; });
+      const fetchMock = vi.fn(async (url: string) => {
+        await gate;
+        return outcome === 'answered'
+          ? { ok: true, status: 200, json: async () => (url.includes('/members/tree') ? OFFICE : [admin()]) }
+          : { ok: false, status: 500, json: async () => ({ error: { code: 'INTERNAL_ERROR', message: 'x', requestId: 'r' } }) };
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const unhandled = vi.fn();
+      process.on('unhandledRejection', unhandled);
+      try {
+        const { unmount } = renderWithSession(<AdminsPage />, { me: OWNER });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        unmount();
+        vi.stubGlobal('window', undefined);
+        release();
+        for (let tick = 0; tick < 3; tick += 1) await new Promise((resolve) => { setTimeout(resolve, 0); });
+      } finally {
+        vi.unstubAllGlobals();
+        process.off('unhandledRejection', unhandled);
+      }
+      expect(unhandled).not.toHaveBeenCalled();
+    });
+  }
 });
