@@ -159,7 +159,8 @@ describe('P12-T2 — my calendar, week view', () => {
       expect(document.querySelector('[data-now]')).toBeNull();
     });
 
-    it('moves the line each minute, and reads again once it passes midnight', async () => {
+    // Heavy under a loaded CI runner (5s was missed there on 2026-10-26, alone it takes under a second).
+    it('moves the line each minute, and reads again once it passes midnight', { timeout: 20_000 }, async () => {
       vi.useFakeTimers({ toFake: ['setInterval', 'Date'] });
       const late = weekRead({ now: { at: '2026-09-28T16:58:00.000Z', minute: 1438 } });
       const stub = show({ [WEEK_READ]: { body: late } });

@@ -226,7 +226,8 @@ describe('P11-T6 AC-12 no screen shows a permission code', () => {
     for (const other of ['md', 'print', 'hover', 'seed', 'feature', 'data']) expect(resources).not.toContain(other);
   });
 
-  it('no rendered string is, or holds, a permission code', () => {
+  // Heavy under a loaded CI runner (5s was missed there on 2026-10-26, alone it takes under a second).
+  it('no rendered string is, or holds, a permission code', { timeout: 20_000 }, () => {
     const offenders = files.flatMap((f) =>
       codeMentions(f, sources.get(f)!, resources).map((hit) => `src/${f}:${hit}`),
     );
