@@ -80,7 +80,8 @@ describe('View feedback: the roll call and the Feedback Summary (P18.5-T5 AC-7, 
     expect(within(row('Budi Santoso')).getByText('RSVP’d')).toBeInTheDocument();
     expect(within(row('Indah Permata')).getByText('Said they came')).toBeInTheDocument();
     expect(within(row('Siti Rahma')).getAllByRole('cell')[1]).toHaveTextContent('—');
-    expect(within(row('Maya Halim')).getByText('Agency Builder')).toBeInTheDocument();
+    // The rung by its badge's name (P18.95-T9 AC-1), whatever label the server sends beside the code.
+    expect(within(row('Maya Halim')).getByText('AB')).toBeInTheDocument();
     const pressed = (name: string) => within(row(name)).getAllByRole('button').map((b) => [b.textContent, b.getAttribute('aria-pressed')]);
     expect(pressed('Budi Santoso')).toEqual([['Attended', 'true'], ['Absent', 'false']]);
     expect(pressed('Dimas Pratama')).toEqual([['Attended', 'false'], ['Absent', 'true']]);

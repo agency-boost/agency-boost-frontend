@@ -6,12 +6,14 @@ import {
 } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { TermText, TermTip } from '@/components/ui/term-tip';
 import { Toast, useToast } from '@/components/ui/toast';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { CONTENT_TERM_KEYS, firstMentions, type TermKey } from '@/lib/terms';
 import {
   campaignHref, chasedToast, chaseCampaign, OWN_COPY, PROTOTYPE_COPY, readCampaigns, requirementsLine,
-  SEASONAL_FILTERS, seasonalSections, structuralSections, unchaseCampaign, unchasedToast,
+  SEASONAL_FILTERS, seasonalSections, showsChase, structuralSections, unchaseCampaign, unchasedToast,
   type CampaignCard, type CampaignList as CampaignListView, type CampaignSection, type SeasonalFilter,
 } from '@/lib/campaigns';
 import { ChaseButton, Poster, PromotionLabel } from './campaign-parts';
@@ -139,6 +141,7 @@ export function CampaignList({ children }: { children?: ReactNode }) {
   const sections = list
     ? (type === 'seasonal' ? seasonalSections(list.campaigns, filter) : structuralSections(list.campaigns))
     : [];
+  const terms = cardTerms(sections);
 
   return (
     <DialogHost.Provider value={host}>
@@ -159,11 +162,12 @@ export function CampaignList({ children }: { children?: ReactNode }) {
                 <Card
                   key={card.code}
                   card={card}
-                  canChase={list.can.chase}
+                  canChase={showsChase(card, list.can)}
                   busy={busy === card.code}
                   error={chaseError?.code === card.code ? chaseError.error : null}
                   onChase={() => void chase(card)}
                   onOpen={() => open(card.code)}
+                  terms={terms.get(card.code)}
                 />
               ))}
             </Section>
@@ -272,12 +276,13 @@ function Section({ section, children }: { section: CampaignSection; children: Re
 
 /**
  * **One card** (`campaignCardHtml`, `:8040-8074`): the poster and its tags, *Promotion path*, the title and its
- * window, the blurb, 🏆 the prize, *Requirements:* in words joined by *" | "*, and the foot — the chase and
- * *View details*. An ended card is grey (`.is-ended`, `:1884-1886`) and keeps its chase, disabled, its reason
- * named (D-lists). Every authored word is text, never markup.
+ * window, the blurb, 🏆 the prize, *Needs:* and each requirement in its words joined by *" + "* (P18.95-T10 AC-3,
+ * where the prototype wrote *Requirements:* and *" | "*), and the foot — the chase and *View details*. An ended
+ * card is grey (`.is-ended`, `:1884-1886`) and **draws no chase** (P18.95-T10 AC-2; UI-024), where D-lists drew
+ * it disabled with its reason: the poster's *Ended* says why. Every authored word is text, never markup.
  */
 function Card({
-  card, canChase, busy, error, onChase, onOpen,
+  card, canChase, busy, error, onChase, onOpen, terms = [],
 }: {
   card: CampaignCard;
   canChase: boolean;
@@ -285,8 +290,12 @@ function Card({
   error: ApiError | null;
   onChase: () => void;
   onOpen: () => void;
+  /** The terms this card is the first to name: its title's, blurb's, prize's and *Needs:* line's (`cardTerms`). */
+  terms?: TermKey[][];
 }) {
   const titleId = useId();
+  const [titleTerms = [], blurbTerms = [], rewardTerms = [], needsTerms = []] = terms;
+  const title = <h3 id={titleId} className="text-[0.90625rem] font-bold leading-snug text-navy">{card.title}</h3>;
   const ended = card.kind === 'seasonal' && card.phase === 'ended';
   return (
     <article
@@ -301,20 +310,27 @@ function Card({
       <div className={cn('px-4 pb-4 pt-3.5', ended && 'bg-navy/[0.02]')}>
         {card.subtype === 'promotion' && <PromotionLabel />}
         <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
-          <h3 id={titleId} className="text-[0.90625rem] font-bold leading-snug text-navy">{card.title}</h3>
+          {titleTerms.length === 0 ? title : (
+            // Beside the heading, not in it, so the card is still named by its title alone.
+            <span className="flex items-center gap-1">
+              {title}
+              {titleTerms.map((term) => <TermTip key={term} term={term} />)}
+            </span>
+          )}
           <span className="whitespace-nowrap text-sm font-medium text-muted">{card.duration}</span>
         </div>
-        {card.blurb && <p className="mb-3 text-[0.78125rem] leading-snug text-muted">{card.blurb}</p>}
+        {card.blurb && <p className="mb-3 text-[0.78125rem] leading-snug text-muted"><TermText text={card.blurb} terms={blurbTerms} /></p>}
         {card.reward && (
           // Navy words on the prize's amber wash, where the prototype's amber-dark is 2.6:1 (row 44).
           <p className="mb-2.5 flex items-center gap-1.5 rounded-[7px] bg-amber/10 px-2.5 py-1.5 text-[0.78125rem] font-semibold text-navy">
             <span aria-hidden="true" className="shrink-0">🏆</span>
-            <span className="min-w-0">{card.reward}</span>
+            <span className="min-w-0"><TermText text={card.reward} terms={rewardTerms} /></span>
           </p>
         )}
         {card.requirements.length > 0 && (
           <p className="mb-[9px] text-[0.78125rem] leading-normal text-navy">
-            <span className="font-bold text-muted">{PROTOTYPE_COPY.requirements}</span> {requirementsLine(card.requirements)}
+            <span className="font-bold text-muted">{OWN_COPY.needs}</span>{' '}
+            <TermText text={requirementsLine(card.requirements)} terms={needsTerms} />
           </p>
         )}
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -334,6 +350,20 @@ function Card({
       </div>
     </article>
   );
+}
+
+/**
+ * **Which card first names each term, and where on it** (P18.95-T9 AC-3; UI-028: *APE*, *MDRT* unexplained): the
+ * cards in the order they are drawn, each card's title, blurb, prize and *Needs:* line in reading order. A term the
+ * list names on twelve cards gets one ⓘ, on the first.
+ */
+function cardTerms(sections: readonly CampaignSection[]): Map<string, TermKey[][]> {
+  const cards = sections.flatMap((section) => section.items);
+  const texts = cards.flatMap((card) => [
+    card.title, card.blurb, card.reward, card.requirements.length > 0 ? requirementsLine(card.requirements) : null,
+  ]);
+  const found = firstMentions(texts, CONTENT_TERM_KEYS);
+  return new Map(cards.map((card, i) => [card.code, found.slice(i * 4, i * 4 + 4)]));
 }
 
 /** Two sections of cards, shaped like the list that is coming. */

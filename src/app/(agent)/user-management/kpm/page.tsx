@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
-import { UserManagementTabs } from '@/components/user-management-tabs';
+import { USER_MANAGEMENT_TITLE, UserManagementTabs } from '@/components/user-management-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
@@ -73,7 +73,7 @@ export default function RegisterKpmPage() {
 
   return (
     <Page
-      title="Register KPM"
+      title={USER_MANAGEMENT_TITLE}
       subtitle="Find the Prudential KPM your branch belongs to."
     >
       <UserManagementTabs leaderLocked={!registered} />

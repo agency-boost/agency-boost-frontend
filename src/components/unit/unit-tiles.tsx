@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { TermTip } from '@/components/ui/term-tip';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { formatPercent, formatRupiahCompact, formatRupiahCompactPair } from '@/lib/format';
 import {
@@ -8,7 +9,8 @@ import {
 
 /**
  * The four tiles (`Overall.html:7241-7272`, CSS `:1556-1571`): *Your team*, *Direct Group production*,
- * *Potential Monthly Active Agents (Group)* and *Potential Recruits (Group)*, each over every row of the
+ * *On pace to be active (Group)* (the prototype's *Potential Monthly Active Agents (Group)*, in plain words since
+ * P18.95-T9 AC-4) and *Potential Recruits (Group)*, each over every row of the
  * roster below, as the prototype sums them (D-groups) — four across, two on a tablet, one on a phone.
  *
  * **On a unit below the reader** the words that would say *you* of somebody else name the unit's head
@@ -18,16 +20,19 @@ import {
 export function UnitTiles({ view, period }: { view: UnitDashboardView; period: UnitPeriod }) {
   const { team, directGroupProduction: production, potentialActive, potentialRecruits } = view.tiles;
   const own = view.head.isReader;
-  const including = own ? 'you' : view.head.name;
   const missing = missingWords(production.missing, namesMissing(everyRow(view)));
 
   return (
     <div className="mb-3 mt-5 grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-4">
       <Tile label={PROTOTYPE_COPY.yourTeam}>
         <p className={HEADLINE}>{agentsCount(team.total)}</p>
-        <p className="text-sm text-muted">
-          {team.direct} direct agents (including {including}) · {team.units} AAB units · {team.underUnits} agents under AABs
-        </p>
+        {/*
+          * **The client's line, at every size** (P18.95-T7 AC-1, grey text row 19; ADR-0167 §7): *4 direct · 8 under
+          * AABs*, where it read *"4 direct agents (including you) · 3 AAB units · 5 agents under AABs"*. Under AABs is
+          * every AAB unit with its head — the units and everybody in them — so the two parts add up to the headline.
+          */}
+        {/* *AAB*'s first appearance on the dashboard, so its ⓘ is here (P18.95-T9 AC-3; UI-028). */}
+        <p className="text-sm text-muted">{teamLine(team)} <TermTip term="AAB" /></p>
       </Tile>
 
       <Tile label={PROTOTYPE_COPY.directGroupProduction}>
@@ -75,6 +80,10 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
     </div>
   );
 }
+
+/** *4 direct · 8 under AABs*: the head's own unit, then every AAB unit beneath it, heads included (row 19). */
+export const teamLine = (team: { direct: number; units: number; underUnits: number }) =>
+  `${team.direct} direct · ${team.units + team.underUnits} under AABs`;
 
 /** `.tile-headline` (`:1560`): 19px Manrope, navy. */
 const HEADLINE = 'mb-0.5 font-display text-[1.1875rem] font-bold text-navy';

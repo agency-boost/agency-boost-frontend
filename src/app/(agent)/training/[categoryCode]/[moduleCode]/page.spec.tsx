@@ -61,10 +61,10 @@ describe('/training/[categoryCode]/[moduleCode], a module’s page (P18.5-T1)', 
       expect(screen.getByText('Structured training module.')).toBeInTheDocument();
     });
 
-    it('P18.5-T1 AC-5 links back to the category’s list as “Back to {category title}”', async () => {
+    it('P18.5-T1 AC-5, P18.95-T9 AC-2 links back to the category’s list by that page’s title, Back to Training Modules', async () => {
       show();
       await ready();
-      expect(screen.getByRole('link', { name: 'Back to Sales Training' })).toHaveAttribute('href', '/training/SALES');
+      expect(screen.getByRole('link', { name: 'Back to Training Modules' })).toHaveAttribute('href', '/training/SALES');
     });
 
     it('P18.5-T1 AC-5 keeps the subtabs above it, its category current', async () => {

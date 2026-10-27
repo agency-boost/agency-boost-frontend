@@ -1,4 +1,5 @@
 import type { SubPeriodTarget } from './activity';
+import { shortOfRung } from '@/components/ui/role-badge';
 import { api } from './api-client';
 import { joinInFlight } from './in-flight';
 import type { RatioDisplayUnit } from './ratio-format';
@@ -187,9 +188,11 @@ export function coachingTabOf(pathname: string | null, membershipId: string): Co
  * *reports to*, *tagged to*, *untagged*, *unassigned*).
  */
 export function coacheeUnitLine(coachee: Pick<Coachee, 'rung' | 'direct' | 'leader'>): string {
-  if (coachee.direct) return `${coachee.rung.label} · Direct unit`;
-  if (coachee.leader) return `${coachee.rung.label} · ${coachee.leader.name}’s unit`;
-  return coachee.rung.label;
+  // The rung by its badge's name, *AAB · Direct unit* (P18.95-T9 AC-1, ADR-0167 §10).
+  const rung = shortOfRung(coachee.rung);
+  if (coachee.direct) return `${rung} · Direct unit`;
+  if (coachee.leader) return `${rung} · ${coachee.leader.name}’s unit`;
+  return rung;
 }
 
 /**

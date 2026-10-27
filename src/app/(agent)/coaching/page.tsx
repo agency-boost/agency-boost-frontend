@@ -5,9 +5,10 @@ import { CoachingRoster, ROSTER_CAPTION, ROSTER_COLUMNS } from '@/components/coa
 import { Page } from '@/components/page';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ButtonLink, Card, ErrorBanner } from '@/components/ui/field';
-import { SkeletonTable } from '@/components/ui/skeleton';
+import { SkeletonCards, SkeletonTable } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readRoster, type Roster } from '@/lib/coaching';
+import { usePhone } from '@/lib/use-phone';
 
 /**
  * Coaching Session (`Overall.html:3955-3967`, `:10596-10664`) — the roster, a leader's way into
@@ -33,6 +34,8 @@ export default function CoachingRosterPage() {
 function RosterBody() {
   const [roster, setRoster] = useState<Roster | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  // Asked before the roster answers, so a phone draws its cards at once and never the table first (P18.95-T3 AC-3).
+  const phone = usePhone();
 
   useEffect(() => {
     let live = true;
@@ -56,7 +59,10 @@ function RosterBody() {
       </Card>
 
       {error && <ErrorBanner {...error} />}
-      {!roster && !error && <SkeletonTable caption={ROSTER_CAPTION} columns={ROSTER_COLUMNS} rows={4} />}
+      {/* Shaped like what is coming: on a phone, cards (P18.95-T3 AC-3). */}
+      {!roster && !error && (phone
+        ? <SkeletonCards count={4} label={`Loading ${ROSTER_CAPTION.toLowerCase()}…`} />
+        : <SkeletonTable caption={ROSTER_CAPTION} columns={ROSTER_COLUMNS} rows={4} />)}
       {nobody && (
         // Ours (L-01). The nav and the landing offer this screen only to a leader, but its gate is
         // `coaching_session:read`, which every active member holds for their own sessions, and the
@@ -67,7 +73,7 @@ function RosterBody() {
           <EmptyState title="No one to coach yet." />
         </Card>
       )}
-      {roster && !nobody && <CoachingRoster roster={roster} />}
+      {roster && !nobody && <CoachingRoster roster={roster} phone={phone} />}
     </div>
   );
 }

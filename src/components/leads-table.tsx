@@ -8,20 +8,29 @@ import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
 import { Dialog } from '@/components/ui/dialog';
 import { DragHandle } from '@/components/ui/drag-handle';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Button, ErrorBanner, Select, TextInput } from '@/components/ui/field';
-import { InlineSaveField, useInlineSave, type InlineSaveOutcome } from '@/components/ui/inline-save-status';
+import { Button, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import {
+  InlineSaveField, InlineSaveStatus, useInlineSave, type InlineSaveOutcome, type InlineSaveState,
+  type InlineSaveStatusProps,
+} from '@/components/ui/inline-save-status';
+import { Modal } from '@/components/ui/modal';
 import { NavIcon } from '@/components/ui/nav-icon';
+import { TAP_HEIGHT, TAP_TARGET } from '@/components/ui/phone';
 import { Skeleton, SkeletonCards, SkeletonTable, SkeletonText } from '@/components/ui/skeleton';
+import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { formatCalendarDay } from '@/lib/format';
 import {
-  createLead, deleteLead, listEveryLead, readLead, reorderLeads, setLeadOutcome, setLeadStatus, updateLead,
-  whatsAppLink, LEAD_NAME_MIN, LEAD_ROWS_FIRST_SHOWN, type Lead, type LeadOutcome, type LeadQuery, type LeadType,
+  callLink, createLead, deleteLead, listEveryLead, phoneHeld, readLead, reorderLeads, setLeadOutcome, setLeadStatus,
+  updateLead, whatsAppLink, LEAD_NAME_MIN, LEAD_ROWS_FIRST_SHOWN, type Lead, type LeadOutcome, type LeadQuery,
+  type LeadType,
 } from '@/lib/leads';
 import { useSession } from '@/lib/session';
 import type { LeadStatusRow } from '@/lib/tenant-config';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { useDebounced } from '@/lib/use-debounced';
+import { usePhone } from '@/lib/use-phone';
 
 /**
  * The order the table can be in, as `GET /leads` names it: the three headings that sort
@@ -43,9 +52,9 @@ type Sort = { key: SortKey; dir: 'asc' | 'desc' } | null;
 /**
  * The narrowest the table is drawn, in rem: below it, each lead is a card (P13.1-T4 AC-7, ADR-0108 §6).
  *
- * The six fixed columns (`WIDTHS`, 42.5rem) and the two that share what is left, at no less than
- * 7.75rem each — the date box with its icon, and a remark of two or three words a line; 43.25rem and
- * 7.375rem on `/leads`, whose first column holds a drag handle (P18.8-T7). **Measured
+ * The six fixed columns (`WIDTHS`, 43.25rem since P18.95-T4 put 📞 in *Actions*) and the two that share
+ * what is left, at no less than 7.375rem each — the date box with its icon, and a remark of two or three
+ * words a line; 44rem and 7rem on `/leads`, whose first column holds a drag handle (P18.8-T7). **Measured
  * against the table's own box, not the window**, so the sidebar counts: at 1280px with the sidebar
  * open the box is 59rem and the table stands; at 1024px it is 43rem, or 55.5rem with the sidebar
  * folded, and the leads are cards. In rem, so a reader who has turned their browser's text up gets the
@@ -63,7 +72,19 @@ const TABLE_MIN_REM = 58;
 // word *Recruitment* were cut off, and the *Actions* heading overflowed its 3rem by 8px — a sideways scroll
 // of its own. 11rem holds a three-word name, 7.5rem *Select type* with its chevron, 4.5rem the heading —
 // and, since P18.8-T7, the WhatsApp link and the ⋮ side by side, 28px each.
-const WIDTHS = ['2rem', '11rem', '7.5rem', '11rem', '6.5rem', 'auto', 'auto', '4.5rem'] as const;
+// *Widened 2026-10-26 (P18.95-T4 AC-3):* 5.25rem holds WhatsApp and 📞 at 24px each beside the 28px ⋮, in a
+// cell padded 4px a side (`ACTIONS_CELL`) — 0.75rem more, so the two text columns keep 7.625rem each at 1280px
+// with the sidebar open, room for the date with its icon; at 28px and the cells' own 8px they would have had 6.5rem.
+const WIDTHS = ['2rem', '11rem', '7.5rem', '11rem', '6.5rem', 'auto', 'auto', '5.25rem'] as const;
+
+/** The *Actions* cell's own padding, 4px a side where every other cell has 8px (`WIDTHS`). */
+const ACTIONS_CELL = '!px-1';
+
+/**
+ * WhatsApp's and 📞's box at rest: **24px, the glyph 16px in it**, so the two sit beside the 28px ⋮ in
+ * 5.25rem. **44px on a phone** (`TAP_TARGET`), each owning its own square, as the ⋮ does.
+ */
+const CONTACT_GLYPH = cn('inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm', TAP_TARGET);
 
 /**
  * **The same, with room for a drag handle beside the row's number** (P18.8-T7): `/leads`, where the reader
@@ -73,15 +94,22 @@ const WIDTHS = ['2rem', '11rem', '7.5rem', '11rem', '6.5rem', 'auto', 'auto', '4
  */
 const WIDTHS_WITH_HANDLES = ['2.75rem', ...WIDTHS.slice(1)] as const;
 
-/** The card layout's sort: each order the headings give, said in words, since a card has no heading. */
+/**
+ * The card layout's sort: each order the headings give, said in words, since a card has no heading.
+ *
+ * **What the order does, not which way a key runs** (P18.95-T4 AC-4, ADR-0167; UI-027: *"Type, ascending"*
+ * says nothing about where the Sales leads go). The values sent are the headings' own, unchanged: `type`
+ * ascending is no type, then Sales, then Recruit, and descending the reverse; `status` ascending is the
+ * first stage of a ladder first, a lead with no stage before it.
+ */
 const SORT_CHOICES: readonly { sort: Sort; label: string }[] = [
   { sort: null, label: 'Saved order' },
-  { sort: { key: 'name', dir: 'asc' }, label: 'Lead name, A–Z' },
-  { sort: { key: 'name', dir: 'desc' }, label: 'Lead name, Z–A' },
-  { sort: { key: 'type', dir: 'asc' }, label: 'Type, ascending' },
-  { sort: { key: 'type', dir: 'desc' }, label: 'Type, descending' },
-  { sort: { key: 'status', dir: 'asc' }, label: 'Status, ascending' },
-  { sort: { key: 'status', dir: 'desc' }, label: 'Status, descending' },
+  { sort: { key: 'name', dir: 'asc' }, label: 'Name A–Z' },
+  { sort: { key: 'name', dir: 'desc' }, label: 'Name Z–A' },
+  { sort: { key: 'type', dir: 'asc' }, label: 'Sales first' },
+  { sort: { key: 'type', dir: 'desc' }, label: 'Recruit first' },
+  { sort: { key: 'status', dir: 'asc' }, label: 'Earliest stage first' },
+  { sort: { key: 'status', dir: 'desc' }, label: 'Furthest stage first' },
 ];
 const sortValue = (sort: Sort) => (sort ? `${sort.key}:${sort.dir}` : 'saved');
 
@@ -214,9 +242,17 @@ const byRegisteredDesc = (a: Lead, b: Lead) =>
  * the whole list; only what is drawn first stops at 30, and *Show more* draws the rest at once.
  *
  * **One table, two toolbars** (P10.1-T4 AC-12). `/leads` has the prototype's count and *+ Add lead*
- * (`:2791-2794`). The coaching card has a search box and a type filter instead of the count
- * (`:4258-4266`), which is `filters`. It is off unless asked for, and `/leads` never asks: the
- * client chose a leads screen that cannot be searched (ADR-0062), and a test pins it.
+ * (`:2791-2794`), and **since P18.95-T4 a search, a *Type* and a *Status* filter above them** (AC-2,
+ * ADR-0167 §4; the client's UI review of 2026-10-26, UI-016: 71 leads and no way to find one). The coaching
+ * card has a search box and a type filter instead of the count (`:4258-4266`), which is `filters`. A list
+ * narrowed by any of them offers no drag handle, as a column sort does not: the saved order is the whole
+ * list's, and a drop among some of it would save an order the reader never saw.
+ *
+ * **On a phone, a read-only card per lead, and a sheet to edit it** (P18.95-T4 AC-1; UI-016: every field
+ * of every card editable, the name included, at 26–28px). Below 768px each card is the lead in words —
+ * name, type, stage, next action, the remarks in full — with WhatsApp, 📞 and ⋮ beside the name; a tap on
+ * it opens the edit sheet, which holds the same controls at 44px under their own labels, each saving
+ * itself as a cell does. A tablet and a desktop are as they were (ADR-0167 §12).
  *
  * **Every write is one field, and the server is its only judge.** Which ladder a stage belongs to,
  * whether a lead may be won here — the row shows exactly what the server said, beneath the lead, for
@@ -234,7 +270,8 @@ export function LeadsTable({
 }: {
   /**
    * The coaching card's search box and type filter in place of the count (`Overall.html:4258-4266`).
-   * **Never on `/leads`** — P10.1-T4 AC-12, pinned by the screen's own spec.
+   * `/leads` keeps its count and has its own filter bar above it since P18.95-T4 — search, *Type* and
+   * *Status* (AC-2) — so this is the coaching card's toolbar, and nothing more.
    */
   filters?: boolean;
   /**
@@ -269,12 +306,21 @@ export function LeadsTable({
   const { me } = useSession();
   const myMembership = me?.membership?.membershipId;
   const uid = useId();
-  const [frame, cards] = useCardLayout();
+  const [frame, boxCards] = useCardLayout();
+  /**
+   * **Below 768px, the read-only cards and their edit sheet** (P18.95-T4 AC-1). Asked of the window, not the
+   * box, because it is the phone's layout the client reviewed (ADR-0167 §4, §12): a tablet whose box is under
+   * `TABLE_MIN_REM` keeps the editable cards it has had since P13.1-T4.
+   */
+  const phone = usePhone();
+  const cards = boxCards || phone;
 
   const [sort, setSort] = useState<Sort>(null);
   const [term, setTerm] = useState('');
   const search = useDebounced(term.trim());
   const [typeFilter, setTypeFilter] = useState<'' | LeadType>('');
+  /** `/leads`' *Status* filter (P18.95-T4 AC-2): a stage code, of either ladder — one code per office across both. */
+  const [statusFilter, setStatusFilter] = useState('');
   /** Bumped to load the open leads again from page 1 — after a reopen, or a write that shifts the pages. */
   const [reloads, setReloads] = useState(0);
   /**
@@ -282,7 +328,9 @@ export function LeadsTable({
    * first 30 again (AC-8) — so the press is remembered against the list it was made on, rather than
    * cleared by an effect after the new list has already drawn in full for a frame.
    */
-  const listKey = [sort?.key ?? '', sort?.dir ?? '', search, typeFilter, owner ?? ''].join('\n');
+  const listKey = [sort?.key ?? '', sort?.dir ?? '', search, typeFilter, statusFilter, owner ?? ''].join('\n');
+  /** A list the reader has searched or filtered: some of their leads, not all of them (P18.95-T4 AC-2). */
+  const narrowed = search !== '' || typeFilter !== '' || statusFilter !== '';
   const [expandedFor, setExpandedFor] = useState<string | null>(null);
   /*
    * **And forgotten once the list changes**, so coming back to the list it was pressed on — a header
@@ -346,6 +394,11 @@ export function LeadsTable({
   }, [clearSave]);
 
   const [detailsFor, setDetailsFor] = useState<string | null>(null);
+  /**
+   * **The lead the phone's edit sheet is open on**, by its row's key — `keyFor`'s, or the inline row's own —
+   * so a new lead's sheet stays open, on the same name box, once its name has made it a lead (P18.95-T4 AC-1).
+   */
+  const [sheetFor, setSheetFor] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Lead | null>(null);
   const [confirmType, setConfirmType] = useState<{ row: Lead; type: LeadType | null } | null>(null);
   const [confirmOutcome, setConfirmOutcome] = useState<{ row: Lead; outcome: LeadOutcome } | null>(null);
@@ -380,8 +433,10 @@ export function LeadsTable({
         // No sort is the owner's own order (P18.8-T7 AC-3).
         sort: sort?.key,
         dir: sort?.dir,
-        search: filters && search ? search : undefined,
-        type: filters && typeFilter ? typeFilter : undefined,
+        // The server narrows; the screen only asks (P18.95-T4 AC-2). Nothing is sent until something is chosen.
+        search: search || undefined,
+        type: typeFilter || undefined,
+        statusCode: statusFilter || undefined,
         owner,
       },
       (rows, total, first) => {
@@ -426,7 +481,7 @@ export function LeadsTable({
       if (isCurrent()) loadingOpen.current = false;
     });
     return () => { openLoad.current += 1; };
-  }, [sort?.key, sort?.dir, filters, search, typeFilter, reloads, owner, forgetSaves]);
+  }, [sort?.key, sort?.dir, search, typeFilter, statusFilter, reloads, owner, forgetSaves]);
 
   /**
    * The two closed cards, loaded the same way (AC-4), once — **each on its own.**
@@ -460,6 +515,8 @@ export function LeadsTable({
 
   const draftInputId = `${uid}-draft-name`;
   const nameId = (id: string) => `${uid}-name-${id}`;
+  /** A control in the phone's edit sheet, which holds one lead at a time (P18.95-T4 AC-1). */
+  const sheetFieldId = (field: string) => `${uid}-sheet-${field}`;
   useEffect(() => {
     if (draft) document.getElementById(draftInputId)?.focus();
     // Only when a new inline row appears — not on every letter typed into it.
@@ -594,7 +651,12 @@ export function LeadsTable({
       done(saved);
       dropDrafts(id, fields);
       forget(id, ['', ...fields]);
-      if (sort && moves.includes(sort.key)) restartIfLoading();
+      /*
+       * A write that can move the row under the sort — or, under a search or a filter, take it out of the
+       * list (P18.95-T4) — shifts the pages still to come. The row itself stays until the next load: a lead
+       * does not vanish from under the reader's finger because its type no longer matches the filter.
+       */
+      if ((sort && moves.includes(sort.key)) || (narrowed && moves.length > 0)) restartIfLoading();
       onWrite?.(saved);
       return saved;
     } catch (err) {
@@ -710,11 +772,15 @@ export function LeadsTable({
   /** `+ Add lead`: a row at the top, or back to the one already there. */
   function addLead() {
     if (draft) {
-      document.getElementById(draftInputId)?.focus();
+      // On a phone the inline row lives in the sheet, which opens on its name box (P18.95-T4 AC-1).
+      if (phone) setSheetFor(draft.key);
+      else document.getElementById(draftInputId)?.focus();
       return;
     }
     drafted.current += 1;
-    setDraft({ key: `draft-${drafted.current}`, name: '', posting: false });
+    const key = `draft-${drafted.current}`;
+    setDraft({ key, name: '', posting: false });
+    if (phone) setSheetFor(key);
   }
 
   function changeDraftName(value: string) {
@@ -826,15 +892,25 @@ export function LeadsTable({
     'Actions',
   ];
 
-  const narrowed = filters && (search !== '' || typeFilter !== '');
   const held = open?.rows ?? [];
   const shown = expanded ? held : held.slice(0, LEAD_ROWS_FIRST_SHOWN);
   const unshown = held.length - shown.length;
+  const draftEntry = draft ? [{ lead: blankLead(draft.key, draft.name), isDraft: true }] : [];
   const rows: { lead: Lead; isDraft: boolean }[] = [
-    ...(draft ? [{ lead: blankLead(draft.key, draft.name), isDraft: true }] : []),
+    ...draftEntry,
     ...shown.map((lead) => ({ lead, isDraft: false })),
   ];
   const detailsLead = open?.rows.find((r) => r.id === detailsFor) ?? null;
+
+  /** A row's key: the inline row's own, kept by the lead it becomes (`keyFor`), or the lead's id. */
+  const rowKey = (row: Lead) => keyFor[row.id] ?? row.id;
+  /*
+   * **The sheet's lead**, among every lead held — drawn or not — and the inline row. One that has gone (closed,
+   * deleted, a draft left empty) takes the sheet with it, and so does a window widened past the phone's.
+   */
+  const sheetEntry = sheetFor === null ? null
+    : [...draftEntry, ...held.map((lead) => ({ lead, isDraft: false }))].find((e) => rowKey(e.lead) === sheetFor) ?? null;
+  if (sheetFor !== null && (!sheetEntry || !phone)) setSheetFor(null);
 
   /** *Show more*: every other lead at once, and the focus on the first of them (AC-8). */
   function showMore() {
@@ -847,12 +923,13 @@ export function LeadsTable({
    *
    * **On `/leads` only, and while no column sort is on.** A coaching session's card (`owner`) shows the
    * coachee's order and offers no handle: the order is its owner's. Under a sort the rows are in the
-   * sort's order, and a drop there would save an order the reader never saw.
+   * sort's order, and a drop there would save an order the reader never saw. **Nor under a search or a
+   * filter** (P18.95-T4 AC-2): the rows are some of the reader's leads, and the order saved is all of them.
    *
    * **Every page first.** The server takes the reader's open leads all at once, so a list still arriving
    * holds its handles still until the last page lands.
    */
-  const ordering = !owner && !readOnly && sort === null;
+  const ordering = !owner && !readOnly && sort === null && !narrowed;
   const complete = open !== null && open.rows.length >= open.total;
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -1037,8 +1114,12 @@ export function LeadsTable({
    * One lead's controls, once — **the table's cells and the card's lines draw the same ones**, under
    * the same accessible names, so a lead reads the same to a screen reader at any width and every
    * behaviour below holds in both.
+   *
+   * **`sheet` is the phone's edit sheet** (P18.95-T4 AC-1): the same controls, each a 44px field under a
+   * label of its own rather than a cell named for its row, with the same writes, the same held row and the
+   * same *Saving… → Saved ✓* beside each.
    */
-  function controlsFor({ lead: row, isDraft }: { lead: Lead; isDraft: boolean }, n: number) {
+  function controlsFor({ lead: row, isDraft }: { lead: Lead; isDraft: boolean }, n: number, variant: 'row' | 'sheet' = 'row') {
     const ladder = ladderFor(row.type);
     const retired = row.statusCode && !ladder.some((s) => s.code === row.statusCode);
     const saving = busy[row.id] === true;
@@ -1053,21 +1134,36 @@ export function LeadsTable({
     const locked = saving || isDraft || readOnly;
     const monthAction = row.type === 'recruitment' ? 'Recruit this month' : 'Close this month';
     const foreign = !isDraft && row.ownerMembershipId !== myMembership;
-    const dateId = `${uid}-date-${keyFor[row.id] ?? row.id}`;
+    const sheet = variant === 'sheet';
+    const dateId = sheet ? sheetFieldId('nextActionDate') : `${uid}-date-${keyFor[row.id] ?? row.id}`;
     const chat = isDraft ? null : whatsAppLink(row.contact.phone);
+    const call = isDraft ? null : callLink(row.contact.phone);
+    /** Why the two are held — nothing saved, or nothing that can be dialled (AC-3) — or `null` where they are live. */
+    const dialless = isDraft ? null : phoneHeld(row.contact.phone);
+    const who = row.name || 'this lead';
+    /** In a row a control is named for its row; in the sheet its own label above it names it. */
+    const nameOf = (label: string) => (sheet ? undefined : `${label}, row ${n}`);
+    const saveLabel = (label: string) => (sheet ? label : `${label}, row ${n}`);
+    const density = sheet ? 'default' : 'cell';
+    /** A text box in the sheet: a field's box at rest, 44px at least, its words 16px on a phone. */
+    const SHEET_TEXT = 'min-h-11 rounded-md border-hairline bg-card px-3 py-2.5';
 
     return {
       /*
        * **The reader's own open leads, on `/leads`, while no sort is on** (P18.8-T7 AC-4) — none on the
        * inline row, which is not a lead yet, and none on an agent's row on their leader's list: the order
-       * of a list is its owner's. Held still until every page has arrived (`complete`).
+       * of a list is its owner's. Held still until every page has arrived (`complete`). **44px on a phone**
+       * (P18.95-T4), where the card around it is otherwise read-only.
        */
       handle: ordering && !isDraft && !foreign ? (
         <DragHandle
           id={handleId(row.id)}
           label={row.name || 'this lead'}
           disabled={!complete}
-          className="cursor-grab select-none text-sm leading-none text-muted disabled:cursor-not-allowed"
+          className={cn(
+            'cursor-grab select-none text-sm leading-none text-muted disabled:cursor-not-allowed',
+            'max-md:inline-flex max-md:items-center max-md:justify-center', TAP_TARGET,
+          )}
           onPick={() => setDragging(row.id)}
           onDrop={() => { setDragging(null); setOver(null); }}
           onMove={(by) => moveBy(row.id, by)}
@@ -1079,12 +1175,12 @@ export function LeadsTable({
        * the box no label; it gets a name a screen reader can say and nothing a reader can see.
        */
       name: (heading = false) => (
-        <InlineSaveField status={inline.statusOf(saveKey(row, 'name'))} label={`Lead name, row ${n}`}>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'name'))} label={saveLabel('Lead name')}>
           <TextInput
-            id={isDraft ? draftInputId : nameId(row.id)}
-            aria-label={`Lead name, row ${n}`}
-            density="cell"
-            className={cn('w-full', heading && 'text-md font-semibold')}
+            id={isDraft ? draftInputId : sheet ? sheetFieldId('name') : nameId(row.id)}
+            aria-label={nameOf('Lead name')}
+            density={density}
+            className={cn('w-full', heading && 'text-md font-semibold', sheet && TAP_HEIGHT)}
             value={isDraft ? row.name : draftOf(row, 'name', row.name)}
             placeholder="First Last"
             readOnly={isDraft ? draft?.posting : saving || readOnly}
@@ -1122,16 +1218,18 @@ export function LeadsTable({
        * hover and the focus ring are the cell's own.
        */
       type: (
-        <InlineSaveField status={inline.statusOf(saveKey(row, 'type'))} label={`Type, row ${n}`}>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'type'))} label={saveLabel('Type')}>
           <Select
-            aria-label={`Type, row ${n}`}
-            density="cell"
+            id={sheet ? sheetFieldId('type') : undefined}
+            aria-label={nameOf('Type')}
+            density={density}
             className={cn(
               'border-hairline',
               row.type === 'sales' && 'font-semibold text-amber-ink',
               row.type === 'recruitment' && 'font-semibold text-navy-soft',
               row.type === null && 'text-muted',
               isDraft && INERT_CONTROL,
+              sheet && cn('w-full', TAP_HEIGHT),
             )}
             value={row.type ?? ''}
             aria-disabled={locked || undefined}
@@ -1154,11 +1252,12 @@ export function LeadsTable({
        * option says why (`Overall.html:5447-5455`); the server refuses a stage without one either way.
        */
       status: (
-        <InlineSaveField status={inline.statusOf(saveKey(row, 'status'))} label={`Status, row ${n}`}>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'status'))} label={saveLabel('Status')}>
           <Select
-            aria-label={`Status, row ${n}`}
-            density="cell"
-            className={cn('font-semibold', stageTint(row, ladder))}
+            id={sheet ? sheetFieldId('status') : undefined}
+            aria-label={nameOf('Status')}
+            density={density}
+            className={cn('font-semibold', stageTint(row, ladder), sheet && cn('w-full', TAP_HEIGHT))}
             value={row.statusCode ?? ''}
             disabled={!row.type}
             aria-disabled={locked || undefined}
@@ -1182,19 +1281,23 @@ export function LeadsTable({
       /*
        * **Written out beside the box** (`.month-check-wrap`, `Overall.html:479-487`) — a close and a
        * recruitment are different promises. **Not until there is a type** (`:5505-5506`, P10.1-T4
-       * AC-7): a promise has to say which of the two it is.
+       * AC-7): a promise has to say which of the two it is. In the sheet the box is 20px and its line 44px.
        */
       month: (
-        <InlineSaveField status={inline.statusOf(saveKey(row, 'thisMonth'))} label={`${monthAction}, row ${n}`}>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'thisMonth'))} label={saveLabel(monthAction)}>
           <label
             className={cn(
               'flex items-start gap-1.5 text-xs leading-tight',
               row.type ? 'text-muted' : 'text-muted/40',
+              sheet && 'min-h-11 items-center gap-2.5 text-md text-navy',
             )}
           >
             <input
               type="checkbox"
-              className="mt-px h-[13px] w-[13px] shrink-0 accent-success disabled:cursor-not-allowed"
+              className={cn(
+                'mt-px h-[13px] w-[13px] shrink-0 accent-success disabled:cursor-not-allowed',
+                sheet && 'mt-0 h-5 w-5',
+              )}
               checked={row.thisMonth}
               disabled={!row.type}
               aria-disabled={locked || undefined}
@@ -1214,13 +1317,15 @@ export function LeadsTable({
        * where a remark could be written until they hovered it (2026-10-07). The table's other cells
        * keep the prototype's transparent rest, *Type* aside; these two are the boxes a reader writes
        * sentences in. **No placeholder in either since 2026-10-26** (ADR-0161 §2): the border says where
-       * to write, and the grey words read as something already written.
+       * to write, and the grey words read as something already written. **In the sheet it grows with what
+       * is typed** (P18.95-T4 AC-1; UI-016: the remark was clipped), from 44px.
        */
       remarks: (
-        <InlineSaveField status={inline.statusOf(saveKey(row, 'remarks'))} label={`Remarks, row ${n}`}>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'remarks'))} label={saveLabel('Remarks')}>
           <AutoGrowTextarea
-            aria-label={`Remarks, row ${n}`}
-            className={cn('w-full border-hairline', isDraft && INERT_CONTROL)}
+            id={sheet ? sheetFieldId('remarks') : undefined}
+            aria-label={nameOf('Remarks')}
+            className={cn('w-full border-hairline', isDraft && INERT_CONTROL, sheet && SHEET_TEXT)}
             value={draftOf(row, 'remarks', row.remarks)}
             readOnly={locked}
             onChange={(e) => setDraftValue(row.id, 'remarks', e.target.value)}
@@ -1231,7 +1336,7 @@ export function LeadsTable({
       ),
 
       date: (
-        <InlineSaveField status={inline.statusOf(saveKey(row, 'nextActionDate'))} label={`Next action date, row ${n}`}>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'nextActionDate'))} label={saveLabel('Next action date')}>
           <div className="relative">
             <button
               type="button"
@@ -1239,18 +1344,19 @@ export function LeadsTable({
               aria-hidden="true"
               className={cn(
                 'absolute inset-y-0 left-0 flex w-6 items-center justify-center text-muted hover:text-navy',
+                sheet && 'w-9',
                 locked && 'cursor-not-allowed hover:text-muted',
               )}
               onClick={() => openPicker(dateId, locked)}
             >
-              <NavIcon name="calendar" className="h-3.5 w-3.5" />
+              <NavIcon name="calendar" className={sheet ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
             </button>
             <TextInput
               id={dateId}
               type="date"
-              aria-label={`Next action date, row ${n}`}
-              density="cell"
-              className={cn('w-full pl-6', NO_NATIVE_PICKER, isDraft && INERT_CONTROL)}
+              aria-label={nameOf('Next action date')}
+              density={density}
+              className={cn('w-full pl-6', NO_NATIVE_PICKER, isDraft && INERT_CONTROL, sheet && cn('pl-9', TAP_HEIGHT))}
               value={draftOf(row, 'nextActionDate', row.nextActionDate)}
               readOnly={locked}
               onChange={(e) => {
@@ -1267,10 +1373,11 @@ export function LeadsTable({
       ),
 
       note: (
-        <InlineSaveField status={inline.statusOf(saveKey(row, 'nextActionNote'))} label={`Next action note, row ${n}`}>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'nextActionNote'))} label={saveLabel('Next action note')}>
           <AutoGrowTextarea
-            aria-label={`Next action note, row ${n}`}
-            className={cn('w-full border-hairline', isDraft && INERT_CONTROL)}
+            id={sheet ? sheetFieldId('nextActionNote') : undefined}
+            aria-label={nameOf('Next action note')}
+            className={cn('w-full border-hairline', isDraft && INERT_CONTROL, sheet && SHEET_TEXT)}
             value={draftOf(row, 'nextActionNote', row.nextActionNote)}
             readOnly={locked}
             onChange={(e) => setDraftValue(row.id, 'nextActionNote', e.target.value)}
@@ -1282,25 +1389,56 @@ export function LeadsTable({
 
       /*
        * **WhatsApp, beside the ⋮** (P18.8-T7 AC-5, ADR-0161 §2), where it was a button in *Lead details*.
-       * The number as `wa.me` takes it (`whatsAppNumber`), in a new tab and with no opener; no number
-       * WhatsApp could open, no link. A finalized session's card keeps it: opening a chat writes nothing.
-       * 28px, the ⋮'s own size, so the two fill the Actions column's 4.5rem and widen nothing.
+       * The number as `wa.me` takes it (`whatsAppNumber`), in a new tab and with no opener. A finalized
+       * session's card keeps it: opening a chat writes nothing. **Held, with its reason, where there is no
+       * number WhatsApp could open** (P18.95-T4 AC-3) — until then there was no link at all, and a lead with
+       * no phone looked the same as a lead whose WhatsApp had not loaded.
        */
-      whatsapp: chat ? (
+      whatsapp: isDraft ? null : chat ? (
         <a
           href={chat}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={`Chat with ${row.name || 'this lead'} on WhatsApp (opens in a new tab)`}
+          aria-label={`Chat with ${who} on WhatsApp (opens in a new tab)`}
           title="WhatsApp"
-          className={cn(
-            'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-success',
-            'hover:bg-success/[0.12]',
-          )}
+          className={cn(CONTACT_GLYPH, 'text-success hover:bg-success/[0.12]')}
         >
           <NavIcon name="whatsapp" className="h-4 w-4" />
         </a>
-      ) : null,
+      ) : (
+        <TippedGlyph
+          glyph={<NavIcon name="whatsapp" className="h-4 w-4" />}
+          name={`Chat with ${who} on WhatsApp`}
+          tip={dialless ?? ''}
+          unavailable
+          align="fit"
+          face={cn(CONTACT_GLYPH, 'text-success')}
+        />
+      ),
+
+      /*
+       * **📞, beside WhatsApp** (P18.95-T4 AC-3, ADR-0167 §4; UI-016): `tel:` with the same number, read by the
+       * same rule, so the phone's own dialler rings it. Held with the same reason where WhatsApp is held.
+       */
+      call: isDraft ? null : call ? (
+        <a
+          href={call}
+          aria-label={`Call ${who}`}
+          title="Call"
+          className={cn(CONTACT_GLYPH, 'text-sm leading-none hover:bg-navy/[0.08]')}
+        >
+          <span aria-hidden="true">📞</span>
+        </a>
+      ) : (
+        <TippedGlyph
+          glyph="📞"
+          name={`Call ${who}`}
+          tip={dialless ?? ''}
+          unavailable
+          align="fit"
+          face={cn(CONTACT_GLYPH, 'text-sm leading-none')}
+        />
+      ),
 
       /*
        * **One ⋮ where there were four glyphs and an attribution** (P13.1-T4 AC-3, ADR-0108 §3). The
@@ -1345,8 +1483,8 @@ export function LeadsTable({
               {c.note}
             </div>
           </Cell>
-          <Cell>
-            <div className="flex items-center justify-end">{c.whatsapp}{c.actions}</div>
+          <Cell className={ACTIONS_CELL}>
+            <div className="flex items-center justify-end">{c.whatsapp}{c.call}{c.actions}</div>
           </Cell>
         </Row>
 
@@ -1389,6 +1527,7 @@ export function LeadsTable({
           <span className="w-5 shrink-0 text-base font-semibold text-muted">{n}</span>
           <div className="min-w-0 flex-1">{c.name(true)}</div>
           {c.whatsapp}
+          {c.call}
           {c.actions}
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -1410,6 +1549,156 @@ export function LeadsTable({
     );
   }
 
+  /**
+   * **Every field of a lead's save, said once on its phone card** (P18.95-T1 AC-5, P18.95-T4 AC-1): the sheet
+   * can close while a field is still on its way, and its *Saved ✓* would then be said to nobody. A failure
+   * comes first, then *Saving…*, then *Saved ✓*; the retry sends each field that failed again, as it went.
+   */
+  function cardSave(row: Lead): InlineSaveStatusProps {
+    const states = SAVING_FIELDS.map((field) => [field, inline.stateOf(saveKey(row, field))] as const);
+    const failed = states.filter(([, state]) => state === 'failed').map(([field]) => field);
+    const some = (state: InlineSaveState) => states.some(([, now]) => now === state);
+    const state: InlineSaveState = failed.length > 0 ? 'failed' : some('saving') ? 'saving' : some('saved') ? 'saved' : 'idle';
+    return {
+      state,
+      onRetry: failed.length > 0 ? () => { for (const field of failed) inline.retry(saveKey(row, field)); } : undefined,
+    };
+  }
+
+  /**
+   * **Closing the sheet leaves the field being typed in first**, as Escape does in *Lead details*: removing a
+   * focused box fires no `blur`, so the one field still being typed in would close unsaved.
+   */
+  function closeSheet() {
+    const active = document.activeElement as HTMLElement | null;
+    if (active && active !== document.body) active.blur?.();
+    setSheetFor(null);
+  }
+
+  /**
+   * One lead on a phone: **read-only, and a tap away from its edit sheet** (P18.95-T4 AC-1, ADR-0167 §4;
+   * UI-016).
+   *
+   * The lead in words — the name, its type and stage, the next action and its date, the remarks **in full**,
+   * nothing cut — under the table heading's own small capitals, label above value. **The name is the card's
+   * button**, named *Edit {name}*, and its tap area is the whole card; WhatsApp, 📞, ⋮ and the drag handle sit
+   * above it, each its own 44px target, so a tap meant for one never opens the sheet. What the reader typed
+   * and has not yet saved shows here as it does in the sheet.
+   */
+  function renderPhoneCard(entry: { lead: Lead; isDraft: boolean }, index: number) {
+    const n = index + 1;
+    const c = controlsFor(entry, n);
+    const { lead: row, isDraft } = entry;
+    const key = rowKey(row);
+    const name = isDraft ? row.name : draftOf(row, 'name', row.name);
+    const remarks = draftOf(row, 'remarks', row.remarks).trim();
+    const day = draftOf(row, 'nextActionDate', row.nextActionDate);
+    const note = draftOf(row, 'nextActionNote', row.nextActionNote).trim();
+    const next = [day ? formatCalendarDay(day) : '', note].filter(Boolean).join(' · ');
+    const stage = stageLabel(row) ?? (row.statusCode ? `${row.statusCode} (retired)` : null);
+    return (
+      <li
+        key={key}
+        {...dropTarget(row.id, isDraft)}
+        className={cn('relative flex flex-col gap-2 border-b border-hairline px-3 py-3 last:border-b-0', dropLook(row.id))}
+      >
+        <div className="flex items-center gap-1">
+          {c.handle && <span className="relative z-10 flex">{c.handle}</span>}
+          <span className="w-5 shrink-0 text-base font-semibold text-muted">{n}</span>
+          <button
+            type="button"
+            id={isDraft ? undefined : nameId(row.id)}
+            aria-label={isDraft ? 'Edit the new lead' : `Edit ${name || 'this lead'}`}
+            aria-haspopup="dialog"
+            onClick={() => setSheetFor(key)}
+            className={cn(
+              'min-w-0 flex-1 break-words text-left text-md font-semibold text-navy',
+              // The whole card is the tap, and the focus ring is drawn round the whole card.
+              "after:absolute after:inset-0 after:rounded-sm after:content-['']",
+              'focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2',
+              'focus-visible:after:-outline-offset-2 focus-visible:after:outline-amber',
+            )}
+          >
+            {name || <span className="font-normal text-muted">New lead</span>}
+          </button>
+          <span className="relative z-10 flex shrink-0 items-center">{c.whatsapp}{c.call}{c.actions}</span>
+        </div>
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <span
+            className={cn(
+              'font-semibold',
+              row.type === 'sales' && 'text-amber-ink',
+              row.type === 'recruitment' && 'text-navy-soft',
+              row.type === null && 'font-normal text-muted',
+            )}
+          >
+            {row.type ? TYPE_WORD[row.type] : 'No type yet'}
+          </span>
+          {stage && <span className={cn('rounded-sm px-1.5 py-0.5 font-semibold', stageTint(row, ladderFor(row.type)))}>{stage}</span>}
+        </p>
+        {(next || remarks) && (
+          <dl className="flex flex-col gap-2">
+            {next && (
+              <div className="flex flex-col gap-0.5">
+                <dt className={CARD_LABEL}>Next action</dt>
+                <dd className="break-words text-sm text-navy">{next}</dd>
+              </div>
+            )}
+            {remarks && (
+              <div className="flex flex-col gap-0.5">
+                <dt className={CARD_LABEL}>Remarks</dt>
+                <dd className="whitespace-pre-wrap break-words text-sm text-navy">{remarks}</dd>
+              </div>
+            )}
+          </dl>
+        )}
+        {/* The sheet says its own while it is open; this is for once it has closed. */}
+        {sheetFor !== key && <InlineSaveStatus {...cardSave(row)} label={name || 'the new lead'} className="relative z-10" />}
+        {c.errors.length > 0 && <div className="relative z-10 flex flex-col gap-2">{c.errors}</div>}
+      </li>
+    );
+  }
+
+  /**
+   * **The phone's edit sheet** (P18.95-T4 AC-1): the lead's own fields, the ones its row edits, as 44px
+   * controls under labels of their own, the remark growing as it is typed. `Modal`, rising from the foot of
+   * the screen: the focus in it and held, Escape, the backdrop and **Close** shut it, and the focus goes back
+   * to the card. Each field saves as it is left, with its *Saving… → Saved ✓* under it, exactly as a cell does,
+   * and a refusal shows here while it is open. *+ Add lead* opens it on a new lead, the name box focused,
+   * and it stays open on the same box once the name has made it a lead.
+   */
+  function renderSheet(entry: { lead: Lead; isDraft: boolean }) {
+    const index = rows.findIndex((r) => rowKey(r.lead) === rowKey(entry.lead));
+    const c = controlsFor(entry, index + 1, 'sheet');
+    const { lead: row, isDraft } = entry;
+    return (
+      <Modal
+        open
+        placement="sheet"
+        title={isDraft ? 'New lead' : `Edit ${row.name || 'this lead'}`}
+        // An existing lead opens on its title, so no keyboard rises over the sheet until a field is chosen.
+        focusDialog={!isDraft}
+        onClose={closeSheet}
+      >
+        <div className="flex flex-col gap-4">
+          <Field label="Lead name" htmlFor={isDraft ? draftInputId : sheetFieldId('name')}>{c.name()}</Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Type" htmlFor={sheetFieldId('type')}>{c.type}</Field>
+            <Field label="Status" htmlFor={sheetFieldId('status')}>{c.status}</Field>
+          </div>
+          {c.month}
+          <Field label="Remarks" htmlFor={sheetFieldId('remarks')}>{c.remarks}</Field>
+          <Field label="Next action date" htmlFor={sheetFieldId('nextActionDate')}>{c.date}</Field>
+          <Field label="Next action note" htmlFor={sheetFieldId('nextActionNote')}>{c.note}</Field>
+          {c.errors.length > 0 && <div className="flex flex-col gap-2">{c.errors}</div>}
+          <div className="flex justify-end">
+            <Button variant="secondary" className={TAP_HEIGHT} onClick={closeSheet}>Close</Button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
   const empty = (
     /* The coaching card has one empty line whatever narrowed it (`Overall.html:10815`). */
     <EmptyState
@@ -1422,11 +1711,73 @@ export function LeadsTable({
   const sortChoice = cards && (
     <Select
       aria-label="Sort leads"
+      className={TAP_HEIGHT}
       value={sortValue(sort)}
       onChange={(e) => setSort(SORT_CHOICES.find((c) => sortValue(c.sort) === e.target.value)?.sort ?? null)}
     >
       {SORT_CHOICES.map((c) => <option key={sortValue(c.sort)} value={sortValue(c.sort)}>{c.label}</option>)}
     </Select>
+  );
+
+  /**
+   * A new *Type* keeps the *Status* filter only where the stage is on its ladder: the two ladders share no
+   * stage, so a sales stage under *Recruit* would match nothing, and say nothing about why.
+   */
+  function chooseType(next: '' | LeadType) {
+    setTypeFilter(next);
+    if (next && statusFilter && !ladderFor(next).some((s) => s.code === statusFilter)) setStatusFilter('');
+  }
+
+  /**
+   * **`/leads`' search and its two filters, above the list at every size** (P18.95-T4 AC-2, AC-5; ADR-0167 §4).
+   *
+   * The coaching card's own controls and words (`Overall.html:4258-4266`) — *Search leads…*, *All types* —
+   * with a *Status* filter beside them, and nothing else: the search is sent once the typing settles, each
+   * filter as it is chosen, and the server answers them (`GET /leads` `search`, `type`, `statusCode`), so the
+   * count and *Show more* are the narrowed list's. *Status* offers the ladder of the type chosen, or both
+   * ladders under their names. Drawn whatever the list is doing, so a search whose answer failed can still
+   * be changed. On a phone the search takes the row and the two filters share the next, each 44px tall.
+   */
+  const filterBar = !filters && (
+    <div
+      role="search"
+      aria-label="Search and filter leads"
+      className="mb-3 flex flex-wrap items-center gap-2.5 max-md:grid max-md:grid-cols-2"
+    >
+      <TextInput
+        type="search"
+        aria-label="Search leads"
+        placeholder="Search leads…"
+        className={cn('w-56 max-w-full max-md:col-span-2 max-md:w-full', TAP_HEIGHT)}
+        value={term}
+        onChange={(e) => setTerm(e.target.value)}
+      />
+      <Select
+        aria-label="Filter by type"
+        className={cn('max-md:w-full max-md:min-w-0', TAP_HEIGHT)}
+        value={typeFilter}
+        onChange={(e) => chooseType(e.target.value as '' | LeadType)}
+      >
+        <option value="">All types</option>
+        <option value="sales">{TYPE_WORD.sales}</option>
+        <option value="recruitment">{TYPE_WORD.recruitment}</option>
+      </Select>
+      <Select
+        aria-label="Filter by status"
+        className={cn('max-md:w-full max-md:min-w-0', TAP_HEIGHT)}
+        value={statusFilter}
+        onChange={(e) => setStatusFilter(e.target.value)}
+      >
+        <option value="">All statuses</option>
+        {typeFilter
+          ? ladderFor(typeFilter).map((s) => <option key={s.code} value={s.code}>{s.label}</option>)
+          : pipelines.map((p) => (
+            <optgroup key={p.pipeline} label={TYPE_WORD[p.pipeline]}>
+              {p.statuses.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
+            </optgroup>
+          ))}
+      </Select>
+    </div>
   );
 
   let body: React.ReactNode;
@@ -1468,8 +1819,10 @@ export function LeadsTable({
         ) : (
           /* The prototype's toolbar: the count, and the screen's one action (`Overall.html:2791-2794`). */
           <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+            {/* Narrowed, the count is what matched — the whole list is not on the screen (P18.95-T4 AC-2). */}
             <p className="text-sm text-muted">
               {open.total} active lead{open.total === 1 ? '' : 's'}
+              {narrowed && (open.total === 1 ? ' matches' : ' match')}
             </p>
             <div className="flex flex-wrap items-center gap-2.5">
               {sortChoice}
@@ -1487,7 +1840,8 @@ export function LeadsTable({
             <div className="rounded-lg border border-hairline bg-card">{empty}</div>
           ) : (
             <ul role="list" aria-label={caption} className="rounded-lg border border-hairline bg-card">
-              {rows.map(renderCard)}
+              {/* A phone's cards are read and tapped; a tablet's are edited where they stand (P18.95-T4 AC-1, AC-5). */}
+              {rows.map(phone ? renderPhoneCard : renderCard)}
             </ul>
           )
         ) : (
@@ -1523,6 +1877,9 @@ export function LeadsTable({
           stageLabel={stageLabel}
           onReopen={readOnly ? undefined : (row) => void reopen(row)}
         />
+
+        {/* Before the questions below, so a type change asked from the sheet is drawn over it. */}
+        {sheetEntry && renderSheet(sheetEntry)}
 
         {detailsLead && (
           <LeadDetailsDialog
@@ -1617,7 +1974,7 @@ export function LeadsTable({
   }
 
   // One box whatever is in it, so the width it is measured by is the same from the first frame.
-  return <div ref={frame} className="min-w-0">{body}</div>;
+  return <div ref={frame} className="min-w-0">{filterBar}{body}</div>;
 }
 
 /**

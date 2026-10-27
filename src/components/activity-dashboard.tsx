@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useState, type ReactNode } from 'react';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
 import { ErrorBanner, TextInput } from '@/components/ui/field';
 import { NumberBadge } from '@/components/ui/number-badge';
 import { Segmented } from '@/components/ui/segmented';
-import { SkeletonTable } from '@/components/ui/skeleton';
+import { SkeletonCards, SkeletonTable } from '@/components/ui/skeleton';
+import { TermText } from '@/components/ui/term-tip';
 import { SummaryStrip } from '@/components/summary-strip';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
@@ -19,7 +20,9 @@ import { PRONOUN_FORMS, type Pronoun } from '@/lib/coaching';
 import { formatShortDay, formatWeekday } from '@/lib/format';
 import { useSession } from '@/lib/session';
 import { summaryTiles } from '@/lib/summary-tiles';
+import { activityTermMentions, type TermKey } from '@/lib/terms';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
+import { usePhone } from '@/lib/use-phone';
 
 /**
  * The Activity Dashboard's body (P10-T1): a member's days over a range, types down and time across
@@ -38,6 +41,12 @@ import { useTenantConfig } from '@/lib/tenant-config-cache';
  * **The office's today, not the browser's.** A custom range may end no later than `today` from the
  * last answer — the browser's clock would let an agent in another zone ask for a day that has not
  * happened in the office yet, which the server refuses anyway.
+ *
+ * **Below 768px, each item's total, and a tap for its days** (P18.95-T3 AC-6, ADR-0167 §6; the client's UI
+ * review, UI-012: *Total* and every day off the screen to the right). `PhoneTotals`: the table's rows in its
+ * order, each a button holding the item's name and total, opening that item's count for each of the period's
+ * columns. Asked of the window (`usePhone`) when the panel mounts, before the first answer, so a phone never draws
+ * the table first; a tablet and a desktop draw the table they drew (§12).
  */
 
 /** Whose days, when they are not the reader's: coaching's *Activity* tab's coachee. */
@@ -90,6 +99,7 @@ export function ActivityDashboardPanel({ subject }: { subject?: DashboardSubject
   /** A range the server refused — its words, shown where the range is. */
   const [refused, setRefused] = useState<string | null>(null);
   const forId = subject?.membershipId;
+  const phone = usePhone();
 
   const today = view?.today ?? null;
   const problem = range === 'CUSTOM' && custom && today ? invalid(custom.from, custom.to, today) : null;
@@ -188,14 +198,17 @@ export function ActivityDashboardPanel({ subject }: { subject?: DashboardSubject
               )}
             </div>
 
-            {!view && !error && (
+            {/* Shaped like what is coming: on a phone, its lines (P18.95-T3 AC-6). */}
+            {!view && !error && (phone ? (
+              <SkeletonCards count={3} label={`Loading ${caption.toLowerCase()}…`} />
+            ) : (
               <SkeletonTable
                 caption={caption}
                 columns={['Activity', 'Total', 'Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5']}
               />
-            )}
+            ))}
 
-            {showing && <Dashboard view={showing} subject={subject} caption={caption} />}
+            {showing && <Dashboard view={showing} subject={subject} caption={caption} phone={phone} />}
           </>
         )}
       </Segmented>
@@ -221,7 +234,7 @@ function RangeLabel({ view }: { view: ActivityDashboard }) {
 }
 
 /** A column's heading: the day, or the block and its dates (`Overall.html:5000-5050`). */
-function heading(bucket: DashboardBucket, index: number): Column {
+function heading(bucket: DashboardBucket, index: number): { label: string; detail: string } {
   const dates = bucket.from === bucket.to
     ? formatShortDay(bucket.from)
     : `${formatShortDay(bucket.from)}–${formatShortDay(bucket.to)}`;
@@ -243,7 +256,9 @@ function standingNote(standing: Exclude<DashboardStanding, 'shown'>, subject?: D
  * which is below every contrast floor for a number that is information: *nothing that day* is an
  * answer, not a blank.
  */
-function Dashboard({ view, subject, caption }: { view: ActivityDashboard; subject?: DashboardSubject; caption: string }) {
+function Dashboard({
+  view, subject, caption, phone,
+}: { view: ActivityDashboard; subject?: DashboardSubject; caption: string; phone: boolean }) {
   const { config } = useTenantConfig();
   const { me } = useSession();
   const columns: Column[] = ['Activity', 'Total', ...view.buckets.map(heading)];
@@ -261,11 +276,14 @@ function Dashboard({ view, subject, caption }: { view: ActivityDashboard; subjec
   const totals = new Map(view.sections
     .filter((s) => s.standing === 'shown')
     .map((s) => [s.code, s.total]));
+  // Which activity first names each term, the table's rows in order (P18.95-T9 AC-3). Not on a phone: its rows are buttons.
+  const termsIn = activityTermMentions(view.sections);
   const tiles = summaryTiles(
     config?.activity ?? [],
     subject?.rungCode ?? me?.membership?.orgLevelCode ?? '',
     (category) => totals.get(category.code) ?? 0,
-    { label: 'Total touches', value: view.total },
+    // What a touch is, once, on the strip's total (P18.95-T9 AC-3; UI-028).
+    { label: 'Total touches', value: view.total, term: 'TOUCHES' },
   );
 
   return (
@@ -284,31 +302,39 @@ function Dashboard({ view, subject, caption }: { view: ActivityDashboard; subjec
         </p>
       )}
 
-      <DataTable
-        caption={caption}
-        columns={columns}
-        density="compact"
-        widths={['18.75rem', '4rem', ...view.buckets.map(() => '4.75rem')]}
-        tableClassName="min-w-[40rem] [&_td]:py-2 [&_th]:text-center [&_th:first-child]:text-left"
-      >
-        {/*
-          * **In 30-day mode only, as the prototype draws it** (`renderDashboard`, `:5101-5116`).
-          * It was on every range as an Improvement (I-135), which ADR-0062 §4 no longer licenses;
-          * the strip's total says the same number above the table on every range.
-          */}
-        {view.range === 'ROLLING_30D' && (
-          <Row className="bg-amber/[0.16] font-bold">
-            <Cell className="font-display">Total — all categories</Cell>
-            <Cell className="bg-amber/[0.28] text-center">{view.total}</Cell>
-            {view.counts.map((n, i) => (
-              <Cell key={i} className="text-center">{n}</Cell>
-            ))}
-          </Row>
-        )}
-        {view.sections.map((section) => (
-          <SectionRows key={section.code || section.label} section={section} count={count} subject={subject} />
-        ))}
-      </DataTable>
+      {phone ? <PhoneTotals view={view} subject={subject} caption={caption} /> : (
+        <DataTable
+          caption={caption}
+          columns={columns}
+          density="compact"
+          widths={['18.75rem', '4rem', ...view.buckets.map(() => '4.75rem')]}
+          tableClassName="min-w-[40rem] [&_td]:py-2 [&_th]:text-center [&_th:first-child]:text-left"
+        >
+          {/*
+            * **In 30-day mode only, as the prototype draws it** (`renderDashboard`, `:5101-5116`).
+            * It was on every range as an Improvement (I-135), which ADR-0062 §4 no longer licenses;
+            * the strip's total says the same number above the table on every range.
+            */}
+          {view.range === 'ROLLING_30D' && (
+            <Row className="bg-amber/[0.16] font-bold">
+              <Cell className="font-display">Total — all categories</Cell>
+              <Cell className="bg-amber/[0.28] text-center">{view.total}</Cell>
+              {view.counts.map((n, i) => (
+                <Cell key={i} className="text-center">{n}</Cell>
+              ))}
+            </Row>
+          )}
+          {view.sections.map((section) => (
+            <SectionRows
+              key={section.code || section.label}
+              section={section}
+              count={count}
+              subject={subject}
+              terms={termsIn.get(section.code)}
+            />
+          ))}
+        </DataTable>
+      )}
     </>
   );
 }
@@ -317,10 +343,13 @@ function SectionRows({
   section,
   count,
   subject,
+  terms,
 }: {
   section: ActivityDashboard['sections'][number];
   count: (n: number, key: string) => ReactNode;
   subject?: DashboardSubject;
+  /** Which of this section's words first name a term on the screen (`activityTermMentions`, P18.95-T9 AC-3). */
+  terms?: Map<string, TermKey[]>;
 }) {
   return (
     <>
@@ -342,9 +371,11 @@ function SectionRows({
             <span className="flex items-start gap-2">
               {type.displayOrder > 0 && <NumberBadge n={type.displayOrder} className="mt-0.5" />}
               <span className="min-w-0">
-                <span className="block">{type.label}</span>
+                <span className="block"><TermText text={type.label} terms={terms?.get(`${type.code}:label`) ?? []} /></span>
                 {type.description && (
-                  <span className="mt-0.5 block text-xs italic text-muted">{type.description}</span>
+                  <span className="mt-0.5 block text-xs italic text-muted">
+                    <TermText text={type.description} terms={terms?.get(`${type.code}:description`) ?? []} />
+                  </span>
                 )}
                 {type.standing !== 'shown' && section.standing === 'shown' && (
                   <ConfigBadge tone="navy" className="mt-1">{standingNote(type.standing, subject)}</ConfigBadge>
@@ -357,5 +388,144 @@ function SectionRows({
         </Row>
       ))}
     </>
+  );
+}
+
+/*
+ * ── On a phone: totals, and a tap for the days (P18.95-T3 AC-6) ─────────────────────────────────
+ */
+
+/** What one line of the phone's list holds: a row of the table. */
+interface PhoneItem {
+  kind: 'all' | 'section' | 'type';
+  label: string;
+  /** The type's display number (`NumberBadge`), 0 for none. */
+  order: number;
+  description: string | null;
+  /** Why it is not one of the sections shown today (`standingNote`), or null. */
+  note: string | null;
+  total: number;
+  counts: readonly number[];
+}
+
+/**
+ * **The table on a phone** (P18.95-T3 AC-6): *Activity* and *Total*, the table's two first columns, a line per row
+ * in the table's order — *Total — all categories* first in 30-day mode, then each section and its items — and **a
+ * tap on a line shows its count for each column of the period** (a day, or under a longer range a week and the
+ * days remaining), each column's name above its count. Each line is a button (`aria-expanded`), so a keyboard opens
+ * it as a tap does. The figures are the same answer's, the zero muted as in the table.
+ */
+function PhoneTotals({ view, subject, caption }: { view: ActivityDashboard; subject?: DashboardSubject; caption: string }) {
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (key: string) => setOpen((was) => {
+    const next = new Set(was);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
+  const columns = view.buckets.map((bucket, i) => ({ kind: bucket.kind, ...heading(bucket, i) }));
+  const line = (key: string, item: PhoneItem) => (
+    <PhoneLine key={key} item={item} columns={columns} open={open.has(key)} onToggle={() => toggle(key)} />
+  );
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-hairline bg-card">
+      {/* The table's first two headings, over the lines: each line's name is its own. */}
+      <p aria-hidden="true" className="flex justify-between border-b border-hairline px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
+        <span>Activity</span>
+        <span className="pr-6">Total</span>
+      </p>
+      <ul role="list" aria-label={caption}>
+        {view.range === 'ROLLING_30D' && line('all', {
+          kind: 'all', label: 'Total — all categories', order: 0, description: null, note: null, total: view.total, counts: view.counts,
+        })}
+        {view.sections.map((section) => {
+          const sectionKey = section.code || section.label;
+          return (
+            <Fragment key={sectionKey}>
+              {line(`section:${sectionKey}`, {
+                kind: 'section',
+                label: section.label,
+                order: 0,
+                description: null,
+                note: section.standing !== 'shown' ? standingNote(section.standing, subject) : null,
+                total: section.total,
+                counts: section.counts,
+              })}
+              {section.types.map((type) => line(`type:${sectionKey}:${type.code}`, {
+                kind: 'type',
+                label: type.label,
+                order: type.displayOrder,
+                description: type.description,
+                note: type.standing !== 'shown' && section.standing === 'shown' ? standingNote(type.standing, subject) : null,
+                total: type.total,
+                counts: type.counts,
+              }))}
+            </Fragment>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** One line: its name and total as a button, and under it, once opened, the count for each column. */
+function PhoneLine({
+  item, columns, open, onToggle,
+}: {
+  item: PhoneItem;
+  columns: readonly { kind: DashboardBucket['kind']; label: string; detail: string }[];
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const panelId = useId();
+  return (
+    <li
+      className={cn(
+        'border-b border-hairline last:border-b-0',
+        item.kind === 'all' && 'bg-amber/[0.16]',
+        item.kind === 'section' && 'bg-navy/5',
+      )}
+    >
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        onClick={onToggle}
+        className="flex min-h-11 w-full items-start gap-2 px-4 py-2.5 text-left text-base text-navy"
+      >
+        {item.order > 0 && <NumberBadge n={item.order} className="mt-0.5" />}
+        <span className="min-w-0 flex-1">
+          <span className={cn('block', item.kind !== 'type' && 'font-display font-bold')}>{item.label}</span>
+          {item.description && <span className="mt-0.5 block text-xs italic text-muted">{item.description}</span>}
+          {item.note && <ConfigBadge tone="navy" className="mt-1">{item.note}</ConfigBadge>}
+        </span>
+        <span className="shrink-0 font-bold">
+          <span className="sr-only">, total </span>
+          {item.total}
+        </span>
+        <span aria-hidden="true" className={cn('w-4 shrink-0 text-center leading-normal text-muted transition-transform', open && 'rotate-180')}>⌄</span>
+      </button>
+      {open && (
+        <dl id={panelId} className="grid grid-cols-4 gap-x-2 gap-y-2.5 px-4 pb-3 pt-0.5">
+          {columns.map((column, i) => {
+            const n = item.counts[i] ?? 0;
+            return (
+              <div key={i} className="min-w-0">
+                <dt className="text-xs text-muted">
+                  {column.kind === 'day' ? `${column.label} ${column.detail}` : (
+                    <>
+                      <span className="block font-semibold">{column.label}</span>
+                      <span className="block">{column.detail}</span>
+                    </>
+                  )}
+                </dt>
+                <dd className={cn('text-base', n === 0 ? 'text-muted' : 'font-semibold text-navy')}>{n}</dd>
+              </div>
+            );
+          })}
+        </dl>
+      )}
+    </li>
   );
 }

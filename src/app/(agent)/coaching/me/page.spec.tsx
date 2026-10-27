@@ -104,7 +104,7 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
     show();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Coaching Session$/);
     expect(await screen.findByRole('heading', { level: 2, name: 'Jordan Reyes' })).toBeInTheDocument();
-    expect(screen.getByText('Agency Builder · Your own coaching')).toBeInTheDocument();
+    expect(screen.getByText('AB · Your own coaching')).toBeInTheDocument();
     expect(within(screen.getByRole('main')).getByText('JR')).toHaveAttribute('aria-hidden', 'true');
   });
 

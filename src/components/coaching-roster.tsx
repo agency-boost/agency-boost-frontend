@@ -18,6 +18,12 @@ import {
  * what `DataTable` exists for — a real `<th scope>` on every heading and a caption a screen reader
  * hears — and adds the two groupings as `<tbody>` row groups, so the visual nesting is a structure a
  * screen reader can follow too: each divider and each unit head is a `rowgroup` header.
+ *
+ * **Below 768px, a card per person instead** (P18.95-T3 AC-3, ADR-0167 §6; the client's UI review, UI-011:
+ * *Coaching →* and *Status* off the screen to the right, *No 1:1 yet* on three lines): `RosterCards`, the same
+ * groups in the same order, each card the name, the status, *Last 1:1* and who held it, and *Coaching →* across the
+ * card. Asked of the window (`usePhone`, by the page, before the roster answers), so a tablet and a desktop draw the
+ * table they drew (§12).
  */
 
 /** The prototype's five headings (`:3963`); the last is empty on screen, and named for a screen reader. */
@@ -169,11 +175,18 @@ function PersonRow({
  * the server sends it (`:10648-10657`). A group with nobody in it is left out rather than drawn as a
  * heading over nothing; a roster with nobody at all is the page's empty state, not this table.
  */
-export function CoachingRoster({ roster }: { roster: Roster }) {
+export function CoachingRoster({ roster, phone = false }: {
+  roster: Roster;
+  /** The window is narrower than 768px: a card per person (P18.95-T3 AC-3). */
+  phone?: boolean;
+}) {
   // The junior rung: a member on any other rung heads a unit of their own, nested or not.
   const ladder = useLadder();
   const agentRung = [...ladder].sort((a, b) => a.displayOrder - b.displayOrder)[0]?.code;
   const { directAgents, units } = roster;
+  const badgedMember = (member: RosterRow) => agentRung !== undefined && member.rung.code.toUpperCase() !== agentRung.toUpperCase();
+
+  if (phone) return <RosterCards roster={roster} badgedMember={badgedMember} />;
 
   return (
     // `.list-table-card` (`:1437`), scrolling inside itself on a phone rather than widening the page.
@@ -217,12 +230,121 @@ export function CoachingRoster({ roster }: { roster: Roster }) {
                 key={member.membershipId}
                 row={member}
                 nested
-                badged={agentRung !== undefined && member.rung.code.toUpperCase() !== agentRung.toUpperCase()}
+                badged={badgedMember(member)}
               />
             ))}
           </tbody>
         ))}
       </table>
     </div>
+  );
+}
+
+/*
+ * ── On a phone: a card per person (P18.95-T3 AC-3) ──────────────────────────────────────────────
+ */
+
+/** One step of nesting on a phone: half the table's (`INDENT`), so the card keeps the screen. */
+const PHONE_INDENT = 12;
+
+/** The table's headings in small capitals, over a value on a card: label above value (ADR-0167 §6). */
+const CARD_LABEL = 'text-xs font-semibold uppercase tracking-wide text-muted';
+
+/**
+ * **The roster on a phone** (P18.95-T3 AC-3): *Your direct agents · n*, then *AAB units* and each unit — its head,
+ * then their people a step in — as the table groups them. Each group's band is a heading, each group a list. The
+ * table's caption is the cards' heading, there for a screen reader as the caption is.
+ */
+function RosterCards({ roster, badgedMember }: { roster: Roster; badgedMember: (member: RosterRow) => boolean }) {
+  const { directAgents, units } = roster;
+  return (
+    <div className="overflow-hidden rounded-lg border border-hairline bg-card">
+      <h2 className="sr-only">{ROSTER_CAPTION}</h2>
+      {directAgents.length > 0 && (
+        <>
+          <GroupBand label="Your direct agents" count={directAgents.length} />
+          <ul role="list" aria-label="Your direct agents">
+            {directAgents.map((row) => <PersonCard key={row.membershipId} row={row} />)}
+          </ul>
+        </>
+      )}
+      {units.length > 0 && <GroupBand label="AAB units" />}
+      {units.map((unit) => (
+        <ul key={unit.head.membershipId} role="list" aria-label={`${unit.head.name}’s unit`}>
+          <PersonCard row={unit.head} head />
+          {unit.members.map((member) => (
+            <PersonCard key={member.membershipId} row={member} nested badged={badgedMember(member)} />
+          ))}
+        </ul>
+      ))}
+    </div>
+  );
+}
+
+/** A group's band (`GroupDivider`'s paint), as a heading. */
+function GroupBand({ label, count }: { label: string; count?: number }) {
+  return (
+    <h3 className="border-b border-hairline bg-navy/[0.045] px-4 py-2.5 font-display text-base font-bold text-navy">
+      {label}
+      {count !== undefined && (
+        <>
+          {' '}
+          <span className="ml-1.5 font-body font-semibold text-muted">· {count}</span>
+        </>
+      )}
+    </h3>
+  );
+}
+
+/**
+ * **A person as a card** (P18.95-T3 AC-3): the name in full with its rung's badge where the row has one, the
+ * status pill, *Last 1:1* under its label on one line of its own — *No 1:1 yet* no longer three — with *by {coach}*
+ * under it where the table's *Last Coached By* has a name, and **Coaching →** across the card's width, the row's own
+ * link (`coachingSessionHref`), 44px tall. A unit's head keeps its tint and rule, a member its step in.
+ */
+function PersonCard({
+  row, head = false, nested = false, badged = head,
+}: { row: RosterRow; head?: boolean; nested?: boolean; badged?: boolean }) {
+  const last = row.lastOneOnOne;
+  const overdue = lastOneOnOneOverdue(last);
+  const steps = nested ? Math.max(1, row.depth - 1) : 0;
+  return (
+    <li
+      data-membership={row.membershipId}
+      className={cn(
+        'border-b border-hairline px-4 py-3.5',
+        head && 'bg-navy-soft/[0.045] shadow-[inset_3px_0_0_var(--color-navy-soft)]',
+        nested && 'shadow-[inset_3px_0_0_color-mix(in_srgb,var(--color-navy-soft)_22%,transparent)]',
+      )}
+      style={steps ? { paddingLeft: 16 + steps * PHONE_INDENT } : undefined}
+    >
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="min-w-0 break-words text-md font-semibold text-navy">{row.name}</span>
+        {badged && <RoleBadge role={row.rung.code} />}
+      </p>
+      <StatusPill
+        status={TONE[row.status]}
+        label={ROSTER_STATUS_LABEL[row.status]}
+        className="mt-2 w-[126px] justify-center px-2.5 py-1 text-xs font-semibold normal-case tracking-normal"
+      />
+      <dl className="mt-2.5">
+        <dt className={CARD_LABEL}>Last 1:1</dt>
+        <dd className="mt-1">
+          <span className={cn('text-sm font-semibold', overdue ? 'text-alert' : 'text-success')}>
+            {/* *Overdue* in words, not by colour alone (P18.8-T15 AC-7). */}
+            {lastOneOnOneLine(last)}
+          </span>
+          {last?.coach && <span className="mt-0.5 block text-xs text-muted">by {last.coach.name}</span>}
+        </dd>
+      </dl>
+      <ButtonLink
+        href={coachingSessionHref(row.membershipId)}
+        className="mt-3 h-auto min-h-11 w-full justify-center px-3.5 py-2 text-base"
+      >
+        <span>
+          Coaching <span aria-hidden="true">→</span>
+        </span>
+      </ButtonLink>
+    </li>
   );
 }

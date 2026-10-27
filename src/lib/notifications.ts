@@ -102,3 +102,32 @@ export function announceInboxChanged(change: InboxChange = {}): void {
 export function inboxChangeOf(event: Event): InboxChange {
   return (event as CustomEvent<InboxChange | null>).detail ?? {};
 }
+
+/** A run of one notice, newest first: a single item, or its repeats (`groupRepeats`). */
+export interface NoticeRun {
+  /** The newest item's id: stable while the run is on the page. */
+  key: string;
+  items: InboxItem[];
+}
+
+/**
+ * **Repeats of one notice, in a row, as one line** (P18.95-T7 AC-4; the client's UI review of 2026-10-26, UI-030 —
+ * *Wilson updated your goal · 7×*). Items next to each other on the page that say the same thing about the same
+ * thing — one template, the same words and the same address — are one run; any other item between them starts a new
+ * one. The server composes the words from who acted and on what (ADR-0010), so identical words are the same actor
+ * and the same subject, and two notices that read alike are not told apart by anything the reader could see.
+ *
+ * Within a page, as the inbox is paged: a run that crosses into the next page is counted on each.
+ */
+export function groupRepeats(items: readonly InboxItem[]): NoticeRun[] {
+  const runs: NoticeRun[] = [];
+  for (const item of items) {
+    const last = runs[runs.length - 1];
+    if (last && sameNotice(last.items[0], item)) last.items.push(item);
+    else runs.push({ key: item.notificationId, items: [item] });
+  }
+  return runs;
+}
+
+const sameNotice = (a: InboxItem, b: InboxItem) =>
+  a.templateId === b.templateId && a.title === b.title && a.detail === b.detail && a.href === b.href;

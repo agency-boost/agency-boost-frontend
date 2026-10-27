@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -128,15 +128,9 @@ describe('SidebarUserMenu', () => {
     expect(screen.getByRole('button', { name: 'Sign out' })).toHaveFocus();
   });
 
-  describe('with the shell’s nav, on a phone (ADR-0085, P11-T6 AC-11)', () => {
-    const NAV = (
-      <nav aria-label="Main">
-        <a href="/leads">Leads management</a>
-      </nav>
-    );
-
+  describe('in the phone’s bar (ADR-0085, P11-T6 AC-11; P18.95-T2 AC-4)', () => {
     it('P11-T6 AC-11 opens downward, the caret pointing the way it opens', async () => {
-      setup({ nav: NAV });
+      setup({ phone: true });
       const trigger = screen.getByRole('button', { name: /Platform Operator/ });
       expect(trigger).toHaveTextContent('▾');
       await userEvent.click(trigger);
@@ -147,12 +141,36 @@ describe('SidebarUserMenu', () => {
       expect(trigger.parentElement!.className).not.toContain('relative');
     });
 
-    it('P11-T6 AC-11 puts the nav first, then the account’s two, and focus on the first link', async () => {
-      setup({ nav: NAV });
+    it('P18.95-T2 AC-4 holds the account’s items alone — no nav — and takes the focus to the first', async () => {
+      setup({ phone: true });
       await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
-      const links = screen.getAllByRole('link').map((a) => a.textContent);
-      expect(links).toEqual(['Leads management', 'Your account']);
-      expect(screen.getByRole('link', { name: 'Leads management' })).toHaveFocus();
+      const panel = document.getElementById('sidebar-user-actions')!;
+      expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual(['Your account']);
+      expect(within(panel).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+      // Nothing above the email to rule off any more.
+      expect(within(panel).queryByRole('separator')).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Your account' })).toHaveFocus();
+    });
+
+    it('P18.95-T2 AC-4 holds the focus inside, round its two items', async () => {
+      setup({ phone: true });
+      await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
+      await userEvent.tab();
+      expect(screen.getByRole('button', { name: 'Sign out' })).toHaveFocus();
+      await userEvent.tab();
+      expect(screen.getByRole('link', { name: 'Your account' })).toHaveFocus();
+      await userEvent.tab({ shift: true });
+      expect(screen.getByRole('button', { name: 'Sign out' })).toHaveFocus();
+    });
+
+    it('P18.95-T2 AC-2 names a panel of its own when the shell asks, so two chips never share an id', async () => {
+      setup({ panelId: 'phone-menu-account' });
+      const trigger = screen.getByRole('button', { name: /Platform Operator/ });
+      expect(trigger).toHaveAttribute('aria-controls', 'phone-menu-account');
+      await userEvent.click(trigger);
+      expect(document.getElementById('phone-menu-account')).toContainElement(screen.getByRole('link', { name: 'Your account' }));
+      expect(document.getElementById('sidebar-user-actions')).toBeNull();
     });
 
     it('P11-T6 AC-11 keeps a desktop chip as it was: upward, caret up, focus on the chip', async () => {
@@ -206,18 +224,14 @@ describe('SidebarUserMenu', () => {
       }
     });
 
-    it('P13.2-T5 AC-3 on a phone sits after the nav groups and before Your account', async () => {
-      setup({
-        viewSwitch: { href: '/kpm/overview', label: 'Open Owner view' },
-        nav: <nav aria-label="Main"><a href="/leads">Leads management</a></nav>,
-      });
+    it('P13.2-T5 AC-3, P18.95-T2 AC-4 on a phone comes first, before Your account, and takes the focus', async () => {
+      setup({ viewSwitch: { href: '/kpm/overview', label: 'Open Owner view' }, phone: true });
       await userEvent.click(screen.getByRole('button', { name: /Platform Operator/ }));
-      expect(screen.getAllByRole('link').map((a) => a.textContent))
-        .toEqual(['Leads management', 'Open Owner view', 'Your account']);
-      // Focus still starts on the nav's first link, and Tab from it reaches the switch next.
-      expect(screen.getByRole('link', { name: 'Leads management' })).toHaveFocus();
-      await userEvent.tab();
+      expect(screen.getAllByRole('link').map((a) => a.textContent)).toEqual(['Open Owner view', 'Your account']);
+      // The nav is the drawer's now (P18.95-T2): the switch is the panel's first control.
       expect(screen.getByRole('link', { name: 'Open Owner view' })).toHaveFocus();
+      await userEvent.tab();
+      expect(screen.getByRole('link', { name: 'Your account' })).toHaveFocus();
     });
 
     it('P13.2-T5 AC-1 has no axe violations with the switch open', async () => {

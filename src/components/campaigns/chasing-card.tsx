@@ -19,8 +19,9 @@ import { chaseToast } from './campaign-list';
  * coach's chips and the member's own rows cannot disagree (exit test 3). It waits and fails on its own,
  * the rest of the Summary drawn already.
  *
- * - **The reader's own** (`:6221-6253`): a row per campaign — its emoji, its title and *"{kindLabel} ·
- *   {duration}"* — and *View →* opening the campaign's dialog **in place**, as the prototype does; a chase
+ * - **The reader's own** (`:6221-6253`): a row per campaign — its emoji, its title and the months it runs, *Runs
+ *   Jan – Des* (P18.95-T7 AC-1, the client's grey text; the prototype's *"{kindLabel} · {duration}"*) — and *View →*
+ *   opening the campaign's dialog **in place**, as the prototype does; a chase
  *   made there reads the card again. None: the prototype's sentence (`:6229`).
  * - **A coachee's** (`:4121-4130`): 🚀 chips sorted by title, no link (the prototype's are not); none: the Unit
  *   Dashboard detail's words (`:7283`), a Fill — the prototype's coachee card has no empty state.

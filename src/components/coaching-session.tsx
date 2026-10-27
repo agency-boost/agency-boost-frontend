@@ -11,7 +11,7 @@ import { useSessionHistoryPrefetch } from '@/components/coaching-person';
 import { LeadsTable } from '@/components/leads-table';
 import { SummaryCard } from '@/components/personal-summary';
 import { Button, ErrorBanner, TextInput } from '@/components/ui/field';
-import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
+import { REMOVED_ON_PHONE, TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { InlineSaveField, InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Toast, useToast } from '@/components/ui/toast';
@@ -515,7 +515,7 @@ function SessionHeader({ coachee, history, session }: { coachee: Coachee; histor
               finalized ? 'bg-success/10 text-success' : 'bg-base text-muted',
             )}
           >
-            {finalized ? 'Finalized' : 'Draft'}
+            {sessionTag(session)}
           </span>
         </p>
         <button
@@ -554,6 +554,16 @@ function SessionHeader({ coachee, history, session }: { coachee: Coachee; histor
   );
 }
 
+/**
+ * **The session's tag**: *Not started* before *Start coaching session* has opened one (P18.95-T7 AC-2; the client's
+ * UI review, UI-021), *Draft* while it is open, *Finalized* once it is. The prototype's tag reads *Draft* from the
+ * start (`Overall.html:4171`), before there is anything to be a draft of.
+ */
+export function sessionTag(session: Pick<CoachingSession, 'status'> | null): 'Not started' | 'Draft' | 'Finalized' {
+  if (session === null) return 'Not started';
+  return session.status === 'finalized' ? 'Finalized' : 'Draft';
+}
+
 function StartCard({ starting, error, onStart }: { starting: boolean; error: ApiError | null; onStart: () => void }) {
   return (
     <div className="rounded-lg border border-hairline bg-card px-[22px] py-[18px] text-center">
@@ -561,7 +571,8 @@ function StartCard({ starting, error, onStart }: { starting: boolean; error: Api
         <Button onClick={onStart} disabled={starting} className="h-auto px-[22px] py-[11px]">
           <span aria-hidden="true">▶&nbsp;</span>Start coaching session
         </Button>
-        <p className="mt-2.5 text-sm text-muted">
+        {/* The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 24): from 768px it reads as before. */}
+        <p className={cn('mt-2.5 text-sm text-muted', REMOVED_ON_PHONE)}>
           {"Opens last week's items, goals, leads, and everything else for today's 1-on-1."}
         </p>
       </div>
@@ -782,7 +793,7 @@ function GoalCard({
       title="Goal"
       className="min-w-0"
       aside={editable && !noGoal && summary && !editing
-        ? <span className="text-xs text-muted">Click this year’s target to edit</span>
+        ? <span className="text-xs text-muted">Tap this year’s target to edit</span>
         : undefined}
     >
       {error && <ErrorBanner {...error} />}
@@ -966,7 +977,7 @@ function TipsCard({ draft, locked }: { draft: SessionDraft; locked: boolean }) {
     >
       {tips.length === 0 ? (
         <p className={EMPTY_LINE}>
-          {locked ? 'No tips were added this session.' : 'No tips added yet — click + above to add one.'}
+          {locked ? 'No tips were added this session.' : 'No tips added yet — tap + above to add one.'}
         </p>
       ) : (
         <ol>
@@ -1063,7 +1074,7 @@ function NextActionsCard({
       <h3 className={label}>Other action items</h3>
       {actions.length === 0 ? (
         <p className={EMPTY_LINE}>
-          {locked ? 'No other action items were added this session.' : 'No other action items yet — click + above to add one.'}
+          {locked ? 'No other action items were added this session.' : 'No other action items yet — tap + above to add one.'}
         </p>
       ) : (
         <ol>

@@ -580,7 +580,8 @@ export default function ActivityTypesPage() {
                       {/*
                         * **The summary tile: one field, in the edit that already exists** (ADR-0064,
                         * ADR-0062 §2). A name, offering the tiles the office already has; sections
-                        * with the same one share a tile above Log Activity and the Dashboard.
+                        * with the same one share a tile above the Activity Dashboard (Log Activity draws
+                        * a tile per section since P18.95-T5 AC-2).
                         */}
                       <Field
                         label="Summary tile"

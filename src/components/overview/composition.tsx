@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
-import { useRoleAvatarClass } from '@/components/ui/role-badge';
+import { shortOfRung, useRoleAvatarClass } from '@/components/ui/role-badge';
+import { TermTip } from '@/components/ui/term-tip';
 import { cn } from '@/lib/cn';
 import { newThisMonth, PROTOTYPE_COPY, type OverviewComposition, type OverviewRungCount } from '@/lib/kpm-overview';
 
@@ -38,7 +39,9 @@ function RungTile({ rung }: { rung: OverviewRungCount }) {
       label={(
         <>
           <span aria-hidden="true" className={cn('mr-1.5 inline-block h-2 w-2 rounded-full align-middle', dot)} />
-          {rung.label}
+          {/* The badge's name for the rung (P18.95-T9 AC-1): *AB*, *AAB*, *Agent*; *AAB*'s ⓘ, its first appearance (AC-3). */}
+          {shortOfRung(rung)}
+          {shortOfRung(rung) === 'AAB' && <> <TermTip term="AAB" /></>}
         </>
       )}
       value={rung.count}

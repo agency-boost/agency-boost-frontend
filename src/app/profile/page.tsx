@@ -6,6 +6,7 @@ import { SessionList } from '@/components/session-list';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { PasswordInput } from '@/components/ui/password-input';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
+import { heldBecause } from '@/lib/disabled-reason';
 import { GENDER_LABEL, WORK_STATUS_LABEL, type Gender, type WorkStatus } from '@/lib/personal';
 import { useSession, type Me } from '@/lib/session';
 import { useSignOut } from '@/lib/use-sign-out';
@@ -172,6 +173,8 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
           label="Pronoun"
           htmlFor="pronoun"
           hint={lockedHint ?? 'Yours to set. It appears in the commitment sentence your leader reads back to you in coaching.'}
+          // The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 27); a support session's reason still shows.
+          hintOnPhone={lockedHint !== undefined}
         >
           <Select
             id="pronoun"
@@ -265,6 +268,24 @@ function PasswordForm() {
   // Only once they have started the second box — an empty field has not disagreed yet.
   const mismatch = confirmNewPassword.length > 0 && confirmNewPassword !== newPassword;
 
+  /*
+   * **What *Change password* waits for, said under it** (P18.95-T7 AC-3; UI-030): the boxes still empty, by their
+   * labels, then a new password under ten characters, then the two that disagree — which its field says as well.
+   */
+  const tooShort = newPassword.length > 0 && newPassword.length < 10;
+  const missing = [
+    [!currentPassword, 'Current password'],
+    [!newPassword, 'New password'],
+    [!confirmNewPassword, 'Confirm new password'],
+  ].filter(([empty]) => empty).map(([, label]) => label as string);
+  const held = !currentPassword || newPassword.length < 10 || mismatch || !confirmNewPassword;
+  const heldWhy = held && !busy
+    ? heldBecause({
+      missing,
+      fix: tooShort ? 'The new password needs at least 10 characters.' : mismatch ? 'Fix the passwords above.' : null,
+    })
+    : null;
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -337,15 +358,12 @@ function PasswordForm() {
           />
         </Field>
 
-        <Button
-          type="submit"
-          disabled={
-            busy || !currentPassword || newPassword.length < 10
-            || mismatch || !confirmNewPassword
-          }
-        >
-          {busy ? 'Changing…' : 'Change password'}
-        </Button>
+        <div className="flex flex-col gap-1">
+          <Button type="submit" disabled={busy || held} aria-describedby={heldWhy ? 'change-password-held' : undefined}>
+            {busy ? 'Changing…' : 'Change password'}
+          </Button>
+          {heldWhy && <p id="change-password-held" className="text-xs text-muted">{heldWhy}</p>}
+        </div>
       </form>
     </Card>
   );

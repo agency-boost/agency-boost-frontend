@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useState } from 'react';
 import { Button, ErrorBanner, TextInput } from '@/components/ui/field';
+import { shortOfRung } from '@/components/ui/role-badge';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { ADMIN_COPY, chosenCount, leftRow, readInvitees, type EventInvitee } from '@/lib/events-admin';
@@ -127,7 +128,8 @@ export function AudiencePicker({ leadersOnly, chosen, disabled, onChange }: {
                   onChange={(e) => toggle(person.membershipId, e.target.checked)}
                 />
                 <span className="min-w-0 flex-1 break-words">{person.name}</span>
-                <span className="shrink-0 text-sm text-muted">{person.rung}</span>
+                {/* The rung by its badge's name (P18.95-T9 AC-1): the server sends the ladder's label beside the code. */}
+                <span className="shrink-0 text-sm text-muted">{shortOfRung({ code: person.orgLevelCode, label: person.rung })}</span>
               </label>
             </li>
           ))}

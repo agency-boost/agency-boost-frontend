@@ -722,7 +722,7 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
   it('makes every figure a control for somebody who may correct it, and says so in the prototype’s words', async () => {
     stubFetch(routes(month([withApe()], 1)));
     renderWithSession(<DataUploadPage />, { me: CORRECTOR });
-    expect(await screen.findByText('Click any number to correct it manually — no need to re-upload for a single fix.')).toBeInTheDocument();
+    expect(await screen.findByText('Tap any number to correct it manually — no need to re-upload for a single fix.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Correct FYP year to date for Rina Wijaya, now nothing reported' })).toBeInTheDocument();
   });
 

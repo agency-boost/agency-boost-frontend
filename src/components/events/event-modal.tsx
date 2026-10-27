@@ -7,7 +7,7 @@ import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  audienceLine, cancelledToast, cancelRsvp, dayOf, goingToast, isGoing, OWN_COPY, pastBlockOf, PROTOTYPE_COPY,
+  audienceLine, cancelledToast, cancelRsvp, canJoin, dayOf, goingToast, isGoing, OWN_COPY, pastBlockOf, PROTOTYPE_COPY,
   readEvent, refusalOf, rsvpEvent, timeOf, type EventsMeta, type GuestEvent,
 } from '@/lib/events';
 import { EventLocation, EventPosterFrame, EventStatePill, EventTagLabel } from './event-card';
@@ -206,7 +206,7 @@ function EventDetail({ event, meta, titleId, busy, writeError, onJoin, onCancel,
     <>
       <EventPosterFrame event={event} past={false} className="h-[190px] text-[58px]" />
       <div className="px-5 pb-[26px] pt-[22px] sm:px-[26px]">
-        <div className="mb-2"><EventTagLabel event={event} inline /></div>
+        <div className="mb-2"><EventTagLabel event={event} /></div>
         <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">{audienceLine(event.audience, meta.companyName)}</p>
         <h2 id={titleId} className="mb-1.5 break-words text-2xl font-extrabold text-navy">{event.title}</h2>
         <div className="mb-3.5 flex flex-col gap-[3px] text-md text-muted">
@@ -230,7 +230,8 @@ function EventDetail({ event, meta, titleId, busy, writeError, onJoin, onCancel,
                 )}
               </>
             ) : (
-              meta.can.rsvp && (
+              // One rule for the modal's *Join event* and the card's *Join* (P18.95-T10 AC-1).
+              canJoin(event, meta.can) && (
                 <Button aria-disabled={busy || undefined} onClick={onJoin}>{PROTOTYPE_COPY.joinEvent}</Button>
               )
             )}

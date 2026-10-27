@@ -209,10 +209,12 @@ export const FIRST_CASE_CLOSED = 'FIRST_CASE_CLOSED';
  * real agent finishes"*.
  */
 export const PROTOTYPE_COPY = {
-  // `Overall.html:10408-10409`
-  title: '90-Day Activation',
+  // `Overall.html:10408-10409`. **Both titles are the nav items' words** since P18.95-T9 AC-2 (ADR-0167 §10, OD-205;
+  // UI-027, *menu labels = page titles*): the prototype titled them *90-Day Activation* and *Your New Hires* under
+  // nav items reading *Your 90-day activation* and *New hires* (`:2638-2647`).
+  title: 'Your 90-Day Activation',
   subtitle: 'Your first 90 days, checklist by checklist.',
-  rosterTitle: 'Your New Hires',
+  rosterTitle: 'New Hires',
   rosterSubtitle: "Track your new agents' 90-day activation progress.",
   // The hire's page (`:3280-3349`).
   progressHeading: 'Your activation progress',
@@ -247,13 +249,15 @@ export const PROTOTYPE_COPY = {
   closedFirstCase: 'Closed first case',
   none: '—',
   // The detail (`:3367-3414`, `:6793-6794`, `:6869`, `:6891`).
-  back: 'Back to Your New Hires',
+  // The roster's title, as it now reads (P18.95-T9 AC-2): the prototype's *Back to Your New Hires*.
+  back: 'Back to New Hires',
   detailSubtitle: 'You can update their 90-Day Activation status, plus your coaching note.',
   detailHeading: 'Activation progress',
   statusUpdated: 'Activation status updated.',
   noteHeading: 'Coaching note',
   noteHint: 'Visible to this agent on their own 90-Day Activation page.',
-  noteExample: "e.g. Great pace on prospecting — let's focus on booking your first JFW this week.",
+  // A placeholder holds no ⓘ, so *JFW* is spelled out in place (P18.95-T9 AC-3; UI-028): the prototype's *first JFW*.
+  noteExample: "e.g. Great pace on prospecting — let's focus on booking your first joint field work this week.",
   saveNote: 'Save note',
   noteSaved: (name: string) => `Coaching note saved — visible to ${name}.`,
   // The coaching renderer (`:6464-6489`).
@@ -312,6 +316,11 @@ export const OWN_COPY = {
   byHandName: 'Ticked by hand — this link does not complete the item on its own, so the hire or one of their leaders ticks it',
   // The overdue *Day*, after the day, for a screen reader: the red and the bold say it to everybody else.
   overdue: ', overdue',
+  /**
+   * A hire's *Day* on a phone's card (P18.95-T3 AC-4; the client's UI review, UI-012: *"Day 64 of 90"*): the
+   * table's *64 /90* in words, the day as `dayShown` prints it (*90+* past the window).
+   */
+  dayOf: (day: string, window: number) => `${PROTOTYPE_COPY.day} ${day} of ${window}`,
   // Attribution (OD-121, T4 AC-5).
   you: 'you',
   tickedBy: (who: string, when: string) => `Ticked by ${who} · ${when}`,

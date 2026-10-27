@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+import { CHIP_GRID_PHONE, CHIP_PHONE } from '@/components/ui/phone';
 import { BriefCard, ChoiceGroup } from './brief-card';
 
 const AGES = [{ value: 1, label: '< 25' }, { value: 2, label: '25–34' }, { value: 3, label: '35–49' }];
@@ -43,5 +44,19 @@ describe('BriefCard and ChoiceGroup', () => {
   it('wraps its chips, so a phone never scrolls sideways', () => {
     render(<Harness />);
     expect(within(screen.getByRole('group', { name: 'Age band' })).getAllByRole('button')[0].parentElement).toHaveClass('flex-wrap');
+  });
+
+  it('P18.95-T6 AC-1 grid/sticky classes scoped to max-md: two chips to a row below 768px, the wrapping row wider', () => {
+    render(<Harness />);
+    const chips = within(screen.getByRole('group', { name: 'Age band' })).getAllByRole('button');
+    const box = chips[0].parentElement!;
+    const wider = (el: Element) => [...el.classList].filter((c) => !c.startsWith('max-md:'));
+    expect(box).toHaveClass(...CHIP_GRID_PHONE.split(' '));
+    expect(wider(box)).toEqual(['flex', 'flex-wrap', 'gap-2']);
+    for (const chip of chips) {
+      expect(chip).toHaveClass(...CHIP_PHONE.split(' '));
+      // At 768px and wider the chip is drawn exactly as before.
+      expect(wider(chip)).not.toContain('w-full');
+    }
   });
 });

@@ -70,8 +70,9 @@ export default function KpmRequestsPage() {
   const decided = rows?.filter((r) => r.status !== 'pending') ?? [];
 
   return (
+    // The nav item's words (P18.95-T9 AC-2; UI-027): *Pending KPM requests* (`Superadmin.html:189`).
     <Page
-      title="KPMs pending approval"
+      title="Pending KPM Requests"
       subtitle="New registrations, awaiting Superadmin sign-off"
     >
       {error && <ErrorBanner {...error} />}

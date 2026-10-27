@@ -179,6 +179,20 @@ export const BUDGET_CHOICES: readonly Choice<number>[] = [
   { value: 7, label: 'Lump-sum' },
 ];
 
+/**
+ * **The band that is not a monthly premium**: *Lump-sum*, the backend's `PRODUCT_LUMP_SUM_BUDGET_BAND`
+ * (`product-catalog.spec.ts` pins the number to that file). The brief asks it as **its own option** beside
+ * *Monthly premium budget*, not as that question's seventh chip (P18.95-T6 AC-3; UI-030, parity I-422). Its
+ * number is unchanged, so `?budget=7` and every product's bands mean what they did.
+ */
+export const LUMP_SUM_BUDGET = 7;
+
+/** *Monthly premium budget*'s chips: the six monthly bands, 1 to 6. */
+export const MONTHLY_BUDGET_CHOICES: readonly Choice<number>[] = BUDGET_CHOICES.filter((c) => c.value !== LUMP_SUM_BUDGET);
+
+/** The option of its own after them: *Lump-sum*. */
+export const LUMP_SUM_CHOICES: readonly Choice<number>[] = BUDGET_CHOICES.filter((c) => c.value === LUMP_SUM_BUDGET);
+
 /** The catalog's category tabs after *All products*, in order (`Overall.html:10116-10122`). */
 export const CATEGORY_TABS: readonly Choice<string>[] = [
   { value: 'life', label: 'Life' },
@@ -274,6 +288,18 @@ export function filtersQuery(filters: CatalogFilters): string {
 }
 
 export const catalogHref = (filters: CatalogFilters) => `/product-catalog${filtersQuery(filters)}`;
+
+/**
+ * **The catalog's search, by product name** (P18.95-T6 AC-4; UI-023: 31 products, no search). The name the card
+ * shows — the office's display name, else the company's — contains what was typed, ignoring case, accents and
+ * the spaces around it; nothing typed matches everything. Over the shelf already loaded: `GET /product-catalog`
+ * answers the whole shelf in one read, so a search asks the server nothing.
+ */
+export function matchesSearch(name: string, term: string): boolean {
+  const fold = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('id-ID');
+  const wanted = fold(term.trim());
+  return wanted === '' || fold(name).includes(wanted);
+}
 export const drawerHref = (code: string, filters: CatalogFilters) =>
   `/product-catalog/${encodeURIComponent(code)}${filtersQuery(filters)}`;
 
@@ -302,12 +328,13 @@ export const hasScript = (script: CatalogScript) => script.fullScript.trim() !==
 
 /**
  * The two screens' words, verbatim (`Overall.html`; D-copy). *"Not uploaded by KPM yet."* keeps *KPM*, and
- * goes to the client with OD-39.
+ * goes to the client with OD-39. **Two say *Tap* where the prototype says *click*** (P18.95-T9 AC-5; ADR-0167 §10,
+ * the client's UI review UI-027): `catalogSubtitle` and `alsoMatches`.
  */
 export const PROTOTYPE_COPY = {
   catalogTitle: 'Product Catalog',
   catalogSubtitle:
-    'The full individual shelf — conventional and syariah. Click any product for benefits, positioning, and its sales script.',
+    'The full individual shelf — conventional and syariah. Tap any product for benefits, positioning, and its sales script.',
   allProducts: 'All products',
   all: 'All',
   runOff: 'In run-off',
@@ -339,11 +366,16 @@ export const PROTOTYPE_COPY = {
   youSay: 'You say:',
   nextAction: 'Next action',
   planTitle: 'Sales Attack Plan',
-  planSubtitle: 'Tell us about the customer. Get the product, the pitch, and the objection response.',
   stepBrief: 'Customer brief',
   stepPlan: 'Attack plan',
   briefTitle: 'Who are we talking to?',
-  briefHint: 'Three questions. Enough to get a defensible recommendation, fast.',
+  /**
+   * **One line where there were two** (P18.95-T7 AC-1, grey text row 10; ADR-0167 §7): the page's sub-line *"Tell us
+   * about the customer. Get the product, the pitch, and the objection response."* and this hint, *"Three questions.
+   * Enough to get a defensible recommendation, fast."*, became the client's one sentence at every size — here, beside
+   * the three questions it counts, as on Recruitment's brief.
+   */
+  briefHint: 'Answer 3 questions to get your pitch.',
   primaryNeed: 'Primary need',
   ageBand: 'Age band',
   budget: 'Monthly premium budget',
@@ -363,7 +395,7 @@ export const PROTOTYPE_COPY = {
   planRunOff:
     'This product is in run-off and not actively issued to new applicants. No active sales script — shown for reference against existing policyholders only.',
   planNoScriptNext: 'No authored script yet for this product — confirm details manually before proposing.',
-  alsoMatches: 'Also matches this need — click to switch the plan above:',
+  alsoMatches: 'Also matches this need — tap to switch the plan above:',
   noMatch: 'No active product matches this need. Try a different need in the brief.',
 } as const;
 
@@ -392,4 +424,10 @@ export const OWN_COPY = {
   channels: 'Channel',
   steps: 'Steps',
   productTabs: 'Product details',
+  /** The second budget group's name: *Lump-sum*, asked apart from the monthly bands (P18.95-T6 AC-3; UI-030). */
+  lumpSum: 'Or pay once',
+  /** The catalog's search (P18.95-T6 AC-4; UI-023): its name, its placeholder, and what a search that finds nothing says. */
+  searchName: 'Search products by name',
+  searchPlaceholder: 'Search products…',
+  noSearchMatch: (term: string) => `No products match “${term.trim()}”.`,
 } as const;

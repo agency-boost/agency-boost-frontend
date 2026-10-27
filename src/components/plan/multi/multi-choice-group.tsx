@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { CHIP_GRID_PHONE, CHIP_PHONE } from '@/components/ui/phone';
 import { cn } from '@/lib/cn';
 import type { ChoiceOption } from '../brief-card';
 
@@ -13,7 +14,10 @@ import type { ChoiceOption } from '../brief-card';
  * leaves the others as they are.
  *
  * **The answer is in the chips' order, not the order clicked** (`:521`): `onChange` is handed the chosen
- * values as `options` lists them. The chips wrap on a phone. Props only — every word comes in.
+ * values as `options` lists them. Props only — every word comes in.
+ *
+ * **Below 768px the chips are two to a row**, as `ChoiceGroup`'s are (P18.95-T6 AC-1; UI-015); at 768px and
+ * wider they wrap as drawn.
  */
 export function MultiChoiceGroup<T extends string | number>({
   label,
@@ -38,7 +42,7 @@ export function MultiChoiceGroup<T extends string | number>({
   return (
     <div role="group" aria-labelledby={labelId}>
       <p id={labelId} className="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-muted">{label}</p>
-      <div className="flex flex-wrap gap-2">
+      <div className={cn('flex flex-wrap gap-2', CHIP_GRID_PHONE)}>
         {options.map((option) => {
           const on = chosen.has(option.value);
           return (
@@ -49,6 +53,7 @@ export function MultiChoiceGroup<T extends string | number>({
               onClick={() => toggle(option.value)}
               className={cn(
                 'rounded-md border px-[15px] py-[9px] text-base font-semibold transition-colors',
+                CHIP_PHONE,
                 on ? 'border-navy bg-navy text-white' : 'border-hairline bg-base text-navy hover:border-navy',
               )}
             >

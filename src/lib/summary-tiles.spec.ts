@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  isShownTo, OWN_TILE_REFUSED, planSummaryTile, summaryGroups, summaryTileName, summaryTiles, tileRefusal,
-  type SummaryTileCategory,
+  isShownTo, OWN_TILE_REFUSED, planSummaryTile, sectionTiles, shownSections, summaryGroups, summaryTileName,
+  summaryTiles, tileRefusal, type SummaryTileCategory,
 } from './summary-tiles';
 
 const category = (
@@ -289,5 +289,43 @@ describe('the Summary tile field (P10.1-T5 AC-5, OD-101)', () => {
       code: 'CONFIG_SUMMARY_GROUP_CODE_TAKEN',
       message: 'DEVELOPMENT is already the code of the summary tile “Development”. Give the section another code.',
     });
+  });
+});
+
+/** Log Activity's strip since 2026-10-26: one tile per section it shows (P18.95-T5 AC-2; UI-017). */
+describe('P18.95-T5 AC-2: shownSections and sectionTiles', () => {
+  it('P18.95-T5 AC-2: the seed’s log strip is its five sections and the total — the Development grouping is not read', () => {
+    const tiles = sectionTiles(shownSections(SEED, 'AGENT'), count, TOTAL);
+    expect(labels(tiles)).toEqual([
+      'Leads Generation', 'Selling', 'Recruitment', 'Personal Development', 'Team Development', 'Total touches today',
+    ]);
+    expect(values(tiles)).toEqual([1, 2, 4, 8, 16, 63]);
+    expect(tiles.at(-1)!.total).toBe(true);
+    expect(tiles.filter((t) => t.total)).toHaveLength(1);
+  });
+
+  it('P18.95-T5 AC-2: one list — the sections in display order, ties by position, active and shown to the rung only', () => {
+    const list = [
+      category('B', 'Second', 2),
+      category('A', 'First', 1),
+      category('C', 'Tie, earlier', 3),
+      category('D', 'Tie, later', 3),
+      category('OLD', 'Archived', 0, { status: 'archived' }),
+      category('LEAD', 'Leaders only', 4, { appliesToOrgLevelCodes: ['AB'] }),
+    ];
+    expect(shownSections(list, 'AGENT').map((c) => c.code)).toEqual(['A', 'B', 'C', 'D']);
+    expect(shownSections(list, 'AB').map((c) => c.code)).toEqual(['A', 'B', 'C', 'D', 'LEAD']);
+    // The tiles are that list, one each, in that order: a card and its tile cannot disagree.
+    const sections = shownSections(list, 'AB');
+    expect(labels(sectionTiles(sections, () => 0, TOTAL)).slice(0, -1)).toEqual(sections.map((c) => c.label));
+  });
+
+  it('P18.95-T5 AC-2: keys a tile by its section, so two sections of one name are still two tiles', () => {
+    const tiles = sectionTiles([category('X', 'Same', 1), category('Y', 'Same', 2)], () => 1, TOTAL);
+    expect(tiles.map((t) => t.key)).toEqual(['own:X', 'own:Y', 'total']);
+  });
+
+  it('P18.95-T5 AC-2: a count that is not a number counts as zero, as summaryTiles has it', () => {
+    expect(values(sectionTiles([category('X', 'X', 1)], () => Number.NaN, TOTAL))).toEqual([0, 63]);
   });
 });

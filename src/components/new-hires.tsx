@@ -8,7 +8,7 @@ import {
 } from '@/components/activation-parts';
 import { PageHeader } from '@/components/app-shell';
 import { Button, Card, ErrorBanner, Textarea } from '@/components/ui/field';
-import { TAP_HEIGHT } from '@/components/ui/phone';
+import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Toast, useToast } from '@/components/ui/toast';
@@ -22,6 +22,7 @@ import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client
 import { cn } from '@/lib/cn';
 import { formatOfficeDay, formatPercent, formatShortDay } from '@/lib/format';
 import { useCan, useSession } from '@/lib/session';
+import { usePhone } from '@/lib/use-phone';
 
 /*
  * ── The roster ───────────────────────────────────────────────────────────────────────────────────
@@ -34,8 +35,12 @@ import { useCan, useSession } from '@/lib/session';
  * orders; this draws what it is served.
  *
  * **Each hire's name is a link to their detail** (contradiction 10): the prototype's rows are table rows
- * with a click handler, which a keyboard cannot reach. **The table scrolls inside its card** on a phone
+ * with a click handler, which a keyboard cannot reach. **The table scrolls inside its card** on a tablet
  * (`.table-scroll`, `:6778`; AC-9), so the page never does.
+ *
+ * **Below 768px a card per hire instead** (P18.95-T3 AC-4, ADR-0167 §6; the client's UI review, UI-012: *Day* and
+ * *Active Agent* off the screen to the right): the name, the bar and its percentage, and *Day 64 of 90*. Asked of
+ * the window (`usePhone`), so a tablet and a desktop draw the table they drew (§12).
  */
 export function NewHires() {
   const [roster, setRoster] = useState<NewHiresRoster | null>(null);
@@ -57,6 +62,8 @@ export function NewHires() {
     return () => { live = false; };
   }, [attempt]);
 
+  const phone = usePhone();
+
   if (empty || (roster && roster.groups.every((g) => g.hires.length === 0))) {
     return <Card><p className="text-center text-md text-muted">{OWN_COPY.rosterEmpty}</p></Card>;
   }
@@ -71,7 +78,7 @@ export function NewHires() {
       )}
       {!roster && !error && <SkeletonCards count={2} label={OWN_COPY.loadingRoster} />}
       {roster?.groups.filter((g) => g.hires.length > 0).map((group) => (
-        <GroupCard key={group.leader?.membershipId ?? 'direct'} group={group} />
+        <GroupCard key={group.leader?.membershipId ?? 'direct'} group={group} phone={phone} />
       ))}
     </div>
   );
@@ -81,9 +88,10 @@ export function NewHires() {
 const TH = 'border-b border-hairline px-3 py-[9px] text-left text-xs font-semibold uppercase tracking-wide text-muted';
 const TD = 'border-b border-hairline px-3 py-3.5 text-md font-medium text-navy';
 
-/** One group's card (`.newhire-group-card`, `:6775-6789`): its heading, and its table. */
-function GroupCard({ group }: { group: NewHireGroup }) {
+/** One group's card (`.newhire-group-card`, `:6775-6789`): its heading, and its table — on a phone, its cards. */
+function GroupCard({ group, phone }: { group: NewHireGroup; phone: boolean }) {
   const title = groupTitle(group);
+  if (phone) return <GroupCards group={group} title={title} />;
   return (
     <section aria-label={title} className="rounded-lg border border-hairline bg-card px-6 py-[22px]">
       <h2 className="mb-3 font-display text-md font-bold text-navy">{title}</h2>
@@ -153,6 +161,49 @@ function GroupCard({ group }: { group: NewHireGroup }) {
           </tbody>
         </table>
       </div>
+    </section>
+  );
+}
+
+/**
+ * **A group on a phone** (P18.95-T3 AC-4): the same card and heading, and a card per hire in the table's order — the
+ * name (the link to their detail), the bar with its percentage, and ***Day 64 of 90***, the table's *Day* cell in
+ * words: red and bold past the window, and *, overdue* said to a screen reader, as the cell does. *Joined* and
+ * *Active Agent* are not drawn here, as the client asked (*"Name · progress bar · Day 64 of 90"*); both are on the
+ * hire's own page, a tap away.
+ */
+function GroupCards({ group, title }: { group: NewHireGroup; title: string }) {
+  return (
+    <section aria-label={title} className="rounded-lg border border-hairline bg-card px-4 py-[18px]">
+      <h2 className="mb-1 font-display text-md font-bold text-navy">{title}</h2>
+      <ul role="list" aria-label={title}>
+        {group.hires.map((row) => {
+          const width = Math.min(100, Math.max(0, row.pct));
+          return (
+            <li key={row.hire.membershipId} className="border-b border-hairline py-3 last:border-b-0">
+              <Link
+                href={newHireHref(row.hire.membershipId)}
+                className={cn('break-words text-md font-semibold text-navy hover:underline', TEXT_TAP)}
+              >
+                {row.hire.name}
+              </Link>
+              <div className="mt-1.5 flex items-center gap-[9px] text-md font-medium text-navy">
+                <div aria-hidden="true" className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-sm border border-hairline bg-base">
+                  <div className="h-full rounded-sm bg-gradient-to-r from-amber to-amber-dark" style={{ width: `${width}%` }} />
+                </div>
+                <span className="shrink-0">{formatPercent(row.pct)}</span>
+              </div>
+              <p
+                className={cn('mt-1.5 text-sm font-medium text-navy', row.overdue && 'font-bold text-alert')}
+                data-overdue={row.overdue || undefined}
+              >
+                {OWN_COPY.dayOf(dayShown(row.day, row.window), row.window)}
+                {row.overdue && <span className="sr-only">{OWN_COPY.overdue}</span>}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }
@@ -335,7 +386,7 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
   );
 }
 
-/** *Back to Your New Hires* (`:3365-3368`, `.training-back-btn` `:1811-1816`): the prototype's chevron and words, as a link. */
+/** *Back to New Hires* (`:3365-3368`; the prototype's *Your New Hires* until P18.95-T9 AC-2, `.training-back-btn` `:1811-1816`): the prototype's chevron and words, as a link. */
 function BackToRoster() {
   return (
     <Link

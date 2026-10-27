@@ -66,11 +66,13 @@ describe('the person shell (P11-T7)', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P11-T7 AC-1 heads the page with the way back, the initials, the name, and the rung and unit', async () => {
+  it('P11-T7 AC-1, P18.95-T7 AC-2 heads the page with the way back, the initials, the name as its title, and the rung and unit', async () => {
     const { calls } = show(RINA);
 
-    const heading = await screen.findByRole('heading', { level: 2, name: 'Rina Wijaya' });
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Coaching Session$/);
+    // P18.95-T7 AC-2 (UI-021): the person's name is the page's one title; *Coaching Session* is the tab and the way back.
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.queryByRole('heading', { name: 'Coaching Session' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: '← Back to Coaching Session' })).toHaveAttribute('href', '/coaching');
     // P18.95-T1 AC-10: 44px tall on a phone (UI-029), and the same line at 768px and wider.
     expect(screen.getByRole('link', { name: '← Back to Coaching Session' })).toHaveClass('inline-flex', 'items-center', 'max-md:min-h-11');
@@ -85,7 +87,7 @@ describe('the person shell (P11-T7)', () => {
     nav.pathname = '/coaching/mem-novi/summary';
     show(NOVI, 'mem-novi');
 
-    const heading = await screen.findByRole('heading', { level: 2, name: 'Novi Lestari' });
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Novi Lestari' });
     expect(heading.nextElementSibling).toHaveTextContent(/^Agent · Arief Nugroho’s unit$/);
     expect(screen.getByText('NL')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(SIX_WORDS);
@@ -150,7 +152,7 @@ describe('the person shell (P11-T7)', () => {
 
   it('P11-T7 AC-3 Agent view takes Leader Notes out of the bar, and Leader view brings it back', async () => {
     show(RINA);
-    await screen.findByRole('heading', { level: 2, name: 'Rina Wijaya' });
+    await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
     const leaderView = screen.getByRole('button', { name: 'Leader view' });
     const agentView = screen.getByRole('button', { name: 'Agent view' });
     expect(within(screen.getByRole('group', { name: 'View' })).getAllByRole('button')).toEqual([leaderView, agentView]);
@@ -209,13 +211,13 @@ describe('the person shell (P11-T7)', () => {
 
   it('P11-T7 AC-8 is one shell whoever the person is: another id, another read, the same parts', async () => {
     const first = show(RINA);
-    await screen.findByRole('heading', { level: 2, name: 'Rina Wijaya' });
+    await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
     first.unmount();
     vi.unstubAllGlobals();
 
     nav.pathname = '/coaching/mem-novi/summary';
     const { calls } = show(NOVI, 'mem-novi');
-    await screen.findByRole('heading', { level: 2, name: 'Novi Lestari' });
+    await screen.findByRole('heading', { level: 1, name: 'Novi Lestari' });
     expect(calls.some((c) => c.url.endsWith('/coaching/coachees/mem-novi'))).toBe(true);
     expect(screen.getByRole('navigation', { name: 'Coaching' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Personal Summary' })).toHaveAttribute('href', '/coaching/mem-novi/summary');
@@ -228,6 +230,9 @@ describe('the person shell (P11-T7)', () => {
     expect(heading.nextElementSibling).toHaveTextContent(
       /^They may have moved to another leader, or the address may be mistyped\. Everyone you coach is on Coaching Session\.$/,
     );
+    // P18.95-T7 AC-2: with nobody to name, the page keeps the prototype's title, and the card is a section under it.
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Coaching Session$/);
+    expect(heading.tagName).toBe('H2');
     // Inside the agent shell: its nav is there, and the way back.
     expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '← Back to Coaching Session' })).toHaveAttribute('href', '/coaching');
@@ -280,7 +285,7 @@ describe('the person shell (P11-T7)', () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
     // Hidden behind the route's skeleton and shown again, the shell read the person a second time.
     expect(calls.filter((c) => c.url.endsWith('/coaching/coachees/mem-rina'))).toHaveLength(1);
-    expect(screen.getByRole('heading', { level: 2, name: 'Rina Wijaya' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 1, name: 'Rina Wijaya' })).toBeVisible();
   });
 
   it('shows the error banner for any other failure, and no tab', async () => {
@@ -327,7 +332,7 @@ describe('the person shell (P11-T7)', () => {
 
     expect(screen.getByRole('heading', { name: 'This person isn’t someone you coach.' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Coaching' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { level: 2, name: 'Rina Wijaya' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: 'Rina Wijaya' })).not.toBeInTheDocument();
   });
 
   it('useCoacheeNotFound() refuses to be used outside the shell', () => {

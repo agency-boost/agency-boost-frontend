@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  balanceBand, balanceSideNames, formatBalanceBand, formatBalanceSplit,
+  balanceAdvice, balanceBand, balanceSideNames, formatBalanceBand, formatBalanceSplit,
 } from '@/lib/ratio-balance';
 
 /** A balance read as each side's share of the two (P13.1-T6). */
@@ -76,5 +76,38 @@ describe('the balance as two shares (P13.1-T6)', () => {
       expect(balanceSideNames({ numerator: 'Selling', denominator: 'selling' }))
         .toEqual({ first: 'Side A', second: 'Side B' });
     });
+  });
+});
+
+/** What an off-balance reading says to do (P18.95-T5 AC-6; the client's UI review, UI-030). */
+describe('P18.95-T5 AC-6: the balance says what to do', () => {
+  const SEED = { numerator: 'Selling', denominator: 'Recruitment' };
+
+  it('P18.95-T5 AC-6: names the side there is too much of, lower-cased, and the band to aim for', () => {
+    expect(balanceAdvice(67, 30, 'alert', SEED)).toBe('Too much selling — aim for 35,0%–65,0%');
+    expect(balanceAdvice(30, 30, 'alert', SEED)).toBe('Too much recruitment — aim for 35,0%–65,0%');
+  });
+
+  it('P18.95-T5 AC-6: reads the band from the ratio’s own benchmark — never a literal 35–65', () => {
+    expect(balanceAdvice(70, 20, 'alert', SEED)).toBe('Too much selling — aim for 40,0%–60,0%');
+    expect(balanceAdvice(90, 50, 'alert', SEED)).toBe('Too much selling — aim for 25,0%–75,0%');
+  });
+
+  it('P18.95-T5 AC-6: says nothing in the band, nor with nothing to read, so the screen keeps its own words', () => {
+    expect(balanceAdvice(62.2, 30, 'success', SEED)).toBeNull();
+    expect(balanceAdvice(null, 30, 'neutral', SEED)).toBeNull();
+    expect(balanceAdvice(null, 30, 'alert', SEED)).toBeNull();
+  });
+
+  it('P18.95-T5 AC-6: an office’s own sections are lower-cased too, and Side A or B is written as the track writes it', () => {
+    expect(balanceAdvice(75, 30, 'alert', { numerator: 'Leads Generation', denominator: 'Selling' }))
+      .toBe('Too much leads generation — aim for 35,0%–65,0%');
+    expect(balanceAdvice(80, 30, 'alert', { numerator: null, denominator: 'Selling' }))
+      .toBe('Too much Side A — aim for 35,0%–65,0%');
+    expect(balanceAdvice(20, 30, 'alert', { numerator: null, denominator: 'Selling' }))
+      .toBe('Too much selling — aim for 35,0%–65,0%');
+    // Both ends one section: the track says Side A and Side B, and so does the sentence.
+    expect(balanceAdvice(80, 30, 'alert', { numerator: 'Selling', denominator: 'Selling' }))
+      .toBe('Too much Side A — aim for 35,0%–65,0%');
   });
 });

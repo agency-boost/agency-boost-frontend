@@ -1,6 +1,8 @@
-import { screen, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession } from '@test/harness';
+import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { PHONE_QUERY } from '@/lib/use-phone';
 import { AgentShell } from './agent-shell';
 import { AdminShell } from './admin-shell';
 import { TenantShell } from './tenant-shell';
@@ -584,5 +586,84 @@ describe('a line between every two groups, in all three shells (parity I-144)', 
     sections.forEach((section, i) => {
       expect(section.lastElementChild?.getAttribute('role') === 'separator').toBe(i < sections.length - 1);
     });
+  });
+});
+
+/**
+ * **The phone's drawer is each shell's sidebar** (P18.95-T2 AC-2, ADR-0167 §3): below 768px ☰ opens the nav the
+ * sidebar draws wider — the field's, the office's and the console's — with the same groups in the same order,
+ * the same labels and badges, the *Core leader* group where the reader has it, and the current page marked.
+ * Compared against the sidebar itself, at a desktop's width, so neither can drift from the other.
+ */
+describe('P18.95-T2 AC-2 the phone’s drawer holds each shell’s sidebar', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    route.path = '/group-tree';
+  });
+
+  /** A width the shell can ask about, and move: `matchMedia`, which jsdom does not have. */
+  function atWidth(px: number) {
+    let width = px;
+    const listeners = new Set<() => void>();
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      media: query,
+      get matches() { return query === PHONE_QUERY && width < 768; },
+      addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+    })));
+    return (next: number) => {
+      width = next;
+      act(() => listeners.forEach((fn) => fn()));
+    };
+  }
+
+  const SUPER = makeMe({
+    user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
+  });
+  // Every group the field offers: a leader with hires, in their own activation, and tagged Core Leader.
+  const CORE_LEADER = makeMe({ ...AGENT, membership: { ...AGENT.membership!, isCoreLeader: true } });
+
+  it.each([
+    ['field', () => <AgentShell title="x">body</AgentShell>, CORE_LEADER, '/leads', 'Leads management', 'Core leader'],
+    ['office', () => <TenantShell title="x">body</TenantShell>, OWNER, '/people/members', 'All members', 'People'],
+    ['console', () => <AdminShell title="x">body</AdminShell>, SUPER, '/admin/tenants', 'All KPMs', 'Platform admin'],
+  ] as const)('the %s shell: the same groups, labels, order and current page', async (_shell, shell, me, path, current, group) => {
+    route.path = path;
+    const resize = atWidth(1280);
+    renderWithSession(shell(), { me });
+    const sidebar = screen.getByRole('navigation', { name: 'Main' });
+    const words = navLabels();
+    const markup = sidebar.innerHTML;
+    expect(words).toContain(group);
+
+    resize(375);
+    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    const drawer = screen.getByRole('dialog', { name: 'Menu' });
+    const nav = within(drawer).getByRole('navigation', { name: 'Main' });
+
+    expect(navLabels()).toEqual(words);
+    expect(nav.innerHTML).toBe(markup);
+    expect(within(nav).getByRole('link', { name: current })).toHaveAttribute('aria-current', 'page');
+    // The sidebar's foot comes with it: who is signed in.
+    expect(within(drawer).getByRole('button', { name: /Rina|Signed in|Super Admin/ })).toBeInTheDocument();
+  });
+
+  it('the console: a badge on an item rides into the drawer as it is drawn in the sidebar', async () => {
+    // Two waiting and one decided: the count is the two (ADR-0157 §3).
+    stubFetch({ '/admin/leader-limit-requests': { body: [{ status: 'pending' }, { status: 'pending' }, { status: 'approved' }] } });
+    const resize = atWidth(1280);
+    renderWithSession(<AdminShell title="x">body</AdminShell>, {
+      me: { ...SUPER, permissions: [...SUPER.permissions, 'leader_limit_request:decide'] },
+    });
+    const sidebar = screen.getByRole('navigation', { name: 'Main' });
+    const item = () => within(sidebar).getByRole('link', { name: /Leaders past the limit/ });
+    await waitFor(() => expect(item()).toHaveTextContent('Leaders past the limit2'));
+    const badge = item().textContent;
+
+    resize(375);
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    const nav = within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('navigation', { name: 'Main' });
+    expect(within(nav).getByRole('link', { name: /Leaders past the limit/ }).textContent).toBe(badge);
   });
 });

@@ -1,3 +1,4 @@
+import { shortOfRung } from '@/components/ui/role-badge';
 import { api } from './api-client';
 import { CONFIRMED } from './confirmations';
 import { formatMonthName } from './format';
@@ -375,7 +376,7 @@ export const filterMeetings = (meetings: MeetingCard[], filter: MeetingFilter): 
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.number - a.number));
 
 /** A rung as the forum draws it: the code when it reads as one (*AB*, *AAB*), the label otherwise (*Agent*). */
-export const rungShort = (rung: ForumPerson['rung']) => (rung.code.length <= 4 ? rung.code : rung.label);
+export const rungShort = (rung: ForumPerson['rung']) => shortOfRung(rung);
 
 /** The card's date block: the month's three letters over the day (`:2597`) — *Okt* over *13*, `id-ID` (ADR-0167 §1). */
 export function dateBlock(date: string): { month: string; day: string } {

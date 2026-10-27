@@ -128,6 +128,11 @@ export interface ChasedCampaign {
   /** Never `ended`: an ended campaign leaves every chasing list (D-lists). */
   phase: 'upcoming' | 'running';
   duration: string;
+  /**
+   * The months it runs, composed by the server in the office's calendar: *Runs Jan – Des*, *Runs Agu – Okt 2026*,
+   * *Runs over the last 12 months* — the Summary row's line (P18.95-T7 AC-1, grey text row 23).
+   */
+  runs: string;
   poster: CampaignPoster;
 }
 
@@ -166,8 +171,13 @@ export const readChasing = (forMembershipId?: string) =>
 
 /** The strings `Overall.html` draws, verbatim. Those saying *KPM* go to the client with OD-39. */
 export const PROTOTYPE_COPY = {
-  title: 'Campaigns',
-  subtitle: "Company and KPM campaigns — mark the ones you're chasing, click into any card for full requirements.",
+  /**
+   * The prototype's *Campaigns*, **the nav item's words since P18.95-T9 AC-2** (ADR-0167 §10, OD-205; UI-027, *menu
+   * labels = page titles*): the nav reads *Campaign list* (`:2669`).
+   */
+  title: 'Campaign List',
+  // *Tap*, not *click* (P18.95-T9 AC-5; UI-027): the prototype's *click into any card*.
+  subtitle: "Company and KPM campaigns — mark the ones you're chasing, tap any card for full requirements.",
   seasonal: 'Seasonal',
   structural: 'Structural',
   all: 'All',
@@ -186,7 +196,6 @@ export const PROTOTYPE_COPY = {
   sourceTag: 'KPM',
   promotionPath: 'Promotion path',
   ongoingIncentive: 'Ongoing incentive',
-  requirements: 'Requirements:',
   requirementsTitle: 'Requirements',
   prize: 'Prize',
   chase: 'Chase',
@@ -234,9 +243,15 @@ export const OWN_COPY = {
   nothingLogged: 'Nothing logged yet',
   notMeasured: 'Not measured yet',
   met: 'Met',
+  /**
+   * The card's requirements, ***Needs:*** — the client's word (P18.95-T10 AC-3; UI-024, ADR-0167), where the
+   * prototype wrote *Requirements:* (`:8032`). The dialog's heading stays *Requirements*.
+   */
+  needs: 'Needs:',
 } as const;
 
-const COMPARATOR: Record<Comparator, string> = { gte: '', gt: 'more than ', lte: 'at most ', lt: 'under ', eq: '' };
+/** *At least* is the plain figure; every other comparison is said (*exactly* since P18.95-T10 AC-3). */
+const COMPARATOR: Record<Comparator, string> = { gte: '', gt: 'more than ', lte: 'at most ', lt: 'under ', eq: 'exactly ' };
 
 /**
  * A figure in its unit: rupiah from sen (X-68's rule, invariant §9), a percentage, a ratio as the ratio card
@@ -254,13 +269,47 @@ export function figureWords(value: number, unit: string): string {
   return formatNumber(value, { maxDecimals: 2 });
 }
 
-/** *APE achieved Rp 500 jt*, as the card's line prints `{label} {target}` (`reqRowHtml`, `:8031-8034`). */
-export const requirementWords = (r: Pick<CampaignRequirement, 'metricName' | 'comparator' | 'value' | 'unit'>) =>
-  `${r.metricName} ${COMPARATOR[r.comparator] ?? ''}${figureWords(r.value, r.unit)}`;
+/**
+ * **What each campaign requirement counts, said after its figure** (P18.95-T10 AC-3; the client's UI-024): *Rp 16
+ * jt APE*, *3 new hires* — one and many, as the figure is one or not. Keyed by the metric's code, never its name
+ * (invariant §4). The campaign-evaluable set (`CAMPAIGN_METRICS`, D-evaluable) less the ratios, whose name is the
+ * rate itself: those, the balance's points and a stored requirement outside the set keep `{name} {target}`.
+ */
+const NOUNS: Readonly<Record<string, readonly [one: string, many: string]>> = {
+  APE_ACHIEVED: ['APE', 'APE'],
+  NEW_HIRES: ['new hire', 'new hires'],
+  NEW_ACTIVE_AGENTS: ['new active agent', 'new active agents'],
+  MAA_COUNT_IN_UNIT: ['active agent in unit', 'active agents in unit'],
+  CASCADE_ACTIVITY_TOUCHES: ['goal activity', 'goal activities'],
+  ROLLING_PERSISTENCY: ['rolling persistency', 'rolling persistency'],
+};
 
-/** The card's line: every requirement in words, joined by *" | "* (`:8032`). */
+/**
+ * One requirement in the card's words: ***Rp 16 jt APE***, ***3 new hires***, *more than 2 new active agents* — the
+ * target compact only where that loses nothing (`figureWords`), then what it counts. Without a noun, the
+ * prototype's `{label} {target}` (`reqRowHtml`, `:8031-8034`): *Selling success rate 0,15*.
+ */
+export function requirementWords(r: Pick<CampaignRequirement, 'metricKey' | 'metricName' | 'comparator' | 'value' | 'unit'>): string {
+  const target = `${COMPARATOR[r.comparator] ?? ''}${figureWords(r.value, r.unit)}`;
+  const noun = NOUNS[r.metricKey];
+  if (!noun) return `${r.metricName} ${target}`;
+  return `${target} ${r.value === 1 ? noun[0] : noun[1]}`;
+}
+
+/**
+ * The card's line after *Needs:*, every requirement in its words **joined by *" + "*** (P18.95-T10 AC-3), where the
+ * prototype joined them by *" | "* (`:8032`): *Rp 16 jt APE + 3 new hires*.
+ */
 export const requirementsLine = (requirements: readonly CampaignRequirement[]) =>
-  requirements.map(requirementWords).join(' | ');
+  requirements.map(requirementWords).join(' + ');
+
+/**
+ * Whether the chase is drawn at all: the server lets the reader chase here (`can.chase`), and **the campaign has
+ * not ended** (P18.95-T10 AC-2; UI-024) — the server's `chaseBlocked: 'ended'`, where it was drawn disabled with an
+ * ⓘ. The server refuses a chase or a drop of an ended one all the same (`409 CAMPAIGN_NOT_OPEN`).
+ */
+export const showsChase = (c: Pick<CampaignCard, 'chaseBlocked'>, can: CampaignCan) =>
+  can.chase && c.chaseBlocked !== 'ended';
 
 /** The status tag (`:8047-8051`): the phase for a seasonal campaign, *Ongoing* for a structural one. */
 export const statusWords = (c: Pick<CampaignCard, 'kind' | 'phase'>) =>
@@ -272,8 +321,13 @@ export const kindLabel = (c: Pick<CampaignCard, 'kind' | 'subtype' | 'phase'>) =
     ? PROTOTYPE_COPY[c.phase]
     : c.subtype === 'promotion' ? PROTOTYPE_COPY.promotionPath : PROTOTYPE_COPY.ongoingIncentive);
 
-/** The Summary row's sub-line, *"{kindLabel} · {duration}"* (`:6243`). */
-export const rowSubline = (c: ChasedCampaign) => `${kindLabel(c)} · ${c.duration}`;
+/**
+ * **The Summary row's sub-line: the months it runs** (P18.95-T7 AC-1, grey text row 23; ADR-0167 §7), at every size —
+ * *Runs Jan – Des*, where the prototype's *"{kindLabel} · {duration}"* (`:6243`) read *"Ongoing incentive · Standing
+ * — evaluated per calendar year (1 Jan – 31 Des)"*. The server composes it (`runs`); the dialog the row opens keeps
+ * the campaign's kind and its dates.
+ */
+export const rowSubline = (c: ChasedCampaign) => c.runs;
 
 /**
  * A requirement row's progress in the dialog (OD-157): *"{current} of {target}"* while there is a figure to

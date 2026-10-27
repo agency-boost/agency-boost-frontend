@@ -21,6 +21,13 @@ interface SubTab {
   readonly needs?: string;
 }
 
+/**
+ * **The heading over all four tabs: the nav item's words** (P18.95-T9 AC-2; ADR-0167 §10, OD-205; the client's UI
+ * review, UI-027: menu *User management* over a page titled *Register KPM*). The prototype's own title for the module
+ * (`Overall.html:10414`, *User Management*). Each tab still names its page.
+ */
+export const USER_MANAGEMENT_TITLE = 'User Management';
+
 const SUBTABS: readonly SubTab[] = [
   { href: '/user-management/kpm', label: 'Register KPM' },
   { href: '/user-management/leader', label: 'Find Your Leader' },

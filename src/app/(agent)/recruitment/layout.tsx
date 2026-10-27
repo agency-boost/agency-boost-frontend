@@ -18,7 +18,8 @@ import { ATTACK_PLAN_HREF, OWN_COPY, PITCH_MATERIALS_HREF, PROTOTYPE_COPY } from
  */
 export default function RecruitmentLayout({ children }: { children: ReactNode }) {
   return (
-    <Page title={PROTOTYPE_COPY.title} subtitle={PROTOTYPE_COPY.subtitle} permission="recruitment:read">
+    // The sub-line is not drawn on a phone: the client's *Remove* (P18.95-T7 AC-1, grey text row 8).
+    <Page title={PROTOTYPE_COPY.title} subtitle={PROTOTYPE_COPY.subtitle} subtitleOnPhone={false} permission="recruitment:read">
       <RouteTabs
         label={OWN_COPY.tabs}
         tabs={[

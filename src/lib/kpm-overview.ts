@@ -1,3 +1,4 @@
+import { shortOfRung } from '@/components/ui/role-badge';
 import { api } from './api-client';
 import { formatMonth, formatPercent, formatRupiahCompact, formatRupiahCompactPair } from './format';
 
@@ -219,7 +220,11 @@ export const saveRecruitTarget = (body: RecruitTarget) =>
 
 /** The strings `KPM_Owner.html` draws, verbatim (D-copy), with OD-142's title for the first card. */
 export const PROTOTYPE_COPY = {
-  title: 'KPM Overview',
+  /**
+   * The prototype's *KPM Overview* (`:2027`), **the nav item's word since P18.95-T9 AC-2** (ADR-0167 §10, OD-205;
+   * UI-027, *menu labels = page titles*): the nav reads *Overview* (`:873`).
+   */
+  title: 'Overview',
   composition: 'Team composition',
   engagement: 'Engagement',
   engagementSub: 'Last 7 days',
@@ -321,7 +326,7 @@ export function trendWords(now: number, lastMonthToDate: number | null): TrendWo
  * (`:991`, `:995`): the code where it reads as an acronym, the ladder's label where it would be shouted.
  * The role badge's own rule for its short form (`role-badge.tsx`), so the two cannot disagree on v1's rungs.
  */
-export const rungShort = (rung: NotLoggedRung) => (rung.code.length <= 4 ? rung.code : rung.label);
+export const rungShort = (rung: NotLoggedRung) => shortOfRung(rung);
 
 /** *"Last logged 9 days ago"* or *"Never logged"* (`:991-999`). */
 export function lastLoggedWords(daysSince: number | null): string {

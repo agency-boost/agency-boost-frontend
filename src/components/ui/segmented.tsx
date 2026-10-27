@@ -2,7 +2,7 @@
 
 import { useId, useRef, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
-import { SEGMENT_PHONE, SEGMENTS_PHONE } from '@/components/ui/phone';
+import { SEGMENT_PHONE, SEGMENT_WRAP_PHONE, SEGMENTS_PHONE } from '@/components/ui/phone';
 import { useTabRow } from '@/components/ui/use-tab-row';
 
 export interface SegmentedTab {
@@ -37,6 +37,10 @@ export interface SegmentedTab {
  * **On a phone a segment never breaks its words over two lines** (ADR-0167; UI-013): the segments share
  * the track while their words fit, and when they do not the track scrolls sideways, fading on the side
  * that has more, with the selected one in view. Below 768px only (`phone.ts`, `use-tab-row.ts`).
+ *
+ * **Two options are the exception** (`phoneLayout="wrap"`, P18.95-T5 AC-7): a choice between two must show
+ * both, so the halves stay equal and a label wraps inside its own (`SEGMENT_WRAP_PHONE`) rather than the track
+ * scrolling one of them out of sight — *Calculate from savings target* on `/goals` at 375px.
  */
 export function Segmented({
   label,
@@ -45,6 +49,7 @@ export function Segmented({
   onSelect,
   children,
   className,
+  phoneLayout = 'scroll',
 }: {
   /** Names the group for a screen reader — *"How you want to set it"*. */
   label: string;
@@ -54,6 +59,11 @@ export function Segmented({
   /** The active panel's contents. Called with the active tab's id. */
   children: (activeId: string) => ReactNode;
   className?: string;
+  /**
+   * Below 768px: `scroll`, a row that scrolls when its words do not fit (the default), or `wrap`, equal halves whose
+   * words wrap inside them — for two options, which must both be seen (P18.95-T5 AC-7).
+   */
+  phoneLayout?: 'scroll' | 'wrap';
 }) {
   const group = useId();
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -74,7 +84,7 @@ export function Segmented({
         role="tablist"
         aria-label={label}
         data-fade={row.fade}
-        className={cn('flex w-full rounded-lg border border-hairline bg-base p-[3px]', SEGMENTS_PHONE, className)}
+        className={cn('flex w-full rounded-lg border border-hairline bg-base p-[3px]', phoneLayout === 'scroll' && SEGMENTS_PHONE, className)}
       >
         {tabs.map((tab, i) => {
           const on = tab.id === active;
@@ -101,7 +111,7 @@ export function Segmented({
               }}
               className={cn(
                 'flex-1 rounded-md px-2.5 py-2 text-base font-semibold transition-colors',
-                SEGMENT_PHONE,
+                phoneLayout === 'scroll' ? SEGMENT_PHONE : SEGMENT_WRAP_PHONE,
                 on ? 'bg-navy text-card' : 'text-muted hover:text-navy',
               )}
             >

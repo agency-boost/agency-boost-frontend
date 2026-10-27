@@ -22,14 +22,16 @@ function focusables(root: HTMLElement | null): HTMLElement[] {
  *
  * It opens upward because it sits at the bottom of the viewport.
  *
- * **Below 768px it is the way round the app** (ADR-0085). The sidebar is a bar across the top there,
- * and its nav is hidden: the prototype's phone shows nothing where the nav was, and no way to sign
- * out (`Overall.html:1421-1428`). So on a phone the shell passes its own nav groups in, and the chip
- * opens them — in their order and with their names — then, for an Owner or an Admin, the view switch
- * (ADR-0114), then *Your account* and *Sign out*, in a panel
- * **below** the bar, where it is on the screen. The panel covers the page, so focus moves into it and
- * stays there until it closes: on Escape, which puts focus back on the chip, on a click outside it,
- * or on following any link in it. Nothing new is drawn in the bar.
+ * **Below 768px it hangs from the bar** (ADR-0085). The sidebar is a bar across the top there, and the
+ * prototype's phone shows no way to sign out (`Overall.html:1421-1428`), so the chip stays in the bar
+ * and its panel drops **below** it, where it is on the screen, across the bar's width. Focus moves into
+ * it and stays there until it closes: on Escape, which puts focus back on the chip, on a click outside
+ * it, or on following any link in it.
+ *
+ * **It holds the account's items alone** (P18.95-T2 AC-4, ADR-0167 §3): for an Owner or an Admin the view
+ * switch (ADR-0114), then *Your account* and *Sign out*. Until 2026-10-26 it held the shell's nav groups
+ * as well, above them — the client's review found the menu hidden behind the name (UI-009) — and the
+ * nav is now the drawer the bar's ☰ opens (`app-shell.tsx`).
  */
 export function SidebarUserMenu({
   user,
@@ -38,7 +40,8 @@ export function SidebarUserMenu({
   signingOut,
   className,
   compact,
-  nav,
+  phone = false,
+  panelId = 'sidebar-user-actions',
   viewSwitch,
 }: {
   user: { name: string; role: string; initials: string; email?: string };
@@ -61,15 +64,20 @@ export function SidebarUserMenu({
    */
   compact?: boolean;
   /**
-   * The shell's nav, **on a phone only** (ADR-0085): passed below 768px, where the sidebar holds no
-   * nav, and never wider, where the panel is the account's alone and opens upward as it always has.
+   * **The chip in the phone's bar** (ADR-0085), below 768px: the panel drops below the bar and holds the
+   * focus. False in the sidebar and in the phone's drawer (P18.95-T2), where the chip sits at the foot and
+   * its panel opens upward as it always has.
    */
-  nav?: React.ReactNode;
+  phone?: boolean;
+  /**
+   * The panel's id, for the trigger's `aria-controls`. The phone's drawer draws a second chip at its foot
+   * while the bar's is on the page behind it (P18.95-T2 AC-2), and one id names one element.
+   */
+  panelId?: string;
   /**
    * **The view switch** (ADR-0114): for an Owner or an Admin, the one link to their other view —
    * *Open agent view* in the office console, *Open Owner view* or *Open Admin view* in the field view.
-   * Above *Your account* at every width, so on a phone it falls after the nav groups and before the
-   * account's two. Omitted for everyone else, who has one view.
+   * Above *Your account* at every width. Omitted for everyone else, who has one view.
    */
   viewSwitch?: { href: string; label: string };
 }) {
@@ -77,7 +85,6 @@ export function SidebarUserMenu({
   const container = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
-  const phone = nav !== undefined;
 
   useEffect(() => {
     if (!open) return;
@@ -101,9 +108,9 @@ export function SidebarUserMenu({
     };
   }, [open]);
 
-  // **On a phone, into the panel.** It covers the page, and focus left on the chip would leave a
-  // keyboard reader one Tab from the screen behind it. Wider, the panel is two items under the
-  // chip, and Tab from the chip already reaches them, as it always has.
+  // **On a phone, into the panel.** It lies over the page across the bar's width, away from the chip,
+  // and focus left on the chip would leave a keyboard reader one Tab from the screen behind it. Wider,
+  // the panel is two items above the chip, and Tab from the chip already reaches them, as it always has.
   useEffect(() => {
     if (open && phone) focusables(panel.current)[0]?.focus();
   }, [open, phone]);
@@ -140,7 +147,7 @@ export function SidebarUserMenu({
         ref={trigger}
         type="button"
         aria-expanded={open}
-        aria-controls="sidebar-user-actions"
+        aria-controls={panelId}
         aria-label={compact ? `${user.name} — ${user.role}` : undefined}
         title={compact ? `${user.name} — ${user.role}` : undefined}
         onClick={() => setOpen((wasOpen) => !wasOpen)}
@@ -176,15 +183,16 @@ export function SidebarUserMenu({
       {open && (
         <div
           ref={panel}
-          id="sidebar-user-actions"
+          id={panelId}
+          data-account-panel=""
           onKeyDown={holdFocus}
           onClick={closeOnLink}
           /*
             * Collapsed, the panel is given its own width and allowed out of the rail: at 56px
             * `right-0` would make *Your account* and *Sign out* a column of one word each.
             *
-            * On a phone it drops from the bar across its full width, and scrolls inside itself: eight
-            * groups of nav are taller than a phone held upright.
+            * On a phone it drops from the bar across its full width, and scrolls inside itself should a
+            * phone held on its side be shorter than what it holds.
             */
           className={cn(
             'border border-white/10 bg-navy-soft p-1 shadow-modal',
@@ -193,8 +201,6 @@ export function SidebarUserMenu({
               : cn('absolute bottom-full mb-1.5 rounded-md', compact ? 'left-0 z-20 w-48' : 'left-0 right-0'),
           )}
         >
-          {nav}
-          {phone && <div role="separator" className="mx-1 my-2 h-px bg-white/10" />}
           {user.email && (
             <p className="truncate px-2 pb-1.5 pt-1 text-xs text-white/55" title={user.email}>
               {user.email}

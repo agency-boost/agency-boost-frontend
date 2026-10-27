@@ -396,7 +396,7 @@ describe('members directory (P3-T1 AC-3)', () => {
       expect(row).toHaveTextContent('Agent→AAB');
       // The badge abbreviates; the full name has to stay reachable, because "AAB"
       // means nothing to somebody reading their first role change.
-      expect(within(row).getByTitle('Associate Agency Builder')).toBeInTheDocument();
+      expect(within(row).getByTitle('AAB')).toBeInTheDocument();
       expect(row).toHaveTextContent('Ready to lead a unit');
       expect(row).toHaveTextContent('Wilson Tanoto');
       expect(within(row).getByRole('link', { name: 'Rina Wijaya' })).toHaveAttribute(
@@ -584,7 +584,7 @@ describe('members directory (P3-T1 AC-3)', () => {
       const alert = await screen.findByRole('alert');
       await userEvent.click(within(alert).getByRole('button', { name: 'Ask AgencyBoost to approve' }));
       expect(await screen.findByText("Waiting for AgencyBoost's approval")).toBeInTheDocument();
-      expect(screen.getByText('Let in as Associate Agency Builder')).toBeInTheDocument();
+      expect(screen.getByText('Let in as AAB')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Cancel request' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
     });

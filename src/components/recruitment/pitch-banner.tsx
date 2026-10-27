@@ -43,7 +43,7 @@ export function PitchBanner({ summary }: { summary: PitchSummary }) {
         <p className="m-0 text-base text-muted">
           {complete
             ? PITCH_COPY.completeLine(summary.total)
-            : `${parts.join(', ')}${PITCH_COPY.notReady}`}
+            : PITCH_COPY.incompleteLine(parts)}
         </p>
       </div>
     </div>

@@ -182,6 +182,8 @@ describe('profile', () => {
       expect(screen.getByLabelText(label)).toBeDisabled();
     }
     expect(screen.getAllByText('Only they can change this, not a support session.')).toHaveLength(7);
+    // P18.95-T7 AC-1: the support session's reason shows at every size; only the pronoun's own line goes on a phone.
+    expect(screen.getAllByText('Only they can change this, not a support session.').every((p) => !/hidden/.test(p.className))).toBe(true);
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
     expect(calls.some((c) => c.init.method === 'PATCH')).toBe(false);
   });
@@ -264,6 +266,34 @@ describe('profile', () => {
   it('warns that a password change signs out the other sessions', () => {
     renderWithSession(<ProfilePage />, { me: ME });
     expect(screen.getByText(/signs out your other sessions/)).toBeInTheDocument();
+  });
+
+  it('P18.95-T7 AC-1 keeps the pronoun’s line from 768px and draws it nowhere on a phone, still its description (grey text row 27)', () => {
+    renderWithSession(<ProfilePage />, { me: ME });
+    const line = screen.getByText('Yours to set. It appears in the commitment sentence your leader reads back to you in coaching.');
+    expect(line.className.split(/\s+/).filter((c) => /hidden/.test(c))).toEqual(['max-md:hidden']);
+    expect(screen.getByLabelText('Pronoun')).toHaveAccessibleDescription(line.textContent!);
+    expect(screen.getByText('What colleagues call you day to day.').className).not.toMatch(/hidden/);
+  });
+
+  it('P18.95-T7 AC-3 says under Change password what it waits for: the boxes still empty, then what to fix', async () => {
+    renderWithSession(<ProfilePage />, { me: ME });
+    const submit = screen.getByRole('button', { name: 'Change password' });
+    expect(submit).toHaveAccessibleDescription('Still needed: Current password, New password and Confirm new password.');
+
+    await userEvent.type(screen.getByLabelText('Current password'), 'old password');
+    expect(submit).toHaveAccessibleDescription('Still needed: New password and Confirm new password.');
+    await userEvent.type(screen.getByLabelText('New password'), 'short');
+    await userEvent.type(screen.getByLabelText('Confirm new password'), 'short');
+    expect(submit).toHaveAccessibleDescription('The new password needs at least 10 characters.');
+
+    await userEvent.type(screen.getByLabelText('New password'), ' but now long enough');
+    expect(submit).toHaveAccessibleDescription('Fix the passwords above.');
+    expect(screen.getByText('The two passwords do not match.')).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText('Confirm new password'), ' but now long enough');
+    expect(submit).toBeEnabled();
+    expect(submit).not.toHaveAccessibleDescription();
   });
 
   it('holds the password button until both fields are usable', async () => {

@@ -19,6 +19,10 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  * closes. Escape and the
  * backdrop close it; a click inside does not, so selecting text in it never dismisses it. Named by
  * its title, and by its description when it has one.
+ *
+ * **`placement="sheet"` is the same dialog anchored to the foot of the screen** (P18.95-T4, ADR-0167 §4):
+ * the full width, its top corners rounded, at most 90% of the screen tall and scrolling inside, and clear
+ * of the home indicator. A lead's edit sheet on a phone is the first; its manners are this one's.
  */
 export function Modal({
   open,
@@ -28,6 +32,7 @@ export function Modal({
   initialFocus,
   focusDialog = false,
   eyebrow,
+  placement = 'center',
   className,
   children,
 }: {
@@ -47,6 +52,8 @@ export function Modal({
    * starts on a control at its foot opens scrolled past its own title.
    */
   focusDialog?: boolean;
+  /** `center`, the default, over the middle of the page; `sheet`, rising from its foot. */
+  placement?: 'center' | 'sheet';
   className?: string;
   children: ReactNode;
 }) {
@@ -92,8 +99,17 @@ export function Modal({
     }
   };
 
+  const sheet = placement === 'sheet';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/35 p-5" onClick={onClose}>
+    <div
+      data-placement={placement}
+      className={cn(
+        'fixed inset-0 z-50 flex justify-center bg-navy/35',
+        sheet ? 'items-end' : 'items-center p-5',
+      )}
+      onClick={onClose}
+    >
       <div
         ref={box}
         role="dialog"
@@ -103,7 +119,14 @@ export function Modal({
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={trap}
-        className={cn('max-h-[calc(100vh-2.5rem)] w-full max-w-[26rem] overflow-y-auto rounded-lg bg-card p-6 shadow-modal', className)}
+        className={cn(
+          'w-full overflow-y-auto bg-card p-6 shadow-modal',
+          sheet
+            // The foot clears the home indicator on a phone that has one, and 1.5rem on one that does not.
+            ? 'max-h-[90dvh] rounded-t-lg pb-[max(1.5rem,env(safe-area-inset-bottom))]'
+            : 'max-h-[calc(100vh-2.5rem)] max-w-[26rem] rounded-lg',
+          className,
+        )}
       >
         {eyebrow}
         <h2 id={titleId} className="font-display text-lg font-bold text-navy">{title}</h2>

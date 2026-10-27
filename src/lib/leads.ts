@@ -157,6 +157,37 @@ export function whatsAppLink(phone: string | null | undefined): string | null {
 }
 
 /**
+ * **A call, `tel:`, to the number WhatsApp is given** (P18.95-T4 AC-3, ADR-0167 §4; UI-016): the same digits,
+ * read by the same rule, with the `+` a dialler needs for a country code — `0812-1100-2200` is
+ * `tel:+6281211002200`. One rule for both, so a lead the 📞 can ring is a lead WhatsApp can open, and the
+ * other way round. `null` where it cannot.
+ */
+export function callLink(phone: string | null | undefined): string | null {
+  const number = whatsAppNumber(phone);
+  return number ? `tel:+${number}` : null;
+}
+
+/**
+ * Why the 📞 and WhatsApp are held on a lead, in the reader's words — and where to put it right, which on a
+ * phone is the ⋮'s *Lead details*. (P18.95-T4 AC-3.)
+ */
+export const PHONE_HELD = {
+  missing: 'No phone number yet — add one in Lead details.',
+  unusable: 'This number can’t be dialled — check it in Lead details.',
+} as const;
+
+/**
+ * Why a lead's phone can be neither called nor opened in WhatsApp, or `null` when it can (P18.95-T4 AC-3).
+ *
+ * **One reason for both actions**, because one rule (`whatsAppNumber`) decides both: nothing saved, or
+ * something saved that is not 10 to 15 digits once read — `123`, a name typed in the wrong box.
+ */
+export function phoneHeld(phone: string | null | undefined): string | null {
+  if (whatsAppNumber(phone)) return null;
+  return (phone ?? '').trim() === '' ? PHONE_HELD.missing : PHONE_HELD.unusable;
+}
+
+/**
  * `?a=b`, or nothing — and appended with `+`, never interpolated.
  *
  * The API-consumer gate reads path **literals** out of each call, and an interpolation at the

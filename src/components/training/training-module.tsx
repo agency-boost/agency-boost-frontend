@@ -76,7 +76,6 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
   if (error) return <ReadFailed error={error} onRetry={() => setAttempt((n) => n + 1)} />;
   if (!page) return <CatalogSkeleton label={OWN_COPY.loadingModule} />;
 
-  const categoryTitle = PROTOTYPE_COPY.categoryTitle(page.category.label);
   const offered = catalog.view?.categories.filter((c) => c.offered) ?? [];
 
   const choose = async (status: TrainingStatus) => {
@@ -110,7 +109,8 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
     <Page title={page.title} subtitle={PROTOTYPE_COPY.moduleSubtitle}>
       {offered.length > 0 && <TrainingSubtabs categories={offered} current={page.category.code} currentAs="location" />}
       <div className="mx-auto max-w-[820px]">
-        <BackLink href={trainingCategoryHref(page.category.code)} title={categoryTitle} />
+        {/* Back to the list it came from, by that page's title (P18.95-T9 AC-2): *Back to Training Modules*. */}
+        <BackLink href={trainingCategoryHref(page.category.code)} title={OWN_COPY.title} />
         <Card density="compact">
           <div className="mb-[13px] flex flex-wrap items-center justify-between gap-2.5">
             <h2 className="font-display text-md font-bold text-navy">{page.title}</h2>
@@ -149,7 +149,7 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
   );
 }
 
-/** *Back to {category title}* (`:3734-3737`, `.training-back-btn` `:1811-1816`): the chevron and the words, as the link it is. */
+/** *Back to Training Modules* (`:3734-3737`'s *Back to {category title}* until P18.95-T9 AC-2, `.training-back-btn` `:1811-1816`): the chevron and the words, as the link it is. */
 function BackLink({ href, title }: { href: string; title: string }) {
   return (
     <Link
@@ -300,7 +300,7 @@ function StatusToggle({
 /** Not offered, or never was (AC-3): the not-found card, under the page's own title. */
 function ModuleNotFound() {
   return (
-    <Page title={PROTOTYPE_COPY.tab}>
+    <Page title={OWN_COPY.title}>
       <div className="mx-auto max-w-[820px]">
         <NotFoundCard title={OWN_COPY.moduleNotFound} />
       </div>

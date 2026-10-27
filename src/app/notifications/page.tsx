@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { SubtitleOnPhone } from '@/components/app-shell';
 import { INBOX_EMPTY, NotificationList } from '@/components/notification-list';
 import { RoleShell } from '@/components/role-shell';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -61,59 +62,63 @@ export default function NotificationsPage() {
   const pages = inbox ? Math.max(1, Math.ceil(inbox.total / (inbox.pageSize || INBOX_PAGE_SIZE))) : 1;
 
   return (
-    <RoleShell
-      title="Notifications"
-      subtitle="What has happened that you should know about."
-      permission="notification:read_inbox"
-      actions={
-        canMark && inbox && inbox.unread > 0 ? (
-          <Button variant="secondary" onClick={() => void list.readAll()}>
-            Mark all read
-          </Button>
-        ) : undefined
-      }
-    >
-      {error && (
-        <div className="mb-4">
-          <ErrorBanner {...error} />
-          {inbox === null && (
-            <Button variant="secondary" className="mt-3" onClick={() => void load(1)}>Try again</Button>
-          )}
-        </div>
-      )}
-
-      {inbox === null && !error && (
-        <Skeleton label="Loading your inbox…">
-          <div className="space-y-4 rounded-lg border border-hairline bg-card p-4">
-            {Array.from({ length: 6 }, (_, i) => (
-              <div key={i}>
-                <SkeletonBar className="h-3.5 w-2/5" />
-                <SkeletonBar className="mt-1.5 w-3/5" />
-              </div>
-            ))}
+    // The sub-line is not drawn on a phone: the client's *Remove* (P18.95-T7 AC-1, grey text row 25). The shell draws
+    // the header, so the page says it through the context rather than a prop.
+    <SubtitleOnPhone.Provider value={false}>
+      <RoleShell
+        title="Notifications"
+        subtitle="What has happened that you should know about."
+        permission="notification:read_inbox"
+        actions={
+          canMark && inbox && inbox.unread > 0 ? (
+            <Button variant="secondary" onClick={() => void list.readAll()}>
+              Mark all read
+            </Button>
+          ) : undefined
+        }
+      >
+        {error && (
+          <div className="mb-4">
+            <ErrorBanner {...error} />
+            {inbox === null && (
+              <Button variant="secondary" className="mt-3" onClick={() => void load(1)}>Try again</Button>
+            )}
           </div>
-        </Skeleton>
-      )}
+        )}
 
-      {inbox && inbox.items.length === 0 && (
-        <Card>
-          <EmptyState title={INBOX_EMPTY} />
-        </Card>
-      )}
+        {inbox === null && !error && (
+          <Skeleton label="Loading your inbox…">
+            <div className="space-y-4 rounded-lg border border-hairline bg-card p-4">
+              {Array.from({ length: 6 }, (_, i) => (
+                <div key={i}>
+                  <SkeletonBar className="h-3.5 w-2/5" />
+                  <SkeletonBar className="mt-1.5 w-3/5" />
+                </div>
+              ))}
+            </div>
+          </Skeleton>
+        )}
 
-      {inbox && inbox.items.length > 0 && (
-        <>
-          <Card className="p-1.5" aria-busy={list.loading || undefined}>
-            <NotificationList items={inbox.items} setRead={canMark ? list.setRead : undefined} />
+        {inbox && inbox.items.length === 0 && (
+          <Card>
+            <EmptyState title={INBOX_EMPTY} />
           </Card>
-          <Pager
-            label="Notification pages"
-            page={inbox.page}
-            pages={pages}
-            onPage={(page) => void load(page)}
-          />
-        </>
-      )}
-    </RoleShell>
+        )}
+
+        {inbox && inbox.items.length > 0 && (
+          <>
+            <Card className="p-1.5" aria-busy={list.loading || undefined}>
+              <NotificationList items={inbox.items} setRead={canMark ? list.setRead : undefined} />
+            </Card>
+            <Pager
+              label="Notification pages"
+              page={inbox.page}
+              pages={pages}
+              onPage={(page) => void load(page)}
+            />
+          </>
+        )}
+      </RoleShell>
+    </SubtitleOnPhone.Provider>
   );
 }

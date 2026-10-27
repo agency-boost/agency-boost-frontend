@@ -5,7 +5,7 @@ import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Field, Select } from '@/components/ui/field';
-import { RoleBadge } from '@/components/ui/role-badge';
+import { RoleBadge, rungShort, useLadder } from '@/components/ui/role-badge';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { displayName } from '@/lib/display-name';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -41,6 +41,7 @@ const COLUMNS = ['Name', 'Role', 'Admin since', 'Granted by', { label: 'Actions'
  * office is not a power; handing it out is.
  */
 export default function AdminsPage() {
+  const ladder = useLadder();
   const [admins, setAdmins] = useState<DelegatedAdmin[] | null>(null);
   const [candidates, setCandidates] = useState<{ membershipId: string; fullName: string }[]>([]);
   const [granting, setGranting] = useState<string | null>(null);
@@ -97,7 +98,7 @@ export default function AdminsPage() {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-2xl text-md text-muted">
           An Admin can do everything you can except one thing: grant or revoke admin access.
-          Admin access is <strong>not</strong> a hierarchy role — an Agency Builder with a unit can
+          Admin access is <strong>not</strong> a hierarchy role — an {rungShort('AB', ladder)} with a unit can
           hold it, and holding it changes nothing about who reports to them.
         </p>
         <Field label="Grant admin access to" htmlFor="grant-to" className="min-w-56">

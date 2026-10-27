@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
 import { cn } from '@/lib/cn';
 import { formatNoticeFull, formatNoticeShort } from '@/lib/format';
-import type { InboxItem } from '@/lib/notifications';
+import { groupRepeats, type InboxItem, type NoticeRun } from '@/lib/notifications';
 
 /** Said when there is nothing to show, in the bell's popover and on `/notifications` alike. */
 export const INBOX_EMPTY = 'Nothing yet. This is where you will hear about your unit.';
@@ -45,6 +45,10 @@ function ToggleGlyph({ unread }: { unread: boolean }) {
 /**
  * One notification, compact, so many fit (P12.1-T3 AC-6): its title on one line with the short date
  * beside it, its detail on one line under it, each cut with an ellipsis, and a dot for unread.
+ *
+ * **On a phone neither is cut** (P18.95-T7 AC-4; the client's UI review, UI-030): below 768px the title and the
+ * detail wrap onto as many lines as they take — an event's time and place among them — and from 768px each is one
+ * line with its ellipsis, as before.
  *
  * **The whole row is one control** (AC-1): a link for a row with an address, which is what it is, and a
  * button for one without, which opens its modal. It spans the row, so the click target is the row and
@@ -96,7 +100,7 @@ export function NotificationRow({
           {unread && <span id={stateId} className="sr-only">Unread:</span>}
           <span
             id={titleId}
-            className={cn('min-w-0 flex-1 truncate text-md text-navy', unread ? 'font-semibold' : 'font-normal')}
+            className={cn('min-w-0 flex-1 break-words text-md text-navy md:truncate', unread ? 'font-semibold' : 'font-normal')}
           >
             {item.title}
           </span>
@@ -105,7 +109,7 @@ export function NotificationRow({
           </time>
         </span>
         {item.detail && (
-          <span id={detailId} className="block truncate text-sm text-muted">{item.detail}</span>
+          <span id={detailId} className="block break-words text-sm text-muted md:truncate">{item.detail}</span>
         )}
       </span>
     </>
@@ -172,6 +176,9 @@ export function NotificationModal({ item, onClose }: { item: InboxItem | null; o
  * **Without `setRead` the list marks nothing** (roles-and-permissions §7.2, the read-only support
  * session; the Phase 12.1 exit review, N2): no toggle, and a row opens — its page or its modal, as
  * ever — and stays unread, with no mark sent for the server to refuse.
+ *
+ * **Repeats in a row are one line** (P18.95-T7 AC-4, `RepeatedNotice`): the same notice said again — one template,
+ * the same words, the same address — opens to its items rather than standing as seven rows of one sentence.
  */
 export function NotificationList({
   items,
@@ -179,8 +186,8 @@ export function NotificationList({
   onFollow,
 }: {
   items: readonly InboxItem[];
-  /** Absent for a reader who may not mark (`useCanMark`). */
-  setRead?: (item: InboxItem, read: boolean) => Promise<boolean>;
+  /** Absent for a reader who may not mark (`useCanMark`). One item, or a run of repeats at once (P18.95-T7 AC-4). */
+  setRead?: (items: InboxItem | readonly InboxItem[], read: boolean) => Promise<boolean>;
   /** A row with an address was followed. */
   onFollow?: () => void;
 }) {
@@ -191,20 +198,117 @@ export function NotificationList({
     if (item.href) onFollow?.();
     else setShown(item);
   };
+  const toggle = setRead && ((row: InboxItem) => void setRead(row, row.readAt === null));
 
   return (
     <>
       <ul className="flex flex-col divide-y divide-hairline">
-        {items.map((item) => (
-          <NotificationRow
-            key={item.notificationId}
-            item={item}
+        {groupRepeats(items).map((run) => (run.items.length === 1 ? (
+          <NotificationRow key={run.key} item={run.items[0]} onActivate={activate} onToggle={toggle} />
+        ) : (
+          <RepeatedNotice
+            key={run.key}
+            run={run}
             onActivate={activate}
-            onToggle={setRead && ((row) => void setRead(row, row.readAt === null))}
+            onToggle={toggle}
+            onToggleAll={setRead && ((all, read) => void setRead(all, read))}
           />
-        ))}
+        )))}
       </ul>
       <NotificationModal item={shown} onClose={() => setShown(null)} />
     </>
+  );
+}
+
+/**
+ * **A notice repeated in a row, as one line with its count** (P18.95-T7 AC-4; the client's UI review of 2026-10-26,
+ * UI-030 — *Wilson updated your goal · 7×*; `groupRepeats`). Its title and *· 3×*, its detail, the newest one's date,
+ * and a dot while any of them is unread, in a row's own idiom.
+ *
+ * - **The line is a disclosure** (`aria-expanded`): it opens to the notices themselves, each a row as any other —
+ *   opening one reads it and goes where it goes, and its own toggle reads or unreads it alone. Opening the line reads
+ *   nothing: the reader has not yet seen any of them.
+ * - **Its toggle reads or unreads all of them** — *Mark all 3 as read* while any is unread, *Mark all 3 as unread*
+ *   once none is — as one mark (`setRead` with the run), the bell moving by the count at once.
+ *
+ * Named by its title and how many — *Unread: Kickoff 2026 is coming up, 3 notices* — in place of the *· 3×* drawn,
+ * which a screen reader would read as *times* of a sign it cannot see.
+ */
+function RepeatedNotice({
+  run,
+  onActivate,
+  onToggle,
+  onToggleAll,
+}: {
+  run: NoticeRun;
+  onActivate: (item: InboxItem) => void;
+  onToggle?: (item: InboxItem) => void;
+  onToggleAll?: (items: readonly InboxItem[], read: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
+  const detailId = useId();
+  const whenId = useId();
+  const [newest] = run.items;
+  const count = run.items.length;
+  const unread = run.items.some((item) => item.readAt === null);
+  const toggle = unread ? `Mark all ${count} as read` : `Mark all ${count} as unread`;
+
+  return (
+    <li data-unread={unread || undefined} data-repeats={count}>
+      <div className="flex items-center gap-1 py-0.5">
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={listId}
+          // Named in one string: the *×* is drawn and not said, and a name joined from spans gains stray spaces.
+          aria-label={`${unread ? 'Unread: ' : ''}${newest.title}, ${count} notices`}
+          aria-describedby={newest.detail ? `${detailId} ${whenId}` : whenId}
+          onClick={() => setOpen((was) => !was)}
+          className="flex min-w-0 flex-1 items-start gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-navy/[0.04]"
+        >
+          <span
+            aria-hidden="true"
+            className={cn('mt-[7px] h-2 w-2 shrink-0 rounded-pill', unread ? 'bg-amber-deep' : 'bg-transparent')}
+          />
+          <span className="min-w-0 flex-1">
+            <span className="flex items-baseline gap-2">
+              <span
+                className={cn('min-w-0 flex-1 break-words text-md text-navy md:truncate', unread ? 'font-semibold' : 'font-normal')}
+              >
+                {newest.title}
+                <span className="text-muted"> · {count}×</span>
+              </span>
+              <time id={whenId} dateTime={newest.createdAt} className="shrink-0 text-xs text-muted">
+                {formatNoticeShort(newest.createdAt)}
+              </time>
+              <span aria-hidden="true" className="shrink-0 text-xs text-muted">{open ? '▴' : '▾'}</span>
+            </span>
+            {newest.detail && (
+              <span id={detailId} className="block break-words text-sm text-muted md:truncate">{newest.detail}</span>
+            )}
+          </span>
+        </button>
+        {onToggleAll && (
+          <Button
+            variant="icon"
+            title={toggle}
+            className="mr-1"
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleAll(run.items, unread);
+            }}
+          >
+            <ToggleGlyph unread={unread} />
+            <span className="sr-only">{toggle}</span>
+          </Button>
+        )}
+      </div>
+      <ul id={listId} hidden={!open} aria-label={newest.title} className="mb-1 ml-5 border-l border-hairline pl-1">
+        {run.items.map((item) => (
+          <NotificationRow key={item.notificationId} item={item} onActivate={onActivate} onToggle={onToggle} />
+        ))}
+      </ul>
+    </li>
   );
 }

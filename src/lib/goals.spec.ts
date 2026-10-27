@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
-import { goalInputsOf, producedFrom, saveGoal, type Goal } from './goals';
+import { goalInputsOf, monthsLeftInWords, producedFrom, saveGoal, type Goal } from './goals';
 
 /**
  * The provenance marker's words (ADR-0063 §5, P10.1-T6 AC-1): where the APE produced came from, and
@@ -22,9 +22,11 @@ describe('producedFrom', () => {
       .toBe('From your office’s upload, Sep 2026');
   });
 
-  it('says a year’s figure is the year to date as of its month', () => {
-    expect(producedFrom({ provenance: 'imported', month: '2026-08' }, 'year'))
-      .toBe('From your office’s upload, year to date as of Agu 2026');
+  it('P18.95-T7 AC-1 says the office’s year to date in the client’s words, As of its month (grey text row 18)', () => {
+    expect(producedFrom({ provenance: 'imported', month: '2026-08' }, 'year')).toBe('As of Agu 2026');
+    expect(producedFrom({ provenance: 'imported', month: '2026-10' }, 'year')).toBe('As of Okt 2026');
+    // The month's own figure, a correction and a coachee's keep their words.
+    expect(producedFrom({ provenance: 'imported', month: '2026-08' }, 'month')).toBe('From your office’s upload, Agu 2026');
     expect(producedFrom({ provenance: 'corrected', month: '2026-08' }, 'year'))
       .toBe('Corrected by hand, year to date as of Agu 2026');
   });
@@ -96,5 +98,28 @@ describe('saving a plan from a coaching session (P11-T8 AC-4)', () => {
     } as unknown as Goal;
     expect(goalInputsOf(goal)).toEqual({ ...inputs, mode: 'from_savings', monthsLeft: null });
     expect(goalInputsOf({ ...goal, monthsLeftIsOverride: true }).monthsLeft).toBe(2.9);
+  });
+});
+
+/**
+ * Months left in words (P18.95-T5 AC-5; the client's UI review, UI-018): the nearest whole month, a half rounding
+ * up, and *less than a month* below half of one (`metrics-and-definitions.md`, `MONTHS_LEFT_IN_YEAR`, *Display*).
+ */
+describe('P18.95-T5 AC-5: monthsLeftInWords', () => {
+  it.each([
+    [2.2, 'about 2 months'],
+    [2.5, 'about 3 months'],
+    [2.49, 'about 2 months'],
+    [1.4, 'about 1 month'],
+    [1.5, 'about 2 months'],
+    [0.5, 'about 1 month'],
+    [11.9, 'about 12 months'],
+    [12, 'about 12 months'],
+  ])('P18.95-T5 AC-5: %s months reads %s', (months, words) => {
+    expect(monthsLeftInWords(months)).toBe(words);
+  });
+
+  it.each([0.49, 0.1, 0, -1, Number.NaN])('P18.95-T5 AC-5: %s months — below half a month — reads less than a month', (months) => {
+    expect(monthsLeftInWords(months)).toBe('less than a month');
   });
 });

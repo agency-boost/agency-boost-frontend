@@ -29,7 +29,8 @@ export default function AttackPlanPage({ searchParams }: { searchParams?: Promis
       ? { kind: 'product', code: product }
       : { kind: 'brief' };
   return (
-    <Page title={PROTOTYPE_COPY.planTitle} subtitle={PROTOTYPE_COPY.planSubtitle} permission="product_catalog:read">
+    // No sub-line: the brief's one line says it, at every size (P18.95-T7 AC-1, grey text row 10).
+    <Page title={PROTOTYPE_COPY.planTitle} permission="product_catalog:read">
       <SalesToolsTabs />
       <AttackPlanScreen address={address} />
     </Page>

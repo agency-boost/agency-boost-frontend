@@ -55,6 +55,26 @@ describe('find your leader (P3-T3)', () => {
     expect(screen.getByText('4 in their unit')).toBeInTheDocument();
   });
 
+  /*
+   * P18.95-T7 AC-1 (ADR-0167 §7; the client's *Grey text* table, rows 1–3): the client's words at every size, and its
+   * *Remove* below 768px only — the sentence keeps its words from 768px, where the client has not reviewed it yet.
+   */
+  it('P18.95-T7 AC-1 heads the search Find a leader, says They’ll need to approve., and keeps the invite’s line off a phone', async () => {
+    stubFetch({ '/join/me': { body: REGISTERED }, '/join/leaders': { body: LEADERS } });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
+
+    expect(await screen.findByRole('heading', { level: 2, name: 'Find a leader' })).toBeInTheDocument();
+    expect(screen.queryByText(/Find a leader in/)).not.toBeInTheDocument();
+    expect(screen.getByText("They'll need to approve.")).toBeInTheDocument();
+    expect(screen.queryByText(/Sending a request notifies them/)).not.toBeInTheDocument();
+    const invite = screen.getByText(/^Any of the three does the same thing/);
+    expect(invite).toHaveClass('max-md:hidden');
+    expect(invite).toHaveTextContent(
+      'Any of the three does the same thing: it joins you and tags you to them in one step, with no approval. Opening their link or scanning their QR takes you to the same place.',
+    );
+    expect(invite.className.split(/\s+/).filter((c) => /hidden/.test(c))).toEqual(['max-md:hidden']);
+  });
+
   it('says a leader with no unit can still take you on', async () => {
     // "0 people in unit" reads as a number they failed to reach. A new AAB has to be
     // askable or they could never get a first report.
@@ -146,7 +166,7 @@ describe('find your leader (P3-T3)', () => {
     renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
 
     expect(
-      await screen.findByText('This office has no Agency Builders or Associate Agency Builders yet.'),
+      await screen.findByText('This office has no ABs or AABs yet.'),
     ).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText('Search by name'), 'zzz');

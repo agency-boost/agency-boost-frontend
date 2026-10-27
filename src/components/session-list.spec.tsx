@@ -57,6 +57,15 @@ describe('where you are signed in (P4-T13)', () => {
     expect(await screen.findByText('This device')).toBeInTheDocument();
   });
 
+  it('P18.95-T7 AC-5 says what Sign out everywhere is for in the client’s words: Use this if you lose your phone.', async () => {
+    render();
+    await screen.findByText('This device');
+    const line = screen.getByText(/^Ends every session including this one\./);
+    expect(line).toHaveTextContent(/^Ends every session including this one\. Use this if you lose your phone\.$/);
+    expect(line.className).not.toMatch(/hidden/);
+    expect(screen.queryByText(/a device was lost/)).not.toBeInTheDocument();
+  });
+
   it('offers no way to revoke the seat you are sitting in', async () => {
     /*
      * It would work, and it would read as a bug: the page reloads into a login screen

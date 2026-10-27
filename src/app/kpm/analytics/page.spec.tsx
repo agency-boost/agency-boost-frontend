@@ -74,7 +74,7 @@ describe('KPM analytics (P18-T2)', () => {
       expect(within(period).getAllByRole('option').map((o) => o.textContent)).toEqual(['This month', 'Previous month']);
       expect(period).toHaveValue('this_month');
 
-      // Each heading's own words; the MOC heading's ⓘ and its bubble come after them.
+      // Each heading's own words; the MOC heading's ⓘ and its bubble come after them, as *APE*'s do (P18.95-T9 AC-3).
       const words = (h: HTMLElement) => (h.querySelector('[role=tooltip]') ? h.textContent!.split('ⓘ')[0] : h.textContent);
       expect(screen.getAllByRole('columnheader').map(words)).toEqual([
         'AB', 'Manpower', 'APE — This Month', 'APE — Annual', 'Coached (7d)', 'Active this month', 'Total leads', 'MOC',
@@ -228,8 +228,9 @@ describe('KPM analytics (P18-T2)', () => {
       await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Period' }), 'previous_month');
       await screen.findByRole('columnheader', { name: 'Active last month' });
       // F-174: the month's APE column says which month it reads, as *Active* does.
-      expect(screen.getByRole('columnheader', { name: 'APE — Last Month' })).toBeInTheDocument();
-      expect(screen.queryByRole('columnheader', { name: 'APE — This Month' })).not.toBeInTheDocument();
+      // Its name then *What is APE?*, the ⓘ beside it (P18.95-T9 AC-3).
+      expect(screen.getByRole('columnheader', { name: /^APE — Last Month/ })).toBeInTheDocument();
+      expect(screen.queryByRole('columnheader', { name: /^APE — This Month/ })).not.toBeInTheDocument();
       const after = cells();
       // Manpower, APE — Annual, Coached (7d): unchanged. APE — This Month, Active, Total leads: moved.
       expect([after[0], after[2], after[3]]).toEqual([before[0], before[2], before[3]]);

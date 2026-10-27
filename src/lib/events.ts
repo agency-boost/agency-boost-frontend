@@ -161,6 +161,14 @@ export const isOpen = (event: Pick<GuestEvent, 'ended'>) => !event.ended;
 export const isGoing = (event: Pick<GuestEvent, 'me'>) => event.me.rsvp === 'going';
 
 /**
+ * Whether a *Join* is drawn for this event — the modal's *Join event* and the card's *Join* alike (P18.95-T10
+ * AC-1): the server says the reader may RSVP (`can.rsvp`, all false in a read-only support session), the event
+ * has not wrapped up, and they are not going already. The server refuses anything else all the same.
+ */
+export const canJoin = (event: Pick<GuestEvent, 'me' | 'ended'>, can: Pick<GuestEventCan, 'rsvp'>) =>
+  can.rsvp && isOpen(event) && !isGoing(event);
+
+/**
  * Joined, as the prototype's `joined` means it after the event (`:8732-8741`): RSVP'd, or said they came.
  * Before the event only the RSVP counts — a claim cannot exist yet.
  */
@@ -227,8 +235,11 @@ export const timeOf = (event: Pick<GuestEvent, 'startTime'>) => formatClock(even
  * The prototype's ASCII apostrophes are kept as written.
  */
 export const PROTOTYPE_COPY = {
-  /** `:10413`. */
-  title: 'KPM Events',
+  /**
+   * `:10413`'s *KPM Events*, **the nav item's words since P18.95-T9 AC-2** (ADR-0167 §10, OD-205; UI-027, *menu
+   * labels = page titles*): the nav reads *Event list* (`:2664`).
+   */
+  title: 'Event List',
   sub: 'Browse upcoming and past events from your KPM — join, and share feedback once they wrap up.',
   /** `:3426-3430`. */
   filters: { all: 'All', upcoming: 'Upcoming', past: 'Past' } as Record<EventFilter, string>,
@@ -279,6 +290,8 @@ export const PROTOTYPE_COPY = {
  * prototype's *"You're going to {title}"* (`:8718`), so the toast still says which event.
  */
 export const goingToast = (title: string) => withDetail(CONFIRMED.joined, `you're going to ${title}`);
+/** The card's *Join*, named with its event for a screen reader: *"Join Kickoff 2026"* (P18.95-T10 AC-1). */
+export const joinName = (title: string) => `${OWN_COPY.join} ${title}`;
 /** *"RSVP cancelled for {title}"* (`:8728`). */
 export const cancelledToast = (title: string) => `RSVP cancelled for ${title}`;
 
@@ -329,6 +342,11 @@ export const OWN_COPY = {
   notFoundHint: 'It may have been archived, or it isn’t one you were invited to.',
   backToEvents: 'Back to events',
   opensInNewTab: 'opens in a new tab',
+  /**
+   * The card's *Join* — the client's word (P18.95-T10 AC-1; UI-024, ADR-0167), where the prototype's card had no
+   * control but *View event*. Its accessible name adds the event's title, so a list of them is told apart.
+   */
+  join: 'Join',
 } as const;
 
 /**

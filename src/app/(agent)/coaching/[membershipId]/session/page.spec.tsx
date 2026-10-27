@@ -6,6 +6,7 @@ import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '
 import { act } from 'react';
 import CoachingPersonLayout from '../layout';
 import CoachingSessionTabPage from './page';
+import { sessionTag } from '@/components/coaching-session';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -220,13 +221,22 @@ describe('the session workspace (P11-T8)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   describe('the header and the start', () => {
-    it('P11-T8 AC-1 heads the tab with the office’s today and the Draft tag, before anything starts', async () => {
+    it('P11-T8 AC-1, P18.95-T7 AC-2 heads the tab with the office’s today and Not started, before anything starts', async () => {
       show({ 'GET /coaching/coachees/mem-rina/sessions': { body: history() } });
 
       await screen.findByRole('button', { name: 'Start coaching session' });
       const header = headerLine();
-      expect(header).toHaveTextContent("Today's session — Jumat, 2 Okt 2026 Draft");
+      // P18.95-T7 AC-2 (UI-021): *Not started*, not the prototype's *Draft* of a session nobody has opened.
+      expect(header).toHaveTextContent("Today's session — Jumat, 2 Okt 2026 Not started");
+      expect(header).not.toHaveTextContent('Draft');
       expect(within(header).getByText('Jumat, 2 Okt 2026').tagName).toBe('STRONG');
+    });
+
+    it('P18.95-T7 AC-2 tags a session Draft once it is open, and Finalized once it is done', () => {
+      expect(sessionTag(null)).toBe('Not started');
+      expect(sessionTag({ status: 'draft' })).toBe('Draft');
+      expect(sessionTag({ status: 'reopened' })).toBe('Draft');
+      expect(sessionTag({ status: 'finalized' })).toBe('Finalized');
     });
 
     it('P11-T8 AC-1 lists past sessions behind View past sessions ▾, each a row that opens its archive', async () => {
@@ -261,7 +271,8 @@ describe('the session workspace (P11-T8)', () => {
 
       const start = await screen.findByRole('button', { name: 'Start coaching session' });
       expect(start).toHaveTextContent('▶ Start coaching session');
-      expect(screen.getByText("Opens last week's items, goals, leads, and everything else for today's 1-on-1.")).toBeInTheDocument();
+      // P18.95-T7 AC-1 (grey text row 24): its words from 768px, not drawn on a phone.
+      expect(screen.getByText("Opens last week's items, goals, leads, and everything else for today's 1-on-1.")).toHaveClass('max-md:hidden');
       // Every one of these reads is audited; the pre-start state draws none of them.
       expect(calls.some((c) => /\/summary\?|\/activity\/|\/leads|\/goals\//.test(c.url))).toBe(false);
       expect(screen.queryByRole('region', { name: 'Goal' })).not.toBeInTheDocument();
@@ -383,7 +394,7 @@ describe('the session workspace (P11-T8)', () => {
       expect(goal).toHaveTextContent('65,0%');
       expect(goal).toHaveTextContent('Rp 340 jt remaining this year.');
       expect(within(goal).getByRole('progressbar', { name: 'This month’s target' })).toHaveAttribute('aria-valuenow', '82');
-      expect(within(goal).getByText('Click this year’s target to edit')).toBeInTheDocument();
+      expect(within(goal).getByText('Tap this year’s target to edit')).toBeInTheDocument();
       // One control on the card: the annual target. This month's target is a figure.
       expect(within(goal).getAllByRole('button').map((b) => b.textContent)).toEqual(['Rp 960 jt, this year’s target — edit']);
       expect(calls.filter((c) => c.url.includes('/summary?for=mem-rina')).map((c) => c.url))
@@ -447,7 +458,7 @@ describe('the session workspace (P11-T8)', () => {
       const goal = await card('Goal');
 
       expect(await within(goal).findByText('No goal set')).toBeInTheDocument();
-      expect(within(goal).queryByText('Click this year’s target to edit')).not.toBeInTheDocument();
+      expect(within(goal).queryByText('Tap this year’s target to edit')).not.toBeInTheDocument();
       await userEvent.click(within(goal).getByRole('button', { name: 'Set this year’s target' }));
       await userEvent.type(within(goal).getByLabelText('Annual APE target'), '500000000{Enter}');
 
@@ -639,7 +650,7 @@ describe('the session workspace (P11-T8)', () => {
 
       await userEvent.click(within(tips).getByRole('button', { name: 'Remove tip 1' }));
 
-      expect(within(tips).getByText('No tips added yet — click + above to add one.')).toBeInTheDocument();
+      expect(within(tips).getByText('No tips added yet — tap + above to add one.')).toBeInTheDocument();
       await waitFor(() => expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(1));
       expect(bodyOf(sent(calls, 'PUT', '/coaching/sessions/s-1')[0]).tips).toEqual([]);
     });
@@ -660,7 +671,7 @@ describe('the session workspace (P11-T8)', () => {
       show({ 'GET /coaching/sessions/s-1': { body: session({ leadActions: [], actionItems: [] }) } });
       const next = await card('Next action items');
       expect(within(next).getByText('No leads have a next action date set yet.')).toBeInTheDocument();
-      expect(within(next).getByText('No other action items yet — click + above to add one.')).toBeInTheDocument();
+      expect(within(next).getByText('No other action items yet — tap + above to add one.')).toBeInTheDocument();
     });
 
     it('P11-T8 AC-9 adds an action dated the office’s today, and refuses a second blank one in the prototype’s words', async () => {
@@ -738,7 +749,7 @@ describe('the session workspace (P11-T8)', () => {
       expect(screen.getByRole('searchbox', { name: 'Search leads' })).toBeDisabled();
       const goal = await card('Goal');
       expect(within(goal).queryByRole('button')).not.toBeInTheDocument();
-      expect(within(goal).queryByText('Click this year’s target to edit')).not.toBeInTheDocument();
+      expect(within(goal).queryByText('Tap this year’s target to edit')).not.toBeInTheDocument();
       // The history is read again, so the finalized session is among the past ones.
       expect(sent(calls, 'GET', '/coaching/coachees/mem-rina/sessions').length).toBeGreaterThan(1);
     });

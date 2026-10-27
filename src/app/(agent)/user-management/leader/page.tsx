@@ -2,14 +2,16 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
-import { UserManagementTabs } from '@/components/user-management-tabs';
+import { USER_MANAGEMENT_TITLE, UserManagementTabs } from '@/components/user-management-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
-import { RoleBadge } from '@/components/ui/role-badge';
+import { RoleBadge, rungShort, useLadder } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
+import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { Toast, useToast } from '@/components/ui/toast';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import { CONFIRMED } from '@/lib/confirmations';
 import {
   cancelLeaderRequest,
@@ -31,6 +33,7 @@ import {
  * absent.
  */
 export default function FindLeaderPage() {
+  const ladder = useLadder();
   const [state, setState] = useState<JoinState | null>(null);
   const [q, setQ] = useState('');
   const [leaders, setLeaders] = useState<LeaderChoice[] | null>(null);
@@ -94,7 +97,7 @@ export default function FindLeaderPage() {
 
   return (
     <Page
-      title="Find Your Leader"
+      title={USER_MANAGEMENT_TITLE}
       subtitle="Search leaders in your KPM and request to be tagged."
     >
       <UserManagementTabs leaderLocked={!registered} />
@@ -123,7 +126,8 @@ export default function FindLeaderPage() {
             <h2 className="font-display text-lg font-bold text-navy">
               Have a leader&apos;s code, link or QR?
             </h2>
-            <p className="mt-1 text-md text-muted">
+            {/* The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 1): its words stay from 768px. */}
+            <p className={cn('mt-1 text-md text-muted', REMOVED_ON_PHONE)}>
               Any of the three does the same thing: it joins you and tags you to them in one step,
               with no approval. Opening their link or scanning their QR takes you to the same place.
             </p>
@@ -146,12 +150,12 @@ export default function FindLeaderPage() {
           )}
 
           <Card>
-            <h2 className="font-display text-lg font-bold text-navy">
-              Find a leader in {state.kpmLabel}
-            </h2>
-            <p className="mt-1 text-md text-muted">
-              Sending a request notifies them — they need to approve it before you are tagged.
-            </p>
+            {/*
+              * The client's words at every size (P18.95-T7 AC-1, grey text rows 3 and 2): *Find a leader*, where it
+              * named the office the tabs above already sit in, and the approval in four words.
+              */}
+            <h2 className="font-display text-lg font-bold text-navy">Find a leader</h2>
+            <p className="mt-1 text-md text-muted">They&apos;ll need to approve.</p>
 
             <Field label="Search by name" htmlFor="leader-search" className="mt-3">
               <TextInput
@@ -222,7 +226,7 @@ export default function FindLeaderPage() {
                 title={
                   q
                     ? 'No leaders match that search.'
-                    : 'This office has no Agency Builders or Associate Agency Builders yet.'
+                    : `This office has no ${rungShort('AB', ladder)}s or ${rungShort('AAB', ladder)}s yet.`
                 }
               />
             )}

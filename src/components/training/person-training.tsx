@@ -7,6 +7,7 @@ import { SkillCards } from '@/components/training/training-parts';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import { usePhone } from '@/lib/use-phone';
 import {
   OWN_COPY, readCoacheeTraining, readTrainingProgress, type TrainingProgressView,
 } from '@/lib/training';
@@ -27,7 +28,11 @@ import {
  * the learner and `/coaching/me/training` cannot disagree. The prototype's tab drew a 24-module constant
  * over two hand-made maps (F-12).
  */
-export function PersonTraining({ view }: { view: TrainingProgressView }) {
+export function PersonTraining({ view, phone }: {
+  view: TrainingProgressView;
+  /** Below 768px, a row per module (P18.95-T3 AC-5): asked by the tab before its read answers, so no table draws first. */
+  phone?: boolean;
+}) {
   if (view.categories.length === 0) return <EmptyCard title={OWN_COPY.noTraining} />;
   return (
     <div className="flex flex-col">
@@ -37,7 +42,7 @@ export function PersonTraining({ view }: { view: TrainingProgressView }) {
             {category.label}{' '}
             <span className="text-sm font-medium text-muted">({category.done}/{category.total})</span>
           </h2>
-          <SkillCards skills={category.skills} />
+          <SkillCards skills={category.skills} phone={phone} />
         </section>
       ))}
     </div>
@@ -84,6 +89,7 @@ function useTrainingRead(read: () => Promise<TrainingProgressView>, key: string,
 }
 
 function ReadState({ read, label }: { read: ReturnType<typeof useTrainingRead>; label: string }) {
+  const phone = usePhone();
   if (read.error) {
     return (
       <div>
@@ -103,5 +109,5 @@ function ReadState({ read, label }: { read: ReturnType<typeof useTrainingRead>; 
       </Skeleton>
     );
   }
-  return <PersonTraining view={read.view} />;
+  return <PersonTraining view={read.view} phone={phone} />;
 }

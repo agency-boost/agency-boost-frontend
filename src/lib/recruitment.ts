@@ -175,7 +175,8 @@ export const PROTOTYPE_COPY = {
   stepBrief: 'Candidate brief',
   stepPlan: 'Recruitment plan',
   briefTitle: 'Who are we talking to?',
-  briefHint: 'Three questions. Enough to get an opening line, a benefits list, and an objection response, fast.',
+  /** The client's words at every size (P18.95-T7 AC-1, grey text row 9; ADR-0167 §7), as `/attack-plan`'s hint. */
+  briefHint: 'Answer 3 questions to get your pitch.',
   candidateType: 'Candidate type',
   motivation: 'What\'s driving them',
   hesitation: 'Their biggest hesitation',

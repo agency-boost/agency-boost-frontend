@@ -120,25 +120,39 @@ export function TenantConfigProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const refresh = useCallback(async () => {
-    try {
-      /*
-       * Both in one place, for one reason (P4-T9): the ladder is what every role badge on
-       * every screen is drawn from, so fetching it per screen would be the thing this
-       * provider exists to prevent. It changes about once a year.
-       */
-      const [next, rungs] = await Promise.all([
-        api<TenantConfig>('/kpm/config'),
-        api<OrgLevel[]>('/kpm/org-levels'),
-      ]);
-      if (!mounted.current) return;
-      setConfig(next);
-      setLadder(rungs);
-      setError(null);
-    } catch (err) {
-      if (mounted.current) setError(err);
-    } finally {
+    /*
+     * Both in one place, for one reason (P4-T9): the ladder is what every role badge on
+     * every screen is drawn from, so fetching it per screen would be the thing this
+     * provider exists to prevent. It changes about once a year.
+     *
+     * **Each read settles on its own** (P18.95-T5 AC-3; the client's UI review, UI-030: Log Activity's
+     * skeleton still up after 2 s). They were one `Promise.all`, so `loading` — which only the screens
+     * that need the *configuration* read — waited for the ladder as well, which neither of them draws, and
+     * a ladder that failed threw a configuration that had arrived away with it. Now `loading` clears when
+     * the configuration has answered, whatever the ladder is doing, and `error` is the configuration's: a
+     * ladder that fails leaves the one it had, and a role badge reads its rung's code meanwhile, as it
+     * does before the ladder first arrives. `refresh()` still waits for both, for the settings screens
+     * that ask again after a write.
+     */
+    const config = api<TenantConfig>('/kpm/config').then(
+      (next) => {
+        if (!mounted.current) return;
+        setConfig(next);
+        setError(null);
+      },
+      (err: unknown) => {
+        if (mounted.current) setError(err);
+      },
+    ).finally(() => {
       if (mounted.current) setLoading(false);
-    }
+    });
+    const ladder = api<OrgLevel[]>('/kpm/org-levels').then(
+      (rungs) => {
+        if (mounted.current) setLadder(rungs);
+      },
+      () => undefined,
+    );
+    await Promise.all([config, ladder]);
   }, []);
 
   /*

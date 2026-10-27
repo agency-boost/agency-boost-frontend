@@ -62,7 +62,7 @@ describe('admin overview', () => {
     // `Companies` and `KPMs` are also a section heading and a sidebar group, so match
     // each tile by its own number rather than by the word.
     expect(await screen.findByText('Total members')).toBeInTheDocument();
-    expect(screen.getByText('Agency Builders')).toBeInTheDocument();
+    expect(screen.getByText('ABs')).toBeInTheDocument();
     expect(screen.getByText('61')).toBeInTheDocument();
     // `KPMs` is a tile label, a section in the sidebar and a figure on the company card,
     // so it appears more than once by design.

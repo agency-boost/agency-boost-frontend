@@ -86,7 +86,7 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
 
       expect(screen.getByRole('img', { name: '1 of 4 documents complete' })).toHaveTextContent('1/4');
       expect(screen.getByText(
-        '2 not uploaded, 1 uploaded but not fully confirmed — not yet ready to rely on for candidates.',
+        '2 missing, 1 needs checking.',
       )).toBeInTheDocument();
       // The agent's two badges (`:696`): a partly confirmed document reads Uploaded here.
       expect(within(card('Opportunity Overview')).getByText('Uploaded')).toBeInTheDocument();
@@ -118,12 +118,12 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
     expect(stub.calls).toEqual([]);
   });
 
-  it('shows the file’s name, size and day, the missing line, and the dashed border', async () => {
+  it('P18.95-T7 AC-1 shows the file’s name, size and day, the missing line in the client’s words (grey text row 12), and the dashed border', async () => {
     render();
     await screen.findByRole('article', { name: 'FAQ' });
     expect(within(card('Opportunity Overview')).getByText('Opportunity_Overview_v3.pdf')).toBeInTheDocument();
     expect(within(card('Opportunity Overview')).getByText('2,4 MB · updated 12 Sep 2026')).toBeInTheDocument();
-    expect(within(card('FAQ')).getByText('No PDF uploaded yet — candidates can\'t be shown this document.')).toBeInTheDocument();
+    expect(within(card('FAQ')).getByText('Not uploaded yet')).toBeInTheDocument();
     expect(card('FAQ').className).toContain('border-dashed');
   });
 
@@ -152,7 +152,7 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
     expect(screen.getAllByText('Missing')).toHaveLength(4);
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.getByText(
-      '4 not uploaded — not yet ready to rely on for candidates.',
+      '4 missing.',
     )).toBeInTheDocument();
     expect(urlCalls(stub)).toEqual([]);
   });

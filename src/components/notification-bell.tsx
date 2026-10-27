@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { INBOX_EMPTY, NotificationList } from '@/components/notification-list';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
+import { TAP_TARGET } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { cn } from '@/lib/cn';
 import { POPOVER_PAGE_SIZE } from '@/lib/notifications';
@@ -103,7 +104,8 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
         aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
         onClick={() => setOpen((was) => !was)}
         className={cn(
-          'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md',
+          // 44 × 44 on a phone (P18.95-T1 AC-10); 36 × 36 from 768 px, as before.
+          'relative flex h-9 w-9 shrink-0 items-center justify-center rounded-md', TAP_TARGET,
           active ? 'bg-amber/15 text-white' : 'text-white/[0.78] hover:bg-white/[0.06]',
         )}
       >

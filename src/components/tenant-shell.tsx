@@ -5,7 +5,7 @@ import { AppShell, type NavSection } from '@/components/app-shell';
 import { type NavIconName } from '@/components/ui/nav-icon';
 import { RequireSession } from '@/components/require-session';
 import { ToastHost } from '@/components/ui/toast';
-import { useLadder } from '@/components/ui/role-badge';
+import { shortOfRung, useLadder } from '@/components/ui/role-badge';
 import { viewSwitchFor } from '@/lib/landing';
 import { displayName } from '@/lib/display-name';
 import { profileLine } from '@/lib/profile-line';
@@ -181,7 +181,7 @@ function TenantChrome({
   const ladder = useLadder();
   const rung = ladder.find((l) => l.code === membership?.orgLevelCode?.toUpperCase());
   const shortRung = rung
-    ? (rung.code.length <= 4 ? rung.code : rung.label)
+    ? shortOfRung(rung)
     : (membership?.hierarchyRole ?? '').toUpperCase();
 
   const capacity = membership?.isKpmOwner

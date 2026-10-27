@@ -8,7 +8,7 @@ import { useCampaignDialogHost, toggleChase } from '@/components/campaigns/campa
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  figureWords, isReservedCode, OWN_COPY, progressWords, PROTOTYPE_COPY, readCampaign,
+  figureWords, isReservedCode, OWN_COPY, progressWords, PROTOTYPE_COPY, readCampaign, showsChase,
   type CampaignCard, type CampaignDetail, type CampaignRequirement, type ProgressRow,
 } from '@/lib/campaigns';
 import { ChaseButton, DialogTags, Poster, PromotionLabel } from './campaign-parts';
@@ -201,7 +201,8 @@ export function CampaignDialog({
               {campaign.requirements.length > 0 && (
                 <Requirements campaign={campaign} />
               )}
-              {campaign.can.chase && (
+              {/* No chase once the campaign has ended (P18.95-T10 AC-2): its tag says *Ended*. */}
+              {showsChase(campaign, campaign.can) && (
                 <div className="flex flex-wrap items-center gap-2.5">
                   <ChaseButton
                     chasing={campaign.chasing}

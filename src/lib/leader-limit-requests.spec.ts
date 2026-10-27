@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { leaderLimitWords } from '@/components/leader-limit-notice';
-import { rungLabel } from '@/components/ui/role-badge';
+import { rungShort } from '@/components/ui/role-badge';
 import {
   canRequestApproval, pendingFor, requestedChange, type LeaderLimitRequestRow,
 } from './leader-limit-requests';
@@ -28,10 +28,12 @@ describe('leader-limit requests (P18.8-T2)', () => {
     expect(pendingFor({} as never, 'mem-1')).toBeNull();
   });
 
-  it('says what waits: the rung change, or letting a pending leader in', () => {
-    expect(requestedChange(row(), (code) => rungLabel(code))).toBe('Agent → Associate Agency Builder');
-    expect(requestedChange(row({ action: 'activate', fromOrgLevelCode: 'AAB', toOrgLevelCode: null }), (code) => rungLabel(code)))
-      .toBe('Let in as Associate Agency Builder');
+  it('says what waits: the rung change, or letting a pending leader in, each rung by the name it is given', () => {
+    // The screens give it the badge's name, *AAB* (P18.95-T9 AC-1); a long label is shown only where one is passed.
+    expect(requestedChange(row(), (code) => rungShort(code))).toBe('Agent → AAB');
+    expect(requestedChange(row({ action: 'activate', fromOrgLevelCode: 'AAB', toOrgLevelCode: null }), (code) => rungShort(code)))
+      .toBe('Let in as AAB');
+    expect(requestedChange(row(), (code) => (code === 'AAB' ? 'Unit Manager' : 'Agent'))).toBe('Agent → Unit Manager');
   });
 
   it('AC-9 the roster’s words name the way through that asks; a role change’s offer the ask where it may be made', () => {

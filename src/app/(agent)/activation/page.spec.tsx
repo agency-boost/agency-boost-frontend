@@ -42,10 +42,10 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     vi.useRealTimers();
   });
 
-  it('P13-T4 AC-2 is titled and headed verbatim, and reads the reader’s own activation once', async () => {
+  it('P13-T4 AC-2, P18.95-T9 AC-2 is titled as its nav item, headed verbatim, and reads the reader’s own activation once', async () => {
     const { calls } = show();
     await ready();
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^90-Day Activation$/);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Your 90-Day Activation$/);
     expect(screen.getByText('Your first 90 days, checklist by checklist.')).toBeInTheDocument();
     expect(calls.filter((c) => c.url.includes('/activation/me')).map((c) => c.url)).toEqual(['http://api.test/api/v1/activation/me']);
   });

@@ -324,7 +324,13 @@ export const PROTOTYPE_COPY = {
   updateProduction: 'Update production',
   yourTeam: 'Your team',
   directGroupProduction: 'Direct Group production',
-  potentialActiveTile: 'Potential Monthly Active Agents (Group)',
+  /**
+   * The prototype's *Potential Monthly Active Agents (Group)* (`:7259-7264`), **in plain words since P18.95-T9 AC-4**
+   * (ADR-0167 §10, OD-205; the client's UI review, UI-028). The figure is `POTENTIAL_MAA_COUNT_IN_UNIT` — members on
+   * pace to be active this month, a projection — so it reads *On pace to be active*, never the client's *Active this
+   * month*, which is `MAA_COUNT_IN_UNIT`'s and counts what was sold (invariant §8).
+   */
+  potentialActiveTile: 'On pace to be active (Group)',
   potentialRecruitsTile: 'Potential Recruits (Group)',
   yourUnitRecruits: 'Your unit',
   yourAabs: 'Your AABs',
@@ -334,7 +340,6 @@ export const PROTOTYPE_COPY = {
   /** A unit head's own row, apart from the unit's total (`:7384`). */
   personal: 'Personal',
   noOneOnOne: 'No 1:1 yet',
-  maa: 'Potential Monthly Active Agent — pacing to submit at least 1 policy this month.',
   statusInfo: 'How is status decided?',
   /** The *Status* header's tooltip (`:3929-3935`), its list kept as lines. */
   statusRules: [
@@ -393,6 +398,12 @@ export const OWN_COPY = {
   targetMade: 'Year’s target made',
   targetMadeNote: 'The year’s target was made before this month began — this month needs nothing more.',
   thisMonth: 'this month',
+  /**
+   * **A figure standing without a target says what it is** (P18.95-T3 AC-2; the client's UI review, UI-030: *"You
+   * (Agus): No goal set · Rp 29.000.000"*, an unlabelled number). Under *No goal set* and *Year’s target made* the
+   * sub-line is the period's production alone, and reads *produced Rp 29 jt*, at every size and on every row.
+   */
+  produced: (sum: string) => `produced ${sum}`,
   proRated: 'pro-rated',
   /*
    * **The roster's activity figure is *goal activities*, not *touches*** (ADR-0165 §2, P18.8-T15 AC-5; the client's
@@ -413,7 +424,20 @@ export const OWN_COPY = {
   notFoundLine: 'They may lead nobody yet, or sit outside your team, or the address may be mistyped.',
   backToYours: 'Your Unit Dashboard',
   saving: 'Saving…',
+  /**
+   * **What each row's ✓ is called, for a screen reader** (P18.95-T9 AC-4). Its sentence — *pacing to submit at least
+   * 1 policy this month* — was every ✓'s tooltip, so a roster of twelve said it twelve times (UI-028); it is the
+   * *Name* heading's ⓘ now, once (`TERMS.POTENTIAL_MAA`).
+   */
+  maaMark: 'Potential Monthly Active Agent',
 } as const;
+
+/**
+ * **A total's count of members on pace, in plain words** (P18.95-T9 AC-4; UI-028): *On pace to be active: 6/12*,
+ * where it read *6/12 potential active*. `POTENTIAL_MAA_COUNT_IN_UNIT`, a projection — not *Active this month*,
+ * which is the analytics' `MAA_COUNT_IN_UNIT` (invariant §8).
+ */
+export const onPaceWords = (p: PotentialActive): string => `On pace to be active: ${p.count}/${p.of}`;
 
 /*
  * ── Rows ────────────────────────────────────────────────────────────────────────────────────────
@@ -466,13 +490,15 @@ export function goalWords(figures: {
   set?: boolean;
 }): GoalWords {
   const { targetMinor: target, actualMinor: actual } = figures;
+  // The production alone, with no target beside it, is labelled (P18.95-T3 AC-2): *produced Rp 29 jt*.
+  const produced = (sum: number) => OWN_COPY.produced(formatRupiahCompact(sum));
   if (figures.set === false || target === null) {
-    return { tone: 'none', line: OWN_COPY.noGoal, sub: actual === null ? null : formatRupiahCompact(actual) };
+    return { tone: 'none', line: OWN_COPY.noGoal, sub: actual === null ? null : produced(actual) };
   }
   // A target of 0 is only ever a month made already (ADR-0047; `periodFigures` answers `null` for no
   // target), on a row or on a total whose rows were all made: nothing to measure a percentage against.
   if (target === 0) {
-    return { tone: 'over', line: OWN_COPY.targetMade, sub: actual === null ? OWN_COPY.notUploaded : formatRupiahCompact(actual) };
+    return { tone: 'over', line: OWN_COPY.targetMade, sub: actual === null ? OWN_COPY.notUploaded : produced(actual) };
   }
   if (actual === null) {
     // The Summary's own phrase beside its figure, *of {target} target*, under the missing one.
@@ -486,6 +512,17 @@ export function goalWords(figures: {
   return met
     ? { tone: 'over', line: `${pct} · +${formatRupiahCompact(over)} over`, sub }
     : { tone: 'short', line: `${pct} · ${formatRupiahCompact(short)} short`, sub };
+}
+
+/**
+ * **A phone card's goal bar** (P18.95-T3 AC-1; the client's UI review, UI-010: *"one card per agent (name, status
+ * chip, goal bar, …)"*): how far along the target the figures are, 0–100, or `null` where there is nothing to draw
+ * — no target, none to measure against (a month made already), or no figure. An empty track would read as zero,
+ * which *Not uploaded yet* is not (D-figures). The percentage is the server's; the table draws no bar.
+ */
+export function goalBar(figures: { targetMinor: number | null; actualMinor: number | null; attainmentPct: number | null; set?: boolean }): number | null {
+  if (figures.set === false || figures.targetMinor === null || figures.targetMinor === 0 || figures.actualMinor === null) return null;
+  return Math.min(100, Math.max(0, Math.round(figures.attainmentPct ?? 0)));
 }
 
 /** *"Sales: {n} · {m} closing"* (`:7399`). */

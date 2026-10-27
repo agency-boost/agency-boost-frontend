@@ -80,7 +80,7 @@ describe('DemoAccountsPanel', () => {
     render(<DemoAccountsPanel onChoose={vi.fn()} />);
     await expand();
 
-    expect(screen.getByText('Associate AB · leads nobody')).toBeInTheDocument();
+    expect(screen.getByText('AAB · leads nobody')).toBeInTheDocument();
     expect(screen.getByText('Waiting on a leader')).toBeInTheDocument();
     expect(screen.getByText('Removed')).toBeInTheDocument();
     expect(screen.getByText('Office suspended')).toBeInTheDocument();

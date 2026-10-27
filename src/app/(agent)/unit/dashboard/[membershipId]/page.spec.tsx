@@ -79,10 +79,10 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
     expect(screen.getByRole('button', { name: 'View details for Sari Wulandari' })).toBeInTheDocument();
   });
 
-  it('P15-T4 AC-2 says whose unit the tiles count, not you', async () => {
+  it('P15-T4 AC-2, P18.95-T7 AC-1 says whose unit the tiles count, not you, and counts its team in the client’s line', async () => {
     render();
     await screen.findByRole('table');
-    expect(screen.getByText('4 direct agents (including Sari Wulandari) · 1 AAB units · 1 agents under AABs')).toBeInTheDocument();
+    expect(screen.getByText('4 direct · 2 under AABs')).toBeInTheDocument();
     expect(screen.getByText('Sari Wulandari’s unit').closest('p')).toHaveTextContent('1 candidate');
     expect(screen.getByText('Sari Wulandari’s AABs').closest('p')).toHaveTextContent('0 candidates');
     expect(screen.queryByText(/including you/)).not.toBeInTheDocument();

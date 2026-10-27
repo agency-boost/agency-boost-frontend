@@ -50,7 +50,7 @@ function drawer(code: string, routes: Routes = {}, me = RINA_ME) {
 }
 
 const shelfReady = () => screen.findByRole('heading', { level: 2, name: 'Life' });
-const dialog = () => screen.findByRole('dialog', { name: 'PRUMapan (nama kami)' });
+const dialog = () => screen.findByRole('dialog', { name: 'PRUMapan' });
 
 describe('/product-catalog, the office’s shelf (P14-T7)', () => {
   beforeEach(() => {
@@ -102,9 +102,15 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       await shelfReady();
       expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Product Catalog$/);
       expect(screen.getByText(
-        'The full individual shelf — conventional and syariah. Click any product for benefits, positioning, and its sales script.',
+        'The full individual shelf — conventional and syariah. Tap any product for benefits, positioning, and its sales script.',
       )).toBeInTheDocument();
       expect(calls.filter((c) => /\/product-catalog$/.test(c.url))).toHaveLength(1);
+    });
+
+    it('P18.95-T7 AC-1 keeps the sub-line from 768px and draws it nowhere on a phone, its search above the grid (grey text row 13)', async () => {
+      grid();
+      await shelfReady();
+      expect(screen.getByText(/^The full individual shelf — conventional and syariah\./)).toHaveClass('max-md:hidden');
     });
 
     it('P14-T7 AC-2, AC-11 the category tabs and the channel toggle, each saying which is on', async () => {
@@ -147,7 +153,7 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       await shelfReady();
       const mapan = document.querySelector('[data-product-card="PRUMAPAN"]') as HTMLElement;
       expect(mapan.tagName).toBe('BUTTON');
-      expect(mapan.textContent).toBe('ConventionalPRUMapan (nama kami)Dana pensiun yang cair rutin dari usia 55.View detail →');
+      expect(mapan.textContent).toBe('ConventionalPRUMapanDana pensiun yang cair rutin dari usia 55.View detail →');
       const syariah = document.querySelector('[data-product-card="PRUSEHAT_SYARIAH"]') as HTMLElement;
       expect(within(syariah).getByText('Syariah')).toHaveClass('text-navy');
       const pgb = document.querySelector('[data-product-card="PRULINK_GENERASI_BARU_PGB"]') as HTMLElement;
@@ -194,6 +200,86 @@ describe('/product-catalog, the office’s shelf (P14-T7)', () => {
       await shelfReady();
       await userEvent.click(document.querySelector('[data-product-card="PRUMAPAN"]') as HTMLElement);
       expect(nav.push).toHaveBeenCalledWith('/product-catalog/PRUMAPAN?category=life', { scroll: false });
+    });
+  });
+
+  describe('P18.95-T6 AC-4 — the search by name and the phone’s filter row (UI-023, UI-015; ADR-0167)', () => {
+    const search = () => screen.getByRole('searchbox', { name: 'Search products by name' });
+    const cards = () => [...document.querySelectorAll('[data-product-card]')].map((c) => c.getAttribute('data-product-card'));
+
+    it('P18.95-T6 AC-4 catalog search: a search box above the filters, at every size, filtering the shelf by name', async () => {
+      const { calls } = grid();
+      await shelfReady();
+      expect(search()).toHaveAttribute('placeholder', 'Search products…');
+      // Above the filters, and part of what a drawer makes inert.
+      expect(search().compareDocumentPosition(screen.getByRole('group', { name: 'Category' })) & Node.DOCUMENT_POSITION_FOLLOWING)
+        .toBeTruthy();
+      // No phone-only class: the search is the same at every size.
+      expect(search().className.split(/\s+/).filter((c) => c.startsWith('max-md:'))).toEqual([]);
+      await userEvent.type(search(), 'mapan');
+      expect(cards()).toEqual(['PRUMAPAN']);
+      // A section the search empties is hidden, and a section's count is what it shows.
+      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Life']);
+      expect(within(screen.getByRole('region', { name: 'Life' })).getByText('1 product')).toBeInTheDocument();
+      // Over the shelf already loaded: the server is asked nothing more, and the address is not touched.
+      expect(calls.filter((c) => c.url.includes('/product-catalog'))).toHaveLength(1);
+      expect(nav.replace).not.toHaveBeenCalled();
+    });
+
+    it('P18.95-T6 AC-4 catalog search: ignores case and the spaces around it, with the category and channel', async () => {
+      nav.search = 'channel=conventional';
+      grid();
+      await shelfReady();
+      await userEvent.type(search(), '  PRU ');
+      expect(cards()).toEqual(['PRUMAPAN', 'PRUFUTURE', 'PRULINK_GENERASI_BARU_PGB']);
+      await userEvent.clear(search());
+      await userEvent.type(search(), 'sehat');
+      // PRUSehat Syariah matches the name, but the channel filter leaves it out.
+      expect(cards()).toEqual([]);
+      await userEvent.clear(search());
+      expect(cards()).toEqual(['PRUMAPAN', 'PRUFUTURE', 'PRULINK_GENERASI_BARU_PGB']);
+    });
+
+    it('P18.95-T6 AC-4 catalog search and empty result: says what was searched for', async () => {
+      grid();
+      await shelfReady();
+      await userEvent.type(search(), 'zzz');
+      // A status, so it is heard as the shelf empties, not only seen.
+      expect(screen.getByText('No products match “zzz”.')).toHaveAttribute('role', 'status');
+      expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
+      expect(screen.queryByText('No products match this filter.')).not.toBeInTheDocument();
+    });
+
+    it('P18.95-T6 AC-4 catalog search: kept while a drawer opens over the grid and closes again', async () => {
+      grid();
+      await shelfReady();
+      await userEvent.type(search(), 'future');
+      await userEvent.click(document.querySelector('[data-product-card="PRUFUTURE"]') as HTMLElement);
+      expect(nav.push).toHaveBeenCalledWith('/product-catalog/PRUFUTURE', { scroll: false });
+      expect(search()).toHaveValue('future');
+      expect(cards()).toEqual(['PRUFUTURE']);
+    });
+
+    it('P18.95-T6 AC-4 the scrollable filter row: the category pills are one row that scrolls on a phone, and wrap at 768px and wider', async () => {
+      nav.search = 'category=investment';
+      grid();
+      await screen.findByRole('heading', { level: 2, name: 'Investment-linked' });
+      const row = screen.getByRole('group', { name: 'Category' });
+      expect(row).toHaveClass('flex', 'flex-wrap', 'max-md:flex-nowrap', 'max-md:overflow-x-auto', 'max-md:overflow-y-hidden', 'max-md:w-full');
+      for (const pill of within(row).getAllByRole('button')) {
+        expect(pill).toHaveClass('max-md:shrink-0', 'max-md:whitespace-nowrap');
+      }
+      // jsdom lays nothing out, so nothing has more and nothing fades; the row says which side does once it can.
+      expect(row).not.toHaveAttribute('data-fade');
+      // The channel toggle is not part of the row.
+      expect(row).not.toContainElement(screen.getByRole('group', { name: 'Channel' }));
+    });
+
+    it('P18.95-T6 AC-4 the name fix: the shelf names PRUMapan without a placeholder', async () => {
+      grid();
+      await shelfReady();
+      expect(screen.getByText('PRUMapan')).toBeInTheDocument();
+      expect(screen.queryByText(/nama kami/)).not.toBeInTheDocument();
     });
   });
 
@@ -251,7 +337,7 @@ describe('/product-catalog/[productCode], the drawer (P14-T7)', () => {
       drawer('PRUMAPAN');
       const box = await dialog();
       expect(within(box).getByText('Conventional')).toBeInTheDocument();
-      expect(within(box).getByRole('heading', { level: 2, name: 'PRUMapan (nama kami)' })).toBeInTheDocument();
+      expect(within(box).getByRole('heading', { level: 2, name: 'PRUMapan' })).toBeInTheDocument();
       expect(within(box).getByText('Dana pensiun yang cair rutin dari usia 55.')).toBeInTheDocument();
     });
 

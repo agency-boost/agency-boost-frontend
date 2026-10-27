@@ -4,7 +4,7 @@ import {
   BOOTCAMP, guestEvent, KICKOFF, NPS, PRODUCT_REFRESH, PRULINK, RINA_EVENTS, TOWN_HALL,
 } from '@test/events-fixtures';
 import {
-  audienceLine, cancelledToast, goingToast, joined, pastBlockOf, pickScoreToast, pillOf, PROTOTYPE_COPY, refusalOf,
+  audienceLine, cancelledToast, canJoin, goingToast, joined, joinName, OWN_COPY, pastBlockOf, pickScoreToast, pillOf, PROTOTYPE_COPY, refusalOf,
   scaleHighLine, scaleLowLine, scaleOf, scoredLine, sections, tagOf, whenLine,
 } from './events';
 import {
@@ -44,6 +44,22 @@ describe('KPM Events: what the screen derives, and nothing more (P18.5-T5, T6)',
     // A cancelled RSVP is not going.
     const cancelled = { ...KICKOFF, me: { ...KICKOFF.me, rsvp: 'cancelled' as const } };
     expect(pillOf(cancelled)).toBe('notJoined');
+  });
+
+  it('P18.95-T10 AC-1 Join is offered where the server allows an RSVP, the event is open and the reader not going', () => {
+    const can = { rsvp: true };
+    expect(canJoin(KICKOFF, can)).toBe(true);
+    expect(canJoin(guestEvent({ id: 'ev-run', phase: 'running' }), can)).toBe(true);
+    expect(canJoin({ ...KICKOFF, me: { ...KICKOFF.me, rsvp: 'cancelled' } }, can)).toBe(true);
+    expect(canJoin(PRODUCT_REFRESH, can)).toBe(false);
+    expect(canJoin(TOWN_HALL, can)).toBe(false);
+    expect(canJoin(PRULINK, can)).toBe(false);
+    expect(canJoin(KICKOFF, { rsvp: false })).toBe(false);
+  });
+
+  it('P18.95-T10 AC-1 the card’s Join: the client’s word, named with its event for a screen reader', () => {
+    expect(OWN_COPY.join).toBe('Join');
+    expect(joinName('Kickoff 2026')).toBe('Join Kickoff 2026');
   });
 
   it('P18.5-T5 AC-6, T6 AC-2 the past block: the didn’t-join block, the form after an RSVP or a claim, the thanks', () => {
@@ -87,7 +103,8 @@ describe('KPM Events: what the screen derives, and nothing more (P18.5-T5, T6)',
     // Led by the client's *Joined ✓* since 2026-10-26 (P18.95-T1 AC-6), the prototype's sentence after it.
     expect(goingToast('Kickoff 2026')).toBe("Joined ✓ — you're going to Kickoff 2026");
     expect(cancelledToast('Kickoff 2026')).toBe('RSVP cancelled for Kickoff 2026');
-    expect(PROTOTYPE_COPY.title).toBe('KPM Events');
+    // The nav item's words, where the prototype titled the page *KPM Events* (P18.95-T9 AC-2; UI-027).
+    expect(PROTOTYPE_COPY.title).toBe('Event List');
     expect(PROTOTYPE_COPY.sub).toBe('Browse upcoming and past events from your KPM — join, and share feedback once they wrap up.');
     expect(PROTOTYPE_COPY.emptyGoing).toBe("You haven't joined any upcoming events yet.");
     expect(PROTOTYPE_COPY.didntJoinSub).toBe("Feedback is only collected from agents who attended, so there's nothing to fill out here.");

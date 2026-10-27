@@ -14,6 +14,7 @@ import { readActivityRatios, type ActivityRatios } from '@/lib/activity';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/lib/session';
+import { usePhone } from '@/lib/use-phone';
 import {
   lockedWords, OWN_COPY, productionToast, PROTOTYPE_COPY, readUnitDashboard, UNIT_PERIODS,
   type UnitDashboardView, type UnitPeriod, type UnitRow,
@@ -44,6 +45,8 @@ export function UnitDashboard({ forId, period }: { forId?: string; period: UnitP
   const pathname = usePathname();
   const { me } = useSession();
   const { toast, show } = useToast();
+  /** Below 768px the roster is a card per person (P18.95-T3 AC-1), asked before the read answers, so no table draws first. */
+  const phone = usePhone();
 
   /** The period on screen: the address's, and the one just pressed until the address catches up. */
   const [shown, setShown] = useState<UnitPeriod>(period);
@@ -136,6 +139,7 @@ export function UnitDashboard({ forId, period }: { forId?: string; period: UnitP
             expanded={expanded}
             onToggle={toggle}
             readRatios={readRatios}
+            phone={phone}
             action={canUpdate && (view.production.locked ? (
               // Drawn and not usable: the month is locked, and the words say who reopens it (P15-T3). Its face is
               // the primary button's own classes, so the held button and the live one are the same amber.

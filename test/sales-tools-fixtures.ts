@@ -42,7 +42,7 @@ export function card(over: Partial<CatalogCard> & { code: string }): CatalogCard
 
 /** 0417's shelf, cut down: two Life, one Health in Syariah, and PGB in run-off. */
 export const SHELF: CatalogCard[] = [
-  card({ code: 'PRUMAPAN', name: 'PRUMapan (nama kami)', tagline: 'Dana pensiun yang cair rutin dari usia 55.', needs: ['retirement'] }),
+  card({ code: 'PRUMAPAN', name: 'PRUMapan', tagline: 'Dana pensiun yang cair rutin dari usia 55.', needs: ['retirement'] }),
   card({ code: 'PRUFUTURE', name: 'PRUFuture', tagline: 'Affordable whole-life to age 100.' }),
   card({
     code: 'PRUSEHAT_SYARIAH', name: 'PRUSehat Syariah', tagline: 'Sharia health cover.', channel: 'syariah',
@@ -66,7 +66,7 @@ export const SCRIPT: CatalogScript = {
 
 export function product(over: Partial<CatalogProduct> = {}): CatalogProduct {
   return {
-    code: 'PRUMAPAN', name: 'PRUMapan (nama kami)', tagline: 'Dana pensiun yang cair rutin dari usia 55.',
+    code: 'PRUMAPAN', name: 'PRUMapan', tagline: 'Dana pensiun yang cair rutin dari usia 55.',
     category: { code: 'life', label: 'Life' }, channel: 'conventional', lifecycle: 'active', needs: ['retirement'],
     benefits: ['Manfaat Dana Mapan paid annually.', 'Death cover.'],
     differentiator: 'The accessible retirement-income option.',

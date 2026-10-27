@@ -8,12 +8,13 @@ import { Button, ErrorBanner } from '@/components/ui/field';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  answerEntry, deleteEntry, initialsOf, OWN_COPY, PROTOTYPE_COPY, readEntry, titleOf, TYPE_BADGE,
+  answerEntry, deleteEntry, initialsOf, notesParts, OWN_COPY, PROTOTYPE_COPY, readEntry, titleOf, TYPE_LABEL,
   type Answer, type CalendarEntry, type CalendarInvitee,
 } from '@/lib/calendar';
 import { coachingSessionHref } from '@/lib/coaching';
 import { formatTripWhen, formatWhen } from '@/lib/format';
 import { cn } from '@/lib/cn';
+import { TEXT_TAP } from '@/components/ui/phone';
 import { Avatar, BADGE_TONE, CHIP, DETAIL_LABEL } from './calendar-parts';
 
 /** An invitee's answer, as the organiser's chip shows it (ADR-0097, form 2). */
@@ -27,9 +28,12 @@ const ANSWER_GLYPH: Record<Answer, { glyph: string; name: string }> = {
  * The detail dialog (`Calendar_Section.html:422-449`, `:817-853`; P12-T2 AC-7, AC-9; P12-T4 AC-5,
  * AC-6; P12-T6 AC-1).
  *
- * The prototype's, verbatim: the badge in the type's own word (*Meeting*, not *Internal meeting*), the
- * title, *When*, *Location / notes* or *—*, *Invitees* or *No one else invited*. **What it offers
- * follows the server's `readerIs`, and draws nothing the API would refuse** (D-write):
+ * The prototype's, verbatim: the badge, the title, *When*, *Location / notes* or *—*, *Invitees* or
+ * *No one else invited*. **The badge names the type as the legend does** — *Internal meeting*, where the
+ * prototype's capitalised its code, *Meeting* (P18.95-T8 AC-2; the client's UI review, UI-020: one set
+ * of type names). **A meeting link in the notes is a link**: *Join Zoom* on a Zoom host, *Join meeting*
+ * on any other, opening in a new tab (`NotesText`). **What it offers follows the server's `readerIs`,
+ * and draws nothing the API would refuse** (D-write):
  *
  * | Reader | Left | Right |
  * |---|---|---|
@@ -137,7 +141,7 @@ export function DetailDialog({
         className="max-w-[420px]"
         eyebrow={(
           <span className={cn('mb-[11px] inline-block rounded-pill px-[11px] py-1 text-xs font-bold', BADGE_TONE[entry.type])}>
-            {TYPE_BADGE[entry.type]}
+            {TYPE_LABEL[entry.type]}
           </span>
         )}
       >
@@ -148,7 +152,9 @@ export function DetailDialog({
           </div>
           <div>
             <dt className={DETAIL_LABEL}>{PROTOTYPE_COPY.where}</dt>
-            <dd className="whitespace-pre-line break-words text-md leading-normal text-navy">{entry.notes.trim() || '—'}</dd>
+            <dd className="whitespace-pre-line break-words text-md leading-normal text-navy">
+              {entry.notes.trim() ? <NotesText notes={entry.notes.trim()} /> : '—'}
+            </dd>
           </div>
           <div>
             <dt className={DETAIL_LABEL}>{PROTOTYPE_COPY.invitees}</dt>
@@ -189,6 +195,42 @@ export function DetailDialog({
         onConfirm={() => void remove()}
         onCancel={() => setAsking(false)}
       />
+    </>
+  );
+}
+
+/**
+ * ***Location / notes*, as the organiser wrote it, with each meeting link a link** (P18.95-T8 AC-2; the
+ * client's UI review, UI-020: *the Zoom link in the event popup is plain text*). The link reads *Join
+ * Zoom* or *Join meeting* (`notesParts`), is a 44px target on a phone (`TEXT_TAP`), opens in a new tab
+ * with neither the opener nor the referrer handed on, and says so to a screen reader; its address is
+ * its tooltip. Only an `http:` or `https:` address becomes one — nothing else the notes hold is made
+ * something a press could run.
+ */
+function NotesText({ notes }: { notes: string }) {
+  return (
+    <>
+      {notesParts(notes).map((part, i) => ('href' in part ? (
+        <a
+          // The notes are the organiser's words: a part's place in them is its identity.
+          // eslint-disable-next-line react/no-array-index-key
+          key={i}
+          href={part.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={part.href}
+          className={cn(
+            'inline-flex items-center rounded-pill bg-navy-soft/[0.12] px-2.5 py-0.5 align-baseline text-sm font-semibold text-navy hover:bg-navy-soft/20',
+            TEXT_TAP,
+          )}
+        >
+          {part.label}
+          <span className="sr-only">{OWN_COPY.newTab}</span>
+        </a>
+      ) : (
+        // eslint-disable-next-line react/no-array-index-key
+        <span key={i}>{part.text}</span>
+      )))}
     </>
   );
 }

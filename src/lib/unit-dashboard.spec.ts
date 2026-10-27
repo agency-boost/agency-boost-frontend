@@ -4,7 +4,7 @@ import {
   AGUS_ROW, BUDI, dashboard, DIMAS, goalCell, rp, SARI, SARI_UNIT, TONO, unitRow, WULAN, YANTI,
 } from '@test/unit-dashboard-fixtures';
 import {
-  candidates, countWords, dialogGroups, everyRow, gapWords, goalWords, inputsOf, lockedWords, missingWords,
+  candidates, countWords, dialogGroups, everyRow, gapWords, goalBar, goalWords, inputsOf, lockedWords, missingWords,
   OWN_COPY, periodFrom, prefill, productionChanges, productionToast, provenanceWords, readUnitDashboard, readerName,
   recruitLine, regroup, rowName, salesLine, totalRecruitLine, touchesWords, updateUnitProduction,
 } from './unit-dashboard';
@@ -61,15 +61,41 @@ describe('the words a row is drawn in', () => {
   it('P15-T2 AC-3 never shows a missing figure as 0: Not uploaded yet, and No goal set', () => {
     expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null })))
       .toEqual({ tone: 'missing', line: 'Not uploaded yet', sub: 'of Rp 80 jt target' });
+    // The figure alone is labelled (P18.95-T3 AC-2; UI-030), which it was not until 2026-10-26.
     expect(goalWords(goalCell({ set: false, targetMinor: null, attainmentPct: null })))
-      .toEqual({ tone: 'none', line: 'No goal set', sub: 'Rp 65,6 jt' });
+      .toEqual({ tone: 'none', line: 'No goal set', sub: 'produced Rp 65,6 jt' });
     expect(goalWords({ targetMinor: null, actualMinor: null, attainmentPct: null }))
       .toEqual({ tone: 'none', line: 'No goal set', sub: null });
   });
 
+  it('P18.95-T3 AC-2 labels a figure that stands without a target: produced Rp 29 jt, on every row and total', () => {
+    // The client's own row (UI-030): *"You (Agus): No goal set · Rp 29.000.000"*, an unlabelled number.
+    const agus = goalWords({ set: false, targetMinor: null, actualMinor: rp(29), attainmentPct: null });
+    expect(agus).toEqual({ tone: 'none', line: 'No goal set', sub: 'produced Rp 29 jt' });
+    expect(OWN_COPY.produced('Rp 29 jt')).toBe('produced Rp 29 jt');
+    // A total of nobody's targets says it the same way, and a figure beside its target needs no label.
+    expect(goalWords({ targetMinor: null, actualMinor: rp(131.2), attainmentPct: null }).sub).toBe('produced Rp 131,2 jt');
+    expect(goalWords(goalCell()).sub).toBe('Rp 65,6 jt of 80 jt');
+    expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null })).sub).toBe('of Rp 80 jt target');
+  });
+
+  it('P18.95-T3 AC-1 draws a phone card’s goal bar from the server’s percentage, capped, and none without a figure or a target', () => {
+    expect(goalBar(goalCell())).toBe(82);
+    expect(goalBar(goalCell({ attainmentPct: 135 }))).toBe(100);
+    expect(goalBar(goalCell({ attainmentPct: 45.6 }))).toBe(46);
+    expect(goalBar(goalCell({ attainmentPct: -3 }))).toBe(0);
+    // A percentage with nothing to show is the cell's own zero (the line's *0,0%*), drawn as an empty bar.
+    expect(goalBar({ targetMinor: rp(100), actualMinor: rp(0), attainmentPct: null })).toBe(0);
+    // No target, a month made already, no figure: nothing to draw — an empty track would read as zero.
+    expect(goalBar(goalCell({ set: false, targetMinor: null, attainmentPct: null }))).toBeNull();
+    expect(goalBar({ targetMinor: null, actualMinor: rp(29), attainmentPct: null })).toBeNull();
+    expect(goalBar(goalCell({ targetMinor: 0, attainmentPct: null }))).toBeNull();
+    expect(goalBar(goalCell({ actualMinor: null, attainmentPct: null }))).toBeNull();
+  });
+
   it('P15-T2 AC-3 says a month made before it began is made, never 0% of Rp 0 (ADR-0047)', () => {
     const made = goalCell({ targetMinor: 0, actualMinor: rp(12), attainmentPct: null, gapMinor: 0, overMinor: rp(12), policiesNeeded: 0, targetMet: true });
-    expect(goalWords(made)).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'Rp 12 jt' });
+    expect(goalWords(made)).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'produced Rp 12 jt' });
     expect(goalWords({ ...made, actualMinor: null })).toEqual({ tone: 'over', line: 'Year’s target made', sub: 'Not uploaded yet' });
     // A total whose target-holding rows were all made sums to a target of 0, and says the same.
     expect(goalWords({ targetMinor: 0, actualMinor: rp(30), attainmentPct: null }).line).toBe('Year’s target made');

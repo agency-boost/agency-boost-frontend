@@ -1,11 +1,13 @@
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderInLayout, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
 import {
   AGUS_ME, dashboard, EMPTY, goalCell, RATIOS, ratio, rp, total, unitRow, UNITS,
 } from '@test/unit-dashboard-fixtures';
+import { TERMS } from '@/lib/terms';
 import type { UnitDashboardView } from '@/lib/unit-dashboard';
+import { PHONE_QUERY } from '@/lib/use-phone';
 import AgentLayout from '../../layout';
 import UnitDashboardPage from './page';
 
@@ -82,11 +84,16 @@ describe('the Unit Dashboard (P15-T2)', () => {
       await table();
       expect(screen.getByText('Your team')).toBeInTheDocument();
       expect(screen.getByText('16 agents')).toBeInTheDocument();
-      expect(screen.getByText('4 direct agents (including you) · 3 AAB units · 9 agents under AABs')).toBeInTheDocument();
+      // P18.95-T7 AC-1 (grey text row 19): the client's line, its two parts adding up to the headline — 4 + 3 + 9.
+      expect(screen.getByText('4 direct · 12 under AABs')).toBeInTheDocument();
+      expect(screen.queryByText(/direct agents \(including/)).not.toBeInTheDocument();
       expect(screen.getByText('Direct Group production')).toBeInTheDocument();
       expect(screen.getByText('Rp 1 M / 1,3 M')).toBeInTheDocument();
       expect(screen.getByText('78,0%')).toBeInTheDocument();
-      expect(screen.getByText('Potential Monthly Active Agents (Group)')).toBeInTheDocument();
+      // P18.95-T9 AC-4: the prototype's *Potential Monthly Active Agents (Group)*, in plain words — on pace, not active.
+      expect(screen.getByText('On pace to be active (Group)')).toBeInTheDocument();
+      expect(screen.queryByText('Potential Monthly Active Agents (Group)')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Active this month/)).not.toBeInTheDocument();
       expect(screen.getByText('12 / 16 agents')).toBeInTheDocument();
       expect(screen.getByText('Potential Recruits (Group)')).toBeInTheDocument();
       const recruits = screen.getByText('Your unit').closest('p')!;
@@ -109,12 +116,15 @@ describe('the Unit Dashboard (P15-T2)', () => {
       expect(tile.textContent).not.toMatch(/Rp 0\b|0%/);
     });
 
-    it('P15-T2 AC-2 names Siti and Yanti in the production tile, the two the rows hold no figure for', async () => {
+    it('P15-T2 AC-2, P18.95-T7 AC-1 names Siti and Yanti in the production tile’s ⓘ, the two the rows hold no figure for', async () => {
       render();
       await table();
       const tile = screen.getByText('Direct Group production').parentElement!;
-      expect(within(tile).getByRole('button', { name: 'Not uploaded yet for Siti Rahma, Yanti Puspita, so not counted in this total.' }))
-        .toBeInTheDocument();
+      const words = 'Not uploaded yet for Siti Rahma, Yanti Puspita, so not counted in this total.';
+      expect(within(tile).getByRole('button', { name: words })).toBeInTheDocument();
+      // Grey text row 20, the client's *ⓘ*: it is one at every size already, and never a sentence on the tile.
+      expect(within(tile).getAllByText(words).every((el) => el.getAttribute('role') === 'tooltip' || el.classList.contains('sr-only')))
+        .toBe(true);
     });
 
     it('P15-T2 AC-2 says the year’s target is made, never “/ Rp 0”, when every target-holding row made it (ADR-0047)', async () => {
@@ -199,16 +209,29 @@ describe('the Unit Dashboard (P15-T2)', () => {
       expect(row).toHaveClass('bg-amber/5');
     });
 
-    it('P15-T2 AC-3 marks a potential monthly active agent with a named ✓, and nobody else', async () => {
+    it('P15-T2 AC-3, P18.95-T9 AC-4 marks a potential monthly active agent with a named ✓, and nobody else', async () => {
       render();
       await table();
       const dimas = rowOf('Dimas Pratama');
-      const check = within(dimas).getByRole('button', {
-        name: 'Potential Monthly Active Agent — pacing to submit at least 1 policy this month.',
-      });
-      expect(check).toHaveTextContent('✓');
-      expect(within(rowOf('Siti Rahma')).queryByText('✓')).not.toBeInTheDocument();
-      expect(within(rowOf('Sari Wulandari')).queryByText('✓')).not.toBeInTheDocument();
+      // Named for a screen reader, and no longer a button repeating the sentence on every row (UI-028).
+      const mark = within(dimas).getByText('Potential Monthly Active Agent');
+      expect(mark).toHaveClass('sr-only');
+      expect(mark.parentElement).toHaveTextContent(/^✓Potential Monthly Active Agent$/);
+      expect(within(dimas).queryByRole('button', { name: /pacing to submit/ })).not.toBeInTheDocument();
+      expect(within(rowOf('Siti Rahma')).queryByText('Potential Monthly Active Agent')).not.toBeInTheDocument();
+      expect(within(rowOf('Sari Wulandari')).queryByText('Potential Monthly Active Agent')).not.toBeInTheDocument();
+    });
+
+    it('P18.95-T9 AC-4 explains the ✓ once, as the Name heading’s ⓘ, in the one-line definition', async () => {
+      render();
+      await table();
+      const name = screen.getByRole('columnheader', { name: /^Name/ });
+      const tip = within(name).getByRole('button', { name: 'What is a Potential Monthly Active Agent?' });
+      expect(tip).toHaveAccessibleDescription(TERMS.POTENTIAL_MAA.definition);
+      expect(TERMS.POTENTIAL_MAA.definition).toMatch(/pacing, from this month’s activity, to submit at least 1 policy this month/);
+      // Once on the screen, however many rows carry a ✓.
+      expect(screen.getAllByRole('button', { name: 'What is a Potential Monthly Active Agent?' })).toHaveLength(1);
+      expect(screen.getAllByText('Potential Monthly Active Agent').length).toBeGreaterThan(1);
     });
 
     it('P15-T2 AC-3 tags each unit head’s own row Personal', async () => {
@@ -235,7 +258,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       render();
       await table();
       expect(within(rowOf('Siti Rahma')).getAllByRole('cell')[0]).toHaveTextContent(/^Not uploaded yetof Rp 80 jt target$/);
-      expect(within(rowOf('Sari Wulandari')).getAllByRole('cell')[0]).toHaveTextContent(/^No goal setRp 65,6 jt$/);
+      expect(within(rowOf('Sari Wulandari')).getAllByRole('cell')[0]).toHaveTextContent(/^No goal setproduced Rp 65,6 jt$/);
     });
 
     it('P15-T2 AC-3 writes the leads lines, the recruit line a dash with nothing to recruit', async () => {
@@ -366,7 +389,8 @@ describe('the Unit Dashboard (P15-T2)', () => {
       expect(cells[2]).toHaveTextContent('Sales: 36 · 16 closingRecruit: 1 potential recruit');
       expect(cells[3]).toHaveTextContent('340 / 380 goal activities');
       expect(cells[4]).toHaveTextContent(/^—$/);
-      expect(cells[5]).toHaveTextContent('3/4 potential active');
+      // P18.95-T9 AC-4: what it counts, in plain words — members on pace, `POTENTIAL_MAA_COUNT_IN_UNIT`.
+      expect(cells[5]).toHaveTextContent(/^On pace to be active: 3\/4$/);
     });
 
     it('P15-T2 AC-4 names in a unit’s total who it leaves out', async () => {
@@ -625,12 +649,12 @@ describe('the Unit Dashboard (P15-T2)', () => {
       render([{ body: dashboard() }, { body: dashboard({ period: '7d' }) }]);
       await table();
       const before = screen.getAllByRole('button', { name: /^(On track|Watch closely|Needs attention|No goal set)$/ }).map((b) => b.textContent);
-      const checks = screen.getAllByRole('button', { name: /^Potential Monthly Active Agent/ }).length;
+      const checks = screen.getAllByText('Potential Monthly Active Agent').length;
       await userEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
       await table();
       expect(screen.getAllByRole('button', { name: /^(On track|Watch closely|Needs attention|No goal set)$/ }).map((b) => b.textContent))
         .toEqual(before);
-      expect(screen.getAllByRole('button', { name: /^Potential Monthly Active Agent/ })).toHaveLength(checks);
+      expect(screen.getAllByText('Potential Monthly Active Agent')).toHaveLength(checks);
     });
 
     it('P15-T2 AC-3 and D-period say this month under Last 7 days, and pro-rated targets', async () => {
@@ -1055,3 +1079,276 @@ describe('Chasing MDRT and Campaigns they’re chasing (P18.5-T7 AC-7, AC-8)', (
     expect(calls.some((c) => /\/campaigns/.test(c.url))).toBe(false);
   });
 });
+
+/*
+ * **The roster as cards below 768px** (P18.95-T3 AC-1, AC-2; ADR-0167 §6; the client's UI review of 2026-10-26,
+ * UI-010 and UI-030). On a phone only *Name* and *Goal progress* fitted: *Status*, *Last 1:1* and the ⌄ sat some
+ * 760px to the right, names were cut (*Indah Permat…*), *Personal* lay over *No goal set*, and the opened detail was
+ * as wide as the table. The phone is `matchMedia` answering `usePhone`'s query; jsdom has none, so every spec above
+ * is the table a tablet and a desktop draw.
+ */
+describe('P18.95-T3 — the roster as cards on a phone', () => {
+  const onPhone = (matches = true) => vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    media: query, matches: matches && query === PHONE_QUERY, addEventListener: () => {}, removeEventListener: () => {},
+  })));
+  /** A person's card, found by the link their name is. */
+  const cardOf = (name: string) => screen.getByRole('link', { name }).closest('li')!;
+  const cards = () => screen.findByRole('list', { name: 'Your Unit' });
+  const toggleOf = (name: string) => screen.getByRole('button', { name: `View details for ${name}` });
+
+  beforeEach(() => document.addEventListener('click', stayPut));
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.removeEventListener('click', stayPut);
+  });
+
+  it('P18.95-T3 AC-1 draws a card per person below 768px, and no table', async () => {
+    onPhone();
+    render();
+    await cards();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    // Fourteen people, fourteen cards, each with its ⌄ — as many as the table has rows.
+    expect(screen.getAllByRole('button', { name: /^View details for / })).toHaveLength(14);
+    expect(screen.getByRole('heading', { level: 2, name: 'Your team’s roster' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Update production' })).toBeInTheDocument();
+  });
+
+  it('P18.95-T9 AC-4 explains the ✓ once on a phone too, beside the roster’s heading, with no Name heading to hold it', async () => {
+    onPhone();
+    render();
+    await cards();
+    const tips = screen.getAllByRole('button', { name: 'What is a Potential Monthly Active Agent?' });
+    expect(tips).toHaveLength(1);
+    expect(tips[0]).toHaveAccessibleDescription(TERMS.POTENTIAL_MAA.definition);
+    expect(screen.getByRole('heading', { level: 2, name: 'Your team’s roster' }).parentElement).toContainElement(tips[0]);
+  });
+
+  it('P18.95-T3 AC-1 keeps the table’s groups and order: Your Unit · 4 and its total, AAB units, each unit’s total before its head', async () => {
+    onPhone();
+    render();
+    await cards();
+    expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Your Unit · 4', 'AAB units']);
+    expect(screen.getAllByRole('list').map((l) => l.getAttribute('aria-label'))).toEqual([
+      'Your Unit', 'Arief Wibowo’s Unit', 'Dewi Kartika’s Unit', 'Sari Wulandari’s Unit', 'Wulan Sari’s Unit',
+    ]);
+    // A total's card names its unit; a person's card is named by the link their name is.
+    const lines = (list: string) => within(screen.getByRole('list', { name: list })).getAllByRole('listitem')
+      .map((li) => (li.querySelector('a') ?? li.querySelector('p'))!.textContent);
+    expect(lines('Your Unit')).toEqual(['Your Unit — Total', 'You (Agus)', 'Dimas Pratama', 'Indah Lestari', 'Siti Rahma']);
+    expect(lines('Sari Wulandari’s Unit')).toEqual([
+      'Sari Wulandari’s Unit — Total', 'Sari Wulandari', 'Budi Santoso', 'Rina Wijaya', 'Yanti Puspita',
+    ]);
+    // A unit inside a unit one step further in, as the table's ↳ is — half its step, on a phone.
+    const indent = (name: string) => cardOf(name).style.paddingLeft;
+    expect(indent('Dimas Pratama')).toBe('');
+    expect(indent('Arief Wibowo')).toBe('28px');
+    expect(indent('Wulan Sari')).toBe('40px');
+    expect(indent('Tono Saputra')).toBe('40px');
+  });
+
+  it('P18.95-T3 AC-1 says on a card what the table’s row says: the pill, the goal, Last 1:1 and who held it', async () => {
+    // The table's cells first, read as a tablet draws them …
+    render();
+    await table();
+    const row = rowOf('Dimas Pratama');
+    const goal = within(row).getAllByRole('cell')[0].textContent;
+    const last = within(row).getAllByRole('cell')[4].textContent;
+    cleanup();
+
+    // … and the same words on the phone's card.
+    onPhone();
+    render();
+    await cards();
+    const dimas = cardOf('Dimas Pratama');
+    expect(dimas).toHaveTextContent(goal!);
+    expect(dimas).toHaveTextContent(last!);
+    expect(goal).toBe('82,0% · Rp 14,4 jt shortRp 65,6 jt of 80 jt');
+    expect(last).toBe('12 days ago · overdueby Agus Santoso');
+    expect(within(dimas).getByText('12 days ago · overdue')).toHaveClass('text-alert');
+    expect(within(dimas).getByRole('button', { name: 'Watch closely' })).toHaveAccessibleDescription(
+      'Still pacing to qualify as a Monthly Active Agent, but under 90% of expected goal pace — worth a check-in.',
+    );
+    // Each value under its column's name, label above value (ADR-0167 §6).
+    expect([...dimas.querySelectorAll('dt')].map((dt) => dt.textContent)).toEqual(['Goal progress', 'Last 1:1']);
+    // The status rules the table keeps in its heading, beside the pill on a card.
+    expect(within(dimas).getByRole('button', { name: 'How is status decided?' })).toBeInTheDocument();
+    expect(cardOf('Siti Rahma')).toHaveTextContent('Not uploaded yetof Rp 80 jt target');
+    expect(cardOf('Siti Rahma')).toHaveTextContent('No 1:1 yet');
+  });
+
+  it('P18.95-T3 AC-1 draws the goal bar from the server’s percentage, in the goal’s tone, and none without a figure', async () => {
+    onPhone();
+    render();
+    await cards();
+    const bar = (name: string) => cardOf(name).querySelector<HTMLElement>('[data-goal-bar]');
+    expect(bar('Dimas Pratama')).toHaveAttribute('data-goal-bar', '82');
+    expect(bar('Dimas Pratama')!.firstElementChild).toHaveStyle({ width: '82%' });
+    expect(bar('Dimas Pratama')!.firstElementChild).toHaveClass('bg-alert');
+    expect(bar('You (Agus)')!.firstElementChild).toHaveStyle({ width: '100%' });
+    expect(bar('You (Agus)')!.firstElementChild).toHaveClass('bg-success');
+    // The figures carry it: the bar is their picture, hidden from a screen reader.
+    expect(bar('Dimas Pratama')).toHaveAttribute('aria-hidden', 'true');
+    expect(bar('Siti Rahma')).toBeNull();
+    expect(bar('Sari Wulandari')).toBeNull();
+  });
+
+  it('P18.95-T3 AC-1 writes a name in full, never cut, and keeps Personal on the name’s line, apart from the goal', async () => {
+    onPhone();
+    const long = unitRow('mem-indah', 'Indah Permatasari Wijayakusuma', { leads: true });
+    render(dashboard({ yourUnit: { ...dashboard().yourUnit, rows: [AGUS_ME_ROW(), long] } }));
+    await cards();
+    const name = screen.getByRole('link', { name: 'Indah Permatasari Wijayakusuma' });
+    expect(name).not.toHaveClass('truncate');
+    expect(name).toHaveClass('break-words');
+    const sari = cardOf('Sari Wulandari');
+    const badge = within(sari).getByText('Personal');
+    expect(badge.closest('p')).toContainElement(within(sari).getByRole('link', { name: 'Sari Wulandari' }));
+    expect(badge.closest('dl')).toBeNull();
+    const goal = sari.querySelector('dd')!;
+    expect(goal).toHaveTextContent('No goal set');
+    expect(goal).not.toContainElement(badge);
+  });
+
+  it('P18.95-T3 AC-1 opens the rest from the ⌄ by keyboard, each label above its value, nothing cut, and closes it', async () => {
+    onPhone();
+    render();
+    await cards();
+    const button = toggleOf('Dimas Pratama');
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    button.focus();
+    await userEvent.keyboard('{Enter}');
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    const detail = document.getElementById(button.getAttribute('aria-controls')!)!;
+    expect(cardOf('Dimas Pratama')).toContainElement(detail);
+    // The table's other columns, under their names …
+    expect([...detail.querySelectorAll(':scope > dl > div > dt')].map((dt) => dt.textContent)).toEqual([
+      'Leads', expect.stringMatching(/^Activityⓘ/), expect.stringMatching(/^Chasing MDRT/),
+    ]);
+    expect(detail).toHaveTextContent('Sales: 9 · 4 closingRecruit: —');
+    expect(detail).toHaveTextContent('85 / 95 goal activities');
+    expect(within(detail).getByRole('button', { name: 'Dimas Pratama is chasing MDRT this year.' })).toBeInTheDocument();
+    expect(within(detail).getByRole('button', { name: 'What counts as a goal activity?' })).toBeInTheDocument();
+    // … then the detail's tiles, whole: the gap's sentence wraps in the card rather than running off it.
+    expect(within(detail).getAllByRole('heading').map((h) => h.textContent))
+      .toEqual(['Gap', 'Activity breakdown', 'Ratios', 'Campaigns they’re chasing', 'Flagged follow-up (system-detected)']);
+    expect(detail).toHaveTextContent('≈ 1 policy needed at their avg case size of Rp 18 jt.');
+    const appointment = within(detail).getByText('Set appointment').parentElement!;
+    expect(appointment).toHaveClass('flex-col');
+    expect(appointment).toHaveTextContent('Set appointment63/70');
+    const rate = (await within(detail).findByText('Selling success rate')).parentElement!;
+    expect(rate).toHaveClass('flex-col');
+    expect(within(detail).getByText('70,0% Selling · 30,0% Recruitment')).not.toHaveClass('whitespace-nowrap');
+
+    await userEvent.keyboard(' ');
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(document.getElementById(detail.id)).toBeNull();
+  });
+
+  it('P18.95-T3 AC-1 opens a card from a tap on it, and not from a tap on a drill or a control', async () => {
+    onPhone();
+    render();
+    await cards();
+    const button = toggleOf('Dimas Pratama');
+    fireEvent.click(within(cardOf('Dimas Pratama')).getByText('12 days ago · overdue'));
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(within(cardOf('Dimas Pratama')).getByText('12 days ago · overdue'));
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(screen.getByRole('link', { name: 'Dimas Pratama' }));
+    fireEvent.click(within(cardOf('Dimas Pratama')).getByRole('button', { name: 'Watch closely' }));
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('P18.95-T3 AC-1 keeps every drill the row has: the name, the goal and, opened, the leads', async () => {
+    onPhone();
+    render();
+    await cards();
+    const hrefs = (name: string) => [...cardOf(name).querySelectorAll('a')].map((a) => a.getAttribute('href'));
+    expect(hrefs('Dimas Pratama')).toEqual(['/coaching/mem-dimas/summary', '/coaching/mem-dimas/goal-setting']);
+    await userEvent.click(toggleOf('Dimas Pratama'));
+    expect(hrefs('Dimas Pratama')).toEqual([
+      '/coaching/mem-dimas/summary', '/coaching/mem-dimas/goal-setting', '/coaching/mem-dimas/session',
+    ]);
+    await userEvent.click(toggleOf('you'));
+    expect(hrefs('You (Agus)')).toEqual(['/summary', '/goals', '/leads']);
+  });
+
+  it('P18.95-T3 AC-1 draws a total as a card: its goal, leads, goal activities and potential active, who it leaves out', async () => {
+    onPhone();
+    render();
+    await cards();
+    const total = within(screen.getByRole('list', { name: 'Your Unit' })).getAllByRole('listitem')[0];
+    expect([...total.querySelectorAll('dt')].map((dt) => dt.textContent)).toEqual(['Goal progress', 'Leads', 'Activity', 'Status']);
+    expect(total).toHaveTextContent('82,0% · Rp 57,6 jt short');
+    expect(total).toHaveTextContent('Sales: 36 · 16 closingRecruit: 1 potential recruit');
+    expect(total).toHaveTextContent('340 / 380 goal activities');
+    expect(total).toHaveTextContent('On pace to be active: 3/4');
+    expect(total).not.toHaveTextContent('potential active');
+    expect(total.querySelector('button[aria-expanded]')).toBeNull();
+    const sari = within(screen.getByRole('list', { name: 'Sari Wulandari’s Unit' })).getAllByRole('listitem')[0];
+    expect(within(sari).getByRole('button', { name: 'Not uploaded yet for Yanti Puspita, so not counted in this total.' }))
+      .toBeInTheDocument();
+  });
+
+  it('P18.95-T3 AC-1 stars the reader’s own card and draws no Last 1:1 on it', async () => {
+    onPhone();
+    render();
+    await cards();
+    const own = cardOf('You (Agus)');
+    expect(own).toHaveTextContent('★');
+    expect(own).toHaveClass('bg-amber/5');
+    expect(own).not.toHaveTextContent('Last 1:1');
+    expect(own).not.toHaveTextContent('Personal');
+  });
+
+  it('P18.95-T3 AC-2 labels the reader’s own figure at every size: No goal set · produced Rp 29 jt', async () => {
+    const own = { ...AGUS_ME_ROW(), goal: goalCell({ set: false, targetMinor: null, actualMinor: rp(29), attainmentPct: null }) };
+    const view = dashboard({ yourUnit: { ...dashboard().yourUnit, rows: [own] }, units: [] });
+    render(view);
+    await table();
+    expect(within(rowOf('You (Agus)')).getAllByRole('cell')[0]).toHaveTextContent(/^No goal setproduced Rp 29 jt$/);
+    cleanup();
+
+    onPhone();
+    render(view);
+    await cards();
+    expect(cardOf('You (Agus)')).toHaveTextContent('No goal setproduced Rp 29 jt');
+  });
+
+  it('P18.95-T3 AC-1 never draws the table first on a phone: the width is asked before the roster answers', async () => {
+    onPhone();
+    expect(await drewATable(async () => {
+      render();
+      await cards();
+    })).toBe(false);
+  });
+
+  it('P18.95-T3 AC-1 keeps the table at 768px and wider', async () => {
+    onPhone(false);
+    render();
+    await table();
+    expect(screen.queryByRole('list', { name: 'Your Unit' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^View details for / })).toHaveLength(14);
+  });
+});
+
+/** The reader's own row as the fixture holds it. */
+function AGUS_ME_ROW() {
+  return dashboard().yourUnit.rows[0];
+}
+
+/** Whether a `<table>` was ever put on the page while `run` waited: a phone's first paint must already be its cards. */
+async function drewATable(run: () => Promise<unknown>) {
+  let seen = false;
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node instanceof Element && (node.matches('table') || node.querySelector('table'))) seen = true;
+      }
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  await run();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  observer.disconnect();
+  return seen;
+}

@@ -2,13 +2,15 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button, ErrorBanner } from '@/components/ui/field';
+import { Button, ErrorBanner, TextInput } from '@/components/ui/field';
+import { TAB_PHONE, TAB_ROW_PHONE } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { useTabRow } from '@/components/ui/use-tab-row';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  CATEGORY_TABS, CHANNEL_LABELS, catalogHref, drawerHref, filtersFrom, OWN_COPY, productCount, PROTOTYPE_COPY,
-  readCatalog, type CatalogCard, type CatalogFilters, type ProductChannel,
+  CATEGORY_TABS, CHANNEL_LABELS, catalogHref, drawerHref, filtersFrom, matchesSearch, OWN_COPY, productCount,
+  PROTOTYPE_COPY, readCatalog, type CatalogCard, type CatalogFilters, type ProductChannel,
 } from '@/lib/product-catalog';
 
 /** What the drawer beneath the grid needs from it: how to close, and where the focus goes back to. */
@@ -62,6 +64,12 @@ export function ProductTags({ channel, runOff }: { channel: ProductChannel; runO
  *
  * The states the prototype lacks are Fills (P14-T7 AC-10): a skeleton while the shelf loads, an error with
  * a retry, and the empty shelf — an office whose company has no catalog, or which keeps nothing on.
+ *
+ * **A search by product name** above the filters, at every size (P18.95-T6 AC-4; the client's review, UI-023:
+ * 31 products and no search). It filters the shelf already loaded — the one read answers it whole — together
+ * with the category and the channel, and is held by the grid rather than the address: it stays while a drawer
+ * opens and closes over it, as the grid's scroll does. **On a phone the category pills are one row that scrolls
+ * sideways** (UI-015: three lines), fading on the side that has more, the chosen one in view (`use-tab-row.ts`).
  */
 export function ProductCatalog({ children }: { children?: ReactNode }) {
   const router = useRouter();
@@ -70,6 +78,7 @@ export function ProductCatalog({ children }: { children?: ReactNode }) {
   const filters = useMemo(() => filtersFrom(params), [params]);
 
   const [products, setProducts] = useState<CatalogCard[] | null>(null);
+  const [term, setTerm] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
   /** Whether this grid pushed the drawer's address — so closing it can go back rather than forward. */
@@ -109,6 +118,16 @@ export function ProductCatalog({ children }: { children?: ReactNode }) {
     <DrawerHost.Provider value={host}>
       {/* Behind the open drawer the grid takes no focus and no click: the dialog is modal (P14-T7 AC-11). */}
       <div className="min-w-0" inert={drawerOpen || undefined}>
+        <div className="mb-3.5">
+          <TextInput
+            type="search"
+            aria-label={OWN_COPY.searchName}
+            placeholder={OWN_COPY.searchPlaceholder}
+            className="w-full max-w-sm"
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+          />
+        </div>
         <FilterBar filters={filters} onChange={setFilters} />
         {error && (
           <div>
@@ -118,7 +137,7 @@ export function ProductCatalog({ children }: { children?: ReactNode }) {
         )}
         {!products && !error && <CatalogSkeleton />}
         {products && products.length === 0 && <EmptyShelf />}
-        {products && products.length > 0 && <Shelf products={products} filters={filters} onOpen={open} />}
+        {products && products.length > 0 && <Shelf products={products} filters={filters} term={term} onOpen={open} />}
       </div>
       {children}
     </DrawerHost.Provider>
@@ -137,15 +156,23 @@ function FilterBar({ filters, onChange }: { filters: CatalogFilters; onChange: (
   const channels: ['all' | ProductChannel, string][] = [
     ['all', PROTOTYPE_COPY.all], ['conventional', CHANNEL_LABELS.conventional], ['syariah', CHANNEL_LABELS.syariah],
   ];
+  // On a phone the pills are one row that scrolls inside its own box (P18.95-T6 AC-4), the chosen one in view.
+  const row = useTabRow<HTMLDivElement>(filters.category);
   return (
     <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-      <div role="group" aria-label={OWN_COPY.categories} className="flex flex-wrap gap-1.5">
+      <div
+        ref={row.ref}
+        role="group"
+        aria-label={OWN_COPY.categories}
+        data-fade={row.fade}
+        className={cn('flex flex-wrap gap-1.5', TAB_ROW_PHONE, 'max-md:w-full max-md:min-w-0')}
+      >
         {[{ value: 'all', label: PROTOTYPE_COPY.allProducts }, ...CATEGORY_TABS].map((c) => (
           <button
             key={c.value}
             type="button"
             aria-pressed={filters.category === c.value}
-            className={tab(filters.category === c.value)}
+            className={cn(tab(filters.category === c.value), TAB_PHONE)}
             onClick={() => onChange({ category: c.value })}
           >
             {c.label}
@@ -169,10 +196,15 @@ function FilterBar({ filters, onChange }: { filters: CatalogFilters; onChange: (
   );
 }
 
-/** A section per category, in the tabs' order, each hidden when the filter leaves it empty (`:10161-10186`). */
-function Shelf({ products, filters, onOpen }: {
+/**
+ * A section per category, in the tabs' order, each hidden when the filter leaves it empty (`:10161-10186`) — the
+ * search's too (P18.95-T6 AC-4), so a section's count is what it shows. Nothing left: the prototype's line for a
+ * filter, or, while a search is typed, one that names what was searched for.
+ */
+function Shelf({ products, filters, term, onOpen }: {
   products: readonly CatalogCard[];
   filters: CatalogFilters;
+  term: string;
   onOpen: (code: string) => void;
 }) {
   const sections = CATEGORY_TABS
@@ -180,11 +212,19 @@ function Shelf({ products, filters, onOpen }: {
     .map((c) => ({
       ...c,
       items: products.filter((p) => p.category.code === c.value
-        && (filters.channel === 'all' || p.channel === filters.channel)),
+        && (filters.channel === 'all' || p.channel === filters.channel)
+        && matchesSearch(p.name, term)),
     }))
     .filter((s) => s.items.length > 0);
 
-  if (sections.length === 0) return <p className="text-md text-muted">{PROTOTYPE_COPY.noFilterMatch}</p>;
+  if (sections.length === 0) {
+    return (
+      // A status, so a search that empties the shelf is heard as it happens (WCAG 4.1.3), not only seen.
+      <p role="status" className="text-md text-muted" data-state="no-match">
+        {term.trim() ? OWN_COPY.noSearchMatch(term) : PROTOTYPE_COPY.noFilterMatch}
+      </p>
+    );
+  }
 
   return (
     <>

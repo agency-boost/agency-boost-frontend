@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
+import { CHIP_GRID_PHONE, CHIP_PHONE } from '@/components/ui/phone';
 import { MultiChoiceGroup } from './multi-choice-group';
 
 const DRIVERS = [
@@ -71,6 +72,12 @@ describe('MultiChoiceGroup', () => {
   it('P17-T3 AC-8 wraps its chips, so a phone never scrolls sideways', () => {
     render(<Harness />);
     expect(chip('Full career change').parentElement).toHaveClass('flex-wrap');
+  });
+
+  it('P18.95-T6 AC-1 grid/sticky classes scoped to max-md: two chips to a row below 768px, as ChoiceGroup’s', () => {
+    render(<Harness />);
+    expect(chip('Full career change').parentElement).toHaveClass('flex', 'flex-wrap', ...CHIP_GRID_PHONE.split(' '));
+    for (const each of within(group()).getAllByRole('button')) expect(each).toHaveClass(...CHIP_PHONE.split(' '));
   });
 
   it('renders a label as text', () => {

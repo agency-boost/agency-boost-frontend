@@ -1,8 +1,10 @@
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import { createContext, useContext, useEffect, useRef, useState, type RefObject } from 'react';
 import { NotificationBell } from '@/components/notification-bell';
 import { SidebarUserMenu } from '@/components/sidebar-user-menu';
 import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
+import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { cn } from '@/lib/cn';
 import { usePhone } from '@/lib/use-phone';
 
@@ -67,6 +69,20 @@ function BrandMark() {
       <line x1="13" y1="9" x2="6.5" y2="15.5" strokeWidth="1.4" className="stroke-sidebar-text" />
       <line x1="13" y1="9" x2="19.5" y2="15.5" strokeWidth="1.4" className="stroke-sidebar-text" />
     </svg>
+  );
+}
+
+/** The wordmark, and the amber line under it naming which app this is — the sidebar's and the phone's drawer's. */
+function Wordmark({ brandTag, className }: { brandTag?: string; className?: string }) {
+  return (
+    <span className={cn('font-display text-lg font-extrabold leading-tight tracking-tight text-white', className)}>
+      AgencyBoost
+      {brandTag && (
+        <span className="block text-2xs font-semibold uppercase tracking-wide text-amber">
+          {brandTag}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -206,21 +222,38 @@ export function PageHeader({
   title,
   subtitle,
   actions,
+  subtitleOnPhone,
 }: {
   title: string;
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   actions?: React.ReactNode;
+  /**
+   * `false`: **the sub-line is not drawn below 768px** — the client's *Remove* verdict on a page's sub-line (P18.95-T7
+   * AC-1, row 25 of the review's *Grey text* table; ADR-0167 §7). At 768px and wider it reads as before. Absent, the
+   * page that renders the shell said so through `SubtitleOnPhone` — a shell draws this header, not the page.
+   */
+  subtitleOnPhone?: boolean;
 }) {
+  const fromPage = useContext(SubtitleOnPhone);
+  const onPhone = subtitleOnPhone ?? fromPage;
   return (
     <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 className="font-display text-3xl font-bold text-navy">{title}</h1>
-        {subtitle && <p className="mt-1 text-md text-muted">{subtitle}</p>}
+        {subtitle && <p className={cn('mt-1 text-md text-muted', !onPhone && REMOVED_ON_PHONE)}>{subtitle}</p>}
       </div>
       {actions}
     </div>
   );
 }
+
+/**
+ * **Whether a page's sub-line shows on a phone, said by a page whose shell draws its header** (`RoleShell`, which
+ * takes a title and a sub-line and hands them through a shell to `PageHeader`): `/notifications` wraps its shell in
+ * `false`, so the client's *Remove* reaches the header without every shell carrying one more prop (P18.95-T7 AC-1).
+ * A `Page` passes `subtitleOnPhone` to its header itself.
+ */
+export const SubtitleOnPhone = createContext(true);
 
 /**
  * The foot of the sidebar: who is signed in, and what is waiting for them.
@@ -240,14 +273,21 @@ function SidebarFoot({
   user,
   account,
   notifications,
-  nav,
+  phone = false,
+  drawer = false,
 }: {
   rail: boolean;
   user: ShellUser;
   account?: AppShellAccount;
   notifications?: { href: string; unread: number };
-  /** The nav, on a phone only, for the chip's panel to open (ADR-0085). */
-  nav?: React.ReactNode;
+  /** In the phone's bar: the chip's panel drops below it (ADR-0085). */
+  phone?: boolean;
+  /**
+   * **At the foot of the phone's drawer** (P18.95-T2 AC-2): the sidebar's foot as the sidebar draws it, the
+   * chip opening upward. **The bell is not repeated there**: it is on the bar, which a phone always shows,
+   * and its popover is placed against the bar.
+   */
+  drawer?: boolean;
 }) {
   /*
    * **The chip takes the space; the bell is pinned.** The chip sized itself to its contents,
@@ -264,7 +304,8 @@ function SidebarFoot({
       viewSwitch={account.viewSwitch}
       className={rail ? undefined : 'min-w-0 flex-1'}
       compact={rail}
-      nav={nav}
+      phone={phone}
+      panelId={drawer ? DRAWER_ACCOUNT_ID : undefined}
     />
   ) : (
     <div
@@ -286,6 +327,9 @@ function SidebarFoot({
       )}
     </div>
   );
+  // The sidebar's own rule above it, unprefixed: the drawer is a phone's alone.
+  if (drawer) return <div className="mt-3 flex min-w-0 items-center border-t border-white/10 pt-3">{chip}</div>;
+
   const bell = notifications ? <NotificationBell {...notifications} /> : null;
 
   /*
@@ -313,7 +357,7 @@ const RAIL_KEY = 'ab.sidebar.rail';
 
 /**
  * The nav's groups, each a heading that opens and closes it and the items beneath — rendered by the
- * sidebar, and on a phone by the account chip's panel (ADR-0085), so the two cannot differ in order,
+ * sidebar, and on a phone by the drawer the bar's ☰ opens (P18.95-T2), so the two cannot differ in order,
  * names or state.
  */
 function NavGroups({
@@ -410,6 +454,141 @@ function NavGroups({
           </div>
         );
       })}
+    </>
+  );
+}
+
+/** The phone's drawer, as the bar's ☰ names it in `aria-controls`. */
+const DRAWER_ID = 'phone-menu';
+/** The account panel of the chip at the drawer's foot: the bar's chip keeps `sidebar-user-actions`. */
+const DRAWER_ACCOUNT_ID = 'phone-menu-account';
+
+/** What Tab can land on inside the drawer. An upcoming nav item is an `<a>` with no href, and is not. */
+const DRAWER_FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** Three lines and a cross: the ☰ that opens the drawer and the ✕ that closes it, drawn as the rail toggle is. */
+function MenuGlyph({ close = false }: { close?: boolean }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      className="h-5 w-5 shrink-0"
+    >
+      <path d={close ? 'M6 6l12 12M18 6 6 18' : 'M4 7h16M4 12h16M4 17h16'} />
+    </svg>
+  );
+}
+
+/**
+ * **The phone's menu** (P18.95-T2, ADR-0167 §3, OD-198; the client's UI review, UI-009): the sidebar, as a
+ * drawer from the left, below 768px. The same brand, the same `NavGroups` — so the groups, their order, their
+ * labels, their badges, their open or closed state and the current page are the sidebar's by construction —
+ * and the sidebar's foot.
+ *
+ * **A modal dialog**, named *Menu*. Focus moves to its ✕ as it opens and Tab and Shift+Tab go round inside
+ * it; **Escape**, the scrim and ✕ close it, and the focus goes back to ☰. Following any link closes it — the
+ * route moving closes it as well, for *Back* — and the page behind does not scroll while it is open. An
+ * account panel opened at its foot shuts first on Escape, as it does in the sidebar, and the drawer stays.
+ *
+ * Rendered beside the bar, not in it: the bar is `sticky` with a `z-index`, and a drawer inside it could
+ * never stand above a page's own raised layers.
+ */
+function PhoneMenu({
+  onClose,
+  returnTo,
+  brandTag,
+  children,
+  foot,
+}: {
+  onClose: () => void;
+  returnTo: RefObject<HTMLButtonElement | null>;
+  brandTag?: string;
+  /** The nav. */
+  children: React.ReactNode;
+  foot: React.ReactNode;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const closer = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    closer.current?.focus();
+    // The page behind holds still. On `body`, which the viewport takes its overflow from.
+    const before = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const back = returnTo.current;
+    return () => {
+      document.body.style.overflow = before;
+      back?.focus();
+    };
+  }, [returnTo]);
+
+  function keys(event: React.KeyboardEvent) {
+    if (event.key === 'Escape') {
+      // The foot's account panel hears Escape itself and shuts alone; the drawer waits for the next one.
+      if (box.current?.querySelector('[data-account-panel]')) return;
+      event.stopPropagation();
+      onClose();
+      return;
+    }
+    if (event.key !== 'Tab' || !box.current) return;
+    // Never empty: ✕ is always here.
+    const items = Array.from(box.current.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE));
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  /** Following any link closes the drawer, so it is not left open over the next screen. */
+  function closeOnLink(event: React.MouseEvent) {
+    if ((event.target as Element).closest('a[href]')) onClose();
+  }
+
+  return (
+    <>
+      <div aria-hidden="true" data-scrim="" className="fixed inset-0 z-40 bg-navy/35 print:hidden md:hidden" onClick={onClose} />
+      <div
+        ref={box}
+        id={DRAWER_ID}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menu"
+        onKeyDown={keys}
+        onClick={closeOnLink}
+        /*
+          * The sidebar's own width, and never more than 85% of the screen, so a strip of the page stays in
+          * sight and the scrim is there to tap. Its padding is the sidebar's.
+          */
+        className="fixed inset-y-0 left-0 z-50 flex w-sidebar max-w-[85vw] flex-col bg-navy px-4 pb-4 pt-3.5 text-sidebar-text shadow-modal print:hidden md:hidden"
+      >
+        <div className="mb-3 flex items-center gap-2 border-b border-white/10 px-1 pb-3.5">
+          <BrandMark />
+          <Wordmark brandTag={brandTag} />
+          {/* Where the rail toggle sits in the sidebar: a control on the frame. 44px, as every target on a phone. */}
+          <button
+            ref={closer}
+            type="button"
+            onClick={onClose}
+            aria-label="Close menu"
+            className="-mr-2 ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-white/[0.55] hover:bg-white/[0.06] hover:text-white"
+          >
+            <MenuGlyph close />
+          </button>
+        </div>
+        <nav id="sidebar-nav" aria-label="Main" className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5">
+          {children}
+        </nav>
+        {foot}
+      </div>
     </>
   );
 }
@@ -529,24 +708,35 @@ export function AppShell({
   };
 
   /*
-   * **On a phone, the account chip is the way round** (ADR-0085). Below 768px the sidebar is a bar
-   * and has no room for the nav, and the prototype's phone simply hides it, with *Sign out*
-   * (`Overall.html:1421-1428`). So there the nav groups go into the chip's panel, above *Your
-   * account* and *Sign out*, and the panel drops below the bar. One nav at a time, never two: the
-   * sidebar renders it wider, the chip on a phone. The rail is a desktop control, so a collapsed one
-   * remembered from a wider window does not shrink the chip to an avatar on a phone.
+   * **On a phone, ☰ opens the sidebar as a drawer** (P18.95-T2, ADR-0167 §3; the client's UI review, UI-009).
+   * Below 768px the sidebar is a bar and has no room for the nav, and the prototype's phone simply hides it,
+   * with *Sign out* (`Overall.html:1421-1428`). From 2026-10-02 the nav went into the account chip's panel
+   * (ADR-0085), where the client found the menu hidden behind the name; now ☰, before the brand, opens the
+   * sidebar's own content from the left, and the chip keeps the account's items. One nav at a time, never two:
+   * the sidebar renders it wider, the drawer on a phone. The rail is a desktop control, so a collapsed one
+   * remembered from a wider window does not shrink the chip to an avatar on a phone, nor the drawer to a rail.
    */
   const phone = usePhone();
   const groups = (
     <NavGroups sections={sections} rail={rail && !phone} closed={closed} onToggle={toggleGroup} pill={upcomingLabel} />
   );
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const pathname = usePathname();
+  /*
+   * **The route moving closes it** — a link followed inside it closes it first; this is *Back*, and any other
+   * way the page changes underneath it — and so does the width crossing 768px, where the sidebar is back.
+   */
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname, phone]);
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       {/* Below the prototype's 720px breakpoint the rail becomes a horizontal navy bar
           that keeps the brand and hides the nav and footer (`Overall.html:1421-1428`).
           It used to be `hidden md:flex`, which took the only route to sign out with it;
-          the chip in it now opens the nav as well (ADR-0085). */}
+          the chip in it stayed (ADR-0085), and ☰ before the brand opens the nav (P18.95-T2). */}
       <aside
         className={cn(
           // `print:hidden`: a printed page is the page, not the app around it (`Overall.html:1022`, ADR-0061).
@@ -561,6 +751,26 @@ export function AppShell({
           rail ? 'md:w-[var(--sidebar-rail-width)] md:px-2' : 'md:w-sidebar',
         )}
       >
+        {/*
+          * **☰, before the brand, below 768px only** (P18.95-T2 AC-1). Hidden by its class rather than by
+          * `usePhone`, so a phone's first paint already has it and the brand does not move when the page
+          * wakes; nothing wider shows it. A 44px target, as every target on a phone; the glyph keeps the
+          * brand mark's place at the bar's edge.
+          */}
+        <button
+          ref={menuButton}
+          type="button"
+          // Only on a phone: from 768px it is not shown, and an open drawer left waiting would spring open
+          // the moment the window narrowed.
+          onClick={() => { if (phone) setMenuOpen(true); }}
+          aria-label="Open menu"
+          aria-haspopup="dialog"
+          aria-expanded={menuOpen && phone}
+          aria-controls={DRAWER_ID}
+          className="-ml-2 mr-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-white/[0.78] hover:bg-white/[0.06] hover:text-white md:hidden"
+        >
+          <MenuGlyph />
+        </button>
         <div
           className={cn(
             'flex items-center gap-2 px-1 md:mb-3 md:border-b md:border-white/10 md:pb-4',
@@ -570,19 +780,7 @@ export function AppShell({
           <BrandMark />
           {/* The wordmark goes, the mark stays: it is the thing that says which product this
               is, and 56px has room for exactly one of them. */}
-          <span
-            className={cn(
-              'font-display text-lg font-extrabold leading-tight tracking-tight text-white',
-              rail && 'md:hidden',
-            )}
-          >
-            AgencyBoost
-            {brandTag && (
-              <span className="block text-2xs font-semibold uppercase tracking-wide text-amber">
-                {brandTag}
-              </span>
-            )}
-          </span>
+          <Wordmark brandTag={brandTag} className={rail ? 'md:hidden' : undefined} />
 
           {/*
             * **Beside the mark, not above the nav.** It was its own row under the brand, which
@@ -621,7 +819,7 @@ export function AppShell({
           )}
         </div>
 
-        {/* Wider than a phone, the nav is the sidebar's. On a phone it is the account chip's (below). */}
+        {/* Wider than a phone, the nav is the sidebar's. On a phone it is the drawer's (below). */}
         {!phone && (
           <nav id="sidebar-nav" className="hidden min-h-0 flex-1 overflow-y-auto pr-0.5 md:block" aria-label="Main">
             {groups}
@@ -633,9 +831,20 @@ export function AppShell({
           user={user}
           account={account}
           notifications={notifications}
-          nav={phone ? <nav id="sidebar-nav" aria-label="Main">{groups}</nav> : undefined}
+          phone={phone}
         />
       </aside>
+
+      {menuOpen && phone && (
+        <PhoneMenu
+          onClose={() => setMenuOpen(false)}
+          returnTo={menuButton}
+          brandTag={brandTag}
+          foot={<SidebarFoot rail={false} user={user} account={account} drawer />}
+        >
+          {groups}
+        </PhoneMenu>
+      )}
 
       <main className="min-w-0 flex-1 px-5 py-6 print:p-0 md:px-10 md:pb-14 md:pt-8">
         {title !== undefined && (

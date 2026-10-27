@@ -2,22 +2,28 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
-import { ActivityTabs } from '@/components/activity-tabs';
+import { ACTIVITY_TITLE, ActivityTabs } from '@/components/activity-tabs';
 import { SummaryStrip } from '@/components/summary-strip';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { ConfigBadge } from '@/components/ui/config-badge';
+import { TermText, TermTip } from '@/components/ui/term-tip';
 import { Dialog } from '@/components/ui/dialog';
 import { NumberBadge } from '@/components/ui/number-badge';
 import { SaveStatus } from '@/components/ui/save-status';
 import { SectionCard } from '@/components/ui/section-card';
 import { Stepper } from '@/components/ui/stepper';
 import { Toast, useToast } from '@/components/ui/toast';
+import { ACTION_BAR_PHONE, ACTION_BAR_ROOM_PHONE } from '@/components/ui/phone';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import { CONFIRMED } from '@/lib/confirmations';
+import { formatCalendarDay, formatNumber } from '@/lib/format';
+import { activityTermMentions } from '@/lib/terms';
 import { useSession } from '@/lib/session';
-import { isShownTo, summaryTiles } from '@/lib/summary-tiles';
+import { sectionTiles, shownSections } from '@/lib/summary-tiles';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
+import { usePhone } from '@/lib/use-phone';
 import {
   correctActivityDay, readActivityDay, saveActivityDay, type ActivityDay,
 } from '@/lib/activity';
@@ -38,12 +44,20 @@ import {
  * card, the day-status card and each section's description are gone, at the client's request of
  * 2026-09-29. What stays beyond the prototype is a frozen day's reason field (ADR-0042), the
  * empty-configuration card and the unsaved-counts dialog, each only when it is needed.
+ *
+ * **On a phone** (P18.95-T5 AC-1, the client's UI review of 2026-10-26, UI-017): the five tiles that filled
+ * the first screen are one line, *Today: 3 touches*, and *Save activity* — 2,260px down the page — is in a
+ * bar fixed to the bottom of the screen with its *Saved* / *Not yet saved* beside it. At 768px and wider
+ * nothing changes (ADR-0167 §12). **At every size the tiles are the sections below them** (AC-2), one each.
  */
 export default function LogActivityPage() {
-  const { config, loading: configLoading } = useTenantConfig();
+  const { config, loading: configLoading, error: configError } = useTenantConfig();
   const { me } = useSession();
+  const phone = usePhone();
   const [day, setDay] = useState<ActivityDay | null>(null);
   const [date, setDate] = useState<string>('');
+  /** The office's today: the day the first read, which names no date, answered with. */
+  const [today, setToday] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [dirty, setDirty] = useState(false);
   const [reason, setReason] = useState('');
@@ -60,6 +74,7 @@ export default function LogActivityPage() {
       const next = await readActivityDay(on ? { date: on } : {});
       setDay(next);
       setDate(next.localDate);
+      if (!on) setToday(next.localDate);
       setCounts(Object.fromEntries(next.entries.map((e) => [e.activityTypeCode, e.count])));
       setDirty(false);
       setReason('');
@@ -113,7 +128,7 @@ export default function LogActivityPage() {
 
   if (configLoading || (day === null && error === null)) {
     return (
-      <Page title="Log Activity" subtitle="Enter today's activities in 1 minute.">
+      <Page title={ACTIVITY_TITLE} subtitle="Enter today's activities in 1 minute." subtitleOnPhone={false}>
         <ActivityTabs />
         <SkeletonCards count={3} label="Loading your day…" />
       </Page>
@@ -136,7 +151,14 @@ export default function LogActivityPage() {
    */
   const rung = me?.membership?.orgLevelCode ?? '';
   const categories = config?.activity ?? [];
-  const sections = categories.filter((c) => c.status === 'active' && isShownTo(c, rung));
+  /** The configuration's read failed and there is none to draw from (P18.95-T5 AC-3): its error, not *not set up*. */
+  const configFailed = configError !== null && config === null;
+  /*
+   * **One list for the cards and the tiles** (P18.95-T5 AC-2; UI-017). The strip counted the office's
+   * *Summary tiles* (ADR-0064), so the seed's Personal and Team Development were one *Development* tile over
+   * two cards: four tiles, five groups. Now both are drawn from this list, in its order.
+   */
+  const sections = shownSections(categories, rung);
   const sectionTotal = (section: (typeof categories)[number]) => section.types
     .filter((ty) => ty.status === 'active')
     .reduce((sum, ty) => sum + (Number(counts[ty.code]) || 0), 0);
@@ -155,11 +177,34 @@ export default function LogActivityPage() {
    * not offered). Found walking P10.1-T5, 2026-10-01; the screen had offered it since Phase 6.
    */
   const unloggedAndClosed = frozen && savedTotal === null;
+  /** The buttons are drawn: on a phone, in the bar fixed to the bottom of the screen (AC-1). */
+  const saving = sections.length > 0 && !unloggedAndClosed;
+  /*
+   * **One save status, where the reader is looking** (AC-1): under the date, as the prototype stacks them, and
+   * on a phone in the bar, beside the button it answers for. Never both: it is the screen's live region.
+   */
+  const saveStatus = savedTotal !== null ? (
+    <SaveStatus state="saved">Saved · {savedTotal} touches</SaveStatus>
+  ) : (
+    <SaveStatus state="unsaved">Not yet saved</SaveStatus>
+  );
+  const statusInBar = phone && saving;
+  /*
+   * **Which activity first names each term**, in reading order — every section's types, each label then its note
+   * (P18.95-T9 AC-3; UI-028: *NPA*, *JFW*, *BOP* unexplained). *Touch* has its own ⓘ above the cards.
+   */
+  const termsIn = activityTermMentions(sections);
+  /** A closed day's reason field, below the cards: then it is the last thing above the bar. */
+  const reasonShown = sections.length > 0 && frozen && !unloggedAndClosed;
+  /** Room under whatever is last above the bar, so its last line is never behind it (`ACTION_BAR_ROOM_PHONE`). */
+  const roomUnderCards = saving && !reasonShown;
 
   return (
     <Page
-      title="Log Activity"
+      title={ACTIVITY_TITLE}
       subtitle="Enter today's activities in 1 minute."
+      // The client's *Remove* on a phone, as every reviewed sub-line (P18.95-T7 AC-1, grey text row 25).
+      subtitleOnPhone={false}
       actions={
         /*
          * The date sits in the topbar beside the title, with the save status under it, as the
@@ -175,28 +220,46 @@ export default function LogActivityPage() {
               onChange={(e) => goTo(e.target.value)}
             />
           </Field>
-          {savedTotal !== null ? (
-            <SaveStatus state="saved">Saved · {savedTotal} touches</SaveStatus>
-          ) : (
-            <SaveStatus state="unsaved">Not yet saved</SaveStatus>
-          )}
+          {!statusInBar && saveStatus}
         </div>
       }
     >
       <ActivityTabs />
       {error && <ErrorBanner {...error} />}
+      {/*
+        * **A configuration that did not arrive says so** (P18.95-T5 AC-3). It read as an office with nothing set
+        * up — *Ask your KPM Owner* — which sent the reader to the wrong person about a request that failed.
+        */}
+      {configFailed && <ErrorBanner {...toDisplayError(configError)} />}
 
-      {/* The office's tiles, then the total (ADR-0064, `:2720-2726`). */}
+      {/* A tile per section, then the total (`:2720-2726`; P18.95-T5 AC-2). Not on a phone: the line below. */}
       {sections.length > 0 && (
         <SummaryStrip
-          tiles={summaryTiles(categories, rung, sectionTotal, {
+          className="max-md:hidden"
+          tiles={sectionTiles(sections, sectionTotal, {
             label: 'Total touches today',
             value: total,
+            // What a touch is, once (P18.95-T9 AC-3; UI-028): the strip is where the word first shows.
+            term: 'TOUCHES',
           })}
         />
       )}
+      {/*
+        * **On a phone, one line** (AC-1; UI-017): the total the tiles add up to, where five tiles filled the first
+        * screen. *Today* is the office's day; another date is named, since the line would otherwise say *today*
+        * about a day that is not.
+        */}
+      {sections.length > 0 && (
+        <p className="mb-4 text-md text-navy md:hidden">
+          {date === today ? 'Today' : formatCalendarDay(date)}:{' '}
+          <strong className="font-bold">{formatNumber(total)}</strong>{' '}
+          {total === 1 ? 'touch' : 'touches'}{' '}
+          {/* Below 768px this line stands where the strip is, so the word's ⓘ is here (P18.95-T9 AC-3). */}
+          <TermTip term="TOUCHES" />
+        </p>
+      )}
 
-      {sections.length === 0 && (
+      {sections.length === 0 && !configFailed && (
         <Card>
           <p className="text-md text-navy">
             Your office has not set up its activity types yet. Ask your KPM Owner — the list on this
@@ -210,9 +273,10 @@ export default function LogActivityPage() {
         * stacked full-width put three activities on a screen; side by side a reader sees the whole
         * day at once, which is what "in 1 minute" depends on.
         */}
-      <div className="mb-5 grid items-start gap-4 lg:grid-cols-2">
+      <div className={cn('mb-5 grid items-start gap-4 lg:grid-cols-2', roomUnderCards && ACTION_BAR_ROOM_PHONE)}>
         {sections.map((section) => {
           const types = section.types.filter((ty) => ty.status === 'active');
+          const mentions = termsIn.get(section.code);
           return (
             <SectionCard
               key={section.code}
@@ -241,7 +305,10 @@ export default function LogActivityPage() {
                 >
                   <NumberBadge n={type.displayOrder} />
                   <span className="min-w-0">
-                    <span className="block text-md text-navy">{type.label}</span>
+                    {/* An ⓘ after a term the office's words use (*Proses NPA*), the first time on the screen (AC-3). */}
+                    <span className="block text-md text-navy">
+                      <TermText text={type.label} terms={mentions?.get(`${type.code}:label`) ?? []} />
+                    </span>
                     {/*
                       * The italic sub-note the prototype pulls out of the label's trailing
                       * parenthetical (`splitLabel`, `:4778`). Ours is a field the office fills in, so
@@ -249,7 +316,7 @@ export default function LogActivityPage() {
                       */}
                     {type.description && (
                       <span className="mt-0.5 block text-xs italic text-muted">
-                        {type.description}
+                        <TermText text={type.description} terms={mentions?.get(`${type.code}:description`) ?? []} />
                       </span>
                     )}
                   </span>
@@ -269,14 +336,14 @@ export default function LogActivityPage() {
       {sections.length > 0 && unloggedAndClosed && (
         <p role="status" className="mb-4 text-sm text-muted">This day is closed, and nothing was logged for it.</p>
       )}
-      {sections.length > 0 && frozen && !unloggedAndClosed && (
+      {reasonShown && (
         <Field
           label="Why is this being corrected?"
           htmlFor="correction-reason"
           hint={corrections > 0
             ? `This day is closed, and has been corrected ${corrections === 1 ? 'once' : `${corrections} times`}.`
             : 'This day is closed.'}
-          className="mb-4 max-w-xl"
+          className={cn('mb-4 max-w-xl', ACTION_BAR_ROOM_PHONE)}
         >
           {/* Required, and capped where the API caps it (`activity.dto.ts`, 500), so a reason is never
               refused far from the field a phone user is looking at. */}
@@ -295,8 +362,17 @@ export default function LogActivityPage() {
         * Inside a card the save button read as one more field of the last group; out here it belongs
         * to the page, which is what it saves.
         */}
-      {sections.length > 0 && !unloggedAndClosed && (
-        <div className="flex flex-wrap justify-end gap-2.5">
+      {/*
+        * **On a phone, a bar fixed to the bottom of the screen** (AC-1, `ACTION_BAR_PHONE`): the save status, then
+        * Cancel and the save, on one line. `data-action-bar` lifts the shell's toast above it (`toast.tsx`), so
+        * *Activity logged ✓* never covers the button it confirms.
+        */}
+      {saving && (
+        <div
+          data-action-bar=""
+          className={cn('flex flex-wrap items-center justify-end gap-2.5', ACTION_BAR_PHONE, 'max-md:flex-nowrap')}
+        >
+          {statusInBar && <span className="mr-auto min-w-0">{saveStatus}</span>}
           <Button variant="secondary" disabled={busy} onClick={() => void load(date)}>
             Cancel
           </Button>

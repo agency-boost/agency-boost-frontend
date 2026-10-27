@@ -7,6 +7,7 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
 import { type DemoAccount } from '@/lib/demo-accounts';
 import { DemoAccountsPanel } from '@/components/demo-accounts-panel';
+import { AUTH_PAGE } from '@/components/auth-page';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { resendVerification } from '@/lib/sessions';
 import { destinationAfterSignIn, sessionEndedIn } from '@/lib/return-path';
@@ -66,7 +67,7 @@ export default function LoginPage() {
   const notVerified = error?.code === 'AUTH_EMAIL_NOT_VERIFIED';
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
+    <main className={AUTH_PAGE}>
       <h1 className="font-display text-3xl font-bold text-navy">AgencyBoost</h1>
       {/* `useSearchParams` needs a boundary; until the address is read, the sentence everybody else reads. */}
       <Suspense fallback={<Lede ended={false} />}>

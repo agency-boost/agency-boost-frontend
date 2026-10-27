@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { PageHeader } from '@/components/app-shell';
+import { TitledPageContext } from '@/components/require-session';
 import { Card, ErrorBanner } from '@/components/ui/field';
 import { TAB_PHONE, TAB_ROW_PHONE, TAP_HEIGHT, UNDERLINED_ROW_PHONE } from '@/components/ui/phone';
 import { useTabRow } from '@/components/ui/use-tab-row';
@@ -172,39 +174,62 @@ export function PersonShell({ membershipId, children }: { membershipId: string; 
     if (previewingNotes) router.replace(coachingTabHref(membershipId, 'summary'));
   }, [previewingNotes, membershipId, router]);
 
+  /*
+   * **The page's title** (P18.95-T7 AC-2; UI-021): the person's name, as the header's heading, once they are read; the
+   * prototype's *Coaching Session* while there is nobody to name — not found, a read that failed, a former coach's
+   * archive. Whatever is drawn beneath is under that title (`TitledPageContext`), so a tab's refusal is a section.
+   */
+  const untitled = <PageHeader title={COACHING_TITLE} />;
+
   // A former coach on the archive of a session they led: the archive alone, under the way back.
   if (missing && archive) {
     return (
-      <div>
-        <WayBack />
-        <Suspense fallback={null}>{children}</Suspense>
-      </div>
+      <TitledPageContext.Provider value>
+        <div>
+          {untitled}
+          <WayBack />
+          <Suspense fallback={null}>{children}</Suspense>
+        </div>
+      </TitledPageContext.Provider>
     );
   }
-  if (missing) return <CoacheeNotFound />;
+  if (missing) {
+    return (
+      <TitledPageContext.Provider value>
+        {untitled}
+        <CoacheeNotFound />
+      </TitledPageContext.Provider>
+    );
+  }
 
   return (
-    <div>
-      <BackLink />
-      {error && <ErrorBanner {...error} />}
-      {!coachee && !error && <HeaderSkeleton />}
-      {coachee && (
-        <>
-          <PersonHeader coachee={coachee} view={view} onView={setView} />
-          <PersonTabs membershipId={membershipId} current={current} view={view} />
-          <CoacheeContext.Provider value={coachee}>
-            <CoacheeGoneContext.Provider value={gone}>
-              <HistoryPrefetchContext.Provider value={takeHistory}>
-                {/* The shell's own boundary: a tab that suspends waits here, under the header (above). */}
-                <Suspense fallback={null}>{!previewingNotes && children}</Suspense>
-              </HistoryPrefetchContext.Provider>
-            </CoacheeGoneContext.Provider>
-          </CoacheeContext.Provider>
-        </>
-      )}
-    </div>
+    <TitledPageContext.Provider value>
+      <div>
+        {error && !coachee && untitled}
+        <BackLink />
+        {error && <ErrorBanner {...error} />}
+        {!coachee && !error && <HeaderSkeleton />}
+        {coachee && (
+          <>
+            <PersonHeader coachee={coachee} view={view} onView={setView} />
+            <PersonTabs membershipId={membershipId} current={current} view={view} />
+            <CoacheeContext.Provider value={coachee}>
+              <CoacheeGoneContext.Provider value={gone}>
+                <HistoryPrefetchContext.Provider value={takeHistory}>
+                  {/* The shell's own boundary: a tab that suspends waits here, under the header (above). */}
+                  <Suspense fallback={null}>{!previewingNotes && children}</Suspense>
+                </HistoryPrefetchContext.Provider>
+              </CoacheeGoneContext.Provider>
+            </CoacheeContext.Provider>
+          </>
+        )}
+      </div>
+    </TitledPageContext.Provider>
   );
 }
+
+/** The prototype's title for every coaching view (`Overall.html:10407`): the page's, where there is nobody to name. */
+const COACHING_TITLE = 'Coaching Session';
 
 /** `/coaching/{membershipId}/archive/…`: a past session's record. */
 function isArchivePath(pathname: string | null, membershipId: string): boolean {
@@ -245,13 +270,14 @@ function WayBack() {
  * `.person-header` (`Overall.html:1083-1092`, `:3972-3985`): the avatar's initials, the name, the rung
  * and whose unit; the view toggle on the right.
  *
- * The name is the page's second heading, not a second `<h1>`: the page's own title, *Coaching
- * Session*, is the first (`Overall.html:10407`), and the prototype's two `<h1>`s leave a screen reader
- * two pages' worth of top-level headings. It looks as the prototype's `.person-name` does.
+ * **The name is the page's title, its one `<h1>`** (P18.95-T7 AC-2; the client's UI review, UI-021). It was the second
+ * heading under *Coaching Session*, which was also a tab and the way back; the prototype's two `<h1>`s left a screen
+ * reader two pages' worth of top-level headings, and one is all there is now. It looks as the prototype's
+ * `.person-name` does.
  */
 function PersonHeader({ coachee, view, onView }: { coachee: Coachee; view: View; onView: (view: View) => void }) {
   return (
-    <PersonIdentity initials={coacheeInitials(coachee.name)} name={coachee.name} line={coacheeUnitLine(coachee)}>
+    <PersonIdentity initials={coacheeInitials(coachee.name)} name={coachee.name} line={coacheeUnitLine(coachee)} title>
       <ViewToggle view={view} onView={onView} />
     </PersonIdentity>
   );
@@ -259,12 +285,14 @@ function PersonHeader({ coachee, view, onView }: { coachee: Coachee; view: View;
 
 /**
  * The avatar, the name and the line under it (`.person-header`, `Overall.html:3972-3979`, `:4387-4394`),
- * with whatever goes on the right. The name is an `<h2>` under the page's own title. `line` is `null`
+ * with whatever goes on the right. The name is an `<h2>` under the page's own title, or with `title` **the page's
+ * title**, its `<h1>` (the person shell's, P18.95-T7 AC-2) — drawn the same either way. `line` is `null`
  * for a person whose rung the reader is not told: the archive a former coach reads (ADR-0082).
  */
 export function PersonIdentity({
-  initials, name, line, children,
-}: { initials: string; name: string; line: string | null; children?: ReactNode }) {
+  initials, name, line, title = false, children,
+}: { initials: string; name: string; line: string | null; title?: boolean; children?: ReactNode }) {
+  const Name = title ? 'h1' : 'h2';
   return (
     <div className="mb-[22px] flex flex-wrap items-center justify-between gap-4">
       <div className="flex items-center gap-3.5">
@@ -275,7 +303,7 @@ export function PersonIdentity({
           {initials}
         </span>
         <div>
-          <h2 className="font-display text-[1.5rem] font-bold leading-tight text-navy">{name}</h2>
+          <Name className="font-display text-[1.5rem] font-bold leading-tight text-navy">{name}</Name>
           {line && <p className="mt-0.5 text-base text-muted">{line}</p>}
         </div>
       </div>

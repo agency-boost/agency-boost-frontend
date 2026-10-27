@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useId, type MouseEvent, type ReactNode } from 'react';
+import { TermTip } from '@/components/ui/term-tip';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/lib/session';
@@ -57,7 +58,13 @@ export function UnitComparisonTable({
             <tr className="border-b border-hairline">
               <th scope="col" className={HEAD}>{PROTOTYPE_COPY.headAb}</th>
               <th scope="col" className={HEAD}>{PROTOTYPE_COPY.headManpower}</th>
-              <th scope="col" className={HEAD}>{PROTOTYPE_COPY.headApeMonth(view.period)}</th>
+              <th scope="col" className={HEAD}>
+                {/* *APE*'s first appearance on the screen, so its ⓘ is here, opening below (P18.95-T9 AC-3; UI-028). */}
+                <span className="inline-flex items-center gap-1">
+                  {PROTOTYPE_COPY.headApeMonth(view.period)}
+                  <TermTip term="APE" className={RULES_TIP} />
+                </span>
+              </th>
               <th scope="col" className={HEAD}>{PROTOTYPE_COPY.headApeAnnual}</th>
               <th scope="col" className={HEAD}>{PROTOTYPE_COPY.headCoached}</th>
               <th scope="col" className={HEAD}>{PROTOTYPE_COPY.headActive(view.period)}</th>
@@ -136,7 +143,8 @@ function TotalRow({ total, split }: { total: AnalyticsTotal; split: number }) {
       </th>
       <td className={CELL}>
         <div className="font-bold text-navy">{total.manpower.total}</div>
-        <div className={SUB}>{manpowerSub(total.manpower)}</div>
+        {/* *AAB*'s first appearance, in the first row (P18.95-T9 AC-3): opening below, inside the table's scroll box. */}
+        <div className={SUB}>{manpowerSub(total.manpower)} <TermTip term="AAB" className={BELOW_TIP} /></div>
       </td>
       <Figures figures={total} split={split} />
       <td className={CELL}>

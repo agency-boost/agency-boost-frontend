@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 
 /**
  * Narrower than Tailwind's `md`, 768px: where the shell's sidebar becomes a bar across the top and
- * its nav goes into the account chip's panel (ADR-0085).
+ * its nav goes into the drawer the bar's ☰ opens (P18.95-T2, ADR-0167 §3; until then the account chip's
+ * panel, ADR-0085).
  */
 export const PHONE_QUERY = '(max-width: 767.98px)';
 

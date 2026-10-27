@@ -55,12 +55,12 @@ describe('/coaching/[membershipId]/activation, a coachee’s Activation tab (P13
     expect(calls.filter((c) => c.url.includes('/new-hires/')).map((c) => c.url)).toEqual(['http://api.test/api/v1/new-hires/mem-rina']);
   });
 
-  it('P13-T9 AC-1 the five aspect cards, numbered, under the person shell’s own title', async () => {
+  it('P13-T9 AC-1, P18.95-T7 AC-2 the five aspect cards, numbered, under the person shell’s own title, her name', async () => {
     show();
     await card();
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Coaching Session$/);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Rina Wijaya$/);
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
-      'Rina Wijaya', '90-Day Activation', '1Introduction', '2Initial Setup', '3Training & Certification', '4First Sale', '5Ongoing Habits',
+      '90-Day Activation', '1Introduction', '2Initial Setup', '3Training & Certification', '4First Sale', '5Ongoing Habits',
     ]);
   });
 
@@ -127,7 +127,7 @@ describe('/coaching/[membershipId]/activation, a coachee’s Activation tab (P13
       if (url.includes('/new-hires/')) await held;
       return answer(url, init);
     });
-    await screen.findByRole('heading', { level: 2, name: 'Rina Wijaya' });
+    await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
     expect(await screen.findByText('Loading this activation…')).toBeInTheDocument();
     await act(async () => { release(); });
     await card();

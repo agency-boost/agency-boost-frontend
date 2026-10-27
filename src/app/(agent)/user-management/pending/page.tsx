@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LeaderLimitNotice, LeaderLimitWaiting, isLeaderLimit } from '@/components/leader-limit-notice';
 import { Page } from '@/components/page';
-import { UserManagementTabs } from '@/components/user-management-tabs';
+import { USER_MANAGEMENT_TITLE, UserManagementTabs } from '@/components/user-management-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
-import { RoleBadge, rungLabel, useLadder } from '@/components/ui/role-badge';
+import { RoleBadge, rungShort, useLadder } from '@/components/ui/role-badge';
 import {
   askLeaderLimitApproval, cancelLeaderLimitRequest, pendingFor, readLeaderLimitRequests, requestedChange,
   type LeaderLimitRequestRow,
@@ -138,7 +138,7 @@ export default function PendingPage() {
 
   return (
     <Page
-      title="Pending Requests"
+      title={USER_MANAGEMENT_TITLE}
       subtitle="Approve or decline agents who requested to be tagged to you."
       permission="leader_request:read_inbox"
     >
@@ -158,10 +158,8 @@ export default function PendingPage() {
 
       <Card>
         <h2 className="font-display text-lg font-bold text-navy">Incoming requests</h2>
-        <p className="mt-1 text-md text-muted">
-          These are people who found you under Find Your Leader. Approving adds them to your unit.
-          Declining leaves them in the office, free to ask somebody else.
-        </p>
+        {/* The client's words at every size (P18.95-T7 AC-1, grey text row 7). */}
+        <p className="mt-1 text-md text-muted">Approve to add them to your unit.</p>
 
         {requests === null && (
           <SkeletonCards count={2} label="Loading requests…" className="mt-4" />
@@ -198,7 +196,7 @@ export default function PendingPage() {
                 // ADR-0157: letting them in waits for AgencyBoost; nothing about them changes meanwhile.
                 <div className="mt-3">
                   <LeaderLimitWaiting
-                    what={requestedChange(pendingFor(asks, request.membershipId)!, (code) => rungLabel(code, ladder))}
+                    what={requestedChange(pendingFor(asks, request.membershipId)!, (code) => rungShort(code, ladder))}
                     cancelling={busy === 'ask'}
                     onCancel={() => void cancelAsk(pendingFor(asks, request.membershipId)!.requestId)}
                   />

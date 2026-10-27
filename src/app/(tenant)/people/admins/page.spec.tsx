@@ -58,7 +58,7 @@ describe('manage KPM admins (P3-T10)', () => {
     // make "an AB who is also an Admin" read as a contradiction.
     open();
     const row = within(await screen.findByRole('table')).getByRole('row', { name: /Maya/ });
-    expect(within(row).getByTitle('Agency Builder')).toBeInTheDocument();
+    expect(within(row).getByTitle('AB')).toBeInTheDocument();
   });
 
   it('AC-4: names the one thing an Admin does not get', async () => {

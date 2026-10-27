@@ -1,8 +1,10 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { axe } from 'vitest-axe';
 import AgentLayout from '@/app/(agent)/layout';
-import { makeMe, renderInLayout, stubFetch } from '@test/harness';
+import { PHONE_QUERY } from '@/lib/use-phone';
+import { makeMe, renderInLayout, renderWithSession, stubFetch } from '@test/harness';
 import GroupTreePage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -90,13 +92,24 @@ describe('group tree (P3-T8)', () => {
     expect(self.closest('[data-node]')).toHaveAttribute('data-node', 'mem-ab');
   });
 
-  it('AC-4: the legend names all three roles in words, never colour alone', async () => {
+  it('AC-4, P18.95-T8 AC-3: the legend names all three rungs in words, as their badges do — AB, AAB, Agent — never Associate AB', async () => {
     open();
     await screen.findByText('Layer 1');
-    // The prototype's legend, verbatim — and it abbreviates the middle one.
-    expect(screen.getByText('Agency Builder')).toBeInTheDocument();
-    expect(screen.getByText('Associate AB')).toBeInTheDocument();
-    expect(screen.getByText('Agent')).toBeInTheDocument();
+    // One name per rung (ADR-0167 §10; UI-025, UI-027): the ladder's short names, the badges' own.
+    const legend = screen.getByRole('button', { name: 'What is AAB?' }).closest('ul')!;
+    // The AAB item carries its ⓘ, once on the screen (P18.95-T9 AC-3): its name and bubble follow the word.
+    expect([...legend.querySelectorAll('li')].map((li) => li.textContent!.replace(/ⓘ.*$/, ''))).toEqual(['AB', 'AAB', 'Agent']);
+    expect(screen.queryByText(/Associate AB/)).not.toBeInTheDocument();
+    const sari = document.querySelector('[data-node="mem-sari"]') as HTMLElement;
+    expect(within(sari).getByTitle('AAB')).toHaveTextContent('AAB');
+  });
+
+  it('P18.95-T9 AC-3 says what AAB means once, in the legend, in the glossary’s one line', async () => {
+    open();
+    await screen.findByText('Layer 1');
+    const tips = screen.getAllByRole('button', { name: 'What is AAB?' });
+    expect(tips).toHaveLength(1);
+    expect(tips[0]).toHaveAccessibleDescription('Associate Agency Builder: a leader under an AB, with agents of their own.');
   });
 
   it('AC-4: a node badge carries its text, and the avatar carries the colour', async () => {
@@ -105,7 +118,7 @@ describe('group tree (P3-T8)', () => {
     const card = document.querySelector('[data-node="mem-sari"]') as HTMLElement;
 
     // Text on the badge…
-    expect(within(card).getByTitle('Associate Agency Builder')).toHaveTextContent('AAB');
+    expect(within(card).getByTitle('AAB')).toHaveTextContent('AAB');
     // …and the role colour on the avatar beside it, which is where the prototype puts it.
     expect(within(card).getByText('SP')).toHaveClass('bg-role-aab');
   });
@@ -147,11 +160,13 @@ describe('group tree (P3-T8)', () => {
   describe('P15-T4 AC-3 a card opens the person (D-drill, `Overall.html:8408-8411`, `KPM_Owner.html:2228-2230`)', () => {
     const card = (id: string) => document.querySelector(`[data-node="${id}"]`) as HTMLElement;
 
-    it('says so under the title, verbatim (`:10412`)', async () => {
+    it('says so under the title (`:10412`), titled as its nav item and saying Tap (P18.95-T9 AC-2, AC-5)', async () => {
       open();
       await screen.findByText('Layer 1');
+      // The nav item's words, where the prototype titled it *Group Overview*.
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Group Tree$/);
       expect(
-        screen.getByText('Your leader, you, and your full downline, laid out by layer. Click anyone to open their Unit Dashboard.'),
+        screen.getByText('Your leader, you, and your full downline, laid out by layer. Tap anyone to open their Unit Dashboard.'),
       ).toBeInTheDocument();
     });
 
@@ -288,5 +303,119 @@ describe('group tree (P3-T8)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
     // The gate's code is on the refusal as data, and never in its words (P11-T6).
     expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'org_tree:read');
+  });
+
+  /*
+   * P18.95-T8 AC-3 (the client's UI review of 2026-10-26, UI-025; ADR-0167): below 768px the tree grew
+   * right, 516px wide in a 285px box, and showed only the reader. A phone gets an indented list that opens
+   * and closes; 768px and wider keep the canvas. The phone is `matchMedia` answering `usePhone`'s query.
+   */
+  describe('P18.95-T8 AC-3 the tree on a phone (UI-025)', () => {
+    const onPhone = () => vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      media: query,
+      matches: query === PHONE_QUERY,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    })));
+    const onAPhone = (tree: unknown = TREE, me = LEADER) => {
+      onPhone();
+      stubFetch({ '/members/tree': { body: tree } });
+      return renderWithSession(<GroupTreePage />, { me });
+    };
+    const line = (id: string) => document.querySelector<HTMLElement>(`[data-node="${id}"]`);
+    const row = (id: string) => line(id)!.firstElementChild as HTMLElement;
+
+    it('P18.95-T8 AC-3 draws an indented list, not the canvas, opened on the reader one level down', async () => {
+      onAPhone();
+      await screen.findByText('YOU');
+      expect(screen.queryByTestId('tree-canvas')).not.toBeInTheDocument();
+      expect(screen.queryByText('Layer 1')).not.toBeInTheDocument();
+      // The reader and their direct reports; the unit below them closed.
+      expect(['mem-ab', 'mem-sari', 'mem-dewi', 'mem-rina'].map((id) => line(id) !== null)).toEqual([true, true, true, false]);
+      // Indented a level at a time, each team a list inside its leader's line.
+      expect([row('mem-ab').style.paddingLeft, row('mem-sari').style.paddingLeft]).toEqual(['0px', '16px']);
+      expect(line('mem-sari')!.parentElement!.closest('li')).toBe(line('mem-ab'));
+      // Each line: the name, the rung, and a leader's unit.
+      expect(row('mem-sari')).toHaveTextContent('Sari PuspitaAAB');
+      expect(within(row('mem-ab')).getByTitle('AB')).toHaveTextContent('AB');
+      expect(row('mem-ab')).toHaveTextContent('Agus PrasetyoYOUAB');
+      expect(screen.getByRole('button', { name: 'Hide who reports to Agus Prasetyo' })).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByRole('button', { name: 'Show who reports to Sari Puspita' })).toHaveAttribute('aria-expanded', 'false');
+      // The canvas's sentence about closed units is the canvas's: the list's + says it.
+      expect(screen.queryByText(/inside a closed unit/)).not.toBeInTheDocument();
+      // The legend and the count stay above it.
+      expect(screen.getByText(/3 below you · 0 AB · 2 AAB · 1 Agent/)).toBeInTheDocument();
+    });
+
+    it('P18.95-T8 AC-3 opens and closes a unit from the keyboard, its control a 44px button that keeps the focus', async () => {
+      onAPhone();
+      const show = await screen.findByRole('button', { name: 'Show who reports to Sari Puspita' });
+      expect(show.className).toContain('max-md:min-h-11');
+      expect(show.closest('a')).toBeNull();
+      show.focus();
+      await userEvent.keyboard('{Enter}');
+      expect(line('mem-rina')).not.toBeNull();
+      expect(row('mem-rina').style.paddingLeft).toBe('32px');
+      const hide = screen.getByRole('button', { name: 'Hide who reports to Sari Puspita' });
+      expect(hide).toHaveAttribute('aria-expanded', 'true');
+      expect(hide).toHaveFocus();
+      await userEvent.keyboard(' ');
+      expect(line('mem-rina')).toBeNull();
+      // Closing the reader's own line folds everybody under it.
+      await userEvent.click(screen.getByRole('button', { name: 'Hide who reports to Agus Prasetyo' }));
+      expect(line('mem-sari')).toBeNull();
+      // Somebody who leads nobody has no control.
+      await userEvent.click(screen.getByRole('button', { name: 'Show who reports to Agus Prasetyo' }));
+      expect(within(row('mem-dewi')).queryByRole('button')).toBeNull();
+    });
+
+    it('P18.95-T8 AC-3 links each line as its card links, the reader and their leader inert', async () => {
+      onAPhone();
+      await screen.findByText('YOU');
+      expect(within(row('mem-sari')).getByRole('link', { name: 'Sari Puspita' })).toHaveAttribute('href', '/unit/dashboard/mem-sari');
+      expect(within(row('mem-dewi')).getByRole('link', { name: 'Dewi Lestari' })).toHaveAttribute('href', '/coaching/mem-dewi/summary');
+      expect(within(row('mem-ab')).queryByRole('link')).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Wilson Tanoto' })).not.toBeInTheDocument();
+    });
+
+    it('P18.95-T8 AC-3 opens an office-wide tree down to the reader, so an Admin is in view at once', async () => {
+      const ADMIN = makeMe({
+        membership: {
+          membershipId: 'mem-admin', kpmId: 'kpm-1', orgLevelCode: 'AAB', hierarchyRole: 'aab', status: 'active',
+          isKpmOwner: false, isKpmAdmin: true, directCount: 1,
+        },
+        permissions: ['org_tree:read'],
+      });
+      onAPhone({
+        nodes: [
+          node({ membershipId: 'mem-owner', fullName: 'Wilson Tanoto', initials: 'WT', role: 'ab', layer: 1, isLeader: true, directCount: 2 }),
+          node({ membershipId: 'mem-admin', fullName: 'Arief Nugroho', initials: 'AN', role: 'aab', layer: 2, leaderId: 'mem-owner', isLeader: true, directCount: 1, isSelf: true }),
+          node({ membershipId: 'mem-ab2', fullName: 'Budi Santoso', initials: 'BS', role: 'ab', layer: 2, leaderId: 'mem-owner', isLeader: true, directCount: 1 }),
+          node({ membershipId: 'mem-b-ag', fullName: 'Eka Putri', initials: 'EP', layer: 3, leaderId: 'mem-ab2' }),
+          node({ membershipId: 'mem-own-ag', fullName: 'Dina Lestari', initials: 'DL', layer: 3, leaderId: 'mem-admin' }),
+        ],
+        leader: null,
+        rootIds: ['mem-owner'],
+        selfId: 'mem-admin',
+        counts: { ab: 2, aab: 1, agent: 2, total: 5 },
+      }, ADMIN);
+      await screen.findByText('YOU');
+      expect(['mem-owner', 'mem-admin', 'mem-own-ag', 'mem-ab2', 'mem-b-ag'].map((id) => line(id) !== null))
+        .toEqual([true, true, true, true, false]);
+    });
+
+    it('P18.95-T8 AC-3 at 768px and wider keeps the canvas, its layers and its cards', async () => {
+      open();
+      expect(await screen.findByText('Layer 1')).toBeInTheDocument();
+      expect(screen.getByTestId('tree-canvas')).toBeInTheDocument();
+      expect(screen.getByText(/1 person is inside a closed unit/)).toBeInTheDocument();
+    });
+
+    it('P18.95-T8 AC-3 the list, a unit opened, passes axe (WCAG 2.1 AA)', async () => {
+      onAPhone();
+      await userEvent.click(await screen.findByRole('button', { name: 'Show who reports to Sari Puspita' }));
+      const results = await axe(document.body, { rules: { 'color-contrast': { enabled: false }, region: { enabled: false } } });
+      expect((results.violations ?? []).map((v) => v.id)).toEqual([]);
+    });
   });
 });

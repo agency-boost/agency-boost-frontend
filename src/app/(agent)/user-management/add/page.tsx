@@ -3,16 +3,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LeaderLimitNotice, LeaderLimitWaiting, isLeaderLimit } from '@/components/leader-limit-notice';
 import { Page } from '@/components/page';
-import { UserManagementTabs } from '@/components/user-management-tabs';
+import { USER_MANAGEMENT_TITLE, UserManagementTabs } from '@/components/user-management-tabs';
 import { CopyableValue } from '@/components/ui/copyable-value';
 import { InviteQr } from '@/components/ui/invite-qr';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import { CONFIRMED } from '@/lib/confirmations';
 import { useDebounced } from '@/lib/use-debounced';
 import { useSession } from '@/lib/session';
-import { RoleBadge, classOfRung, rungLabel, useLadder } from '@/components/ui/role-badge';
+import { RoleBadge, classOfRung, rungShort, useLadder } from '@/components/ui/role-badge';
 import {
   askLeaderLimitApproval, cancelLeaderLimitRequest, pendingFor, readLeaderLimitRequests, requestedChange,
   type LeaderLimitRequestRow,
@@ -234,7 +236,7 @@ export default function AddAgentsPage() {
 
   return (
     <Page
-      title="Add New Agents"
+      title={USER_MANAGEMENT_TITLE}
       subtitle="Invite new people or tag existing agents to your team."
       // Hiding the tab is not gating the screen: the URL is typeable, and until now an
       // Agent who typed it got the whole thing, with only the API refusing the calls
@@ -256,12 +258,8 @@ export default function AddAgentsPage() {
 
       <Card className="mb-4">
         <h2 className="font-display text-lg font-bold text-navy">Invite someone</h2>
-        <p className="mt-1 text-md text-muted">
-          Share your link, code, or QR with someone who is not registered yet. Any of the
-          three pre-fills them into this office and tags them to you automatically — no
-          approval needed. It is the same code every time: it came with your membership and
-          it does not change.
-        </p>
+        {/* The client's words at every size (P18.95-T7 AC-1, grey text row 4). */}
+        <p className="mt-1 text-md text-muted">Share this so new agents join your team.</p>
         {/* `User_Management_Section.html:444-455`: a wrapping row of co-equal artefacts,
             the link box growing and the code box holding its width — not an even grid.
             The section file supersedes `Overall.html` for this module, and its version
@@ -300,10 +298,8 @@ export default function AddAgentsPage() {
 
       <Card className="mt-6">
         <h2 className="font-display text-lg font-bold text-navy">Find someone already here</h2>
-        <p className="mt-1 text-md text-muted">
-          People registered in this office who report to nobody. Adding them puts them in your unit
-          right away — they do not have to approve it, because the office has already let them in.
-        </p>
+        {/* The client's words at every size (P18.95-T7 AC-1, grey text row 5). */}
+        <p className="mt-1 text-md text-muted">Agents without a leader. Tap Add to join your unit.</p>
 
         <Field label="Search by name" htmlFor="untagged-search" className="mt-3">
           <TextInput
@@ -349,7 +345,7 @@ export default function AddAgentsPage() {
                 // ADR-0157: letting this pending leader in waits for AgencyBoost.
                 <div className="basis-full">
                   <LeaderLimitWaiting
-                    what={requestedChange(pendingFor(asks, member.membershipId)!, (code) => rungLabel(code, ladder))}
+                    what={requestedChange(pendingFor(asks, member.membershipId)!, (code) => rungShort(code, ladder))}
                     cancelling={busy === 'ask'}
                     onCancel={() => void cancelAsk(pendingFor(asks, member.membershipId)!.requestId)}
                   />
@@ -393,7 +389,8 @@ export default function AddAgentsPage() {
       {canManageTeam && (
       <Card className="mt-6">
         <h2 className="font-display text-lg font-bold text-navy">Your team</h2>
-        <p className="mt-1 text-md text-muted">
+        {/* The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 6): its words stay from 768px. */}
+        <p className={cn('mt-1 text-md text-muted', REMOVED_ON_PHONE)}>
           People who report to you. Only somebody&apos;s direct leader can change their role, and
           changing it moves nobody — they keep reporting to you either way.
         </p>
@@ -454,7 +451,7 @@ export default function AddAgentsPage() {
               {pendingFor(asks, member.membershipId) && (
                 <div className="basis-full">
                   <LeaderLimitWaiting
-                    what={requestedChange(pendingFor(asks, member.membershipId)!, (code) => rungLabel(code, ladder))}
+                    what={requestedChange(pendingFor(asks, member.membershipId)!, (code) => rungShort(code, ladder))}
                     cancelling={busy === 'ask'}
                     onCancel={() => void cancelAsk(pendingFor(asks, member.membershipId)!.requestId)}
                   />

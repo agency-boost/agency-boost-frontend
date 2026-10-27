@@ -1,7 +1,8 @@
-import { screen, within } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderInLayout, renderWithSession, stubFetch } from '@test/harness';
 import type { RosterRow, RosterStatus } from '@/lib/coaching';
+import { PHONE_QUERY } from '@/lib/use-phone';
 import AgentLayout from '../layout';
 import CoachingRosterPage from './page';
 
@@ -337,3 +338,114 @@ describe('Coaching Session — the roster (P11-T6)', () => {
     expect(within(nav).getByRole('link', { name: 'Coaching session' })).toHaveAttribute('aria-current', 'page');
   });
 });
+
+/*
+ * **The roster as cards below 768px** (P18.95-T3 AC-3, ADR-0167 §6; the client's UI review of 2026-10-26, UI-011:
+ * *Coaching →* and *Status* off the screen to the right, *No 1:1 yet* on three lines). The phone is `matchMedia`
+ * answering `usePhone`'s query; every spec above is the table a tablet and a desktop keep.
+ */
+describe('P18.95-T3 — the roster as cards on a phone', () => {
+  const onPhone = (matches = true) => vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    media: query, matches: matches && query === PHONE_QUERY, addEventListener: () => {}, removeEventListener: () => {},
+  })));
+  /** A person's card: the list item their name stands in. */
+  const cardOf = (name: string) => screen.getAllByText(name).map((el) => el.closest('li')).find((li) => li?.querySelector('p span')?.textContent === name)!;
+  const cards = () => screen.findByRole('list', { name: 'Your direct agents' });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P18.95-T3 AC-3 draws a card per person below 768px, in the table’s groups and order, and no table', async () => {
+    onPhone();
+    render();
+    await cards();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Everyone you coach' })).toHaveClass('sr-only');
+    expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Your direct agents · 3', 'AAB units']);
+    expect(screen.getAllByRole('list').map((l) => l.getAttribute('aria-label')))
+      .toEqual(['Your direct agents', 'Dimas Aditya’s unit', 'Sri Lestari’s unit']);
+    const names = screen.getAllByRole('listitem').map((li) => li.querySelector('p span')!.textContent);
+    expect(names).toEqual(EVERYONE);
+    // A unit's head keeps its badge and tint; a member one step in, a head inside a unit one more.
+    expect(within(cardOf('Dimas Aditya')).getByText('AAB')).toBeInTheDocument();
+    expect(cardOf('Dimas Aditya')).toHaveClass('bg-navy-soft/[0.045]');
+    expect(within(cardOf('Wulan Sari')).getByText('AAB')).toBeInTheDocument();
+    expect(within(cardOf('Agus Santoso')).queryByText('AGENT')).not.toBeInTheDocument();
+    expect(cardOf('Rina Wijaya').style.paddingLeft).toBe('');
+    expect(cardOf('Yuni Sartika').style.paddingLeft).toBe('28px');
+    expect(cardOf('Tono Saputra').style.paddingLeft).toBe('40px');
+  });
+
+  it('P18.95-T3 AC-3 says on a card what the row says: the status, Last 1:1 on its own line, and who held it', async () => {
+    // The row's cells, as a tablet draws them …
+    render();
+    await screen.findByRole('table');
+    const row = rowOf('Fajar Hidayat');
+    const [last, coach, status] = [...row.querySelectorAll('td')].map((td) => td.textContent);
+    cleanup();
+
+    // … and the same words on the phone's card.
+    onPhone();
+    render();
+    await cards();
+    const fajar = cardOf('Fajar Hidayat');
+    expect(fajar).toHaveTextContent(last!);
+    expect(fajar).toHaveTextContent(`by ${coach}`);
+    expect(fajar).toHaveTextContent(status!);
+    expect(last).toBe('12 days ago · overdue');
+    expect(within(fajar).getByText('12 days ago · overdue')).toHaveClass('text-alert');
+    expect(within(fajar).getByText('Needs attention')).toHaveClass('text-alert');
+    // *Last 1:1* under its label, the value on a line the width of the card (UI-011: three lines in the cell).
+    expect(within(fajar).getByText('Last 1:1').tagName).toBe('DT');
+    const none = cardOf('Melati Putri');
+    expect(none).toHaveTextContent('Last 1:1No 1:1 yet');
+    expect(none).not.toHaveTextContent('by ');
+    expect(within(none).getByText('No goal set')).toHaveClass('text-muted');
+    // Coached by somebody whose membership is gone: no *by* line, as the table's dash says.
+    expect(cardOf('Wulan Sari')).not.toHaveTextContent('by ');
+  });
+
+  it('P18.95-T3 AC-3 puts Coaching → across every card, the row’s own link, a 44px target', async () => {
+    onPhone();
+    render();
+    await cards();
+    const links = screen.getAllByRole('link', { name: 'Coaching' });
+    expect(links).toHaveLength(EVERYONE.length);
+    const tono = within(cardOf('Tono Saputra')).getByRole('link', { name: 'Coaching' });
+    expect(tono).toHaveAttribute('href', '/coaching/mem-tono/session');
+    expect(tono).toHaveClass('w-full', 'min-h-11', 'justify-center');
+    expect(tono.children).toHaveLength(1);
+    expect(tono.children[0].textContent).toBe('Coaching →');
+  });
+
+  it('P18.95-T3 AC-3 never draws the table first on a phone: the width is asked before the roster answers', async () => {
+    onPhone();
+    expect(await drewATable(async () => {
+      render();
+      await cards();
+    })).toBe(false);
+  });
+
+  it('P18.95-T3 AC-3 keeps the table at 768px and wider', async () => {
+    onPhone(false);
+    render();
+    expect(await screen.findByRole('table')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Your direct agents' })).not.toBeInTheDocument();
+  });
+});
+
+/** Whether a `<table>` was ever put on the page while `run` waited: a phone's first paint must already be its cards. */
+async function drewATable(run: () => Promise<unknown>) {
+  let seen = false;
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node instanceof Element && (node.matches('table') || node.querySelector('table'))) seen = true;
+      }
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  await run();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  observer.disconnect();
+  return seen;
+}

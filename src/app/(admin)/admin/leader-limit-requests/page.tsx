@@ -5,7 +5,7 @@ import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, FieldRow, TextInput } from '@/components/ui/field';
-import { rungLabel } from '@/components/ui/role-badge';
+import { rungShort } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -75,7 +75,8 @@ export default function LeaderLimitRequestsPage() {
 
   const pending = rows?.filter((r) => r.status === 'pending') ?? [];
   const decided = rows?.filter((r) => r.status !== 'pending') ?? [];
-  const label = (code: string) => rungLabel(code);
+  // The badge's name (P18.95-T9 AC-1): *Agent → AAB*.
+  const label = (code: string) => rungShort(code);
 
   return (
     <Page

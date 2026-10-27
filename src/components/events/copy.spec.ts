@@ -19,8 +19,9 @@ import { ApiRequestError } from '@/lib/api-client';
  * words — *office*, *KPM*, *reports to*, *tagged to*, *untagged*, *unassigned* — no phase, and no internal id
  * or permission code.
  *
- * **Three of the prototype's verbatim strings carry *KPM*** and are allowed by name: the title *KPM Events*
- * and its sub-line (`Overall.html:10413`), and the audience line's issuer *KPM* (`:8532`, the event's data).
+ * **Two of the prototype's verbatim strings carry *KPM*** and are allowed by name: the title's sub-line
+ * (`Overall.html:10413`) and the audience line's issuer *KPM* (`:8532`, the event's data). The title was the
+ * third, *KPM Events*, until P18.95-T9 AC-2 gave the page its nav item's words, *Event List*.
  * They go to the client with OD-39, as every such string has since ADR-0084. Anything else that says one
  * fails here.
  *
@@ -82,7 +83,9 @@ describe('the events screens’ own copy (P18.5-T5, T6)', () => {
     expect(offends('Events from your KPM')).toBe(true);
     expect(offends('Arrives in phase 18')).toBe(true);
     expect(offends('/kpm/settings/events')).toBe(false);
-    expect(offends('KPM Events')).toBe(false);
+    // The title is the nav item's *Event List* since P18.95-T9 AC-2, so the prototype's *KPM Events* is no longer allowed.
+    expect(offends('KPM Events')).toBe(true);
+    expect(offends(PROTOTYPE_COPY.title)).toBe(false);
   });
 
   it.each(MINE)('%s: none of the six words, no phase', (root) => {

@@ -79,6 +79,10 @@ export function Toast({ toast }: { toast: ToastMessage | null }) {
  * The region itself. **Above a dialog** (`z-[60]`, over `Modal`'s and the event modal's `z-50`), where
  * the action that raised it often is — an event's *Join* on a phone, where the modal is the whole screen;
  * it takes no pointer, so it never stands between a finger and the dialog.
+ *
+ * **Above a phone's action bar** (P18.95-T5 AC-1, AC-4): a screen whose save sits in a bar fixed to the
+ * bottom (`ACTION_BAR_PHONE`) marks the bar `data-action-bar`, and below 768px the toast then stands 96px up,
+ * clear of it — *Activity logged ✓* and *Goal saved ✓* would otherwise cover the button they confirm.
  */
 function ToastRegion({ toast }: { toast: ToastMessage | null }) {
   return (
@@ -87,7 +91,7 @@ function ToastRegion({ toast }: { toast: ToastMessage | null }) {
       aria-live="polite"
       aria-atomic="true"
       data-layer="toast"
-      className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center px-4 print:hidden"
+      className="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center px-4 print:hidden max-md:[body:has([data-action-bar])_&]:bottom-24"
     >
       {toast && (
         <p

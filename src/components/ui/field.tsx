@@ -1,7 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/cn';
-import { TAP_TARGET } from '@/components/ui/phone';
+import { REMOVED_ON_PHONE, TAP_TARGET } from '@/components/ui/phone';
 
 /** One place, so `FieldRow.Actions`'s spacer is the same height as a label by construction. */
 const LABEL_CLASS = 'text-sm font-semibold text-navy';
@@ -53,6 +53,7 @@ FieldRow.Actions = function FieldRowActions({
 export function Field({
   label,
   hint,
+  hintOnPhone = true,
   error,
   htmlFor,
   children,
@@ -65,6 +66,12 @@ export function Field({
    */
   label: React.ReactNode;
   hint?: string;
+  /**
+   * `false`: **the hint is not drawn below 768px** — the client's *Remove* verdict on a grey sentence (P18.95-T7
+   * AC-1; ADR-0167 §7). It still describes the control there, as it does at every width: a screen reader reads a
+   * description it is not shown.
+   */
+  hintOnPhone?: boolean;
   error?: string;
   htmlFor: string;
   children: React.ReactNode;
@@ -105,7 +112,7 @@ export function Field({
        * `aria-describedby` is id-based, so nothing announced changes. Hint before error keeps
        * the visual order matching the `describedBy` string built above.
        */}
-      {hint && <p id={hintId} className="text-xs text-muted">{hint}</p>}
+      {hint && <p id={hintId} className={cn('text-xs text-muted', !hintOnPhone && REMOVED_ON_PHONE)}>{hint}</p>}
       {/* Announced to assistive technology, not just coloured red. */}
       {error && (
         <p id={errorId} role="alert" className="text-xs font-semibold text-alert">

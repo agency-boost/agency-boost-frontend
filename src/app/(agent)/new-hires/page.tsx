@@ -12,7 +12,7 @@ import { PROTOTYPE_COPY } from '@/lib/activation';
  */
 export default function NewHiresPage() {
   return (
-    <Page title={PROTOTYPE_COPY.rosterTitle} subtitle={PROTOTYPE_COPY.rosterSubtitle} permission="new_hires:read_roster">
+    <Page title={PROTOTYPE_COPY.rosterTitle} subtitle={PROTOTYPE_COPY.rosterSubtitle} subtitleOnPhone={false} permission="new_hires:read_roster">
       <NewHires />
     </Page>
   );

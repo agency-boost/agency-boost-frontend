@@ -1,7 +1,7 @@
 'use client';
 
 import { ActivityDashboardPanel } from '@/components/activity-dashboard';
-import { ActivityTabs } from '@/components/activity-tabs';
+import { ACTIVITY_TITLE, ActivityTabs } from '@/components/activity-tabs';
 import { Page } from '@/components/page';
 
 /**
@@ -13,7 +13,7 @@ import { Page } from '@/components/page';
  */
 export default function ActivityDashboardPage() {
   return (
-    <Page title="Activity Dashboard" subtitle="Your own activity, day by day.">
+    <Page title={ACTIVITY_TITLE} subtitle="Your own activity, day by day.">
       <ActivityTabs />
       <ActivityDashboardPanel />
     </Page>

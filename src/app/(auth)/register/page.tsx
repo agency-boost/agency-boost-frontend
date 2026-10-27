@@ -5,8 +5,12 @@ import { useEffect, useState } from 'react';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
 import { listInsurers, type Insurer } from '@/lib/companies';
 import { GENDER_LABEL, WORK_STATUS_LABEL, type Gender, type WorkStatus } from '@/lib/personal';
+import { AUTH_PAGE } from '@/components/auth-page';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { PasswordInput } from '@/components/ui/password-input';
+import { REMOVED_ON_PHONE } from '@/components/ui/phone';
+import { cn } from '@/lib/cn';
+import { heldBecause } from '@/lib/disabled-reason';
 
 /**
  * Self-signup.
@@ -68,6 +72,27 @@ export default function RegisterPage() {
   const refusedField = PERSONAL_FIELDS.find((f) => f === error?.details?.field) as PersonalField | undefined;
   const fieldError = (f: PersonalField) => (refusedField === f ? error?.message : undefined);
 
+  /*
+   * **What *Create account* waits for, said under it** (P18.95-T7 AC-3; UI-030): the fields still empty, by their
+   * labels and in the form's order, or — once none is — that the password is wrong, which its own field says.
+   */
+  const joinedLabel = `Joined ${insurerName ?? 'your insurer'}`;
+  const missing = [
+    [!form.fullName.trim(), 'Full name'],
+    [!form.dateOfBirth, 'Date of birth'],
+    [!form.gender, 'Gender'],
+    [!form.companyId, 'Insurer'],
+    [!form.agentCode.trim(), 'Agent code'],
+    [!form.companyJoinMonth, joinedLabel],
+    [!form.workStatus, 'Status'],
+    [!form.email.trim(), 'Email'],
+    [!form.password, 'Password'],
+    [!form.confirmPassword, 'Confirm password'],
+  ].filter(([empty]) => empty).map(([, label]) => label as string);
+  const passwordWrong = tooShort || padded || mismatch;
+  const held = !busy && (missing.length > 0 || passwordWrong);
+  const heldWhy = held ? heldBecause({ missing, fix: passwordWrong ? 'Fix the password above.' : null }) : null;
+
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -87,9 +112,13 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
-      <h1 className="font-display text-3xl font-bold text-navy">Create your account</h1>
-      <p className="mb-6 mt-1 text-md text-muted">
+    <main className={AUTH_PAGE}>
+      {/*
+        * The line under the title is the client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 26): from 768px it
+        * reads as before. On a phone the title keeps the line's gap below it, so the form does not start against it.
+        */}
+      <h1 className="font-display text-3xl font-bold text-navy max-md:mb-6">Create your account</h1>
+      <p className={cn('mb-6 mt-1 text-md text-muted', REMOVED_ON_PHONE)}>
         Your office is added separately. This is just your login.
       </p>
 
@@ -173,7 +202,8 @@ export default function RegisterPage() {
             <Field
               label="Agent code"
               htmlFor="agentCode"
-              hint="The producer id on your contract, digits only. It identifies you, like your email."
+              // The client's words at every size (P18.95-T7 AC-1, grey text row 26).
+              hint="Found on your contract"
             >
               <TextInput
                 id="agentCode"
@@ -187,7 +217,7 @@ export default function RegisterPage() {
             </Field>
 
             <Field
-              label={`Joined ${insurerName ?? 'your insurer'}`}
+              label={joinedLabel}
               htmlFor="companyJoinMonth"
               hint="The month and year you joined them."
               error={fieldError('companyJoinMonth')}
@@ -264,17 +294,12 @@ export default function RegisterPage() {
               />
             </Field>
 
-            <Button
-              type="submit"
-              disabled={
-                busy || tooShort || padded || mismatch || !form.confirmPassword
-                || !form.fullName.trim() || !form.email.trim()
-                || !form.companyId || !form.agentCode.trim()
-                || !form.dateOfBirth || !form.companyJoinMonth || !form.workStatus || !form.gender
-              }
-            >
-              {busy ? 'Creating…' : 'Create account'}
-            </Button>
+            <div className="flex flex-col gap-1">
+              <Button type="submit" disabled={busy || held} aria-describedby={heldWhy ? 'create-account-held' : undefined}>
+                {busy ? 'Creating…' : 'Create account'}
+              </Button>
+              {heldWhy && <p id="create-account-held" className="text-xs text-muted">{heldWhy}</p>}
+            </div>
 
             <Link href="/login" className="text-center text-sm text-muted underline">
               Already have an account? Sign in

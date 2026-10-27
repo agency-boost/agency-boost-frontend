@@ -39,7 +39,7 @@ describe('Leaders past the limit (P18.8-T2)', () => {
     stubFetch({ '/admin/leader-limit-requests': { body: [req()] } });
     renderInLayout(AdminLayout, <LeaderLimitRequestsPage />, { me: SUPER_ADMIN });
 
-    expect(await screen.findByText('Rizky Ramadhan · Agent → Associate Agency Builder')).toBeInTheDocument();
+    expect(await screen.findByText('Rizky Ramadhan · Agent → AAB')).toBeInTheDocument();
     expect(screen.getByText(/KPM 0603 · Tangerang Branch · asked by/)).toHaveTextContent('leaders 13 / 10');
     expect(screen.getByText('Ready to bring on his own agents')).toBeInTheDocument();
     expect(screen.getByText(/the office's leaders become 14 \/ 10\. The limit does not change\./)).toBeInTheDocument();

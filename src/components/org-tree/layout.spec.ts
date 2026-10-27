@@ -3,6 +3,7 @@ import type { OrgTree, OrgTreeNode } from '@/lib/org';
 import {
   COLUMN_GAP,
   defaultCollapsed,
+  defaultOpenInList,
   GROUP_GAP,
   layoutTree,
   NODE_HEIGHT,
@@ -220,5 +221,43 @@ describe('tree layout (P3-T8)', () => {
       const t = tree([node({ membershipId: 'solo', layer: 1 })]);
       expect(defaultCollapsed(t).size).toBe(0);
     });
+  });
+});
+
+describe('P18.95-T8 AC-3 what the phone’s list opens on', () => {
+  const office = () => [
+    node({ membershipId: 'root', layer: 1, isLeader: true, directCount: 2 }),
+    node({ membershipId: 'me', layer: 2, leaderId: 'root', isLeader: true, directCount: 1, isSelf: true }),
+    node({ membershipId: 'peer', layer: 2, leaderId: 'root', isLeader: true, directCount: 1 }),
+    node({ membershipId: 'mine', layer: 3, leaderId: 'me', isLeader: true, directCount: 1 }),
+    node({ membershipId: 'deep', layer: 4, leaderId: 'mine' }),
+    node({ membershipId: 'theirs', layer: 3, leaderId: 'peer' }),
+  ];
+
+  it('P18.95-T8 AC-3 opens the reader’s own line one level down, and every line above them, nothing else', () => {
+    expect([...defaultOpenInList(tree(office(), { selfId: 'me' }))].sort()).toEqual(['me', 'root']);
+  });
+
+  it('P18.95-T8 AC-3 finds the reader by selfId when no node says isSelf', () => {
+    const nodes = office().map((n) => ({ ...n, isSelf: false }));
+    expect([...defaultOpenInList(tree(nodes, { selfId: 'mine' }))].sort()).toEqual(['me', 'mine', 'root']);
+  });
+
+  it('P18.95-T8 AC-3 opens nothing for a reader who leads nobody but their way up', () => {
+    const nodes = office().map((n) => ({ ...n, isSelf: n.membershipId === 'deep' }));
+    expect([...defaultOpenInList(tree(nodes))].sort()).toEqual(['me', 'mine', 'root']);
+  });
+
+  it('P18.95-T8 AC-3 with no reader in the tree, opens each root that leads, one level', () => {
+    const nodes = [...office().map((n) => ({ ...n, isSelf: false })), node({ membershipId: 'orphan', layer: 1 })];
+    expect([...defaultOpenInList(tree(nodes))]).toEqual(['root']);
+  });
+
+  it('P18.95-T8 AC-3 stops on a loop in bad data rather than hanging', () => {
+    const nodes = [
+      node({ membershipId: 'a', layer: 1, leaderId: 'b', isLeader: true, directCount: 1, isSelf: true }),
+      node({ membershipId: 'b', layer: 2, leaderId: 'a', isLeader: true, directCount: 1 }),
+    ];
+    expect([...defaultOpenInList(tree(nodes, { rootIds: [] }))].sort()).toEqual(['a', 'b']);
   });
 });

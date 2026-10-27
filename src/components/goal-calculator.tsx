@@ -11,16 +11,21 @@ import { KpiTile } from '@/components/ui/kpi-tile';
 import { NumberBadge } from '@/components/ui/number-badge';
 import { SaveStatus } from '@/components/ui/save-status';
 import { Toast, useToast } from '@/components/ui/toast';
+import { ACTION_BAR_PHONE, ACTION_BAR_ROOM_PHONE, REMOVED_ON_PHONE } from '@/components/ui/phone';
+import { PhoneTip } from '@/components/ui/phone-tip';
 import { Segmented } from '@/components/ui/segmented';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { TermTip } from '@/components/ui/term-tip';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import { CONFIRMED } from '@/lib/confirmations';
+import type { TermKey } from '@/lib/terms';
 import { capitalized, PRONOUN_FORMS, type CoacheeSubject } from '@/lib/coaching';
 import { formatDay, formatDayLong, formatNumber, formatPercent, formatRupiahCompact } from '@/lib/format';
 import {
-  formatRupiah, goalInputsOf, groupDigits, parseDigits, producedFrom, readGoal, saveGoal, toMajor, toMinor,
-  type Goal, type GoalInputs, type GoalMode,
+  formatRupiah, goalInputsOf, groupDigits, monthsLeftInWords, parseDigits, producedFrom, readGoal, saveGoal, toMajor,
+  toMinor, type Goal, type GoalInputs, type GoalMode,
 } from '@/lib/goals';
 import { useSession } from '@/lib/session';
 import { useTenantConfig, type TenantConfig } from '@/lib/tenant-config-cache';
@@ -56,6 +61,12 @@ import { useTenantConfig, type TenantConfig } from '@/lib/tenant-config-cache';
  * words, and policies per week to one decimal. What stays beyond the prototype is what a requirement
  * needs: *Set by your leader* (ADR-0046), the provenance marker on the APE already produced
  * (ADR-0063 §5), the disclaimer (L-29) and the target-passed state (ADR-0047).
+ *
+ * **The client's UI review of 2026-10-26** (P18.95-T5 AC-4, AC-5, AC-7; UI-018): on a phone *Save goal* is in a
+ * bar fixed to the bottom of the screen, so it sits under *My commitment* once the plan is read, where it stood
+ * in step 1, 2,400px above the result; the APE already produced is shown once, not as a field and then a tile
+ * repeating it; the months left read *about 2 months*; the cascade's chips name the activities; and step 1's two
+ * options share the track at 375px rather than one scrolling out of sight.
  */
 
 /** How the calculator's sentences read: the reader's own plan, or a coachee's in their pronoun. */
@@ -159,6 +170,7 @@ export function GoalCalculator({
     && goal.savedByMembershipId !== null
     && goal.savedByMembershipId !== me?.membership?.membershipId;
   const numbers = activityNumbers(config, goal.cascadeBinding);
+  const names = activityNames(config, goal.cascadeBinding);
   const produced = producedFrom(goal.achieved, 'year', subject?.pronoun);
 
   return (
@@ -172,7 +184,7 @@ export function GoalCalculator({
         * against the steps' `px-5 py-4`, so the first card a reader saw was wider and more thickly
         * padded than the plan underneath — the same thing said in two shapes.
         */}
-      <div className="mx-auto flex max-w-[51.25rem] flex-col gap-3">
+      <div className={cn('mx-auto flex max-w-[51.25rem] flex-col gap-3', ACTION_BAR_ROOM_PHONE)}>
         {error && <ErrorBanner {...error} />}
 
         {/*
@@ -194,8 +206,20 @@ export function GoalCalculator({
           n={1}
           // The coaching tool's own words for somebody else's plan (`Overall.html:5860`), verbatim.
           title={mine ? "What's your APE target this year?" : "What's their APE target this year?"}
+          // *APE*'s first appearance on the page, so its ⓘ is here (P18.95-T9 AC-3; UI-028).
+          term="APE"
           actions={(
-            <div className="flex items-center gap-3">
+            /*
+             * **On a phone, a bar fixed to the bottom of the screen** (P18.95-T5 AC-4, `ACTION_BAR_PHONE`): the same
+             * status and button, moved rather than repeated, so at the end of the page they stand under *My
+             * commitment* — the sentence the save agrees to — and on the way down they are always one tap away.
+             * `data-action-bar` lifts the shell's toast above it (`toast.tsx`). At 768px and wider they stay in step 1's
+             * header, as the prototype has them.
+             */
+            <div
+              data-action-bar=""
+              className={cn('flex items-center gap-3', ACTION_BAR_PHONE, 'max-md:justify-between')}
+            >
               {/*
                 * **The status beside the button, not at the bottom of the page.** Its job is to answer
                 * *did that land* where you are already looking (`:2854-2862`, `:627-632`). It was 500
@@ -216,7 +240,13 @@ export function GoalCalculator({
             * could not see the product had a mode for them. It also sat in the same row as the value it
             * governs, so the mode competed with the number.
             */}
+          {/*
+            * **Both options in sight on a phone** (P18.95-T5 AC-7): the track keeps its two equal halves and each
+            * label wraps inside its own, where the shared tab row (P18.95-T1 AC-8) scrolled *Calculate from savings
+            * target* half out of a 375px screen. Two options are a choice, not a strip to browse.
+            */}
           <Segmented
+            phoneLayout="wrap"
             label={mine ? 'How you want to set it' : 'How to set it'}
             tabs={[
               { id: 'direct', label: 'Set APE target directly' },
@@ -317,7 +347,8 @@ export function GoalCalculator({
               * The typed figure is kept, and still saved, for the year a file stops arriving.
               *
               * **No sentence says so** (P10.1-T6, ADR-0063 §5): whose figure it is, and for which
-              * month, is the marker on *Already produced* below, as on the Summary.
+              * month, is the marker beside this field's label, as on the Summary (the *Already produced* tile that
+              * carried it went in P18.95-T5).
               */}
             {/*
               * Either way it takes the rest of the row, as the prototype's `flex:1 1 220px` does
@@ -341,12 +372,12 @@ export function GoalCalculator({
               <ReadOnlyField
                 layout="field"
                 className="grow basis-56"
-                label={projected ? 'APE already produced this year' : (
+                label={(
                   <>
                     APE already produced this year{' '}
                     {/*
-                      * No plan, no *Already produced* tile to carry the marker — so it is here, once,
-                      * rather than leaving a carrier's figure with nothing to say whose it is.
+                      * **The provenance marker, on the one place the figure is** (ADR-0063 §5): the *Already
+                      * produced* tile that carried it repeated this figure, and went (P18.95-T5 AC-5).
                       */}
                     <TippedGlyph
                       glyph="ⓘ"
@@ -363,30 +394,12 @@ export function GoalCalculator({
           </FieldRow>
           {projected && (
             <>
-              {/* Two-up, as `.kpi-row` is (`:686`) — a grid rather than a wrap, so they stay equal. */}
-              <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
-                <KpiTile
-                  label={(
-                    <>
-                      Already produced{' '}
-                      {/*
-                        * The provenance marker (ADR-0063 §5), the Summary's: its words say whose figure
-                        * this is and for which month. The negative margin keeps the 28px tap target
-                        * from making this tile's label taller than its neighbour's.
-                        */}
-                      <TippedGlyph
-                        glyph="ⓘ"
-                        name={produced}
-                        tip={produced}
-                        align="fit"
-                        className="-my-2 align-middle"
-                      />
-                    </>
-                  )}
-                  value={formatRupiahCompact(projected.apeAchievedMinor)}
-                />
-                <KpiTile label="Remaining needed" value={formatRupiahCompact(projected.remainingApeMinor)} />
-              </div>
+              {/*
+                * **The produced figure once** (P18.95-T5 AC-5; UI-018: *Rp 290.000.000* twice in a row). The
+                * prototype's `.kpi-row` echoes the field above it in an *Already produced* tile (`:2928-2936`);
+                * the field holds the figure, so the row holds only what it adds, the remainder.
+                */}
+              <KpiTile className="mt-3" label="Remaining needed" value={formatRupiahCompact(projected.remainingApeMinor)} />
               {/*
                 * **The one number this card is for.** It was the third of three identical figures, so
                 * the answer looked like the two echoes of what you had just typed (`:2938-2941`).
@@ -409,6 +422,13 @@ export function GoalCalculator({
               value={draft.caseSizeMinor}
               onChange={(caseSizeMinor) => set({ caseSizeMinor })}
             />
+            {/*
+              * **On a phone, the prototype's 💡 tip as an ⓘ beside the field** (P18.95-T7 AC-1, grey text row 15;
+              * ADR-0167 §7): the client's *ⓘ* verdict on *"APE per closing…"* (`Overall.html:2971`). At 768px and wider
+              * nothing, as since ADR-0160 §4 removed the tip; the ⓘ sits level with the label, outside it, since a
+              * button inside a `<label>` would be a second control it names.
+              */}
+            <PhoneTip text={CASE_SIZE_TIP} className="mt-0.5" />
           </FieldRow>
           {projected && (
             <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
@@ -485,22 +505,22 @@ export function GoalCalculator({
             <CascadeRow
               columns={[
                 {
-                  label: 'Set appointment',
-                  chip: chipOf(numbers.leads),
+                  label: LABEL.leads,
+                  chip: chipOf(names.leads, LABEL.leads),
                   icon: 'clipboard',
                   month: `${formatNumber(projected.leadsPerMonth)}/month`,
                   week: `≈ ${formatNumber(projected.leadsPerWeek, { maxDecimals: 1 })}/week`,
                 },
                 {
-                  label: 'Sales meeting',
-                  chip: chipOf(numbers.appointments),
+                  label: LABEL.appointments,
+                  chip: chipOf(names.appointments, LABEL.appointments),
                   icon: 'calendar',
                   month: `${formatNumber(projected.appointmentsPerMonth)}/month`,
                   week: `≈ ${formatNumber(projected.appointmentsPerWeek, { maxDecimals: 1 })}/week`,
                 },
                 {
-                  label: 'Submission polis',
-                  chip: chipOf(numbers.closings),
+                  label: LABEL.closings,
+                  chip: chipOf(names.closings, LABEL.closings),
                   icon: 'target',
                   month: `${formatNumber(projected.policiesPerMonth)}/month`,
                   week: `≈ ${formatNumber(projected.policiesPerWeek, { maxDecimals: 1 })}/week`,
@@ -521,8 +541,9 @@ export function GoalCalculator({
             * by code (invariant §4) — so a reordered list renumbers the tip and never rebinds the plan.
             * Until the configuration has answered there is nothing true to print, so nothing is.
             */}
+          {/* The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 17): from 768px it reads as before. */}
           {numbers.leads !== null && numbers.appointments !== null && numbers.closings !== null && (
-            <Tip glyph="🔗">
+            <Tip glyph="🔗" className={REMOVED_ON_PHONE}>
               Maps to activities {[numbers.leads, numbers.appointments, numbers.closings].map(hashes).join(', ')} in
               {' '}Activity Management.
             </Tip>
@@ -551,8 +572,9 @@ export function GoalCalculator({
           </h2>
           {projected && !projected.targetMet && (
             <p className="mt-2 text-lg leading-relaxed text-white">
+              {/* *about 2 months*, not *2.2 months* (P18.95-T5 AC-5): a plan is not kept to a tenth of a month. */}
               To reach APE <Figure>{formatRupiahCompact(projected.annualApeTargetMinor)}</Figure> this year
-              ({formatNumber(goal.monthsLeft, { maxDecimals: 1 })} months left), this month&apos;s target is APE{' '}
+              ({monthsLeftInWords(goal.monthsLeft)} left), this month&apos;s target is APE{' '}
               <Figure>{formatRupiahCompact(projected.monthlyApeTargetMinor)}</Figure> — {mine ? 'I' : voice.pronoun} will contact{' '}
               <Figure>{formatNumber(projected.leadsPerMonth)} leads</Figure>, get{' '}
               <Figure>{formatNumber(projected.appointmentsPerMonth)} appointments</Figure>, and close{' '}
@@ -607,6 +629,8 @@ function Figure({ children }: { children: React.ReactNode }) {
  * id and is never shown (ADR-0062 §3). `null` until the configuration arrives, and for a stage it holds no live
  * type for: a number pointing at nothing on the log is not printed — so an archived type, still counted for its
  * history, is not numbered.
+ *
+ * *Since 2026-10-26 (P18.95-T5 AC-5) the 🔗 tip's alone*: the chips name the activities (`activityNames`).
  */
 function activityNumbers(config: TenantConfig | null, binding: Goal['cascadeBinding']) {
   const types = (config?.activity ?? [])
@@ -629,8 +653,54 @@ function activityNumbers(config: TenantConfig | null, binding: Goal['cascadeBind
 /** `#3`, or `#3, #13` for a stage that counts two. */
 const hashes = (numbers: readonly number[]) => numbers.map((n) => `#${n}`).join(', ');
 
-/** The chip over a cascade column: *Activity #3*, verbatim, or none while the number is unknown. */
-const chipOf = (numbers: readonly number[] | null) => (numbers === null ? undefined : `Activity ${hashes(numbers)}`);
+/**
+ * The cascade's three stages, in the client's words (ADR-0160 §4): each column's label, and what its chip is
+ * compared with.
+ */
+const LABEL = { leads: 'Set appointment', appointments: 'Sales meeting', closings: 'Submission polis' } as const;
+
+/** Step 3's tip, the prototype's words verbatim (`Overall.html:2971`), in a phone's ⓘ (grey text row 15). */
+export const CASE_SIZE_TIP = 'APE per closing. Increase if one appointment often yields multiple policies.';
+
+/**
+ * **The names of the activities each stage counts** (P18.95-T5 AC-5; the client's UI review, UI-018): the
+ * office's own label for every code its **activity binding** names for the stage (`goal.cascadeBinding`,
+ * ADR-0163), as Log Activity prints it, in the binding's order — *Set Appointment*, *Melakukan presentasi
+ * penjualan untuk calon atau existing nasabah* and *Submission polis* on the seed. Read from the published
+ * configuration the shell already holds, by code (invariant §4), so a renamed activity renames its chip.
+ *
+ * The same rule as the numbers it replaced: a code with no active type behind it — archived, its history still
+ * counting — is not named, because nobody logs it today; `null` until the configuration arrives, and for a stage
+ * it holds no live type for.
+ */
+function activityNames(config: TenantConfig | null, binding: Goal['cascadeBinding']) {
+  const types = (config?.activity ?? [])
+    .filter((category) => category.status === 'active')
+    .flatMap((category) => category.types)
+    .filter((type) => type.status === 'active');
+  const namesOf = (codes: readonly string[] | undefined) => {
+    const found = (codes ?? [])
+      .map((code) => types.find((type) => type.code === code)?.label.trim())
+      .filter((label): label is string => Boolean(label));
+    return found.length ? found : null;
+  };
+  return {
+    leads: namesOf(binding?.leads),
+    appointments: namesOf(binding?.appointments),
+    closings: namesOf(binding?.closings),
+  };
+}
+
+/**
+ * The chip over a cascade column: the activities it counts, *A + B* for a stage that counts two, where it read
+ * *Activity #3* (P18.95-T5 AC-5). **None when it would only repeat the column's label** — the seed's *Submission
+ * polis* under *Submission polis* — and none while the names are unknown.
+ */
+function chipOf(names: readonly string[] | null, label: string): string | undefined {
+  if (names === null) return undefined;
+  const chip = names.join(' + ');
+  return chip.toLocaleLowerCase() === label.toLocaleLowerCase() ? undefined : chip;
+}
 
 
 /**
@@ -644,20 +714,30 @@ const chipOf = (numbers: readonly number[] | null) => (numbers === null ? undefi
  * header (`:2854-2862`), where the plan starts rather than at the bottom of the page.
  */
 function Step({
-  n, title, actions, children,
+  n, title, term, actions, children,
 }: {
   n: number;
   title: string;
+  /** A term the title uses, whose ⓘ follows it (P18.95-T9 AC-3) — beside the heading, so its name stays the title. */
+  term?: TermKey;
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const heading = (
+    <h2 className="flex items-center gap-2.5 font-display text-md font-bold text-navy">
+      <NumberBadge n={n} size="md" />
+      {title}
+    </h2>
+  );
   return (
     <Card density="compact">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2.5 font-display text-md font-bold text-navy">
-          <NumberBadge n={n} size="md" />
-          {title}
-        </h2>
+        {term ? (
+          <div className="flex items-center gap-1">
+            {heading}
+            <TermTip term={term} />
+          </div>
+        ) : heading}
         {actions}
       </div>
       <div className="mt-3.5">{children}</div>
@@ -673,9 +753,9 @@ function Step({
  * another screen*, and they are the difference between a hint and a footnote at a glance. It is
  * `aria-hidden` because the sentence says the same thing in words.
  */
-function Tip({ glyph, children }: { glyph: string; children: React.ReactNode }) {
+function Tip({ glyph, children, className }: { glyph: string; children: React.ReactNode; className?: string }) {
   return (
-    <p className="mt-3 flex items-start gap-2 text-sm leading-relaxed text-muted">
+    <p className={cn('mt-3 flex items-start gap-2 text-sm leading-relaxed text-muted', className)}>
       <span aria-hidden="true" className="shrink-0">{glyph}</span>
       <span>{children}</span>
     </p>

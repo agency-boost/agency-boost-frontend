@@ -1,3 +1,4 @@
+import { shortOfRung } from '@/components/ui/role-badge';
 import { api } from './api-client';
 import { formatNumber } from './format';
 
@@ -21,7 +22,13 @@ export type EntryType = 'meeting' | 'coaching' | 'client' | 'task' | 'travel';
 /** The legend's and the type toggle's order (`Calendar_Section.html:310-314`, `:370-374`). */
 export const ENTRY_TYPES: readonly EntryType[] = ['meeting', 'coaching', 'client', 'task', 'travel'];
 
-/** The legend's and the toggle's words, verbatim (`:310-314`, `:370-374`). */
+/**
+ * **The types' one set of names** (`:310-314`, `:370-374`): the legend's and the type toggle's words,
+ * verbatim — and, since P18.95-T8 AC-2, the detail's badge, every entry's accessible name and the
+ * agenda's line too. The prototype's badge capitalised the code instead (*Meeting*, *Coaching*,
+ * *Client*, `:824`), so the legend said *Internal meeting* and the popup *Meeting* for one entry (the
+ * client's UI review, UI-020; ADR-0167). The legend's are the ones the reader chooses from, so they won.
+ */
 export const TYPE_LABEL: Record<EntryType, string> = {
   meeting: 'Internal meeting',
   coaching: '1:1 coaching',
@@ -30,16 +37,18 @@ export const TYPE_LABEL: Record<EntryType, string> = {
   travel: 'Travel',
 };
 
-/** The detail's badge, verbatim and **not** the legend's words: the type capitalised (`:824`). */
-export const TYPE_BADGE: Record<EntryType, string> = {
-  meeting: 'Meeting',
-  coaching: 'Coaching',
-  client: 'Client',
-  task: 'Task',
-  travel: 'Travel',
-};
-
+/** What a read asks the server for: a week or a month. */
 export type CalendarView = 'week' | 'month';
+
+/**
+ * **What the screen draws** (P18.95-T8 AC-1). *Agenda* is a phone's list of the week by day: it is
+ * the week's read drawn as a list, so it asks for nothing the week does not, and at 768px and wider
+ * it is drawn as the week, which is what the page opens on there.
+ */
+export type CalendarDisplay = 'agenda' | 'week' | 'month';
+
+/** The read a display asks for: the agenda reads the week. */
+export const viewOf = (display: CalendarDisplay): CalendarView => (display === 'month' ? 'month' : 'week');
 
 /** An invitee's answer. A block's member gives none: they are placed (ADR-0098). */
 export type Answer = 'pending' | 'accepted' | 'declined';
@@ -249,7 +258,8 @@ const query = (params: Record<string, string | number | undefined>) => {
 
 /**
  * One person's week or month. Without `forId`, the reader's own calendar; with it, a member they
- * coach (Week only), which the server audits — one entry per read (D-audit). Outside `COACH` it is 404.
+ * coach — a week or, since P18.95-T8 AC-2, a month — which the server audits, one entry per read
+ * (D-audit). Outside `COACH` it is 404.
  */
 export const readCalendar = (q: { view: CalendarView; date?: string; forId?: string }) =>
   api<CalendarRead>('/calendar/entries' + query({ view: q.view, date: q.date, for: q.forId }));
@@ -441,6 +451,22 @@ export const OWN_COPY = {
   hideDetailsTip: 'Leaders who view your calendar see only "Busy" and the time. People you invite still see the details.',
   /** A save of the switch refused: it is back where it was, and this says so. */
   hideDetailsFailed: 'Your setting couldn\'t be saved, so it has been put back.',
+  /*
+   * ── A phone's calendar, and the popup's link (P18.95-T8; the client's UI review, UI-020) ──
+   */
+  /** The phone's third view, beside the prototype's *Week* and *Month*: the week as a list by day. */
+  agenda: 'Agenda',
+  /** The phone's one button for what the toolbar's row has no room for: compare, the legend, the switch. */
+  filters: 'Filters',
+  /** A day of the agenda, or the day a month's tap shows, with nothing on it. */
+  noEvents: 'No events',
+  /** After a month cell's date on a phone, where its lines are dots: how many it holds. */
+  eventCount: (n: number) => (n === 1 ? '1 event' : `${formatNumber(n)} events`),
+  /** A meeting link in *Location / notes*: on a Zoom host, and on any other. */
+  joinZoom: 'Join Zoom',
+  joinMeeting: 'Join meeting',
+  /** After the link's words, read and not drawn: it opens in a new tab (WCAG G201). */
+  newTab: ', opens in a new tab',
 } as const;
 
 /*
@@ -465,16 +491,18 @@ export function initialsOf(name: string): string {
 }
 
 /**
- * A person's tag in the picker and the compare popover: the rung's ladder label, then *" · under
- * {full name}"* for anybody who is not the reader's direct report. No abbreviated rung, no first name
- * and no *"KPM Manager"*, which is no rung (contradiction 17).
+ * A person's tag in the picker and the compare popover: the rung by its badge's name (*AB*, *AAB*, *Agent*;
+ * P18.95-T9 AC-1, ADR-0167 §10 — the ladder's label, whole, until then), then *" · under {full name}"* for
+ * anybody who is not the reader's direct report. No first name and no *"KPM Manager"*, which is no rung
+ * (contradiction 17).
  *
  * **Who is a direct report is the server's `direct`**, read off the row, never worked out here by
  * matching the leader's name to the reader's: a name is a mutable attribute and two people can share
  * one (invariant §2), so a namesake's agent would have lost their *"· under"*.
  */
 export function personTag(person: { rung: CalendarRung; leaderName: string | null; direct: boolean }): string {
-  return !person.direct && person.leaderName ? `${person.rung.label} · under ${person.leaderName}` : person.rung.label;
+  const rung = shortOfRung(person.rung);
+  return !person.direct && person.leaderName ? `${rung} · under ${person.leaderName}` : rung;
 }
 
 /**
@@ -526,4 +554,72 @@ export function daysInclusive(a: string, b: string): number {
 export function hhmm(minutes: number): string {
   const m = ((minutes % 1440) + 1440) % 1440;
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+/*
+ * ── Meeting links in *Location / notes* (P18.95-T8 AC-2; the client's UI review, UI-020) ─────────
+ */
+
+/** A run of the notes as written, or a link found in them and the words it is drawn with. */
+export type NotesPart = { text: string } | { href: string; label: string };
+
+/**
+ * **Hosts a meeting address is typed on without its `https://`** — the seed's own *zoom.us/j/91827364*
+ * among them. Anything else is a link only when it is written with `http://` or `https://`, or starts
+ * with `www.`: a bare *word.word/word* in free text is too often not an address.
+ */
+const BARE_MEETING_HOSTS = /^(?:[a-z0-9-]+\.)*(?:zoom\.us|webex\.com)$|^(?:meet\.google\.com|teams\.microsoft\.com|teams\.live\.com)$/;
+
+/**
+ * An address with its scheme, or a bare one on a host above or starting `www.`, up to the next space —
+ * after the start or a character that cannot be part of an address (group 1), so *name@zoom.us/x* is
+ * not read as one. A capture rather than a lookbehind, which Safari before 16.4 cannot parse.
+ */
+const ADDRESS = /(^|[^\w@./-])(https?:\/\/[^\s<>"]+|(?:www\.)?(?:[a-z0-9-]+\.)+[a-z]{2,}\/[^\s<>"]*)/gi;
+
+/** What closes a sentence or a bracket after an address belongs to the sentence, not to the address. */
+const TRAILING = /[.,;:!?'")\]}]+$/;
+
+/** A Zoom meeting's host: `zoom.us` and its own subdomains (`us02web.zoom.us`), and nothing that merely ends in it. */
+export const isZoomHost = (hostname: string) => hostname === 'zoom.us' || hostname.endsWith('.zoom.us');
+
+/**
+ * The address a run of the notes names, **only as `http:` or `https:`**, or `null`: a bare address is
+ * read as `https://`, and one with any other scheme — `javascript:`, `data:`, `mailto:` — is not an
+ * address here, because the pattern above never matches one.
+ */
+export function meetingUrl(raw: string): URL | null {
+  const withScheme = /^https?:\/\//i.test(raw);
+  let url: URL;
+  try {
+    url = new URL(withScheme ? raw : `https://${raw}`);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+  if (!url.hostname.includes('.')) return null;
+  if (!withScheme && !url.hostname.startsWith('www.') && !BARE_MEETING_HOSTS.test(url.hostname)) return null;
+  return url;
+}
+
+/**
+ * ***Location / notes*, with each meeting link made a link** (P18.95-T8 AC-2): *Join Zoom* on a Zoom
+ * host, *Join meeting* on any other, everything else the organiser wrote kept as they wrote it. The
+ * address itself stays the link's `title` and its `href`, so it is never hidden from whoever wants to
+ * see where it goes.
+ */
+export function notesParts(notes: string): NotesPart[] {
+  const parts: NotesPart[] = [];
+  let at = 0;
+  for (const match of notes.matchAll(ADDRESS)) {
+    const raw = match[2].replace(TRAILING, '');
+    const url = meetingUrl(raw);
+    if (!url) continue;
+    const start = (match.index ?? 0) + match[1].length;
+    if (start > at) parts.push({ text: notes.slice(at, start) });
+    parts.push({ href: url.href, label: isZoomHost(url.hostname) ? OWN_COPY.joinZoom : OWN_COPY.joinMeeting });
+    at = start + raw.length;
+  }
+  if (at < notes.length) parts.push({ text: notes.slice(at) });
+  return parts;
 }

@@ -48,8 +48,11 @@ export function reveal(row: HTMLElement, tab: HTMLElement) {
  */
 const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
-/** The current tab, by what the strip already says about it: `aria-current` on a link, `aria-selected` on a tab. */
-const CURRENT = '[aria-current]:not([aria-current="false"]), [aria-selected="true"]';
+/**
+ * The current tab, by what the strip already says about it: `aria-current` on a link, `aria-selected` on a tab,
+ * `aria-pressed` on a filter's toggle button — the catalog's category pills (P18.95-T6 AC-4).
+ */
+const CURRENT = '[aria-current]:not([aria-current="false"]), [aria-selected="true"], [aria-pressed="true"]';
 
 /**
  * A tab strip's phone behaviour: the fade on the side that has more, and the current tab scrolled into

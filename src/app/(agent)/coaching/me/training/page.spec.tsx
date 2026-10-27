@@ -110,7 +110,8 @@ describe('/coaching/me/training, the reader’s own Training tab (P18.5-T4 AC-3)
       { me: coach },
     );
     await sales();
-    expect(screen.getAllByRole('heading', { level: 2 }).slice(1).map((h) => h.textContent)).toEqual(mine.headings);
+    // The coach's tab: the coachee's name is its page title since P18.95-T7 AC-2, so every h2 is a category.
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(mine.headings);
     expect(rowsShown()).toEqual(mine.rows);
   });
 });

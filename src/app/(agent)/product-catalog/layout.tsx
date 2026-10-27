@@ -25,7 +25,14 @@ import { PRODUCT_CATALOG_HREF, PROTOTYPE_COPY } from '@/lib/product-catalog';
 export default function ProductCatalogLayout({ children }: { children: ReactNode }) {
   const drawerOpen = usePathname() !== PRODUCT_CATALOG_HREF;
   return (
-    <Page title={PROTOTYPE_COPY.catalogTitle} subtitle={PROTOTYPE_COPY.catalogSubtitle} permission="product_catalog:read">
+    // The sub-line is not drawn on a phone: the client's *Remove* (P18.95-T7 AC-1, grey text row 13), its search above
+    // the grid since P18.95-T6.
+    <Page
+      title={PROTOTYPE_COPY.catalogTitle}
+      subtitle={PROTOTYPE_COPY.catalogSubtitle}
+      subtitleOnPhone={false}
+      permission="product_catalog:read"
+    >
       <div inert={drawerOpen || undefined}>
         <SalesToolsTabs />
       </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ActivityTabs } from '@/components/activity-tabs';
+import { ACTIVITY_TITLE, ActivityTabs } from '@/components/activity-tabs';
 import { Page } from '@/components/page';
 import { Card, ErrorBanner } from '@/components/ui/field';
 import { NumberBadge } from '@/components/ui/number-badge';
@@ -11,7 +11,7 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readActivityRatios, type ActivityRatio, type ActivityRatios, type RatioTerm } from '@/lib/activity';
 import { cn } from '@/lib/cn';
 import { formatShortDay } from '@/lib/format';
-import { balanceSideNames, formatBalanceBand, formatBalanceSplit } from '@/lib/ratio-balance';
+import { balanceAdvice, balanceSideNames, formatBalanceBand, formatBalanceSplit } from '@/lib/ratio-balance';
 import { formatBenchmark, formatRatioForStatus } from '@/lib/ratio-format';
 
 /**
@@ -23,6 +23,11 @@ import { formatBenchmark, formatRatioForStatus } from '@/lib/ratio-format';
  *
  * **A ratio that is not a question about your rung is not here at all** (ADR-0020) — the server leaves
  * it out, so there is nothing to hide and nothing to show as failed. On the seed, an agent sees three.
+ *
+ * **Nor is one with too little data to read** (P18.95-T5 AC-6; the client's UI review, UI-030, 2026-10-26):
+ * a ratio whose denominator is zero over the window — the API's `value: null`, *Not enough data* — is left
+ * off this list, where it was a card of *–* and a grey pill. The API still answers it, and a coaching
+ * session's Ratios card still shows it. When every ratio is too thin, the page says so in its empty card.
  */
 export default function ActivityRatioPage() {
   const [view, setView] = useState<ActivityRatios | null>(null);
@@ -37,7 +42,7 @@ export default function ActivityRatioPage() {
   }, []);
 
   return (
-    <Page title="Activity Ratios" subtitle="How your activity is converting.">
+    <Page title={ACTIVITY_TITLE} subtitle="How your activity is converting." subtitleOnPhone={false}>
       <ActivityTabs />
       {error && <ErrorBanner {...error} />}
       {!view && !error && <SkeletonCards count={4} label="Working out your ratios…" />}
@@ -47,6 +52,8 @@ export default function ActivityRatioPage() {
 }
 
 function Ratios({ view }: { view: ActivityRatios }) {
+  /** The ratios there is data enough to read: `null` is *not enough data* (`ratios.md`), never a zero. */
+  const readable = view.ratios.filter((ratio) => ratio.value !== null);
   return (
     <>
       {/*
@@ -68,9 +75,15 @@ function Ratios({ view }: { view: ActivityRatios }) {
             Your office has no ratios for your role yet. Ratios are your KPM Owner&apos;s to set up.
           </p>
         </Card>
+      ) : readable.length === 0 ? (
+        <Card>
+          <p className="text-md text-navy">
+            Not enough activity in the last {view.days} days to work out your ratios yet.
+          </p>
+        </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {view.ratios.map((ratio) => (ratio.comparison === 'band'
+          {readable.map((ratio) => (ratio.comparison === 'band'
             ? <BalanceCard key={ratio.code} ratio={ratio} />
             : <RateCard key={ratio.code} ratio={ratio} />))}
         </div>
@@ -129,6 +142,10 @@ function RateCard({ ratio }: { ratio: ActivityRatio }) {
  * **The ends are named by what each side counts** — *Selling* and *Recruitment* on the seed, *Side A* and
  * *Side B* where a side has no one section — so an office that builds its own is not told it leans
  * toward selling.
+ *
+ * **Off the band, the sentence says what to do** (P18.95-T5 AC-6, the client's request of 2026-10-26):
+ * *67,0% Selling · 33,0% Recruitment · Too much selling — aim for 35,0%–65,0%*, where it read *Below
+ * benchmark*; in the band it still reads *On track*. The band is the ratio's own benchmark (`balanceAdvice`).
  */
 function BalanceCard({ ratio }: { ratio: ActivityRatio }) {
   const id = `ratio-${ratio.code}`;
@@ -137,6 +154,8 @@ function BalanceCard({ ratio }: { ratio: ActivityRatio }) {
     ? null
     : formatBalanceSplit(ratio.share, ratio.benchmark, ratio.status);
   const band = formatBalanceBand(ratio.benchmark);
+  // Off the band, what to do about it (P18.95-T5 AC-6); in it, today's words.
+  const advice = balanceAdvice(ratio.share, ratio.benchmark, ratio.status, ratio.sides);
   // The marker sits at the second side's share, from the first side's end — the prototype's `recruitmentPct`.
   const position = ratio.share === null ? null : 100 - ratio.share;
 
@@ -165,7 +184,7 @@ function BalanceCard({ ratio }: { ratio: ActivityRatio }) {
               {' · '}
               <strong className="text-navy">{split.second}</strong> {second}
               {' · '}
-              {STATUS_LABEL[ratio.status]}
+              {advice ?? STATUS_LABEL[ratio.status]}
             </>
           )}
         </p>

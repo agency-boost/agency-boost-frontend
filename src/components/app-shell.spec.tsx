@@ -6,9 +6,11 @@ import { axe } from 'vitest-axe';
 import { PHONE_QUERY } from '@/lib/use-phone';
 import { AppShell, PageHeader, type NavSection } from './app-shell';
 
+// Mutable so the phone's drawer can watch the route move under it (P18.95-T2 AC-2); every other test reads `/admin`.
+const route = vi.hoisted(() => ({ path: '/admin' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  usePathname: () => '/admin',
+  usePathname: () => route.path,
 }));
 
 const SECTIONS: readonly NavSection[] = [
@@ -418,179 +420,353 @@ function atWidth(px: number) {
   };
 }
 
-describe('below 768px, the account chip is the way round (ADR-0085, P11-T6 AC-11)', () => {
-  afterEach(() => vi.unstubAllGlobals());
+/**
+ * **The phone's menu** (P18.95-T2, ADR-0167 §3, OD-198; the client's UI review, UI-009). Below 768px ☰ in the
+ * bar opens the sidebar as a drawer; the account chip keeps the account's items. Until 2026-10-26 the chip's
+ * panel held the nav (ADR-0085, P11-T6 AC-11), and these cases replace that block's.
+ */
+describe('below 768px, ☰ opens the sidebar as a drawer (P18.95-T2)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    route.path = '/admin';
+    document.body.style.overflow = '';
+  });
 
-  function renderPhoneShell(px = 360) {
+  /** An unheaded group, a badge, a divider and an upcoming item: everything the sidebar draws. */
+  const PHONE_SECTIONS: readonly NavSection[] = [
+    { label: null, divider: true, items: [{ label: 'Overview', href: '/admin', icon: 'gauge', active: true }] },
+    {
+      label: 'Personal tools',
+      divider: true,
+      items: [
+        { label: 'Activity management', href: '/activity', icon: 'activity' },
+        { label: 'Leads management', href: '/leads', icon: 'funnel', badge: 3 },
+      ],
+    },
+    { label: 'Reporting', items: [{ label: 'Advanced analytics', href: '#', icon: 'chartUp', upcoming: true }] },
+  ];
+
+  function shell(over: Partial<React.ComponentProps<typeof AppShell>> = {}) {
+    return (
+      <AppShell
+        sections={PHONE_SECTIONS}
+        user={{ ...USER, email: 'rina@kpm0417.test' }}
+        account={{ href: '/profile', onSignOut: vi.fn() }}
+        notifications={{ href: '/notifications', unread: 2 }}
+        brandTag="KPM OWNER"
+        title="Log Activity"
+        {...over}
+      >
+        <p>content</p>
+      </AppShell>
+    );
+  }
+  function renderPhoneShell(px = 375, over: Partial<React.ComponentProps<typeof AppShell>> = {}) {
     window.localStorage.clear();
     const onSignOut = vi.fn();
     const width = atWidth(px);
-    const result = render(
-      <>
-        <p data-testid="outside">elsewhere</p>
-        <AppShell
-          sections={SECTIONS}
-          user={{ ...USER, email: 'rina@kpm0417.test' }}
-          account={{ href: '/profile', onSignOut }}
-          title="Log Activity"
-        >
-          <p>content</p>
-        </AppShell>
-      </>,
-    );
+    const result = render(shell({ account: { href: '/profile', onSignOut }, ...over }));
     return { ...result, onSignOut, width };
   }
-  const chip = () => screen.getByRole('button', { name: /Rina Wijaya/ });
-  const panel = () => document.getElementById('sidebar-user-actions');
+  const burger = () => screen.getByRole('button', { name: 'Open menu' });
+  const drawer = () => screen.queryByRole('dialog', { name: 'Menu' });
+  /** The bar's chip — the one outside the drawer. */
+  const barChip = () => within(document.querySelector('aside')!).getByRole('button', { name: /Rina Wijaya/ });
+  /** What a nav says, in order: each group's heading and each item's name. */
+  const navWords = (nav: HTMLElement) => Array.from(nav.querySelectorAll('[aria-controls^="nav-group"], a'))
+    .map((el) => (el.textContent ?? '').trim());
 
-  it('P11-T6 AC-11 offers no nav on the bar until the chip opens it', () => {
+  it('P18.95-T2 AC-1 puts ☰ in the bar, named Open menu, a 44px target before the brand, below 768px only', () => {
     renderPhoneShell();
-    // The prototype's phone: the nav hidden, and nothing drawn in its place (`Overall.html:1421-1428`).
+    const button = burger();
+    // Hidden from 768px by its class, so the phone's first paint has it and nothing wider ever does.
+    expect(button).toHaveClass('md:hidden');
+    expect(button).toHaveClass('h-11', 'w-11');
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(button).toHaveAttribute('aria-haspopup', 'dialog');
+    // Before the brand: the first thing in the bar, ahead of the mark.
+    const aside = document.querySelector('aside')!;
+    expect(aside.firstElementChild).toBe(button);
+    const mark = aside.querySelector('svg[viewBox="0 0 26 26"]')!;
+    expect(button.compareDocumentPosition(mark) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // No nav on the bar until it opens, and no rail toggle: there is no sidebar here to collapse.
     expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
-    expect(chip()).toHaveAttribute('aria-expanded', 'false');
-    // The rail is a desktop control, and there is no sidebar here to collapse.
     expect(screen.queryByRole('button', { name: /the sidebar/ })).not.toBeInTheDocument();
+    expect(drawer()).not.toBeInTheDocument();
   });
 
-  it('P11-T6 AC-11 opens the nav groups, in their order and names, then Your account and Sign out, below the bar', async () => {
-    renderPhoneShell();
-    await userEvent.click(chip());
+  it('P18.95-T2 AC-2 opens the sidebar’s own nav from the left: the same groups, order, labels, badges and current page', async () => {
+    // The sidebar first, at a desktop's width, to compare against.
+    const { width } = renderPhoneShell(1280);
+    const sidebar = screen.getByRole('navigation', { name: 'Main' });
+    const sidebarWords = navWords(sidebar);
+    const sidebarMarkup = sidebar.innerHTML;
 
-    const open = panel()!;
-    expect(chip()).toHaveAttribute('aria-expanded', 'true');
-    // Below the bar, across it, and scrolling inside itself.
-    expect(open.className).toContain('top-full');
-    expect(open.className).toContain('inset-x-0');
-    expect(open.className).not.toContain('bottom-full');
+    width.resize(375);
+    await userEvent.click(burger());
+    const open = drawer()!;
+    expect(burger()).toHaveAttribute('aria-expanded', 'true');
+    expect(burger()).toHaveAttribute('aria-controls', open.id);
+    // From the left, the sidebar's width and never more than most of the screen.
+    expect(open).toHaveClass('fixed', 'left-0', 'inset-y-0', 'w-sidebar', 'max-w-[85vw]', 'bg-navy');
 
     const nav = within(open).getByRole('navigation', { name: 'Main' });
-    const groups = within(nav).getAllByRole('button').map((b) => b.textContent);
-    expect(groups).toEqual(['Personal tools', 'Reporting']);
-    expect(within(nav).getByRole('link', { name: 'Leads management' })).toHaveAttribute('href', '/leads');
-    // An upcoming item keeps its pill and stays inert, as in the sidebar.
+    // One `NavGroups` draws both, so the drawer's nav is the sidebar's, to the attribute.
+    expect(nav.innerHTML).toBe(sidebarMarkup);
+    expect(navWords(nav)).toEqual(sidebarWords);
+    expect(navWords(nav)).toEqual(['Overview', 'Personal tools', 'Activity management', 'Leads management3', 'Reporting', 'Advanced analyticsUpcoming']);
+    expect(within(nav).getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page');
+    expect(within(nav).getByRole('link', { name: /Leads management/ })).toHaveAttribute('href', '/leads');
+    expect(within(nav).getAllByRole('separator')).toHaveLength(2);
     expect(within(nav).getByText('Advanced analytics').closest('a')).toHaveAttribute('aria-disabled');
-
-    // The account's two, after the nav.
-    const account = within(open).getByRole('link', { name: 'Your account' });
-    const signOut = within(open).getByRole('button', { name: 'Sign out' });
-    expect(nav.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(account.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(open).getByText('rina@kpm0417.test')).toBeInTheDocument();
+    // The brand above it, with the app's tag, as the sidebar's.
+    expect(within(open).getByText('KPM OWNER')).toBeInTheDocument();
+    // One nav at a time: the bar holds none.
+    expect(screen.getAllByRole('navigation', { name: 'Main' })).toHaveLength(1);
   });
 
-  it('P11-T6 AC-11 moves focus into the panel, and holds it there', async () => {
+  it('P18.95-T2 AC-2 keeps the sidebar’s foot at the bottom: who is signed in, and their menu opening upward', async () => {
     renderPhoneShell();
-    await userEvent.click(chip());
+    await userEvent.click(burger());
+    const open = drawer()!;
+    const foot = within(open).getByRole('button', { name: /Rina Wijaya/ });
+    expect(foot).toHaveTextContent('Agent · KPM 0417');
+    expect(foot).toHaveAttribute('aria-controls', 'phone-menu-account');
+    expect(within(open).getByRole('navigation').compareDocumentPosition(foot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The bell stays on the bar, where a phone always shows it, and is not drawn twice.
+    expect(within(open).queryByRole('button', { name: /Notifications/ })).not.toBeInTheDocument();
 
-    const first = screen.getByRole('button', { name: /Personal tools/ });
-    const last = screen.getByRole('button', { name: 'Sign out' });
-    expect(first).toHaveFocus();
-
-    // Shift+Tab from the first goes round to the last, and Tab from the last back to the first.
-    await userEvent.tab({ shift: true });
-    expect(last).toHaveFocus();
-    await userEvent.tab();
-    expect(first).toHaveFocus();
-    // In between, Tab walks the panel in order: a group, its live links, the next group.
-    await userEvent.tab();
-    expect(screen.getByRole('link', { name: 'Activity management' })).toHaveFocus();
+    await userEvent.click(foot);
+    const panel = document.getElementById('phone-menu-account')!;
+    expect(open).toContainElement(panel);
+    expect(panel).toHaveClass('bottom-full');
+    expect(within(panel).getByRole('link', { name: 'Your account' })).toHaveAttribute('href', '/profile');
+    expect(within(panel).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
   });
 
-  it('P11-T6 AC-11 closes on Escape, and puts focus back on the chip', async () => {
-    renderPhoneShell();
-    await userEvent.click(chip());
-    await userEvent.keyboard('{Escape}');
+  it('P18.95-T2 AC-2 lets a group close inside it without closing the drawer, and the sidebar remembers it', async () => {
+    const { width } = renderPhoneShell();
+    await userEvent.click(burger());
+    await userEvent.click(within(drawer()!).getByRole('button', { name: /Personal tools/ }));
+    expect(drawer()).not.toBeNull();
+    expect(screen.queryByRole('link', { name: /Leads management/ })).not.toBeInTheDocument();
 
-    expect(panel()).toBeNull();
-    expect(chip()).toHaveAttribute('aria-expanded', 'false');
-    expect(chip()).toHaveFocus();
+    // One state for both: the sidebar, wider, has the group closed as the reader left it.
+    width.resize(1024);
+    expect(screen.getByRole('button', { name: /Personal tools/ })).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('P11-T6 AC-11 closes on a click outside it', async () => {
-    renderPhoneShell();
-    await userEvent.click(chip());
-    await userEvent.click(screen.getByTestId('outside'));
-    expect(panel()).toBeNull();
-  });
-
-  it('P11-T6 AC-11 lets a group close inside it without closing the panel', async () => {
-    renderPhoneShell();
-    await userEvent.click(chip());
-    await userEvent.click(screen.getByRole('button', { name: /Personal tools/ }));
-    expect(panel()).not.toBeNull();
-    expect(screen.queryByRole('link', { name: 'Leads management' })).not.toBeInTheDocument();
-  });
-
-  it('P11-T6 AC-11 offers Sign out, and it signs out', async () => {
-    const { onSignOut } = renderPhoneShell();
-    await userEvent.click(chip());
-    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
-    expect(onSignOut).toHaveBeenCalledTimes(1);
-  });
-
-  it('P11-T6 AC-11 follows a link and closes, so it is not left open over the next screen', async () => {
-    // jsdom cannot navigate, and the navigation is next/link's: the href is where it goes, and the
-    // click is what closes the panel.
+  it('P18.95-T2 AC-2 navigates and closes when an item is chosen, so it is not left open over the next screen', async () => {
+    // jsdom cannot navigate, and the navigation is next/link's: the href is where it goes, and the click
+    // is what closes the drawer.
     const swallow = (event: Event) => event.preventDefault();
     document.addEventListener('click', swallow);
     try {
       renderPhoneShell();
-      await userEvent.click(chip());
-      const leads = screen.getByRole('link', { name: 'Leads management' });
+      await userEvent.click(burger());
+      const leads = within(drawer()!).getByRole('link', { name: /Leads management/ });
       expect(leads).toHaveAttribute('href', '/leads');
       await userEvent.click(leads);
-      expect(panel()).toBeNull();
+      expect(drawer()).toBeNull();
+      expect(burger()).toHaveFocus();
 
-      await userEvent.click(chip());
-      await userEvent.click(screen.getByRole('link', { name: 'Your account' }));
-      expect(panel()).toBeNull();
+      // *Your account*, from the foot's menu, closes it too.
+      await userEvent.click(burger());
+      await userEvent.click(within(drawer()!).getByRole('button', { name: /Rina Wijaya/ }));
+      await userEvent.click(within(drawer()!).getByRole('link', { name: 'Your account' }));
+      expect(drawer()).toBeNull();
+
+      // An upcoming item goes nowhere, and leaves the drawer open.
+      await userEvent.click(burger());
+      await userEvent.click(within(drawer()!).getByText('Advanced analytics'));
+      expect(drawer()).not.toBeNull();
     } finally {
       document.removeEventListener('click', swallow);
     }
   });
 
-  it('P11-T6 AC-11 does not open at 768px: the sidebar holds the nav, and the chip opens its account panel upward', async () => {
+  it('P18.95-T2 AC-2 closes when the route moves under it — Back, or any other way the page changes', async () => {
+    const { rerender } = renderPhoneShell();
+    await userEvent.click(burger());
+    expect(drawer()).not.toBeNull();
+
+    route.path = '/leads';
+    rerender(shell());
+    expect(drawer()).toBeNull();
+  });
+
+  it('P18.95-T2 AC-3 is a modal dialog: focus moves to its ✕ and goes round inside it both ways', async () => {
+    renderPhoneShell();
+    await userEvent.click(burger());
+    const open = drawer()!;
+    expect(open).toHaveAttribute('aria-modal', 'true');
+    const close = within(open).getByRole('button', { name: 'Close menu' });
+    expect(close).toHaveFocus();
+    // A 44px target, as every target on a phone.
+    expect(close).toHaveClass('h-11', 'w-11');
+
+    const foot = within(open).getByRole('button', { name: /Rina Wijaya/ });
+    // Shift+Tab from the first goes round to the last — the foot's chip — and Tab from it back to ✕.
+    await userEvent.tab({ shift: true });
+    expect(foot).toHaveFocus();
+    await userEvent.tab();
+    expect(close).toHaveFocus();
+    // In between, Tab walks the drawer in order: ✕, the first item, the next group.
+    await userEvent.tab();
+    expect(within(open).getByRole('link', { name: 'Overview' })).toHaveFocus();
+    await userEvent.tab();
+    expect(within(open).getByRole('button', { name: /Personal tools/ })).toHaveFocus();
+  });
+
+  it('P18.95-T2 AC-3 closes on Escape and puts focus back on ☰', async () => {
+    renderPhoneShell();
+    await userEvent.click(burger());
+    await userEvent.keyboard('{Escape}');
+    expect(drawer()).toBeNull();
+    expect(burger()).toHaveAttribute('aria-expanded', 'false');
+    expect(burger()).toHaveFocus();
+  });
+
+  it('P18.95-T2 AC-3 closes on its ✕ and on the scrim, focus back on ☰ each time', async () => {
+    renderPhoneShell();
+    await userEvent.click(burger());
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }));
+    expect(drawer()).toBeNull();
+    expect(burger()).toHaveFocus();
+
+    await userEvent.click(burger());
+    const scrim = document.querySelector('[data-scrim]')!;
+    expect(scrim).toHaveAttribute('aria-hidden', 'true');
+    await userEvent.click(scrim);
+    expect(drawer()).toBeNull();
+    expect(burger()).toHaveFocus();
+    expect(document.querySelector('[data-scrim]')).toBeNull();
+  });
+
+  it('P18.95-T2 AC-3 shuts the foot’s account menu first on Escape, and the drawer on the next', async () => {
+    renderPhoneShell();
+    await userEvent.click(burger());
+    const foot = within(drawer()!).getByRole('button', { name: /Rina Wijaya/ });
+    await userEvent.click(foot);
+    await userEvent.keyboard('{Escape}');
+    expect(document.getElementById('phone-menu-account')).toBeNull();
+    expect(drawer()).not.toBeNull();
+    expect(foot).toHaveFocus();
+
+    await userEvent.keyboard('{Escape}');
+    expect(drawer()).toBeNull();
+    expect(burger()).toHaveFocus();
+  });
+
+  it('P18.95-T2 AC-3 holds the page behind still while it is open, and gives it back as it was', async () => {
+    renderPhoneShell();
+    document.body.style.overflow = 'auto';
+    await userEvent.click(burger());
+    expect(document.body.style.overflow).toBe('hidden');
+    await userEvent.keyboard('{Escape}');
+    expect(document.body.style.overflow).toBe('auto');
+  });
+
+  it('P18.95-T2 AC-3 has no axe violations while it is open', async () => {
+    const { container } = renderPhoneShell();
+    await userEvent.click(burger());
+    const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
+    expect(results.violations ?? []).toHaveLength(0);
+  });
+
+  it('P18.95-T2 AC-4 leaves the bar’s name menu the account’s items alone — no nav — below the bar', async () => {
+    renderPhoneShell(360, {
+      account: { href: '/profile', onSignOut: vi.fn(), viewSwitch: { href: '/unit/dashboard', label: 'Open agent view' } },
+    });
+    await userEvent.click(barChip());
+    const panel = document.getElementById('sidebar-user-actions')!;
+    // Below the bar, across it, as before (ADR-0085).
+    expect(panel).toHaveClass('top-full', 'inset-x-0');
+    expect(within(panel).queryByRole('navigation')).not.toBeInTheDocument();
+    expect(within(panel).getAllByRole('link').map((a) => a.textContent)).toEqual(['Open agent view', 'Your account']);
+    expect(within(panel).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    expect(within(panel).getByText('rina@kpm0417.test')).toBeInTheDocument();
+    // Focus into it, and held there, as before.
+    expect(within(panel).getByRole('link', { name: 'Open agent view' })).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    expect(barChip()).toHaveFocus();
+  });
+
+  it('P18.95-T2 AC-4 signs out from the bar’s name menu', async () => {
+    const { onSignOut } = renderPhoneShell();
+    await userEvent.click(barChip());
+    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    expect(onSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('P18.95-T2 AC-1 changes nothing at 768px: no drawer, the sidebar holds the nav, the chip opens its panel upward', async () => {
     renderPhoneShell(768);
+    // ☰ is in the markup and hidden by its class from 768px; pressing it there opens nothing.
+    expect(burger()).toHaveClass('md:hidden');
+    await userEvent.click(burger());
+    expect(drawer()).toBeNull();
+    expect(burger()).toHaveAttribute('aria-expanded', 'false');
+    expect(document.body.style.overflow).toBe('');
+
     const sidebarNav = screen.getByRole('navigation', { name: 'Main' });
     expect(sidebarNav).toHaveAttribute('id', 'sidebar-nav');
+    expect(sidebarNav).toHaveClass('hidden', 'md:block');
+    expect(screen.getByRole('button', { name: 'Collapse the sidebar' })).toBeInTheDocument();
 
-    await userEvent.click(chip());
-    const open = panel()!;
+    await userEvent.click(barChip());
+    const open = document.getElementById('sidebar-user-actions')!;
     expect(within(open).queryByRole('navigation')).not.toBeInTheDocument();
     expect(open.className).toContain('bottom-full');
     expect(open.className).not.toContain('top-full');
     // Focus stays on the chip, as the desktop disclosure always has: Tab reaches the two items.
-    expect(chip()).toHaveFocus();
+    expect(barChip()).toHaveFocus();
     expect(screen.getAllByRole('navigation', { name: 'Main' })).toHaveLength(1);
   });
 
-  it('P11-T6 AC-11 moves the nav when the width crosses 768px', async () => {
-    const { width } = renderPhoneShell(1024);
-    expect(screen.getByRole('navigation', { name: 'Main' })).toHaveAttribute('id', 'sidebar-nav');
-
-    width.resize(360);
-    expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
-    await userEvent.click(chip());
-    expect(within(panel()!).getByRole('navigation', { name: 'Main' })).toBeInTheDocument();
+  it('P18.95-T2 AC-1 draws the sidebar at 1280px exactly as it was drawn before ☰', () => {
+    renderPhoneShell(1280);
+    const aside = document.querySelector('aside')!;
+    // The bar's classes, unchanged, and every element after ☰ the sidebar's own.
+    expect(aside.className).toBe(
+      'sticky top-0 z-10 flex w-full shrink-0 flex-row items-center bg-navy px-4 py-3.5 text-sidebar-text print:hidden '
+      + 'md:h-screen md:flex-col md:items-stretch md:py-5 md:w-sidebar',
+    );
+    const [first, brand, nav, foot] = Array.from(aside.children);
+    expect(first).toBe(burger());
+    expect(brand.className).toBe('flex items-center gap-2 px-1 md:mb-3 md:border-b md:border-white/10 md:pb-4');
+    expect(within(brand as HTMLElement).getByText('AgencyBoost').className)
+      .toBe('font-display text-lg font-extrabold leading-tight tracking-tight text-white');
+    expect(nav).toBe(screen.getByRole('navigation', { name: 'Main' }));
+    expect(foot.className).toContain('md:border-t');
+    expect(aside.children).toHaveLength(4);
+    expect(drawer()).toBeNull();
   });
 
-  it('P11-T6 AC-11 shows the whole chip on a phone, whatever rail a wider window remembered', () => {
+  it('P18.95-T2 AC-1 closes the drawer when the width crosses 768px, and the sidebar has the nav again', async () => {
+    const { width } = renderPhoneShell(375);
+    await userEvent.click(burger());
+    expect(drawer()).not.toBeNull();
+
+    width.resize(1024);
+    expect(drawer()).toBeNull();
+    expect(screen.getByRole('navigation', { name: 'Main' })).toHaveAttribute('id', 'sidebar-nav');
+    expect(document.body.style.overflow).toBe('');
+
+    // Back on a phone it waits for ☰ again rather than reopening on its own.
+    width.resize(375);
+    expect(drawer()).toBeNull();
+  });
+
+  it('P11-T6 AC-11 shows the whole chip on a phone, whatever rail a wider window remembered — the drawer too', async () => {
     window.localStorage.setItem('ab.sidebar.rail', '1');
     atWidth(360);
-    render(
-      <AppShell sections={SECTIONS} user={USER} account={{ href: '/profile', onSignOut: vi.fn() }}>
-        <p>content</p>
-      </AppShell>,
-    );
-    expect(within(chip()).getByText('Rina Wijaya')).toBeInTheDocument();
+    render(shell());
+    expect(within(barChip()).getByText('Rina Wijaya')).toBeInTheDocument();
+    await userEvent.click(burger());
+    // The rail is a desktop control: the drawer's groups keep their headings and their words.
+    expect(within(drawer()!).getByRole('button', { name: /Personal tools/ })).toBeInTheDocument();
+    expect(within(drawer()!).getByText('Activity management')).toBeInTheDocument();
     window.localStorage.clear();
-  });
-
-  it('P11-T6 AC-11 has no axe violations while it is open', async () => {
-    const { container } = renderPhoneShell();
-    await userEvent.click(chip());
-    const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
-    expect(results.violations ?? []).toHaveLength(0);
   });
 
   /*

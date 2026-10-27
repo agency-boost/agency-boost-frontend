@@ -22,15 +22,18 @@ const one = (value: string | string[] | undefined) => (typeof value === 'string'
  * inside the period) and `entry` (an entry whose detail opens, on the week holding it) — the last two
  * are what a notice's row opens (ADR-0095). Anything unreadable is ignored for the default, never an
  * error page. A new address is a new screen, so a notice opened from the calendar itself starts afresh.
+ * **Without a `view`** the page opens on Week, and on a phone on the Agenda (P18.95-T8 AC-1), so an
+ * address that names one is passed on as named and one that does not, as nothing.
  */
 export default function CalendarPage({ searchParams }: { searchParams?: Promise<Query> }) {
   const query = searchParams ? use(searchParams) : {};
-  const view = one(query.view) === 'month' ? 'month' : 'week';
+  const asked = one(query.view);
+  const view = asked === 'month' || asked === 'week' ? asked : undefined;
   const date = readableDate(one(query.date));
   const entry = one(query.entry);
   return (
     <Page title={PROTOTYPE_COPY.calendar} permission="calendar_entry:read">
-      <CalendarScreen key={`${view}|${date ?? ''}|${entry ?? ''}`} initialView={view} initialDate={date} initialEntry={entry} />
+      <CalendarScreen key={`${view ?? ''}|${date ?? ''}|${entry ?? ''}`} initialView={view} initialDate={date} initialEntry={entry} />
     </Page>
   );
 }

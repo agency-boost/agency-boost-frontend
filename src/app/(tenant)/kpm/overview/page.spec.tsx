@@ -84,11 +84,12 @@ describe('KPM Overview (P18-T1)', () => {
   });
 
   describe('the page, verbatim (AC-2)', () => {
-    it('AC-2: is titled KPM Overview, its sub-line composed from the office', async () => {
+    it('AC-2, P18.95-T9 AC-2: is titled Overview, the nav item’s word, its sub-line composed from the office', async () => {
       render();
       await loaded();
       const title = screen.getByRole('heading', { level: 1 });
-      expect(title).toHaveTextContent(/^KPM Overview$/);
+      // The prototype titled it *KPM Overview* under a nav item reading *Overview* (UI-027).
+      expect(title).toHaveTextContent(/^Overview$/);
       expect(screen.getByText('Prudential · KPM 0417 — BSD City Branch')).toBeInTheDocument();
     });
 
@@ -128,10 +129,13 @@ describe('KPM Overview (P18-T1)', () => {
     it('AC-3: one tile per rung, in the ladder’s order, labelled by the ladder, summing to the total', async () => {
       render();
       const region = await loaded();
-      const labels = [...region.querySelectorAll('p.mb-1\\.5')].map((p) => p.textContent);
-      expect(labels).toEqual(['Total members', 'Agency Builder', 'Associate Agency Builder', 'Agent']);
-      const counts = ['Agency Builder', 'Associate Agency Builder', 'Agent']
-        .map((label) => Number(within(region).getByText(label).closest('p')?.nextElementSibling?.textContent));
+      // Each rung by its badge's name (P18.95-T9 AC-1), *AAB* with its ⓘ (AC-3), which the words leave out here.
+      const tiles = [...region.querySelectorAll('p.mb-1\\.5')];
+      const labels = tiles.map((p) => p.textContent!.replace(/ ⓘ.*$/, ''));
+      expect(labels).toEqual(['Total members', 'AB', 'AAB', 'Agent']);
+      expect(within(tiles[2] as HTMLElement).getByRole('button', { name: 'What is AAB?' })).toBeInTheDocument();
+      const counts = ['AB', 'AAB', 'Agent']
+        .map((label) => Number(tiles[labels.indexOf(label)].nextElementSibling?.textContent));
       expect(counts).toEqual([8, 24, 155]);
       expect(counts.reduce((a, b) => a + b, 0)).toBe(187);
     });
@@ -139,9 +143,10 @@ describe('KPM Overview (P18-T1)', () => {
     it('AC-3: each rung’s dot is the rung’s colour token, and its label says which rung', async () => {
       render();
       const region = await loaded();
-      const dot = (label: string) => within(region).getByText(label).closest('p')?.querySelector('[aria-hidden="true"]');
-      expect(dot('Agency Builder')?.className).toContain('bg-role-ab');
-      expect(dot('Associate Agency Builder')?.className).toContain('bg-role-aab');
+      const tiles = [...region.querySelectorAll('p.mb-1\\.5')];
+      const dot = (label: string) => tiles.find((p) => p.textContent!.replace(/ ⓘ.*$/, '') === label)?.querySelector('[aria-hidden="true"]');
+      expect(dot('AB')?.className).toContain('bg-role-ab');
+      expect(dot('AAB')?.className).toContain('bg-role-aab');
       expect(dot('Agent')?.className).toContain('bg-role-agent');
     });
   });
@@ -674,7 +679,7 @@ describe('KPM Overview (P18-T1)', () => {
       vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => { answer = resolve; })));
       renderWithSession(<KpmOverviewPage />, { me: OWNER });
       expect(screen.getByRole('status')).toHaveTextContent('Loading the overview…');
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('KPM Overview');
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Overview$/);
       await act(async () => answer({ ok: true, status: 200, json: async () => overviewView() }));
       expect(await loaded()).toBeInTheDocument();
       expect(screen.queryByText('Loading the overview…')).not.toBeInTheDocument();

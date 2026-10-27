@@ -152,8 +152,9 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
     expect(goal).not.toHaveTextContent('%');
     // No bar: an empty track under *Not uploaded yet* reads as zero.
     expect(within(goal).queryByRole('progressbar')).not.toBeInTheDocument();
-    // Nothing produced, so nothing to mark: *Not uploaded yet* says it (P10.1-T6 AC-1).
-    expect(within(goal).queryByRole('button')).not.toBeInTheDocument();
+    // Nothing produced, so nothing to mark: *Not uploaded yet* says it (P10.1-T6 AC-1). The one button is the
+    // heading's *What is APE?* (P18.95-T9 AC-3).
+    expect(within(goal).queryAllByRole('button').map((b) => b.textContent)).toEqual(['ⓘWhat is APE?']);
     const gap = await card('The gap');
     expect(gap).toHaveTextContent('Remaining this month—');
     expect(gap).not.toHaveTextContent('Rp 0');
@@ -297,7 +298,10 @@ describe('the Personal Summary — activity targets, chips and the pulse (P10-T5
     expect(within(targets).getByRole('progressbar', { name: 'Submission polis against target' })).toHaveAttribute('aria-valuenow', '40');
     expect(within(targets).getByRole('progressbar', { name: 'Set appointment against target' })).toHaveAttribute('aria-valuetext', '20 of 57');
     expect(within(targets).getByRole('link', { name: 'Goal Settings' })).toHaveAttribute('href', '/goals');
-    expect(targets).toHaveTextContent('42 total activities logged this month across all categories.');
+    expect(targets).toHaveTextContent('42 activities this month');
+    expect(targets).not.toHaveTextContent(/total activities logged|across all categories/);
+    // P18.95-T7 AC-1 (grey text row 21): where the targets come from, from 768px; the client's *Remove* below it.
+    expect(within(targets).getByRole('link', { name: 'Goal Settings' }).closest('p')).toHaveClass('max-md:hidden');
   });
 
   it('AC-1: the year to date against the year’s targets', async () => {
@@ -309,7 +313,7 @@ describe('the Personal Summary — activity targets, chips and the pulse (P10-T5
     const targets = await card('Your sales activity targets');
     expect(within(targets).getByText('This year')).toBeInTheDocument();
     expect(targets).toHaveTextContent('Submission polis11 / 28');
-    expect(targets).toHaveTextContent('310 total activities logged this year across all categories.');
+    expect(targets).toHaveTextContent('310 activities this year');
   });
 
   it('AC-1: no goal is no target — the counts still show, and nothing is divided by zero (F-25)', async () => {
@@ -738,7 +742,7 @@ describe('the Personal Summary, trimmed to the prototype (P10.1-T6, ADR-0063)', 
     expect(screen.queryByText(/nearest of your/)).not.toBeInTheDocument();
     // What links remain is the prototype's: *From Goal Settings — …* under the targets' title.
     expect(screen.getAllByRole('link').map((a) => a.getAttribute('href'))).toEqual(['/goals']);
-    expect(await card('Your sales activity targets')).toHaveTextContent('42 total activities logged this month across all categories.');
+    expect(await card('Your sales activity targets')).toHaveTextContent('42 activities this month');
   });
 
   /*
@@ -813,7 +817,8 @@ describe('the Personal Summary, trimmed to the prototype (P10.1-T6, ADR-0063)', 
     show(summary());
     await card('Goal vs. actual (APE)');
 
-    expect(screen.getByText('Your goals, activity and leads — on one page.')).toBeInTheDocument();
+    // P18.95-T7 AC-1 (grey text row 25): from 768px; the client's *Remove* below it.
+    expect(screen.getByText('Your goals, activity and leads — on one page.')).toHaveClass('max-md:hidden');
     expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Print' })).not.toBeInTheDocument();
   });
@@ -848,13 +853,14 @@ describe('Campaigns you’re chasing (P18.5-T7 AC-6)', () => {
     expect(section.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('P18.5-T7 AC-6 a row per chase: its emoji, its title, "{kindLabel} · {duration}" and View →, read with no for', async () => {
+  it('P18.5-T7 AC-6, P18.95-T7 AC-1 a row per chase: its emoji, its title, the months it runs and View →, read with no for', async () => {
     const { calls } = showWith({ 'GET /campaigns/chasing': { body: RINA_CHASING } });
     const section = await campaigns();
     const rows = await within(section).findAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
-      '🚀Q4 APE SprintRunning · 1 Okt – 31 Des 2026View →',
-      '🏆MDRT QualificationOngoing incentive · Standing — evaluated per calendar year (1 Jan – 31 Des)View →',
+      // Grey text row 23: the server's *Runs …*, where it read *"Ongoing incentive · Standing — evaluated per calendar year …"*.
+      '🚀Q4 APE SprintRuns Okt – Des 2026View →',
+      '🏆MDRT QualificationRuns Jan – DesView →',
     ]);
     expect(calls.filter((c) => c.url.includes('/campaigns')).map((c) => c.url))
       .toEqual(['http://api.test/api/v1/campaigns/chasing']);
@@ -889,7 +895,7 @@ describe('Campaigns you’re chasing (P18.5-T7 AC-6)', () => {
     expect(await screen.findByText('Removed "Q4 APE Sprint" from your chase list')).toBeInTheDocument();
     // The card's own rows: the dialog, drawn over it, keeps its requirement rows inside the same section.
     await waitFor(() => expect([...section.querySelectorAll(':scope > ul > li')].map((li) => li.textContent))
-      .toEqual(['🏆MDRT QualificationOngoing incentive · Standing — evaluated per calendar year (1 Jan – 31 Des)View →']));
+      .toEqual(['🏆MDRT QualificationRuns Jan – DesView →']));
     expect(calls.filter((c) => c.init.method === 'DELETE')).toHaveLength(1);
     await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -977,7 +983,7 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11)', () => 
 
     expect(nav.replace).toHaveBeenCalledWith('/summary?month=2026-08', { scroll: false });
     expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('Agu 2026');
-    expect(await screen.findByText(/total activities logged in Agu 2026 across all categories/)).toBeInTheDocument();
+    expect(await screen.findByText(/activities in Agu 2026/)).toBeInTheDocument();
     expect(summaryReads(calls)).toEqual(['', '?month=2026-08']);
   });
 
@@ -1032,7 +1038,7 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11)', () => 
     expect(screen.queryByText(/current pace/)).not.toBeInTheDocument();
     const targets = await card('Your sales activity targets');
     expect(within(targets).getByText('Agu 2026')).toBeInTheDocument();
-    expect(targets).toHaveTextContent('37 total activities logged in Agu 2026 across all categories.');
+    expect(targets).toHaveTextContent('37 activities in Agu 2026');
   });
 
   it('P18.8-T11 AC-3 the current month still has its pace and its gap, under This month', async () => {

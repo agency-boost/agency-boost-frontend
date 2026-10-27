@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession } from '@test/harness';
 import { PHONE_QUERY } from '@/lib/use-phone';
+import { ImpersonationBanner } from './impersonation-banner';
 import { TenantShell } from './tenant-shell';
 
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
@@ -194,7 +195,7 @@ describe('Open agent view, in the identity menu (P13.2-T5, ADR-0114)', () => {
     expect(screen.queryByText('body')).not.toBeInTheDocument();
   });
 
-  it('P13.2-T5 AC-3 on a phone sits after the nav groups and before Your account', async () => {
+  it('P13.2-T5 AC-3, P18.95-T2 AC-4 on a phone opens the name menu with the switch before Your account — no nav', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query,
       matches: query === PHONE_QUERY,
@@ -204,13 +205,42 @@ describe('Open agent view, in the identity menu (P13.2-T5, ADR-0114)', () => {
     renderWithSession(<TenantShell title="All members">body</TenantShell>, { me: tenantAdmin(true, 3) });
     await userEvent.click(chip());
 
-    const nav = within(panel()).getByRole('navigation', { name: 'Main' });
+    // The nav is the drawer ☰ opens (P18.95-T2); the name keeps the account's items.
+    expect(within(panel()).queryByRole('navigation')).not.toBeInTheDocument();
     const viewSwitch = within(panel()).getByRole('link', { name: 'Open agent view' });
     const account = within(panel()).getByRole('link', { name: 'Your account' });
-    expect(nav.compareDocumentPosition(viewSwitch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(nav.contains(viewSwitch)).toBe(false);
-    // Directly before *Your account*: the last two links of the panel.
-    expect(links().slice(-2)).toEqual(['Open agent view', 'Your account']);
+    expect(links()).toEqual(['Open agent view', 'Your account']);
     expect(viewSwitch.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(panel()).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  });
+});
+
+/**
+ * **A setup session's banner stays on a phone** (P18.95-T2; ADR-0162): the banner sits above the shell, in the
+ * root layout, and ☰ and its drawer change nothing about it.
+ */
+describe('the support banner over the phone’s bar (P18.95-T2)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P18.95-T2 AC-1 keeps a setup session’s banner above the bar with ☰, open and closed', async () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      media: query, matches: query === PHONE_QUERY, addEventListener: () => undefined, removeEventListener: () => undefined,
+    })));
+    const me = {
+      ...tenantAdmin(true, 3), isImpersonating: true, impersonationReadOnly: true,
+      impersonationPurpose: 'setup' as const, impersonatedBy: 'u-support',
+    };
+    renderWithSession(<><ImpersonationBanner /><TenantShell title="All members">body</TenantShell></>, { me });
+    const banner = screen.getByRole('status');
+    expect(banner).toHaveTextContent('This is a setup session');
+    // Above the bar in the reading order, as it is on screen.
+    const burger = screen.getByRole('button', { name: 'Open menu' });
+    expect(banner.compareDocumentPosition(burger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await userEvent.click(burger);
+    expect(screen.getByRole('dialog', { name: 'Menu' })).toBeInTheDocument();
+    expect(banner).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.getByRole('status')).toHaveTextContent('Stop acting as them');
   });
 });

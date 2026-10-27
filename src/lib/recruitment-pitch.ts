@@ -114,7 +114,8 @@ export const PITCH_COPY = {
   complete: 'Complete',
   uploaded: 'Uploaded',
   confirmed: (ticked: number, total: number) => `${ticked}/${total} confirmed`,
-  noFile: 'No PDF uploaded yet — candidates can\'t be shown this document.',
+  /** The client's words at every size (P18.95-T7 AC-1, grey text row 12; ADR-0167 §7). */
+  noFile: 'Not uploaded yet',
   updated: (size: string, day: string) => `${size} · updated ${day}`,
   fileIcon: 'PDF',
   checklist: 'Confirm this PDF actually includes',
@@ -126,9 +127,15 @@ export const PITCH_COPY = {
   completeLine: (total: number) =>
     `All ${total} documents are uploaded and fully confirmed — ready to show or send to a candidate.`,
   incompleteTitle: 'Recruitment Pitch is incomplete',
-  notUploaded: (n: number) => `${n} not uploaded`,
-  notConfirmed: (n: number) => `${n} uploaded but not fully confirmed`,
-  notReady: ' — not yet ready to rely on for candidates.',
+  /**
+   * **The incomplete banner's line, in the client's words at every size** (P18.95-T7 AC-1, grey text row 11; ADR-0167
+   * §7): *"2 missing, 1 needs checking."*, where it read *"2 not uploaded, 1 uploaded but not fully confirmed — not
+   * yet ready to rely on for candidates."* The counts are the server's, as before.
+   */
+  notUploaded: (n: number) => `${n} missing`,
+  notConfirmed: (n: number) => `${n} needs checking`,
+  /** The two counts as one sentence: *2 missing, 1 needs checking.* — either alone where the other is none. */
+  incompleteLine: (parts: readonly string[]) => `${parts.join(', ')}.`,
 } as const;
 
 /**

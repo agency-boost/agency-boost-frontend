@@ -3,8 +3,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   AGE_CHOICES, briefFromQuery, BUDGET_CHOICES, CATEGORY_TABS, CHANNEL_LABELS, catalogHref, drawerHref, filtersFrom,
-  fitNote, formatRate, moreLine, NEED_CHOICES, OWN_COPY, planHref, productCount, productFromQuery, productPlanHref,
-  resultTag,
+  fitNote, formatRate, LUMP_SUM_BUDGET, LUMP_SUM_CHOICES, matchesSearch, MONTHLY_BUDGET_CHOICES, moreLine, NEED_CHOICES,
+  OWN_COPY, planHref, productCount, productFromQuery, productPlanHref, resultTag,
 } from './product-catalog';
 
 const BACKEND = join(__dirname, '..', '..', '..', 'backend', 'src', 'domain', 'constants');
@@ -33,6 +33,18 @@ describe('sales tools: the words and the addresses (Phase 14)', () => {
       expect(AGE_CHOICES.map((c) => [String(c.value), c.label])).toEqual(Object.entries(record(catalogConstants, 'PRODUCT_AGE_BAND_LABELS')));
       expect(BUDGET_CHOICES.map((c) => [String(c.value), c.label]))
         .toEqual(Object.entries(record(catalogConstants, 'PRODUCT_BUDGET_BAND_LABELS')));
+    });
+
+    it('P18.95-T6 AC-3 the lump-sum option and its encoding: the backend’s band, asked apart from the six monthly ones', () => {
+      const backend = /export const PRODUCT_LUMP_SUM_BUDGET_BAND = (\d+);/.exec(catalogConstants);
+      expect(Number(backend?.[1])).toBe(LUMP_SUM_BUDGET);
+      expect(MONTHLY_BUDGET_CHOICES.map((c) => c.value)).toEqual([1, 2, 3, 4, 5, 6]);
+      expect(LUMP_SUM_CHOICES).toEqual([{ value: 7, label: 'Lump-sum' }]);
+      // Together they are the seven bands, in order: nothing added, nothing renumbered.
+      expect([...MONTHLY_BUDGET_CHOICES, ...LUMP_SUM_CHOICES]).toEqual(BUDGET_CHOICES);
+      // An address that carries it still reads as a brief.
+      expect(briefFromQuery({ need: 'investment', age: '3', budget: '7' })).toEqual({ need: 'investment', age: 3, budget: 7 });
+      expect(OWN_COPY.lumpSum).toBe('Or pay once');
     });
 
     it('P14-T7 AC-2 the category tabs and the channels, as the backend names them', () => {
@@ -81,6 +93,32 @@ describe('sales tools: the words and the addresses (Phase 14)', () => {
       expect(catalogHref({ category: 'life', channel: 'all' })).toBe('/product-catalog?category=life');
       expect(drawerHref('PRUMAPAN', { category: 'life', channel: 'conventional' }))
         .toBe('/product-catalog/PRUMAPAN?category=life&channel=conventional');
+    });
+  });
+
+  describe('P18.95-T6 AC-4 catalog search, by product name (UI-023)', () => {
+    it.each([
+      ['PRUMapan', 'mapan', true],
+      ['PRUMapan', 'MAPAN', true],
+      ['PRUMapan', '  mapan  ', true],
+      ['PRULink Generasi Baru (PGB)', 'generasi baru', true],
+      ['PRUMapan', '', true],
+      ['PRUMapan', '   ', true],
+      ['PRUMapan', 'future', false],
+      ['PRUMapan', 'pru mapan', false],
+    ])('P18.95-T6 AC-4 %s, searched for %o: %s', (name, term, found) => {
+      expect(matchesSearch(name, term)).toBe(found);
+    });
+
+    it('P18.95-T6 AC-4 ignores accents either side, so a name typed without them is found', () => {
+      expect(matchesSearch('PRUCinta Syariah', 'cinta')).toBe(true);
+      expect(matchesSearch('Café Plan', 'cafe')).toBe(true);
+      expect(matchesSearch('Cafe Plan', 'café')).toBe(true);
+    });
+
+    it('P18.95-T6 AC-4 catalog search and empty result: the line names what was searched for, trimmed', () => {
+      expect(OWN_COPY.noSearchMatch('  zzz ')).toBe('No products match “zzz”.');
+      expect([OWN_COPY.searchName, OWN_COPY.searchPlaceholder]).toEqual(['Search products by name', 'Search products…']);
     });
   });
 

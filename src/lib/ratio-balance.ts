@@ -62,6 +62,36 @@ export function formatBalanceSplit(share: number, benchmark: number, status: Sta
 }
 
 /**
+ * **What an off-balance reading tells the reader to do** (P18.95-T5 AC-6; the client's UI review, UI-030:
+ * *67% Selling · 33% Recruitment · Below benchmark* said that something was wrong and not what): the side
+ * there is too much of, and the band to come back into — *Too much selling — aim for 35,0%–65,0%*.
+ *
+ * - **`null` in the band**, and for a reading with no status to give: the screen keeps its own words there
+ *   (*On track*), as it always has.
+ * - **The band is the ratio's own benchmark**, read as shares (`formatBalanceBand`): an office's ±20 points
+ *   says *aim for 40,0%–60,0%*. Nothing here is a literal (invariant §7).
+ * - **The side is named as the track's ends are** (`balanceSideNames`), lower-cased in the sentence where it is
+ *   a section's name — *too much selling* — and as it is where it is *Side A* or *Side B*.
+ */
+export function balanceAdvice(
+  share: number | null,
+  benchmark: number,
+  status: Status,
+  sides: { numerator: string | null; denominator: string | null } | null | undefined,
+): string | null {
+  if (share === null || status !== 'alert') return null;
+  const { first, second } = balanceSideNames(sides);
+  // The status is judged on the lean, which is the share's distance from half: past the band, the larger side.
+  const firstIsMore = share > 50;
+  const side = firstIsMore ? first : second;
+  // A section's name, unless `balanceSideNames` fell back to *Side A* / *Side B* for it.
+  const section = (firstIsMore ? sides?.numerator : sides?.denominator) ?? null;
+  const fellBack = section === null || (first.toLowerCase() === 'side a' && second.toLowerCase() === 'side b');
+  const { low, high } = formatBalanceBand(benchmark);
+  return `Too much ${fellBack ? side : side.toLowerCase()} — aim for ${low}–${high}`;
+}
+
+/**
  * What the two ends are called: the section each side counts, as the API names it — *Selling* and
  * *Recruitment* on the seed — or **Side A** and **Side B**, the Add-a-ratio form's own words, for a side
  * with no one name.

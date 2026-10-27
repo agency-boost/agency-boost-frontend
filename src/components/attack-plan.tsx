@@ -11,13 +11,13 @@ import { StepPills } from '@/components/plan/step-pills';
 import { EmptyShelf } from '@/components/product-catalog';
 import { ProductScript } from '@/components/product-script';
 import { Button, ErrorBanner } from '@/components/ui/field';
-import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
+import { ACTION_BAR_PHONE, ACTION_BAR_ROOM_PHONE, TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { cn } from '@/lib/cn';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  AGE_CHOICES, ageLabel, BUDGET_CHOICES, budgetLabel, fitNote, moreLine, NEED_CHOICES, needLabel, OWN_COPY,
-  planHref, PROTOTYPE_COPY, readAttackPlan, readCatalog, readCatalogProduct, resultTag,
+  AGE_CHOICES, ageLabel, budgetLabel, fitNote, LUMP_SUM_BUDGET, LUMP_SUM_CHOICES, MONTHLY_BUDGET_CHOICES, moreLine,
+  NEED_CHOICES, needLabel, OWN_COPY, planHref, PROTOTYPE_COPY, readAttackPlan, readCatalog, readCatalogProduct, resultTag,
   type AttackPlan, type AttackPlanBrief, type CatalogProduct,
 } from '@/lib/product-catalog';
 
@@ -55,6 +55,12 @@ type Shown =
  * **Nothing is kept** (OD-133): a plan is a read, so a read-only support session builds one like anybody.
  * The states the prototype lacks are Fills (P14-T8 AC-10): a skeleton while the plan is built, an error
  * with a retry that keeps the brief, the empty shelf in the catalog's words, and the not-found state.
+ *
+ * **The client's review of 2026-10-26** (ADR-0167; P18.95-T6): below 768px the chips are two to a row and
+ * *Build attack plan* sits in a bar fixed to the bottom of the screen, with room left under the brief so its
+ * last chips are never behind it (AC-1, UI-015); at every size *Lump-sum* is an option of its own after
+ * *Monthly premium budget*, not that question's seventh chip — one answer between the two groups, band 7 as
+ * before (AC-3, UI-030).
  */
 export function AttackPlanScreen({ address }: { address: PlanAddress }) {
   const router = useRouter();
@@ -115,20 +121,24 @@ export function AttackPlanScreen({ address }: { address: PlanAddress }) {
   const steps = [PROTOTYPE_COPY.stepBrief, PROTOTYPE_COPY.stepPlan];
 
   if (address.kind === 'brief') {
+    const lumpSum = budget === LUMP_SUM_BUDGET;
     return (
-      <div className="mx-auto max-w-[980px]">
+      <div className={cn('mx-auto max-w-[980px]', !shelfEmpty && ACTION_BAR_ROOM_PHONE)}>
         <StepPills label={OWN_COPY.steps} steps={steps} current={0} />
         {shelfEmpty ? <EmptyShelf /> : (
           <>
             <BriefCard title={PROTOTYPE_COPY.briefTitle} hint={PROTOTYPE_COPY.briefHint}>
               <ChoiceGroup label={PROTOTYPE_COPY.primaryNeed} options={NEED_CHOICES} value={need} onChange={setNeed} />
               <ChoiceGroup label={PROTOTYPE_COPY.ageBand} options={AGE_CHOICES} value={age} onChange={setAge} />
-              <ChoiceGroup label={PROTOTYPE_COPY.budget} options={BUDGET_CHOICES} value={budget} onChange={setBudget} />
+              {/* One answer across the two: choosing *Lump-sum* releases a monthly band, and a band releases it. */}
+              <ChoiceGroup label={PROTOTYPE_COPY.budget} options={MONTHLY_BUDGET_CHOICES} value={lumpSum ? null : budget} onChange={setBudget} />
+              <ChoiceGroup label={OWN_COPY.lumpSum} options={LUMP_SUM_CHOICES} value={lumpSum ? budget : null} onChange={setBudget} />
             </BriefCard>
-            <div className="flex flex-wrap items-center justify-end gap-3.5">
+            {/* On a phone, a bar fixed to the bottom of the screen: the note beside the action, on one line. */}
+            <div className={cn('flex flex-wrap items-center justify-end gap-3.5', ACTION_BAR_PHONE, 'max-md:flex-nowrap max-md:gap-3')}>
               {/* Emptied once the brief is complete (`:9557-9561`), and read out as it changes. */}
-              <p className="m-0 mr-auto text-sm text-muted" aria-live="polite">{complete ? '' : PROTOTYPE_COPY.pickAll}</p>
-              <Button disabled={!complete} onClick={build} className="h-auto px-[22px] py-[11px]">{PROTOTYPE_COPY.build}</Button>
+              <p className="m-0 mr-auto text-sm text-muted max-md:min-w-0 max-md:flex-1" aria-live="polite">{complete ? '' : PROTOTYPE_COPY.pickAll}</p>
+              <Button disabled={!complete} onClick={build} className="h-auto px-[22px] py-[11px] max-md:shrink-0">{PROTOTYPE_COPY.build}</Button>
             </div>
           </>
         )}

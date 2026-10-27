@@ -104,7 +104,8 @@ const dashboardCalls = (calls: { url: string }[]) => calls.filter((c) => c.url.i
 /** The strip's tiles, label and value each. */
 function strip() {
   const row = screen.getByText('Total touches').closest('[data-total]')!.parentElement!;
-  return [...row.children].map((tile) => [tile.children[0].textContent, tile.children[1].textContent]);
+  // A tile's label without the ⓘ the total carries (P18.95-T9 AC-3).
+  return [...row.children].map((tile) => [tile.children[0].textContent!.replace(/ ⓘ.*$/, ''), tile.children[1].textContent]);
 }
 
 /** The six words coaching's own strings never use (ADR-0084). */
@@ -182,14 +183,14 @@ describe('a coachee’s Activity tab (P13.1-T9)', () => {
 
     expect(await screen.findByText(/Membership not found/)).toBeInTheDocument();
     // The shell stays: the person and the tabs are still there.
-    expect(screen.getByRole('heading', { level: 2, name: 'Rina Wijaya' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Rina Wijaya' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Coaching' })).toBeInTheDocument();
   });
 
   it('P13.1-T9 AC-4 is refused, with no dashboard read, to a reader without activity_log:read_raw', async () => {
     const { calls } = show(undefined, makeMe({ ...LEADER, permissions: ['coaching_session:read'] }));
 
-    await screen.findByRole('heading', { level: 2, name: 'Rina Wijaya' });
+    await screen.findByRole('heading', { level: 1, name: 'Rina Wijaya' });
     await waitFor(() => expect(screen.queryByRole('table')).toBeNull());
     expect(dashboardCalls(calls)).toHaveLength(0);
   });

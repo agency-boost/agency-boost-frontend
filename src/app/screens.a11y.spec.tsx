@@ -688,6 +688,20 @@ describe('screens have no axe violations', () => {
       await expectClean('unit/dashboard expanded');
     });
 
+    it('on a phone: a card per person, every group and total, two cards opened (P18.95-T3 AC-1)', async () => {
+      vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+        media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      })));
+      stubFetch({ ...shell, 'GET /unit/dashboard': { body: unitDashboard() }, '/activity/ratios': { body: UNIT_RATIOS } });
+      renderInLayout(AgentLayout, page(), { me: UNIT_READER });
+      await screen.findByRole('list', { name: 'Your Unit' });
+      await expectClean('unit/dashboard (phone)');
+      await userEvent.click(screen.getByRole('button', { name: 'View details for Dimas Pratama' }));
+      await userEvent.click(screen.getByRole('button', { name: 'View details for you' }));
+      await screen.findAllByText('Selling success rate');
+      await expectClean('unit/dashboard (phone, opened)');
+    });
+
     it('with Update production open', async () => {
       stubFetch({ ...shell, 'GET /unit/dashboard': { body: unitDashboard() } });
       renderInLayout(AgentLayout, page(), { me: UNIT_READER });
@@ -793,6 +807,16 @@ describe('screens have no axe violations', () => {
       renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
       await screen.findByRole('table', { name: 'Everyone you coach' });
       await expectClean('coaching');
+    });
+
+    it('the roster on a phone: a card per person, the groups, a unit and a unit nested in it (P18.95-T3 AC-3)', async () => {
+      vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+        media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      })));
+      stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
+      renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
+      await screen.findByRole('list', { name: 'Your direct agents' });
+      await expectClean('coaching (phone)');
     });
 
     it('the roster with nobody to coach', async () => {
@@ -1210,17 +1234,24 @@ describe('screens have no axe violations', () => {
       await expectClean('coaching/[membershipId] (not found)');
     });
 
-    it('the way round on a phone, open (ADR-0085, P11-T6 AC-11)', async () => {
+    it('the phone’s menu, open (P18.95-T2 AC-3; ADR-0085, P11-T6 AC-11)', async () => {
       vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
         media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
       })));
       stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
       renderInLayout(AgentLayout, <CoachingRosterPage />, { me: leader });
-      await screen.findByRole('table', { name: 'Everyone you coach' });
-      await userEvent.click(screen.getByRole('button', { name: /Rina/ }));
-      expect(within(document.getElementById('sidebar-user-actions')!).getByRole('navigation', { name: 'Main' }))
+      // A phone draws the roster as cards (P18.95-T3 AC-3), headed by the table's caption.
+      await screen.findByRole('heading', { name: 'Everyone you coach' });
+      await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+      expect(within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('navigation', { name: 'Main' }))
         .toBeInTheDocument();
-      await expectClean('coaching (the phone’s nav open)');
+      await expectClean('coaching (the phone’s drawer open)');
+      // And the name menu on the bar, which keeps the account's items (P18.95-T2 AC-4).
+      await userEvent.keyboard('{Escape}');
+      const bar = document.querySelector('aside')!;
+      await userEvent.click(within(bar as HTMLElement).getByRole('button', { name: /Rina/ }));
+      expect(document.getElementById('sidebar-user-actions')).toBeInTheDocument();
+      await expectClean('coaching (the phone’s name menu open)');
     });
   });
 
@@ -1261,6 +1292,18 @@ describe('screens have no axe violations', () => {
     await screen.findByText('Submission polis');
     await screen.findByText('Total touches');
     await expectClean('activity/dashboard');
+
+    // On a phone: each item's total, and two of them opened on their days (P18.95-T3 AC-6).
+    cleanup();
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    })));
+    renderInLayout(AgentLayout, <ActivityDashboardPage />, {});
+    await screen.findByRole('list', { name: 'Your activity' });
+    await expectClean('activity/dashboard (phone)');
+    await userEvent.click(screen.getByRole('button', { name: /^Submission polis/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^An archived item/ }));
+    await expectClean('activity/dashboard (phone, opened)');
   });
 
   it('Personal Summary, populated: the period tabs, progress bars, the pace, the chips, the pulse, the leads and the insights (P10-T4 to T7)', async () => {
@@ -1412,8 +1455,44 @@ describe('screens have no axe violations', () => {
     renderInLayout(AgentLayout, <LogActivityPage />, { me: makeMe() });
 
     await screen.findByLabelText('Why is this being corrected?');
-    expect(screen.getByText('Leads Generation')).toBeInTheDocument();
+    // A tile per section since P18.95-T5 AC-2: the section's own name, not its summary tile's.
+    expect(screen.getByText('Total touches today').closest('[data-total]')!.parentElement).toHaveTextContent('Leads');
     await expectClean('activity/log');
+  });
+
+  it('Log activity on a phone: the one-line total and the save bar with its status (P18.95-T5 AC-1)', async () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    })));
+    stubFetch({
+      '/kpm/config': {
+        body: {
+          activity: [{
+            id: 'c1', code: 'LEADS', label: 'Leads', description: null,
+            appliesToOrgLevelCodes: [], displayOrder: 1, version: 1, status: 'active',
+            types: [{
+              id: 't1', code: 'LEADS_CONTACTED', label: 'Set Appointment',
+              categoryCode: 'LEADS', description: null, displayOrder: 1, version: 1, status: 'active',
+            }],
+          }],
+          ratios: [], leadPipelines: [], version: 1,
+        },
+      },
+      '/kpm/org-levels': { body: [] },
+      '/activity/log': {
+        body: {
+          membershipId: 'mem-1', localDate: '2026-03-11',
+          entries: [{ activityTypeId: 't1', activityTypeCode: 'LEADS_CONTACTED', label: 'Set Appointment', count: 2 }],
+          totalCount: 2, version: 1, frozenAt: null, editable: true, correctionCount: 0,
+        },
+      },
+    });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: makeMe() });
+
+    const save = await screen.findByRole('button', { name: 'Save activity' });
+    expect(save.parentElement).toHaveAttribute('data-action-bar');
+    expect(screen.getByText(/^Today:/)).toHaveTextContent('Today: 2 touches');
+    await expectClean('activity/log (phone)');
   });
 
   it('the leads table, with its sortable headings, a row of inline editors and the contact dialog', async () => {
@@ -1491,7 +1570,7 @@ describe('screens have no axe violations', () => {
   it('goal settings: five numbered cards, two entry modes and a live cascade', async () => {
     const period = String(new Date().getFullYear());
     stubFetch({
-      // The cascade's three types, so each column carries its *Activity #n* chip (P10.1-T6).
+      // The cascade's three types, so each column carries its activity's chip (P10.1-T6; by name since P18.95-T5).
       '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
       '/kpm/org-levels': { body: [] },
       '/goals': {
@@ -1587,6 +1666,44 @@ describe('screens have no axe violations', () => {
 
     await screen.findByRole('button', { name: 'Save goal' });
     await expectClean('goals');
+  });
+
+  it('goal settings on a phone: the save bar under the commitment, the chips by name, both options in sight (P18.95-T5)', async () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    })));
+    const period = String(new Date().getFullYear());
+    stubFetch({
+      '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/goals': {
+        body: {
+          period, mode: 'direct', annualApeTargetMinor: 500_000_000_00, savingsTargetMinor: 50_000_000_00,
+          commissionRatePct: 10, monthsLeft: 2.2, monthsLeftIsOverride: false, apeAchievedMinor: 0,
+          achieved: { minor: 290_000_000_00, provenance: 'imported', month: '2026-09' },
+          caseSizeMinor: 18_000_000_00, leadsToApptPct: 50, closingRatePct: 30,
+          snapshot: { monthlyApeTargetMinor: 95_454_545_00, policiesPerMonth: 6, appointmentsPerMonth: 18, leadsPerMonth: 36 },
+          projected: {
+            annualApeTargetMinor: 500_000_000_00, apeAchievedMinor: 290_000_000_00,
+            remainingApeMinor: 210_000_000_00, monthlyApeTargetMinor: 95_454_545_00,
+            policiesPerMonth: 6, policiesPerWeek: 1.4, appointmentsPerMonth: 18, appointmentsPerWeek: 5,
+            leadsPerMonth: 36, leadsPerWeek: 9, targetMet: false,
+          },
+          cascadeMapping: { leadsCode: 'LEADS_CONTACTED', appointmentsCode: 'SELL_PRESENTATION', closingsCode: 'SELL_SUBMISSION' },
+          cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
+          measured: { from: '2026-08-15', to: '2026-09-13', days: 30, leadToAppointmentRate: 0.25, closingRate: null },
+          savedAt: '2026-09-13T04:00:00.000Z', savedByMembershipId: 'mem-1',
+        },
+      },
+    });
+    renderInLayout(AgentLayout, <GoalSettingsPage />, {
+      me: makeMe({ permissions: ['goal:read', 'goal:update'] }),
+    });
+
+    const save = await screen.findByRole('button', { name: 'Save goal' });
+    expect(save.parentElement).toHaveAttribute('data-action-bar');
+    expect(screen.getByText(/To reach APE/).closest('p')).toHaveTextContent('(about 2 months left)');
+    await expectClean('goals (phone)');
   });
 
   it('the invite screen, with a code to share and a team below it', async () => {
@@ -2383,21 +2500,21 @@ describe('screens have no axe violations', () => {
 
     it('the detail as the organiser: answers on the chips, a coachee’s link, a placed member', async () => {
       await open();
-      await userEvent.click(screen.getByRole('button', { name: /^Coaching: 1:1 Coaching — Indah Permata/ }));
+      await userEvent.click(screen.getByRole('button', { name: /^1:1 coaching: 1:1 Coaching — Indah Permata/ }));
       await screen.findByRole('link', { name: 'Indah Permata' });
       await expectClean('calendar (detail, organiser)');
     });
 
     it('the detail as an invitee, Accept and Decline in place, the organiser’s chip first', async () => {
       await open();
-      await userEvent.click(screen.getByRole('button', { name: /^Meeting: Goal review — Q4 planning/ }));
+      await userEvent.click(screen.getByRole('button', { name: /^Internal meeting: Goal review — Q4 planning/ }));
       await screen.findByRole('button', { name: 'Accept' });
       await expectClean('calendar (detail, invitee)');
     });
 
     it('the delete question over the detail', async () => {
       await open();
-      await userEvent.click(screen.getByRole('button', { name: /^Meeting: Weekly unit standup/ }));
+      await userEvent.click(screen.getByRole('button', { name: /^Internal meeting: Weekly unit standup/ }));
       await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
       await screen.findByRole('dialog', { name: 'Delete "Weekly unit standup"?' });
       await expectClean('calendar (delete question)');
@@ -2467,6 +2584,17 @@ describe('screens have no axe violations', () => {
       renderInLayout(AgentLayout, <NewHiresPage />, { me: SARI_ME });
       await screen.findByRole('region', { name: 'AAB: Arief Hidayat' });
       await expectClean('new-hires');
+    });
+
+    it('the roster on a phone: a card per hire, an overdue day (P18.95-T3 AC-4)', async () => {
+      nav.pathname = '/new-hires';
+      vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+        media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      })));
+      stubFetch({ ...SHELL, '/new-hires': { body: ROSTER } });
+      renderInLayout(AgentLayout, <NewHiresPage />, { me: SARI_ME });
+      await screen.findByRole('list', { name: 'AAB: Arief Hidayat' });
+      await expectClean('new-hires (phone)');
     });
 
     it('the roster with nobody on it (P13-T5)', async () => {
@@ -2570,11 +2698,24 @@ describe('screens have no axe violations', () => {
       await expectClean('training/[categoryCode]');
     });
 
+    it('a category’s Skills List on a phone: a row per module (P18.95-T3 AC-5)', async () => {
+      nav.pathname = '/training/SALES';
+      vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+        media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+      })));
+      stubFetch(SHELL);
+      renderInLayout(AgentLayout, list('SALES'), { me: TRAINING_LEARNER });
+      await screen.findByRole('list', { name: 'Prospecting modules' });
+      await expectClean('training/[categoryCode] (phone)');
+    });
+
     it('a category offering nothing yet: the prototype’s empty card (P18.5-T1 AC-4)', async () => {
       nav.pathname = '/training/PRODUCT';
       stubFetch(SHELL);
       renderInLayout(AgentLayout, list('PRODUCT'), { me: TRAINING_LEARNER });
-      await screen.findByRole('heading', { level: 1, name: 'Product Training' });
+      // The heading is the nav item's words (P18.95-T9 AC-2); the empty card keeps the category's own title.
+      await screen.findByRole('heading', { level: 1, name: 'Training Modules' });
+      expect(screen.getByText('Product Training')).toBeInTheDocument();
       await expectClean('training/[categoryCode] (empty)');
     });
 
@@ -2678,6 +2819,15 @@ describe('screens have no axe violations', () => {
       await expectClean('product-catalog (empty)');
     });
 
+    it('the Product Catalog, a search that finds nothing (P18.95-T6 AC-4)', async () => {
+      nav.pathname = '/product-catalog';
+      stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } } });
+      renderInLayout(AgentLayout, <ProductCatalogLayout><ProductCatalogPage /></ProductCatalogLayout>, { me: SALES_ME });
+      await userEvent.type(await screen.findByRole('searchbox', { name: 'Search products by name' }), 'zzz');
+      await screen.findByText('No products match “zzz”.');
+      await expectClean('product-catalog (search, no match)');
+    });
+
     it.each(['Details', 'Attack Plan', 'Documents'])('the drawer open on %s (P14-T7 AC-11)', async (tab) => {
       nav.pathname = '/product-catalog/PRUMAPAN';
       stubFetch({
@@ -2688,7 +2838,7 @@ describe('screens have no axe violations', () => {
         <ProductCatalogLayout><ProductDrawerPage params={routeParams({ productCode: 'PRUMAPAN' })} /></ProductCatalogLayout>,
         { me: SALES_ME },
       );
-      const box = await screen.findByRole('dialog', { name: 'PRUMapan (nama kami)' });
+      const box = await screen.findByRole('dialog', { name: 'PRUMapan' });
       await userEvent.click(within(box).getByRole('tab', { name: tab }));
       await expectClean(`product-catalog/[productCode] (${tab})`);
     });
@@ -2722,7 +2872,7 @@ describe('screens have no axe violations', () => {
       const alternatives = ['A', 'B', 'C', 'D'].map((c) => ({ code: c, name: `Product ${c}` }));
       stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } }, 'GET /attack-plan': { body: salesPlan({ alternatives, moreCount: 3 }) } });
       renderInLayout(AgentLayout, <AttackPlanPage searchParams={query({ need: 'health', age: '2', budget: '2' })} />, { me: SALES_ME });
-      await screen.findByRole('heading', { level: 2, name: 'PRUMapan (nama kami)' });
+      await screen.findByRole('heading', { level: 2, name: 'PRUMapan' });
       await expectClean('attack-plan (plan)');
     });
 
@@ -2760,7 +2910,7 @@ describe('screens have no axe violations', () => {
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       await userEvent.click(within(screen.getByRole('group', { name: 'Candidate type' })).getByRole('button', { name: 'Retiree' }));
       await userEvent.click(
-        within(screen.getByRole('group', { name: 'What\'s driving them' })).getByRole('button', { name: 'Full career change' }),
+        within(screen.getByRole('group', { name: 'What\'s driving them' })).getByRole('button', { name: 'Career change' }),
       );
       await expectClean('recruitment/attack-plan (brief)');
     });

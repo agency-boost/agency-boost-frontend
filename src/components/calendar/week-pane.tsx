@@ -6,12 +6,12 @@ import {
   timedOn,
 } from '@/lib/calendar-layout';
 import {
-  entryNameSuffix, isBusy, OWN_COPY, titleOf, TYPE_BADGE, type CalendarEntry, type CalendarItem, type CalendarRead,
+  entryNameSuffix, isBusy, OWN_COPY, titleOf, TYPE_LABEL, type CalendarEntry, type CalendarItem, type CalendarRead,
 } from '@/lib/calendar';
 import type { Slot } from '@/lib/calendar-form';
 import { formatDayHeader, formatHour, formatTimeSpan, formatWeekdayDay } from '@/lib/format';
 import { cn } from '@/lib/cn';
-import { Avatar, ENTRY_TONE } from './calendar-parts';
+import { ENTRY_TONE, PaneHeadBar, type PaneHead } from './calendar-parts';
 
 /** The scroll boxes of every pane on the page, moved as one (`syncScroll`, `:1001-1005`). */
 export interface ScrollGroup {
@@ -19,13 +19,7 @@ export interface ScrollGroup {
   sync: (source: HTMLElement) => void;
 }
 
-/** Who a pane is: the reader, or a member compared beside them (`:320-324`, `:974-979`). */
-export interface PaneHead {
-  name: string;
-  initials: string;
-  role: string;
-  me: boolean;
-}
+export type { PaneHead } from './calendar-parts';
 
 /**
  * The hour lines, every 56px (`.day-col`, `:131`), drawn in the hairline token rather than in boxes.
@@ -94,14 +88,7 @@ export function WeekPane({
 
   return (
     <section aria-label={head.name} className={cn('flex min-w-0 flex-1 flex-col bg-card', className)}>
-      <div className="flex items-center gap-[9px] border-b border-hairline bg-base px-3.5 py-[11px]">
-        <Avatar initials={head.initials} me={head.me} size="md" />
-        <div className="min-w-0">
-          <p className="truncate text-md font-bold text-navy">{head.name}</p>
-          <p className="truncate text-xs text-muted">{head.role}</p>
-        </div>
-        {pill}
-      </div>
+      <PaneHeadBar head={head} pill={pill} />
 
       <div className="overflow-x-auto">
         <div className={PHONE_MIN_WIDTH}>
@@ -208,7 +195,7 @@ function AllDayBar({ item, style, onOpen }: { item: CalendarItem; style: React.C
       type="button"
       data-entry=""
       style={style}
-      aria-label={`${TYPE_BADGE[item.type]}: ${titleOf(item)}${entryNameSuffix(item)}`}
+      aria-label={`${TYPE_LABEL[item.type]}: ${titleOf(item)}${entryNameSuffix(item)}`}
       onClick={() => onOpen(item)}
       className={cn(shape, 'border-teal/30 bg-teal/[0.14] text-left text-teal-ink hover:brightness-[0.96]')}
     >
@@ -376,7 +363,7 @@ function EntryBlock({
       type="button"
       data-entry=""
       style={style}
-      aria-label={`${TYPE_BADGE[item.type]}: ${titleOf(item)}, ${time}${entryNameSuffix(item)}`}
+      aria-label={`${TYPE_LABEL[item.type]}: ${titleOf(item)}, ${time}${entryNameSuffix(item)}`}
       onClick={() => onOpen(item)}
       className={cn(shape, 'z-[1] hover:brightness-[0.96]', ENTRY_TONE[item.type])}
     >

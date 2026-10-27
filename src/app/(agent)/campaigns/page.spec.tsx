@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import { renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
 import {
-  APE, CHALLENGE, campaign, detail, LIST, notFound, notOpen, PROMO_AGENT, PUSH, READ_ONLY_RINA,
+  APE, CHALLENGE, campaign, detail, LIST, NEW_HIRE, notFound, notOpen, PROMO_AGENT, PUSH, READ_ONLY_RINA,
   RINA_ME, serverError, SHELL_STUBS, SPRINT,
 } from '@test/campaigns-fixtures';
 import type { CampaignList } from '@/lib/campaigns';
@@ -77,12 +77,14 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       expect(screen.getByRole('link', { name: 'Campaign list' })).toHaveAttribute('aria-current', 'page');
     });
 
-    it('P18.5-T7 AC-2 is titled and sub-titled as drawn, and reads the list once', async () => {
+    it('P18.5-T7 AC-2, P18.95-T9 AC-2 and AC-5 is titled as its nav item, sub-titled as drawn, and reads the list once', async () => {
       const { calls } = list();
       await listReady();
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Campaigns$/);
+      // P18.95-T9 AC-2: the nav item's words, *Campaign list* — the prototype titled the page *Campaigns*.
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Campaign List$/);
+      // P18.95-T9 AC-5: *tap*, where the prototype said *click into*.
       expect(screen.getByText(
-        "Company and KPM campaigns — mark the ones you're chasing, click into any card for full requirements.",
+        "Company and KPM campaigns — mark the ones you're chasing, tap any card for full requirements.",
       )).toBeInTheDocument();
       expect(calls.filter((c) => /\/campaigns$/.test(c.url))).toHaveLength(1);
     });
@@ -171,7 +173,7 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       expect(within(cardOf('MDRT Qualification')).getAllByText('🏆')[0].parentElement).toHaveClass('bg-gold');
     });
 
-    it('P18.5-T7 AC-3 the title and its window, the blurb, 🏆 the prize, the requirements in rupiah joined by " | "', async () => {
+    it('P18.5-T7 AC-3, P18.95-T10 AC-3 the title and its window, the blurb, 🏆 the prize, Needs: in rupiah joined by " + "', async () => {
       list();
       await listReady();
       const card = cardOf('Q4 APE Sprint');
@@ -179,7 +181,18 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       expect(within(card).getByText('1 Okt – 31 Des 2026')).toBeInTheDocument();
       expect(within(card).getByText('Push for APE this quarter — top 10 unit-wide win a trip.')).toBeInTheDocument();
       expect(card).toHaveTextContent('🏆Top 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus');
-      expect(card).toHaveTextContent('Requirements: APE achieved Rp 500 jt | New Hire 1');
+      expect(card).toHaveTextContent('Needs: Rp 500 jt APE + 1 new hire');
+      expect(card).not.toHaveTextContent('Requirements:');
+    });
+
+    it('P18.95-T10 AC-3 the client’s example: Needs: Rp 16 jt APE + 3 new hires; a promotion’s Rp 1,2 M APE + 3 new active agents', async () => {
+      const sixteen = campaign({ code: 'SIXTEEN', title: 'Sixteen', requirements: [APE(16), NEW_HIRE(3)] });
+      list({ 'GET /campaigns': { body: { campaigns: [sixteen, PROMO_AGENT], can: { chase: true } } } });
+      await listReady();
+      // *APE*'s first appearance on the list carries its ⓘ (P18.95-T9 AC-3): its name and bubble sit after the word.
+      expect(cardOf('Sixteen')).toHaveTextContent(/Needs: Rp 16 jt APE ⓘWhat is APE\?.+ \+ 3 new hires/);
+      await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
+      expect(cardOf('Promotion: Agent → AAB')).toHaveTextContent(/Needs: Rp 1,2 M APE ⓘWhat is APE\?.+ \+ 3 new active agents/);
     });
 
     it('P18.5-T7 AC-3 Promotion path over a promotion’s title, and nowhere else', async () => {
@@ -206,15 +219,20 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       expect(within(cardOf('October New Hire Blitz')).getByRole('button', { name: 'View details' })).toBeInTheDocument();
     });
 
-    it('P18.5-T7 AC-3 an ended card is grey, its chase disabled and its reason named', async () => {
+    it('P18.5-T7 AC-3, P18.95-T10 AC-2 an ended card is grey and draws no chase — not even disabled; its tag says Ended', async () => {
       list();
       await listReady();
       const card = cardOf('Mid-Year Persistency Push');
       expect(card).toHaveClass('grayscale-[45%]');
-      const chase = within(card).getByRole('button', { name: 'Chasing' });
-      expect(chase).toBeDisabled();
-      expect(within(card).getByRole('button', { name: 'This campaign has ended.' })).toHaveTextContent('ⓘ');
+      expect(within(card).queryByRole('button', { name: /^Chas/ })).not.toBeInTheDocument();
+      expect(card.querySelector('[data-chase]')).toBeNull();
+      expect(within(card).queryByRole('button', { name: 'This campaign has ended.' })).not.toBeInTheDocument();
+      expect(within(card).getByText('Ended')).toBeInTheDocument();
+      // View details stays on the right, where the chase is not.
+      expect(within(card).getByRole('button', { name: 'View details' })).toBeInTheDocument();
       expect(cardOf('Q4 APE Sprint')).not.toHaveClass('grayscale-[45%]');
+      expect(within(cardOf('Q4 APE Sprint')).getByRole('button', { name: 'Chasing' })).toBeEnabled();
+      expect(within(cardOf('Q1 APE Challenge')).getByRole('button', { name: 'Chase' })).toBeEnabled();
     });
 
     it('P18.5-T7 AC-3 a campaign not for the reader’s rung draws its chase disabled, saying why', async () => {
@@ -298,7 +316,9 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       await userEvent.click(within(cardOf('October New Hire Blitz')).getByRole('button', { name: 'Chase' }));
       expect(await screen.findByRole('alert')).toHaveTextContent('This campaign has ended, so it can no longer be chased or dropped.');
       await waitFor(() => expect(calls.filter((c) => /\/campaigns$/.test(c.url))).toHaveLength(2));
-      await waitFor(() => expect(within(cardOf('October New Hire Blitz')).getByRole('button', { name: 'Chase' })).toBeDisabled());
+      // P18.95-T10 AC-2: read again, the ended card draws no chase at all; the refusal stays said on it.
+      await waitFor(() => expect(within(cardOf('October New Hire Blitz')).queryByRole('button', { name: 'Chase' })).not.toBeInTheDocument());
+      expect(within(cardOf('October New Hire Blitz')).getByRole('alert')).toBeInTheDocument();
       expect(screen.queryByText(/^Now chasing/)).not.toBeInTheDocument();
     });
   });
@@ -512,7 +532,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     dialogAt('GADING_PUSH', { 'GET /campaigns/GADING_PUSH': notFound });
     expect(await screen.findByText('This campaign isn’t on your list.')).toBeInTheDocument();
     expect(screen.getByText('It may have been withdrawn, or the address may be mistyped.')).toBeInTheDocument();
-    expect(screen.getByRole('dialog', { name: 'Campaigns' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Campaign List' })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(nav.replace).toHaveBeenCalledWith('/campaigns', { scroll: false });
   });
@@ -548,7 +568,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
   it('a skeleton while the campaign loads, and an error with a retry', async () => {
     dialogAt('APE_SPRINT', { 'GET /campaigns/APE_SPRINT': [serverError, { body: detail() }] });
     expect((await screen.findByText('Loading the campaign…')).closest('[role="status"]')).not.toBeNull();
-    const box = screen.getByRole('dialog', { name: 'Campaigns' });
+    const box = screen.getByRole('dialog', { name: 'Campaign List' });
     expect(await within(box).findByRole('alert')).toHaveTextContent('Something went wrong.');
     await userEvent.click(within(box).getByRole('button', { name: 'Try again' }));
     await dialog();
@@ -561,10 +581,11 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(box.querySelector('script, b')).toBeNull();
   });
 
-  it('the dialog of an ended campaign the reader chased draws its chase disabled and why', async () => {
+  it('P18.95-T10 AC-2 the dialog of an ended campaign the reader chased draws no chase; its tag says Ended', async () => {
     dialogAt('PERSISTENCY_PUSH', { 'GET /campaigns/PERSISTENCY_PUSH': { body: detail({ ...PUSH, progress: null }) } });
     const box = await dialog('Mid-Year Persistency Push');
-    expect(within(box).getByRole('button', { name: 'Chasing' })).toBeDisabled();
-    expect(within(box).getByRole('button', { name: 'This campaign has ended.' })).toBeInTheDocument();
+    expect(within(box).queryByRole('button', { name: /^Chas/ })).not.toBeInTheDocument();
+    expect(within(box).queryByRole('button', { name: 'This campaign has ended.' })).not.toBeInTheDocument();
+    expect(within(box).getByText('Ended')).toBeInTheDocument();
   });
 });

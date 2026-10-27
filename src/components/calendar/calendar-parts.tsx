@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { ENTRY_TYPES, TYPE_LABEL, type EntryType } from '@/lib/calendar';
 import { cn } from '@/lib/cn';
 
@@ -86,6 +87,32 @@ export function Avatar({
     >
       {initials}
     </span>
+  );
+}
+
+/** Who a pane is: the reader, or a member compared beside them (`:320-324`, `:974-979`). */
+export interface PaneHead {
+  name: string;
+  initials: string;
+  role: string;
+  me: boolean;
+}
+
+/**
+ * A pane's head (`:320-324`, `:974-979`): the avatar, the name, the rung, and a compared pane's
+ * *"Drag to block"* pill. **One head for every view** — the week's pane, and since P18.95-T8 AC-2 a
+ * month and an agenda drawn beside somebody compared — so a person reads the same in all three.
+ */
+export function PaneHeadBar({ head, pill }: { head: PaneHead; pill?: ReactNode }) {
+  return (
+    <div className="flex items-center gap-[9px] border-b border-hairline bg-base px-3.5 py-[11px]">
+      <Avatar initials={head.initials} me={head.me} size="md" />
+      <div className="min-w-0">
+        <p className="truncate text-md font-bold text-navy">{head.name}</p>
+        <p className="truncate text-xs text-muted">{head.role}</p>
+      </div>
+      {pill}
+    </div>
   );
 }
 

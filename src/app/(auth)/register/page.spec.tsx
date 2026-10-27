@@ -2,6 +2,7 @@ import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithSession, stubFetch } from '@test/harness';
+import { AUTH_PAGE } from '@/components/auth-page';
 import RegisterPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -41,11 +42,63 @@ async function personal() {
 describe('register', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('says plainly that an account is not an office', () => {
+  it('says plainly that an account is not an office, from 768px — on a phone it is not drawn (P18.95-T7 AC-1)', () => {
     // Creating an account and joining an office are separate steps; a reader who
     // expects one to imply the other will wait for something that is not coming.
     renderWithSession(<RegisterPage />, { me: null });
-    expect(screen.getByText(/office is added separately/)).toBeInTheDocument();
+    const line = screen.getByText('Your office is added separately. This is just your login.');
+    // Grey text row 26: the client's *Remove* below 768px, its words kept above it.
+    expect(line.className.split(/\s+/).filter((c) => /hidden/.test(c))).toEqual(['max-md:hidden']);
+    // The title keeps the line's gap on a phone, so the form does not start against it.
+    expect(screen.getByRole('heading', { level: 1, name: 'Create your account' })).toHaveClass('max-md:mb-6');
+  });
+
+  it('P18.95-T7 AC-1 says where the agent code is, in the client’s words at every size (grey text row 26)', () => {
+    renderWithSession(<RegisterPage />, { me: null });
+    expect(screen.getByLabelText('Agent code')).toHaveAccessibleDescription('Found on your contract');
+    expect(screen.queryByText(/producer id/)).not.toBeInTheDocument();
+  });
+
+  it('P18.95-T7 AC-3 places its title as sign-in places its own: one column, its top 16% of a phone down, centred from 768px', () => {
+    renderWithSession(<RegisterPage />, { me: null });
+    const main = screen.getByRole('main');
+    expect(main.className).toBe(AUTH_PAGE);
+    expect(main).toHaveClass('justify-center', 'max-md:justify-start', 'max-md:pt-[16svh]');
+    expect(main.firstElementChild).toBe(screen.getByRole('heading', { level: 1 }));
+  });
+
+  it('P18.95-T7 AC-3 says under Create account what it waits for — the fields still empty, by their labels', async () => {
+    stubFetch({ '/companies': { body: INSURERS } });
+    renderWithSession(<RegisterPage />, { me: null });
+    const submit = screen.getByRole('button', { name: 'Create account' });
+
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAccessibleDescription(
+      'Still needed: Full name, Date of birth, Gender, Insurer, Agent code, Joined your insurer, Status, Email, Password and Confirm password.',
+    );
+    await userEvent.type(screen.getByLabelText('Full name'), 'Rina Wijaya');
+    await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
+    await screen.findByRole('option', { name: 'Prudential' });
+    await userEvent.selectOptions(screen.getByLabelText('Insurer'), 'co-2');
+    await userEvent.type(screen.getByLabelText('Agent code'), '88213');
+    await personal();
+    expect(submit).toHaveAccessibleDescription('Still needed: Password and Confirm password.');
+
+    // Nothing empty, but the password wrong: its own field says how, and the hint says to fix it.
+    await userEvent.type(screen.getByLabelText('Password'), 'short');
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'short');
+    expect(submit).toBeDisabled();
+    expect(submit).toHaveAccessibleDescription('Fix the password above.');
+    expect(screen.getByText('Fix the password above.')).toHaveClass('text-xs', 'text-muted');
+
+    // Live: no hint at all.
+    await userEvent.clear(screen.getByLabelText('Password'));
+    await userEvent.clear(screen.getByLabelText('Confirm password'));
+    await userEvent.type(screen.getByLabelText('Password'), 'a long enough password');
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'a long enough password');
+    expect(submit).toBeEnabled();
+    expect(submit).not.toHaveAccessibleDescription();
+    expect(screen.queryByText(/^Still needed/)).not.toBeInTheDocument();
   });
 
   it('sends the nine fields the API asks for', async () => {

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as PHONE from './phone';
 import { SEGMENT_PHONE, SEGMENTS_PHONE, TAB_PHONE, TAB_ROW_PHONE, TAP_AREA, TAP_TARGET, UNDERLINED_ROW_PHONE } from './phone';
-import { fadeOf, reveal } from './use-tab-row';
+import { fadeOf, reveal, useTabRow } from './use-tab-row';
 import { RouteTabs } from './route-tabs';
 import { Segmented } from './segmented';
 import { Button, buttonClass, Select, Textarea, TextInput } from './field';
@@ -170,6 +170,22 @@ describe('AC-8 one tab row on a phone', () => {
       expect(phone(on)).toEqual(tokens(SEGMENT_PHONE));
     });
 
+    it('P18.95-T5 AC-7: with phoneLayout="wrap", two options keep equal halves and wrap their words — below 768px only', () => {
+      const TWO = [{ id: 'direct', label: 'Set APE target directly' }, { id: 'savings', label: 'Calculate from savings target' }];
+      render(
+        <Segmented label="How" tabs={TWO} active="direct" onSelect={() => {}} phoneLayout="wrap">
+          {(id) => <span>{id}</span>}
+        </Segmented>,
+      );
+      const list = screen.getByRole('tablist', { name: 'How' });
+      expect(wider(list)).toBe('flex w-full rounded-lg border border-hairline bg-base p-[3px]');
+      expect(phone(list)).toEqual([]);
+      for (const tab of screen.getAllByRole('tab')) {
+        expect(wider(tab)).toMatch(/^flex-1 rounded-md px-2\.5 py-2 text-base font-semibold transition-colors /);
+        expect(phone(tab)).toEqual(tokens(PHONE.SEGMENT_WRAP_PHONE));
+      }
+    });
+
     it('keeps one tab stop and the arrow keys while it scrolls, and brings the chosen one into view', async () => {
       render(<Host />);
       const list = screen.getByRole('tablist');
@@ -262,6 +278,29 @@ describe('AC-8 one tab row on a phone', () => {
       // Pills have no hairline to repaint.
       expect(phone(nav)).toEqual(tokens(TAB_ROW_PHONE));
       for (const tab of screen.getAllByRole('link')) expect(phone(tab)).toEqual(tokens(TAB_PHONE));
+    });
+
+    it('P18.95-T6 AC-4 the scrollable filter row: a row of toggle buttons brings the pressed one into view', () => {
+      // The catalog's category pills (`product-catalog.tsx`): buttons with `aria-pressed`, not links or tabs.
+      const PILLS = ['All products', 'Life', 'Health', 'Critical illness', 'Education', 'Investment-linked'];
+      function Pills({ on }: { on: string }) {
+        const row = useTabRow<HTMLDivElement>(on);
+        return (
+          <div ref={row.ref} role="group" aria-label="Category" data-fade={row.fade} className={TAB_ROW_PHONE}>
+            {PILLS.map((p) => <button key={p} type="button" aria-pressed={p === on} className={TAB_PHONE}>{p}</button>)}
+          </div>
+        );
+      }
+      const { rerender } = render(<Pills on="All products" />);
+      const group = screen.getByRole('group', { name: 'Category' });
+      const box = layOut(group, { content: 600, visible: 343 });
+
+      rerender(<Pills on="Investment-linked" />);
+
+      // The sixth pill, 500–590, brought into view: the row scrolls to its end, 600 − 343.
+      expect(box.left).toBe(257);
+      expect(group).toHaveAttribute('data-fade', 'start');
+      expect(scrollIntoView).not.toHaveBeenCalled();
     });
   });
 });

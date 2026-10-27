@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Page } from '@/components/page';
 import { Card, ErrorBanner } from '@/components/ui/field';
 import { EmptyState } from '@/components/ui/empty-state';
+import { rungShort } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { formatNumber } from '@/lib/format';
@@ -36,7 +37,9 @@ export default function AdminOverviewPage() {
   }, []);
 
   return (
-    <Page title="Platform Overview" subtitle="Every company and KPM on AgencyBoost">
+    // The nav item's word (P18.95-T9 AC-2; UI-027, menu labels = page titles): the prototype's *Platform Overview*
+    // (`Superadmin.html:224`) under a nav item reading *Overview* (`:170`).
+    <Page title="Overview" subtitle="Every company and KPM on AgencyBoost">
       {error && <ErrorBanner {...error} />}
 
       {!overview && !error && (
@@ -77,7 +80,8 @@ export default function AdminOverviewPage() {
             <Tile label="Companies" value={overview.tiles.companies} lead />
             <Tile label="KPMs" value={overview.tiles.kpms} />
             <Tile label="Total members" value={overview.tiles.totalMembers} />
-            <Tile label="Agency Builders" value={overview.tiles.agencyBuilders} />
+            {/* The badge's name, plural (P18.95-T9 AC-1): the prototype's *Agency Builders* was a second name for AB. */}
+            <Tile label={`${rungShort('AB')}s`} value={overview.tiles.agencyBuilders} />
           </div>
 
           <h2 className="mt-6 font-display text-lg font-bold text-navy">Companies</h2>

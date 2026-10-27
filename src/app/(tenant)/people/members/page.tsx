@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import {
   Button, ErrorBanner, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
-import { RoleBadge, rungLabel, useLadder } from '@/components/ui/role-badge';
+import { RoleBadge, rungShort, useLadder } from '@/components/ui/role-badge';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -396,9 +396,10 @@ export default function MembersPage() {
         <Field label="Role" htmlFor="role" className="w-44">
           <Select id="role" value={role} onChange={(e) => setRole(e.target.value as HierarchyRole | '')}>
             <option value="">Every role</option>
-            <option value="ab">Agency Builder</option>
-            <option value="aab">Associate Agency Builder</option>
-            <option value="agent">Agent</option>
+            {/* Each role by its badge's name (P18.95-T9 AC-1, ADR-0167 §10). */}
+            <option value="ab">{rungShort('AB', ladder)}</option>
+            <option value="aab">{rungShort('AAB', ladder)}</option>
+            <option value="agent">{rungShort('AGENT', ladder)}</option>
           </Select>
         </Field>
       </FieldRow>
@@ -520,7 +521,7 @@ export default function MembersPage() {
                       {pendingFor(asks, m.membershipId) ? (
                         // ADR-0157: letting them in waits for AgencyBoost.
                         <LeaderLimitWaiting
-                          what={requestedChange(pendingFor(asks, m.membershipId)!, (code) => rungLabel(code, ladder))}
+                          what={requestedChange(pendingFor(asks, m.membershipId)!, (code) => rungShort(code, ladder))}
                           cancelling={busy}
                           onCancel={() => void cancelAsk(pendingFor(asks, m.membershipId)!.requestId)}
                         />

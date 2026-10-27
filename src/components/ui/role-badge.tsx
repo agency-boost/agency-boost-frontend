@@ -24,11 +24,16 @@ export type HierarchyRole = 'ab' | 'aab' | 'agent';
  * The platform console renders members of many companies and belongs to none, and a test
  * that never mounts the provider still has to draw a badge. Honest rather than silent: v1
  * ships one ladder, and this is it.
+ *
+ * **Its labels are the seed's** — *AB*, *AAB*, *Agent*, the backend's `DEFAULT_ORG_LADDER` — since
+ * P18.95-T9 AC-1 (ADR-0167 §10, OD-205; the client's UI review, UI-027). Until then this copy said
+ * *Agency Builder* and *Associate Agency Builder* where every office's own ladder says *AB* and *AAB*, so
+ * the console and the development accounts named a rung one way and the offices another.
  */
 export const SEEDED_LADDER: OrgLevel[] = [
   { orgLevelId: 'seed-agent', companyId: '', code: 'AGENT', label: 'Agent', displayOrder: 1, leaderTier: null, status: 'active' },
-  { orgLevelId: 'seed-aab', companyId: '', code: 'AAB', label: 'Associate Agency Builder', displayOrder: 2, leaderTier: 'associate', status: 'active' },
-  { orgLevelId: 'seed-ab', companyId: '', code: 'AB', label: 'Agency Builder', displayOrder: 3, leaderTier: 'senior', status: 'active' },
+  { orgLevelId: 'seed-aab', companyId: '', code: 'AAB', label: 'AAB', displayOrder: 2, leaderTier: 'associate', status: 'active' },
+  { orgLevelId: 'seed-ab', companyId: '', code: 'AB', label: 'AB', displayOrder: 3, leaderTier: 'senior', status: 'active' },
 ];
 
 /** Senior first. The first rung gets the strongest colour. */
@@ -47,15 +52,28 @@ function paletteFor(ladder: OrgLevel[], code: string) {
 }
 
 /**
- * The short form.
+ * **What a rung is called, wherever a person's role is named** — the badge, a pane's head, a sub-line, a
+ * sentence (P18.95-T9 AC-1; ADR-0167 §10, OD-205: one name per role).
  *
  * A code that reads as an acronym is already the short form — `AB`, `AAB`. A longer one
  * would be shouted, so the label is used instead: `AGENT` renders `Agent`, which is
- * exactly what v1 shipped.
+ * exactly what v1 shipped. For a rung the caller already holds, `{ code, label }` as the API sends it;
+ * `rungShort` finds one in the ladder by its code. The ladder's own label, whole, is for where the ladder
+ * itself is listed and edited (`/admin/org-levels`, a setting's rung checkboxes), and for the badge's title.
  */
+export function shortOfRung(rung: { code: string; label: string }): string {
+  return rung.code.length <= RUNG_SHORT_CODE_MAX_LENGTH ? rung.code : rung.label;
+}
+
+/**
+ * The longest rung code that is its own short name — the backend's `RUNG_SHORT_CODE_MAX_LENGTH`
+ * (`domain/constants/leader-tier.ts`), registered in `metrics-and-definitions.md`; `ui.spec.tsx` reads the
+ * backend's value so the two cannot drift (invariant §7).
+ */
+export const RUNG_SHORT_CODE_MAX_LENGTH = 4;
+
 function shortFor(level: OrgLevel | undefined, code: string): string {
-  if (!level) return code.toUpperCase();
-  return level.code.length <= 4 ? level.code : level.label;
+  return level ? shortOfRung(level) : code.toUpperCase();
 }
 
 /**
@@ -68,6 +86,17 @@ function shortFor(level: OrgLevel | undefined, code: string): string {
  */
 export function rungLabel(code: string, ladder: OrgLevel[] = SEEDED_LADDER): string {
   return ladder.find((l) => l.code === code.toUpperCase())?.label ?? code.toUpperCase();
+}
+
+/**
+ * **A rung's short name, without a hook** — what `RoleBadge` prints: *AB*, *AAB*, *Agent* on the seeded
+ * ladder. For a legend that names the badges beside it (the group tree's, P18.95-T8 AC-3), so the two
+ * say one name per rung (ADR-0167 §10, OD-205), and since P18.95-T9 AC-1 for every other place a role is
+ * named in words. A rung the caller already holds is named as it is; a code is found in the ladder.
+ */
+export function rungShort(rung: string | { code: string; label: string }, ladder: OrgLevel[] = SEEDED_LADDER): string {
+  if (typeof rung !== 'string') return shortOfRung(rung);
+  return shortFor(ladder.find((l) => l.code === rung.toUpperCase()), rung);
 }
 
 /**
@@ -89,10 +118,15 @@ export function useLadder(): OrgLevel[] {
   return ladder.length > 0 ? ladder : SEEDED_LADDER;
 }
 
-/** A rung's full label — `Agency Builder`. */
+/** A rung's full label, as the ladder writes it — *AB* on the seeded ladder, *Senior Manager* on one that says so. */
 export function useRoleLabel(code: string): string {
   const ladder = useLadder();
   return ladder.find((l) => l.code === code.toUpperCase())?.label ?? code.toUpperCase();
+}
+
+/** A rung's short name, from the office's ladder: what its badge prints (P18.95-T9 AC-1). */
+export function useRoleShort(code: string): string {
+  return rungShort(code, useLadder());
 }
 
 /** The avatar or legend-swatch colour for a rung, without a hook. */

@@ -95,6 +95,13 @@ describe('the bell’s popover (P12.1-T2)', () => {
     expect(popover()).toBeNull();
   });
 
+  it('P18.95-T1 AC-10 is a 44 × 44 target on a phone and 36 × 36 from 768 px', async () => {
+    stubFetch({ '/notifications': { body: page([item()]) } });
+    renderBell();
+    const trigger = await screen.findByRole('button', { name: 'Notifications, 1 unread' });
+    expect(trigger).toHaveClass('h-9', 'w-9', 'max-md:min-h-11', 'max-md:min-w-11');
+  });
+
   it('AC-2 reads the latest eight each time it opens, newest first as the server sends them', async () => {
     const eight = Array.from({ length: 8 }, (_, i) => item({ notificationId: `n-${i}`, title: `Notice ${i + 1}` }));
     const { calls } = stubFetch({ '/notifications': { body: page(eight, { total: 30, unread: 8 }) } });

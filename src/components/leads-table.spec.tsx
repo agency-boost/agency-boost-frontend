@@ -310,7 +310,8 @@ describe('LeadsTable, read-only, as P13.1-T4 left it', () => {
 
     expect(await screen.findByRole('list', { name: 'Her leads' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: 'Search leads' })).toBeInTheDocument();
-    await userEvent.selectOptions(screen.getByLabelText('Sort leads'), 'Status, ascending');
+    // P18.95-T4 AC-4: the order in words — *Status, ascending* until 2026-10-26.
+    await userEvent.selectOptions(screen.getByLabelText('Sort leads'), 'Earliest stage first');
     await waitFor(() => expect(lastRead(calls).get('sort')).toBe('status'));
     expect(lastRead(calls).get('owner')).toBe('mem-rina');
   });
@@ -357,5 +358,42 @@ describe('LeadsTable, on a coaching session’s card (P18.8-T7)', () => {
     expect(within(screen.getByLabelText('Type, row 1')).getAllByRole('option').map((o) => o.textContent))
       .toEqual(['Select type', 'Sales', 'Recruit']);
     expect(screen.getByLabelText('Type, row 1')).toHaveValue('recruitment');
+  });
+});
+
+/**
+ * P18.95-T4 on the coaching session's card (ADR-0167 §4): 📞 beside WhatsApp, as on `/leads`, and its own
+ * toolbar — the prototype card's search and type filter — with no *Status* filter and no `/leads` filter bar.
+ */
+describe('LeadsTable, on a coaching session’s card (P18.95-T4)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P18.95-T4 AC-3 rings the coachee’s lead from 📞 beside WhatsApp, and holds it with its reason where there is no number', async () => {
+    renderFor({
+      'outcome=open': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } }), lead({ id: 'l2', name: 'Ibu Wati' })]) },
+    });
+    await screen.findByDisplayValue('Ibu Wati');
+
+    const call = screen.getByRole('link', { name: 'Call Pak Budi' });
+    expect(call).toHaveAttribute('href', 'tel:+6281211002200');
+    expect(call.closest('td')).toBe(screen.getByRole('button', { name: 'Actions for Pak Budi' }).closest('td'));
+    expect(screen.getByRole('button', { name: 'Call Ibu Wati' })).toHaveAccessibleDescription('No phone number yet — add one in Lead details.');
+  });
+
+  it('P18.95-T4 AC-2 keeps the card’s own toolbar: its search and type filter, no Status filter, and no /leads filter bar', async () => {
+    renderFor({ 'outcome=open': { body: page([lead()]) } });
+    await screen.findByDisplayValue('Pak Budi');
+
+    expect(screen.getByRole('searchbox', { name: 'Search leads' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Filter by type')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Filter by status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('search')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('searchbox')).toHaveLength(1);
+  });
+
+  it('P18.95-T4 AC-3 keeps 📞 under a finalized session’s lock, since ringing writes nothing', async () => {
+    renderFor({ 'outcome=open': { body: page([lead({ contact: { phone: '0812-1100-2200', email: null } })]) } }, { readOnly: true });
+    await screen.findByDisplayValue('Pak Budi');
+    expect(screen.getByRole('link', { name: 'Call Pak Budi' })).toHaveAttribute('href', 'tel:+6281211002200');
   });
 });

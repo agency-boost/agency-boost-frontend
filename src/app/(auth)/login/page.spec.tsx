@@ -5,6 +5,7 @@ import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { ApiConfigError } from '@/lib/api';
 import { ApiRequestError } from '@/lib/api-client';
 import type { Me } from '@/lib/session';
+import { AUTH_PAGE } from '@/components/auth-page';
 import LoginPage from './page';
 
 const push = vi.fn();
@@ -47,6 +48,15 @@ async function signInFrom(search: string, who: Me | null): Promise<unknown> {
 }
 
 describe('login', () => {
+  it('P18.95-T7 AC-3 places its title where registration places its own: the one column the two share', () => {
+    renderWithSession(<LoginPage />);
+    const main = screen.getByRole('main');
+    // Centred from 768px, as before; below it the column starts 16% of the window down, as registration's does.
+    expect(main.className).toBe(AUTH_PAGE);
+    expect(main).toHaveClass('justify-center', 'max-md:justify-start', 'max-md:pt-[16svh]');
+    expect(main.firstElementChild).toBe(screen.getByRole('heading', { level: 1, name: 'AgencyBoost' }));
+  });
+
   it('labels both fields and marks them for the password manager', () => {
     renderWithSession(<LoginPage />);
     expect(screen.getByLabelText('Email')).toHaveAttribute('autocomplete', 'email');

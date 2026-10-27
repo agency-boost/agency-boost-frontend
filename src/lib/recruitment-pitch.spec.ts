@@ -64,14 +64,15 @@ describe('formatFileSize', () => {
 });
 
 describe('the pitch’s words', () => {
-  it('are the prototype’s, verbatim (`Recruitment_Section.html:681-818`)', () => {
+  it('P18.95-T7 AC-1 are the prototype’s (`Recruitment_Section.html:681-818`), but for the client’s two lines', () => {
     expect(PITCH_COPY.confirmed(2, 4)).toBe('2/4 confirmed');
-    expect(PITCH_COPY.noFile).toBe('No PDF uploaded yet — candidates can\'t be shown this document.');
+    // P18.95-T7 AC-1 (grey text rows 11 and 12): the client's words where the prototype's were.
+    expect(PITCH_COPY.noFile).toBe('Not uploaded yet');
     expect(PITCH_COPY.updated('2.4 MB', '12 Sep 2026')).toBe('2.4 MB · updated 12 Sep 2026');
     expect(PITCH_COPY.completeLine(4))
       .toBe('All 4 documents are uploaded and fully confirmed — ready to show or send to a candidate.');
-    expect(`${PITCH_COPY.notUploaded(2)}, ${PITCH_COPY.notConfirmed(1)}${PITCH_COPY.notReady}`)
-      .toBe('2 not uploaded, 1 uploaded but not fully confirmed — not yet ready to rely on for candidates.');
+    expect(PITCH_COPY.incompleteLine([PITCH_COPY.notUploaded(2), PITCH_COPY.notConfirmed(1)])).toBe('2 missing, 1 needs checking.');
+    expect(PITCH_COPY.incompleteLine([PITCH_COPY.notUploaded(4)])).toBe('4 missing.');
   });
 
   it('the module’s own use none of OD-39’s six words (D-copy)', () => {

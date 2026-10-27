@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -6,7 +8,7 @@ import { StatusPill, statusFor, STATUS_LABEL } from './status-pill';
 import { Stepper } from './stepper';
 import { ProgressBar } from './progress-bar';
 import { EmptyState } from './empty-state';
-import { RoleBadge, SEEDED_LADDER } from './role-badge';
+import { RoleBadge, RUNG_SHORT_CODE_MAX_LENGTH, rungLabel, rungShort, SEEDED_LADDER, shortOfRung } from './role-badge';
 import { ConfigBadge } from './config-badge';
 import { NumberBadge } from './number-badge';
 import { KpiTile } from './kpi-tile';
@@ -919,12 +921,14 @@ describe('RoleBadge', () => {
      * badge said nothing at all.
      *
      * Outside a provider the badge falls back to the seeded ladder — which is what v1
-     * ships, and what keeps every existing screen looking exactly as it did.
+     * ships, and what keeps every existing screen looking exactly as it did. **Its labels are the
+     * seed's** (P18.95-T9 AC-1): the backend's `DEFAULT_ORG_LADDER` labels the rungs *AB* and *AAB*,
+     * and this copy said *Agency Builder* and *Associate Agency Builder*.
      */
     expect(SEEDED_LADDER.map((l) => [l.code, l.label])).toEqual([
       ['AGENT', 'Agent'],
-      ['AAB', 'Associate Agency Builder'],
-      ['AB', 'Agency Builder'],
+      ['AAB', 'AAB'],
+      ['AB', 'AB'],
     ]);
   });
 
@@ -940,16 +944,46 @@ describe('RoleBadge', () => {
     expect(screen.getByText('Agent')).toBeInTheDocument();
   });
 
-  it('always carries a text label, with the full name available on hover', () => {
+  it('always carries a text label, with the ladder’s label available on hover', () => {
     render(<RoleBadge role="aab" />);
     const badge = screen.getByText('AAB');
     expect(badge).toBeInTheDocument();
-    expect(badge).toHaveAttribute('title', 'Associate Agency Builder');
+    expect(badge).toHaveAttribute('title', 'AAB');
   });
 
-  it('can render the long form', () => {
+  it('can render the long form: the ladder’s own label, where the ladder writes one', () => {
+    const ladder = [...SEEDED_LADDER, { ...SEEDED_LADDER[2], orgLevelId: 'x', code: 'SM', label: 'Senior Manager', displayOrder: 4 }];
+    expect(rungLabel('sm', ladder)).toBe('Senior Manager');
     render(<RoleBadge role="ab" short={false} />);
-    expect(screen.getByText('Agency Builder')).toBeInTheDocument();
+    expect(screen.getByText('AB')).toBeInTheDocument();
+  });
+
+  it('P18.95-T9 AC-1 the short-code limit is the backend’s, read from its constants (invariant §7)', () => {
+    const backend = readFileSync(join(__dirname, '..', '..', '..', '..', 'backend', 'src', 'domain', 'constants', 'leader-tier.ts'), 'utf8');
+    expect(Number(/export const RUNG_SHORT_CODE_MAX_LENGTH = (\d+);/.exec(backend)?.[1])).toBe(RUNG_SHORT_CODE_MAX_LENGTH);
+    expect(shortOfRung({ code: 'ABCD', label: 'Four' })).toBe('ABCD');
+    expect(shortOfRung({ code: 'ABCDE', label: 'Five' })).toBe('Five');
+  });
+
+  it('P18.95-T8 AC-3 rungShort says, without a hook, what the badge prints — AB, AAB, Agent — from the ladder it is given', () => {
+    expect(['ab', 'AAB', 'agent'].map((code) => rungShort(code))).toEqual(['AB', 'AAB', 'Agent']);
+    const another = [...SEEDED_LADDER, { ...SEEDED_LADDER[0], orgLevelId: 'x', code: 'SENIOR', label: 'Senior Partner', displayOrder: 4 }];
+    expect(rungShort('senior', another)).toBe('Senior Partner');
+    // A code the ladder does not hold reads as itself, as the badge's does.
+    expect(rungShort('zz')).toBe('ZZ');
+    render(<RoleBadge role="aab" />);
+    expect(screen.getByText(rungShort('aab'))).toHaveAttribute('title', 'AAB');
+  });
+
+  it('P18.95-T9 AC-1 names a rung the caller holds as the badge does, whatever the ladder’s label says', () => {
+    // The one rule, for a `{ code, label }` the API sends as for a code found in the ladder.
+    expect(shortOfRung({ code: 'AAB', label: 'Associate Agency Builder' })).toBe('AAB');
+    expect(shortOfRung({ code: 'AGENT', label: 'Agent' })).toBe('Agent');
+    expect(shortOfRung({ code: 'REGIONAL', label: 'Regional Director' })).toBe('Regional Director');
+    expect(rungShort({ code: 'SM', label: 'Senior Manager' })).toBe('SM');
+    // And the same name from a code, through the ladder: one name per rung, the badge's.
+    const ladder = [...SEEDED_LADDER, { ...SEEDED_LADDER[2], orgLevelId: 'x', code: 'SM', label: 'Senior Manager', displayOrder: 4 }];
+    expect(rungShort('sm', ladder)).toBe('SM');
   });
 });
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react';
 import { Page } from '@/components/page';
+import { TermTip } from '@/components/ui/term-tip';
 import { Cell, Row, type Column } from '@/components/ui/data-table';
 import { Button, buttonClass, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { SkeletonBar, SkeletonTable } from '@/components/ui/skeleton';
@@ -39,7 +40,8 @@ export default function DataUploadPage() {
   return (
     <Page
       title="Data upload"
-      subtitle="APE, rolling persistency, recruitment, new active agents, FYP and # of policy — one file per month, matched by agent code."
+      // *APE*'s first appearance on the screen carries its ⓘ (P18.95-T9 AC-3; UI-028).
+      subtitle={<>APE <TermTip term="APE" />, rolling persistency, recruitment, new active agents, FYP and # of policy — one file per month, matched by agent code.</>}
       permission="data_upload:read"
     >
       <MonthTable />
@@ -306,7 +308,7 @@ function MonthTable() {
           </p>
           {correctable && (
             <p className="-mt-2 mb-1 text-sm text-muted">
-              Click any number to correct it manually — no need to re-upload for a single fix.
+              Tap any number to correct it manually — no need to re-upload for a single fix.
             </p>
           )}
           {/* Where every figure came from, said once rather than on every cell (P9-T6 AC-4). */}

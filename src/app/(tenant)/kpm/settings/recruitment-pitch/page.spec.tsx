@@ -114,7 +114,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(ring).toHaveTextContent('1/4');
       expect(screen.getByText('Recruitment Pitch is incomplete')).toBeInTheDocument();
       expect(screen.getByText(
-        '2 not uploaded, 1 uploaded but not fully confirmed — not yet ready to rely on for candidates.',
+        '2 missing, 1 needs checking.',
       )).toBeInTheDocument();
     });
 
@@ -139,13 +139,13 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       expect(within(card('How to Join')).getByText('Missing')).toBeInTheDocument();
     });
 
-    it('shows a file’s own name, size and day, and the missing line on a dashed card', async () => {
+    it('P18.95-T7 AC-1 shows a file’s own name, size and day, and the missing line in the client’s words on a dashed card', async () => {
       render();
       const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
       expect(within(opp).getByText('Opportunity_Overview_v3.pdf')).toBeInTheDocument();
       expect(within(opp).getByText('2,4 MB · updated 12 Sep 2026')).toBeInTheDocument();
       expect(within(card('Proof & Credibility')).getByText('1,1 MB · updated 30 Agu 2026')).toBeInTheDocument();
-      expect(within(card('FAQ')).getByText('No PDF uploaded yet — candidates can\'t be shown this document.')).toBeInTheDocument();
+      expect(within(card('FAQ')).getByText('Not uploaded yet')).toBeInTheDocument();
       expect(card('FAQ').className).toContain('border-dashed');
       expect(opp.className).not.toContain('border-dashed');
     });
@@ -488,7 +488,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       for (const box of within(opp()).getAllByRole('checkbox')) expect(box).not.toBeChecked();
       await waitFor(() => expect(calls(stub, '/recruitment/pitch-materials')).toHaveLength(5));
       expect(screen.getByText(
-        '3 not uploaded, 1 uploaded but not fully confirmed — not yet ready to rely on for candidates.',
+        '3 missing, 1 needs checking.',
       )).toBeInTheDocument();
       expect(screen.getByText('“Opportunity_Overview_v4.pdf” attached. Its ticks are cleared.')).toBeInTheDocument();
     });

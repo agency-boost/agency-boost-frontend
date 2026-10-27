@@ -111,6 +111,8 @@ export default function PersonalSummaryPage({ searchParams }: { searchParams?: P
     <Page
       title="Personal Summary"
       subtitle="Your goals, activity and leads — on one page."
+      // The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 25): from 768px it reads as before.
+      subtitleOnPhone={false}
       actions={summary && (
         // The prototype's glyph before its label (`Overall.html:2705`), as *⬇ Download template* has it on
         // the data upload; hidden from the accessible name, which is the word alone.

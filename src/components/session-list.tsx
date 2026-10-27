@@ -140,7 +140,8 @@ export function SessionList() {
           Sign out everywhere
         </Button>
         <p className="mt-2 text-sm text-muted">
-          Ends every session including this one. What to do if a device was lost.
+          {/* The client's words for the lost device (P18.95-T7 AC-5; UI-030), at every size. */}
+          Ends every session including this one. Use this if you lose your phone.
         </p>
       </div>
     </Card>

@@ -9,6 +9,7 @@ import { SkeletonTree } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readOrgTree, type OrgTree as OrgTreeData } from '@/lib/org';
 import { useSession } from '@/lib/session';
+import { usePhone } from '@/lib/use-phone';
 
 /**
  * Group tree (`Overall.html:3639-3660`) — your own downline.
@@ -30,11 +31,17 @@ import { useSession } from '@/lib/session';
  * The same rule for the Owner and the Admin in their field view, who read the whole office as one
  * tree (the server's answer to a tenant admin): their own leader is then an ordinary node, and still
  * inert. Each target keeps its own guard; a link decides what is offered, never what is allowed.
+ *
+ * **On a phone the tree is an indented list that opens and closes** (`asList`; P18.95-T8 AC-3, the
+ * client's UI review, UI-025), opened on the reader's own line one level down; the same links, the same
+ * people. At 768px and wider it is the canvas it always was. The width is read here, when the page mounts
+ * and before the tree has answered, so a phone never draws the canvas first.
  */
 export default function GroupTreePage() {
   const [tree, setTree] = useState<OrgTreeData | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const { me } = useSession();
+  const phone = usePhone();
   const membership = me?.membership ?? null;
   // A member on the agent rung who leads somebody reads their unit (ADR-0087) but coaches nobody: their
   // coaching tabs and subject reads are `own` only, so a summary link would answer *not found*. The
@@ -48,10 +55,12 @@ export default function GroupTreePage() {
       .catch((err) => setError(toDisplayError(err)));
   }, []);
 
+  // The title is the nav item's words (P18.95-T9 AC-2, UI-027): the prototype's *Group Overview* sat under a nav item
+  // reading *Group tree*. *Tap*, not *Click* (AC-5).
   return (
     <Page
-      title="Group Overview"
-      subtitle="Your leader, you, and your full downline, laid out by layer. Click anyone to open their Unit Dashboard."
+      title="Group Tree"
+      subtitle="Your leader, you, and your full downline, laid out by layer. Tap anyone to open their Unit Dashboard."
       permission="org_tree:read"
     >
       {error && <ErrorBanner {...error} />}
@@ -65,7 +74,7 @@ export default function GroupTreePage() {
           <EmptyState title="Nobody reports to you yet. Once you add agents to your unit they appear here, with everyone below them." />
         )}
 
-        {tree && tree.nodes.length > 1 && <OrgTree tree={tree} personHref={personHref} />}
+        {tree && tree.nodes.length > 1 && <OrgTree tree={tree} personHref={personHref} asList={phone} />}
       </Card>
     </Page>
   );

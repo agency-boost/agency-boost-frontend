@@ -118,8 +118,9 @@ export default function CompaniesPage() {
   const draftSlugBad = draft.slug.length > 0 && !SLUG.test(draft.slug);
 
   return (
+    // The nav item's words (P18.95-T9 AC-2; UI-027): *Manage companies* (`Superadmin.html:177`).
     <Page
-      title="Companies"
+      title="Manage Companies"
       subtitle="Each company has its own role ladder, product catalog, and Company template. A KPM belongs to exactly one, and inherits its currency, locale and time zone."
     >
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">

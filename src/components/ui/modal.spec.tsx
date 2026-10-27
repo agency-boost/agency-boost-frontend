@@ -101,4 +101,33 @@ describe('Modal (P11-T8)', () => {
     expect(dialog).toContainElement(badge);
     expect(badge.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  it('P18.95-T4 AC-1: rises from the foot of the screen as a sheet, with the same manners as the dialog', async () => {
+    const onClose = vi.fn();
+    render(
+      <Modal open placement="sheet" title="Edit Pak Budi" focusDialog onClose={onClose}>
+        <input aria-label="Remarks" />
+      </Modal>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Edit Pak Budi' });
+
+    // The full width, anchored to the foot, its top corners rounded and clear of the home indicator.
+    expect(dialog.parentElement).toHaveAttribute('data-placement', 'sheet');
+    expect(dialog.parentElement!.className).toContain('items-end');
+    expect(dialog.className).toContain('rounded-t-lg');
+    expect(dialog.className).toContain('max-h-[90dvh]');
+    expect(dialog.className).not.toContain('max-w-[26rem]');
+    expect(dialog).toHaveFocus();
+
+    await userEvent.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('P18.95-T4: keeps the centred box by default', () => {
+    render(<Modal open title="Edit again" onClose={() => {}}><p>Why</p></Modal>);
+    const dialog = screen.getByRole('dialog', { name: 'Edit again' });
+    expect(dialog.parentElement).toHaveAttribute('data-placement', 'center');
+    expect(dialog.className).toContain('max-w-[26rem]');
+    expect(dialog.className).toContain('rounded-lg');
+  });
 });

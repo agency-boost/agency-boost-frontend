@@ -12,7 +12,7 @@ import { ResultHead } from '@/components/plan/result-head';
 import { BulletList, NextAction, ScriptBlock, ScriptText } from '@/components/plan/script-blocks';
 import { StepPills } from '@/components/plan/step-pills';
 import { Button, ErrorBanner } from '@/components/ui/field';
-import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
+import { ACTION_BAR_PHONE, ACTION_BAR_ROOM_PHONE, TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { cn } from '@/lib/cn';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
@@ -61,6 +61,10 @@ const options = (choices: readonly Choice[]) => choices.map((c) => ({ value: c.c
  * The states the prototype lacks are Fills (AC-7): a skeleton while a read is out, an error with a retry
  * that keeps the brief, and the playbook-empty state of a company with no playbook, which points to *Pitch
  * Materials* — that tab does not depend on the playbook.
+ *
+ * **On a phone** (ADR-0167; P18.95-T6 AC-1, UI-015) the chips are two to a row and *Build recruitment plan* sits
+ * in a bar fixed to the bottom of the screen, with room left under the brief for it; 768px and wider, as drawn.
+ * The chips' words are the server's, the client's shorter ones since 2026-10-26 (AC-2).
  */
 export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress }) {
   const router = useRouter();
@@ -154,7 +158,7 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
         {briefError && <Retry error={briefError} onRetry={() => setBriefAttempt((n) => n + 1)} />}
         {known && !known.hasPlaybook && <NoPlaybook />}
         {known?.hasPlaybook && (
-          <>
+          <div className={ACTION_BAR_ROOM_PHONE}>
             <div ref={briefRegion} tabIndex={-1}>
             <BriefCard title={PROTOTYPE_COPY.briefTitle} hint={PROTOTYPE_COPY.briefHint}>
               <ChoiceGroup label={PROTOTYPE_COPY.candidateType} options={options(known.vocabulary.types)} value={type} onChange={setType} />
@@ -173,10 +177,13 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
             </BriefCard>
             </div>
             {/* The primary, amber with navy text (an action, ADR-0137), full width (`.btn-block`, `:104`), disabled until the brief is complete. */}
-            <Button disabled={!brief} onClick={build} className="h-auto w-full px-[22px] py-3.5 text-lg">
-              {PROTOTYPE_COPY.build}
-            </Button>
-          </>
+            {/* On a phone, in a bar fixed to the bottom of the screen, still the bar's full width. */}
+            <div className={ACTION_BAR_PHONE}>
+              <Button disabled={!brief} onClick={build} className="h-auto w-full px-[22px] py-3.5 text-lg">
+                {PROTOTYPE_COPY.build}
+              </Button>
+            </div>
+          </div>
         )}
       </div>
     );

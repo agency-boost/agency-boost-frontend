@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
+import { ACTION_BAR_PHONE, SEGMENT_WRAP_PHONE } from '@/components/ui/phone';
 import { makeMe, renderInLayout, stubFetch } from '@test/harness';
 import GoalSettingsPage from './page';
 
@@ -90,6 +91,17 @@ const config = (activity: unknown[]) => ({ '/kpm/config': { body: { activity, ra
 const base = {
   ...config(SEED_ACTIVITY),
   '/kpm/org-levels': { body: [] },
+};
+
+/**
+ * The chip over the cascade panel a stage label heads — the activities it counts (P18.95-T5 AC-5) — or `null` for a
+ * panel with none.
+ */
+const chipOver = (label: string) => {
+  const panel = [...document.querySelectorAll('[class*="text-center"]')]
+    .find((p) => p.textContent?.includes('/month') && p.textContent.startsWith(label));
+  if (!panel) throw new Error(`No cascade panel headed ${label}`);
+  return panel.querySelector('[data-tone="navy"]')?.textContent ?? null;
 };
 
 const render = (routes: Record<string, unknown>, me = AGENT) => {
@@ -574,8 +586,8 @@ describe('Goal Settings (P8-T3)', () => {
       await screen.findByText("This month's APE target");
       const tile = screen.getByText("This month's APE target").closest('[data-variant]')!;
       expect(tile).toHaveAttribute('data-variant', 'insight');
-      // The two figures beside it merely restate what was typed.
-      expect(screen.getByText('Already produced').closest('[data-variant]'))
+      // The remainder beside it is plain; the *Already produced* echo of the field went (P18.95-T5 AC-5).
+      expect(screen.getByText('Remaining needed').closest('[data-variant]'))
         .toHaveAttribute('data-variant', 'plain');
       expect(document.querySelectorAll('[data-variant]').length).toBeGreaterThan(2);
     });
@@ -584,10 +596,10 @@ describe('Goal Settings (P8-T3)', () => {
       render({ '/goals': { body: goal() } });
 
       await screen.findByText('Set appointment');
-      // Each column names the activity it counts against, as the log screen numbers it (P10.1-T6 AC-11).
-      expect(await screen.findByText('Activity #3')).toBeInTheDocument();
-      expect(screen.getByText('Activity #4')).toBeInTheDocument();
-      expect(screen.getByText('Activity #6')).toBeInTheDocument();
+      // Each column names the activity it counts against, by its name on the log (P18.95-T5 AC-5) — where it was
+      // *Activity #4* (P10.1-T6 AC-11); a name that only repeats its column's label is not printed twice.
+      expect(await screen.findByText('Melakukan presentasi penjualan untuk calon atau existing nasabah')).toBeInTheDocument();
+      expect(screen.queryByText(/^Activity #/)).not.toBeInTheDocument();
       // The submissions column is the hero.
       expect(document.querySelector('[data-hero="true"]')).toHaveTextContent('Submission polis');
       // And the arrow's percentage is spelled out, because the glyph is decorative.
@@ -731,29 +743,40 @@ describe('Goal settings — the APE already produced, once the office holds prod
     render({ '/goals': { body: imported() } });
 
     const shown = (await screen.findByText('APE already produced this year')).closest('dl')!;
-    expect(shown).toHaveTextContent('APE already produced this yearRp 120.000.000');
+    // The label, its marker (on the field since P18.95-T5 AC-5), and the figure.
+    expect(shown).toHaveTextContent(/^APE already produced this year.*Rp 120\.000\.000$/);
     // The reason sentence went in P10.1-T6: whose figure it is, is the marker's to say.
     expect(shown.querySelectorAll('dd')).toHaveLength(1);
     expect(screen.queryByText(/typed on this plan is kept/)).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'APE already produced this year' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'From your office’s upload, year to date as of Agu 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'As of Agu 2026' })).toBeInTheDocument();
   });
 
   it('keeps the marker, on the field, when the plan cannot be worked out and there is no tile to carry it', async () => {
     render({ '/goals': { body: imported({ projected: null }) } });
     await screen.findByText(/cannot be worked out/);
 
-    const marker = screen.getByRole('button', { name: 'From your office’s upload, year to date as of Agu 2026' });
+    const marker = screen.getByRole('button', { name: 'As of Agu 2026' });
     expect(marker.closest('dl')).toHaveTextContent('APE already produced this year');
     // Once: the tile it would otherwise sit on is not drawn.
-    expect(screen.getAllByRole('button', { name: /year to date as of Agu 2026/ })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /^As of Agu 2026$/ })).toHaveLength(1);
   });
 
-  it('marks the figure once, on the tile, when the plan is worked out', async () => {
+  /* **Was** *marks the figure once, on the tile*: the *Already produced* tile carried it, and went (P18.95-T5 AC-5). */
+  it('P18.95-T5 AC-5: marks the figure once, on the field — the one place it is shown — when the plan is worked out', async () => {
     render({ '/goals': { body: imported() } });
     await screen.findByText('APE already produced this year');
-    expect(screen.getAllByRole('button', { name: /year to date as of Agu 2026/ })).toHaveLength(1);
-    expect(screen.getByText('APE already produced this year').closest('dl')!.querySelector('button')).toBeNull();
+    expect(screen.getAllByRole('button', { name: /^As of Agu 2026$/ })).toHaveLength(1);
+    expect(screen.getByText('APE already produced this year').closest('dl')!.querySelector('button')).not.toBeNull();
+  });
+
+  it('P18.95-T5 AC-5: shows the produced figure once — no Already produced tile repeating the field', async () => {
+    render({ '/goals': { body: imported() } });
+    await screen.findByText('Remaining needed');
+    expect(screen.queryByText('Already produced')).not.toBeInTheDocument();
+    // Rp 120.000.000 in the field, and nowhere else: not again as *Rp 120 jt* in a tile beneath it.
+    expect(screen.getAllByText(/^Rp 120(\.000\.000| jt)$/)).toHaveLength(1);
+    expect(screen.getByText('Remaining needed').closest('[data-variant]')).toHaveTextContent('Rp 380 jt');
   });
 
   it('says so when the office corrected it by hand', async () => {
@@ -771,11 +794,16 @@ describe('Goal settings — the APE already produced, once the office holds prod
     expect(sent.apeAchievedMinor).toBe(50_000_000_00);
   });
 
-  it('leaves the box for the agent’s own figure until production arrives, and marks it as theirs', async () => {
+  /*
+   * **Was** *… and marks it as theirs*: the *Already produced* tile beneath the box said *Your own figure, entered in
+   * Goal Settings*. The tile went (P18.95-T5 AC-5), and the box the agent types into needs no marker to say so.
+   */
+  it('leaves the box for the agent’s own figure until production arrives, with no tile repeating it', async () => {
     render({ '/goals': { body: goal() } });
     const box = await screen.findByRole('textbox', { name: 'APE already produced this year' });
     expect(box).not.toHaveAccessibleDescription();
-    expect(screen.getByRole('button', { name: 'Your own figure, entered in Goal Settings' })).toBeInTheDocument();
+    expect(screen.queryByText('Already produced')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Your own figure, entered in Goal Settings' })).not.toBeInTheDocument();
   });
 
   it('sits beside the months as a field and takes the rest of the row, as the prototype’s does (P10.1-T8)', async () => {
@@ -831,7 +859,7 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
       expect(screen.getByText('auto')).toBeInTheDocument();
     });
 
-    it('AC-8: Already produced carries the marker — the Summary’s glyph, its words on a tap', async () => {
+    it('AC-8, P18.95-T5 AC-5: the produced figure carries the marker — the Summary’s glyph, its words on a tap', async () => {
       render({
         '/goals': {
           body: goal({
@@ -841,11 +869,12 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
         },
       });
 
-      const marker = await screen.findByRole('button', { name: 'From your office’s upload, year to date as of Agu 2026' });
-      const tile = marker.closest('[data-variant]')!;
-      expect(tile).toHaveTextContent('Already produced');
-      expect(tile).toHaveTextContent('Rp 120 jt');
-      const tip = screen.getByText('From your office’s upload, year to date as of Agu 2026', { selector: '[role="tooltip"]' });
+      const marker = await screen.findByRole('button', { name: 'As of Agu 2026' });
+      // On the field, since its tile went (P18.95-T5 AC-5).
+      const field = marker.closest('dl')!;
+      expect(field).toHaveTextContent('APE already produced this year');
+      expect(field).toHaveTextContent('Rp 120.000.000');
+      const tip = screen.getByText('As of Agu 2026', { selector: '[role="tooltip"]' });
       fireEvent.click(marker);
       expect(tip).toBeVisible();
     });
@@ -868,10 +897,13 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
     expect(screen.queryByText('% of contacted leads that become an appointment')).not.toBeInTheDocument();
     expect(screen.queryByText('% of appointments that become a closing')).not.toBeInTheDocument();
     expect(screen.queryByText('Use your real conversion ratios for accuracy.')).not.toBeInTheDocument();
-    expect(screen.queryByText(/APE per closing/)).not.toBeInTheDocument();
     expect(screen.queryByText('💡')).not.toBeInTheDocument();
-    // The 🔗 footnote is no tip: it says where the three columns count.
-    expect(screen.getByText('Maps to activities #3, #4, #6 in Activity Management.')).toBeInTheDocument();
+    // P18.95-T7 AC-1 (grey text row 15): step 3's sentence is in an ⓘ beside the case size on a phone, and nowhere else.
+    const tip = screen.getByRole('button', { name: 'APE per closing. Increase if one appointment often yields multiple policies.' });
+    expect(tip.parentElement).toHaveClass('md:hidden');
+    expect(screen.getAllByText(/APE per closing/).every((el) => el.closest('.md\\:hidden'))).toBe(true);
+    // P18.95-T7 AC-1 (grey text row 17): the 🔗 footnote reads as before from 768px, and is not drawn on a phone.
+    expect(screen.getByText('Maps to activities #3, #4, #6 in Activity Management.').closest('p')).toHaveClass('max-md:hidden');
   });
 
   it('AC-10: no history card, and nothing asks for the retired history', async () => {
@@ -884,18 +916,50 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
     expect(calls.filter((c) => c.url.includes('/history'))).toHaveLength(0);
   });
 
-  describe('AC-11 — the cascade chips show what the prototype shows', () => {
-    it('AC-11: Activity #3, #4 and #6, read from configuration — never the code', async () => {
+  /*
+   * **Was** *AC-11 — the cascade chips show what the prototype shows*, *Activity #3, #4, #6*. The client asked for the
+   * activities' names (2026-10-26, UI-018): the chips read the office's label for each bound code (P18.95-T5 AC-5).
+   * The 🔗 tip keeps the numbers, the prototype's sentence.
+   */
+  describe('P18.95-T5 AC-5 — the cascade chips name the activities', () => {
+    it('P18.95-T5 AC-5: names each stage’s activity as the log does — never a number, never the code', async () => {
       render({ '/goals': { body: goal() } });
 
-      expect(await screen.findByText('Activity #3')).toBeInTheDocument();
-      expect(screen.getByText('Activity #4')).toBeInTheDocument();
-      expect(screen.getByText('Activity #6')).toBeInTheDocument();
-      expect(screen.getByText('Maps to activities #3, #4, #6 in Activity Management.')).toBeInTheDocument();
+      await screen.findByText('Maps to activities #3, #4, #6 in Activity Management.');
+      // *Set Appointment* and *Submission polis* are their columns' own labels, so no chip repeats them.
+      expect(chipOver('Set appointment')).toBeNull();
+      expect(chipOver('Sales meeting')).toBe('Melakukan presentasi penjualan untuk calon atau existing nasabah');
+      expect(chipOver('Submission polis')).toBeNull();
+      expect(screen.queryByText(/^Activity #/)).not.toBeInTheDocument();
       expect(screen.queryByText(/LEADS_CONTACTED|SELL_PRESENTATION|SELL_SUBMISSION/)).not.toBeInTheDocument();
     });
 
-    it('AC-11: follows the office’s order — a type dragged elsewhere renumbers the chip, and the plan still binds by code', async () => {
+    it('P18.95-T5 AC-5: an office that renamed its activities is named in its own words, on every chip', async () => {
+      const renamed = [
+        category('LEADS_GENERATION', 'Leads Generation', 1, [
+          type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Menghubungi prospek yang sudah ada', 3),
+        ]),
+        category('SELLING', 'Selling', 2, [
+          type('SELL_PRESENTATION', 'SELLING', 'Presentasi penjualan', 4),
+          type('SELL_SUBMISSION', 'SELLING', 'Closing polis', 6),
+        ]),
+      ];
+      render({ '/goals': { body: goal() }, ...config(renamed) });
+
+      await screen.findByText('Maps to activities #3, #4, #6 in Activity Management.');
+      expect(chipOver('Set appointment')).toBe('Menghubungi prospek yang sudah ada');
+      expect(chipOver('Sales meeting')).toBe('Presentasi penjualan');
+      expect(chipOver('Submission polis')).toBe('Closing polis');
+    });
+
+    it('P18.95-T5 AC-5: lets a long name wrap inside its panel rather than run out of it', async () => {
+      render({ '/goals': { body: goal() } });
+      const chip = await screen.findByText('Melakukan presentasi penjualan untuk calon atau existing nasabah');
+      expect(chip).toHaveClass('whitespace-normal', 'max-w-full', 'normal-case');
+      expect(chip).not.toHaveClass('whitespace-nowrap');
+    });
+
+    it('AC-11: follows the office’s order — a type dragged elsewhere renumbers the tip, and the plan still binds by code', async () => {
       const reordered = [
         category('SELLING', 'Selling', 1, [
           type('SELL_SUBMISSION', 'SELLING', 'Submission polis', 1),
@@ -910,10 +974,12 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
       expect(await screen.findByText('Maps to activities #7, #2, #1 in Activity Management.')).toBeInTheDocument();
       const hero = document.querySelector('[data-hero="true"]')!;
       expect(hero).toHaveTextContent('Submission polis');
-      expect(hero).toHaveTextContent('Activity #1');
+      // Its chip is its name, which no reorder moves (P18.95-T5 AC-5); the tip carries the new number.
+      expect(hero).not.toHaveTextContent('Activity #');
+      expect(chipOver('Sales meeting')).toBe('Melakukan presentasi penjualan untuk calon atau existing nasabah');
     });
 
-    it('AC-11: a type the configuration holds no live row for gets no chip and no tip — never a code', async () => {
+    it('AC-11, P18.95-T5 AC-5: a type the configuration holds no live row for gets no chip and no tip — never a code', async () => {
       const archived = [
         category('LEADS_GENERATION', 'Leads Generation', 1, [
           type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Set Appointment', 3),
@@ -925,14 +991,14 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
       ];
       render({ '/goals': { body: goal() }, ...config(archived) });
 
-      expect(await screen.findByText('Activity #3')).toBeInTheDocument();
-      expect(screen.getByText('Activity #6')).toBeInTheDocument();
-      expect(screen.queryByText('Activity #4')).not.toBeInTheDocument();
+      await screen.findByText('Sales meeting');
+      expect(chipOver('Sales meeting')).toBeNull();
+      expect(screen.queryByText('Melakukan presentasi penjualan')).not.toBeInTheDocument();
       expect(screen.queryByText(/Maps to activities/)).not.toBeInTheDocument();
       expect(screen.queryByText('SELL_PRESENTATION')).not.toBeInTheDocument();
     });
 
-    it('P18.9-T2 AC-2: a stage bound to a replaced activity and its replacement numbers both, from the API’s binding', async () => {
+    it('P18.9-T2 AC-2, P18.95-T5 AC-5: a stage bound to a replaced activity and its replacement names both, from the API’s binding', async () => {
       const replaced = [
         category('LEADS_GENERATION', 'Leads Generation', 1, [
           type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Set Appointment', 3),
@@ -948,13 +1014,13 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
       });
       render({ '/goals': { body: rebound }, ...config(replaced) });
 
-      expect(await screen.findByText('Activity #4, #13')).toBeInTheDocument();
+      expect(await screen.findByText('Presentasi + Sales meeting baru')).toBeInTheDocument();
       expect(screen.getByText('Maps to activities #3, #4, #13, #6 in Activity Management.')).toBeInTheDocument();
       // The stored record is not what the chips read: it still names the old code alone.
       expect(rebound.cascadeMapping).toMatchObject({ appointmentsCode: 'SELL_PRESENTATION' });
     });
 
-    it('AC-11: an archived section numbers none of its types', async () => {
+    it('AC-11, P18.95-T5 AC-5: an archived section names none of its types', async () => {
       const retired = [
         category('LEADS_GENERATION', 'Leads Generation', 1, [
           type('LEADS_CONTACTED', 'LEADS_GENERATION', 'Set Appointment', 3),
@@ -963,9 +1029,10 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
       ];
       render({ '/goals': { body: goal() }, ...config(retired) });
 
-      expect(await screen.findByText('Activity #3')).toBeInTheDocument();
-      expect(screen.queryByText('Activity #4')).not.toBeInTheDocument();
-      expect(screen.queryByText('Activity #6')).not.toBeInTheDocument();
+      await screen.findByText('Sales meeting');
+      expect(chipOver('Sales meeting')).toBeNull();
+      expect(chipOver('Submission polis')).toBeNull();
+      expect(screen.queryByText('Presentasi')).not.toBeInTheDocument();
     });
   });
 
@@ -987,5 +1054,75 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
       expect(screen.getByText('Estimates for personal planning — assumptions vary per individual.')).toBeInTheDocument();
       expect(screen.getByText('You have passed your annual target.')).toBeInTheDocument();
     });
+  });
+});
+
+// ── P18.95-T5: the client's UI review of 2026-10-26 (UI-018) ─────────────────────────────────────
+
+describe('Goal Settings on the client’s UI review (P18.95-T5)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Every class an element wears at 768px and wider: the phone's own are `max-md:`. */
+  const wider = (el: Element) => (el.getAttribute('class') ?? '').split(/\s+/).filter((c) => c && !c.startsWith('max-md:'));
+
+  it('P18.95-T5 AC-4: on a phone, Save goal and its status are a bar fixed to the bottom — one of each, not two', async () => {
+    render({ '/goals': { body: goal() } });
+    await screen.findByRole('heading', { name: /My commitment/ });
+
+    const save = screen.getAllByRole('button', { name: 'Save goal' });
+    expect(save).toHaveLength(1);
+    const bar = save[0].parentElement!;
+    expect(bar).toHaveAttribute('data-action-bar');
+    for (const cls of ACTION_BAR_PHONE.split(' ')) expect(bar).toHaveClass(cls);
+    expect(bar).toContainElement(screen.getByRole('status'));
+    // At 768px and wider it is step 1's header row, as it was (ADR-0167 §12).
+    expect(wider(bar)).toEqual(['flex', 'items-center', 'gap-3']);
+    // The page leaves room under the commitment, so its last line is never behind the bar.
+    expect(screen.getByRole('heading', { name: /My commitment/ }).closest('.max-w-\\[51\\.25rem\\]')).toHaveClass('max-md:pb-24');
+  });
+
+  it('P18.95-T5 AC-4: the bar still saves, and still says so', async () => {
+    const { calls } = render({ '/goals': [{ body: goal() }, { body: goal() }] });
+    await screen.findByRole('heading', { name: /My commitment/ });
+    await userEvent.type(screen.getByLabelText('Annual APE target'), '1');
+    expect(screen.getByRole('status')).toHaveTextContent('Not yet saved');
+    await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
+    await waitFor(() => expect(calls.some((c) => c.init.method === 'PUT')).toBe(true));
+    await waitFor(() => expect(screen.getAllByRole('status').map((r) => r.textContent).join(' ')).toContain('Goal saved ✓'));
+  });
+
+  it('P18.95-T5 AC-5: writes the months left in words — about 2 months — where it wrote 2.2 months', async () => {
+    render({ '/goals': { body: goal({ monthsLeft: 2.2 }) } });
+    const sentence = (await screen.findByText(/To reach APE/)).closest('p')!;
+    expect(sentence).toHaveTextContent('(about 2 months left)');
+    expect(sentence).not.toHaveTextContent(/2[.,]2 months/);
+    // The box keeps the figure the plan divides by: it is an input, and it is what is used.
+    expect(screen.getByLabelText(/Months left this year/)).toHaveAttribute('placeholder', '2,2');
+  });
+
+  it.each([
+    [0.3, '(less than a month left)'],
+    [0.6, '(about 1 month left)'],
+    [11.9, '(about 12 months left)'],
+  ])('P18.95-T5 AC-5: %s months left reads %s', async (monthsLeft, words) => {
+    render({ '/goals': { body: goal({ monthsLeft }) } });
+    expect((await screen.findByText(/To reach APE/)).closest('p')).toHaveTextContent(words);
+  });
+
+  it('P18.95-T5 AC-7: the two ways to set it share the track on a phone, their words wrapping — neither scrolls away', async () => {
+    render({ '/goals': { body: goal() } });
+    const list = await screen.findByRole('tablist', { name: 'How you want to set it' });
+    // No scrolling track below 768px …
+    expect(list.className).not.toContain('max-md:overflow-x-auto');
+    // … and two equal halves whose words may take a second line, where each kept its words on one and scrolled.
+    const tabs = within(list).getAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual(['Set APE target directly', 'Calculate from savings target']);
+    for (const tab of tabs) {
+      for (const cls of SEGMENT_WRAP_PHONE.split(' ')) expect(tab).toHaveClass(cls);
+      expect(tab).toHaveClass('flex-1');
+      expect(tab).not.toHaveClass('max-md:min-w-max');
+    }
+    // The words are the same at every size: nothing shortened for a phone.
+    expect(wider(list)).toEqual(['flex', 'w-full', 'rounded-lg', 'border', 'border-hairline', 'bg-base', 'p-[3px]']);
   });
 });

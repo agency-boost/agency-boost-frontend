@@ -7,8 +7,10 @@ import { ProductScript } from '@/components/product-script';
 import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
 import { TAP_AREA, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { TermText } from '@/components/ui/term-tip';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { CONTENT_TERM_KEYS, firstMentions, type TermKey } from '@/lib/terms';
 import {
   formatRate, OWN_COPY, openDocumentLink, productPlanHref, PROTOTYPE_COPY, readCatalogProduct,
   type CatalogDocument, type CatalogProduct,
@@ -97,6 +99,15 @@ export function ProductDrawer({ code }: { code: string }) {
     }
   };
 
+  /*
+   * **Which of the company's words first names each term** (P18.95-T9 AC-3; UI-028: *CI premium waiver*, *as-billed*):
+   * the tagline, then *Details*' benefits, what stands out and the best fit, in reading order. The card on the
+   * catalog is one button, so the ⓘ is here, on the product's own page.
+   */
+  const terms = product
+    ? firstMentions([product.tagline, ...product.benefits, product.differentiator, product.bestFit], CONTENT_TERM_KEYS)
+    : [];
+
   return (
     <>
       <div aria-hidden="true" className="fixed inset-0 z-40 bg-navy/35" onClick={close} data-scrim />
@@ -149,11 +160,12 @@ export function ProductDrawer({ code }: { code: string }) {
             <>
               <ProductTags channel={product.channel} runOff={product.lifecycle === 'closed_to_new_business'} />
               <h2 id={titleId} className="mb-1.5 mt-3 break-words text-2xl font-bold text-navy">{product.name}</h2>
-              <p className="mb-[22px] text-md text-muted">{product.tagline}</p>
+              {/* An ⓘ after a term the company's copy uses (*CI premium waiver*, *as-billed*), the first time (AC-3). */}
+              <p className="mb-[22px] text-md text-muted"><TermText text={product.tagline} terms={terms[0]} /></p>
               <DrawerTabs active={tab} onSelect={setTab}>
                 {(active) => (
                   <>
-                    {active === 'details' && <DetailsTab product={product} />}
+                    {active === 'details' && <DetailsTab product={product} terms={terms.slice(1)} />}
                     {active === 'plan' && <PlanTab product={product} />}
                     {active === 'documents' && <DocumentsTab product={product} />}
                   </>
@@ -234,7 +246,10 @@ function DetailBlock({ label, children }: { label: string; children: ReactNode }
 }
 
 /** *Details* (`:10238-10280`). */
-function DetailsTab({ product }: { product: CatalogProduct }) {
+function DetailsTab({ product, terms }: { product: CatalogProduct; terms: TermKey[][] }) {
+  // `terms` in the order `firstMentions` read them: each benefit, then what stands out, then the best fit.
+  const benefitTerms = (i: number) => terms[i] ?? [];
+  const [standsOut, bestFit] = [terms[product.benefits.length] ?? [], terms[product.benefits.length + 1] ?? []];
   const runOff = product.lifecycle === 'closed_to_new_business';
   return (
     <div>
@@ -269,16 +284,16 @@ function DetailsTab({ product }: { product: CatalogProduct }) {
           {product.benefits.map((b, i) => (
             <li key={`${i}-${b}`} className="flex items-start gap-[9px] text-base text-navy">
               <span aria-hidden="true" className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber" />
-              <span className="min-w-0">{b}</span>
+              <span className="min-w-0"><TermText text={b} terms={benefitTerms(i)} /></span>
             </li>
           ))}
         </ul>
       </DetailBlock>
       <DetailBlock label={PROTOTYPE_COPY.standsOut}>
-        <p className="m-0 text-base leading-normal text-navy">{product.differentiator}</p>
+        <p className="m-0 text-base leading-normal text-navy"><TermText text={product.differentiator} terms={standsOut} /></p>
       </DetailBlock>
       <DetailBlock label={PROTOTYPE_COPY.bestFit}>
-        <p className="m-0 text-base leading-normal text-navy">{product.bestFit}</p>
+        <p className="m-0 text-base leading-normal text-navy"><TermText text={product.bestFit} terms={bestFit} /></p>
       </DetailBlock>
       <div className="mt-[22px]">
         {runOff ? (

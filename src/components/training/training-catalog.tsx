@@ -11,6 +11,7 @@ import { useTabRow } from '@/components/ui/use-tab-row';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { usePhone } from '@/lib/use-phone';
 import {
   OWN_COPY, PROTOTYPE_COPY, readTrainingProgress, trainingCategoryHref,
   type TrainingCategoryProgress, type TrainingProgressView,
@@ -30,6 +31,11 @@ interface CatalogRead {
   error: ApiError | null;
   /** Read again: after a status write, or when the reader asks after a failure. */
   reload: () => void;
+  /**
+   * The window is a phone's (P18.95-T3 AC-5), asked once by the layout, which outlives every page under it, so a
+   * category's list opened from another already knows and never draws its table first.
+   */
+  phone: boolean;
 }
 
 const CatalogContext = createContext<CatalogRead | null>(null);
@@ -57,7 +63,8 @@ export function TrainingCatalogProvider({ children }: { children: ReactNode }) {
 
   // A reload keeps what is on screen until the answer replaces it: the list does not blank under a toast.
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
-  return <CatalogContext.Provider value={{ view, error, reload }}>{children}</CatalogContext.Provider>;
+  const phone = usePhone();
+  return <CatalogContext.Provider value={{ view, error, reload, phone }}>{children}</CatalogContext.Provider>;
 }
 
 /**
@@ -77,7 +84,7 @@ export function TrainingLanding() {
   if (error && !view) return <ReadFailed error={error} onRetry={reload} />;
   if (!view || first) return <CatalogSkeleton />;
   return (
-    <Page title={PROTOTYPE_COPY.tab}>
+    <Page title={OWN_COPY.title}>
       <EmptyCard title={OWN_COPY.noTraining} sub={OWN_COPY.noTrainingSub} />
     </Page>
   );
@@ -91,7 +98,7 @@ export function TrainingLanding() {
  * reader's *Skill Tracker*, which no agent has.
  */
 export function TrainingCategory({ code }: { code: string }) {
-  const { view, error, reload } = useTrainingCatalog();
+  const { view, error, reload, phone } = useTrainingCatalog();
   if (error && !view) return <ReadFailed error={error} onRetry={reload} />;
   if (!view) return <CatalogSkeleton />;
 
@@ -102,14 +109,15 @@ export function TrainingCategory({ code }: { code: string }) {
 
   const hasModules = category.total > 0;
   const title = PROTOTYPE_COPY.categoryTitle(category.label);
+  // The nav item's words over every category (P18.95-T9 AC-2): the tab names the category, the empty card its title.
   return (
-    <Page title={title} subtitle={hasModules ? (category.description ?? undefined) : PROTOTYPE_COPY.comingSoon}>
+    <Page title={OWN_COPY.title} subtitle={hasModules ? (category.description ?? undefined) : PROTOTYPE_COPY.comingSoon}>
       <TrainingSubtabs categories={offered} current={category.code} />
       <div className="mx-auto flex max-w-[820px] flex-col gap-3">
         {hasModules ? (
           <>
             <h2 className="font-display text-xl font-bold text-navy">{PROTOTYPE_COPY.skillsList}</h2>
-            <SkillCards skills={category.skills} categoryCode={category.code} />
+            <SkillCards skills={category.skills} categoryCode={category.code} phone={phone} />
           </>
         ) : (
           <EmptyCard title={title} sub={PROTOTYPE_COPY.comingSoon} />
@@ -170,7 +178,7 @@ export function EmptyCard({ title, sub }: { title: string; sub?: string }) {
 
 function CategoryNotFound() {
   return (
-    <Page title={PROTOTYPE_COPY.tab}>
+    <Page title={OWN_COPY.title}>
       <NotFoundCard title={OWN_COPY.categoryNotFound} />
     </Page>
   );
@@ -195,7 +203,7 @@ export function NotFoundCard({ title }: { title: string }) {
 /** The read failed (`toDisplayError`): why, and the way to ask again. */
 export function ReadFailed({ error, onRetry }: { error: ApiError; onRetry: () => void }) {
   return (
-    <Page title={PROTOTYPE_COPY.tab}>
+    <Page title={OWN_COPY.title}>
       <ErrorBanner {...error} />
       <Button variant="secondary" className="mt-3" onClick={onRetry}>{OWN_COPY.tryAgain}</Button>
     </Page>

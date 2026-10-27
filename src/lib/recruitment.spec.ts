@@ -70,7 +70,7 @@ describe('a complete brief (D-vocabulary)', () => {
     expect(codesOf(plan().brief)).toEqual({
       type: 'fresh-grad', motivations: ['side-income', 'leadership'], hesitations: ['no-experience', 'time'],
     });
-    expect(labels(plan().brief.motivations)).toBe('Extra income on the side, Building a team / leadership');
+    expect(labels(plan().brief.motivations)).toBe('Side income, Lead a team');
   });
 });
 
@@ -89,10 +89,9 @@ describe('the read', () => {
 });
 
 describe('the words (D-copy)', () => {
-  it('the prototype’s, verbatim (`:278-350`, `:586-619`)', () => {
+  it('P18.95-T7 AC-1 the prototype’s, verbatim (`:278-350`, `:586-619`), but for the client’s brief hint (grey text row 9)', () => {
     expect(PROTOTYPE_COPY.subtitle).toBe('Build the pitch on the fly, or pull the ready-made materials to show a candidate.');
-    expect(PROTOTYPE_COPY.briefHint)
-      .toBe('Three questions. Enough to get an opening line, a benefits list, and an objection response, fast.');
+    expect(PROTOTYPE_COPY.briefHint).toBe('Answer 3 questions to get your pitch.');
     expect([PROTOTYPE_COPY.candidateType, PROTOTYPE_COPY.motivation, PROTOTYPE_COPY.hesitation])
       .toEqual(['Candidate type', 'What\'s driving them', 'Their biggest hesitation']);
     expect([PROTOTYPE_COPY.build, PROTOTYPE_COPY.profileTag, PROTOTYPE_COPY.planReady])

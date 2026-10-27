@@ -198,13 +198,15 @@ describe('the approval inbox (P3-T5)', () => {
     expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument();
   });
 
-  it('says declining is not removal, so nobody thinks they have thrown somebody out', async () => {
+  it('P18.95-T7 AC-1 says what approving does, in the client’s words at every size (grey text row 7)', async () => {
     stubFetch({
       '/join/requests/routing': { body: [] },
       '/join/requests': { body: [] },
     });
     renderInLayout(AgentLayout, <PendingPage />, { me: AB });
-    expect(await screen.findByText(/free to ask somebody else/)).toBeInTheDocument();
+    const line = await screen.findByText('Approve to add them to your unit.');
+    expect(line.className).not.toMatch(/hidden/);
+    expect(screen.queryByText(/These are people who found you/)).not.toBeInTheDocument();
   });
 
   it('AC-4: reloads when somebody else decided first, rather than leaving a dead row', async () => {
@@ -312,7 +314,7 @@ describe('the approval inbox (P3-T5)', () => {
       expect(JSON.parse(String(posted?.init.body))).toEqual({ action: 'activate' });
 
       expect(await screen.findByText("Waiting for AgencyBoost's approval")).toBeInTheDocument();
-      expect(screen.getByText('Let in as Associate Agency Builder')).toBeInTheDocument();
+      expect(screen.getByText('Let in as AAB')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Cancel request' }));
       expect(calls.some((c) => c.init.method === 'DELETE')).toBe(true);

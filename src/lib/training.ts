@@ -238,6 +238,11 @@ export const OWN_COPY = {
   notFoundSub: 'It may have been withdrawn, or the address may be mistyped.',
   /** The not-found card's way back: the nav item's own words, to `/training`. */
   trainingModules: 'Training modules',
+  /**
+   * **Every learner page's title: the nav item's words** (P18.95-T9 AC-2; ADR-0167 §10, OD-205; the client's UI
+   * review, UI-027 — menu *Training modules* over a page titled *Sales Training*). The category is the tab below it.
+   */
+  title: 'Training Modules',
   loadingCatalog: 'Loading training…',
   loadingModule: 'Loading this module…',
   tryAgain: 'Try again',

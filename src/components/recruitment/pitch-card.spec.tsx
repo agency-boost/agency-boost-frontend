@@ -84,11 +84,11 @@ describe('PitchBanner', () => {
   const summary = (over: Partial<PitchSummary>): PitchSummary => ({ done: 0, total: 4, missing: 4, unconfirmed: 0, ...over });
 
   it.each<[Partial<PitchSummary>, string]>([
-    [{ done: 0, missing: 4 }, '4 not uploaded — not yet ready to rely on for candidates.'],
-    [{ done: 3, missing: 0, unconfirmed: 1 }, '1 uploaded but not fully confirmed — not yet ready to rely on for candidates.'],
-    [{ done: 1, missing: 2, unconfirmed: 1 }, '2 not uploaded, 1 uploaded but not fully confirmed — not yet ready to rely on for candidates.'],
+    [{ done: 0, missing: 4 }, '4 missing.'],
+    [{ done: 3, missing: 0, unconfirmed: 1 }, '1 needs checking.'],
+    [{ done: 1, missing: 2, unconfirmed: 1 }, '2 missing, 1 needs checking.'],
     [{ done: 4, missing: 0 }, 'All 4 documents are uploaded and fully confirmed — ready to show or send to a candidate.'],
-  ])('words %o as the prototype does (`:807-818`)', (over, line) => {
+  ])('P18.95-T7 AC-1 words %o in the client’s line where it is incomplete, the prototype’s where it is complete (grey text row 11)', (over, line) => {
     render(<PitchBanner summary={summary(over)} />);
     expect(screen.getByText(line)).toBeInTheDocument();
     const s = summary(over);

@@ -1,7 +1,7 @@
 'use client';
 
 import { api } from './api-client';
-import { rungLabel } from '@/components/ui/role-badge';
+import { rungShort } from '@/components/ui/role-badge';
 import type { OrgLevel } from './tenant-config-cache';
 import type { PersonalDetails } from './personal';
 
@@ -309,15 +309,18 @@ export function roleChangeExplanation(
   from: string,
   to: string,
   viewer: 'their-leader' | 'the-office',
-  /** The company's ladder, for a rung it added (OD-50): its label, not its code. The seeded one by default. */
+  /**
+   * The company's ladder, for a rung it added (OD-50). Each rung by its badge's name, *AAB* (P18.95-T9 AC-1;
+   * *Associate Agency Builder* until then). The seeded one by default.
+   */
   ladder?: OrgLevel[],
 ): string {
   const [f, t] = [from.toLowerCase(), to.toLowerCase()];
   if (viewer === 'their-leader' && f === 'agent' && t === 'aab') {
-    return `${name} will change from Agent to Associate Agency Builder. They keep reporting to you, and can now recruit and manage their own direct agents.`;
+    return `${name} will change from ${rungShort(from, ladder)} to ${rungShort(to, ladder)}. They keep reporting to you, and can now recruit and manage their own direct agents.`;
   }
   if (viewer === 'their-leader' && f === 'aab' && t === 'agent') {
-    return `${name} will change from Associate Agency Builder back to Agent. They keep reporting to you, but will no longer manage their own direct agents.`;
+    return `${name} will change from ${rungShort(from, ladder)} back to ${rungShort(to, ladder)}. They keep reporting to you, but will no longer manage their own direct agents.`;
   }
-  return `${name} will change from ${rungLabel(from, ladder)} to ${rungLabel(to, ladder)}. Nobody moves — they keep reporting to whoever they report to now.`;
+  return `${name} will change from ${rungShort(from, ladder)} to ${rungShort(to, ladder)}. Nobody moves — they keep reporting to whoever they report to now.`;
 }

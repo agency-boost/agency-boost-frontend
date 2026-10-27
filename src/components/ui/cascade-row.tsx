@@ -7,8 +7,9 @@ export interface CascadeColumn {
   /** *Set appointment*, *Sales meeting*, *Submission polis* (ADR-0160 §4). */
   readonly label: string;
   /**
-   * The activity type this column counts against, as the log screen numbers it — *Activity #3*. Never
-   * the stored code, an internal id (ADR-0062 §3); omitted while the number is unknown.
+   * The activity this column counts against, by the name Log Activity gives it — *Set Appointment* — where it
+   * was the log's number, *Activity #3* (P18.95-T5 AC-5). Never the stored code, an internal id (ADR-0062 §3);
+   * omitted while the name is unknown, or when it would only repeat `label`.
    */
   readonly chip?: string;
   readonly icon: NavIconName;
@@ -71,7 +72,9 @@ export function CascadeRow({
             <span className="mb-1 flex flex-col items-center gap-1">
               <span className="text-sm leading-snug text-muted">{col.label}</span>
               {col.chip ? (
-                <ConfigBadge tone="navy" className="normal-case tracking-normal">
+                // A name can be a sentence — *Melakukan presentasi penjualan untuk calon atau existing nasabah* — so
+                // it wraps inside the panel rather than running out of it.
+                <ConfigBadge tone="navy" className="max-w-full whitespace-normal text-center normal-case tracking-normal">
                   {col.chip}
                 </ConfigBadge>
               ) : null}

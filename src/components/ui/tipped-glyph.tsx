@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/field';
 import { TAP_AREA } from '@/components/ui/phone';
 import { cn } from '@/lib/cn';
@@ -65,7 +65,11 @@ export function TippedGlyph({
   className,
   face,
 }: {
-  glyph: string;
+  /**
+   * What is drawn: a character (`✎`, `ⓘ`), or since P18.95-T4 an icon — a lead's WhatsApp held with its
+   * reason. Hidden from assistive technology either way; `name` is what is said.
+   */
+  glyph: ReactNode;
   name: string;
   tip: string;
   unavailable?: boolean;

@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from 'react';
+import { CHIP_GRID_PHONE, CHIP_PHONE } from '@/components/ui/phone';
 import { cn } from '@/lib/cn';
 
 /**
@@ -29,7 +30,10 @@ export interface ChoiceOption<T extends string | number> {
  *
  * The prototype marks a choice with a class alone (`:9545-9548`), so a screen reader hears eight
  * identical buttons (contradiction 12). Here the group is named by its question and each chip says
- * whether it is chosen (`aria-pressed`); choosing one releases the others. The chips wrap on a phone.
+ * whether it is chosen (`aria-pressed`); choosing one releases the others.
+ *
+ * **Below 768px the chips are two to a row** (P18.95-T6 AC-1; UI-015), each its column's width and 44px tall,
+ * where they wrapped one per line; at 768px and wider they wrap as drawn (`phone.ts`).
  */
 export function ChoiceGroup<T extends string | number>({
   label,
@@ -46,7 +50,7 @@ export function ChoiceGroup<T extends string | number>({
   return (
     <div role="group" aria-labelledby={labelId}>
       <p id={labelId} className="m-0 mb-2.5 text-xs font-bold uppercase tracking-wide text-muted">{label}</p>
-      <div className="flex flex-wrap gap-2">
+      <div className={cn('flex flex-wrap gap-2', CHIP_GRID_PHONE)}>
         {options.map((option) => {
           const on = option.value === value;
           return (
@@ -57,6 +61,7 @@ export function ChoiceGroup<T extends string | number>({
               onClick={() => onChange(option.value)}
               className={cn(
                 'rounded-md border px-[15px] py-[9px] text-base font-semibold transition-colors',
+                CHIP_PHONE,
                 on ? 'border-navy bg-navy text-white' : 'border-hairline bg-base text-navy hover:border-navy',
               )}
             >

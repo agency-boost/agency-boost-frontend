@@ -13,16 +13,16 @@ import { Avatar, CHIP } from './calendar-parts';
  * The compare bar (`Calendar_Section.html:296-307`, `:905-965`; P12-T5 AC-1, AC-2).
  *
  * *"Viewing:"* and the reader's own *"My Calendar"*, which cannot be removed, are drawn for everybody.
- * **The rest is a leader's, and Week's** (ADR-0087, D-month): a chip per compared person with a ✕ named
- * *Remove {name}*, and *"+ Compare with downline"* with its popover. In Month neither is offered, and
- * the chips chosen come back with Week.
+ * **The rest is a leader's** (ADR-0087): a chip per compared person with a ✕ named *Remove {name}*, and
+ * *"+ Compare with downline"* with its popover — **in Week, in Month and in a phone's Agenda alike**
+ * (P18.95-T8 AC-2; the client's UI review, UI-020: *"Compare with downline" missing in Month view*).
+ * D-month had kept it to Week; the chips chosen stay with whichever view is drawn.
  *
  * **Removing somebody puts the focus on *"+ Compare with downline"*** (F2): their ✕ goes with their
  * chip, and the focus would have gone with it to the page's foot.
  */
 export function CompareBar({
   myInitials,
-  week,
   canCompare,
   compared,
   lost,
@@ -31,7 +31,6 @@ export function CompareBar({
   onLostSeen,
 }: {
   myInitials: string;
-  week: boolean;
   canCompare: boolean;
   compared: readonly CalendarDownlinePerson[];
   /** Somebody whose calendar the read now refuses — they left, or the edge closed. */
@@ -48,7 +47,7 @@ export function CompareBar({
         <Avatar initials={myInitials} me />
         {PROTOTYPE_COPY.myCalendar}
       </span>
-      {week && compared.map((person) => (
+      {compared.map((person) => (
         <span key={person.membershipId} className={cn(CHIP, 'py-1.5 pl-1.5 pr-1.5')}>
           <Avatar initials={initialsOf(person.name)} />
           {person.name}
@@ -65,7 +64,7 @@ export function CompareBar({
           </button>
         </span>
       ))}
-      {week && canCompare && (
+      {canCompare && (
         <ComparePopover toggle={toggle} compared={compared} lost={lost} onAdd={onAdd} onClosed={onLostSeen} />
       )}
       {lost && <p role="status" className="w-full text-sm text-muted">{OWN_COPY.lost(lost)}</p>}

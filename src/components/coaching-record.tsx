@@ -14,7 +14,7 @@ import {
 import { SummaryCard } from '@/components/personal-summary';
 import { ButtonLink, Card, ErrorBanner } from '@/components/ui/field';
 import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
-import { useRoleLabel } from '@/components/ui/role-badge';
+import { useRoleShort } from '@/components/ui/role-badge';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
@@ -502,7 +502,8 @@ export type MyCoachingTab = 'session' | 'activation' | 'training';
  */
 export function MyCoachingHeader({ current }: { current: MyCoachingTab }) {
   const { me } = useSession();
-  const rung = useRoleLabel(me?.membership?.orgLevelCode ?? '');
+  // The rung by its badge's name, *AB · Your own coaching* (P18.95-T9 AC-1).
+  const rung = useRoleShort(me?.membership?.orgLevelCode ?? '');
   const name = me?.user.fullName ?? '';
   const leads = useLeadsSomebody();
   return (

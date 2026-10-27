@@ -126,9 +126,14 @@ export function detail(over: Partial<CampaignDetail> = {}): CampaignDetail {
   };
 }
 
+/** The server's `runs` for a fixture card (`runsWords`, P18.95-T7 AC-1): a calendar year, the rolling window, or the sprint's. */
+const runsOf = (c: CampaignCard) => (c.window === 'calendar_year'
+  ? 'Runs Jan – Des'
+  : c.window === 'rolling_12m' ? 'Runs over the last 12 months' : 'Runs Okt – Des 2026');
+
 export const chased = (c: CampaignCard): ChasedCampaign => ({
   code: c.code, title: c.title, kind: c.kind, subtype: c.subtype, phase: c.phase === 'upcoming' ? 'upcoming' : 'running',
-  duration: c.duration, poster: c.poster,
+  duration: c.duration, runs: runsOf(c), poster: c.poster,
 });
 
 /** Rina's chases not ended (D-lists): the sprint and MDRT — *Mid-Year Persistency Push* has ended. */

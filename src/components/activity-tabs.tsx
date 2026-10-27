@@ -13,6 +13,15 @@ import { RouteTabs } from '@/components/ui/route-tabs';
  * **The tabs read the prototype's own words**, *Log Activity · Dashboard · Ratio* (`:2712-2716`,
  * P10.1-T5). They borrowed the page titles, which the prototype keeps for the heading above them.
  */
+
+/**
+ * **The heading above all three: the nav item's own words** (P18.95-T9 AC-2; ADR-0167 §10, OD-205; the client's
+ * UI review, UI-027 — *menu labels = page titles*). The prototype titled each tab's page after the tab — *Log
+ * Activity*, *Activity Dashboard*, *Activity Ratios* (`PANEL_META`) — under a nav item reading *Activity
+ * management*, so the menu said one thing and the page another. The tabs below still name each view.
+ */
+export const ACTIVITY_TITLE = 'Activity Management';
+
 export function ActivityTabs() {
   return (
     <RouteTabs

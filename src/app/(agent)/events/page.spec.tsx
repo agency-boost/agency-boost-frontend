@@ -72,7 +72,8 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
     it('P18.5-T5 AC-4 is titled and sub-titled as drawn, and reads the list once', async () => {
       const { calls } = list();
       await listReady();
-      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^KPM Events$/);
+      // P18.95-T9 AC-2: the nav item's words, *Event list*, where the prototype titled it *KPM Events*.
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Event List$/);
       expect(screen.getByText('Browse upcoming and past events from your KPM — join, and share feedback once they wrap up.'))
         .toBeInTheDocument();
       expect(calls.filter((c) => /\/events$/.test(c.url))).toHaveLength(1);
@@ -104,7 +105,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       list({ 'GET /events': { body: eventList([huddle, KICKOFF]) } });
       await listReady();
       expect(titlesIn('Going')).toEqual(["Leaders' huddle"]);
-      expect(within(card("Leaders' huddle")).getByText('Going', { selector: '[data-tag]' })).toBeInTheDocument();
+      expect(within(card("Leaders' huddle")).getByText('Going', { selector: '[data-pill]' })).toBeInTheDocument();
     });
 
     it('P18.5-T5 AC-4 Upcoming shows Going and Upcoming, Past only the past', async () => {
@@ -124,11 +125,11 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(screen.getByText('No past events yet.')).toBeInTheDocument();
     });
 
-    it('P18.5-T5 AC-4 each card: poster with its tag, audience line, title, date and time, place ↗, blurb, pill, View event', async () => {
+    it('P18.5-T5 AC-4, P18.95-T10 AC-1 each card: the type’s icon, audience line, title, date and time, place ↗, blurb, pill, View event', async () => {
       list();
       await listReady();
       const refresh = card('Product refresh briefing');
-      expect(within(refresh).getByText('Going', { selector: '[data-tag]' })).toBeInTheDocument();
+      expect(within(refresh).getByText('Going', { selector: '[data-pill]' })).toBeInTheDocument();
       expect(within(refresh).getByText('Prudential Event | All agents')).toBeInTheDocument();
       expect(within(refresh).getByText(/15 Okt 2026, 14.00/)).toBeInTheDocument();
       const where = within(refresh).getByRole('link', { name: /Online — Zoom/ });
@@ -137,23 +138,62 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(where).toHaveTextContent('↗');
       expect(within(refresh).getByText("ev-refresh's line.")).toBeInTheDocument();
       expect(within(refresh).getByRole('button', { name: 'View event' })).toBeInTheDocument();
-      // The type's colour is the poster's, as the office set it.
+      // The type's colour is the icon's, as the office set it.
       expect(refresh.querySelector('[style]')).toHaveStyle({ backgroundColor: '#2D9CDB' });
       // A place with no address is words, not a link.
       expect(within(card('Kickoff 2026')).queryByRole('link')).not.toBeInTheDocument();
       expect(within(card('Kickoff 2026')).getByText('KPM | All agents')).toBeInTheDocument();
     });
 
-    it('P18.5-T5 AC-4, T6 AC-4 the five foot pills and the three tags', async () => {
+    it('P18.5-T5 AC-4, T6 AC-4 the five foot pills', async () => {
       list();
       await listReady();
       const pill = (title: string) => card(title).querySelector('[data-pill]')!.textContent;
-      const tag = (title: string) => card(title).querySelector('[data-tag]')!.textContent;
-      expect([pill('Product refresh briefing'), tag('Product refresh briefing')]).toEqual(['Going', 'Going']);
-      expect([pill('Kickoff 2026'), tag('Kickoff 2026')]).toEqual(['Not joined', 'Not Joined']);
-      expect([pill('PRULink briefing'), tag('PRULink briefing')]).toEqual(['Feedback pending', 'Past']);
-      expect([pill('August Town Hall'), tag('August Town Hall')]).toEqual(["Didn't join", 'Not Joined']);
-      expect([pill('New Agent Bootcamp'), tag('New Agent Bootcamp')]).toEqual(['Feedback sent', 'Past']);
+      expect(pill('Product refresh briefing')).toBe('Going');
+      expect(pill('Kickoff 2026')).toBe('Not joined');
+      expect(pill('PRULink briefing')).toBe('Feedback pending');
+      expect(pill('August Town Hall')).toBe("Didn't join");
+      expect(pill('New Agent Bootcamp')).toBe('Feedback sent');
+    });
+
+    it('P18.95-T10 AC-1 one status per card: the pill, in words, and no poster tag saying it again', async () => {
+      list();
+      await listReady();
+      for (const title of ['Product refresh briefing', 'Kickoff 2026', 'PRULink briefing', 'August Town Hall', 'New Agent Bootcamp']) {
+        const c = card(title);
+        expect(c.querySelectorAll('[data-pill]')).toHaveLength(1);
+        expect(c.querySelector('[data-tag]')).toBeNull();
+        // Never colour alone: the one status carries its words.
+        expect(c.querySelector('[data-pill]')!.textContent!.trim()).not.toBe('');
+      }
+      expect(within(card('Kickoff 2026')).getAllByText(/not joined/i)).toHaveLength(1);
+      expect(within(card('August Town Hall')).queryByText(/not joined/i)).not.toBeInTheDocument();
+      expect(within(card('Product refresh briefing')).getAllByText(/^going$/i)).toHaveLength(1);
+    });
+
+    it('P18.95-T10 AC-1 the icon in place of the banner: the type’s emoji at 32px on its colour, hidden from a screen reader', async () => {
+      list();
+      await listReady();
+      const kickoff = card('Kickoff 2026');
+      const emoji = within(kickoff).getByText('🏆');
+      expect(emoji).toHaveAttribute('aria-hidden', 'true');
+      const icon = emoji.parentElement!;
+      expect(icon).toHaveClass('h-8', 'w-8', 'shrink-0', 'rounded-md');
+      expect(icon).toHaveStyle({ backgroundColor: '#27AE60' });
+      // No 110px poster on any card.
+      expect(document.querySelector('[data-event] .h-\\[110px\\]')).toBeNull();
+      // The icon sits beside the audience line and the title, inside the card's body.
+      expect(icon.parentElement).toContainElement(screen.getByRole('heading', { level: 3, name: 'Kickoff 2026' }));
+      // A past event's icon keeps its veil.
+      expect(within(card('August Town Hall')).getByText('📚').parentElement!.className).toMatch(/before:bg-navy/);
+    });
+
+    it('P18.95-T10 AC-1 an event with no colour or emoji: a navy icon and 📅', async () => {
+      const plain = guestEvent({ id: 'ev-plain', title: 'Plain one', type: { code: 'X', label: 'X', emoji: null, color: null } });
+      list({ 'GET /events': { body: eventList([plain]) } });
+      const emoji = within(await screen.findByRole('heading', { level: 3, name: 'Plain one' }).then((h) => h.closest<HTMLElement>('[data-event]')!))
+        .getByText('📅');
+      expect(emoji.parentElement).toHaveClass('bg-navy', 'h-8', 'w-8');
     });
 
     it('P18.5-T5 AC-4 a past card is grey; an upcoming one is not', async () => {
@@ -214,6 +254,96 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       const { calls } = list({}, { ...RINA_ME, permissions: [] });
       await waitFor(() => expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument());
       expect(calls.some((c) => /\/events$/.test(c.url))).toBe(false);
+    });
+  });
+
+  describe('Join on the card (P18.95-T10 AC-1)', () => {
+    const joinOn = (title: string) => within(card(title)).queryByRole('button', { name: `Join ${title}` });
+
+    it('P18.95-T10 AC-1 Join is on a card the reader may join, and on no other', async () => {
+      list();
+      await listReady();
+      expect(joinOn('Kickoff 2026')).toBeInTheDocument();
+      // Going already, past, and past unjoined: the one status says so, and there is nothing to press.
+      expect(joinOn('Product refresh briefing')).not.toBeInTheDocument();
+      expect(joinOn('PRULink briefing')).not.toBeInTheDocument();
+      expect(joinOn('August Town Hall')).not.toBeInTheDocument();
+      expect(joinOn('New Agent Bootcamp')).not.toBeInTheDocument();
+      // Its words are the client's Join, its name the event's too, beside View event.
+      expect(joinOn('Kickoff 2026')).toHaveTextContent(/^Join$/);
+      expect(within(card('Kickoff 2026')).getByRole('button', { name: 'View event' })).toBeInTheDocument();
+    });
+
+    it('P18.95-T10 AC-1 Join is the action button: amber, navy words (ADR-0137)', async () => {
+      list();
+      await listReady();
+      expect(joinOn('Kickoff 2026')).toHaveClass('bg-amber', 'text-navy');
+    });
+
+    it('P18.95-T10 AC-1, P18.95-T1 AC-10 Join is a 44px target on a phone, 32px from 768px', async () => {
+      list();
+      await listReady();
+      expect(joinOn('Kickoff 2026')).toHaveClass('h-8', 'max-md:min-h-11');
+    });
+
+    it('P18.95-T10 AC-1 a read-only support session is shown no Join on any card', async () => {
+      list({ 'GET /events': { body: eventList(RINA_EVENTS, { can: CAN_NONE }) } }, READ_ONLY_RINA);
+      await listReady();
+      expect(screen.queryByRole('button', { name: /^Join/ })).not.toBeInTheDocument();
+      expect(card('Kickoff 2026').querySelector('[data-pill]')).toHaveTextContent('Not joined');
+    });
+
+    it('P18.95-T10 AC-1 a running event the reader has not joined can be joined from its card', async () => {
+      const huddle = guestEvent({ id: 'ev-huddle', title: "Leaders' huddle", phase: 'running' });
+      list({ 'GET /events': { body: eventList([huddle, KICKOFF]) } });
+      await listReady();
+      expect(joinOn("Leaders' huddle")).toBeInTheDocument();
+    });
+
+    it('P18.95-T10 AC-1, P18.95-T1 AC-6 Join is the modal’s call: POST …/rsvp, "Joined ✓ — you\'re going to {title}", the card to Going', async () => {
+      const going = { ...KICKOFF, me: { ...KICKOFF.me, rsvp: 'going' as const } };
+      const { calls } = list({ 'POST /events/ev-kickoff/rsvp': { status: 201, body: going } });
+      await listReady();
+      await userEvent.click(joinOn('Kickoff 2026')!);
+      expect(await screen.findByText("Joined ✓ — you're going to Kickoff 2026")).toBeInTheDocument();
+      const post = calls.find((c) => c.url.endsWith('/events/ev-kickoff/rsvp'))!;
+      expect(post.init.method).toBe('POST');
+      expect(bodyOf(post)).toEqual({});
+      await waitFor(() => expect(titlesIn('Going')).toContain('Kickoff 2026'));
+      expect(card('Kickoff 2026').querySelector('[data-pill]')).toHaveTextContent('Going');
+      expect(joinOn('Kickoff 2026')).not.toBeInTheDocument();
+      // A press on Join is not a press on the card: the modal stays shut.
+      expect(nav.push).not.toHaveBeenCalled();
+      // The Join it was on is gone; the focus follows the card to its View event.
+      await waitFor(() => expect(within(card('Kickoff 2026')).getByRole('button', { name: 'View event' })).toHaveFocus());
+    });
+
+    it('P18.95-T10 AC-1 a refusal is said under the card in the spec’s words, and the list read again: the card moves to Past', async () => {
+      const ended = { ...KICKOFF, phase: 'past' as const, ended: true };
+      const { calls } = list({
+        'GET /events': [{ body: eventList() }, { body: eventList([PRODUCT_REFRESH, ended, PRULINK, TOWN_HALL, BOOTCAMP]) }],
+        'POST /events/ev-kickoff/rsvp': conflict('EVENT_RSVP_CLOSED', 'This event has ended, so its RSVP is closed.'),
+      });
+      await listReady();
+      await userEvent.click(joinOn('Kickoff 2026')!);
+      const alert = await within(card('Kickoff 2026')).findByRole('alert');
+      expect(alert).toHaveTextContent('This event has already ended.');
+      expect(alert).toHaveTextContent('EVENT_RSVP_CLOSED');
+      await waitFor(() => expect(titlesIn('Past')).toContain('Kickoff 2026'));
+      expect(calls.filter((c) => /\/events$/.test(c.url))).toHaveLength(2);
+      expect(card('Kickoff 2026').querySelector('[data-pill]')).toHaveTextContent("Didn't join");
+      expect(joinOn('Kickoff 2026')).not.toBeInTheDocument();
+      expect(screen.queryByText(/^Joined ✓/)).not.toBeInTheDocument();
+      expect(nav.push).not.toHaveBeenCalled();
+    });
+
+    it('P18.95-T10 AC-1 another refusal is said and the list is not read again', async () => {
+      const { calls } = list({ 'POST /events/ev-kickoff/rsvp': serverError });
+      await listReady();
+      await userEvent.click(joinOn('Kickoff 2026')!);
+      expect(await within(card('Kickoff 2026')).findByRole('alert')).toHaveTextContent('Something went wrong.');
+      expect(calls.filter((c) => /\/events$/.test(c.url))).toHaveLength(1);
+      expect(joinOn('Kickoff 2026')).toBeInTheDocument();
     });
   });
 
@@ -358,7 +488,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
 
     it('P18.5-T5 AC-5 an error reading the event, with a retry', async () => {
       modal(KICKOFF, { [`GET /events/${KICKOFF.id}`]: [serverError, { body: KICKOFF }] });
-      const box = await screen.findByRole('dialog', { name: 'KPM Events' });
+      const box = await screen.findByRole('dialog', { name: 'Event List' });
       expect(await within(box).findByRole('alert')).toHaveTextContent('Something went wrong.');
       await userEvent.click(within(box).getByRole('button', { name: 'Try again' }));
       expect(await dialog('Kickoff 2026')).toBeInTheDocument();

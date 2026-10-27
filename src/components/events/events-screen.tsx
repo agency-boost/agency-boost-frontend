@@ -5,10 +5,11 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
-import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  EVENT_FILTERS, OWN_COPY, PROTOTYPE_COPY, readEvents, sections, type EventFilter, type EventsMeta, type GuestEvent,
+  canJoin, EVENT_FILTERS, goingToast, OWN_COPY, PROTOTYPE_COPY, readEvents, refusalOf, rsvpEvent, sections,
+  type EventFilter, type EventsMeta, type GuestEvent, type GuestEventCan,
 } from '@/lib/events';
 import { EventCard } from './event-card';
 
@@ -49,6 +50,11 @@ export function useEventsHost(): EventsHost {
  * **The filter says which is on** (`aria-pressed`; ADR-0137 §2, a selection is navy). A running event
  * sits with the upcoming ones (F-42). The cards are one column on a phone (`:2159-2160`).
  *
+ * **A card's *Join*** (P18.95-T10 AC-1) is the modal's *Join event* from the list: the same call, its answer
+ * moving the card to *Going*, the same toast, and a refusal said under that card in the same words — a 409
+ * meaning the event moved on, so the list is read again and the card says so. The focus follows the card to
+ * its new section, onto its *View event*, since the *Join* it was on is gone.
+ *
  * Its own states are Fills (L-01): a skeleton shaped like the cards, an error with a retry, and the
  * prototype's three empty rows for a section with nothing in it.
  */
@@ -63,6 +69,10 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
   const [filter, setFilter] = useState<EventFilter>('all');
   /** Whether this list pushed the modal's address — so closing it can go back rather than forward. */
   const openedHere = useRef(false);
+  /** The card whose *Join* is in flight, its refusal, and the card the focus follows once it has moved. */
+  const [joining, setJoining] = useState<string | null>(null);
+  const [joinError, setJoinError] = useState<{ id: string; error: ApiError } | null>(null);
+  const [refocus, setRefocus] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -96,6 +106,30 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
   }, []);
 
   const reload = useCallback(() => setAttempt((n) => n + 1), []);
+
+  const join = async (id: string) => {
+    if (joining) return;
+    setJoining(id);
+    setJoinError(null);
+    try {
+      const next = await rsvpEvent(id);
+      replace(next);
+      show(goingToast(next.title));
+      setRefocus(id);
+    } catch (err) {
+      setJoinError({ id, error: refusalOf(err) });
+      if (err instanceof ApiRequestError && err.status === 409) reload();
+    } finally {
+      setJoining(null);
+    }
+  };
+
+  // The joined card has moved to *Going* and its *Join* is gone: the focus goes to its *View event*.
+  useEffect(() => {
+    if (!refocus) return;
+    document.querySelector<HTMLElement>(`[data-open-event="${refocus.replace(/["\\]/g, '\\$&')}"]`)?.focus();
+    setRefocus(null);
+  }, [refocus, events]);
   const host = useMemo(
     () => ({ meta, metaError: meta ? null : error, reload, close, toast: show, replace }),
     [meta, error, reload, close, show, replace],
@@ -114,7 +148,14 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
           </div>
         )}
         {!events && !error && <EventsSkeleton />}
-        {events && meta && <Sections events={events} companyName={meta.companyName} filter={filter} onOpen={open} />}
+        {events && meta && (
+          <Sections
+            events={events}
+            companyName={meta.companyName}
+            filter={filter}
+            card={{ can: meta.can, joining, joinError, onOpen: open, onJoin: (id) => void join(id) }}
+          />
+        )}
       </div>
       {children}
       {/*
@@ -153,32 +194,41 @@ function FilterBar({ filter, onChange }: { filter: EventFilter; onChange: (f: Ev
   );
 }
 
+/** What every card is drawn with: what the reader may do, the *Join* in flight and its refusal. */
+interface CardActions {
+  can: GuestEventCan;
+  joining: string | null;
+  joinError: { id: string; error: ApiError } | null;
+  onOpen: (id: string) => void;
+  onJoin: (id: string) => void;
+}
+
 /** *Going*, *Upcoming* and *Past* (`:8546-8571`): *Upcoming* shows the first two, *Past* the last. */
-function Sections({ events, companyName, filter, onOpen }: {
+function Sections({ events, companyName, filter, card }: {
   events: readonly GuestEvent[];
   companyName: string;
   filter: EventFilter;
-  onOpen: (id: string) => void;
+  card: CardActions;
 }) {
   const { going, upcoming, past } = sections(events);
   const showOpen = filter !== 'past';
   const showPast = filter !== 'upcoming';
   return (
     <>
-      {showOpen && <Section id="going" label={PROTOTYPE_COPY.sections.going} events={going} companyName={companyName} empty={PROTOTYPE_COPY.emptyGoing} onOpen={onOpen} />}
-      {showOpen && <Section id="upcoming" label={PROTOTYPE_COPY.sections.upcoming} events={upcoming} companyName={companyName} empty={PROTOTYPE_COPY.emptyUpcoming} onOpen={onOpen} />}
-      {showPast && <Section id="past" label={PROTOTYPE_COPY.sections.past} events={past} companyName={companyName} empty={PROTOTYPE_COPY.emptyPast} onOpen={onOpen} />}
+      {showOpen && <Section id="going" label={PROTOTYPE_COPY.sections.going} events={going} companyName={companyName} empty={PROTOTYPE_COPY.emptyGoing} card={card} />}
+      {showOpen && <Section id="upcoming" label={PROTOTYPE_COPY.sections.upcoming} events={upcoming} companyName={companyName} empty={PROTOTYPE_COPY.emptyUpcoming} card={card} />}
+      {showPast && <Section id="past" label={PROTOTYPE_COPY.sections.past} events={past} companyName={companyName} empty={PROTOTYPE_COPY.emptyPast} card={card} />}
     </>
   );
 }
 
-function Section({ id, label, events, companyName, empty, onOpen }: {
+function Section({ id, label, events, companyName, empty, card }: {
   id: string;
   label: string;
   events: readonly GuestEvent[];
   companyName: string;
   empty: string;
-  onOpen: (id: string) => void;
+  card: CardActions;
 }) {
   const headingId = `events-${id}`;
   return (
@@ -190,7 +240,15 @@ function Section({ id, label, events, companyName, empty, onOpen }: {
         <ul className="mb-8 grid list-none grid-cols-1 gap-4 p-0 md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
           {events.map((event) => (
             <li key={event.id} className="min-w-0">
-              <EventCard event={event} companyName={companyName} onOpen={onOpen} />
+              <EventCard
+                event={event}
+                companyName={companyName}
+                canJoin={canJoin(event, card.can)}
+                busy={card.joining === event.id}
+                error={card.joinError?.id === event.id ? card.joinError.error : null}
+                onOpen={card.onOpen}
+                onJoin={card.onJoin}
+              />
             </li>
           ))}
         </ul>
@@ -208,14 +266,17 @@ export function EventsSkeleton() {
           <SkeletonBar className="mb-3 h-3 w-20" />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-[repeat(auto-fill,minmax(280px,1fr))]">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="overflow-hidden rounded-lg border border-hairline bg-card">
-                <div className="h-[110px] bg-hairline" />
-                <div className="px-4 pb-4 pt-3.5">
-                  <SkeletonBar className="w-24" />
-                  <SkeletonBar className="mt-2 h-4 w-2/3" />
-                  <SkeletonBar className="mt-2 w-1/2" />
-                  <SkeletonBar className="mt-3 w-full" />
+              <div key={i} className="overflow-hidden rounded-lg border border-hairline bg-card px-4 pb-4 pt-3.5">
+                <div className="flex items-start gap-2.5">
+                  {/* The type's icon, 32px, where the card's poster was (P18.95-T10 AC-1). */}
+                  <SkeletonBar className="h-8 w-8 shrink-0 rounded-md" />
+                  <div className="min-w-0 flex-1">
+                    <SkeletonBar className="w-24" />
+                    <SkeletonBar className="mt-2 h-4 w-2/3" />
+                  </div>
                 </div>
+                <SkeletonBar className="mt-2 w-1/2" />
+                <SkeletonBar className="mt-3 w-full" />
               </div>
             ))}
           </div>

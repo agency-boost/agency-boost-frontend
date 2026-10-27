@@ -48,6 +48,14 @@ export const SEGMENTS_PHONE = 'max-md:overflow-x-auto max-md:overflow-y-hidden';
 export const SEGMENT_PHONE = 'max-md:min-w-max';
 
 /**
+ * A segment of a **two-option** `Segmented` on a phone (`phoneLayout="wrap"`; P18.95-T5 AC-7): the segments keep
+ * sharing the track in equal halves and a label that does not fit **wraps inside its own half**, so both options
+ * are always in sight. *Set APE target directly* / *Calculate from savings target* on `/goals` scrolled the second
+ * half out of a 375px screen. The track does not scroll; the two segments stand as tall as each other.
+ */
+export const SEGMENT_WRAP_PHONE = 'max-md:min-w-0 max-md:leading-snug';
+
+/**
  * A control a finger aims at, **44 × 44px at least** (WCAG 2.5.5; UI-029: the ⌄ and ⋮ were 28px). For a
  * control already centred in a flex box: the icon button, the inline text button.
  *
@@ -83,3 +91,44 @@ export const TEXT_TAP = 'max-md:inline-flex max-md:min-h-11 max-md:items-center 
 export const TAP_AREA = 'max-md:after:absolute max-md:after:left-1/2 max-md:after:top-1/2 '
   + 'max-md:after:h-[max(100%,2.75rem)] max-md:after:w-[max(100%,2.75rem)] '
   + "max-md:after:-translate-x-1/2 max-md:after:-translate-y-1/2 max-md:after:content-['']";
+
+/**
+ * **A question's chips on a phone: two to a row** (P18.95-T6 AC-1; UI-015: *Primary need*'s eight chips on five
+ * lines, *Their biggest hesitation*'s five on five). A grid of two equal columns in place of the wrapping row,
+ * so every chip is half the card and the question is half as tall. Put it on the chips' own box.
+ */
+export const CHIP_GRID_PHONE = 'max-md:grid max-md:grid-cols-2';
+
+/**
+ * One chip in that grid: **its column's width, 44px tall at least**, its words allowed onto a second line inside
+ * it — *Already has a stable job* — rather than pushing its neighbour off the row. The two chips of a row stand as
+ * tall as each other (the grid stretches them).
+ */
+export const CHIP_PHONE = 'max-md:w-full max-md:min-h-11 max-md:px-2.5 max-md:leading-snug';
+
+/**
+ * **A screen's one action, in a bar fixed to the bottom of a phone's screen** (P18.95-T6 AC-1; UI-015: *Build
+ * attack plan* at 1,029px). The card's ground with a hairline above it, the page's own 20px gutter, and the
+ * home indicator's inset below the action where the phone has one (`env(safe-area-inset-bottom)`, zero where it
+ * has none). Under the header (`z-10`) and every dialog, over the page it scrolls above.
+ *
+ * The page beneath gives it room: `ACTION_BAR_ROOM_PHONE` on the content above, so its last line is never
+ * hidden behind the bar.
+ */
+export const ACTION_BAR_PHONE = 'max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-[9] '
+  + 'max-md:border-t max-md:border-hairline max-md:bg-card max-md:px-5 max-md:pt-3 '
+  + 'max-md:pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]';
+
+/** The room under the content an `ACTION_BAR_PHONE` stands over: taller than the bar, so nothing is behind it. */
+export const ACTION_BAR_ROOM_PHONE = 'max-md:pb-24';
+
+/**
+ * **The client's *Remove* verdict on a grey sentence: not drawn on a phone** (P18.95-T7 AC-1; ADR-0167 §7, OD-202 —
+ * the review's *Grey text* table). The sentence keeps its words at 768px and wider, where the client has not reviewed
+ * it yet (§12, OD-207), and below 768px it is not there. Put it on the sentence's own element, never on a box that
+ * holds anything else.
+ *
+ * Its sibling verdict, *ⓘ* — the sentence moved into an ⓘ beside its subject — is `PhoneTip` (`phone-tip.tsx`): a
+ * glyph, so not a class here.
+ */
+export const REMOVED_ON_PHONE = 'max-md:hidden';

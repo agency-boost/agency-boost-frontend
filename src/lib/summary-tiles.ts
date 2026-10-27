@@ -1,4 +1,5 @@
 import type { ApiError } from './api-client';
+import type { TermKey } from './terms';
 import { suggestCode } from './config-code';
 
 /**
@@ -16,6 +17,10 @@ import { suggestCode } from './config-code';
  * **Presentation, never a metric input.** Nothing but the strips reads the grouping. A tile's value
  * is whatever the screen counts for its categories, and the total is the screen's own figure, so
  * regrouping moves a count between tiles and never changes one.
+ *
+ * *Amended 2026-10-26 (P18.95-T5 AC-2):* **Log Activity draws a tile per section** (`sectionTiles`),
+ * at the client's request, so its tiles and its cards are one list; the grouping is the Activity
+ * Dashboard's strip's alone.
  */
 
 /** What the strip reads off a category — `ActivityCategoryRow` satisfies it. */
@@ -37,6 +42,8 @@ export interface SummaryTile {
   value: number;
   /** The strip's last tile, the one it is about. */
   total: boolean;
+  /** A term the tile's label uses, whose ⓘ it carries (P18.95-T9 AC-3): *Total touches* → *a touch*. */
+  term?: TermKey;
 }
 
 /** Whether a reader on `rung` is shown this category. Empty means every rung (ADR-0020). */
@@ -59,7 +66,7 @@ export function summaryTiles<C extends SummaryTileCategory>(
   categories: readonly C[],
   rung: string,
   count: (category: C) => number,
-  total: { label: string; value: number },
+  total: { label: string; value: number; term?: TermKey },
 ): SummaryTile[] {
   const shown = categories
     .map((category, at) => ({ category, at }))
@@ -87,7 +94,47 @@ export function summaryTiles<C extends SummaryTileCategory>(
     }
   }
 
-  return [...tiles.values(), { key: 'total', label: total.label, value: total.value, total: true }];
+  return [...tiles.values(), { key: 'total', label: total.label, value: total.value, total: true, term: total.term }];
+}
+
+/**
+ * **The sections Log Activity shows this reader**, in display order: the active ones their rung is shown
+ * (ADR-0020), by display order, ties by position, as `summaryTiles` orders its tiles.
+ *
+ * The one list the log draws **both** its cards and its tiles from (P18.95-T5 AC-2; the client's UI review,
+ * UI-017: four tiles above five groups, because the seed counts Personal and Team Development in one
+ * *Development* tile).
+ */
+export function shownSections<C extends SummaryTileCategory>(categories: readonly C[], rung: string): C[] {
+  return categories
+    .map((category, at) => ({ category, at }))
+    .filter(({ category }) => category.status === 'active' && isShownTo(category, rung))
+    .sort((a, b) => a.category.displayOrder - b.category.displayOrder || a.at - b.at)
+    .map(({ category }) => category);
+}
+
+/**
+ * **One tile per section, then the total** — Log Activity's strip since 2026-10-26 (P18.95-T5 AC-2, the
+ * client's explicit request): the tiles name exactly the groups below them, so a reader adds up what they see.
+ * The office's *Summary tile* grouping (ADR-0064) no longer applies here; the Activity Dashboard's strip,
+ * `summaryTiles`, still reads it.
+ *
+ * `sections` is `shownSections`' answer, the list the cards are drawn from, so the two cannot disagree.
+ */
+export function sectionTiles<C extends SummaryTileCategory>(
+  sections: readonly C[],
+  count: (category: C) => number,
+  total: { label: string; value: number; term?: TermKey },
+): SummaryTile[] {
+  return [
+    ...sections.map((section) => ({
+      key: `own:${section.code}`,
+      label: section.label,
+      value: Number(count(section)) || 0,
+      total: false,
+    })),
+    { key: 'total', label: total.label, value: total.value, total: true, term: total.term },
+  ];
 }
 
 // ------------------------------------------------------------------ the settings field (AC-5)

@@ -55,8 +55,9 @@ export default function AuditPage() {
   }, [scope]);
 
   return (
+    // The nav item's words (P18.95-T9 AC-2; UI-027): *Audit / role change log* (`Superadmin.html:197`).
     <Page
-      title="Audit log"
+      title="Audit / Role Change Log"
       subtitle="Append-only. Provisioning, ownership changes and impersonation are recorded without exception."
       actions={
         <Field label="Scope" htmlFor="scope" className="w-64">

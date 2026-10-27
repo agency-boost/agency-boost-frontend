@@ -1,9 +1,10 @@
-import { screen, within } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import { renderInLayout, stubFetch, type StubReply } from '@test/harness';
 import { notFound, readOnlySession, ROSTER, SARI_ME, SHELL_STUBS } from '@test/activation-fixtures';
+import { PHONE_QUERY } from '@/lib/use-phone';
 import NewHiresPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -22,10 +23,16 @@ const card = (name: string) => screen.findByRole('region', { name });
 describe('/new-hires, the leader’s roster (P13-T5)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P13-T5 AC-2 is titled verbatim and reads the roster once', async () => {
+  it('P18.95-T7 AC-1 keeps the sub-line from 768px and draws it nowhere on a phone (grey text row 25)', async () => {
+    show();
+    await card('Direct Unit');
+    expect(screen.getByText('Track your new agents\' 90-day activation progress.')).toHaveClass('max-md:hidden');
+  });
+
+  it('P13-T5 AC-2, P18.95-T9 AC-2 is titled as its nav item (the prototype’s Your New Hires) and reads the roster once', async () => {
     const { calls } = show();
     await card('Direct Unit');
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Your New Hires$/);
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^New Hires$/);
     expect(screen.getByText('Track your new agents\' 90-day activation progress.')).toBeInTheDocument();
     expect(calls.filter((c) => c.url.includes('/new-hires')).map((c) => c.url)).toEqual(['http://api.test/api/v1/new-hires']);
   });
@@ -156,3 +163,102 @@ describe('/new-hires, the leader’s roster (P13-T5)', () => {
     expect(calls.some((c) => c.url.includes('/new-hires'))).toBe(false);
   });
 });
+
+/*
+ * **A card per hire below 768px** (P18.95-T3 AC-4, ADR-0167 §6; the client's UI review of 2026-10-26, UI-012: the
+ * table's 480px put *Day* and *Active Agent* off the screen). The phone is `matchMedia` answering `usePhone`'s query;
+ * every spec above is the table a tablet and a desktop keep.
+ */
+describe('P18.95-T3 — /new-hires as cards on a phone', () => {
+  const onPhone = (matches = true) => vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    media: query, matches: matches && query === PHONE_QUERY, addEventListener: () => {}, removeEventListener: () => {},
+  })));
+  const hireCard = (name: string) => screen.getByRole('link', { name }).closest('li')!;
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P18.95-T3 AC-4 draws each group’s card with a card per hire, in the order served, and no table', async () => {
+    onPhone();
+    show();
+    const direct = within(await card('Direct Unit'));
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Direct Unit', 'AAB: Sari Puspita', 'AAB: Arief Hidayat',
+    ]);
+    expect(direct.getAllByRole('listitem').map((li) => li.querySelector('a')!.textContent)).toEqual(['Indah Permata', 'Dimas Saputra']);
+    expect(hireCard('Rina Wijaya').querySelector('a')).toHaveAttribute('href', '/new-hires/mem-rina');
+  });
+
+  it('P18.95-T3 AC-4 says the table row’s figures on the card: the bar and its percentage, and Day 62 of 90', async () => {
+    // The row's own figures, as a tablet draws them …
+    show();
+    const sari = within(await card('AAB: Sari Puspita'));
+    const cells = within(sari.getByRole('row', { name: /Budi Hartono/ })).getAllByRole('cell').map((c) => c.textContent);
+    expect(cells.slice(1, 3)).toEqual(['25,0%', '62 /90']);
+    const joined = cells[0]!;
+    cleanup();
+
+    // … and the same on the phone's card, the day in words.
+    onPhone();
+    show();
+    await card('AAB: Sari Puspita');
+    const budi = hireCard('Budi Hartono');
+    expect(budi).toHaveTextContent('25,0%');
+    expect(budi).toHaveTextContent(/Day 62 of 90$/);
+    expect(budi.querySelector('[aria-hidden="true"] > div')).toHaveStyle({ width: '25%' });
+    expect(within(budi).getByText('Day 62 of 90')).not.toHaveClass('text-alert');
+    // The client's three — name, bar, day — and not *Joined* or *Active Agent*, which the hire's own page has.
+    expect(joined).toBe('3 Agu 2026');
+    expect(budi).not.toHaveTextContent(joined);
+  });
+
+  it('P18.95-T3 AC-4 marks an overdue day red and bold, and says overdue to a screen reader, as the cell does', async () => {
+    onPhone();
+    show();
+    await card('Direct Unit');
+    const indah = hireCard('Indah Permata');
+    const day = indah.querySelector('[data-overdue]')!;
+    expect(day).toHaveTextContent(/^Day 90\+ of 90, overdue$/);
+    expect(day).toHaveClass('font-bold', 'text-alert');
+    expect(within(indah).getByText(', overdue')).toHaveClass('sr-only');
+    expect(indah.querySelector('[aria-hidden="true"] > div')).toHaveStyle({ width: '94%' });
+  });
+
+  it('P18.95-T3 AC-4 makes each name a 44px link on a phone', async () => {
+    onPhone();
+    show();
+    await card('Direct Unit');
+    expect(screen.getByRole('link', { name: 'Indah Permata' })).toHaveClass('max-md:min-h-11', 'max-md:inline-flex');
+  });
+
+  it('P18.95-T3 AC-4 never draws the table first on a phone: the width is asked before the roster answers', async () => {
+    onPhone();
+    expect(await drewATable(async () => {
+      show();
+      await screen.findByRole('list', { name: 'Direct Unit' });
+    })).toBe(false);
+  });
+
+  it('P18.95-T3 AC-4 keeps the table at 768px and wider', async () => {
+    onPhone(false);
+    show();
+    expect(within(await card('Direct Unit')).getByRole('table', { name: 'Direct Unit' })).toBeInTheDocument();
+  });
+});
+
+/** Whether a `<table>` was ever put on the page while `run` waited: a phone's first paint must already be its cards. */
+async function drewATable(run: () => Promise<unknown>) {
+  let seen = false;
+  const observer = new MutationObserver((records) => {
+    for (const record of records) {
+      for (const node of record.addedNodes) {
+        if (node instanceof Element && (node.matches('table') || node.querySelector('table'))) seen = true;
+      }
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  await run();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  observer.disconnect();
+  return seen;
+}

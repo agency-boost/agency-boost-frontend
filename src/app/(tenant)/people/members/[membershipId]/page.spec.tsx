@@ -321,7 +321,7 @@ describe('one member', () => {
         (o) => o.getAttribute('value'),
       );
       expect(options).toEqual(['', 'aab']);
-      expect(screen.getByText(/Only the office can make somebody an Agency Builder/)).toBeInTheDocument();
+      expect(screen.getByText(/Only the office can make somebody an AB, or stop/)).toBeInTheDocument();
     });
 
     it('AC-4: offers neither control to somebody who may use neither', async () => {
@@ -488,7 +488,7 @@ describe('one member', () => {
       expect(posted?.url).toContain('/members/mem-1/leader-limit-request');
       expect(JSON.parse(String(posted?.init.body))).toEqual({ action: 'promote', orgLevelCode: 'aab', reason: 'Ready to lead' });
       expect(await screen.findByText("Waiting for AgencyBoost's approval")).toBeInTheDocument();
-      expect(screen.getByText('Agent → Associate Agency Builder')).toBeInTheDocument();
+      expect(screen.getByText('Agent → AAB')).toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 
@@ -545,7 +545,7 @@ describe('one member', () => {
         'Agent — no change', 'Associate Agency Builder', 'Agency Builder', 'Unit Manager', 'Senior Manager',
       ]);
       await userEvent.selectOptions(screen.getByLabelText('New role'), 'sm');
-      expect(screen.getByText(/will change from Agent to Senior Manager/)).toBeInTheDocument();
+      expect(screen.getByText(/will change from Agent to SM\./)).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Change role' }));
       expect(JSON.parse(String(calls.find((c) => c.init.method === 'PATCH')?.init.body))).toEqual({ toRole: 'sm' });
     });

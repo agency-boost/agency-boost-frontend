@@ -7,7 +7,7 @@ import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
-import { RoleBadge, classOfRung, rungLabel, useLadder } from '@/components/ui/role-badge';
+import { RoleBadge, classOfRung, rungLabel, rungShort, useLadder } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { displayName } from '@/lib/display-name';
@@ -250,8 +250,8 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
             </dl>
           ) : (
             <p className="mt-2 text-md text-muted">
-              {rungLabel(member.role, ladder)}, and leads nobody. Leadership follows the tree rather
-              than the role — an {rungLabel(member.role, ladder)} with no direct reports has no unit,
+              {rungShort(member.role, ladder)}, and leads nobody. Leadership follows the tree rather
+              than the role — an {rungShort(member.role, ladder)} with no direct reports has no unit,
               and the surfaces that need one stay closed until they do.
             </p>
           )}
@@ -392,7 +392,7 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                 {/* ADR-0157: a change past the limit, asked of AgencyBoost, waits here until it is decided. */}
                 {pendingFor(asks, member.membershipId) && (
                   <LeaderLimitWaiting
-                    what={requestedChange(pendingFor(asks, member.membershipId)!, (code) => rungLabel(code, ladder))}
+                    what={requestedChange(pendingFor(asks, member.membershipId)!, (code) => rungShort(code, ladder))}
                     cancelling={asking}
                     onCancel={() => void cancelAsk(pendingFor(asks, member.membershipId)!.requestId)}
                   />
@@ -412,10 +412,11 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                   hint={
                     member.canPromoteToAb
                       ? undefined
-                      : 'Only the office can make somebody an Agency Builder, or stop them being one.'
+                      : `Only the office can make somebody an ${rungShort('AB', ladder)}, or stop them being one.`
                   }
                 >
                   <Select id="to-role" value={toRole} onChange={(e) => setToRole(e.target.value)}>
+                    {/* The ladder listed to choose from, so each rung by the ladder's own label (P18.95-T9 AC-1). */}
                     <option value="">{rungLabel(currentRung(member), ladder)} — no change</option>
                     {/* The company's ladder, junior first — a rung it added included (OD-50) — each by its
                         label. The two matrix rows, kept apart: Agent⇄AAB is a direct leader's call, anything

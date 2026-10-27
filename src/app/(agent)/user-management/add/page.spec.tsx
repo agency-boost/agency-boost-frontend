@@ -93,15 +93,15 @@ describe('inviting people (P3-T4)', () => {
     await screen.findByText('Budi Santoso');
   });
 
-  it('says plainly that a code skips approval', async () => {
-    // It is the whole difference from asking a leader, and the reason the code is worth
-    // guarding at all.
+  it('P18.95-T7 AC-1 says what the invite is for in the client’s words, at every size (grey text row 4)', async () => {
     stubFetch({
       '/members/my-team': { body: [] },
       '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-    expect(await screen.findByText(/no approval needed/)).toBeInTheDocument();
+    const line = await screen.findByText('Share this so new agents join your team.');
+    expect(line.className).not.toMatch(/hidden/);
+    expect(screen.queryByText(/Share your link, code, or QR/)).not.toBeInTheDocument();
   });
 
   it('AC-1: shows the code and the link as one artefact, not two', async () => {
@@ -216,6 +216,20 @@ describe('inviting people (P3-T4)', () => {
     expect(await screen.findByText('Your team')).toBeInTheDocument();
   });
 
+  it('P18.95-T7 AC-1 keeps the team card’s line from 768px and draws it nowhere on a phone (grey text row 6)', async () => {
+    stubFetch({
+      '/members/my-team': { body: [] },
+      '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
+    renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
+
+    await screen.findByText('Your team');
+    const line = screen.getByText(/^People who report to you\./);
+    expect(line).toHaveTextContent(
+      "People who report to you. Only somebody's direct leader can change their role, and changing it moves nobody — they keep reporting to you either way.",
+    );
+    expect(line.className.split(/\s+/).filter((c) => /hidden/.test(c))).toEqual(['max-md:hidden']);
+  });
+
   it('AC-1: hides the Pending Requests tab from somebody with no inbox', async () => {
     // The prototype hides it by role (`User_Management_Section.html:996`); we hide it by
     // the permission that decides the same thing, so it survives the role becoming a
@@ -270,14 +284,13 @@ describe('inviting people (P3-T4)', () => {
     expect(screen.queryByText('Your invites')).toBeNull();
   });
 
-  it('says the code does not change, rather than that it can be withdrawn', async () => {
+  it('never offers to withdraw the invite: the code does not change', async () => {
     stubFetch({
       '/members/my-team': { body: [] },
       '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [] } });
     renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-    expect(await screen.findByText(/it came with your membership and it does not change/))
-      .toBeInTheDocument();
+    await screen.findByText('Share this so new agents join your team.');
     expect(screen.queryByText(/Withdrawing the invite/)).toBeNull();
   });
 
@@ -344,7 +357,8 @@ describe('inviting people (P3-T4)', () => {
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
       expect(await screen.findByLabelText('Role')).toBeInTheDocument();
-      expect(screen.getByTitle('Agency Builder')).toBeInTheDocument();
+      // The AB's row draws a badge where a control would be (the seeded ladder's title is *AB* since P18.95-T9 AC-1).
+      expect(screen.getAllByTitle('AB').length).toBeGreaterThan(0);
       expect(screen.getAllByLabelText('Role')).toHaveLength(1);
     });
 
@@ -616,13 +630,15 @@ describe('inviting people (P3-T4)', () => {
       email: 'fajar@kpm0417.test', agentCode: 'KPM0417-011', role: 'agent', ...over,
     });
 
-    it('says plainly that they do not have to approve it', async () => {
+    it('P18.95-T7 AC-1 says who they are and what Add does, in the client’s words at every size (grey text row 5)', async () => {
       stubFetch({
       '/members/my-team': { body: [] },
       '/join/my-code': { body: MY_CODE }, '/join/untagged': { body: [untagged()] } });
       renderInLayout(AgentLayout, <AddAgentsPage />, { me: LEADER });
 
-      expect(await screen.findByText(/they do not have to approve it/)).toBeInTheDocument();
+      const line = await screen.findByText('Agents without a leader. Tap Add to join your unit.');
+      expect(line.className).not.toMatch(/hidden/);
+      expect(screen.queryByText(/People registered in this office who report to nobody/)).not.toBeInTheDocument();
     });
 
     it('lists people who report to nobody', async () => {
@@ -828,7 +844,7 @@ describe('P18.8-T2 — a leader past the limit waits for AgencyBoost', () => {
     const options = [...screen.getByLabelText('Role').querySelectorAll('option')].map((o) => o.textContent);
     expect(options).toEqual(['Agent', 'Associate Agency Builder', 'Unit Manager']);
     await userEvent.selectOptions(screen.getByLabelText('Role'), 'um');
-    expect(screen.getByText(/will change from Agent to Unit Manager/)).toBeInTheDocument();
+    expect(screen.getByText(/will change from Agent to UM\./)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Confirm change' }));
     expect(JSON.parse(String(calls.find((c) => c.init.method === 'PATCH')?.init.body))).toEqual({ toRole: 'um' });
   });

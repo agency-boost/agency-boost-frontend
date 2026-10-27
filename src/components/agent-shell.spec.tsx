@@ -82,7 +82,7 @@ describe('Open Owner view and Open Admin view, in the field view’s identity me
     expect(within(panel()).getByRole('link', { name: 'Open Owner view' })).toHaveAttribute('href', '/kpm/overview');
   });
 
-  it('P13.2-T5 AC-3 on a phone sits after the nav groups and before Your account', async () => {
+  it('P13.2-T5 AC-3, P18.95-T2 AC-4 on a phone opens the name menu with the switch, Your account and Sign out — no nav', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query,
       matches: query === PHONE_QUERY,
@@ -94,11 +94,30 @@ describe('Open Owner view and Open Admin view, in the field view’s identity me
     });
     await userEvent.click(chip());
 
-    const nav = within(panel()).getByRole('navigation', { name: 'Main' });
-    const viewSwitch = within(panel()).getByRole('link', { name: 'Open Admin view' });
-    expect(nav.contains(viewSwitch)).toBe(false);
-    expect(nav.compareDocumentPosition(viewSwitch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(links().slice(-2)).toEqual(['Open Admin view', 'Your account']);
+    // The nav is the drawer ☰ opens (P18.95-T2); the name keeps the account's items.
+    expect(within(panel()).queryByRole('navigation')).not.toBeInTheDocument();
+    expect(links()).toEqual(['Open Admin view', 'Your account']);
+    expect(within(panel()).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+  });
+
+  it('P18.95-T2 AC-2 on a phone keeps the switch out of the drawer: it is the name menu’s, at the drawer’s foot too', async () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      media: query,
+      matches: query === PHONE_QUERY,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    })));
+    renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, {
+      me: reader({ isKpmAdmin: true, directCount: 1 }),
+    });
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    const drawer = screen.getByRole('dialog', { name: 'Menu' });
+    const nav = within(drawer).getByRole('navigation', { name: 'Main' });
+    expect(within(nav).queryByRole('link', { name: 'Open Admin view' })).not.toBeInTheDocument();
+
+    await userEvent.click(within(drawer).getByRole('button', { name: /Rina/ }));
+    const foot = document.getElementById('phone-menu-account')!;
+    expect(within(foot).getAllByRole('link').map((a) => a.textContent)).toEqual(['Open Admin view', 'Your account']);
   });
 });
 

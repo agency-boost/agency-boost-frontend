@@ -20,12 +20,16 @@ import { RequireSession, TitledPageContext } from '@/components/require-session'
 export function Page({
   title,
   subtitle,
+  subtitleOnPhone,
   actions,
   permission,
   children,
 }: {
   title?: string;
-  subtitle?: string;
+  /** A sentence; a node where a term in it carries its ⓘ (P18.95-T9 AC-3). */
+  subtitle?: ReactNode;
+  /** `false`: the sub-line is not drawn below 768px (the client's *Remove*, P18.95-T7 AC-1; `PageHeader`). */
+  subtitleOnPhone?: boolean;
   actions?: ReactNode;
   permission?: string;
   children: ReactNode;
@@ -33,7 +37,7 @@ export function Page({
   const titledAbove = useContext(TitledPageContext);
   const body = (
     <>
-      {title !== undefined && <PageHeader title={title} subtitle={subtitle} actions={actions} />}
+      {title !== undefined && <PageHeader title={title} subtitle={subtitle} subtitleOnPhone={subtitleOnPhone} actions={actions} />}
       {/* What is inside is under a title now: a nested page's refusal is a section of this one. */}
       <TitledPageContext.Provider value={titledAbove || title !== undefined}>{children}</TitledPageContext.Provider>
     </>

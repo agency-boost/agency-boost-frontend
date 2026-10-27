@@ -206,6 +206,21 @@ export const groupDigits = (major: number) => formatNumber(major);
 export const parseDigits = (typed: string) => Number(typed.replace(/\D/g, '')) || 0;
 
 /**
+ * **Months left, in words** (P18.95-T5 AC-5; the client's UI review, UI-018: *2.2 months* is a precision
+ * nobody plans by): the commitment's *(about 2 months left)*.
+ *
+ * The rule, once (`metrics-and-definitions.md`, `MONTHS_LEFT_IN_YEAR`, *Display*): **the nearest whole
+ * month**, a half rounding up — *about 1 month*, *about 2 months*, *about 12 months* — and **below half a
+ * month, *less than a month***, so December's last fortnight never reads *about 0 months*. The figure the plan
+ * divides by is unchanged: the server's, to one decimal, and the *Months left this year* box still shows it.
+ */
+export function monthsLeftInWords(months: number): string {
+  const whole = Math.round(months);
+  if (!Number.isFinite(months) || whole < 1) return 'less than a month';
+  return whole === 1 ? 'about 1 month' : `about ${whole} months`;
+}
+
+/**
  * **Where the APE produced came from, and for which month** (ADR-0063 §5, P10.1-T6): the words of the
  * marker beside the figure, on the Summary and on Goal Settings alike — its accessible name and its
  * tooltip. The payload's `provenance`: the office's upload, a correction by the office, or the
@@ -242,6 +257,12 @@ export function producedFrom(
     : (source.provenance === 'corrected' ? `Corrected by ${by ?? 'hand'}` : 'From your office’s upload');
   const named = subject && by ? `, by ${by}` : '';
   if (!source.month) return `${words}${named}`;
+  /*
+   * **The client's words for the office's year to date** (P18.95-T7 AC-1, grey text row 18; ADR-0167 §7): *As of Okt
+   * 2026*, at every size, where it read *"From your office’s upload, year to date as of Okt 2026"*. The reader's own,
+   * from the upload: a correction still says who made it, and a coachee's still names the upload.
+   */
+  if (span === 'year' && !subject && source.provenance === 'imported') return `As of ${formatMonth(source.month)}`;
   return span === 'year'
     ? `${words}, year to date as of ${formatMonth(source.month)}${named}`
     : `${words}, ${formatMonth(source.month)}${named}`;

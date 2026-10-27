@@ -114,10 +114,12 @@ export function PromotionLabel({ className }: { className?: string }) {
  * (*Chasing*), a ✓ before it, and `aria-pressed` — the calendar's *Accept* is the precedent (ADR-0137's sweep).
  * The prototype's ☆ and ⭐ stay, hidden from a screen reader with the ✓, so the name is the word.
  *
- * **Where it cannot be pressed it says why** (D-lists, AC-3): an ended campaign, or one not for the reader's
- * rung that they are not chasing, draws the button disabled and an ⓘ beside it whose name and tooltip are the
- * reason (ADR-0062 §2, form 2). A chaser whose rung has changed can still drop the chase. The caller draws no
- * control at all where the reader may not chase (`can.chase`: a support session).
+ * **Where it cannot be pressed it says why** (D-lists, AC-3): a campaign not for the reader's rung that they are
+ * not chasing draws the button disabled and an ⓘ beside it whose name and tooltip are the reason (ADR-0062 §2,
+ * form 2). A chaser whose rung has changed can still drop the chase. The caller draws no control at all where
+ * the reader may not chase (`can.chase`: a support session) **or the campaign has ended** (`showsChase`;
+ * P18.95-T10 AC-2, UI-024 — it was drawn disabled with an ⓘ until then); the `ended` branch below stays as the
+ * guard should a caller draw one anyway.
  */
 export function ChaseButton({
   chasing, blocked, busy, onToggle, compact = true,

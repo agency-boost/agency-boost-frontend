@@ -5,20 +5,22 @@ import type { ReactNode } from 'react';
 import { ChasingCampaigns } from '@/components/campaigns/chasing-card';
 import { ComingInPhaseSection } from '@/components/coming-in-phase';
 import { Card, ErrorBanner } from '@/components/ui/field';
-import { TEXT_TAP } from '@/components/ui/phone';
+import { REMOVED_ON_PHONE, TEXT_TAP } from '@/components/ui/phone';
 import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
+import { TermTip } from '@/components/ui/term-tip';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import type { ActivityRatio, ActivityRatios } from '@/lib/activity';
 import type { ApiError } from '@/lib/api-client';
 import { PROTOTYPE_COPY as CAMPAIGN_COPY } from '@/lib/campaigns';
 import { cn } from '@/lib/cn';
 import { capitalized, coachingTabHref, PRONOUN_FORMS, type CoacheeSubject } from '@/lib/coaching';
-import { formatMonth, formatPercent, formatRupiahCompact, formatShortDay } from '@/lib/format';
+import { formatMonth, formatNumber, formatPercent, formatRupiahCompact, formatShortDay } from '@/lib/format';
 import { producedFrom } from '@/lib/goals';
 import { flagLabel } from '@/lib/leads';
 import { formatBenchmark, formatRatioForStatus } from '@/lib/ratio-format';
+import type { TermKey } from '@/lib/terms';
 import type {
   ActivityTarget, FigureSource, Insight, OpenLead, Pace, PeriodFigures, SectionChip, Summary, SummaryActivity,
 } from '@/lib/summary';
@@ -173,8 +175,9 @@ export function SummaryCards({
         <Card>
           <p className="text-md text-navy">
             {summary.period.currentYear
-              ? <>{capitalized(voice.possessive)} goal for {summary.year} has no APE target to measure against yet.</>
-              : <>{capitalized(voice.possessive)} goal for {summary.year} had no APE target to measure against.</>}
+              // *APE*'s first appearance on the page when there is no Goal card, so its ⓘ is here (P18.95-T9 AC-3).
+              ? <>{capitalized(voice.possessive)} goal for {summary.year} has no APE <TermTip term="APE" /> target to measure against yet.</>
+              : <>{capitalized(voice.possessive)} goal for {summary.year} had no APE <TermTip term="APE" /> target to measure against.</>}
           </p>
           {summary.period.currentYear && (
             <Link href={goalHref(voice)} className={cn('mt-2 inline-block font-semibold text-navy underline', TEXT_TAP)}>Open Goal Settings</Link>
@@ -232,11 +235,13 @@ export function SummaryCards({
  * a note on the right in place of the tag (`aside`).
  */
 export function SummaryCard({
-  id, title, icon, tag, badge, aside, className, children,
+  id, title, term, icon, tag, badge, aside, className, children,
 }: {
   id: string;
   /** The heading. A node where the prototype puts a link beside the words (*Activity → view full dashboard*). */
   title: ReactNode;
+  /** A term the heading uses, whose ⓘ follows it (P18.95-T9 AC-3) — beside the heading, so its name stays the title. */
+  term?: TermKey;
   icon?: NavIconName;
   tag?: ReactNode;
   badge?: string;
@@ -245,14 +250,22 @@ export function SummaryCard({
   className?: string;
   children: ReactNode;
 }) {
+  const heading = (
+    <h2 id={id} className="flex items-center gap-2 text-md font-bold text-navy">
+      {icon && <NavIcon name={icon} className="h-[17px] w-[17px] text-navy-soft" />}
+      {title}
+    </h2>
+  );
   return (
     <section aria-labelledby={id} className={cn('rounded-lg border border-hairline bg-card px-[22px] py-[18px] print:break-inside-avoid', className)}>
       {/* Wraps rather than squeezes: on a phone a long tag drops under the title instead of folding it. */}
       <div className="mb-3.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-        <h2 id={id} className="flex items-center gap-2 text-md font-bold text-navy">
-          {icon && <NavIcon name={icon} className="h-[17px] w-[17px] text-navy-soft" />}
-          {title}
-        </h2>
+        {term ? (
+          <span className="flex items-center gap-1">
+            {heading}
+            <TermTip term={term} />
+          </span>
+        ) : heading}
         {tag && <span className="whitespace-nowrap rounded-pill bg-base px-2.5 py-0.5 text-2xs font-semibold text-muted">{tag}</span>}
         {badge && (
           <span className="whitespace-nowrap rounded-pill bg-navy px-2.5 py-0.5 text-2xs font-bold uppercase tracking-wide text-white">{badge}</span>
@@ -319,7 +332,8 @@ function GoalCard({
   // *This month's target*, or a closed period's by name (P18.8-T11).
   const targetName = when.current ? (month ? 'This month’s target' : 'This year’s target') : `${when.named}’s target`;
   return (
-    <SummaryCard id="summary-goal" title="Goal vs. actual (APE)" icon="target" tag={when.tag}>
+    // *APE*'s first appearance on the page, so its ⓘ follows the heading (P18.95-T9 AC-3; UI-028).
+    <SummaryCard id="summary-goal" title="Goal vs. actual (APE)" term="APE" icon="target" tag={when.tag}>
       <div className="mb-2.5 flex flex-wrap items-end justify-between gap-2.5">
         <p className="flex flex-wrap items-baseline gap-1.5">
           {figures.actualMinor === null ? (
@@ -474,15 +488,21 @@ const TARGET_LABEL: Record<ActivityTarget['key'], string> = {
 function TargetsCard({ activity, when, voice }: { activity: SummaryActivity; when: PeriodWords; voice: Voice }) {
   return (
     <SummaryCard id="summary-targets" title={`${capitalized(voice.possessive)} sales activity targets`} icon="flag" tag={when.tag}>
-      <p className="-mt-2 mb-3.5 text-xs text-muted">
+      {/* The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 21): from 768px it reads as before. */}
+      <p className={cn('-mt-2 mb-3.5 text-xs text-muted', REMOVED_ON_PHONE)}>
         From <Link href={goalHref(voice)} className="font-semibold text-navy-soft underline">Goal Settings</Link> — appointments
         and closings are {voice.possessive} {voice.self ? 'Sales' : 'sales'} pipeline targets.
       </p>
       <div className="grid gap-2.5 md:grid-cols-3">
         {activity.targets.map((target) => <TargetChip key={target.key} target={target} when={when} />)}
       </div>
+      {/*
+        * **The client's line, at every size** (P18.95-T7 AC-1, grey text row 22; ADR-0167 §7): *5 activities this
+        * month*, where it read *"5 total activities logged this month across all categories."* The count is the
+        * server's, and the period the card's.
+        */}
       <p className="mt-3 text-center text-xs text-muted">
-        <strong className="text-navy">{activity.total}</strong> total activities logged {when.inline} across all categories.
+        <strong className="text-navy">{formatNumber(activity.total)}</strong> {activity.total === 1 ? 'activity' : 'activities'} {when.inline}
       </p>
       <SectionChips sections={activity.sections} idPrefix="summary-section" />
     </SummaryCard>

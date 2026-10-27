@@ -69,6 +69,12 @@ describe('the small readings', () => {
     expect(dayShown(61, 60)).toBe('60+');
   });
 
+  it('P18.95-T3 AC-4 writes a phone card’s day in words, Day 64 of 90, the window the office’s and 90+ past it', () => {
+    expect(OWN_COPY.dayOf(dayShown(64, 90), 90)).toBe('Day 64 of 90');
+    expect(OWN_COPY.dayOf(dayShown(91, 90), 90)).toBe('Day 90+ of 90');
+    expect(OWN_COPY.dayOf(dayShown(12, 60), 60)).toBe('Day 12 of 60');
+  });
+
   it('names the roster’s cards: Direct Unit, or AAB: {name}', () => {
     expect(groupTitle({ kind: 'direct', leader: null, hires: [] })).toBe('Direct Unit');
     expect(groupTitle({ kind: 'aab', leader: SARI, hires: [] })).toBe('AAB: Sari Puspita');
@@ -184,7 +190,8 @@ describe('the words (D-copy)', () => {
   it('the prototype’s strings are its own, verbatim, with its straight apostrophes', () => {
     expect(PROTOTYPE_COPY.footer).toBe("Visible only to new agents, for their first 6 months. Tenured agents won't see this section.");
     expect(PROTOTYPE_COPY.rosterSubtitle).toBe("Track your new agents' 90-day activation progress.");
-    expect(PROTOTYPE_COPY.noteExample).toBe("e.g. Great pace on prospecting — let's focus on booking your first JFW this week.");
+    // A placeholder holds no ⓘ, so *JFW* is spelled out (P18.95-T9 AC-3; UI-028): the prototype's *your first JFW*.
+    expect(PROTOTYPE_COPY.noteExample).toBe("e.g. Great pace on prospecting — let's focus on booking your first joint field work this week.");
     expect(PROTOTYPE_COPY.noteSaved('Rina Wijaya')).toBe('Coaching note saved — visible to Rina Wijaya.');
     expect(PROTOTYPE_COPY.graduated).toBe('Marked as tenured agent — 90-Day Activation removed from menu.');
     // OD-28 and D-copy: the confirm speaks to the hire, without the demo's sentence.

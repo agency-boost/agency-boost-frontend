@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { shortOfRung } from '@/components/ui/role-badge';
 import { SaveStatus } from '@/components/ui/save-status';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -121,7 +122,7 @@ export function RollCallSection({ eventId, onSaved, tabbed = false }: {
                 {view.people.map((row) => (
                   <tr key={row.membershipId} data-member={row.membershipId}>
                     <th scope="row" className={cn(TD, 'text-left font-semibold text-navy')}>{row.name}</th>
-                    <td className={cn(TD, 'text-muted')}>{row.rung}</td>
+                    <td className={cn(TD, 'text-muted')}>{shortOfRung({ code: row.orgLevelCode, label: row.rung })}</td>
                     <td className={cn(TD, 'text-navy')}>{row.said ? ADMIN_COPY.said[row.said] : '—'}</td>
                     <td className={TD}>
                       <AttendanceCell row={row} value={valueOf(row)} writable={view.can.confirm} onMark={(to) => mark(row, to)} />

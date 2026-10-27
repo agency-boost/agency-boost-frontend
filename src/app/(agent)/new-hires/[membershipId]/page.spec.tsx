@@ -43,7 +43,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     await ready();
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^Rina Wijaya$/);
     expect(screen.getByText('You can update their 90-Day Activation status, plus your coaching note.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to Your New Hires' })).toHaveAttribute('href', '/new-hires');
+    expect(screen.getByRole('link', { name: 'Back to New Hires' })).toHaveAttribute('href', '/new-hires');
     expect(calls.filter((c) => c.url.includes('/new-hires/')).map((c) => c.url)).toEqual(['http://api.test/api/v1/new-hires/mem-rina']);
   });
 
@@ -231,7 +231,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     const card = screen.getByRole('region', { name: 'Coaching note' });
     expect(within(card).getByText('Visible to this agent on their own 90-Day Activation page.')).toBeInTheDocument();
     const box = within(card).getByRole('textbox', { name: 'Coaching note' });
-    expect(box).toHaveAttribute('placeholder', 'e.g. Great pace on prospecting — let\'s focus on booking your first JFW this week.');
+    expect(box).toHaveAttribute('placeholder', 'e.g. Great pace on prospecting — let\'s focus on booking your first joint field work this week.');
     expect(box).toHaveValue('Great pace on prospecting — let’s book your first JFW this week.');
     expect(box).toHaveAttribute('maxLength', '1000');
     expect(within(card).getByRole('button', { name: 'Last saved by you · 30 Sep 2026' })).toBeInTheDocument();
@@ -299,7 +299,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     show({ 'GET /new-hires/mem-rina': notFound });
     expect(await screen.findByRole('heading', { level: 2, name: 'This person isn’t one of your new hires.' })).toBeInTheDocument();
     expect(screen.getByText('They may have moved to another leader, or the address may be mistyped.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Back to Your New Hires' })).toHaveAttribute('href', '/new-hires');
+    expect(screen.getByRole('link', { name: 'Back to New Hires' })).toHaveAttribute('href', '/new-hires');
     expect(document.body.textContent).not.toMatch(/mem-rina|NOT_FOUND|Rina/);
   });
 

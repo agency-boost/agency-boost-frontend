@@ -2,6 +2,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
+import { ACTION_BAR_PHONE } from '@/components/ui/phone';
+import { PHONE_QUERY } from '@/lib/use-phone';
 import { makeMe, renderInLayout, stubFetch } from '@test/harness';
 import LogActivityPage from './page';
 
@@ -72,6 +74,11 @@ const base = {
   '/kpm/org-levels': { body: [] },
 };
 
+/** Below 768px, as `usePhone` reads it: the media query answers. jsdom has none, so a spec says so. */
+const asPhone = () => vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+  media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+})));
+
 /** The five seeded sections, grouped as the seed groups them (ADR-0064). */
 const SEEDED = [
   ['LEADS_GENERATION', 'Leads Generation', 'LEADS_GENERATION', 'Leads Generation', 'LEADS_CONTACTED'],
@@ -97,11 +104,20 @@ const toastText = () => screen.queryAllByRole('status').map((r) => r.textContent
 /** The strip's tiles, label and value each, read off the page. */
 function strip() {
   const row = screen.getByText(/^Total touches/).closest('[data-total]')!.parentElement!;
-  return [...row.children].map((tile) => [tile.children[0].textContent, tile.children[1].textContent]);
+  // A tile's label without the ⓘ the total carries (P18.95-T9 AC-3), which `touchTip` asserts on its own.
+  return [...row.children].map((tile) => [tile.children[0].textContent!.replace(/ ⓘ.*$/, ''), tile.children[1].textContent]);
 }
 
 describe('Log activity (P6-T2)', () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it('P18.95-T7 AC-1 keeps the sub-line from 768px and draws it nowhere on a phone, loading or not (grey text row 25)', async () => {
+    stubFetch({ ...base, '/activity/log': { body: day() } });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+    expect(screen.getByText("Enter today's activities in 1 minute.")).toHaveClass('max-md:hidden');
+    await screen.findByRole('heading', { name: 'Leads' });
+    expect(screen.getByText("Enter today's activities in 1 minute.")).toHaveClass('max-md:hidden');
+  });
 
   it('renders the office’s own sections and types, not a hardcoded twelve', async () => {
     // The prototype groups its items by hardcoded id ranges, so an office that adds a
@@ -433,7 +449,12 @@ describe('Log activity (P6-T2)', () => {
     expect(strip()).toEqual([['Leads', '2'], ['Selling', '2'], ['Total touches today', '4']]);
   });
 
-  describe('P10.1-T5 AC-3, AC-4: the strip is the prototype’s, grouped by the office', () => {
+  /*
+   * **Was P10.1-T5 AC-3, AC-4** — *the strip is the prototype's, grouped by the office*: the seed's Personal and
+   * Team Development were one *Development* tile over two cards. The client asked for the tiles to be the groups
+   * (2026-10-26, UI-017), so the log draws one tile per section; the office's grouping is the Dashboard's alone.
+   */
+  describe('P18.95-T5 AC-2: the tiles are the sections below them, one each', () => {
     const seededDay = day({
       entries: SEEDED.map((c, i) => ({
         activityTypeId: `t${i}`, activityTypeCode: c.types[0].code, label: c.types[0].label, count: i + 1,
@@ -441,7 +462,7 @@ describe('Log activity (P6-T2)', () => {
       totalCount: 15,
     });
 
-    it('AC-3: the seed draws Leads Generation, Selling, Recruitment, Development and the total', async () => {
+    it('P18.95-T5 AC-2: the seed draws its five sections and the total — Personal and Team Development each', async () => {
       stubFetch({
         ...base,
         '/kpm/config': { body: { activity: SEEDED, ratios: [], leadPipelines: [], version: 1 } },
@@ -450,13 +471,29 @@ describe('Log activity (P6-T2)', () => {
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
       await screen.findByRole('heading', { name: 'Team Development' });
 
-      // Development is Personal (4) and Team (5): the office's grouping, not a hardcoded merge.
+      // The seed still groups the two as *Development* (ADR-0064); the log no longer reads it.
       expect(strip()).toEqual([
-        ['Leads Generation', '1'], ['Selling', '2'], ['Recruitment', '3'], ['Development', '9'],
-        ['Total touches today', '15'],
+        ['Leads Generation', '1'], ['Selling', '2'], ['Recruitment', '3'], ['Personal Development', '4'],
+        ['Team Development', '5'], ['Total touches today', '15'],
       ]);
-      // The sections below the strip do not change (I-97): five cards, as before.
-      expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(5);
+      // One tile per card, in the cards' order.
+      const cards = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+      expect(cards).toEqual(strip().slice(0, -1).map(([label]) => label));
+    });
+
+    it('P18.95-T5 AC-2: one list for both — a section reordered moves its card and its tile together', async () => {
+      const reordered = SEEDED.map((c) => (c.code === 'TEAM_DEVELOPMENT' ? { ...c, displayOrder: 0 } : c));
+      stubFetch({
+        ...base,
+        '/kpm/config': { body: { activity: reordered, ratios: [], leadPipelines: [], version: 1 } },
+        '/activity/log': { body: seededDay },
+      });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Team Development' });
+
+      const cards = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+      expect(cards[0]).toBe('Team Development');
+      expect(cards).toEqual(strip().slice(0, -1).map(([label]) => label));
     });
 
     it('AC-3: the total is a white card whose number is amber-deep, with no tint (F-71)', async () => {
@@ -477,7 +514,7 @@ describe('Log activity (P6-T2)', () => {
       expect(plain.children[1]).toHaveClass('text-navy');
     });
 
-    it('AC-4: a section hidden from this rung drops out of its tile', async () => {
+    it('P18.95-T5 AC-2: a section hidden from this rung has no card and no tile', async () => {
       const narrowed = SEEDED.map((c) => (c.code === 'TEAM_DEVELOPMENT'
         ? { ...c, appliesToOrgLevelCodes: ['AB'] }
         : c));
@@ -489,7 +526,138 @@ describe('Log activity (P6-T2)', () => {
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
       await screen.findByRole('heading', { name: 'Personal Development' });
 
-      expect(strip()[3]).toEqual(['Development', '4']);
+      expect(screen.queryByRole('heading', { name: 'Team Development' })).not.toBeInTheDocument();
+      expect(strip().map(([label]) => label)).toEqual([
+        'Leads Generation', 'Selling', 'Recruitment', 'Personal Development', 'Total touches today',
+      ]);
+    });
+  });
+
+  describe('P18.95-T5 AC-1: on a phone, one line and a bar fixed to the bottom', () => {
+    it('P18.95-T5 AC-1: says Today: n touches on one line, the total the tiles add up to, shown below 768px only', async () => {
+      stubFetch({ ...base, '/activity/log': { body: day() } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Leads' });
+
+      const line = screen.getByText(/^Today:/);
+      expect(line).toHaveTextContent('Today: 3 touches');
+      expect(line).toHaveClass('md:hidden');
+      // The tiles, beside it, are not drawn on a phone; at 768px and wider they are as before.
+      const tiles = screen.getByText('Total touches today').closest('[data-total]')!.parentElement!;
+      expect(tiles).toHaveClass('max-md:hidden');
+      expect(strip().at(-1)).toEqual(['Total touches today', '3']);
+
+      await userEvent.click(screen.getByLabelText('Increase Submission polis'));
+      expect(line).toHaveTextContent('Today: 4 touches');
+    });
+
+    it('P18.95-T5 AC-1: names the date when the day open is not today — and says one touch, not one touches', async () => {
+      stubFetch({
+        ...base,
+        '/activity/log': { body: day() },
+        '/activity/log?date=2026-03-09': { body: day({
+          localDate: '2026-03-09', totalCount: 1,
+          entries: day().entries.map((e) => ({ ...e, count: e.activityTypeCode === 'SELL_SUBMISSION' ? 1 : 0 })),
+        }) },
+      });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Leads' });
+
+      fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-03-09' } });
+      await waitFor(() => expect(screen.getByText(/touch/, { selector: 'p' })).toHaveTextContent('9 Mar 2026: 1 touch'));
+    });
+
+    it('P18.95-T5 AC-1: Save activity and its status sit in the bar on a phone — one status, never two', async () => {
+      asPhone();
+      stubFetch({ ...base, '/activity/log': { body: day() } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Leads' });
+
+      const save = screen.getByRole('button', { name: 'Save activity' });
+      const bar = save.parentElement!;
+      expect(bar).toHaveAttribute('data-action-bar');
+      for (const cls of ACTION_BAR_PHONE.split(' ')) expect(bar).toHaveClass(cls);
+      expect(bar).toContainElement(screen.getByRole('button', { name: 'Cancel' }));
+      // The status moved into the bar, beside the button it answers for: the date has none under it now.
+      const statuses = screen.getAllByRole('status').filter((r) => /saved/i.test(r.textContent ?? ''));
+      expect(statuses).toHaveLength(1);
+      expect(bar).toContainElement(statuses[0]);
+      expect(statuses[0]).toHaveTextContent('Saved · 3 touches');
+      // Room under the cards, so the last one is never behind the bar.
+      expect(screen.getByRole('heading', { name: 'Selling' }).closest('.grid')).toHaveClass('max-md:pb-24');
+    });
+
+    it('P18.95-T5 AC-1: at 768px and wider the status stays under the date, and the bar is only the row it was', async () => {
+      stubFetch({ ...base, '/activity/log': { body: day() } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByRole('heading', { name: 'Leads' });
+
+      expect(saveStatus()).toHaveTextContent('Saved · 3 touches');
+      const bar = screen.getByRole('button', { name: 'Save activity' }).parentElement!;
+      expect(bar).not.toContainElement(saveStatus() as HTMLElement);
+      // Every class the bar adds is a phone's: nothing changes at 768px and wider (ADR-0167 §12).
+      const wider = (bar.getAttribute('class') ?? '').split(/\s+/).filter((c) => c && !c.startsWith('max-md:'));
+      expect(wider).toEqual(['flex', 'flex-wrap', 'items-center', 'justify-end', 'gap-2.5']);
+    });
+
+    it('P18.95-T5 AC-1: a closed day keeps its reason above the bar, with the room under it', async () => {
+      asPhone();
+      stubFetch({ ...base, '/activity/log': { body: day({ editable: false, frozenAt: '2026-03-08T00:00:00Z' }) } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      const reason = await screen.findByLabelText('Why is this being corrected?');
+      expect(reason.closest('.max-w-xl')).toHaveClass('max-md:pb-24');
+      expect(screen.getByRole('heading', { name: 'Selling' }).closest('.grid')).not.toHaveClass('max-md:pb-24');
+      expect(screen.getByRole('button', { name: 'Save the correction' }).parentElement).toHaveAttribute('data-action-bar');
+    });
+
+    it('P18.95-T5 AC-1: a closed day never logged has no bar, and its status stays under the date', async () => {
+      asPhone();
+      stubFetch({ ...base, '/activity/log': { body: day({
+        editable: false, frozenAt: '2026-03-08T00:00:00Z', version: 0, totalCount: 0,
+      }) } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+      await screen.findByText('This day is closed, and nothing was logged for it.');
+
+      expect(document.querySelector('[data-action-bar]')).toBeNull();
+      expect(saveStatus()).toHaveTextContent('Not yet saved');
+    });
+  });
+
+  describe('P18.95-T5 AC-3: the skeleton goes once the reads have answered', () => {
+    it('P18.95-T5 AC-3: draws the day as soon as the configuration and the day answer — the ladder still on its way', async () => {
+      // The log waited for `/kpm/org-levels` too, which it never draws: the provider's two reads were one.
+      const { mock } = stubFetch({ ...base, '/activity/log': { body: day() } });
+      vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => (
+        url.includes('/kpm/org-levels') ? new Promise(() => {}) : mock(url, init))));
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      expect(await screen.findByRole('heading', { name: 'Leads' })).toBeInTheDocument();
+      expect(screen.queryByText('Loading your day…')).not.toBeInTheDocument();
+    });
+
+    it('P18.95-T5 AC-3: draws an empty day — never logged, every count zero — once it answers', async () => {
+      stubFetch({ ...base, '/activity/log': { body: day({
+        version: 0, totalCount: 0, entries: day().entries.map((e) => ({ ...e, count: 0 })),
+      }) } });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      expect(await screen.findByRole('heading', { name: 'Leads' })).toBeInTheDocument();
+      expect(screen.queryByText('Loading your day…')).not.toBeInTheDocument();
+      expect(saveStatus()).toHaveTextContent('Not yet saved');
+    });
+
+    it('P18.95-T5 AC-3: a configuration that failed says so, and never that the office has nothing set up', async () => {
+      stubFetch({
+        ...base,
+        '/kpm/config': { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r' } } },
+        '/activity/log': { body: day() },
+      });
+      renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+
+      expect(await screen.findByText('Something went wrong.')).toBeInTheDocument();
+      expect(screen.queryByText('Loading your day…')).not.toBeInTheDocument();
+      expect(screen.queryByText(/has not set up its activity types/)).not.toBeInTheDocument();
     });
   });
 
@@ -689,7 +857,7 @@ describe('Log activity (P6-T2)', () => {
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
       await screen.findByRole('heading', { name: 'Leads' });
 
-      const row = screen.getByRole('heading', { name: 'Log Activity', level: 1 })
+      const row = screen.getByRole('heading', { name: 'Activity Management', level: 1 })
         .parentElement!.parentElement!;
       expect(row).toContainElement(screen.getByLabelText('Date'));
       expect(row).toContainElement(screen.getByRole('status'));
@@ -729,5 +897,56 @@ describe('Log activity (P6-T2)', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Count for Submission polis')).toHaveValue(2);
+  });
+});
+
+describe('Log Activity — names and terms (P18.95-T9)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Item 9 and item 12 in the seed's words: *Proses NPA*, and a note naming *JFW* — each twice over the screen. */
+  const WORDED = [{
+    ...TAXONOMY[0],
+    types: [
+      { ...TAXONOMY[0].types[0], code: 'RECRUIT_AGENT_CODE', label: 'Proses NPA', description: null },
+      { ...TAXONOMY[0].types[1], code: 'DEV_TEAM_ACTIVITY', label: 'Aktivitas team development', description: '1-on-1 coaching, unit meeting, role-play, JFW, memberikan training' },
+    ],
+  }, {
+    ...TAXONOMY[1],
+    types: [{ ...TAXONOMY[1].types[0], label: 'Proses NPA lanjutan', description: 'JFW kedua' }],
+  }];
+  const worded = { ...base, '/kpm/config': { body: { activity: WORDED, ratios: [], leadPipelines: [], version: 1 } } };
+
+  it('P18.95-T9 AC-2 is titled Activity Management, the nav item’s words, over the Log Activity tab', async () => {
+    stubFetch({ ...base, '/activity/log': { body: day() } });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+    expect(await screen.findByRole('heading', { level: 1, name: 'Activity Management' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: 'Log Activity' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Log Activity' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('P18.95-T9 AC-3 says what a touch is once, on the strip’s total, in the one-line definition', async () => {
+    stubFetch({ ...base, '/activity/log': { body: day() } });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+    await screen.findByRole('heading', { name: 'Leads' });
+    const tips = screen.getAllByRole('button', { name: 'What is a touch?' });
+    // The strip's, and the phone's line beside it — one shows at each size (the line is `md:hidden`).
+    expect(tips).toHaveLength(2);
+    expect(tips[0].closest('[data-total]')).not.toBeNull();
+    expect(tips[0]).toHaveAccessibleDescription('A touch is one logged activity: each one you add on Log Activity counts once.');
+    expect(tips[1].closest('p')).toHaveClass('md:hidden');
+  });
+
+  it('P18.95-T9 AC-3 gives a term in the office’s words an ⓘ the first time it appears, and only then', async () => {
+    stubFetch({ ...worded, '/activity/log': { body: day() } });
+    renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
+    await screen.findByRole('heading', { name: 'Leads' });
+    const npa = screen.getAllByRole('button', { name: 'What is NPA?' });
+    expect(npa).toHaveLength(1);
+    expect(npa[0].closest('span.block')).toHaveTextContent(/^Proses NPA ⓘ/);
+    const jfw = screen.getAllByRole('button', { name: 'What is JFW?' });
+    expect(jfw).toHaveLength(1);
+    expect(jfw[0]).toHaveAccessibleDescription('Joint field work: a visit to a prospect that an agent makes with their leader there too.');
+    // The label is still the office's, whole: the stepper is named by it.
+    expect(screen.getByLabelText('Increase Proses NPA')).toBeInTheDocument();
   });
 });

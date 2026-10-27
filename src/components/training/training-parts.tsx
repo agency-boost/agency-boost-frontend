@@ -2,8 +2,10 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { Card } from '@/components/ui/field';
 import { NumberBadge } from '@/components/ui/number-badge';
+import { TEXT_TAP } from '@/components/ui/phone';
 import { StatusPill } from '@/components/ui/status-pill';
 import { cn } from '@/lib/cn';
+import { usePhone } from '@/lib/use-phone';
 import {
   FORMAT_LABEL, OWN_COPY, PROTOTYPE_COPY, STATUS_LABEL, trainingModuleHref,
   type TrainingItemKind, type TrainingSkillProgress, type TrainingStatus,
@@ -18,7 +20,13 @@ import {
  * **A real table** (contradiction 8, a Fix: WCAG 2.1.1): the prototype's rows are `display: contents`
  * divs that a pointer clicks anywhere on and a keyboard cannot reach. Here the module's title is a link on
  * the learner's list, and plain text on a person's tab, where the rows do nothing (contradiction 13): no
- * pointer, no hover tint. **It scrolls inside its card on a phone** (F-124), so the page never does.
+ * pointer, no hover tint. **It scrolls inside its card on a tablet** (F-124), so the page never does.
+ *
+ * **Below 768px, a row per module instead of the table** (P18.95-T3 AC-5, ADR-0167 §6; the client's UI review,
+ * UI-012: *Format* and *Status* off the screen, and the card's own skill repeated in a *Skill* column on every row):
+ * the module's name and its status, nothing else. The skill is the card's heading already; *No.* and *Format* are
+ * the module page's, a tap away. On the learner's list and on a person's *Training* tab alike, so the two cannot
+ * draw one module two ways (P18.5-T4 AC-4).
  */
 
 /** The prototype's three glyphs (`FORMAT_META`, `:7652-7656`), drawn in the chip and on the tile. */
@@ -107,12 +115,14 @@ export function SkillTag({ children, className }: { children: ReactNode; classNa
  * (ADR-0062 §2, form 5), outside every count.
  */
 export function SkillCard({
-  n, skill, categoryCode, withArchived = false,
+  n, skill, categoryCode, withArchived = false, phone = false,
 }: {
   n: number;
   skill: TrainingSkillProgress;
   categoryCode?: string;
   withArchived?: boolean;
+  /** Below 768px: a row per module, its name and its status (P18.95-T3 AC-5). */
+  phone?: boolean;
 }) {
   const HEAD = 'border-b border-hairline px-2 pb-2.5 text-left text-2xs font-bold uppercase tracking-wide text-muted first:pl-0 last:pr-0';
   const CELL = 'border-b border-hairline px-2 py-3 align-middle text-base font-medium text-navy first:pl-0 last:pr-0';
@@ -121,6 +131,40 @@ export function SkillCard({
     // A withdrawn module's Format is its own kinds of material, served on the history row — never *No material yet*.
     ...(withArchived ? skill.archived.map((m) => ({ ...m, archived: true })) : []),
   ];
+  const heading = (
+    <h3 className="mb-3 flex items-center gap-2.5 font-display text-md font-bold text-navy">
+      <NumberBadge n={n} size="md" />
+      {skill.label}
+    </h3>
+  );
+  if (phone) {
+    return (
+      <Card>
+        {heading}
+        <ul role="list" aria-label={OWN_COPY.tableCaption(skill.label)}>
+          {rows.map((row) => (
+            <li
+              key={`${row.archived ? 'archived' : 'offered'}-${row.code}`}
+              data-code={row.code}
+              className="flex items-center justify-between gap-3 border-b border-hairline py-2 last:border-b-0"
+            >
+              <span className="min-w-0 break-words text-base font-medium text-navy">
+                {categoryCode && !row.archived ? (
+                  <Link href={trainingModuleHref(categoryCode, row.code)} className={cn('text-navy hover:underline', TEXT_TAP)}>
+                    {row.title}
+                  </Link>
+                ) : row.title}
+              </span>
+              <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                <TrainingStatusPill status={row.status} />
+                {row.archived && <span className="text-xs font-semibold text-muted">{OWN_COPY.archived}</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    );
+  }
   return (
     <Card>
       <h3 className="mb-3 flex items-center gap-2.5 font-display text-md font-bold text-navy">
@@ -181,17 +225,24 @@ export function SkillCard({
  * included.
  */
 export function SkillCards({
-  skills, categoryCode,
+  skills, categoryCode, phone,
 }: {
   skills: readonly TrainingSkillProgress[];
   categoryCode?: string;
+  /**
+   * The window is a phone's (P18.95-T3 AC-5). The learner's list passes the answer its layout already has, so a
+   * category opened from another draws its rows at once rather than a table first; without it, asked here.
+   */
+  phone?: boolean;
 }) {
+  const asked = usePhone();
+  const onPhone = phone ?? asked;
   const learner = categoryCode !== undefined;
   const shown = learner ? skills.filter((s) => s.offered && s.modules.length > 0) : skills;
   return (
     <div className="flex flex-col gap-4">
       {shown.map((skill, i) => (
-        <SkillCard key={skill.code} n={i + 1} skill={skill} categoryCode={categoryCode} withArchived={!learner} />
+        <SkillCard key={skill.code} n={i + 1} skill={skill} categoryCode={categoryCode} withArchived={!learner} phone={onPhone} />
       ))}
     </div>
   );
