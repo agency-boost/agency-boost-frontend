@@ -195,7 +195,7 @@ describe('Open agent view, in the identity menu (P13.2-T5, ADR-0114)', () => {
     expect(screen.queryByText('body')).not.toBeInTheDocument();
   });
 
-  it('P13.2-T5 AC-3, P18.95-T2 AC-4 on a phone opens the name menu with the switch before Your account — no nav', async () => {
+  it('P13.2-T5 AC-3, P18.95-T2 AC-4 on a phone opens the avatar’s menu with the switch before Your account — no nav', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query,
       matches: query === PHONE_QUERY,
@@ -203,13 +203,14 @@ describe('Open agent view, in the identity menu (P13.2-T5, ADR-0114)', () => {
       removeEventListener: () => undefined,
     })));
     renderWithSession(<TenantShell title="All members">body</TenantShell>, { me: tenantAdmin(true, 3) });
-    await userEvent.click(chip());
+    // The bar's chip is the avatar alone since P18.95-T12, named for the account and the notices.
+    await userEvent.click(screen.getByRole('button', { name: /^Account and notifications/ }));
 
-    // The nav is the drawer ☰ opens (P18.95-T2); the name keeps the account's items.
+    // The nav is the drawer ☰ opens (P18.95-T2); the menu keeps the account's items, after the notices (P18.95-T12).
     expect(within(panel()).queryByRole('navigation')).not.toBeInTheDocument();
     const viewSwitch = within(panel()).getByRole('link', { name: 'Open agent view' });
     const account = within(panel()).getByRole('link', { name: 'Your account' });
-    expect(links()).toEqual(['Open agent view', 'Your account']);
+    expect(links()).toEqual(['Notifications', 'Open agent view', 'Your account']);
     expect(viewSwitch.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(panel()).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
   });

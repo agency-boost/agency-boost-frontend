@@ -285,6 +285,8 @@ function Chrome({
         role: membership ? profileLine(shortRung, membership) : 'No office yet',
         initials: me?.user.initials ?? '??',
         email: me?.user.email,
+        // The first of the phone's menu details (P18.95-T12 AC-3): the name in full, where the chip greets by the preferred one.
+        fullName: me?.user.fullName,
       }}
       // *Advanced analytics* under *Core leader* is the one item here with no screen yet: *Soon*, as the client wrote it.
       upcomingLabel="Soon"

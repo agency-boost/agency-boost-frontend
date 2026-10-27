@@ -40,6 +40,11 @@ import { useCanMark, useInbox } from '@/lib/use-inbox';
  *
  * **A read-only support session marks nothing** (roles-and-permissions §7.2; the Phase 12.1 exit
  * review, N2): no *Mark all read*, no toggle, and a row opens without reading itself (`useCanMark`).
+ *
+ * **Not on a phone's bar since 2026-10-27** (P18.95-T12, the product owner's request): below 768px the bar holds
+ * the avatar alone, which wears this bell's `UnreadBadge` and whose menu holds *Notifications* (`SidebarUserMenu`).
+ * The bell and its popover are the sidebar's, from 768px, exactly as before; the placement under the bar stays in
+ * its classes for a shell with no account to hold the notices, which has no avatar menu.
  */
 export function NotificationBell({ href, unread }: { href: string; unread: number }) {
   const pathname = usePathname();
@@ -101,7 +106,7 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={panelId}
-        aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+        aria-label={withUnread('Notifications', unread)}
         onClick={() => setOpen((was) => !was)}
         className={cn(
           // 44 × 44 on a phone (P18.95-T1 AC-10); 36 × 36 from 768 px, as before.
@@ -122,14 +127,7 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
           <path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
-        {unread > 0 && (
-          <span
-            aria-hidden
-            className="absolute -right-0.5 -top-0.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-pill bg-alert px-1 text-2xs font-bold text-white"
-          >
-            {unread > 9 ? '9+' : unread}
-          </span>
-        )}
+        <UnreadBadge unread={unread} />
       </button>
 
       {open && (
@@ -190,5 +188,35 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * **What the badge says**: the count, and `9+` past nine (L-13) — past that the number stops being one somebody acts
+ * on, and a wider badge would move what is beside it. The accessible name carries the exact count (`withUnread`).
+ */
+export function unreadBadgeText(unread: number): string {
+  return unread > 9 ? '9+' : String(unread);
+}
+
+/** A control's name with the count in it, *Notifications, 3 unread*; the name alone at none. */
+export function withUnread(name: string, unread: number): string {
+  return unread > 0 ? `${name}, ${unread} unread` : name;
+}
+
+/**
+ * **The red count on the bell's corner** — and, on a phone's bar, on the avatar's (P18.95-T12 AC-2), so the two are
+ * one badge: its classes, its tokens and its `9+`. Nothing at all while nothing is unread. Placed against its
+ * control's box, which is `relative`; hidden from a screen reader, which hears the count in the control's name.
+ */
+export function UnreadBadge({ unread }: { unread: number }) {
+  if (unread <= 0) return null;
+  return (
+    <span
+      aria-hidden
+      className="absolute -right-0.5 -top-0.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-pill bg-alert px-1 text-2xs font-bold text-white"
+    >
+      {unreadBadgeText(unread)}
+    </span>
   );
 }

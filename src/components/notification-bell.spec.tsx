@@ -1,10 +1,10 @@
-import { screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
 import { INBOX_CHANGED, type InboxChange } from '@/lib/notifications';
 import { useUnreadCount } from '@/lib/use-unread-count';
-import { NotificationBell } from './notification-bell';
+import { NotificationBell, UnreadBadge, unreadBadgeText, withUnread } from './notification-bell';
 
 const nav = vi.hoisted(() => ({ pathname: '/activity/log', push: vi.fn() }));
 vi.mock('next/navigation', () => ({
@@ -457,5 +457,42 @@ describe('the bell’s popover (P12.1-T2)', () => {
     stubFetch({ '/notifications': { body: page([]) } });
     renderBell();
     expect(await screen.findByRole('button', { name: 'Notifications' })).toHaveClass('bg-amber/15');
+  });
+});
+
+/**
+ * **The badge is one component** (P18.95-T12 AC-2): the bell's corner, and on a phone's bar the avatar's, draw
+ * `UnreadBadge`, so the two cannot drift in classes, tokens or the `9+` cap (L-13).
+ */
+describe('UnreadBadge, the bell’s and the phone avatar’s count (P18.95-T12 AC-2)', () => {
+  it.each([[1, '1'], [9, '9'], [10, '9+'], [42, '9+']])('P18.95-T12 AC-2 reads %i as %s', (unread, text) => {
+    expect(unreadBadgeText(unread)).toBe(text);
+    const { container } = render(<UnreadBadge unread={unread} />);
+    const badge = container.firstElementChild!;
+    expect(badge).toHaveTextContent(text);
+    expect(badge).toHaveAttribute('aria-hidden', 'true');
+    // The bell's classes and tokens, as it drew them before P18.95-T12.
+    expect(badge.className).toBe(
+      'absolute -right-0.5 -top-0.5 inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-pill bg-alert px-1 text-2xs font-bold text-white',
+    );
+  });
+
+  it.each([0, -1])('P18.95-T12 AC-2 draws nothing at %i', (unread) => {
+    const { container } = render(<UnreadBadge unread={unread} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('P18.95-T12 AC-2 names a control with the exact count, and alone at none', () => {
+    expect(withUnread('Notifications', 3)).toBe('Notifications, 3 unread');
+    expect(withUnread('Account and notifications', 42)).toBe('Account and notifications, 42 unread');
+    expect(withUnread('Account and notifications', 0)).toBe('Account and notifications');
+  });
+
+  it('P18.95-T12 AC-2 is the badge the bell wears', async () => {
+    stubFetch({ '/notifications': { body: page([item()], { unread: 12 }) } });
+    renderWithSession(<NotificationBell href="/notifications" unread={12} />, { me: READER });
+    const bell = screen.getByRole('button', { name: 'Notifications, 12 unread' });
+    const { container } = render(<UnreadBadge unread={12} />);
+    expect(within(bell).getByText('9+').outerHTML).toBe(container.innerHTML);
   });
 });

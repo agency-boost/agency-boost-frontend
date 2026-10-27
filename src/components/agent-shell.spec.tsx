@@ -82,7 +82,7 @@ describe('Open Owner view and Open Admin view, in the field view’s identity me
     expect(within(panel()).getByRole('link', { name: 'Open Owner view' })).toHaveAttribute('href', '/kpm/overview');
   });
 
-  it('P13.2-T5 AC-3, P18.95-T2 AC-4 on a phone opens the name menu with the switch, Your account and Sign out — no nav', async () => {
+  it('P13.2-T5 AC-3, P18.95-T2 AC-4 on a phone opens the avatar’s menu with the switch, Your account and Sign out — no nav', async () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query,
       matches: query === PHONE_QUERY,
@@ -92,11 +92,12 @@ describe('Open Owner view and Open Admin view, in the field view’s identity me
     renderWithSession(<AgentShell title="Coaching Session">body</AgentShell>, {
       me: reader({ isKpmAdmin: true, directCount: 1 }),
     });
-    await userEvent.click(chip());
+    // The bar's chip is the avatar alone since P18.95-T12, named for the account and the notices.
+    await userEvent.click(screen.getByRole('button', { name: /^Account and notifications/ }));
 
-    // The nav is the drawer ☰ opens (P18.95-T2); the name keeps the account's items.
+    // The nav is the drawer ☰ opens (P18.95-T2); the menu keeps the account's items, after the notices (P18.95-T12).
     expect(within(panel()).queryByRole('navigation')).not.toBeInTheDocument();
-    expect(links()).toEqual(['Open Admin view', 'Your account']);
+    expect(links()).toEqual(['Notifications', 'Open Admin view', 'Your account']);
     expect(within(panel()).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
   });
 

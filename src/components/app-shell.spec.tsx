@@ -1,5 +1,6 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createHash } from 'node:crypto';
 import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
@@ -470,8 +471,10 @@ describe('below 768px, ☰ opens the sidebar as a drawer (P18.95-T2)', () => {
   }
   const burger = () => screen.getByRole('button', { name: 'Open menu' });
   const drawer = () => screen.queryByRole('dialog', { name: 'Menu' });
-  /** The bar's chip — the one outside the drawer. */
+  /** The bar's chip — the one outside the drawer — from 768px. */
   const barChip = () => within(document.querySelector('aside')!).getByRole('button', { name: /Rina Wijaya/ });
+  /** The bar's avatar below 768px (P18.95-T12): the chip and the bell in one, named for both. */
+  const avatar = () => within(document.querySelector('aside')!).getByRole('button', { name: /^Account and notifications/ });
   /** What a nav says, in order: each group's heading and each item's name. */
   const navWords = (nav: HTMLElement) => Array.from(nav.querySelectorAll('[aria-controls^="nav-group"], a'))
     .map((el) => (el.textContent ?? '').trim());
@@ -533,8 +536,9 @@ describe('below 768px, ☰ opens the sidebar as a drawer (P18.95-T2)', () => {
     expect(foot).toHaveTextContent('Agent · KPM 0417');
     expect(foot).toHaveAttribute('aria-controls', 'phone-menu-account');
     expect(within(open).getByRole('navigation').compareDocumentPosition(foot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // The bell stays on the bar, where a phone always shows it, and is not drawn twice.
+    // The notices are the bar's avatar's (P18.95-T12), which a phone always shows, and are not drawn twice.
     expect(within(open).queryByRole('button', { name: /Notifications/ })).not.toBeInTheDocument();
+    expect(within(open).queryByRole('link', { name: /Notifications/ })).not.toBeInTheDocument();
 
     await userEvent.click(foot);
     const panel = document.getElementById('phone-menu-account')!;
@@ -674,27 +678,28 @@ describe('below 768px, ☰ opens the sidebar as a drawer (P18.95-T2)', () => {
     expect(results.violations ?? []).toHaveLength(0);
   });
 
-  it('P18.95-T2 AC-4 leaves the bar’s name menu the account’s items alone — no nav — below the bar', async () => {
+  it('P18.95-T2 AC-4, P18.95-T12 AC-3 leaves the bar’s menu the account’s items — no nav — below the bar, after the notices', async () => {
     renderPhoneShell(360, {
       account: { href: '/profile', onSignOut: vi.fn(), viewSwitch: { href: '/unit/dashboard', label: 'Open agent view' } },
     });
-    await userEvent.click(barChip());
+    await userEvent.click(avatar());
     const panel = document.getElementById('sidebar-user-actions')!;
     // Below the bar, across it, as before (ADR-0085).
     expect(panel).toHaveClass('top-full', 'inset-x-0');
     expect(within(panel).queryByRole('navigation')).not.toBeInTheDocument();
-    expect(within(panel).getAllByRole('link').map((a) => a.textContent)).toEqual(['Open agent view', 'Your account']);
+    // *Notifications* first since P18.95-T12, its pill reading the count; then the account's items as before.
+    expect(within(panel).getAllByRole('link').map((a) => a.textContent)).toEqual(['Notifications2', 'Open agent view', 'Your account']);
     expect(within(panel).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
     expect(within(panel).getByText('rina@kpm0417.test')).toBeInTheDocument();
     // Focus into it, and held there, as before.
-    expect(within(panel).getByRole('link', { name: 'Open agent view' })).toHaveFocus();
+    expect(within(panel).getByRole('link', { name: 'Notifications, 2 unread' })).toHaveFocus();
     await userEvent.keyboard('{Escape}');
-    expect(barChip()).toHaveFocus();
+    expect(avatar()).toHaveFocus();
   });
 
-  it('P18.95-T2 AC-4 signs out from the bar’s name menu', async () => {
+  it('P18.95-T2 AC-4 signs out from the bar’s menu', async () => {
     const { onSignOut } = renderPhoneShell();
-    await userEvent.click(barChip());
+    await userEvent.click(avatar());
     await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(onSignOut).toHaveBeenCalledTimes(1);
   });
@@ -757,12 +762,18 @@ describe('below 768px, ☰ opens the sidebar as a drawer (P18.95-T2)', () => {
     expect(drawer()).toBeNull();
   });
 
-  it('P11-T6 AC-11 shows the whole chip on a phone, whatever rail a wider window remembered — the drawer too', async () => {
+  it('P11-T6 AC-11, P18.95-T12 AC-4 keeps the phone’s bar and drawer whole, whatever rail a wider window remembered', async () => {
     window.localStorage.setItem('ab.sidebar.rail', '1');
     atWidth(360);
     render(shell());
-    expect(within(barChip()).getByText('Rina Wijaya')).toBeInTheDocument();
+    // The bar's avatar opens the phone's menu below the bar, never the rail's narrow one above it.
+    await userEvent.click(avatar());
+    expect(document.getElementById('sidebar-user-actions')).toHaveClass('top-full');
+    expect(document.getElementById('sidebar-user-actions')).not.toHaveClass('w-48');
+    await userEvent.keyboard('{Escape}');
     await userEvent.click(burger());
+    // The drawer's foot is the whole chip: the name and the profile line.
+    expect(within(within(drawer()!).getByRole('button', { name: /Rina Wijaya/ })).getByText('Rina Wijaya')).toBeInTheDocument();
     // The rail is a desktop control: the drawer's groups keep their headings and their words.
     expect(within(drawer()!).getByRole('button', { name: /Personal tools/ })).toBeInTheDocument();
     expect(within(drawer()!).getByText('Activity management')).toBeInTheDocument();
@@ -775,8 +786,39 @@ describe('below 768px, ☰ opens the sidebar as a drawer (P18.95-T2)', () => {
    * walk, `superadmin-360-panel.png`). jsdom lays nothing out, so this pins the classes that let the
    * row take what the brand leaves and the chip's name truncate inside it, below 768px only.
    */
-  it('P11-T6 AC-11 fits the Super Admin’s bar at 360px: the chip gives way, the bell stays whole', () => {
+  it('P11-T6 AC-11, P18.95-T12 AC-1 fits the Super Admin’s bar at 360px: the avatar alone, at the bar’s right edge', () => {
     atWidth(360);
+    window.localStorage.clear();
+    render(
+      <AppShell
+        sections={SECTIONS}
+        brandTag="SUPERADMIN"
+        user={{ name: 'Platform Operator', role: 'Superadmin', initials: 'PO' }}
+        account={{ href: '/profile', onSignOut: vi.fn() }}
+        notifications={{ href: '/notifications', unread: 3 }}
+      >
+        <p>content</p>
+      </AppShell>,
+    );
+    const bar = document.querySelector('aside')!;
+    // Nothing on the bar to cut: no name, no role, no bell beside the brand.
+    expect(within(bar).queryByText('Platform Operator')).not.toBeInTheDocument();
+    expect(within(bar).queryByText('Superadmin')).not.toBeInTheDocument();
+    expect(within(bar).queryByRole('button', { name: /^Notifications/ })).not.toBeInTheDocument();
+    const trigger = within(bar).getByRole('button', { name: 'Account and notifications, 3 unread' });
+    const row = trigger.parentElement!.parentElement!;
+    // The row still gives way below 768px, and holds in the sidebar from it; the 44px avatar never shrinks.
+    expect(row.classList).toContain('min-w-0');
+    expect(row.classList).toContain('shrink');
+    expect(row.classList).toContain('ml-auto');
+    expect(row.classList).toContain('md:shrink-0');
+    expect(trigger.parentElement!.classList).toContain('shrink-0');
+    expect(trigger.className).toContain('shrink-0');
+    expect(bar.lastElementChild).toBe(row);
+  });
+
+  it('P11-T6 AC-11 keeps the Super Admin’s sidebar foot from 768px: the chip gives way, the bell stays whole', () => {
+    atWidth(1280);
     window.localStorage.clear();
     render(
       <AppShell
@@ -806,6 +848,225 @@ describe('below 768px, ☰ opens the sidebar as a drawer (P18.95-T2)', () => {
     expect(bell.className).toContain('shrink-0');
     expect(box.className).toContain('shrink-0');
     expect(row.lastElementChild).toBe(box);
+  });
+});
+
+/**
+ * **The phone's bar: the avatar holds the account and the notices** (P18.95-T12, the product owner's request of
+ * 2026-10-27, on a screenshot of the bar with *Wilson T…*, the profile line cut and the bell beside it). Below 768px
+ * the bar is ☰, the brand and the avatar alone; the avatar wears the bell's badge and opens one menu: who is signed
+ * in, *Notifications*, then the account's items. 768px and wider are as they were, to the byte.
+ */
+describe('below 768px, the avatar holds the account and the notices (P18.95-T12)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    route.path = '/admin';
+  });
+
+  const LINE = 'AB · Core Leader · Top Producers 2026 · 0417 · Cempaka Putih';
+  function phoneBar(px = 375, over: Partial<React.ComponentProps<typeof AppShell>> = {}) {
+    window.localStorage.clear();
+    const width = atWidth(px);
+    const result = render(
+      <AppShell
+        sections={SECTIONS}
+        user={{ name: 'Wilson', fullName: 'Wilson Tanoto', role: LINE, initials: 'WT', email: 'wilson@kpm0417.test' }}
+        account={{ href: '/profile', onSignOut: vi.fn(), viewSwitch: { href: '/kpm/overview', label: 'Open Owner view' } }}
+        notifications={{ href: '/notifications', unread: 3 }}
+        brandTag="KPM OWNER"
+        title="Log Activity"
+        {...over}
+      >
+        <p>content</p>
+      </AppShell>,
+    );
+    return { ...result, width };
+  }
+  const bar = () => document.querySelector('aside')!;
+  const avatar = () => within(bar()).getByRole('button', { name: /^Account and notifications/ });
+  const panel = () => document.getElementById('sidebar-user-actions');
+
+  it('P18.95-T12 AC-1 holds ☰, the brand and, at its right edge, the avatar alone: no name, no profile line, no bell', () => {
+    phoneBar();
+    const [burger, brand, foot] = Array.from(bar().children);
+    expect(bar().children).toHaveLength(3);
+    expect(burger).toBe(screen.getByRole('button', { name: 'Open menu' }));
+    expect(within(brand as HTMLElement).getByText('AgencyBoost')).toBeInTheDocument();
+    // The foot is one control, pushed to the bar's end.
+    expect(foot).toHaveClass('ml-auto');
+    expect(within(foot as HTMLElement).getAllByRole('button')).toEqual([avatar()]);
+    expect(avatar()).toHaveClass('h-11', 'w-11');
+    expect(within(avatar()).getByText('WT')).toHaveClass('h-8', 'w-8', 'rounded-full', 'bg-amber', 'text-navy');
+    // Nothing else of the chip or the bell on the bar.
+    for (const words of ['Wilson', 'Wilson Tanoto', LINE, 'wilson@kpm0417.test']) {
+      expect(within(bar()).queryByText(words)).not.toBeInTheDocument();
+    }
+    expect(within(bar()).queryByRole('button', { name: /^Notifications/ })).not.toBeInTheDocument();
+    expect(within(bar()).queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('P18.95-T12 AC-2 wears the bell’s own badge, as the bell drew it, and says the count in its name', () => {
+    const { width } = phoneBar(1280);
+    const bell = screen.getByRole('button', { name: 'Notifications, 3 unread' });
+    const drawn = within(bell).getByText('3').outerHTML;
+
+    width.resize(375);
+    expect(screen.queryByRole('button', { name: /^Notifications/ })).not.toBeInTheDocument();
+    const trigger = within(bar()).getByRole('button', { name: 'Account and notifications, 3 unread' });
+    expect(within(trigger).getByText('3').outerHTML).toBe(drawn);
+    // Placed against the avatar's box, as the bell's against its own: on the circle's corner.
+    expect(trigger).toHaveClass('relative');
+  });
+
+  it.each([
+    [1, '1', 'Account and notifications, 1 unread'],
+    [9, '9', 'Account and notifications, 9 unread'],
+    [10, '9+', 'Account and notifications, 10 unread'],
+    [42, '9+', 'Account and notifications, 42 unread'],
+  ])('P18.95-T12 AC-2 at %i unread reads %s on the avatar, and the exact count in its name', (unread, badge, name) => {
+    phoneBar(375, { notifications: { href: '/notifications', unread } });
+    const trigger = within(bar()).getByRole('button', { name });
+    expect(within(trigger).getByText(badge)).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('P18.95-T12 AC-2 wears no badge with nothing unread, and is named for what it opens', () => {
+    phoneBar(375, { notifications: { href: '/notifications', unread: 0 } });
+    const trigger = within(bar()).getByRole('button', { name: 'Account and notifications' });
+    expect(trigger).toHaveTextContent(/^WT$/);
+  });
+
+  it('P18.95-T12 AC-3 opens one menu: the full name, the profile line and the email, then Notifications with its count, then the account’s items', async () => {
+    phoneBar();
+    await userEvent.click(avatar());
+    const open = panel()!;
+    // Below the bar, at its full width (ADR-0085), and in the reading order the eye has.
+    expect(open).toHaveClass('absolute', 'inset-x-0', 'top-full');
+    const lines = Array.from(open.querySelectorAll('p, a, button')).map((el) => el.textContent);
+    expect(lines).toEqual(['Wilson Tanoto', LINE, 'wilson@kpm0417.test', 'Notifications3', 'Open Owner view', 'Your account', 'Sign out']);
+    expect(within(open).getByText(LINE)).not.toHaveClass('truncate');
+    const notices = within(open).getByRole('link', { name: 'Notifications, 3 unread' });
+    expect(notices).toHaveAttribute('href', '/notifications');
+    // 44px rows, every one.
+    for (const row of [...within(open).getAllByRole('link'), within(open).getByRole('button', { name: 'Sign out' })]) {
+      expect(row).toHaveClass('max-md:min-h-11', 'items-center');
+    }
+  });
+
+  it('P18.95-T12 AC-3 goes to /notifications from Notifications and closes, so it is not left open over the inbox', async () => {
+    const swallow = (event: Event) => event.preventDefault();
+    document.addEventListener('click', swallow);
+    try {
+      phoneBar();
+      await userEvent.click(avatar());
+      const notices = within(panel()!).getByRole('link', { name: 'Notifications, 3 unread' });
+      expect(notices).toHaveAttribute('href', '/notifications');
+      await userEvent.click(notices);
+      expect(panel()).toBeNull();
+      expect(avatar()).toHaveAttribute('aria-expanded', 'false');
+    } finally {
+      document.removeEventListener('click', swallow);
+    }
+  });
+
+  it('P18.95-T12 AC-4 keeps the house menu’s keyboard: focus in, round both ways, Escape back to the avatar', async () => {
+    phoneBar();
+    const trigger = avatar();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveAttribute('aria-controls', 'sidebar-user-actions');
+    // A disclosure, as the chip has always been (*The account menu*): no popup role it does not implement.
+    expect(trigger).not.toHaveAttribute('aria-haspopup');
+    await userEvent.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(panel()).toHaveAttribute('id', trigger.getAttribute('aria-controls'));
+
+    const notices = within(panel()!).getByRole('link', { name: 'Notifications, 3 unread' });
+    expect(notices).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    expect(within(panel()!).getByRole('button', { name: 'Sign out' })).toHaveFocus();
+    await userEvent.tab();
+    expect(notices).toHaveFocus();
+    await userEvent.tab();
+    expect(within(panel()!).getByRole('link', { name: 'Open Owner view' })).toHaveFocus();
+
+    await userEvent.keyboard('{Escape}');
+    expect(panel()).toBeNull();
+    expect(avatar()).toHaveFocus();
+  });
+
+  it('P18.95-T12 AC-4 leaves the drawer’s foot as it was: the whole chip, opening upward, with no notices in it', async () => {
+    phoneBar();
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    const drawer = screen.getByRole('dialog', { name: 'Menu' });
+    const foot = within(drawer).getByRole('button', { name: /Wilson/ });
+    expect(foot).toHaveTextContent(`WTWilson${LINE}▴`);
+    expect(foot).toHaveAttribute('aria-controls', 'phone-menu-account');
+    await userEvent.click(foot);
+    const footPanel = document.getElementById('phone-menu-account')!;
+    expect(footPanel).toHaveClass('bottom-full');
+    expect(within(footPanel).getAllByRole('link').map((a) => a.textContent)).toEqual(['Open Owner view', 'Your account']);
+    expect(within(footPanel).getByText('wilson@kpm0417.test')).toHaveClass('truncate');
+  });
+
+  it('P18.95-T12 AC-4 leaves the shell with no account as it was on a phone: the plain label, and the bell beside it', () => {
+    phoneBar(375, { account: undefined });
+    expect(within(bar()).queryByRole('button', { name: /^Account/ })).not.toBeInTheDocument();
+    expect(within(bar()).getByText('Wilson')).toBeInTheDocument();
+    expect(within(bar()).getByRole('button', { name: 'Notifications, 3 unread' })).toBeInTheDocument();
+  });
+
+  it('P18.95-T12 AC-4 has no axe violations with the avatar’s menu open', async () => {
+    const { container } = phoneBar();
+    await userEvent.click(avatar());
+    const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
+    expect(results.violations ?? []).toHaveLength(0);
+  });
+
+  it('P18.95-T12 AC-5 gives the chip and the bell back when the width crosses 768px', () => {
+    const { width } = phoneBar(375);
+    expect(within(bar()).queryByRole('button', { name: /^Notifications/ })).not.toBeInTheDocument();
+    width.resize(1024);
+    expect(within(bar()).getByRole('button', { name: 'Notifications, 3 unread' })).toBeInTheDocument();
+    expect(within(bar()).getByRole('button', { name: /Wilson/ })).toHaveTextContent(`WTWilson${LINE}▴`);
+    expect(within(bar()).queryByRole('button', { name: /^Account and notifications/ })).not.toBeInTheDocument();
+    width.resize(375);
+    expect(avatar()).toBeInTheDocument();
+  });
+
+  /*
+   * **768px and wider, to the byte.** The bar's markup, closed and with the chip's menu open, digested as it was
+   * rendered before P18.95-T12 (captured 2026-10-27 from this fixture on the T11 build) — React's generated ids
+   * aside, which follow render order. The fixture passes `fullName` and the notices, which the desktop chip must not
+   * read. A change here is a change to the tablet and the desktop the client has not reviewed (ADR-0167 §12): if it
+   * is meant, it is registered, and the digests are taken again.
+   */
+  const BEFORE_T12 = {
+    closed: '13fbabe71d23dac7ac3706efde8438f7f798afccf4346825e4425c086264084f',
+    open: '78d55ee46f5b85e26a69379d471747902b9fd8c4fe8a20387eee2628dfa613c9',
+  };
+  const digest = (html: string) => createHash('sha256').update(html.replace(/_r_[0-9a-z]+_/g, '_id_')).digest('hex');
+
+  it.each([768, 1280])('P18.95-T12 AC-5 draws the bar at %ipx exactly as before: the chip with the name, the bell beside it', async (px) => {
+    window.localStorage.clear();
+    atWidth(px);
+    render(
+      <AppShell
+        sections={[{ label: 'Personal tools', items: [{ label: 'Leads management', href: '/leads', icon: 'funnel' }] }]}
+        user={{ name: 'Rina Wijaya', fullName: 'Rina Wijaya Kusuma', role: LINE, initials: 'RW', email: 'rina@kpm0417.test' }}
+        account={{ href: '/profile', onSignOut: vi.fn(), viewSwitch: { href: '/kpm/overview', label: 'Open Owner view' } }}
+        notifications={{ href: '/notifications', unread: 12 }}
+        brandTag="KPM OWNER"
+      >
+        <p>content</p>
+      </AppShell>,
+    );
+    expect(digest(bar().outerHTML)).toBe(BEFORE_T12.closed);
+    // Read as before: the chip says who, the bell says how many.
+    expect(within(bar()).getByRole('button', { name: 'Notifications, 12 unread' })).toBeInTheDocument();
+    expect(within(bar()).queryByRole('button', { name: /^Account/ })).not.toBeInTheDocument();
+
+    await userEvent.click(within(bar()).getByRole('button', { name: /Rina Wijaya/ }));
+    expect(digest(bar().outerHTML)).toBe(BEFORE_T12.open);
+    expect(within(panel()!).queryByRole('link', { name: /Notifications/ })).not.toBeInTheDocument();
   });
 });
 

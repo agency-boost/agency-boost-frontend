@@ -201,6 +201,8 @@ function TenantChrome({
         role: profileLine(capacity, membership),
         initials: me?.user.initials ?? '??',
         email: me?.user.email,
+        // The first of the phone's menu details (P18.95-T12 AC-3): the name in full, where the chip greets by the preferred one.
+        fullName: me?.user.fullName,
       }}
       brandTag="KPM OWNER"
       account={{

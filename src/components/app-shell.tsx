@@ -195,6 +195,11 @@ export interface ShellUser {
   readonly initials: string;
   /** Shown in the account menu, so you can confirm who you are before signing out. */
   readonly email?: string;
+  /**
+   * **The person's full name, for the phone's menu** (P18.95-T12 AC-3): the first of its details, where `name` is
+   * the preferred name the chip greets them by. `name` stands in where it is absent or blank.
+   */
+  readonly fullName?: string;
 }
 
 /**
@@ -267,6 +272,10 @@ export const SubtitleOnPhone = createContext(true);
  * Reordered by rendering, not by `flex-col-reverse`: the second would leave a keyboard reaching
  * the chip first while the eye reads the bell first, which is the kind of mismatch that only
  * shows up for the people who cannot see the discrepancy.
+ *
+ * **On a phone's bar, the avatar alone** (P18.95-T12, the product owner's request of 2026-10-27): at the bar's
+ * right edge, with the bell's badge, and the bell itself goes into its menu as *Notifications* — one control
+ * where the chip, a cut name and the bell stood. The sidebar's foot, from 768px, and the drawer's are as before.
  */
 function SidebarFoot({
   rail,
@@ -284,8 +293,8 @@ function SidebarFoot({
   phone?: boolean;
   /**
    * **At the foot of the phone's drawer** (P18.95-T2 AC-2): the sidebar's foot as the sidebar draws it, the
-   * chip opening upward. **The bell is not repeated there**: it is on the bar, which a phone always shows,
-   * and its popover is placed against the bar.
+   * chip opening upward. **The notices are not repeated there**: they are the bar's avatar's (P18.95-T12),
+   * which a phone always shows.
    */
   drawer?: boolean;
 }) {
@@ -295,6 +304,11 @@ function SidebarFoot({
    * moves with somebody's name is one nobody learns the position of. `flex-1 min-w-0` also
    * gives the name the full width to truncate against rather than only its own.
    */
+  /*
+   * On a phone's bar the avatar is its own size at the bar's right edge, its circle on the bar's padding line
+   * (`-mr-1.5` takes back the 44px box's margin round the 32px circle), and holds the notices (P18.95-T12).
+   */
+  const bar = phone && !drawer;
   const chip = account ? (
     <SidebarUserMenu
       user={user}
@@ -302,10 +316,11 @@ function SidebarFoot({
       onSignOut={account.onSignOut}
       signingOut={account.signingOut}
       viewSwitch={account.viewSwitch}
-      className={rail ? undefined : 'min-w-0 flex-1'}
+      className={bar ? '-mr-1.5 shrink-0' : rail ? undefined : 'min-w-0 flex-1'}
       compact={rail}
       phone={phone}
       panelId={drawer ? DRAWER_ACCOUNT_ID : undefined}
+      notifications={bar ? notifications : undefined}
     />
   ) : (
     <div
@@ -330,7 +345,8 @@ function SidebarFoot({
   // The sidebar's own rule above it, unprefixed: the drawer is a phone's alone.
   if (drawer) return <div className="mt-3 flex min-w-0 items-center border-t border-white/10 pt-3">{chip}</div>;
 
-  const bell = notifications ? <NotificationBell {...notifications} /> : null;
+  // On a phone's bar the avatar's menu holds the notices; with no account there is no menu, and the bell stays.
+  const bell = notifications && !(bar && account) ? <NotificationBell {...notifications} /> : null;
 
   /*
    * **On a phone's bar it gives way; in the sidebar it holds.** Below 768px it sits beside the brand,
@@ -338,7 +354,8 @@ function SidebarFoot({
    * *Superadmin*, beside *AgencyBoost SUPERADMIN*, ran 23px past a 360px screen and clipped the bell
    * (P11-T6 AC-11). `min-w-0 shrink` lets it take what the brand leaves, so the chip's name truncates,
    * as it already does in the sidebar, and the bell stays whole. From 768px it is the sidebar's foot,
-   * which must not shrink under a long nav.
+   * which must not shrink under a long nav. Since P18.95-T12 the bar holds the 44px avatar alone, which
+   * fits beside any brand, and `ml-auto` keeps it at the bar's right edge.
    */
   return (
     <div
@@ -621,7 +638,8 @@ export function AppShell({
    */
   account?: AppShellAccount;
   /**
-   * The bell, beside the identity chip at the foot of the sidebar.
+   * The bell, beside the identity chip at the foot of the sidebar — and **on a phone, the avatar's**: its badge
+   * on the avatar, *Notifications* in its menu, no bell on the bar (P18.95-T12).
    *
    * **Not a nav item.** It was one in all three shells, sitting in a list of places to work
    * with a count beside it — so an office's notifications read as a section of the product
@@ -736,7 +754,8 @@ export function AppShell({
       {/* Below the prototype's 720px breakpoint the rail becomes a horizontal navy bar
           that keeps the brand and hides the nav and footer (`Overall.html:1421-1428`).
           It used to be `hidden md:flex`, which took the only route to sign out with it;
-          the chip in it stayed (ADR-0085), and ☰ before the brand opens the nav (P18.95-T2). */}
+          the chip in it stayed (ADR-0085), and ☰ before the brand opens the nav (P18.95-T2). Since
+          P18.95-T12 the chip and the bell there are one avatar, at the bar's right edge. */}
       <aside
         className={cn(
           // `print:hidden`: a printed page is the page, not the app around it (`Overall.html:1022`, ADR-0061).

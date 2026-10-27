@@ -1234,7 +1234,7 @@ describe('screens have no axe violations', () => {
       await expectClean('coaching/[membershipId] (not found)');
     });
 
-    it('the phone’s menu, open (P18.95-T2 AC-3; ADR-0085, P11-T6 AC-11)', async () => {
+    it('the phone’s menu, open (P18.95-T2 AC-3; ADR-0085, P11-T6 AC-11; P18.95-T12 AC-4)', async () => {
       vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
         media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
       })));
@@ -1246,12 +1246,13 @@ describe('screens have no axe violations', () => {
       expect(within(screen.getByRole('dialog', { name: 'Menu' })).getByRole('navigation', { name: 'Main' }))
         .toBeInTheDocument();
       await expectClean('coaching (the phone’s drawer open)');
-      // And the name menu on the bar, which keeps the account's items (P18.95-T2 AC-4).
+      // And the avatar's menu on the bar: who is signed in, the notices, the account's items (P18.95-T12).
       await userEvent.keyboard('{Escape}');
       const bar = document.querySelector('aside')!;
-      await userEvent.click(within(bar as HTMLElement).getByRole('button', { name: /Rina/ }));
-      expect(document.getElementById('sidebar-user-actions')).toBeInTheDocument();
-      await expectClean('coaching (the phone’s name menu open)');
+      await userEvent.click(within(bar as HTMLElement).getByRole('button', { name: /^Account and notifications/ }));
+      const menu = document.getElementById('sidebar-user-actions')!;
+      expect(within(menu).getByRole('link', { name: /^Notifications/ })).toHaveAttribute('href', '/notifications');
+      await expectClean('coaching (the phone’s avatar menu open)');
     });
   });
 

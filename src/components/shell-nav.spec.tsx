@@ -667,3 +667,147 @@ describe('P18.95-T2 AC-2 the phone’s drawer holds each shell’s sidebar', () 
     expect(within(nav).getByRole('link', { name: /Leaders past the limit/ }).textContent).toBe(badge);
   });
 });
+
+/**
+ * **The phone's bar in each shell: the avatar holds the account and the notices** (P18.95-T12, the product owner's
+ * request of 2026-10-27). Below 768px the field's, the office's and the console's bar is ☰, the brand and the avatar
+ * alone, wearing the bell's count; the avatar's menu reads the person's details, *Notifications*, then the account's
+ * items. Every shell reads its count from `useUnreadCount`, one read of the inbox, so the avatar, its menu and — from
+ * 768px — the bell cannot disagree. The console's profile line has no office part (ADR-0159 §5).
+ */
+describe('P18.95-T12 the phone’s bar in each shell: the avatar holds the account and the notices', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    route.path = '/group-tree';
+  });
+
+  function atWidth(px: number) {
+    let width = px;
+    const listeners = new Set<() => void>();
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      media: query,
+      get matches() { return query === PHONE_QUERY && width < 768; },
+      addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+    })));
+    return (next: number) => {
+      width = next;
+      act(() => listeners.forEach((fn) => fn()));
+    };
+  }
+
+  const SUPER = makeMe({
+    user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
+  });
+  /** The inbox's count, as `useUnreadCount` reads it: a page of one. */
+  const inbox = (unread: number) => stubFetch({
+    '/notifications': { body: { items: [], unread, total: unread, page: 1, pageSize: 1 } },
+  });
+
+  const OFFICE = { code: '0417', branch: 'Cempaka Putih' };
+  // A Core Leader in a group, so the field's line has every part; the office's an Owner's; the console's no office.
+  const FIELD_READER = makeMe({
+    ...AGENT, membership: { ...AGENT.membership!, isCoreLeader: true, groups: ['Top Producers 2026'], office: OFFICE },
+  });
+  const OFFICE_READER = makeMe({ ...OWNER, membership: { ...OWNER.membership!, office: OFFICE } });
+
+  const SHELLS = [
+    ['field', () => <AgentShell title="x">body</AgentShell>, FIELD_READER, '/leads', ['Notifications', 'Your account'],
+      'AB · Core Leader · Top Producers 2026 · 0417 · Cempaka Putih'],
+    ['office', () => <TenantShell title="x">body</TenantShell>, OFFICE_READER, '/people/members',
+      ['Notifications', 'Open agent view', 'Your account'], 'KPM Owner · 0417 · Cempaka Putih'],
+    ['console', () => <AdminShell title="x">body</AdminShell>, SUPER, '/admin/tenants', ['Notifications', 'Your account'],
+      'Superadmin'],
+  ] as const;
+
+  const bar = () => document.querySelector('aside')!;
+  const panel = () => document.getElementById('sidebar-user-actions');
+
+  it.each(SHELLS)('the %s shell: the avatar alone on the bar, then one menu — details, Notifications, the account’s items', async (_shell, render, me, path, links, line) => {
+    route.path = path;
+    inbox(3);
+    const resize = atWidth(1280);
+    renderWithSession(render(), { me });
+    // The sidebar's chip first: the same profile line, and the bell's count.
+    await screen.findByRole('button', { name: 'Notifications, 3 unread' });
+    expect(within(within(bar()).getByRole('button', { name: /Rina/ })).getByTitle(line)).toHaveTextContent(line);
+
+    resize(375);
+    // AC-1: ☰, the brand, the avatar; no name, no profile line, no bell.
+    expect(within(bar()).queryByText('Rina')).not.toBeInTheDocument();
+    expect(within(bar()).queryByText(line)).not.toBeInTheDocument();
+    expect(within(bar()).queryByRole('button', { name: /^Notifications/ })).not.toBeInTheDocument();
+    expect(within(bar()).getAllByRole('button').map((b) => b.getAttribute('aria-label')))
+      .toEqual(['Open menu', 'Account and notifications, 3 unread']);
+    // AC-2: the count on the avatar.
+    const avatar = within(bar()).getByRole('button', { name: 'Account and notifications, 3 unread' });
+    expect(within(avatar).getByText('3')).toHaveClass('bg-alert');
+
+    // AC-3: the full name, the profile line, the email; Notifications with the count; the account's items.
+    await userEvent.click(avatar);
+    const lines = Array.from(panel()!.querySelectorAll('p')).map((p) => p.textContent);
+    expect(lines).toEqual(['Rina Wijaya', line, 'rina@kpm0417.test']);
+    expect(within(panel()!).getAllByRole('link').map((a) => a.textContent))
+      .toEqual(links.map((l) => (l === 'Notifications' ? 'Notifications3' : l)));
+    expect(within(panel()!).getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    const notices = within(panel()!).getByRole('link', { name: 'Notifications, 3 unread' });
+    expect(notices).toHaveAttribute('href', '/notifications');
+
+    // AC-4: focus in on Notifications; Escape shuts it and gives the focus back to the avatar.
+    expect(notices).toHaveFocus();
+    await userEvent.keyboard('{Escape}');
+    expect(panel()).toBeNull();
+    expect(avatar).toHaveFocus();
+  });
+
+  it.each(SHELLS)('the %s shell: Notifications goes to the inbox and closes the menu', async (_shell, render, me, path) => {
+    route.path = path;
+    inbox(2);
+    atWidth(375);
+    const swallow = (event: Event) => event.preventDefault();
+    document.addEventListener('click', swallow);
+    try {
+      renderWithSession(render(), { me });
+      await userEvent.click(await within(bar()).findByRole('button', { name: 'Account and notifications, 2 unread' }));
+      const notices = within(panel()!).getByRole('link', { name: 'Notifications, 2 unread' });
+      expect(notices).toHaveAttribute('href', '/notifications');
+      await userEvent.click(notices);
+      expect(panel()).toBeNull();
+    } finally {
+      document.removeEventListener('click', swallow);
+    }
+  });
+
+  it.each(SHELLS.flatMap(([shell, render, me, path]) => [
+    [shell, render, me, path, 12, '9+', 'Account and notifications, 12 unread'],
+    [shell, render, me, path, 0, null, 'Account and notifications'],
+  ] as const))('the %s shell at %i unread: the avatar’s badge reads %s', async (_shell, render, me, path, unread, badge, name) => {
+    route.path = path;
+    inbox(unread);
+    atWidth(375);
+    renderWithSession(render(), { me });
+    const avatar = await within(bar()).findByRole('button', { name });
+    if (badge) {
+      expect(within(avatar).getByText(badge)).toHaveAttribute('aria-hidden', 'true');
+    } else {
+      // The initials alone: no badge, and no pill in the menu's row.
+      expect(avatar).toHaveTextContent(/^RW$/);
+      await userEvent.click(avatar);
+      expect(within(panel()!).getByRole('link', { name: 'Notifications' })).toHaveTextContent(/^Notifications$/);
+    }
+  });
+
+  it.each(SHELLS)('the %s shell from 768px: the chip with the name and the bell beside it, as before', async (_shell, render, me, path) => {
+    route.path = path;
+    inbox(3);
+    atWidth(768);
+    renderWithSession(render(), { me });
+    const bell = await within(bar()).findByRole('button', { name: 'Notifications, 3 unread' });
+    expect(within(bell).getByText('3')).toBeInTheDocument();
+    expect(within(bar()).getByRole('button', { name: /Rina/ })).toHaveTextContent(/Rina/);
+    expect(within(bar()).queryByRole('button', { name: /^Account/ })).not.toBeInTheDocument();
+    // The bell is the sidebar's foot's last control, after the chip, as it was.
+    const row = bell.parentElement!.parentElement!;
+    expect(row.lastElementChild).toBe(bell.parentElement);
+  });
+});

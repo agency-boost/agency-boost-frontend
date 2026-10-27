@@ -179,6 +179,8 @@ function AdminChrome({
         role: 'Superadmin',
         initials: me?.user.initials ?? 'SA',
         email: me?.user.email,
+        // The first of the phone's menu details (P18.95-T12 AC-3): the name in full, where the chip greets by the preferred one.
+        fullName: me?.user.fullName,
       }}
       brandTag="SUPERADMIN"
       upcomingLabel="Soon"
