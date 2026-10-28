@@ -54,7 +54,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     expect(day).toHaveTextContent('Day90+/90');
     expect(day).toHaveAttribute('data-variant', 'overdue');
     expect(screen.getByText('Completed').parentElement).toHaveTextContent('Completed5/16');
-    expect(screen.getByText('31,0% complete')).toBeInTheDocument();
+    expect(screen.getByText('31% complete')).toBeInTheDocument();
     expect(screen.getByRole('table', { name: 'Activation progress' })).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: 'Activation progress' })).toHaveAttribute('aria-valuenow', '31');
     expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([

@@ -7,8 +7,9 @@ import { useCan } from '@/lib/session';
 
 /**
  * **Settings › Recruitment pitch** (`/kpm/settings/recruitment-pitch`; the prototype's *Viewing as KPM*
- * view, `Recruitment_Section.html:693-753`, `:797-820`; P17-T5, D-settings): the office's four pitch
- * documents, uploaded, replaced and confirmed for every agent who shows them.
+ * view, `Recruitment_Section.html:693-753`, `:797-820`; P17-T5, D-settings): the office's pitch documents —
+ * the four, then *Company Profile* and *Agency Profile*, optional (ADR-0177) — uploaded, replaced and confirmed
+ * for every agent who shows them.
  *
  * The title and no sub-line, as drawn; **no toggle** — the prototype's *Viewing as Agent* / *Viewing as
  * KPM* switch is two routes, and the permissions decide which one a reader reaches (H-22).

@@ -76,7 +76,8 @@ export function OrgTree({
    * **An indented list in place of the canvas** — `/group-tree`'s below 768px (P18.95-T8 AC-3; the
    * client's UI review, UI-025: the tree grew right, 516px wide in a 285px box, and only the reader
    * showed). The page decides, from the width it has known since it mounted, so the canvas never flashes
-   * on a phone before the list; the office's tree keeps its canvas until the client reviews it.
+   * on a phone before the list. The office's tree, `/people/org-tree`, draws it too since the client reviewed
+   * it (P18.97-T7 AC-4, ADR-0178 §5; UI-036).
    */
   asList?: boolean;
 }) {

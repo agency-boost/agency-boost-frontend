@@ -39,7 +39,7 @@ describe('/coaching/me/activation, the reader’s own Activation tab (P13-T9 AC-
   it('P13-T9 AC-4 draws the coaching renderer: the card, the percentage and the five cards, read-only', async () => {
     show();
     const record = await card();
-    expect(within(record).getByText('31,0% complete')).toBeInTheDocument();
+    expect(within(record).getByText('31% complete')).toBeInTheDocument();
     expect(screen.getAllByText('✓ Done · New Active Agent')).toHaveLength(1);
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
@@ -47,7 +47,7 @@ describe('/coaching/me/activation, the reader’s own Activation tab (P13-T9 AC-
   it('P13-T9 AC-4 keeps the checklist once it is graduated, when /activation is no longer offered', async () => {
     show({ 'GET /activation/me': { body: completeView({ state: 'graduated', graduatedAt: '2026-09-29T03:00:00.000Z', graduatedBy: RINA }) } });
     const record = await card();
-    expect(within(record).getByText('100,0% complete')).toBeInTheDocument();
+    expect(within(record).getByText('100% complete')).toBeInTheDocument();
   });
 
   it('P13-T9 AC-4 a reader with no activation opens on an empty state', async () => {

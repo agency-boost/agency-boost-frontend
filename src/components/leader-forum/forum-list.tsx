@@ -17,10 +17,12 @@ import { signInAndReturn } from './meeting-screen';
 const FILTERS: readonly MeetingFilter[] = ['all', 'upcoming', 'past'];
 
 /**
- * **The list** (`/leader-meetings`, `:2002-2013`, `:2588-2630`; *The list*): the list's own line, the filter
- * *All* · *Upcoming* · *Past* over the one read, *+ New meeting* beside it for whoever may make one, and a
- * card per meeting, newest first. A member the server does not let read the forum is answered `404`, and
- * meets the not-found state.
+ * **The list** (`/leader-meetings`, `:2002-2013`, `:2588-2630`; *The list*): the filter *All* · *Upcoming* · *Past*
+ * over the one read, *+ New meeting* beside it for whoever may make one, and a card per meeting, newest first. A member
+ * the server does not let read the forum is answered `404`, and meets the not-found state.
+ *
+ * **One subtitle** (P18.97-T2 AC-1, I-496; the client's grey-text row for UI-015): the page's, from the shell. The list's
+ * own line (`:2004`) said it again and is gone at every size.
  */
 export function ForumList() {
   const { me, loading, signedOut, expired } = useSession();
@@ -61,8 +63,6 @@ export function ForumList() {
 
   return (
     <>
-      <p className="mb-[18px] text-md text-muted">{FORUM_COPY.listLine}</p>
-
       <div className="mb-[22px] flex flex-wrap items-center gap-3">
         {/* `#meeting-segmented` (`:596-601`): each button says whether it is the one on (I-255). */}
         <div className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">

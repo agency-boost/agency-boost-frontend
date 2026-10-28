@@ -11,12 +11,14 @@ import { DateField } from '@/components/ui/date-field';
 import { Button, Card, Field, Select, Textarea, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { figureWords, officeDay, officeDayEdge, POSTER_COLORS, type PosterColor } from '@/lib/campaigns';
+import { figureWords, officeDay, officeDayEdge, POSTER_COLORS, ratioUnitsOf, type PosterColor } from '@/lib/campaigns';
 import { cn } from '@/lib/cn';
 import { suggestCode } from '@/lib/config-code';
 import { parseDecimal } from '@/lib/format';
 import { parseDigits, toMinor } from '@/lib/goals';
 import { useCan } from '@/lib/session';
+import { byPhaseAndDate } from '@/lib/settings-order';
+import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { useHashTab } from '@/lib/use-hash-tab';
 import {
   archiveCampaign, createCampaign, listCampaigns, listMetrics, listQualificationRules, restoreCampaign,
@@ -46,10 +48,12 @@ const COMPARATOR: Record<string, string> = {
  * `idr_minor` is integer sen, rendered as rupiah — the prototype stores *"Rp 600,000,000"* as a
  * display string and one campaign's reward in **pesos**, so neither can be compared or totalled.
  * Written as the campaign cards write it (`figureWords`, ADR-0167 §1): *Rp 600 jt*, in full where
- * compact writing would round the rule.
+ * compact writing would round the rule. **A rate as a percentage** (P18.97-T4 AC-8, ADR-0176 §8; UI-030): a
+ * requirement on one of the office's ratios is written in that ratio's own unit, `ratioUnits` — *Recruitment success
+ * rate at least 30%*, where it read *0,30* — and one the office does not hold as a number, as before.
  */
-function readRequirement(r: RequirementView): string {
-  return `${r.metricName} ${COMPARATOR[r.comparator] ?? r.comparator} ${figureWords(r.value, r.unit)}`;
+function readRequirement(r: RequirementView, ratioUnits: ReadonlyMap<string, 'percent' | 'decimal'>): string {
+  return `${r.metricName} ${COMPARATOR[r.comparator] ?? r.comparator} ${figureWords(r.value, r.unit, ratioUnits.get(r.metricKey))}`;
 }
 
 /**
@@ -131,6 +135,12 @@ export default function CampaignsSettingsPage() {
   const [metrics, setMetrics] = useState<MetricDefinition[]>([]);
   /** The company's rungs, for *Open to* (ADR-0035's shape: none ticked is everybody). */
   const ladder = useLadder();
+  /**
+   * How the office writes each of its ratios (P4-T25), by code — a ratio's code is its metric's key — so a requirement
+   * on one reads as the ratio card does (P18.97-T4 AC-8). Read from the office's published configuration.
+   */
+  const { config } = useTenantConfig();
+  const ratioUnits = ratioUnitsOf(config?.ratios);
 
   const load = useCallback(async () => {
     try {
@@ -171,7 +181,8 @@ export default function CampaignsSettingsPage() {
 
   function campaignsTab() {
     if (campaigns === null) return <SkeletonCards count={3} />;
-    const shown = campaigns.filter((c) => showArchived || c.status === 'active');
+    // Upcoming, then running, then ended — each by date (P18.97-T4 AC-8, ADR-0176 §8; UI-030: the three were mixed).
+    const shown = byPhaseAndDate(campaigns.filter((c) => showArchived || c.status === 'active'));
 
     return (
       <div className="flex flex-col gap-4">
@@ -213,7 +224,8 @@ export default function CampaignsSettingsPage() {
                         <ConfigBadge tone={PHASE[campaign.phase].tone}>
                           {PHASE[campaign.phase].text}
                         </ConfigBadge>
-                        <ConfigBadge tone="open">Your office’s</ConfigBadge>
+                        {/* *This office* (P18.97-T4 AC-8; UI-030), where it read *Your office’s*: run here, not by the insurer. */}
+                        <ConfigBadge tone="open">This office</ConfigBadge>
                         {campaign.status === 'archived' && (
                           <ConfigBadge tone="open">Archived</ConfigBadge>
                         )}
@@ -222,7 +234,7 @@ export default function CampaignsSettingsPage() {
                         <ul className="mt-2 flex flex-col gap-1">
                           {campaign.requirements.map((r) => (
                             <li key={r.metricKey} className="flex flex-wrap items-center gap-2 text-md text-navy">
-                              {readRequirement(r)}
+                              {readRequirement(r, ratioUnits)}
                               {/* A requirement stored before the evaluable set, naming what a campaign cannot measure (T8 AC-1). */}
                               {r.measured === false && <ConfigBadge tone="open">Not measured yet</ConfigBadge>}
                             </li>
@@ -644,7 +656,7 @@ export default function CampaignsSettingsPage() {
                               {rule.groupMode === 'any' ? 'or ' : 'and '}
                             </span>
                           )}
-                          {group.criteria.map((c) => readRequirement(c)).join(
+                          {group.criteria.map((c) => readRequirement(c, ratioUnits)).join(
                             group.mode === 'all' ? ', and ' : ', or ',
                           )}
                         </li>

@@ -5,10 +5,13 @@ import { Page } from '@/components/page';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Field, Select } from '@/components/ui/field';
-import { RoleBadge, rungShort, useLadder } from '@/components/ui/role-badge';
-import { SkeletonTable } from '@/components/ui/skeleton';
+import { CONTROL_PHONE } from '@/components/ui/phone';
+import { RoleBadge } from '@/components/ui/role-badge';
+import { CardField, CardFields, RowCard, RowCards } from '@/components/ui/row-cards';
+import { SkeletonCards, SkeletonTable } from '@/components/ui/skeleton';
 import { displayName } from '@/lib/display-name';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import { formatOfficeMonth } from '@/lib/format';
 import {
   grantAdmin,
@@ -17,6 +20,7 @@ import {
   revokeAdmin,
   type DelegatedAdmin,
 } from '@/lib/org';
+import { usePhone } from '@/lib/use-phone';
 
 /**
  * The skeleton and the table read the same array, so a column added to one cannot
@@ -39,15 +43,18 @@ const COLUMNS = ['Name', 'Role', 'Admin since', 'Granted by', { label: 'Actions'
  * The screen is Owner-only, but the API is not symmetrical: an Admin may *read* the list
  * and is refused the writes with `PERM_OWNER_ONLY`. Knowing who else administers the
  * office is not a power; handing it out is.
+ *
+ * **Below 768px the list is a card per admin** (P18.97-T7 AC-1, ADR-0178 §4; the client's UI-034: the table, 425px on
+ * a 375px screen): `usePhone`, asked where the screen mounts, before the list answers. From 768px the table it was.
  */
 export default function AdminsPage() {
-  const ladder = useLadder();
   const [admins, setAdmins] = useState<DelegatedAdmin[] | null>(null);
   const [candidates, setCandidates] = useState<{ membershipId: string; fullName: string }[]>([]);
   const [granting, setGranting] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<DelegatedAdmin | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const phone = usePhone();
 
   /*
    * **A read that lands after the page is gone is dropped**, as `TenantConfigProvider`'s is: on CI one arrived after
@@ -66,10 +73,16 @@ export default function AdminsPage() {
       const [delegated, office] = await Promise.all([listAdmins(), readOrgTree()]);
       if (!mounted.current) return;
       setAdmins(delegated);
+      /*
+       * **Only the office's active members other than the reader and its admins** (P18.97-T4 AC-5, ADR-0176 §5; the
+       * client's UI-026: the list offered Wilson, who was reading it). The tree is the office's active memberships, so
+       * a removed one is never offered and a member who came back is offered once, by the membership she holds now;
+       * the server refuses a removed one (`404`) and a pending one (`422`) whatever this offers.
+       */
       const already = new Set(delegated.map((a) => a.membershipId));
       setCandidates(
         office.nodes
-          .filter((n) => !already.has(n.membershipId))
+          .filter((n) => !n.isSelf && !already.has(n.membershipId))
           .map((n) => ({ membershipId: n.membershipId, fullName: displayName(n) }))
           .sort((a, b) => a.fullName.localeCompare(b.fullName)),
       );
@@ -109,11 +122,8 @@ export default function AdminsPage() {
       {error && <ErrorBanner {...error} />}
 
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-2xl text-md text-muted">
-          An Admin can do everything you can except one thing: grant or revoke admin access.
-          Admin access is <strong>not</strong> a hierarchy role — an {rungShort('AB', ladder)} with a unit can
-          hold it, and holding it changes nothing about who reports to them.
-        </p>
+        {/* The client's one line for the paragraph it replaces, at every size (P18.97-T4 AC-5; the grey-text table, UI-026). */}
+        <p className="max-w-2xl text-md text-muted">Admins can do everything except manage admins.</p>
         <Field label="Grant admin access to" htmlFor="grant-to" className="min-w-56">
           <Select
             id="grant-to"
@@ -161,9 +171,9 @@ export default function AdminsPage() {
         </div>
       )}
 
-      {admins === null && !error && (
-        <SkeletonTable caption="KPM Admins" columns={COLUMNS} rows={3} />
-      )}
+      {admins === null && !error && (phone
+        ? <SkeletonCards count={2} label="Loading KPM Admins…" />
+        : <SkeletonTable caption="KPM Admins" columns={COLUMNS} rows={3} />)}
 
       {admins?.length === 0 && !error && (
         <div className="rounded-lg border border-hairline bg-card">
@@ -176,6 +186,9 @@ export default function AdminsPage() {
           <p className="mb-2 text-md text-muted">
             {admins.length} {admins.length === 1 ? 'KPM Admin' : 'KPM Admins'}, delegated by you
           </p>
+          {phone ? (
+            <AdminCards admins={admins} busy={busy} onRevoke={setRevoking} />
+          ) : (
           <DataTable
             caption="KPM Admins"
             columns={COLUMNS}
@@ -216,8 +229,60 @@ export default function AdminsPage() {
               </Row>
             ))}
           </DataTable>
+          )}
         </>
       )}
     </Page>
+  );
+}
+
+/**
+ * **The admins as cards** (P18.97-T7 AC-1, ADR-0178 §4; UI-034), in the table's order and words through the shared card
+ * pieces (`components/ui/row-cards.tsx`): the name with the rung's badge after it, the agent code under it, then
+ * *Admin since* and *Granted by* each under its heading (a — is not drawn), and the row's one action across the card —
+ * *Revoke*, 44px tall on a phone, asking first as the table's does — or *Yours* for the Owner's own access.
+ */
+function AdminCards({
+  admins, busy, onRevoke,
+}: {
+  admins: DelegatedAdmin[];
+  busy: boolean;
+  onRevoke: (admin: DelegatedAdmin) => void;
+}) {
+  return (
+    <RowCards label="KPM Admins">
+      {admins.map((admin) => (
+        <RowCard key={admin.membershipId} data-row={admin.membershipId}>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="min-w-0 break-words text-md font-semibold text-navy">{admin.fullName}</span>
+            <RoleBadge role={admin.role} />
+          </p>
+          <p className="text-sm text-muted">{admin.agentCode}</p>
+          {(admin.grantedAt || admin.grantedByName) && (
+            <CardFields>
+              {admin.grantedAt && (
+                <CardField label="Admin since">
+                  <time dateTime={admin.grantedAt} className="text-muted">{formatOfficeMonth(admin.grantedAt)}</time>
+                </CardField>
+              )}
+              {admin.grantedByName && (
+                <CardField label="Granted by"><span className="text-muted">{admin.grantedByName}</span></CardField>
+              )}
+            </CardFields>
+          )}
+          <div className="mt-3">
+            {admin.canRevoke ? (
+              <Button variant="danger" disabled={busy} className={cn('w-full', CONTROL_PHONE)} onClick={() => onRevoke(admin)}>
+                Revoke
+                <span className="sr-only"> {admin.fullName}&apos;s admin access</span>
+              </Button>
+            ) : (
+              // The Owner's own access comes from being the Owner, not a grant.
+              <span className="text-sm text-muted">Yours</span>
+            )}
+          </div>
+        </RowCard>
+      ))}
+    </RowCards>
   );
 }

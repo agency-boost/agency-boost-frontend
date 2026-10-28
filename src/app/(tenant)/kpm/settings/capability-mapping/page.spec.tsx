@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { atWidth, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
 import CapabilityMappingPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -84,7 +84,8 @@ describe('the capability catalog screen', () => {
     render(empty, OWNER, '#ladder');
     expect(await screen.findByText('No stages yet.')).toBeInTheDocument();
     expect(screen.getByText('No milestones yet.')).toBeInTheDocument();
-    expect(screen.queryByText(/Four stages/)).not.toBeInTheDocument();
+    // The ladder's sentence is for a ladder that has stages (the client's words since P18.97-T4 AC-6).
+    expect(screen.queryByText(/highest stage with all milestones ticked/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add a milestone' })).toBeEnabled();
     vi.unstubAllGlobals();
 
@@ -166,12 +167,16 @@ describe('the capability catalog screen', () => {
       .toMatchObject({ status: 'archived' });
   });
 
+  /*
+   * *Amended 2026-10-28 (P18.97-T4 AC-6; UI-027):* in the client's words — how a stage is decided, the milestones ticked
+   * and not the order, which is why reordering moves nobody.
+   */
   it('says reordering the ladder moves nobody’s stage', async () => {
     // The prototype computes the stage from the array index, so tidying it moves everybody.
     render(catalog(), OWNER, '#ladder');
 
-    expect(await screen.findByText(/reordering these changes where they sit on the page/))
-      .toBeInTheDocument();
+    expect((await screen.findAllByText('A person’s stage = highest stage with all milestones ticked.')).length)
+      .toBeGreaterThan(0);
   });
 
   it('reorders by sending every code once, in the new order', async () => {
@@ -252,5 +257,44 @@ describe('the capability catalog screen', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(/already used in this catalog/);
     expect(screen.getByLabelText('Name')).toHaveValue('Approach');
+  });
+});
+
+/**
+ * **The ladder's grey sentence per size** (P18.97-T4 AC-6, ADR-0176 §6; the client's grey-text table of 2026-10-27,
+ * UI-027, *ⓘ · ⓘ · Show*): *"A person’s stage = highest stage with all milestones ticked."* under *The ladder* from
+ * 1024px, behind an ⓘ beside the heading below it.
+ */
+describe('P18.97-T4 AC-6 the ladder’s grey text per size', () => {
+  afterEach(() => { vi.unstubAllGlobals(); window.location.hash = ''; });
+  const NOTE = 'A person’s stage = highest stage with all milestones ticked.';
+
+  async function drawnAt(px: number) {
+    atWidth(px);
+    render(catalog(), OWNER, '#ladder');
+    const heading = await screen.findByRole('heading', { name: 'The ladder' });
+    const shown = (el: Element) => !wears(el, px).split(' ').includes('hidden');
+    const sentence = screen.getAllByText(NOTE).find((el) => el.tagName === 'P')!;
+    const tip = screen.getByRole('button', { name: NOTE });
+    return { heading, sentence: shown(sentence), tip: shown(tip.parentElement!), glyph: tip };
+  }
+
+  it.each([1024, 1280])('P18.97-T4 AC-6 at %ipx shows the sentence under the heading and no ⓘ', async (px) => {
+    const { sentence, tip } = await drawnAt(px);
+    expect([sentence, tip]).toEqual([true, false]);
+  });
+
+  it.each([767, 768, 1023])('P18.97-T4 AC-6 at %ipx hides it behind the ⓘ beside The ladder', async (px) => {
+    const { heading, sentence, tip, glyph } = await drawnAt(px);
+    expect([sentence, tip]).toEqual([false, true]);
+    // Beside its subject, and not inside the heading's name.
+    expect(heading.parentElement).toContainElement(glyph);
+    expect(heading).not.toContainElement(glyph);
+  });
+
+  it('P18.97-T4 AC-6 says the twenty-seven words no more', async () => {
+    render(catalog(), OWNER, '#ladder');
+    await screen.findByRole('heading', { name: 'The ladder' });
+    expect(screen.queryByText(/Four stages\. Somebody is at the highest stage/)).toBeNull();
   });
 });

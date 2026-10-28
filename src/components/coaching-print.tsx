@@ -10,7 +10,7 @@ import {
   goalHasTarget, printActionLine, printGoalLine, printLeadActionLine, readSessionPrint, type SessionPrint,
 } from '@/lib/coaching';
 import { formatCalendarDay, formatCalendarDayLong, formatShortDay } from '@/lib/format';
-import { formatRupiah } from '@/lib/goals';
+import { formatRupiahCompact } from '@/lib/goals';
 import { printAs } from '@/lib/print';
 import { useCan } from '@/lib/session';
 
@@ -27,7 +27,8 @@ import { useCan } from '@/lib/session';
  * - **The session's date, not today's** (a Fix): the prototype printed the browser's today under every
  *   session it exported. A coachee's print says who led it, as the prototype's leader's own export does
  *   (`:11677`), and so does anybody's who did not lead it.
- * - **Money in the one formatter** (F-02), where the prototype's export wrote *Rp1.2M+*.
+ * - **Money in the one formatter** (F-02), where the prototype's export wrote *Rp1.2M+*: **compact**, *Rp 6,5 jt / Rp 8 jt*,
+ *   as every figure is but a price and the file's own (ADR-0174 §4) — a print is read, not checked against a field.
  * - **Numbered as the screen numbers them** (F1 of P11's final walk): the other action items by date,
  *   undated last, with the screen's own comparator, as the prototype sorts them before it exports
  *   (`:11044-11049`, `:11181`). *No goal set* where the archive says it, by the archive's condition (F2).
@@ -113,8 +114,8 @@ export function SessionPrintView({ print, showCoach }: { print: SessionPrint; sh
         <h2 className={h2}>Goal</h2>
         {goalHasTarget(print.goal) ? (
           <>
-            <p className={line}>{printGoalLine('This month', print.goal.monthly, formatRupiah)}</p>
-            <p className={line}>{printGoalLine('This year', print.goal.yearly, formatRupiah)}</p>
+            <p className={line}>{printGoalLine('This month', print.goal.monthly, formatRupiahCompact)}</p>
+            <p className={line}>{printGoalLine('This year', print.goal.yearly, formatRupiahCompact)}</p>
           </>
         ) : (
           <p className={line}>No goal set</p>

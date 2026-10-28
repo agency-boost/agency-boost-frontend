@@ -144,7 +144,7 @@ function RateCard({ ratio }: { ratio: ActivityRatio }) {
  * toward selling.
  *
  * **Off the band, the sentence says what to do** (P18.95-T5 AC-6, the client's request of 2026-10-26):
- * *67,0% Selling · 33,0% Recruitment · Too much selling — aim for 35,0%–65,0%*, where it read *Below
+ * *67,0% Selling · 33,0% Recruitment · Too much selling — aim for 35%–65%*, where it read *Below
  * benchmark*; in the band it still reads *On track*. The band is the ratio's own benchmark (`balanceAdvice`).
  */
 function BalanceCard({ ratio }: { ratio: ActivityRatio }) {

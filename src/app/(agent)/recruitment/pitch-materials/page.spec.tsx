@@ -16,16 +16,22 @@ const LABELS = ['career-path', 'income', 'support', 'commitment'];
 const checklist = (ticked: string[] = []) =>
   LABELS.map((code) => ({ code, label: `Item ${code}`, ticked: ticked.includes(code) }));
 const file = (name: string, bytes = 2.4 * 1024 * 1024, uploadedOn = '2026-09-12') => ({ name, bytes, uploadedOn });
+/** The two the readiness does not count (ADR-0177 §2): the server says so in `required`. */
+const OPTIONAL: readonly PitchSlot['slot'][] = ['company', 'agency'];
 const slot = (code: PitchSlot['slot'], title: string, over: Partial<PitchSlot> = {}): PitchSlot => ({
-  slot: code, title, line: `${title}'s line`, state: 'missing', file: null,
+  slot: code, title, line: `${title}'s line`, required: !OPTIONAL.includes(code), state: 'missing', file: null,
   checklist: code === 'opportunity' ? checklist() : [], version: 0, ...over,
 });
+/** The server's counts, worked out here only to keep each fixture consistent with its slots: the required alone. */
 function view(slots: PitchSlot[]): PitchMaterialsView {
-  const count = (...s: PitchSlot['state'][]) => slots.filter((x) => s.includes(x.state)).length;
+  const required = slots.filter((x) => x.required);
+  const count = (...s: PitchSlot['state'][]) => required.filter((x) => s.includes(x.state)).length;
   return { slots, summary: { done: count('complete', 'uploaded'), total: 4, missing: count('missing'), unconfirmed: count('partial') } };
 }
+const company = (over: Partial<PitchSlot> = {}) => slot('company', 'Company Profile', over);
+const agency = (over: Partial<PitchSlot> = {}) => slot('agency', 'Agency Profile', over);
 
-/** 0417's state in the seed's shape: one partly confirmed, one uploaded, two missing. */
+/** 0417's state in the seed's shape: one partly confirmed, one uploaded, two missing; its Company Profile, a one-page PDF. */
 const PARTLY = view([
   slot('opportunity', 'Opportunity Overview', {
     state: 'partial', file: file('Opportunity_Overview_v3.pdf'), checklist: checklist(['career-path', 'support']), version: 1,
@@ -33,14 +39,25 @@ const PARTLY = view([
   slot('proof', 'Proof & Credibility', { state: 'uploaded', file: file('Proof_and_Credibility_2026.pdf', 1.1 * 1024 * 1024, '2026-08-30'), version: 1 }),
   slot('faq', 'FAQ'),
   slot('howtojoin', 'How to Join'),
+  company({ state: 'uploaded', file: file('Company_Profile_2026.pdf', 712, '2026-09-26'), version: 1 }),
+  agency(),
 ]);
-const NONE = view([slot('opportunity', 'Opportunity Overview'), slot('proof', 'Proof & Credibility'), slot('faq', 'FAQ'), slot('howtojoin', 'How to Join')]);
+const NONE = view([
+  slot('opportunity', 'Opportunity Overview'), slot('proof', 'Proof & Credibility'), slot('faq', 'FAQ'), slot('howtojoin', 'How to Join'),
+  company(), agency(),
+]);
+/** 0555's: the four done, and both optional documents. */
 const ALL = view([
   slot('opportunity', 'Opportunity Overview', { state: 'complete', file: file('o.pdf'), checklist: checklist(LABELS), version: 1 }),
   slot('proof', 'Proof & Credibility', { state: 'uploaded', file: file('p.pdf'), version: 1 }),
   slot('faq', 'FAQ', { state: 'uploaded', file: file('f.pdf'), version: 1 }),
   slot('howtojoin', 'How to Join', { state: 'uploaded', file: file('h.pdf'), version: 1 }),
+  company({ state: 'uploaded', file: file('c.pdf'), version: 1 }),
+  agency({ state: 'uploaded', file: file('a.pdf'), version: 1 }),
 ]);
+/** The four done, and neither optional document: still complete (ADR-0177 §3). */
+const FOUR_DONE = view([...ALL.slots.slice(0, 4), company(), agency()]);
+const SIX_TITLES = ['Opportunity Overview', 'Proof & Credibility', 'FAQ', 'How to Join', 'Company Profile', 'Agency Profile'];
 
 const member = (over: Record<string, unknown> = {}) => ({
   membershipId: 'mem-1', kpmId: 'kpm-1', orgLevelCode: 'AGENT', hierarchyRole: 'agent' as const,
@@ -80,20 +97,27 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
     ['the Owner in the field view', OWNER], ['the Admin in the field view', ADMIN],
     ['a read-only support session', SUPPORT_READ_ONLY],
   ])('read by %s (AC-1, AC-3)', (_who, me) => {
-    it('draws the banner and the four cards, each Missing or Uploaded, with nothing to change', async () => {
+    it('P18.97-T5 AC-1, AC-2, AC-3 draws the banner over the four and all six cards — the amber badge, the optional two tagged — with nothing to change', async () => {
       render({ body: PARTLY }, me);
-      await screen.findByRole('article', { name: 'FAQ' });
+      await screen.findByRole('article', { name: 'Agency Profile' });
 
       expect(screen.getByRole('img', { name: '1 of 4 documents complete' })).toHaveTextContent('1/4');
       expect(screen.getByText(
         '2 missing, 1 needs checking.',
       )).toBeInTheDocument();
-      // The agent's two badges (`:696`): a partly confirmed document reads Uploaded here.
-      expect(within(card('Opportunity Overview')).getByText('Uploaded')).toBeInTheDocument();
-      expect(screen.queryByText(/confirmed$/)).not.toBeInTheDocument();
+      expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(SIX_TITLES);
+      // A partly confirmed document says so to agents too (UI-029), where the prototype's agent view read Uploaded.
+      expect(within(card('Opportunity Overview')).getByText('Uploaded · needs confirmation')).toBeInTheDocument();
+      expect(screen.queryByText(/\d\/\d confirmed/)).not.toBeInTheDocument();
       expect(within(card('Proof & Credibility')).getByText('Uploaded')).toBeInTheDocument();
       expect(within(card('FAQ')).getByText('Missing')).toBeInTheDocument();
       expect(within(card('How to Join')).getByText('Missing')).toBeInTheDocument();
+      // The two optional documents: tagged, the empty one never Missing.
+      for (const title of ['Company Profile', 'Agency Profile']) expect(within(card(title)).getByText('Optional')).toBeInTheDocument();
+      expect(within(card('Company Profile')).getByText('Uploaded')).toBeInTheDocument();
+      expect(within(card('Agency Profile')).getByText('Not uploaded yet')).toBeInTheDocument();
+      expect(within(card('Agency Profile')).queryByText('Missing')).not.toBeInTheDocument();
+      expect(screen.getAllByText('Optional')).toHaveLength(2);
 
       expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
       expect(screen.queryByText('Confirm this PDF actually includes')).not.toBeInTheDocument();
@@ -102,13 +126,15 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
       expect(document.querySelector('input[type=file]')).toBeNull();
     });
 
-    it('offers View PDF on every uploaded card, whatever its ticks, and nothing on a missing one (OD-141)', async () => {
+    it('P18.97-T5 AC-2 offers View PDF on every uploaded card, whatever its ticks, an optional one included, and nothing on an empty one (OD-141)', async () => {
       render({ body: PARTLY }, me);
       await screen.findByRole('article', { name: 'FAQ' });
       expect(within(card('Opportunity Overview')).getByRole('button', { name: 'View PDF, Opportunity Overview — opens in a new tab' })).toBeInTheDocument();
       expect(within(card('Proof & Credibility')).getByRole('button', { name: /^View PDF/ })).toBeInTheDocument();
+      expect(within(card('Company Profile')).getByRole('button', { name: 'View PDF, Company Profile — opens in a new tab' })).toBeInTheDocument();
       expect(within(card('FAQ')).queryByRole('button')).not.toBeInTheDocument();
       expect(within(card('How to Join')).queryByRole('button')).not.toBeInTheDocument();
+      expect(within(card('Agency Profile')).queryByRole('button')).not.toBeInTheDocument();
     });
   });
 
@@ -143,18 +169,48 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
   it('says so when every document is ready', async () => {
     render({ body: ALL });
     expect(await screen.findByText('Recruitment Pitch is complete')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /^View PDF/ })).toHaveLength(4);
+    expect(screen.getByRole('img', { name: '4 of 4 documents complete' })).toHaveTextContent('4/4');
+    expect(screen.getAllByRole('button', { name: /^View PDF/ })).toHaveLength(6);
   });
 
-  it('draws an office with nothing uploaded, and never asks for a link (AC-4)', async () => {
+  it('P18.97-T5 AC-3 the four done reads complete, 4/4, with neither optional document', async () => {
+    render({ body: FOUR_DONE });
+    expect(await screen.findByText('Recruitment Pitch is complete')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '4 of 4 documents complete' })).toHaveTextContent('4/4');
+    expect(within(card('Company Profile')).getByText('Not uploaded yet')).toBeInTheDocument();
+    expect(within(card('Agency Profile')).getByText('Not uploaded yet')).toBeInTheDocument();
+    expect(screen.queryByText('Missing')).not.toBeInTheDocument();
+  });
+
+  it('P18.97-T5 AC-2 draws an office with nothing uploaded — four Missing, the two optional Not uploaded yet — and never asks for a link (AC-4)', async () => {
     const stub = render({ body: NONE });
     await screen.findByRole('article', { name: 'FAQ' });
     expect(screen.getAllByText('Missing')).toHaveLength(4);
+    expect(screen.getAllByText('Not uploaded yet')).toHaveLength(6);
+    for (const title of ['Company Profile', 'Agency Profile']) expect(within(card(title)).queryByText('Missing')).not.toBeInTheDocument();
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
     expect(screen.getByText(
       '4 missing.',
     )).toBeInTheDocument();
     expect(urlCalls(stub)).toEqual([]);
+  });
+
+  it('P18.97-T5 AC-4 a file under 1 KB reads “< 1 KB”, as storage reported its size (UI-029)', async () => {
+    render({ body: PARTLY });
+    await screen.findByRole('article', { name: 'Company Profile' });
+    expect(within(card('Company Profile')).getByText('< 1 KB · updated 26 Sep 2026')).toBeInTheDocument();
+  });
+
+  it('P18.97-T5 AC-2 opens an optional document by its own slot’s link', async () => {
+    const tab = { opener: {} as unknown, location: { href: '' }, close: vi.fn() };
+    vi.stubGlobal('open', vi.fn(() => tab));
+    const stub = render({ body: PARTLY }, AGENT, {
+      '/recruitment/pitch-materials/company/url': { body: { url: 'https://cdn.test/c?sig=1', expiresAt: '2999-01-01T00:00:00Z' } },
+    });
+    await screen.findByRole('article', { name: 'Company Profile' });
+    await userEvent.click(within(card('Company Profile')).getByRole('button', { name: /^View PDF/ }));
+    await waitFor(() => expect(tab.location.href).toBe('https://cdn.test/c?sig=1'));
+    expect(urlCalls(stub).map((c) => c.url)).toEqual([expect.stringMatching(/\/recruitment\/pitch-materials\/company\/url$/)]);
   });
 
   describe('opening a document (AC-2, AC-5)', () => {

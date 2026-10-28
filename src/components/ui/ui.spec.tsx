@@ -890,10 +890,16 @@ describe('DataTable density and widths', () => {
 });
 
 describe('ProgressBar', () => {
-  it('caps the bar at 100% while the label may exceed it', () => {
+  it('caps the bar at 100% while the label may exceed it — P18.97-T3 AC-1, whole', () => {
     render(<ProgressBar value={200} target={100} />);
-    expect(screen.getByText('200,0%')).toBeInTheDocument();
+    expect(screen.getByText('200%')).toBeInTheDocument();
     expect(screen.getByRole('progressbar').firstElementChild).toHaveStyle({ width: '100%' });
+  });
+
+  it('P18.97-T3 F-254 rounds an exact half up in integers: 23 of 40 is 58%, which Math.round(23 / 40 * 100) reads 57%', () => {
+    render(<ProgressBar value={23} target={40} />);
+    expect(screen.getByText('58%')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '58');
   });
 
   it('renders no-target rather than NaN% when the target is zero', () => {

@@ -15,7 +15,8 @@ import { useMeetingWriter } from './meeting-writer';
 const COPY = FORUM_COPY.shareDialog;
 
 /**
- * ***Share this MOM*** (`:2735-2745`; OD-146, ADR-0131, I-256): the product's dialog (F-72).
+ * ***Share these minutes*** (`:2735-2745`, *Share this MOM* there — P18.97-T2 AC-3; OD-146, ADR-0131, I-256): the
+ * product's dialog (F-72).
  *
  * **Each opening makes a fresh link** (contract, Noted 1): only its hash is kept, so a link once made cannot
  * be shown again. Earlier links live until they expire or are stopped. The address is

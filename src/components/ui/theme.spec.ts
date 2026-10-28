@@ -245,10 +245,33 @@ describe('on a phone', () => {
       expect(d['-webkit-mask-image']).toBe(d['mask-image']);
       expect(d['mask-image']).not.toMatch(/#[0-9a-f]{3,8}/i);
     }
-    // Nowhere else: a row that overflows at 768px and wider is not faded.
+    // Nowhere else: a row that overflows at 768px and wider is not faded — but a row that says it is one row below
+    // 1024px as well (P18.97-T6 AC-4, the next case), and only below 1024px.
     const elsewhere = sheet.nodes.filter((n) => n !== block && n.toString().includes('data-fade'));
-    expect(elsewhere).toEqual([]);
+    expect(elsewhere.map((n) => (n as AtRule).params)).toEqual(['not all and (min-width: 1024px)']);
     expect(decls(topRoot)['--tab-fade']).toBe('1.5rem');
+  });
+
+  it('P18.97-T6 AC-4 fades a row that scrolls below 1024px there too — only a row that says so, with the phone’s masks', async () => {
+    // The query a `max-lg:` class compiles to, so the row's classes and its fade change at the same pixel.
+    const css = await compile('max-lg:flex-nowrap');
+    const query = /@media ([^{]+?)\s*\{/.exec(css)![1];
+    expect(query).toBe('not all and (min-width: 1024px)');
+    const blocks = phoneBlocks(query);
+    expect(blocks).toHaveLength(1);
+    const fades = rulesIn(blocks[0]);
+    expect(fades.map((r) => r.selector).sort()).toEqual([
+      "[data-tab-row='below-desktop'][data-fade='both']",
+      "[data-tab-row='below-desktop'][data-fade='end']",
+      "[data-tab-row='below-desktop'][data-fade='start']",
+    ]);
+    // Each the phone's own mask for the same side, so the two cannot come to differ.
+    const phoneFades = rulesIn(await phoneBlock()).filter((r) => r.selector.startsWith('[data-fade='));
+    for (const rule of fades) {
+      const side = /\[data-fade='(\w+)'\]$/.exec(rule.selector)![1];
+      const twin = phoneFades.find((r) => r.selector === `[data-fade='${side}']`)!;
+      expect(decls(rule)).toEqual(decls(twin));
+    }
   });
 
   it('AC-10 leaves no arbitrary text size under 12px in the source, but for a glyph that is not text', () => {

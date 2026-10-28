@@ -436,12 +436,12 @@ describe('/product-catalog/[productCode], the drawer (P14-T7)', () => {
   });
 
   describe('Details (AC-5)', () => {
-    it('P14-T7 AC-5 the commission table, Year · Rate, a row per year, as percentages (OD-135)', async () => {
+    it('P14-T7 AC-5, P18.97-T3 AC-2 the commission table, Year · Rate, a row per year, as percentages with the places stored (OD-135)', async () => {
       drawer('PRUMAPAN');
       const box = await dialog();
       const table = within(box).getByRole('table', { name: 'Commission rate' });
       expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Year', 'Rate']);
-      expect(within(table).getAllByRole('row').slice(1).map((r) => r.textContent)).toEqual(['Y130,0%', 'Y215,0%', 'Y35,0%']);
+      expect(within(table).getAllByRole('row').slice(1).map((r) => r.textContent)).toEqual(['Y130%', 'Y215%', 'Y35%']);
     });
 
     it('P14-T7 AC-5 the not-set line while the company states none — never an invented 40% / 20% (F-15)', async () => {

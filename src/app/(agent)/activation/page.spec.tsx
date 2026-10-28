@@ -71,7 +71,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     expect(completed).toHaveTextContent('Completed5/16');
     expect(completed).toHaveAttribute('data-variant', 'plain');
     expect(screen.getByRole('progressbar', { name: 'Your activation progress' })).toHaveAttribute('aria-valuenow', '31');
-    expect(screen.getByText('31,0% complete')).toBeInTheDocument();
+    expect(screen.getByText('31% complete')).toBeInTheDocument();
 
     const table = screen.getByRole('table', { name: 'Your activation progress' });
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Aspect', 'Items', 'Status']);
@@ -88,7 +88,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     show({ 'GET /activation/me': { body: completeView() } });
     await ready();
     expect(screen.getByText('Completed').parentElement).toHaveAttribute('data-variant', 'complete');
-    expect(screen.getByText('100,0% complete')).toBeInTheDocument();
+    expect(screen.getByText('100% complete')).toBeInTheDocument();
   });
 
   it('P13-T4 AC-6 prints the window it is served and “{window}+” past it, computing no day of its own', async () => {
@@ -149,7 +149,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     const box = within(row('CRM_SETUP')).getByRole('checkbox', { name: 'Set up company CRM system' });
     await userEvent.click(box);
     expect(box).toBeChecked();
-    await screen.findByText('38,0% complete');
+    await screen.findByText('38% complete');
     expect(box).toBeChecked();
     expect(within(row('CRM_SETUP')).getByRole('button', { name: 'Ticked by you · 3 Okt 2026' })).toBeInTheDocument();
     expect(writes(calls)).toEqual([['PUT', '/activation/me/items/CRM_SETUP', { done: true }]]);
@@ -178,9 +178,9 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     await ready();
     await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox'));
     expect(within(row('CRM_SETUP')).getByRole('checkbox')).toBeChecked();
-    expect(screen.getByText('31,0% complete')).toBeInTheDocument();
+    expect(screen.getByText('31% complete')).toBeInTheDocument();
     await act(async () => { release(); });
-    expect(await screen.findByText('38,0% complete')).toBeInTheDocument();
+    expect(await screen.findByText('38% complete')).toBeInTheDocument();
   });
 
   it('P13-T4 AC-7 a refused tick puts the box back and says why', async () => {
@@ -537,12 +537,12 @@ describe('Phase 13 exit review — /activation', () => {
     expect(RINA_ME.activation).toEqual({ open: true, complete: false });
 
     await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox'));
-    expect(await screen.findByText('100,0% complete')).toBeInTheDocument();
+    expect(await screen.findByText('100% complete')).toBeInTheDocument();
     expect(session.reload).toHaveBeenCalledTimes(1);
 
     // And back: the untick that takes it below 100% re-reads it too, so the check goes.
     await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox'));
-    expect(await screen.findByText('94,0% complete')).toBeInTheDocument();
+    expect(await screen.findByText('94% complete')).toBeInTheDocument();
     expect(session.reload).toHaveBeenCalledTimes(2);
   });
 
@@ -550,7 +550,7 @@ describe('Phase 13 exit review — /activation', () => {
     const { session } = show({ 'PUT /activation/me/items/': () => ({ body: crmTicked() }) });
     await ready();
     await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox'));
-    expect(await screen.findByText('38,0% complete')).toBeInTheDocument();
+    expect(await screen.findByText('38% complete')).toBeInTheDocument();
     expect(session.reload).not.toHaveBeenCalled();
   });
 
@@ -572,7 +572,7 @@ describe('Phase 13 exit review — /activation', () => {
     }, { ...RINA_ME, activation: null });
     await ready();
     await userEvent.click(within(row('CRM_SETUP')).getByRole('checkbox'));
-    expect(await screen.findByText('100,0% complete')).toBeInTheDocument();
+    expect(await screen.findByText('100% complete')).toBeInTheDocument();
     expect(factless.session.reload).not.toHaveBeenCalled();
   });
 });

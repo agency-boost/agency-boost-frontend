@@ -137,9 +137,9 @@ describe('sales tools: the words and the addresses (Phase 14)', () => {
         .toBe('Retirement income · Conventional');
     });
 
-    it('P14-T7 AC-5 prints a stored proportion as the percentage (OD-135)', () => {
-      expect([formatRate(0.4), formatRate(0.125), formatRate(0.025), formatRate(0)]).toEqual(['40,0%', '12,5%', '2,5%', '0,0%']);
-      // One decimal (ADR-0167 §1), and the second a rate was stored with: the rate read is the rate stored.
+    it('P14-T7 AC-5, P18.97-T3 AC-2 prints a stored proportion as the percentage, with the places it was stored with (OD-135)', () => {
+      expect([formatRate(0.4), formatRate(0.125), formatRate(0.025), formatRate(0)]).toEqual(['40%', '12,5%', '2,5%', '0%']);
+      // A commission rate is a rule: the places it was stored with and no ,0 (ADR-0174 §3) — the rate read is the rate stored.
       expect(formatRate(0.0725)).toBe('7,25%');
     });
 

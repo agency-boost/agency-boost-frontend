@@ -604,3 +604,63 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(within(box).getByText('Ended')).toBeInTheDocument();
   });
 });
+
+/**
+ * **A ratio requirement in the office's unit for it** (P18.97-T7; ADR-0174 §2, *one way of writing a percentage*): the
+ * card's *Needs:* line and the dialog's rows read *30%* where the office writes the ratio as a percentage, as its
+ * settings have since P18.97-T4 AC-8 — where the card read *0,30*.
+ */
+describe('P18.97-T7 a ratio requirement on the agents’ cards and dialog', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const RATE = {
+    metricKey: 'RECRUIT_SUCCESS_RATE', metricName: 'Recruitment success rate', comparator: 'gte' as const, value: 0.3, unit: 'ratio', measured: true,
+  };
+  const RECRUIT = campaign({ code: 'RECRUIT_DRIVE', title: 'Recruitment Drive', requirements: [RATE] });
+  const config = (displayUnit: 'percent' | 'decimal') => ({
+    '/kpm/config': {
+      body: {
+        activity: [], leadPipelines: [], version: 1,
+        ratios: [{
+          id: 'r1', code: 'RECRUIT_SUCCESS_RATE', label: 'Recruitment success rate', numerator: [], denominator: [], benchmark: 0.3,
+          comparison: 'gte', displayUnit, displayOrder: 1, version: 1, status: 'active', origin: 'platform',
+        }],
+      },
+    },
+  });
+
+  it('P18.97-T7 writes the card’s Needs: line in the office’s unit for the ratio: 30%', async () => {
+    list({ ...config('percent'), 'GET /campaigns': { body: { ...LIST, campaigns: [RECRUIT] } } });
+    await listReady();
+    await waitFor(() => expect(cardOf('Recruitment Drive')).toHaveTextContent('Needs: Recruitment success rate 30%'));
+    expect(cardOf('Recruitment Drive')).not.toHaveTextContent('0,30');
+  });
+
+  it('P18.97-T7 keeps a ratio the office writes as a number a number: 0,30', async () => {
+    list({ ...config('decimal'), 'GET /campaigns': { body: { ...LIST, campaigns: [RECRUIT] } } });
+    await listReady();
+    expect(cardOf('Recruitment Drive')).toHaveTextContent('Needs: Recruitment success rate 0,30');
+  });
+
+  it('P18.97-T7 writes the dialog’s row in the same unit: the figure to its tenth, of the target as typed', async () => {
+    dialogAt('RECRUIT_DRIVE', {
+      ...config('percent'),
+      'GET /campaigns': { body: { ...LIST, campaigns: [RECRUIT] } },
+      'GET /campaigns/RECRUIT_DRIVE': {
+        body: detail({
+          ...RECRUIT,
+          progress: {
+            windowLabel: 'Okt – Des 2026', final: false,
+            rows: [{ metricKey: 'RECRUIT_SUCCESS_RATE', current: 2 / 7, target: 0.3, unit: 'ratio', state: 'in_progress' }],
+          },
+        }),
+      },
+    });
+    const box = await dialog('Recruitment Drive');
+    await waitFor(() => expect(within(box).getAllByRole('listitem').map((r) => r.textContent))
+      .toEqual(['Recruitment success rate28,6% of 30%']));
+  });
+});

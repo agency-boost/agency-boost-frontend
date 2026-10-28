@@ -1,82 +1,85 @@
 import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { stubFetch } from '@test/harness';
-import { completedMeeting, makeActionItems, makeMeetingView } from '@test/leader-meetings-fixtures';
+import { completedMeeting, makeActionItems, makeMeetingView, makeScorecardKeptBefore } from '@test/leader-meetings-fixtures';
 import { PrintLayout } from './print-layout';
 import type { MeetingView } from '@/lib/leader-meetings';
 
 const draw = (meeting: MeetingView = makeMeetingView()) => render(<PrintLayout meeting={meeting} />);
 const tables = () => screen.getAllByRole('table');
 
-describe('P18.1-T3 AC-4 the print layout (`:2662-2695`)', () => {
+describe('P18.1-T3 AC-4, P18.97-T1 AC-18 the print layout (`:2662-2695`; the reference slide’s table)', () => {
   it('off the screen and on the paper only', () => {
     const { container } = draw();
     expect(container.firstElementChild).toHaveClass('hidden', 'print:block');
   });
 
-  it('the three sections in order under their headings', () => {
+  it('P18.97-T1 AC-18 on landscape A4: the page size is the meeting’s while it is open', () => {
+    const { container } = draw();
+    expect(container.querySelector('style')!.textContent).toBe('@media print { @page { size: A4 landscape; margin: 10mm; } }');
+  });
+
+  it('the three sections in order under their headings, the stats’ title a level below', () => {
     draw();
     expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual(['Overview & Stats', 'Agenda', 'Action Items']);
+    expect(screen.getByRole('heading', { level: 4, name: 'BSD City Branch: Sep 2026' })).toBeInTheDocument();
   });
 
-  it('the chips and the table, *pending data* in plain type, the blocked cells navy, the targets as text', () => {
+  it('P18.97-T1 AC-18 the same table: the title and AS OF, the strip, the seven columns in their two groups, the targets as text', () => {
     draw();
-    const chips = screen.getByText('# of AAB').closest('dl')!;
-    expect(within(chips).getByText('24')).toBeInTheDocument();
+    expect(screen.getByText('AS OF 5 Sep 2026')).toBeInTheDocument();
+    const strip = screen.getByText('# of AAB:').closest('dl')!;
+    expect(within(strip).getByText('24')).toBeInTheDocument();
     const [stats] = tables();
     expect(within(stats).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
-      'Metrics', 'FY 2025', 'YTD 2026', 'This Month, Last Year', 'Last Month', 'This Month', 'Monthly Target',
+      'Metrics', '⟵ Full Year & YTD View ⟶', '⟵ Monthly View ⟶',
+      "Full Year 2025(Jan-Des '25)", "YTD 2025(Jan-Sep '25)", "YTD 2026(Jan-Sep '26)", 'This Month, Last Year(Sep-25)',
+      'Last Month(Agu-26)', 'This Month(Sep-26)', 'Monthly Target',
     ]);
-    for (const cell of within(stats).getAllByText('pending data')) expect(cell).not.toHaveClass('italic');
-    expect(stats.querySelectorAll('td.bg-navy')).toHaveLength(12);
-    expect(within(stats).getByText('22 (3 @ unit)')).toBeInTheDocument();
+    expect(within(stats).getByText('96 (3 @ unit)')).toBeInTheDocument();
+    expect(within(stats).getByText('TBD')).toBeInTheDocument();
     expect(within(stats).getByText('12,1')).toBeInTheDocument();
     expect(within(stats).getByText('Activation')).toBeInTheDocument();
+    // Nothing scrolls on paper, and nothing has a minimum width to run off it.
+    expect(stats.parentElement).not.toHaveClass('overflow-x-auto');
+    expect(stats).not.toHaveClass('min-w-[760px]');
   });
 
-  it('a partial figure prints its † and one line under the table naming the months it leaves out', () => {
+  it('P18.97-T1 AC-18 the hatch and the outline print as on the screen; no navy block', () => {
     draw();
     const [stats] = tables();
-    const ape = within(stats).getByRole('rowheader', { name: 'APE (IDR B)' }).parentElement!;
-    expect(ape.children[1]).toHaveTextContent(/^12,1$/);
-    expect(ape.children[2]).toHaveTextContent(/^8,4†$/);
-    // *YTD* of APE, of *Producing agents* and of *Case submission* leave August out.
-    expect(stats.querySelectorAll('td')).toSatisfy((cells: NodeListOf<HTMLElement>) =>
-      [...cells].filter((c) => c.textContent?.endsWith('†')).length === 3);
-    const line = screen.getByText(/^† Without/);
-    expect(line).toHaveTextContent('† Without Agu 2026: no figures uploaded for them yet.');
-    expect(stats.closest('div')!.nextElementSibling).toBe(line);
+    expect(within(stats).getAllByText('Not tracked')).toHaveLength(16);
+    expect(stats.querySelectorAll('td.bg-navy')).toHaveLength(0);
+    const ape = within(stats).getByRole('rowheader', { name: 'APE (Rp M)' }).parentElement!;
+    expect(ape.children[2].className).toContain('border-l-alert');
+    expect(ape.children[3].className).toContain('border-r-alert');
   });
 
-  it('the line names every month left out, once each, in month order', () => {
+  it('P18.97-T1 AC-18 the footnotes and the (*) notes print, where the print’s † and its line were', () => {
+    const { container } = draw();
+    expect(screen.getByText(/^Annual Active Agents — members with APE/)).toBeInTheDocument();
+    expect(screen.getByText('(*) YTD 2026 covers Jan–Sep 2026 without Agu 2026, not uploaded')).toBeInTheDocument();
+    const [stats] = tables();
+    expect(within(stats).getAllByText('*')).toHaveLength(4);
+    expect(container.textContent).not.toContain('†');
+    expect(screen.queryByText(/^Note: AA/)).toBeNull();
+  });
+
+  it('P18.97-T1 AC-18 a scorecard that leaves nothing out prints no * and no (*) note', () => {
     const m = makeMeetingView();
     draw({
       ...m,
       scorecard: {
         ...m.scorecard,
-        rows: m.scorecard.rows.map((r) => (r.key === 'manpower'
-          ? { ...r, cells: { ...r.cells, fy: { kind: 'figure', value: 201, leavesOut: ['2025-03', '2025-01'] } } }
-          : r)),
-      },
-    });
-    expect(screen.getByText(/^† Without/))
-      .toHaveTextContent('† Without Jan 2025, Mar 2025 and Agu 2026: no figures uploaded for them yet.');
-  });
-
-  it('a scorecard that leaves nothing out prints no † and no line', () => {
-    const m = makeMeetingView();
-    const { container } = draw({
-      ...m,
-      scorecard: {
-        ...m.scorecard,
+        partialPeriods: [],
         rows: m.scorecard.rows.map((r) => ({
           ...r,
           cells: Object.fromEntries(Object.entries(r.cells).map(([k, c]) => [k, c.kind === 'figure' ? { ...c, leavesOut: [] } : c])) as typeof r.cells,
         })),
       },
     });
-    expect(container.textContent).not.toContain('†');
-    expect(screen.queryByText(/Without/)).toBeNull();
+    expect(within(tables()[0]).queryAllByText('*')).toEqual([]);
+    expect(screen.queryByText(/^\(\*\)/)).toBeNull();
   });
 
   it('the agenda’s three columns side by side, each item with *"PIC: {name}"*, and no boxes', () => {
@@ -100,17 +103,20 @@ describe('P18.1-T3 AC-4 the print layout (`:2662-2695`)', () => {
     expect(within(tracker).getAllByText('Planned')[0]).toHaveClass('rounded-pill', 'bg-amber/15', 'text-navy');
   });
 
-  it('no control, and no footnotes — as the prototype prints it', () => {
+  it('no control: every field its text', () => {
     draw();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('button')).toBeNull();
-    expect(screen.queryByText(/^Note: AA/)).toBeNull();
-    expect(screen.queryByText(/^Source:/)).toBeNull();
   });
 
-  it('a past meeting prints the scorecard frozen onto it', () => {
-    draw(completedMeeting());
-    expect(within(screen.getByText('# of AAB').closest('dl')!).getByText('23')).toBeInTheDocument();
+  it('P18.97-T1 AC-18 a past meeting prints its frozen figures — one kept before the slide its — and its own units', () => {
+    const { unmount } = draw(completedMeeting());
+    expect(within(screen.getByText('# of AAB:').closest('dl')!).getByText('23')).toBeInTheDocument();
+    unmount();
+    draw(completedMeeting({ scorecard: makeScorecardKeptBefore() }));
+    expect(screen.getByText('AS OF —')).toBeInTheDocument();
+    expect(within(screen.getByText('# of units:').closest('div')!).getByText('5')).toBeInTheDocument();
+    expect(within(tables()[0]).getByText('5 (1 @ unit)')).toBeInTheDocument();
   });
 
   it('prints what the page holds, so it is never stale (flow doc §2.9)', () => {
@@ -136,10 +142,10 @@ describe('P18.1-T3 AC-4 the print layout (`:2662-2695`)', () => {
       actionItems: [{ ...makeActionItems()[0], action: markup }],
       scorecard: {
         ...m.scorecard,
-        rows: m.scorecard.rows.map((r) => (r.key === 'ape' ? { ...r, monthlyTarget: { value: markup, version: 1 } } : r)),
+        rows: m.scorecard.rows.map((r) => (r.key === 'ape' ? { ...r, monthlyTarget: { rate: null, value: null, typed: markup, version: 1 } } : r)),
       },
     });
-    // The item, the tracker's cell and the target; the PIC after its *PIC:*.
+    // The item, the tracker's cell and a target typed as text before rates; the PIC after its *PIC:*.
     expect(screen.getAllByText(markup)).toHaveLength(3);
     expect(screen.getByText(`PIC: ${markup}`)).toBeInTheDocument();
     expect(container.querySelector('b, script')).toBeNull();

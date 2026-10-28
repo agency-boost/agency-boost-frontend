@@ -151,7 +151,7 @@ export default function RatioBenchmarksPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   /*
-   * The unit the draft is typed in (P4-T25). The field takes `15` for 15,0%, so the text
+   * The unit the draft is typed in (P4-T25). The field takes `15` for 15%, so the text
    * alone does not say what it means — changing the unit re-expresses it rather than
    * reinterpreting it, which is what `reexpress` is for.
    */
@@ -449,7 +449,7 @@ export default function RatioBenchmarksPage() {
                   hint={form.comparison === 'band'
                     ? bandHint(form.benchmark)
                     : form.displayUnit === 'percent'
-                      ? 'As a percentage — type 15 for 15,0%.'
+                      ? 'As a percentage — type 15 for 15%.'
                       : undefined}
                   className="min-w-40"
                 >
@@ -749,7 +749,7 @@ export default function RatioBenchmarksPage() {
                       hint={ratio.comparison === 'band'
                         ? bandHint(draft)
                         : draftUnit === 'percent'
-                          ? 'On track at or above this, as a percentage — 15 means 15,0%.'
+                          ? 'On track at or above this, as a percentage — 15 means 15%.'
                           : 'On track at or above this.'}
                       className="min-w-40"
                     >

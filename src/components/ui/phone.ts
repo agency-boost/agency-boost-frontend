@@ -93,6 +93,31 @@ export const TAP_AREA = 'max-md:after:absolute max-md:after:left-1/2 max-md:afte
   + "max-md:after:-translate-x-1/2 max-md:after:-translate-y-1/2 max-md:after:content-['']";
 
 /**
+ * **A 40px control, 44px tall on a phone** (P18.97-T7 AC-6, ADR-0178 §5; the client's UI-040 of 2026-10-27: 48 controls
+ * under 44px on `/kpm/settings/activation-checklist`, 33 on `/kpm/settings/products`, Data upload's buttons among its
+ * 340): a `Button` of a box variant, a `TextInput`, a `Select`, a link wearing `buttonClass`. Height only — each is wider
+ * than 44px already. **Opt-in, on the screens UI-040 names**: the shared controls stay 40px everywhere else, where no
+ * finding has asked for more.
+ */
+export const CONTROL_PHONE = 'max-md:h-11';
+
+/**
+ * **A box to tick on a phone: its line 44px tall** (P18.97-T7 AC-6). On the `<label>` that holds the checkbox and its
+ * words, which is the target a finger aims at; the box itself stays as the browser draws it.
+ */
+export const CHECK_LINE_PHONE = 'max-md:min-h-11';
+
+/**
+ * **A switch on a phone: a 44 × 44px target** (P18.97-T7 AC-6; UI-040: *Agents sell it*, 38 × 22px on every product).
+ * The track stays as drawn (`Switch`, `field.tsx`); its transparent input — the control a finger and a screen reader
+ * both meet — becomes a 44px square centred on the track, and the switch's line 44px tall, so the square reaches over
+ * nothing above or below it. `Switch phoneTarget` puts them on.
+ */
+export const SWITCH_LINE_PHONE = 'max-md:min-h-11';
+export const SWITCH_TAP_PHONE = 'max-md:left-1/2 max-md:top-1/2 max-md:h-11 max-md:w-11 '
+  + 'max-md:-translate-x-1/2 max-md:-translate-y-1/2';
+
+/**
  * **A question's chips on a phone: two to a row** (P18.95-T6 AC-1; UI-015: *Primary need*'s eight chips on five
  * lines, *Their biggest hesitation*'s five on five). A grid of two equal columns in place of the wrapping row,
  * so every chip is half the card and the question is half as tall. Put it on the chips' own box.

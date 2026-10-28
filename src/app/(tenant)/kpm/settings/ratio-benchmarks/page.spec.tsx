@@ -138,7 +138,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     expect(screen.getByText(/On track within/)).toBeInTheDocument();
   });
 
-  it('writes each benchmark in its own unit, not as the stored number (P4-T25)', async () => {
+  it('writes each benchmark in its own unit, as typed — 15%, never 15,0% — not as the stored number (P4-T25, P18.97-T3 AC-2)', async () => {
     /*
      * Every card printed the stored value, so a success rate read `0.15` where the registry
      * and the prototype both say `15.0%`. The unit comes from the API because it cannot be
@@ -146,14 +146,14 @@ describe('the office ratio benchmarks (P4-T2)', () => {
      */
     render();
     await screen.findByRole('heading', { name: 'Selling success rate' });
-    expect(screen.getByText('15,0%')).toBeInTheDocument();
+    expect(screen.getByText('15%')).toBeInTheDocument();
     expect(screen.getByText('±30 points')).toBeInTheDocument();
     expect(screen.getByText('0,50')).toBeInTheDocument();
     expect(screen.queryByText('0,15')).not.toBeInTheDocument();
     expect(screen.queryByText('0.15')).not.toBeInTheDocument();
   });
 
-  it('asks for a percentage the way it is shown: 15 for 15.0%', async () => {
+  it('asks for a percentage the way it is shown: 15 for 15%', async () => {
     render();
     await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]);
     expect(screen.getByLabelText('Benchmark')).toHaveValue('15');
@@ -169,7 +169,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     const card = screen.getByRole('heading', { name: /Referral rate/ }).closest('div')!.parentElement!;
-    expect(within(card).getByText('50,0%')).toBeInTheDocument();
+    expect(within(card).getByText('50%')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
@@ -266,8 +266,8 @@ describe('the office ratio benchmarks (P4-T2)', () => {
 
     const card = screen.getByRole('heading', { name: /Selling success rate/ }).closest('div')!
       .parentElement!;
-    expect(within(card).getByText('25,0%')).toBeInTheDocument();
-    expect(within(card).queryByText('15,0%')).not.toBeInTheDocument();
+    expect(within(card).getByText('25%')).toBeInTheDocument();
+    expect(within(card).queryByText('15%')).not.toBeInTheDocument();
     expect(within(card).getByText('Edited — not saved yet')).toBeInTheDocument();
   });
 
@@ -286,7 +286,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     expect(screen.queryByText(/not saved yet/)).not.toBeInTheDocument();
     const card = screen.getByRole('heading', { name: /Selling success rate/ }).closest('div')!
       .parentElement!;
-    expect(within(card).getByText('15,0%')).toBeInTheDocument();
+    expect(within(card).getByText('15%')).toBeInTheDocument();
   });
 
   it('collapses repeated edits to one row into a single change', async () => {
@@ -552,7 +552,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       expect(benchmark).toHaveAccessibleDescription('Percentage points either side of an even split.');
       await userEvent.type(benchmark, '30');
       expect(benchmark).toHaveAccessibleDescription(
-        'Percentage points either side of an even split: each side between 35,0% and 65,0%.',
+        'Percentage points either side of an even split: each side between 35% and 65%.',
       );
       await userEvent.clear(benchmark);
       await userEvent.type(benchmark, '25');
@@ -584,9 +584,9 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       expect(within(balance).getByText('Recruitment')).toBeInTheDocument();
       expect(within(balance).queryByText(/Selling side|Recruitment side/)).not.toBeInTheDocument();
       expect(balance).toHaveTextContent(
-        'Agents see each side’s share of the two — on track while each side is between 35,0% and 65,0%.',
+        'Agents see each side’s share of the two — on track while each side is between 35% and 65%.',
       );
-      expect(balance).not.toHaveTextContent(/−100,0%/);
+      expect(balance).not.toHaveTextContent(/−100(,0)?%/);
     });
 
     it('AC-9: calls an office’s own balance’s sides Side A and Side B when both count one section', async () => {
@@ -599,7 +599,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       const balance = await cardOf('Presenting vs submitting');
       expect(within(balance).getByText('Side A')).toBeInTheDocument();
       expect(within(balance).getByText('Side B')).toBeInTheDocument();
-      expect(balance).toHaveTextContent('between 40,0% and 60,0%');
+      expect(balance).toHaveTextContent('between 40% and 60%');
     });
 
     it('AC-9: calls a side whose section this office no longer has Side B, never Recruitment by default', async () => {
@@ -617,7 +617,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       expect(within(balance).getByRole('group', { name: 'Side A' })).toBeInTheDocument();
       expect(within(balance).getByRole('group', { name: 'Side B' })).toBeInTheDocument();
       expect(within(balance).getByLabelText('Benchmark')).toHaveAccessibleDescription(
-        'Percentage points either side of an even split: each side between 35,0% and 65,0%.',
+        'Percentage points either side of an even split: each side between 35% and 65%.',
       );
     });
   });

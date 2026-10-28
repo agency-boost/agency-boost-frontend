@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { createContext, useContext, useEffect, useRef, useState, type RefObject } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { NotificationBell } from '@/components/notification-bell';
 import { SidebarUserMenu } from '@/components/sidebar-user-menu';
 import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
 import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { cn } from '@/lib/cn';
+import { useMediaQuery } from '@/lib/use-media-query';
 import { usePhone } from '@/lib/use-phone';
 import { useScrollLock } from '@/lib/use-scroll-lock';
 
@@ -154,14 +155,21 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
    * **Collapsed, the label becomes the accessible name.** The glyph is `aria-hidden`, so
    * without this the rail is a column of links called nothing. `title` gives the same words
    * to a pointer, which is the other half of how somebody finds their way in 56px.
+   *
+   * *Fixed 2026-10-28 (P18.97-T6; parity F-253), found by axe once a tablet opened on the rail:* **a count is in the
+   * name** — *Leaders past the limit, 2* — as it is in the row's words wider; it rode the glyph as a dot and was in
+   * no name. And **an *Upcoming* item says its name in words**, `sr-only`, not in `aria-label`: it has no `href`, so
+   * no role, and ARIA allows no name on an element with none (axe's `aria-prohibited-attr`).
    */
-  const railName = item.upcoming ? `${item.label} — ${pill}` : `${item.label}${item.done ? DONE_SUFFIX : ''}`;
+  const count = item.badge !== undefined && item.badge > 0 ? `, ${item.badge}` : '';
+  const railName = item.upcoming ? `${item.label} — ${pill}` : `${item.label}${count}${item.done ? DONE_SUFFIX : ''}`;
   const named = rail ? { 'aria-label': railName, title: railName } : {};
 
   if (item.upcoming) {
     return (
-      <a aria-disabled className={className} {...named}>
+      <a aria-disabled className={className} title={rail ? railName : undefined}>
         {body}
+        {rail && <span className="sr-only">{railName}</span>}
       </a>
     );
   }
@@ -370,8 +378,19 @@ function SidebarFoot({
   );
 }
 
-/** Where the reader's choice of rail-or-full lives. One key, one character. */
+/** Where the reader's choice of rail-or-full lives, from 1024px. One key, one character: `1` is the rail. */
 const RAIL_KEY = 'ab.sidebar.rail';
+
+/**
+ * **A tablet's choice, kept apart from the desktop's** (P18.97-T6 AC-1, ADR-0178 §1; the client's UI-033). From 768
+ * to 1023px the rail is the default, and opening the sidebar full is remembered here on its own, so a reader who keeps
+ * it full on a desktop is not given it on a tablet, nor the reverse. The same one character: `0` once opened full, `1`
+ * once collapsed again; anything else, nothing, or storage refused is the rail.
+ */
+const TABLET_RAIL_KEY = 'ab.sidebar.rail.tablet';
+
+/** Before the browser paints, with the width (`useMediaQuery`'s `beforePaint`), so a tablet's first frame is the rail. */
+const useBeforePaint = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 /**
  * The nav's groups, each a heading that opens and closes it and the items beneath — rendered by the
@@ -701,28 +720,38 @@ export function AppShell({
   };
 
   /**
-   * **The rail, remembered.** Read in an effect rather than in the initial state: the server
-   * renders this too, and `localStorage` there is a hydration mismatch rather than a
-   * preference. A browser that refuses storage gets the full sidebar, which is the safe half.
+   * **The rail, remembered — one choice per size** (P18.97-T6 AC-1, ADR-0178 §1; the client's UI-033). From 1024px
+   * the full sidebar is the default and `ab.sidebar.rail` remembers the rail, as before; **from 768 to 1023px the rail
+   * is the default** and `ab.sidebar.rail.tablet` remembers opening it full. The width crossing 1024px swaps which one
+   * the sidebar shows, and each keeps its own.
+   *
+   * Read in an effect rather than in the initial state: the server renders this too, and `localStorage` there is a
+   * hydration mismatch rather than a preference. **Before the first paint**, with the width (`useMediaQuery`), so a
+   * tablet's first frame is the rail and a remembered choice is drawn from the start, never one frame of the other
+   * first. A browser that refuses storage gets each size's default: the full sidebar on a desktop, the rail on a
+   * tablet — the room the page needs there.
    */
-  const [rail, setRail] = useState(false);
-  useEffect(() => {
+  const [deskRail, setDeskRail] = useState(false);
+  const [tabletRail, setTabletRail] = useState(true);
+  useBeforePaint(() => {
     try {
-      setRail(window.localStorage.getItem(RAIL_KEY) === '1');
+      setDeskRail(window.localStorage.getItem(RAIL_KEY) === '1');
+      setTabletRail(window.localStorage.getItem(TABLET_RAIL_KEY) !== '0');
     } catch {
       // A private window, or storage switched off. Not a reason to fail the shell.
     }
   }, []);
+  const tablet = useMediaQuery('tablet', { beforePaint: true });
+  const rail = tablet ? tabletRail : deskRail;
   const toggleRail = () => {
-    setRail((was) => {
-      const next = !was;
-      try {
-        window.localStorage.setItem(RAIL_KEY, next ? '1' : '0');
-      } catch {
-        // The preference is lost on reload; the sidebar still works.
-      }
-      return next;
-    });
+    const next = !rail;
+    if (tablet) setTabletRail(next);
+    else setDeskRail(next);
+    try {
+      window.localStorage.setItem(tablet ? TABLET_RAIL_KEY : RAIL_KEY, next ? '1' : '0');
+    } catch {
+      // The preference is lost on reload; the sidebar still works.
+    }
   };
 
   /*
@@ -731,7 +760,7 @@ export function AppShell({
    * with *Sign out* (`Overall.html:1421-1428`). From 2026-10-02 the nav went into the account chip's panel
    * (ADR-0085), where the client found the menu hidden behind the name; now ☰, before the brand, opens the
    * sidebar's own content from the left, and the chip keeps the account's items. One nav at a time, never two:
-   * the sidebar renders it wider, the drawer on a phone. The rail is a desktop control, so a collapsed one
+   * the sidebar renders it wider, the drawer on a phone. The rail is a wider screen's control, so a collapsed one
    * remembered from a wider window does not shrink the chip to an avatar on a phone, nor the drawer to a rail.
    */
   const phone = usePhone();

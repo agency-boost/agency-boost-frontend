@@ -1,8 +1,9 @@
 import { api } from './api-client';
 import {
-  formatMonth, formatMonthName, formatNumber, formatPercent, formatRupiah, formatRupiahCompact,
+  formatMonth, formatMonthName, formatNumber, formatPercent, formatRupiahCompact,
 } from './format';
 import type { Me } from './session';
+import { firstMentions, termQuestion, TERMS, type TermKey } from './terms';
 
 /**
  * KPM analytics (Phase 18, P18-T2; `docs/02-specs/functional/kpm-analytics.md`): the console's *Unit
@@ -12,10 +13,11 @@ import type { Me } from './session';
  * **Every figure is the server's** (D-units, D-period, D-moc, D-clubs): each row's APE, coverage, active
  * agents and leads, each MOC verdict with its criteria, each club tier, and the total — which the server
  * makes the sum of its rows. This file names the shapes, asks for them, and turns them into the
- * prototype's words. It evaluates no rule and sums no rows: the only arithmetic here is the two the
+ * prototype's words. It evaluates no rule and sums no rows: the only arithmetic here is the one the
  * prototype writes into a cell from figures it already shows — *Total leads* as sales plus recruitment
- * (`KPM_Owner.html:3327`), and *Active*'s percentage of the row's manpower (`:3342`). The status pill's
- * split (`:3150`, `:3220`) is the server's too, served as `thresholds.statusSplitPct` (invariant §7).
+ * (`KPM_Owner.html:3327`). *Producing this month*'s percentage of the row's manpower (`:3342`) is **served**
+ * since P18.97-T3 AC-10 (`activePct`, the server's `rateOver`; ADR-0176 §12), where this file divided it. The
+ * status pill's split (`:3150`, `:3220`) is the server's too, served as `thresholds.statusSplitPct` (invariant §7).
  *
  * Each interface is spelled out with named nested types and no `extends`, so `contract.spec.ts` can read
  * its fields against `backend/openapi.json`: it reads an interface's body up to the first `}`.
@@ -123,6 +125,8 @@ export interface UnitFigures {
   coached7d: AnalyticsRate;
   /** `MAA_COUNT_IN_UNIT` for the period's month; `null` is *Not uploaded yet*. */
   activeAgents: number | null;
+  /** Its share of `manpower.total`, the server's whole percent (P18.97-T3 AC-10); `null` not uploaded, or over nobody. */
+  activePct: number | null;
   leads: AnalyticsLeads;
   manpower: AnalyticsManpower;
 }
@@ -134,6 +138,7 @@ export interface AabUnitRow {
   apeAnnual: AnalyticsMoney;
   coached7d: AnalyticsRate;
   activeAgents: number | null;
+  activePct: number | null;
   leads: AnalyticsLeads;
   manpower: AnalyticsManpower;
   moc: Moc | null;
@@ -146,6 +151,7 @@ export interface AgencyRow {
   apeAnnual: AnalyticsMoney;
   coached7d: AnalyticsRate;
   activeAgents: number | null;
+  activePct: number | null;
   leads: AnalyticsLeads;
   manpower: AnalyticsManpower;
   club: AnalyticsClub | null;
@@ -166,6 +172,7 @@ export interface AnalyticsTotal {
   apeAnnual: AnalyticsMoney;
   coached7d: AnalyticsRate;
   activeAgents: number | null;
+  activePct: number | null;
   leads: AnalyticsLeads;
   manpower: AnalyticsManpower;
   abCount: number;
@@ -233,7 +240,12 @@ export const PROTOTYPE_COPY = {
   headApeMonth: (period: AnalyticsPeriod) => (period === 'this_month' ? 'APE — This Month' : 'APE — Last Month'),
   headApeAnnual: 'APE — Annual',
   headCoached: 'Coached (7d)',
-  headActive: (period: AnalyticsPeriod) => (period === 'this_month' ? 'Active this month' : 'Active last month'),
+  /**
+   * The prototype's *Active this month* / *Active last month* (`:1248`, `:3367`), **named for what it counts since
+   * P18.97-T3 AC-9** (ADR-0176 §3, UI-021; parity I-508): production, apart from the Overview's *Agents who logged
+   * activity this month*, which counts logging (ADR-0127). The same `MAA_COUNT_IN_UNIT`, the header still the period's.
+   */
+  headActive: (period: AnalyticsPeriod) => (period === 'this_month' ? 'Producing this month' : 'Producing last month'),
   headLeads: 'Total leads',
   headMoc: 'MOC',
   /** The MOC header's tooltip (`:3247`), its two lines kept. */
@@ -270,8 +282,12 @@ export const OWN_COPY = {
   noGoal: 'No goal set',
   noAbTitle: 'There are no ABs to compare yet.',
   noAbLine: 'Each AB’s agency gets a row here, with its people and its figures.',
-  /** The ⓘ beside *MOC*, as the Unit Dashboard names the one beside *Status*. */
-  mocRulesName: 'How is MOC decided?',
+  /**
+   * The line under the total's *APE — Annual* (P18.97-T3 AC-4; ADR-0176 §1, UI-016; parity I-503): the agencies' sum,
+   * today's members — where the Overview's *Production — this year* keeps a leaver's production (OD-74). Its ⓘ, beside
+   * the row's name, still names the sum it leaves out (`leaversLeftOut`).
+   */
+  currentMembersOnly: 'Current members only',
   expand: (name: string) => `Units in ${name}’s agency`,
   /** After the manpower figure, which is the toggle's visible name: *"31 people in Hendra Wibowo’s agency"*. */
   members: (name: string, n: number) => ` ${n === 1 ? 'person' : 'people'} in ${name}’s agency`,
@@ -300,13 +316,14 @@ export interface MoneyWords {
 
 /**
  * An APE cell (`apeCellHtml`, `:3229-3231`): the figure, *"of {target} target"* and the pill — *success* at or
- * above the server's split, *alert* below it (`:3150`, `:3220`). **In full**: a table's cell (ADR-0167 §1).
+ * above the server's split, *alert* below it (`:3150`, `:3220`). **Compact, in a table too** (ADR-0174 §4, UI-019):
+ * *Rp 5,7 M of Rp 6 M target*, where it read *Rp 5.672.500.000*; the pill a whole percent (§1).
  */
 export function moneyWords(money: AnalyticsMoney, splitPct: number): MoneyWords {
   return {
-    actual: money.achievedMinor === null ? OWN_COPY.notUploaded : formatRupiah(money.achievedMinor),
+    actual: money.achievedMinor === null ? OWN_COPY.notUploaded : formatRupiahCompact(money.achievedMinor),
     uploaded: money.achievedMinor !== null,
-    of: money.targetMinor === null ? OWN_COPY.noGoal : `of ${formatRupiah(money.targetMinor)} target`,
+    of: money.targetMinor === null ? OWN_COPY.noGoal : `of ${formatRupiahCompact(money.targetMinor)} target`,
     pill: money.pct === null
       ? null
       : { text: formatPercent(money.pct), tone: money.pct >= splitPct ? 'success' : 'alert' },
@@ -320,12 +337,15 @@ export const rateWords = (rate: AnalyticsRate) => ({
 });
 
 /**
- * *Active this month* (`:3342`): *"{n} / {manpower}"* and its share of the row's manpower, as the prototype
- * writes it; *Not uploaded yet* for a month with no file, and *—* over nobody.
+ * *Producing this month* (`:3342`): *"{n} / {manpower}"* and its share of the row's manpower, as the prototype
+ * writes it; *Not uploaded yet* for a month with no file, and *—* over nobody. **The share is the server's**
+ * (`activePct`, `rateOver`; P18.97-T3 AC-10, invariant §7): this writes it and divides nothing.
  */
-export function activeWords(active: number | null, manpower: number): { main: string; pct: string | null } {
-  if (active === null) return { main: OWN_COPY.notUploaded, pct: null };
-  return { main: `${active} / ${manpower}`, pct: manpower > 0 ? formatPercent(Math.round((active / manpower) * 100)) : '—' };
+export function activeWords(
+  row: Pick<UnitFigures, 'activeAgents' | 'activePct' | 'manpower'>,
+): { main: string; pct: string | null } {
+  if (row.activeAgents === null) return { main: OWN_COPY.notUploaded, pct: null };
+  return { main: `${row.activeAgents} / ${row.manpower.total}`, pct: row.activePct === null ? '—' : formatPercent(row.activePct) };
 }
 
 /** *Total leads* (`:3343`): the open sales and recruitment leads, and the line under them. */
@@ -375,6 +395,28 @@ export function orgTreeHref(node: { membershipId: string; directCount: number; i
  * ── MOC ─────────────────────────────────────────────────────────────────────────────────────────
  */
 
+/**
+ * **The ⓘ after the *MOC* heading** (P18.97-T3 AC-8; ADR-0176 §3, UI-021; parity I-507): its name *What is MOC?* and
+ * its bubble the glossary's one line (`TERMS.MOC`) **above the company's rules** as the server composes them
+ * (`mocRulesText`) — one ⓘ, the prototype's tooltip on the header (`:1248`), now saying what MOC is before how it is
+ * decided, rather than a second glyph beside it.
+ */
+export const mocTermName = termQuestion('MOC');
+export const mocTip = (rulesText: string) => [TERMS.MOC.definition, rulesText].filter((line) => line !== '').join('\n\n');
+
+/** The three production clubs the glossary explains, each by the term its badge's words name. */
+export const CLUB_TERM_KEYS: readonly TermKey[] = ['STAR_CLUB', 'ELITE_CLUB', 'CHAIRMANS_CLUB'];
+
+/**
+ * **Which agency's badge first shows each club** (P18.97-T3 AC-8), in the table's order: `membershipId → term`, so the
+ * ⓘ goes beside the first *Star Club*, the first *Elite Club* and the first *Chairman's Club* the reader meets, and
+ * nowhere else. Read from the badge's own words (`firstMentions`), so a tier a company names otherwise takes none.
+ */
+export function clubTermFirsts(agencies: readonly Pick<AgencyRow, 'head' | 'club'>[]): Map<string, TermKey> {
+  const found = firstMentions(agencies.map((a) => a.club?.label), CLUB_TERM_KEYS);
+  return new Map(agencies.flatMap((a, i) => (found[i].length > 0 ? [[a.head.membershipId, found[i][0]] as const] : [])));
+}
+
 /** The cell's button, named for its leader (`:3283`): *"MOC requirements met"* or *"… not yet met"*. */
 export function mocButtonName(moc: Moc, name: string): string {
   if (moc.status === 'unknown') return OWN_COPY.mocUnknown(name, moc.missing ?? OWN_COPY.notUploaded);
@@ -385,14 +427,14 @@ export function mocButtonName(moc: Moc, name: string): string {
  * A criterion's figure or threshold, in the criterion's own unit: rupiah for Net APE, a percentage for
  * persistency, a count for the rest (`:3301-3313`). *—* for an input not uploaded.
  *
- * **Compact, and lossless** (ADR-0167 §1): the dialog is a list, not a table, so *Rp 200 jt*; but a figure
- * that compact writing would round is written in full, so *Rp 199.960.000 / Rp 200 jt — Gap* can never read
- * *Rp 200 jt / Rp 200 jt — Gap*. A persistency keeps the decimals it has, at least one.
+ * **Compact, and lossless** (ADR-0167 §1, ADR-0174 §3): *Rp 200 jt*; but a figure that compact writing would round
+ * is written in full, so *Rp 199.960.000 / Rp 200 jt — Gap* can never read *Rp 200 jt / Rp 200 jt — Gap*. A
+ * persistency — the carrier's figure and the rule's threshold — keeps the places it has and no *,0*: *74,96% / 75%*.
  */
 export function criterionValue(code: string, value: number | null): string {
   if (value === null) return '—';
   if (/APE/.test(code)) return formatRupiahCompact(value, { lossless: true });
-  if (/PERSISTENCY/.test(code)) return formatPercent(value, { maxDecimals: 2 });
+  if (/PERSISTENCY/.test(code)) return formatPercent(value, { lossless: true });
   return formatNumber(value, { maxDecimals: 2 });
 }
 

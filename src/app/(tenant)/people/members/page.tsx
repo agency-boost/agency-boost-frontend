@@ -12,17 +12,25 @@ import { EmptyState } from '@/components/ui/empty-state';
 import {
   Button, ErrorBanner, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
+import { TAP_TARGET, TEXT_TAP } from '@/components/ui/phone';
 import { RoleBadge, rungShort, useLadder } from '@/components/ui/role-badge';
-import { SkeletonTable } from '@/components/ui/skeleton';
+import { CardField, CardFields, RowCard, RowCards } from '@/components/ui/row-cards';
+import { SkeletonCards, SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
+import {
+  BELOW_DESKTOP_ROW, TAB_BELOW_DESKTOP, TAB_ROW_BELOW_DESKTOP, UNDERLINED_ROW_BELOW_DESKTOP,
+} from '@/components/ui/tablet';
+import { useTabRow } from '@/components/ui/use-tab-row';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import { daysAgoWords } from '@/lib/kpm-overview';
 import { CORE_LEADER_LABEL } from '@/lib/profile-line';
 import { displayName } from '@/lib/display-name';
 import { useDebounced } from '@/lib/use-debounced';
 import { useCan } from '@/lib/session';
+import { usePhone } from '@/lib/use-phone';
 import { declineRequest, readInbox, approveRequest, type PendingRequest } from '@/lib/join';
-import { dayInZone, formatDateTime, formatOfficeDay, OFFICE_TIME_ZONE } from '@/lib/format';
+import { dayInZone, formatCalendarDay, formatDateTime, formatOfficeDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import {
   askLeaderLimitApproval, cancelLeaderLimitRequest, pendingFor, readLeaderLimitRequests, requestedChange,
   type LeaderLimitRequestRow,
@@ -66,6 +74,9 @@ const ROLE_INDENT: Record<HierarchyRole, string> = {
   agent: 'block pl-8',
 };
 
+/** The same steps on a phone's card, half the table's (`Tables as cards`): its 16px gutter and 12px a step in. */
+const CARD_INDENT: Record<HierarchyRole, number> = { ab: 16, aab: 28, agent: 40 };
+
 const STATUS_TO_PILL: Record<MemberStatus, 'success' | 'alert' | 'neutral'> = {
   active: 'success',
   pending: 'neutral',
@@ -86,6 +97,9 @@ const TABS = [
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
+
+/** A member who leads nobody, in the *Unit* column: the glossary's *No team*, as the Overview's AB list reads it. */
+const NO_TEAM = 'No team';
 
 /**
  * Each tab's columns, declared once. The skeleton and the table read the same array, so
@@ -119,6 +133,12 @@ const rosterColumns = (tab: TabKey) =>
 
 export default function MembersPage() {
   const [tab, setTab] = useState<TabKey>('directory');
+  /*
+   * **Below 768px the roster is a card per member** (P18.97-T7 AC-1, ADR-0178 §4; the client's UI-034: *All members*,
+   * 839px on a 375px screen) — on *Directory* and on *Removed*, which draw the one roster. Asked here, where the screen
+   * mounts and before the roster answers, so a phone never draws the table first. From 768px the table it was.
+   */
+  const phone = usePhone();
   const [log, setLog] = useState<RoleChangeEntry[] | null>(null);
   const [groups, setGroups] = useState<GroupSummary[] | null>(null);
   const [editing, setEditing] = useState<{ groupId: string | null; name: string; owner: string } | null>(null);
@@ -379,6 +399,15 @@ export default function MembersPage() {
   const label = (t: (typeof TABS)[number]) =>
     'count' in t && counts ? `${t.label} (${counts[t.count]})` : t.label;
 
+  /*
+   * **Below 1024px the five tabs are one row that scrolls sideways** (P18.97-T6 AC-4, ADR-0178 §2; the client's
+   * UI-038: two rows at 768px and at 375px) — the shared tab row every strip has on a phone (`useTabRow`): the side
+   * that has more fades, and the current tab is brought into view on arriving and whenever it changes. The tabs, their
+   * names, `aria-current` and the keyboard are this row's own; a row that fits reads as it did, and from 1024px it
+   * wraps exactly as before (`tablet.ts`).
+   */
+  const row = useTabRow<HTMLDivElement>(tab);
+
   return (
     <Page
       title="All Members"
@@ -387,7 +416,12 @@ export default function MembersPage() {
       {/* The prototype's metrics: 24px between tabs, the underline on the hairline, and
           inactive tabs at the same weight as active — they differ by colour and the amber
           rule, never by weight (`Overall.html:81-89`). */}
-      <div className="mb-6 flex flex-wrap gap-6 border-b border-hairline">
+      <div
+        ref={row.ref}
+        data-fade={row.fade}
+        {...BELOW_DESKTOP_ROW}
+        className={cn('mb-6 flex flex-wrap gap-6 border-b border-hairline', TAB_ROW_BELOW_DESKTOP, UNDERLINED_ROW_BELOW_DESKTOP)}
+      >
         {/* Every tab is built. A disabled branch for an unbuilt one, titled "Arrives with its
             phase", sat here unreachable — no tab set it — and went in P10.1-T2. */}
         {TABS.map((t) => (
@@ -396,11 +430,12 @@ export default function MembersPage() {
             type="button"
             onClick={() => setTab(t.key as TabKey)}
             aria-current={tab === t.key ? 'page' : undefined}
-            className={
+            className={cn(
               tab === t.key
                 ? '-mb-px border-b-2 border-amber px-0.5 pb-3 text-md font-semibold text-navy'
-                : '-mb-px border-b-2 border-transparent px-0.5 pb-3 text-md font-semibold text-muted'
-            }
+                : '-mb-px border-b-2 border-transparent px-0.5 pb-3 text-md font-semibold text-muted',
+              TAB_BELOW_DESKTOP,
+            )}
           >
             {label(t)}
           </button>
@@ -762,12 +797,14 @@ export default function MembersPage() {
         </>
       )}
 
-      {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && page === null && (
+      {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && page === null && (phone ? (
+        <SkeletonCards count={4} label={tab === 'removed' ? 'Loading removed members…' : 'Loading the office roster…'} />
+      ) : (
         <SkeletonTable
           caption={tab === 'removed' ? 'Removed members' : 'Office roster'}
           columns={rosterColumns(tab)}
         />
-      )}
+      ))}
 
       {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && page?.length === 0 && !error && (
         <div className="rounded-lg border border-hairline bg-card">
@@ -799,6 +836,14 @@ export default function MembersPage() {
 
       {tab !== 'rolelog' && tab !== 'groups' && tab !== 'pending' && page && page.length > 0 && (
         <>
+          {phone ? (
+            <MemberCards
+              members={page}
+              removed={tab === 'removed'}
+              busy={busy}
+              onToggleCoreLeader={(m) => void toggleCoreLeader(m)}
+            />
+          ) : (
           <DataTable
             caption={tab === 'removed' ? 'Removed members' : 'Office roster'}
             columns={rosterColumns(tab)}
@@ -816,7 +861,8 @@ export default function MembersPage() {
                     <span className="block text-sm font-normal text-muted">{m.email}</span>
                   </span>
                 </Cell>
-                <Cell>
+                {/* On one line: *PRU-80003* broke at its hyphen in a narrow column (P18.97-T4 AC-3; UI-024). */}
+                <Cell className="whitespace-nowrap">
                   <code className="text-sm">{m.agentCode}</code>
                 </Cell>
                 <Cell>
@@ -858,29 +904,43 @@ export default function MembersPage() {
                   </>
                 )}
                 <Cell className="text-muted">
-                  {/* Leadership is the graph, not the role (OD-23): an AAB with no
-                      reports leads nobody, and this column says so. */}
-                  {m.isLeader ? `${m.directCount} direct · ${m.subtreeCount} in unit` : 'Leads nobody'}
+                  {/* Leadership is the graph, not the role (OD-23): an AAB with no reports leads nobody, and this
+                      column says so — *No team*, the words the Overview's AB list uses (ADR-0176 §2; UI-024). */}
+                  {m.isLeader ? `${m.directCount} direct · ${m.subtreeCount} in unit` : NO_TEAM}
                 </Cell>
                 <Cell className={tab === 'removed' ? 'whitespace-nowrap text-muted' : undefined}>
                   {tab === 'removed' ? (
-                    m.removedAt ? (
-                      <time dateTime={m.removedAt}>
-                        {formatOfficeDay(m.removedAt)}
-                      </time>
-                    ) : (
-                      '—'
-                    )
+                    <>
+                      {m.removedAt ? (
+                        <time dateTime={m.removedAt}>
+                          {formatOfficeDay(m.removedAt)}
+                        </time>
+                      ) : (
+                        '—'
+                      )}
+                      {/* The membership she left, and the day she came back on another (P18.97-T4 AC-3, ADR-0176 §5). */}
+                      {m.rejoinedOn && (
+                        <span className="block text-sm">
+                          Rejoined <time dateTime={m.rejoinedOn}>{formatCalendarDay(m.rejoinedOn)}</time>
+                        </span>
+                      )}
+                    </>
                   ) : (
-                    <StatusPill
-                      status={STATUS_TO_PILL[m.status]}
-                      label={MEMBER_STATUS_LABEL[m.status]}
-                    />
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <StatusPill
+                        status={STATUS_TO_PILL[m.status]}
+                        label={MEMBER_STATUS_LABEL[m.status]}
+                      />
+                      {/* She left and came back: the live membership says so beside its status, so *Active* beside
+                          a *Removed* tab holding her earlier one is not read as a contradiction (UI-024). */}
+                      {m.rejoinedOn && <StatusPill status="neutral" label="Rejoined" />}
+                    </span>
                   )}
                 </Cell>
               </Row>
             ))}
           </DataTable>
+          )}
 
           <div className="mt-4 flex items-center gap-2">
             <Button
@@ -912,6 +972,102 @@ export default function MembersPage() {
         </>
       )}
     </Page>
+  );
+}
+
+/**
+ * **The roster as cards** (P18.97-T7 AC-1, ADR-0178 §4; UI-034). A card per member, in the table's order and words,
+ * through the shared card pieces (`components/ui/row-cards.tsx`): the name — the person page's link, 44px tall — with
+ * the rung's badge, *Owner*, *Admin*, *Core Leader* and its control after it on the same wrapping line, their email
+ * under it; the status, with ***Rejoined*** beside it for a member who came back (P18.97-T4 AC-3); then each value
+ * under its column's heading — *Agent code* on one line, *Reports to*, *Last activity*, *Last coached*, *Unit* (*No
+ * team* for one who leads nobody) and, on *Removed*, the day they left and ***Rejoined {date}***. A value the table
+ * writes as — is not drawn. The cards step in by rung as the table's names do, 12px a step.
+ */
+function MemberCards({
+  members, removed, busy, onToggleCoreLeader,
+}: {
+  members: Member[];
+  /** The *Removed* tab: the day they left in place of the status, and no activity. */
+  removed: boolean;
+  busy: boolean;
+  onToggleCoreLeader: (member: Member) => void;
+}) {
+  return (
+    <RowCards label={removed ? 'Removed members' : 'Office roster'}>
+      {members.map((m) => (
+        <RowCard key={m.membershipId} data-row={m.membershipId} style={{ paddingLeft: CARD_INDENT[m.role] }}>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <Link
+              href={`/people/members/${m.membershipId}`}
+              className={cn('min-w-0 break-words text-md font-semibold text-navy underline', TEXT_TAP)}
+            >
+              {displayName(m)}
+            </Link>
+            <RoleBadge role={m.role} />
+            {m.isKpmOwner && <Tag>Owner</Tag>}
+            {m.isKpmAdmin && <Tag>Admin</Tag>}
+            {m.isCoreLeader && <Tag>{CORE_LEADER_LABEL}</Tag>}
+            {!removed && m.canTagCoreLeader && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onToggleCoreLeader(m)}
+                aria-label={m.isCoreLeader
+                  ? `Remove the Core Leader tag from ${displayName(m)}`
+                  : `Tag ${displayName(m)} Core Leader`}
+                title={m.isCoreLeader ? 'Remove the Core Leader tag' : 'Tag as Core Leader'}
+                className={cn(
+                  'inline-flex items-center justify-center px-0.5 text-2xs font-semibold text-muted hover:text-amber-deep disabled:opacity-50',
+                  TAP_TARGET,
+                )}
+              >
+                {m.isCoreLeader ? <span aria-hidden>×</span> : '+ Core Leader'}
+              </button>
+            )}
+          </p>
+          <p className="break-all text-sm text-muted">{m.email}</p>
+          {!removed && (
+            <p className="mt-2 flex flex-wrap items-center gap-1.5">
+              <StatusPill status={STATUS_TO_PILL[m.status]} label={MEMBER_STATUS_LABEL[m.status]} />
+              {m.rejoinedOn && <StatusPill status="neutral" label="Rejoined" />}
+            </p>
+          )}
+          <CardFields>
+            {/* On one line, as in the table: *PRU-80003* never breaks at its hyphen (P18.97-T4 AC-3). */}
+            <CardField label="Agent code"><code className="whitespace-nowrap text-sm text-navy">{m.agentCode}</code></CardField>
+            {m.leaderName && <CardField label="Reports to"><span className="text-muted">{m.leaderName}</span></CardField>}
+            {!removed && m.lastActivityDays !== undefined && (
+              <CardField label="Last activity">
+                <span className="text-muted">
+                  {m.lastActivityOn
+                    ? <time dateTime={m.lastActivityOn}>{daysAgoWords(m.lastActivityDays)}</time>
+                    : daysAgoWords(m.lastActivityDays)}
+                </span>
+              </CardField>
+            )}
+            {!removed && m.lastCoachedDays !== undefined && (
+              <CardField label="Last coached"><span className="text-muted">{daysAgoWords(m.lastCoachedDays)}</span></CardField>
+            )}
+            <CardField label="Unit">
+              <span className="text-muted">{m.isLeader ? `${m.directCount} direct · ${m.subtreeCount} in unit` : NO_TEAM}</span>
+            </CardField>
+            {removed && (m.removedAt || m.rejoinedOn) && (
+              <CardField label="Removed">
+                <span className="text-muted">
+                  {m.removedAt && <time dateTime={m.removedAt}>{formatOfficeDay(m.removedAt)}</time>}
+                  {m.rejoinedOn && (
+                    <span className="block text-sm">
+                      Rejoined <time dateTime={m.rejoinedOn}>{formatCalendarDay(m.rejoinedOn)}</time>
+                    </span>
+                  )}
+                </span>
+              </CardField>
+            )}
+          </CardFields>
+        </RowCard>
+      ))}
+    </RowCards>
   );
 }
 

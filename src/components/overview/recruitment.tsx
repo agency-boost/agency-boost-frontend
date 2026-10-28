@@ -1,24 +1,19 @@
 'use client';
 
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { TextInput } from '@/components/ui/field';
 import { InlineSaveField, useInlineSave, type InlineSaveOutcome } from '@/components/ui/inline-save-status';
+import { TEXT_TAP } from '@/components/ui/phone';
+import { Toast, useToast } from '@/components/ui/toast';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  OWN_COPY, parseTarget, PROTOTYPE_COPY, recruitPill, saveRecruitTarget, type OverviewRecruitment,
+  OWN_COPY, parseTarget, PROTOTYPE_COPY, recruitPill, saveRecruitTarget, targetValueWords, type OverviewRecruitment,
 } from '@/lib/kpm-overview';
 import { useCan, useSession } from '@/lib/session';
-import { useDebounced } from '@/lib/use-debounced';
 import { OverviewCard } from './parts';
 
-/**
- * How long the *Target* waits for typing to stop before it is saved: long enough that *15* is not saved as
- * *1* on its way, short enough that leaving the page a moment after typing has kept it.
- */
-export const TARGET_SAVE_DELAY_MS = 600;
-
-/** The *Target*'s own *Saving… → Saved ✓* (P18.95-T1 AC-5): the one field on this card that saves itself. */
+/** The *Target*'s own *Saving…* and *Couldn't save — retry* (P18.95-T1 AC-5): the one field on this card that saves itself. */
 const TARGET_KEY = 'target';
 
 /**
@@ -27,103 +22,155 @@ const TARGET_KEY = 'target';
  * **The tiles are figures, not links** (D-recruit): the prototype's alert lists candidates by name, and the
  * Owner and the Admin hold lead counts, never leads (roles §3.6).
  *
- * **The *Target* is the office's, for this month, and saved as it changes** (D-recruit): the prototype's
- * input keeps nothing (`:1061`). Ours is written for the office's current month once typing settles,
- * audited by the server with before and after, and carried into a month that has none. The pill reacts as
- * the number is typed, as `updateRecruitStatus()` does (`:4875-4889`), and **is not drawn without a
+ * **The *Target* is the office's, for this month** (D-recruit): the prototype's input keeps nothing (`:1061`). Ours is
+ * written for the office's current month, audited by the server with before and after, and carried into a month that
+ * has none. **Since P18.97-T3 AC-7 it reads as a labelled value** — the tile's *Target* over *15*, or *No target set* —
+ * **with *Edit*** for whoever holds `kpm_overview:set_recruit_target` (ADR-0176 §4, UI-020; parity I-506): *Edit* opens
+ * the labelled number input in the value's place, which **saves itself on Enter or on leaving it** (OD-200's autosave),
+ * reads as a value again and confirms with the toast ***Target saved ✓*** where the field's own *Saved ✓* would have
+ * shown. A refusal keeps the input, with *Couldn't save — retry* beside it, which sends the same value again; ***Escape***
+ * leaves without saving. No *Save* button and no dialog: the smallest form with a label, an *Edit* and a confirmation.
+ *
+ * The pill reacts as the number is typed, as `updateRecruitStatus()` does (`:4875-4889`), and **is not drawn without a
  * target** — judging the pipeline against the prototype's 15 would be judging it against nothing anybody set.
  *
- * Only somebody who may set it is offered the input: `kpm_overview:set_recruit_target`. A read-only support
- * session sees that input **disabled** (roles §3.13: the member's screen as they see it, nothing written), and
- * writes nothing. Anybody else reads it as a figure.
+ * Anybody without the permission reads the value. A read-only support session sees the member's *Edit* **disabled**
+ * (roles §3.13: the member's screen as they see it, nothing written), and writes nothing.
  */
 export function Recruitment({ recruitment, month }: { recruitment: OverviewRecruitment; month: string }) {
   const { me } = useSession();
   const holds = useCan('kpm_overview:set_recruit_target');
   const readOnly = !!me?.impersonationReadOnly;
   const canSet = holds && !readOnly;
-  // A read-only session's `/auth/me` lists no write (the server drops every write verb inside one), so the
-  // member's own *Target* input is recognised by whose screen it is — the Owner's or an Admin's — and drawn
-  // disabled, as roles §3.13 says the member's screen is shown.
-  const membersInput = readOnly && !!(me?.membership?.isKpmOwner || me?.membership?.isKpmAdmin);
+  // A read-only session's `/auth/me` lists no write (the server drops every write verb inside one), so the member's own
+  // *Edit* is recognised by whose screen it is — the Owner's or an Admin's — and drawn disabled, as roles §3.13 says
+  // the member's screen is shown.
+  const showEdit = holds || (readOnly && !!(me?.membership?.isKpmOwner || me?.membership?.isKpmAdmin));
   const [saved, setSaved] = useState<number | null>(recruitment.target);
-  const [typed, setTyped] = useState(recruitment.target === null ? '' : String(recruitment.target));
+  const [editing, setEditing] = useState(false);
+  const [typed, setTyped] = useState('');
+  /** Enter on an empty box: the reader asked to save nothing, so the box says what it takes. */
+  const [asked, setAsked] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const settled = useDebounced(typed, TARGET_SAVE_DELAY_MS);
-  /** The target the server last confirmed: what a refused save goes back to. */
-  const confirmed = useRef<number | null>(recruitment.target);
-  /** **One save in flight**, and only the newest value waiting behind it, so two answers never race. */
-  const inFlight = useRef(false);
-  const queued = useRef<number | null>(null);
-  /** What the box holds now, read by a save answering after the reader typed on. */
-  const typedNow = useRef(typed);
-  typedNow.current = typed;
   const inputId = useId();
   const errorId = useId();
-  /** *Saving… → Saved ✓* beside the box, or *Couldn't save — retry* (P18.95-T1 AC-5). */
+  /** The box, by its id: `TextInput` takes no ref. */
+  const input = useCallback(
+    () => (typeof document === 'undefined' ? null : document.getElementById(inputId) as HTMLInputElement | null),
+    [inputId],
+  );
+  const editButton = useRef<HTMLButtonElement>(null);
+  /** Where the focus goes once the box closes: back to *Edit*, when the box held it. */
+  const [focusEdit, setFocusEdit] = useState(false);
+  const { toast, show } = useToast();
   const inline = useInlineSave();
   const saveInline = inline.save;
-  /** Unmounted: the save that leaving the page sends goes without a status, there being nowhere to draw one. */
+  const clearInline = inline.clear;
+  /** A save on its way: the box waits for it, and neither Enter nor leaving sends another. */
+  const inFlight = useRef(false);
+  /** The value the last attempt was refused: leaving the box does not send it again — its retry does. */
+  const refused = useRef<number | null>(null);
+  /** What the box holds now, and whether it is open, for the save the page's leaving sends. */
+  const now = useRef({ editing, typed, saved });
+  now.current = { editing, typed, saved };
   const gone = useRef(false);
   useEffect(() => {
     gone.current = false;
     return () => { gone.current = true; };
   }, []);
 
+  // *Edit* puts the reader in the box, its number selected, so typing replaces it.
+  useEffect(() => {
+    if (!editing) return;
+    const box = input();
+    box?.focus();
+    try { box?.select(); } catch { /* a number box that keeps no selection still has the focus */ }
+  }, [editing, input]);
+  useEffect(() => {
+    if (!focusEdit) return;
+    editButton.current?.focus();
+    setFocusEdit(false);
+  }, [focusEdit]);
+
   const parsed = parseTarget(typed);
-  const invalid = typed.trim() !== '' && parsed === null;
+  const invalid = editing && ((typed.trim() !== '' && parsed === null) || (asked && parsed === null));
+
+  /** Back to the value, saving nothing: the inline status and the refusal go with the box. */
+  const close = useCallback((refocus: boolean) => {
+    clearInline(TARGET_KEY);
+    refused.current = null;
+    setError(null);
+    setAsked(false);
+    setEditing(false);
+    if (refocus) setFocusEdit(true);
+  }, [clearInline]);
 
   const send = useCallback((value: number) => {
-    let tries = 0;
-    /**
-     * One write of `value`, answering how it went: the box's status, and **its retry, which sends this same
-     * value again** (AC-5). A newer value typed meanwhile is a new `send`, and its status takes over.
-     */
+    /** One write of `value`; its retry sends this same value again (P18.95-T1 AC-5). */
     const attempt = async (): Promise<InlineSaveOutcome> => {
-      const retried = tries++ > 0;
-      const before = confirmed.current;
       inFlight.current = true;
+      refused.current = null;
       setError(null);
       try {
         const written = await saveRecruitTarget({ month, target: value });
-        confirmed.current = written.target;
         setSaved(written.target);
-        // A retry lands after the refusal put the box back to what was kept: it shows what is kept now.
-        if (retried && parseTarget(typedNow.current) === before) setTyped(String(written.target));
+        if (!gone.current) {
+          const hadFocus = typeof document !== 'undefined' && document.activeElement !== null && document.activeElement === input();
+          close(hadFocus);
+          show(OWN_COPY.targetSaved);
+        }
         return true;
       } catch (err) {
+        refused.current = value;
         setError(toDisplayError(err));
-        // What is on screen goes back to what is kept — but only if the box still shows the value refused: a
-        // newer value typed meanwhile is the reader's, and is saved in its turn.
-        if (parseTarget(typedNow.current) === value) {
-          setTyped(confirmed.current === null ? '' : String(confirmed.current));
-        }
         return false;
       } finally {
         inFlight.current = false;
-        const next = queued.current;
-        queued.current = null;
-        if (next !== null && next !== confirmed.current) send(next);
       }
     };
+    // Leaving the page as it saves: nowhere to say how it went.
     if (gone.current) void attempt();
     else void saveInline(TARGET_KEY, attempt);
-  }, [month, saveInline]);
+  }, [month, saveInline, close, show, input]);
 
-  /** Ask for a value to be kept: now, or after the save in flight. A value already kept asks nothing. */
-  const request = useCallback((value: number | null) => {
-    if (!canSet || value === null || value === confirmed.current) return;
-    if (inFlight.current) { queued.current = value; return; }
+  /** Enter, or leaving the box: save what it holds, if it is a target and not the one kept. */
+  const commit = (how: 'enter' | 'blur') => {
+    if (!canSet || inFlight.current) return;
+    const value = parseTarget(typed);
+    if (value === null) {
+      // Leaving a box empty or half-typed clears nothing: the value kept stands. Enter on it says what it takes.
+      if (how === 'enter') setAsked(true);
+      else close(false);
+      return;
+    }
+    if (value === saved) { close(how === 'enter'); return; }
+    // The value just refused is sent again by its retry, not by leaving the box towards it.
+    if (how === 'blur' && value === refused.current) return;
+    send(value);
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit('enter'); }
+    // A save already on its way lands whatever Escape says: the box closes when it does.
+    if (e.key === 'Escape') { e.preventDefault(); if (!inFlight.current) close(true); }
+  };
+
+  // Leaving the page with the box open saves what it holds, as leaving the box does; nothing is drawn for it.
+  useEffect(() => () => {
+    const { editing: wasOpen, typed: text, saved: kept } = now.current;
+    const value = parseTarget(text);
+    if (!wasOpen || !canSet || inFlight.current || value === null || value === kept || value === refused.current) return;
     send(value);
   }, [canSet, send]);
 
-  // Typing settles: save.
-  useEffect(() => { request(parseTarget(settled)); }, [settled, request]);
-  // Leaving the page before it settled: save what was typed, rather than drop it.
-  useEffect(() => () => { request(parseTarget(typedNow.current)); }, [request]);
+  const open = () => {
+    setTyped(saved === null ? '' : String(saved));
+    setAsked(false);
+    setError(null);
+    setEditing(true);
+  };
 
-  const shownTarget = canSet ? parsed : saved;
-  const showInput = holds || membersInput;
+  const shownTarget = editing && parsed !== null ? parsed : saved;
   const pill = recruitPill(recruitment.expectedToClose, shownTarget);
 
   return (
@@ -132,39 +179,48 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
         <RecruitTile label={PROTOTYPE_COPY.expectedToClose}>
           <Value>{recruitment.expectedToClose}</Value>
         </RecruitTile>
-        <RecruitTile label={PROTOTYPE_COPY.target} htmlFor={showInput ? inputId : undefined}>
-          {showInput ? (
-            // Its status on the line under it, inside the tile (AC-5); the refusal's reason stays below the tiles.
+        <RecruitTile label={PROTOTYPE_COPY.target} htmlFor={editing ? inputId : undefined}>
+          {editing ? (
+            // Its status on the line under it, inside the tile (P18.95-T1 AC-5); the refusal's reason stays below the tiles.
             <InlineSaveField status={inline.statusOf(TARGET_KEY)} label={PROTOTYPE_COPY.target}>
               <TextInput
                 id={inputId}
-                disabled={readOnly}
                 type="number"
                 inputMode="numeric"
                 min={0}
                 step={1}
                 value={typed}
                 invalid={invalid}
+                readOnly={inline.stateOf(TARGET_KEY) === 'saving'}
                 aria-describedby={invalid || error ? errorId : undefined}
-                onChange={(e) => setTyped(e.target.value)}
-                // Leaving the box saves at once what it holds, without waiting for the pause; a box left empty or
-                // half-typed goes back to what is kept — nothing is cleared by leaving it.
-                onBlur={() => {
-                  const value = parseTarget(typed);
-                  if (value === null) setTyped(saved === null ? '' : String(saved));
-                  else request(value);
-                }}
+                onChange={(e) => { setTyped(e.target.value); setAsked(false); }}
+                onKeyDown={onKeyDown}
+                onBlur={() => commit('blur')}
                 // `.rt-target-input` (`:524-527`): Inter 20px bold in a 7px box, inside the tile.
                 className="h-auto w-full rounded-[7px] px-1.5 py-px font-body text-2xl font-bold"
               />
             </InlineSaveField>
-          ) : saved === null ? (
-            <Value>
-              <span aria-hidden="true">—</span>
-              <span className="sr-only">{OWN_COPY.noTarget}</span>
-            </Value>
           ) : (
-            <Value>{saved}</Value>
+            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+              {saved === null
+                ? <p className="text-md font-semibold text-muted">{targetValueWords(saved)}</p>
+                : <Value>{targetValueWords(saved)}</Value>}
+              {showEdit && (
+                <button
+                  ref={editButton}
+                  type="button"
+                  disabled={readOnly}
+                  aria-label={OWN_COPY.editTarget}
+                  onClick={open}
+                  className={cn(
+                    'text-sm font-semibold text-amber-ink underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:no-underline',
+                    TEXT_TAP,
+                  )}
+                >
+                  {OWN_COPY.edit}
+                </button>
+              )}
+            </div>
           )}
         </RecruitTile>
         <RecruitTile label={PROTOTYPE_COPY.lastMonth}>
@@ -195,6 +251,8 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
           </span>
         )}
       </div>
+      {/* *Target saved ✓* (OD-200's toast): the shell's region inside a shell, this card's own outside one. */}
+      <Toast toast={toast} />
     </OverviewCard>
   );
 }

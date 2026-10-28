@@ -91,6 +91,35 @@ export const TERMS = {
     definition: 'Potential Monthly Active Agent (✓): pacing, from this month’s activity, to submit at least 1 policy this month. A projection, not a sale.',
     pattern: /\bPotential (?:MAA|Monthly Active Agents?)\b/i,
   },
+  /*
+   * P18.97-T3 AC-8 (ADR-0176 §3; the client's KPM Owner findings, UI-021: *"MOC", "ELITE CLUB", "STAR CLUB" … unexplained*):
+   * the analytics' MOC and its three production clubs. The company's own names stay (Phase 18.98's glossary lists them);
+   * no threshold is written here — each company sets its own, and the MOC ⓘ shows the company's rules beneath this line.
+   */
+  MOC: {
+    name: 'MOC',
+    glossary: 'MOC',
+    definition: 'Maintenance of Contract: the bar a leader must clear to keep their role, set by the company for each leader rung.',
+    pattern: /\bMOC\b/,
+  },
+  STAR_CLUB: {
+    name: 'Star Club',
+    glossary: 'Star Club',
+    definition: 'The first of the company’s production clubs, badged on an agency whose APE this year reaches its bar.',
+    pattern: /\bStar Club\b/i,
+  },
+  ELITE_CLUB: {
+    name: 'Elite Club',
+    glossary: 'Elite Club',
+    definition: 'The middle production club, above Star Club, badged on an agency whose APE this year reaches its bar.',
+    pattern: /\bElite Club\b/i,
+  },
+  CHAIRMANS_CLUB: {
+    name: 'Chairman’s Club',
+    glossary: "Chairman's Club",
+    definition: 'The highest of the company’s production clubs, badged on an agency whose APE this year reaches its bar.',
+    pattern: /\bChairman[’']s Club\b/i,
+  },
 } as const satisfies Record<string, Term>;
 
 export type TermKey = keyof typeof TERMS;
@@ -98,12 +127,19 @@ export type TermKey = keyof typeof TERMS;
 /** Every term, in the order the glossary spells them out here. */
 export const TERM_KEYS = Object.keys(TERMS) as TermKey[];
 
+/** The analytics' own words (P18.97-T3 AC-8): drawn by that screen where they first show, and nobody's content. */
+const ANALYTICS_TERM_KEYS: readonly TermKey[] = ['MOC', 'STAR_CLUB', 'ELITE_CLUB', 'CHAIRMANS_CLUB'];
+
 /**
  * **The terms looked for in words somebody else wrote** — an office's activity labels, a company's product copy.
- * Not *touch*, an ordinary English word there (*a personal touch*), whose ⓘ the screen's own total carries; and not
- * *Potential Monthly Active Agent*, which is the Unit Dashboard's own figure and nobody's content.
+ * Not *touch*, an ordinary English word there (*a personal touch*), whose ⓘ the screen's own total carries; not
+ * *Potential Monthly Active Agent*, which is the Unit Dashboard's own figure and nobody's content; and not MOC and the
+ * clubs, which `/kpm/analytics` explains where its table first draws them — a campaign named after a club (*Year-End
+ * Star Club Drive*) is the campaign's, not the tier's (glossary, *Star Club*).
  */
-export const CONTENT_TERM_KEYS = TERM_KEYS.filter((key) => key !== 'TOUCHES' && key !== 'POTENTIAL_MAA');
+export const CONTENT_TERM_KEYS = TERM_KEYS.filter(
+  (key) => key !== 'TOUCHES' && key !== 'POTENTIAL_MAA' && !ANALYTICS_TERM_KEYS.includes(key),
+);
 
 /** The ⓘ's accessible name: *What is APE?* */
 export const termQuestion = (key: TermKey): string => `What is ${TERMS[key].name}?`;

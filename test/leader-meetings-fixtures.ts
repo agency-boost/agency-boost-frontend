@@ -8,18 +8,18 @@ import {
 } from '@/lib/leader-meetings';
 
 /**
- * A meeting as the server answers it (P18.1-T2): 0417's **#14**, upcoming, as the seed writes it — the
+ * A meeting as the server answers it (P18.1-T2, P18.97-T1): 0417's **#14**, upcoming, as the seed writes it — the
  * prototype's ten agenda items (`KPM_Owner.html:2500-2513`), its four tracker rows (`:2516-2521`) and *Monthly
- * Target* typed as `:2462-2471` draws it — with a scorecard the server computed: *FY*, *YTD* and *This Month,
- * Last Year* held, *YTD* leaving August out, *This Month* not yet uploaded, FLC *pending data* (OD-26), and
- * *Average Case Size* over no policies in *YTD*.
+ * Target* as rates — with a scorecard the server computed in the reference slide's shape: *Full Year*, both *YTD*s and
+ * *This Month, Last Year* held, this year's *YTD* leaving August out, *This Month* not yet uploaded, FLC *pending data*
+ * (OD-26), and *Avg. Case Size* over no policies in *YTD*.
  */
 
 /** Rupiah to minor units (sen). */
 export const sen = (rupiah: number) => Math.round(rupiah * 100);
-/** Billions of rupiah, as *APE (IDR B)* reads, to minor units. */
+/** *Miliar* of rupiah, as *APE (Rp M)* reads, to minor units. */
 export const billions = (b: number) => sen(b * 1e9);
-/** Millions of rupiah, as *Average Case Size (IDR M)* reads, to minor units. */
+/** *Juta* of rupiah, as *Avg. Case Size (Rp jt)* reads, to minor units. */
 export const millions = (m: number) => sen(m * 1e6);
 
 const fig = (value: number, leavesOut: string[] = []): ScorecardCell => ({ kind: 'figure', value, leavesOut });
@@ -28,73 +28,120 @@ const BLOCKED: ScorecardCell = { kind: 'blocked' };
 const NONE: ScorecardCell = { kind: 'none' };
 
 export function makeScorecard(overrides: Partial<Scorecard> = {}): Scorecard {
+  const fy = (value: number, leavesOut: string[] = []) => fig(value, leavesOut);
+  const target = (rate: number | null, value: number | null, version: number, typed: string | null = null) =>
+    ({ rate, value, typed, version });
   return {
-    periods: { fy: '2025', ytd: '2026', thisMonthLastYear: '2025-09', lastMonth: '2026-08', thisMonth: '2026-09' },
-    chips: { manpower: 187, agents: 155, units: 8, ab: 8, aab: 24 },
+    periods: {
+      fy: { from: '2025-01', to: '2025-12' },
+      ytdLastYear: { from: '2025-01', to: '2025-09' },
+      ytd: { from: '2026-01', to: '2026-09' },
+      thisMonthLastYear: { from: '2025-09', to: '2025-09' },
+      lastMonth: { from: '2026-08', to: '2026-08' },
+      thisMonth: { from: '2026-09', to: '2026-09' },
+    },
+    chips: { manpower: 187, agents: 155, units: 32, ab: 8, aab: 24 },
     rows: [
       {
         key: 'ape',
         unit: 'idr_minor',
         cells: {
-          fy: fig(billions(12.1)),
+          fy: fy(billions(12.1)),
+          ytdLastYear: fig(billions(7.9)),
           ytd: fig(billions(8.4), ['2026-08']),
           thisMonthLastYear: fig(billions(0.75)),
           lastMonth: PENDING,
           thisMonth: PENDING,
         },
-        monthlyTarget: { value: 'TBD', version: 2 },
+        ytdChange: { kind: 'figure', value: 6, unit: 'percent' },
+        monthlyTarget: target(null, null, 2),
       },
       {
         key: 'manpower',
         unit: 'count',
-        cells: { fy: fig(201), ytd: fig(187), thisMonthLastYear: fig(196), lastMonth: fig(181), thisMonth: fig(187) },
-        monthlyTarget: { value: '', version: 0 },
+        cells: { fy: fig(201), ytdLastYear: fig(190), ytd: fig(187), thisMonthLastYear: fig(196), lastMonth: fig(181), thisMonth: fig(187) },
+        ytdChange: { kind: 'figure', value: -2, unit: 'percent' },
+        monthlyTarget: target(null, null, 0),
       },
       {
         key: 'flc',
         unit: 'count',
-        cells: { fy: PENDING, ytd: PENDING, thisMonthLastYear: PENDING, lastMonth: PENDING, thisMonth: PENDING },
-        monthlyTarget: { value: '8 (1 @ unit)', version: 1 },
+        cells: { fy: PENDING, ytdLastYear: PENDING, ytd: PENDING, thisMonthLastYear: PENDING, lastMonth: PENDING, thisMonth: PENDING },
+        ytdChange: { kind: 'none' },
+        monthlyTarget: target(1, 32, 1),
       },
       {
         key: 'producing_agents',
         unit: 'count',
-        cells: { fy: fig(96), ytd: fig(71, ['2026-08']), thisMonthLastYear: BLOCKED, lastMonth: BLOCKED, thisMonth: BLOCKED },
+        cells: { fy: fig(96), ytdLastYear: fig(80), ytd: fig(71, ['2026-08']), thisMonthLastYear: BLOCKED, lastMonth: BLOCKED, thisMonth: BLOCKED },
+        ytdChange: { kind: 'figure', value: -11, unit: 'percent' },
         monthlyTarget: null,
-      },
-      {
-        key: 'new_aa',
-        unit: 'count',
-        cells: { fy: fig(3.4), ytd: fig(2.6), thisMonthLastYear: fig(4), lastMonth: PENDING, thisMonth: PENDING },
-        monthlyTarget: { value: 'TBD', version: 1 },
       },
       {
         key: 'new_agent_3m',
         unit: 'percentage',
-        cells: { fy: fig(30), ytd: PENDING, thisMonthLastYear: BLOCKED, lastMonth: BLOCKED, thisMonth: BLOCKED },
+        cells: { fy: fig(30), ytdLastYear: fig(25), ytd: PENDING, thisMonthLastYear: BLOCKED, lastMonth: BLOCKED, thisMonth: BLOCKED },
+        ytdChange: { kind: 'none' },
         monthlyTarget: null,
       },
       {
         key: 'avg_monthly_aa',
         unit: 'count',
-        cells: { fy: fig(14.4), ytd: fig(11), thisMonthLastYear: fig(10), lastMonth: PENDING, thisMonth: PENDING },
-        monthlyTarget: { value: '22 (3 @ unit)', version: 1 },
+        cells: { fy: fig(14.4), ytdLastYear: fig(12), ytd: fig(11), thisMonthLastYear: fig(10), lastMonth: PENDING, thisMonth: PENDING },
+        ytdChange: { kind: 'figure', value: -8, unit: 'percent' },
+        monthlyTarget: target(3, 96, 1),
       },
       {
         key: 'case_submission',
         unit: 'count',
-        cells: { fy: fig(420), ytd: fig(198, ['2026-08']), thisMonthLastYear: fig(27), lastMonth: PENDING, thisMonth: PENDING },
-        monthlyTarget: { value: 'TBD', version: 1 },
+        cells: { fy: fig(420), ytdLastYear: fig(300), ytd: fig(198, ['2026-08']), thisMonthLastYear: fig(27), lastMonth: PENDING, thisMonth: PENDING },
+        ytdChange: { kind: 'figure', value: -34, unit: 'percent' },
+        monthlyTarget: target(null, null, 1),
+      },
+      {
+        key: 'cases_per_producing_agent',
+        unit: 'ratio',
+        cells: { fy: fig(420 / 96), ytdLastYear: fig(3.75), ytd: fig(198 / 71, ['2026-08']), thisMonthLastYear: BLOCKED, lastMonth: BLOCKED, thisMonth: BLOCKED },
+        ytdChange: { kind: 'figure', value: -26, unit: 'percent' },
+        monthlyTarget: null,
       },
       {
         key: 'average_case_size',
         unit: 'idr_minor',
-        cells: { fy: fig(millions(19.8)), ytd: NONE, thisMonthLastYear: BLOCKED, lastMonth: BLOCKED, thisMonth: BLOCKED },
+        cells: { fy: fig(millions(19.8)), ytdLastYear: fig(millions(17.6)), ytd: NONE, thisMonthLastYear: BLOCKED, lastMonth: BLOCKED, thisMonth: BLOCKED },
+        ytdChange: { kind: 'none' },
         monthlyTarget: null,
       },
     ],
+    asOf: { kind: 'date', date: '2026-09-05' },
+    partialPeriods: [{ column: 'ytd', leavesOut: ['2026-08'] }],
     frozenAt: null,
     ...overrides,
+  };
+}
+
+/**
+ * **A scorecard kept before the reference slide's table** (P18.97-T1 AC-19), as the server reads it tolerantly: *YTD
+ * {Y−1}* and *Cases/producing agents* *unrecorded*, *AS OF* unrecorded, *# of units* the five it was kept with.
+ */
+export function makeScorecardKeptBefore(): Scorecard {
+  const now = makeScorecard();
+  const UNRECORDED: ScorecardCell = { kind: 'unrecorded' };
+  return {
+    ...now,
+    chips: { manpower: 26, agents: 17, units: 5, ab: 5, aab: 4 },
+    rows: now.rows.map((row) => ({
+      ...row,
+      cells: row.key === 'cases_per_producing_agent'
+        ? { ...row.cells, fy: UNRECORDED, ytdLastYear: UNRECORDED, ytd: UNRECORDED }
+        : { ...row.cells, ytdLastYear: UNRECORDED },
+      ytdChange: { kind: 'none' },
+      monthlyTarget: row.monthlyTarget && row.monthlyTarget.rate !== null
+        ? { ...row.monthlyTarget, value: row.monthlyTarget.rate * 5 }
+        : row.monthlyTarget,
+    })),
+    asOf: { kind: 'unrecorded' },
+    frozenAt: '2026-09-13T02:00:00.000Z',
   };
 }
 
@@ -184,7 +231,7 @@ export const completedMeeting = (overrides: Partial<MeetingView> = {}) =>
     title: 'Strategic Check-in — #13',
     date: '2026-09-04',
     state: 'completed',
-    scorecard: makeScorecard({ frozenAt: '2026-09-05T02:00:00.000Z', chips: { manpower: 181, agents: 150, units: 8, ab: 8, aab: 23 } }),
+    scorecard: makeScorecard({ frozenAt: '2026-09-05T02:00:00.000Z', chips: { manpower: 181, agents: 150, units: 31, ab: 8, aab: 23 } }),
     ...overrides,
   });
 

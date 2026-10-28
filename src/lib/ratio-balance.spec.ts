@@ -6,7 +6,7 @@ import {
 /** A balance read as each side's share of the two (P13.1-T6). */
 describe('the balance as two shares (P13.1-T6)', () => {
   describe('AC-1: the split sums to 100', () => {
-    it('writes two selling and three recruiting as 40,0% and 60,0% (ADR-0167 §1: one decimal)', () => {
+    it('P18.97-T3 AC-2 writes two selling and three recruiting as 40,0% and 60,0% — a ratio beside its benchmark keeps its tenth', () => {
       expect(formatBalanceSplit(40, 30, 'success')).toEqual({ first: '40,0%', second: '60,0%' });
     });
 
@@ -45,16 +45,16 @@ describe('the balance as two shares (P13.1-T6)', () => {
   });
 
   describe('AC-2: the band, as the shares it allows', () => {
-    it('reads ±30 points as each side between 35% and 65%', () => {
+    it('P18.97-T3 AC-2 reads ±30 points as each side between 35% and 65%, the benchmark as typed', () => {
       expect(balanceBand(30)).toEqual({ low: 35, high: 65 });
-      expect(formatBalanceBand(30)).toEqual({ low: '35,0%', high: '65,0%' });
+      expect(formatBalanceBand(30)).toEqual({ low: '35%', high: '65%' });
     });
 
-    it('keeps a half percent where the band has one, and stays within 0–100%', () => {
+    it('P18.97-T3 AC-2 keeps a half percent where the band has one, and no ,0, within 0–100%', () => {
       expect(formatBalanceBand(25)).toEqual({ low: '37,5%', high: '62,5%' });
       expect(formatBalanceBand(25.5)).toEqual({ low: '37,25%', high: '62,75%' });
-      expect(formatBalanceBand(0)).toEqual({ low: '50,0%', high: '50,0%' });
-      expect(formatBalanceBand(250)).toEqual({ low: '0,0%', high: '100,0%' });
+      expect(formatBalanceBand(0)).toEqual({ low: '50%', high: '50%' });
+      expect(formatBalanceBand(250)).toEqual({ low: '0%', high: '100%' });
     });
   });
 
@@ -84,13 +84,13 @@ describe('P18.95-T5 AC-6: the balance says what to do', () => {
   const SEED = { numerator: 'Selling', denominator: 'Recruitment' };
 
   it('P18.95-T5 AC-6: names the side there is too much of, lower-cased, and the band to aim for', () => {
-    expect(balanceAdvice(67, 30, 'alert', SEED)).toBe('Too much selling — aim for 35,0%–65,0%');
-    expect(balanceAdvice(30, 30, 'alert', SEED)).toBe('Too much recruitment — aim for 35,0%–65,0%');
+    expect(balanceAdvice(67, 30, 'alert', SEED)).toBe('Too much selling — aim for 35%–65%');
+    expect(balanceAdvice(30, 30, 'alert', SEED)).toBe('Too much recruitment — aim for 35%–65%');
   });
 
   it('P18.95-T5 AC-6: reads the band from the ratio’s own benchmark — never a literal 35–65', () => {
-    expect(balanceAdvice(70, 20, 'alert', SEED)).toBe('Too much selling — aim for 40,0%–60,0%');
-    expect(balanceAdvice(90, 50, 'alert', SEED)).toBe('Too much selling — aim for 25,0%–75,0%');
+    expect(balanceAdvice(70, 20, 'alert', SEED)).toBe('Too much selling — aim for 40%–60%');
+    expect(balanceAdvice(90, 50, 'alert', SEED)).toBe('Too much selling — aim for 25%–75%');
   });
 
   it('P18.95-T5 AC-6: says nothing in the band, nor with nothing to read, so the screen keeps its own words', () => {
@@ -101,13 +101,13 @@ describe('P18.95-T5 AC-6: the balance says what to do', () => {
 
   it('P18.95-T5 AC-6: an office’s own sections are lower-cased too, and Side A or B is written as the track writes it', () => {
     expect(balanceAdvice(75, 30, 'alert', { numerator: 'Leads Generation', denominator: 'Selling' }))
-      .toBe('Too much leads generation — aim for 35,0%–65,0%');
+      .toBe('Too much leads generation — aim for 35%–65%');
     expect(balanceAdvice(80, 30, 'alert', { numerator: null, denominator: 'Selling' }))
-      .toBe('Too much Side A — aim for 35,0%–65,0%');
+      .toBe('Too much Side A — aim for 35%–65%');
     expect(balanceAdvice(20, 30, 'alert', { numerator: null, denominator: 'Selling' }))
-      .toBe('Too much selling — aim for 35,0%–65,0%');
+      .toBe('Too much selling — aim for 35%–65%');
     // Both ends one section: the track says Side A and Side B, and so does the sentence.
     expect(balanceAdvice(80, 30, 'alert', { numerator: 'Selling', denominator: 'Selling' }))
-      .toBe('Too much Side A — aim for 35,0%–65,0%');
+      .toBe('Too much Side A — aim for 35%–65%');
   });
 });

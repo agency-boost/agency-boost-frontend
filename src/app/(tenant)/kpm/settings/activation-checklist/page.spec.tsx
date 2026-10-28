@@ -1,7 +1,7 @@
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { atWidth, digestAt, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
 import ActivationChecklistPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -103,12 +103,14 @@ const sent = (calls: { url: string; init: RequestInit }[], method: string) =>
 describe('Settings › Activation checklist (P5-T3)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  // *Amended 2026-10-28 (P18.97-T4 AC-6; UI-027):* the prototype's sentence, in the client's words.
   it('says which version hires are given, and carries the prototype’s own sentence', async () => {
     render();
 
     expect(await screen.findByText(/Hires starting now are given/)).toBeInTheDocument();
     expect(screen.getByText(/version 1/)).toBeInTheDocument();
-    expect(screen.getByText(/Applies to every new hire’s 90-day activation/)).toBeInTheDocument();
+    expect(screen.getAllByText('Linked items complete automatically.').find((el) => el.tagName === 'SPAN'
+      && !el.classList.contains('sr-only') && el.getAttribute('role') !== 'tooltip')).toBeInTheDocument();
   });
 
   it('shows the window read-only, and sends nobody to change it where it cannot be changed', async () => {
@@ -588,5 +590,186 @@ describe('Settings › Activation checklist — the data-backed items (P18.96-T7
     const row = within(rowOf('Close first case independently'));
     expect(row.getByRole('button', { name: `Auto — completes when ${FIRST_SALE.completesWhen}` })).toBeInTheDocument();
     expect(row.queryByLabelText('Completes from')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * **The checklist's grey text per size** (P18.97-T4 AC-6, ADR-0176 §6; the client's grey-text table of 2026-10-27,
+ * UI-027). *"New versions apply to new hires only."* — *ⓘ · ⓘ · Show*: from 1024px under the version line, below it
+ * an ⓘ at the end of that line. *"Linked items complete automatically."* — *Remove · ⓘ · Show*: from 1024px in the
+ * toolbar, at 768–1023px an ⓘ in its place, below 768px nothing.
+ */
+describe('P18.97-T4 AC-6 the checklist’s grey text per size', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const NEW_VERSIONS = 'New versions apply to new hires only.';
+  const LINKED = 'Linked items complete automatically.';
+
+  /** At `px`: whether each sentence and each ⓘ is drawn, read from the classes CSS would apply there. */
+  async function drawnAt(px: number) {
+    atWidth(px);
+    render();
+    await screen.findByText(/Hires starting now are given/);
+    const shown = (el: Element | null | undefined) => (el ? !wears(el, px).split(' ').includes('hidden') : false);
+    const sentence = (text: string) => screen.getAllByText(text)
+      .find((el) => !el.classList.contains('sr-only') && el.getAttribute('role') !== 'tooltip');
+    const tip = (text: string) => screen.getByRole('button', { name: text }).parentElement;
+    return {
+      newVersions: { sentence: shown(sentence(NEW_VERSIONS)), tip: shown(tip(NEW_VERSIONS)) },
+      linked: { sentence: shown(sentence(LINKED)), tip: shown(tip(LINKED)) },
+    };
+  }
+
+  it.each([1024, 1280])('P18.97-T4 AC-6 at %ipx shows both sentences and draws neither ⓘ', async (px) => {
+    expect(await drawnAt(px)).toEqual({ newVersions: { sentence: true, tip: false }, linked: { sentence: true, tip: false } });
+  });
+
+  it.each([768, 1023])('P18.97-T4 AC-6 at %ipx puts both behind their ⓘ', async (px) => {
+    expect(await drawnAt(px)).toEqual({ newVersions: { sentence: false, tip: true }, linked: { sentence: false, tip: true } });
+  });
+
+  it('P18.97-T4 AC-6 at 767px keeps the new versions’ ⓘ and removes the linked items’ sentence altogether', async () => {
+    expect(await drawnAt(767)).toEqual({ newVersions: { sentence: false, tip: true }, linked: { sentence: false, tip: false } });
+  });
+
+  it('P18.97-T4 AC-6 puts the new versions’ ⓘ at the end of the version line it is about, and the old words nowhere', async () => {
+    render();
+    const tip = await screen.findByRole('button', { name: NEW_VERSIONS });
+    expect(tip.closest('p')).toHaveTextContent(/^Hires starting now are given version 1\./);
+    expect(screen.queryByText(/Publishing gives the new version/)).toBeNull();
+    expect(screen.queryByText(/no manual check-off needed/)).toBeNull();
+  });
+});
+
+/**
+ * **44px targets, and ↑ ↓ for a list reordered by drag, on a phone** (P18.97-T7 AC-6, ADR-0178 §5; the client's KPM
+ * Owner review of 2026-10-27, UI-040: 48 tappable controls under 44px). Below 768px every button, field and drag
+ * handle is a 44 × 44 target, and each aspect and item has ↑ and ↓; at 768px and wider the checklist is as it was.
+ */
+describe('P18.97-T7 AC-6 the checklist’s targets on a phone (UI-040)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** The checklist's markup on the build before P18.97-T7, at rest and with an item being edited, from this fixture on 2026-10-28. */
+  const BEFORE_T7: Record<'rest' | 'editing', Record<768 | 1280, string>> = {
+    rest: {
+      768: '60ec720df464aae622def020395568c907c0277501dca6922f5345475eeebf24',
+      1280: 'ba59a104c75438d68a900702510966026ffc8742ee6a35b7c527e060ecdacf60',
+    },
+    editing: {
+      768: 'dd5850d0850cd54edad3d4363beb1d4b1db417bf4f0fa981bd11228571a522af',
+      1280: '66b0b8d847d07cd4b5e8085a3da244e67c7baabc4c6d7bad33aa927eed63893f',
+    },
+  };
+
+  it.each([768, 1280] as const)('P18.97-T7 AC-6 at %ipx draws the checklist as it was, to the byte', async (px) => {
+    atWidth(px);
+    stubFetch({
+      '/kpm/settings/activation-checklist': { body: CHECKLIST },
+      '/kpm/settings/training': { body: TRAINING },
+    });
+    const { container } = renderWithSession(<ActivationChecklistPage />, { me: OWNER });
+    await screen.findByText('Learn insurance basics');
+    expect(digestAt(container, px)).toBe(BEFORE_T7.rest[px]);
+    await userEvent.click(within(rowOf('Learn insurance basics')).getByRole('button', { name: 'Edit' }));
+    await screen.findByLabelText('Item');
+    expect(digestAt(container, px)).toBe(BEFORE_T7.editing[px]);
+  });
+  const onAPhone = (px = 375) => {
+    atWidth(px);
+    const stub = stubFetch({
+      '/kpm/settings/activation-checklist': [{ body: CHECKLIST }, { body: CHECKLIST }],
+      '/kpm/settings/training': { body: TRAINING },
+    });
+    renderWithSession(<ActivationChecklistPage />, { me: OWNER });
+    return stub;
+  };
+  const items = (aspect: string) => [...screen.getByRole('heading', { name: aspect }).closest('[data-row]')!.querySelectorAll('ul > li')]
+    .map((li) => li.querySelector('p')?.textContent);
+
+  it.each([375, 767])('P18.97-T7 AC-6 at %ipx gives every aspect and item ↑ and ↓, named for what they move', async (px) => {
+    onAPhone(px);
+    await screen.findByText('Learn insurance basics');
+    for (const label of ['1. Introduction', '2. Initial Setup', 'Learn insurance basics', 'Learn agency career mindset', 'Goal setting: APE & activity targets']) {
+      for (const way of ['up', 'down']) {
+        const button = screen.getByRole('button', { name: `Move ${label} ${way}` });
+        // A 44 × 44px target, as the handle beside it is.
+        expect(wears(button, px).split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
+      }
+      expect(wears(screen.getByRole('button', { name: new RegExp(`^Reorder ${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.`) }), px).split(' '))
+        .toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
+    }
+    // At the ends they are there and do nothing, and say so.
+    expect(screen.getByRole('button', { name: 'Move Learn insurance basics up' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: 'Move Learn agency career mindset down' })).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('button', { name: 'Move Learn insurance basics down' })).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('P18.97-T7 AC-6 moves an item down and an aspect up with ↑ ↓, keeps the focus on the arrow, and saves the order', async () => {
+    const { calls } = onAPhone();
+    await screen.findByText('Learn insurance basics');
+    const down = screen.getByRole('button', { name: 'Move Learn insurance basics down' });
+    await userEvent.click(down);
+    expect(items('1. Introduction')).toEqual(['Learn agency career mindset', 'Learn insurance basics']);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Move Learn insurance basics down' })).toHaveFocus());
+    // At the foot now: ↓ does nothing, and the order stands.
+    expect(screen.getByRole('button', { name: 'Move Learn insurance basics down' })).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.keyboard('{Enter}');
+    expect(items('1. Introduction')).toEqual(['Learn agency career mindset', 'Learn insurance basics']);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Move 2. Initial Setup up' }));
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent).filter((t) => /^\d\./.test(t ?? '')))
+      .toEqual(['2. Initial Setup', '1. Introduction']);
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+    await waitFor(() => expect(calls.some((c) => c.init.method === 'PUT' || c.init.method === 'POST')).toBe(true));
+    const saved = sent(calls, calls.find((c) => c.init.method === 'PUT') ? 'PUT' : 'POST') as { aspects: { code: string; items: { code: string }[] }[] };
+    expect(saved.aspects.map((a) => a.code)).toEqual(['INITIAL_SETUP', 'INTRODUCTION']);
+    expect(saved.aspects[1].items.map((i) => i.code)).toEqual(['CAREER_MINDSET', 'INSURANCE_BASICS']);
+  });
+
+  it('P18.97-T7 AC-6 makes every button and field a 44px target on a phone, and none at 768px', async () => {
+    onAPhone();
+    await screen.findByText('Learn insurance basics');
+    await userEvent.click(within(rowOf('Learn insurance basics')).getByRole('button', { name: 'Edit' }));
+    await screen.findByLabelText('Item');
+    const controls = [
+      ...['+ Add aspect', 'Save draft', 'Publish version 2', 'Save', 'Cancel'].map((name) => screen.getByRole('button', { name })),
+      ...screen.getAllByRole('button', { name: '+ Add item' }),
+      ...screen.getAllByRole('combobox'),
+      screen.getByLabelText('Item'),
+      screen.getByLabelText('Code'),
+    ];
+    for (const control of controls) {
+      expect(wears(control, 375).split(' ')).toContain('h-11');
+      expect(wears(control, 768).split(' ')).not.toContain('h-11');
+    }
+    // The inline actions, *Rename*, *Edit*, *Remove*, are 44 × 44 on a phone already (`TAP_TARGET`).
+    expect(wears(screen.getAllByRole('button', { name: 'Rename' })[0], 375).split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
+  });
+
+  it('P18.97-T7 AC-6 draws no ↑ ↓ on a row whose name is being edited, so its field keeps the line', async () => {
+    onAPhone();
+    await screen.findByText('Learn insurance basics');
+    await userEvent.click(within(rowOf('Learn insurance basics')).getByRole('button', { name: 'Edit' }));
+    await screen.findByLabelText('Item');
+    expect(screen.queryByRole('button', { name: /^Move Learn insurance basics / })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Move Learn agency career mindset up' })).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole('button', { name: 'Rename' })[0]);
+    await screen.findByLabelText('Name');
+    expect(screen.queryByRole('button', { name: /^Move 1\. Introduction / })).not.toBeInTheDocument();
+  });
+
+  it('P18.97-T7 AC-6 draws no ↑ ↓ at 768px, where the handle’s drag and keys stand', async () => {
+    atWidth(768);
+    stubFetch({ '/kpm/settings/activation-checklist': { body: CHECKLIST }, '/kpm/settings/training': { body: TRAINING } });
+    renderWithSession(<ActivationChecklistPage />, { me: OWNER });
+    await screen.findByText('Learn insurance basics');
+    expect(screen.queryByRole('button', { name: /^Move / })).not.toBeInTheDocument();
+  });
+
+  it('P18.97-T7 AC-6 offers a reader neither handles nor arrows', async () => {
+    atWidth(375);
+    stubFetch({ '/kpm/settings/activation-checklist': { body: CHECKLIST }, '/kpm/settings/training': { body: TRAINING } });
+    renderWithSession(<ActivationChecklistPage />, { me: READER });
+    await screen.findByText('Learn insurance basics');
+    expect(screen.queryByRole('button', { name: /^(Move|Reorder) / })).not.toBeInTheDocument();
   });
 });

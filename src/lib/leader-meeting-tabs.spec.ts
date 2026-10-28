@@ -5,90 +5,211 @@ import { describe, expect, it } from 'vitest';
 import { parse, renderable, SRC } from '@test/copy-scan';
 import { billions, makeActionItems, makeMeetingView, makeScorecard, millions } from '@test/leader-meetings-fixtures';
 import {
-  accessNoteText, cellText, columnHeader, formatFigure, ItemWrites, leftOutLine, listed, moveTo, nextStatus, printLeftOutLine,
-  STATUS_TONE, TABS_COPY, TABS_OWN_COPY, withActionItem, withActionItems, withAgendaItem, withTarget,
+  accessNoteText, asOfText, cellText, changeText, columnHeader, formatFigure, FOOTNOTES, ItemWrites,
+  LEADER_MEETING_TARGET_RATE_DECIMALS, listed, moveTo,
+  NET_APE_FOOTNOTE, nextStatus, noneWords, numberedFootnotes, oneDecimal, partialNotes, rateFromTyped, rateText, STATUS_TONE,
+  statsTitle, TABS_COPY, TABS_OWN_COPY, targetDraftText, targetText, withActionItem, withActionItems, withAgendaItem, withTarget,
 } from './leader-meeting-tabs';
 
-describe('P18.1-T2 AC-4 the scorecard as written: rounded for display, the served figure exact', () => {
+describe('P18.97-T1 AC-15 the scorecard as written: the slide’s numbers, the served figure exact (ADR-0174)', () => {
   const ape = { key: 'ape', unit: 'idr_minor' } as const;
   const caseSize = { key: 'average_case_size', unit: 'idr_minor' } as const;
   const count = { key: 'avg_monthly_aa', unit: 'count' } as const;
   const pct = { key: 'new_agent_3m', unit: 'percentage' } as const;
+  const ratio = { key: 'cases_per_producing_agent', unit: 'ratio' } as const;
 
-  it('APE in billions to one decimal, two below 1 (`:2488` draws 0.75), with a comma (ADR-0167 §1)', () => {
+  it('P18.97-T1 AC-15 APE in miliar to one decimal, a comma — the two below 1 gone (0,10 is 0,1)', () => {
+    expect(formatFigure(ape, billions(5.8))).toBe('5,8');
     expect(formatFigure(ape, billions(12.1))).toBe('12,1');
     expect(formatFigure(ape, billions(8.44))).toBe('8,4');
     expect(formatFigure(ape, billions(12))).toBe('12,0');
-    expect(formatFigure(ape, billions(0.75))).toBe('0,75');
-    expect(formatFigure(ape, billions(0.5))).toBe('0,50');
-    expect(formatFigure(ape, 0)).toBe('0,00');
-  });
-
-  it('rounds to two before choosing, so a figure just under 1 reads 1.0, never 1.00', () => {
+    expect(formatFigure(ape, billions(0.75))).toBe('0,8');
+    expect(formatFigure(ape, billions(0.1))).toBe('0,1');
     expect(formatFigure(ape, billions(0.996))).toBe('1,0');
-    expect(formatFigure(ape, billions(0.994))).toBe('0,99');
+    expect(formatFigure(ape, billions(1250))).toBe('1.250,0');
   });
 
-  it('Average Case Size in millions, by the same rule', () => {
-    expect(formatFigure(caseSize, millions(19.8))).toBe('19,8');
+  it('P18.97-T1 AC-15 a figure that is not zero and rounds to 0,0 reads < 0,1; zero reads 0,0', () => {
+    expect(formatFigure(ape, billions(0.04))).toBe('< 0,1');
+    expect(formatFigure(ape, 1)).toBe('< 0,1');
+    expect(formatFigure(ape, billions(0.05))).toBe('0,1');
+    expect(formatFigure(ape, 0)).toBe('0,0');
+    expect(oneDecimal(0.049)).toBe('< 0,1');
+  });
+
+  it('P18.97-T1 AC-15 Avg. Case Size in juta by the same rule, 17,6 as the slide writes it', () => {
+    expect(formatFigure(caseSize, millions(17.6))).toBe('17,6');
     expect(formatFigure(caseSize, millions(20.46))).toBe('20,5');
-    expect(formatFigure(caseSize, millions(0.85))).toBe('0,85');
+    expect(formatFigure(caseSize, millions(0.85))).toBe('0,9');
+    expect(formatFigure(caseSize, millions(0.02))).toBe('< 0,1');
   });
 
-  it('counts and the averages whole (`:2470`), a thousand with a dot; a percentage to one decimal, with its sign (ADR-0167 §1)', () => {
+  it('P18.97-T1 AC-15 counts and averages whole, a thousand with a dot; % whole; Cases/producing agents to a tenth', () => {
     expect(formatFigure(count, 14.4)).toBe('14');
     expect(formatFigure(count, 14.5)).toBe('15');
-    expect(formatFigure({ key: 'manpower', unit: 'count' }, 187)).toBe('187');
     expect(formatFigure({ key: 'manpower', unit: 'count' }, 1250)).toBe('1.250');
-    expect(formatFigure(pct, 24.4)).toBe('24,4%');
-    expect(formatFigure(pct, 30)).toBe('30,0%');
+    expect(formatFigure(pct, 16)).toBe('16%');
+    expect(formatFigure(pct, 30)).toBe('30%');
+    expect(formatFigure(ratio, 2.4)).toBe('2,4');
+    expect(formatFigure(ratio, 420 / 96)).toBe('4,4');
+    expect(formatFigure(ratio, 3)).toBe('3,0');
   });
 
-  it('*pending data* where no source holds it, *—* over nothing, nothing in a blocked cell — never 0', () => {
+  it('*pending data* where no source holds it, *—* over nothing or for what a kept scorecard lacks, nothing when not tracked — never 0', () => {
     expect(cellText(count, { kind: 'pending' })).toBe('pending data');
     expect(cellText(caseSize, { kind: 'none' })).toBe('—');
+    expect(cellText(count, { kind: 'unrecorded' })).toBe('—');
     expect(cellText(count, { kind: 'blocked' })).toBe('');
     expect(cellText(count, { kind: 'figure', value: 0, leavesOut: [] })).toBe('0');
+    expect(noneWords(caseSize, { kind: 'none' })).toBe('No policies in this period.');
+    expect(noneWords(ratio, { kind: 'none' })).toBe('No annual active agents in this period.');
+    expect(noneWords(count, { kind: 'unrecorded' })).toBe('Not recorded for this meeting.');
   });
 
-  it('F-184: *FY* and *YTD* from the meeting’s own year, the months as drawn', () => {
-    const periods = makeScorecard().periods;
-    expect(columnHeader('fy', periods)).toBe('FY 2025');
-    expect(columnHeader('ytd', periods)).toBe('YTD 2026');
-    expect(columnHeader('fy', { ...periods, fy: '2026', ytd: '2027' })).toBe('FY 2026');
-    expect(columnHeader('ytd', { ...periods, fy: '2026', ytd: '2027' })).toBe('YTD 2027');
-    expect(columnHeader('thisMonthLastYear', periods)).toBe('This Month, Last Year');
-    expect(columnHeader('lastMonth', periods)).toBe('Last Month');
-    expect(columnHeader('thisMonth', periods)).toBe('This Month');
+  it('P18.97-T1 AC-17 a phone’s change: a sign before a rise, — where last year’s is none', () => {
+    expect(changeText({ kind: 'figure', value: 18, unit: 'percent' })).toBe('+18%');
+    expect(changeText({ kind: 'figure', value: -9, unit: 'percent' })).toBe('-9%');
+    expect(changeText({ kind: 'figure', value: 0, unit: 'percent' })).toBe('0%');
+    expect(changeText({ kind: 'none' })).toBe('—');
   });
 
-  it('a figure over part of its period names the months it leaves out; a whole one says nothing', () => {
-    expect(leftOutLine({ kind: 'figure', value: 1, leavesOut: [] })).toBeNull();
-    expect(leftOutLine({ kind: 'pending' })).toBeNull();
-    expect(leftOutLine({ kind: 'figure', value: 1, leavesOut: ['2026-08'] }))
-      .toBe('Without Agu 2026: no figures uploaded for them yet.');
-    expect(leftOutLine({ kind: 'figure', value: 1, leavesOut: ['2026-07', '2026-08'] }))
-      .toBe('Without Jul 2026 and Agu 2026: no figures uploaded for them yet.');
-    expect(leftOutLine({ kind: 'figure', value: 1, leavesOut: ['2025-01', '2025-02', '2025-03'] }))
-      .toBe('Without Jan 2025, Feb 2025 and Mar 2025: no figures uploaded for them yet.');
+  it('P18.97-T8 F1 a percentage row’s change in percentage points, signed and whole, as the app writes points (parity F-256)', () => {
+    // 3M new agent % at 60% against 100%, and at 45% against 30%: never -40% or +50%.
+    expect(changeText({ kind: 'figure', value: -40, unit: 'points' })).toBe('-40 points');
+    expect(changeText({ kind: 'figure', value: 15, unit: 'points' })).toBe('+15 points');
+    // One point is one: the app's own words for points (`formatRatioValue`), a sign before them.
+    expect(changeText({ kind: 'figure', value: 1, unit: 'points' })).toBe('+1 point');
+    expect(changeText({ kind: 'figure', value: -1, unit: 'points' })).toBe('-1 point');
+    expect(changeText({ kind: 'figure', value: 0, unit: 'points' })).toBe('0 points');
+    // The same figure on a count is a percentage of last year's, as it was.
+    expect(changeText({ kind: 'figure', value: -40, unit: 'percent' })).toBe('-40%');
   });
 });
 
-describe('P18.1-T3 AC-4 the print’s line for what its figures leave out', () => {
-  it('every month any figure leaves out, once each, in month order, in the tooltip’s words after a †', () => {
-    expect(printLeftOutLine(makeScorecard())).toBe('† Without Agu 2026: no figures uploaded for them yet.');
-    const rows = makeScorecard().rows.map((r) => (r.key === 'flc'
-      ? { ...r, cells: { ...r.cells, fy: { kind: 'figure' as const, value: 1, leavesOut: ['2025-02', '2026-08'] } } }
-      : r));
-    expect(printLeftOutLine({ rows })).toBe('† Without Feb 2025 and Agu 2026: no figures uploaded for them yet.');
+describe('P18.97-T1 AC-2 each column’s two lines: its name over its period, from the meeting’s month', () => {
+  const periods = (from: string, to: string, ytdFrom: string, lastFrom: string, month: string, lastMonth: string, lastYearMonth: string) => ({
+    fy: { from, to }, ytdLastYear: { from: lastFrom, to: lastYearMonth }, ytd: { from: ytdFrom, to: month },
+    thisMonthLastYear: { from: lastYearMonth, to: lastYearMonth }, lastMonth: { from: lastMonth, to: lastMonth }, thisMonth: { from: month, to: month },
+  });
+  const october = periods('2025-01', '2025-12', '2026-01', '2025-01', '2026-10', '2026-09', '2025-10');
+
+  it('P18.97-T1 AC-2 Full Year and both YTDs named by their years, their spans in the app’s months; the three months as the slide writes them', () => {
+    expect(columnHeader('fy', october)).toEqual({ name: 'Full Year 2025', period: "(Jan-Des '25)" });
+    expect(columnHeader('ytdLastYear', october)).toEqual({ name: 'YTD 2025', period: "(Jan-Okt '25)" });
+    expect(columnHeader('ytd', october)).toEqual({ name: 'YTD 2026', period: "(Jan-Okt '26)" });
+    expect(columnHeader('thisMonthLastYear', october)).toEqual({ name: 'This Month, Last Year', period: '(Okt-25)' });
+    expect(columnHeader('lastMonth', october)).toEqual({ name: 'Last Month', period: '(Sep-26)' });
+    expect(columnHeader('thisMonth', october)).toEqual({ name: 'This Month', period: '(Okt-26)' });
   });
 
-  it('nothing when no figure is partial', () => {
-    const rows = makeScorecard().rows.map((r) => ({
-      ...r,
-      cells: Object.fromEntries(Object.entries(r.cells).map(([k, c]) => [k, c.kind === 'figure' ? { ...c, leavesOut: [] } : c])) as typeof r.cells,
-    }));
-    expect(printLeftOutLine({ rows })).toBeNull();
+  it('P18.97-T1 AC-2 a January meeting: each YTD its January alone, Last Month the December before', () => {
+    const january = periods('2025-01', '2025-12', '2026-01', '2025-01', '2026-01', '2025-12', '2025-01');
+    expect(columnHeader('ytd', january)).toEqual({ name: 'YTD 2026', period: "(Jan '26)" });
+    expect(columnHeader('ytdLastYear', january)).toEqual({ name: 'YTD 2025', period: "(Jan '25)" });
+    expect(columnHeader('lastMonth', january)).toEqual({ name: 'Last Month', period: '(Des-25)' });
+  });
+
+  it('P18.97-T1 AC-2 a December meeting: Full Year and last year’s YTD both run to Des', () => {
+    const december = periods('2025-01', '2025-12', '2026-01', '2025-01', '2026-12', '2026-11', '2025-12');
+    expect(columnHeader('fy', december).period).toBe("(Jan-Des '25)");
+    expect(columnHeader('ytdLastYear', december).period).toBe("(Jan-Des '25)");
+    expect(columnHeader('ytd', december).period).toBe("(Jan-Des '26)");
+  });
+});
+
+describe('P18.97-T1 AC-12 the footnotes and the (*) notes', () => {
+  const ALL_ROWS = makeScorecard().rows.map((r) => r.key);
+
+  it('P18.97-T1 AC-12 numbered without a gap, in the order the rows reach them; a note on two rows numbered once', () => {
+    const { marks, list } = numberedFootnotes(ALL_ROWS);
+    expect(marks).toEqual({ producing_agents: 1, new_agent_3m: 2, avg_monthly_aa: 3, case_submission: 4, average_case_size: 4 });
+    expect(list.map((f) => f.n)).toEqual([1, 2, 3, 4]);
+    expect(list.map((f) => f.text.split(' — ')[0])).toEqual(['Annual Active Agents', '3M new agent %', 'AA', 'Case submission and Avg. Case Size']);
+    expect(FOOTNOTES).toHaveLength(4);
+  });
+
+  it('P18.97-T1 AC-12 with OD-231 answered — a Net APE note on APE — it is 1 and every number after it moves up, still without a gap', () => {
+    expect(NET_APE_FOOTNOTE).toBeNull();
+    const netApe = { rows: ['ape'] as const, text: 'Net APE — …' };
+    const { marks, list } = numberedFootnotes(ALL_ROWS, [netApe, ...FOOTNOTES]);
+    expect(marks).toEqual({ ape: 1, producing_agents: 2, new_agent_3m: 3, avg_monthly_aa: 4, case_submission: 5, average_case_size: 5 });
+    expect(list.map((f) => f.n)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('P18.97-T1 AC-12 a row not drawn gives no number: a scorecard without Annual Active Agents starts at 3M new agent %', () => {
+    const { marks, list } = numberedFootnotes(ALL_ROWS.filter((k) => k !== 'producing_agents'));
+    expect(marks.new_agent_3m).toBe(1);
+    expect(list).toHaveLength(3);
+  });
+
+  it('P18.97-T1 AC-12 one (*) note per partial period, in the client’s words: earlier months, later months, a gap', () => {
+    const periods = makeScorecard().periods;
+    expect(partialNotes({
+      periods,
+      partialPeriods: [{ column: 'fy', leavesOut: ['2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06', '2025-07'] }],
+    })).toEqual(['(*) Full Year 2025 covers Agu–Des 2025 only; earlier months not uploaded']);
+    expect(partialNotes({ periods, partialPeriods: [{ column: 'ytd', leavesOut: ['2026-08', '2026-09'] }] }))
+      .toEqual(['(*) YTD 2026 covers Jan–Jul 2026 only; later months not uploaded']);
+    expect(partialNotes({ periods, partialPeriods: [{ column: 'ytdLastYear', leavesOut: ['2025-03', '2025-04'] }] }))
+      .toEqual(['(*) YTD 2025 covers Jan–Sep 2025 without Mar 2025 and Apr 2025, not uploaded']);
+    expect(partialNotes({ periods, partialPeriods: [] })).toEqual([]);
+  });
+
+  it('P18.97-T1 AC-13 the title, the meeting’s month; AS OF in the office’s calendar, — when unrecorded, nothing with no file', () => {
+    expect(statsTitle('BSD City Branch', '2026-10-27')).toBe('BSD City Branch: Okt 2026');
+    expect(asOfText({ kind: 'date', date: '2026-10-26' })).toBe('AS OF 26 Okt 2026');
+    expect(asOfText({ kind: 'unrecorded' })).toBe('AS OF —');
+    expect(asOfText({ kind: 'none' })).toBeNull();
+  });
+});
+
+describe('P18.97-T1 AC-10 a *Monthly Target* as a rate per unit', () => {
+  const ape = { key: 'ape', unit: 'idr_minor' } as const;
+  const flc = { key: 'flc', unit: 'count' } as const;
+  const MILIAR = 1e9 * 100;
+
+  it('P18.97-T1 AC-10 shown "{rate × units} ({rate} @ unit)", the value the server’s; TBD on APE with none, every other row blank', () => {
+    expect(targetText(flc, { rate: 1, value: 9, typed: null, version: 1 })).toBe('9 (1 @ unit)');
+    expect(targetText({ key: 'avg_monthly_aa', unit: 'count' }, { rate: 3, value: 27, typed: null, version: 1 })).toBe('27 (3 @ unit)');
+    expect(targetText(flc, { rate: 1.5, value: 13.5, typed: null, version: 1 })).toBe('13,5 (1,5 @ unit)');
+    expect(targetText(ape, { rate: 0.5 * MILIAR, value: 4.5 * MILIAR, typed: null, version: 1 })).toBe('4,5 (0,5 @ unit)');
+    expect(targetText(ape, { rate: null, value: null, typed: null, version: 0 })).toBe('TBD');
+    expect(targetText(flc, { rate: null, value: null, typed: null, version: 0 })).toBe('');
+    expect(targetText(flc, { rate: null, value: null, typed: 'Ask Hellen', version: 2 })).toBe('Ask Hellen');
+  });
+
+  it('P18.97-T1 AC-10 the field’s text is the rate, APE’s in miliar, no thousands dot — so it reads back as the same rate', () => {
+    expect(targetDraftText(flc, { rate: 1.5, value: 13.5, typed: null, version: 1 })).toBe('1,5');
+    expect(targetDraftText(ape, { rate: 0.15 * MILIAR, value: null, typed: null, version: 1 })).toBe('0,15');
+    expect(targetDraftText(flc, { rate: 1250, value: null, typed: null, version: 1 })).toBe('1250');
+    expect(targetDraftText(flc, { rate: null, value: null, typed: 'Ask Hellen', version: 1 })).toBe('Ask Hellen');
+    expect(targetDraftText(flc, { rate: null, value: null, typed: null, version: 0 })).toBe('');
+    for (const rate of [1, 1.5, 0.25, 1250]) expect(rateFromTyped('flc', rateText(flc, rate))).toEqual({ rate });
+    expect(rateFromTyped('ape', rateText(ape, 15 * MILIAR / 100))).toEqual({ rate: 15 * MILIAR / 100 });
+  });
+
+  it('P18.97-T1 AC-10 what an editor typed: a comma or a point, from 0; APE’s miliar to whole rupiah in sen; empty clears; anything else no rate', () => {
+    expect(rateFromTyped('flc', '1,5')).toEqual({ rate: 1.5 });
+    expect(rateFromTyped('flc', ' 1.5 ')).toEqual({ rate: 1.5 });
+    expect(rateFromTyped('flc', '0')).toEqual({ rate: 0 });
+    expect(rateFromTyped('flc', '1,234')).toEqual({ rate: 1.23 });
+    expect(rateFromTyped('ape', '0,5')).toEqual({ rate: 0.5 * MILIAR });
+    expect(rateFromTyped('ape', '0,0000000015')).toEqual({ rate: 200 });
+    expect(rateFromTyped('flc', '')).toEqual({ rate: null });
+    expect(rateFromTyped('flc', '   ')).toEqual({ rate: null });
+    for (const typed of ['abc', 'about 2', '-1', '1,2,3', '8 (1 @ unit)', 'TBD']) {
+      expect([typed, rateFromTyped('flc', typed)]).toEqual([typed, { invalid: true }]);
+    }
+  });
+
+  it('P18.97-T1 AC-10 a count’s rate and value keep the backend’s places, read from its constants (invariant §7)', () => {
+    const backend = readFileSync(
+      join(__dirname, '..', '..', '..', 'backend', 'src', 'domain', 'constants', 'leader-forum.ts'), 'utf8',
+    );
+    expect(Number(/export const LEADER_MEETING_TARGET_RATE_DECIMALS = (\d+);/.exec(backend)?.[1]))
+      .toBe(LEADER_MEETING_TARGET_RATE_DECIMALS);
+    expect(rateFromTyped('flc', '0,756')).toEqual({ rate: 0.76 });
+    expect(targetText(flc, { rate: 0.75, value: 6.75, typed: null, version: 1 })).toBe('6,75 (0,75 @ unit)');
   });
 });
 
@@ -146,7 +267,7 @@ describe('P18.1-T2 AC-7 what a landed write leaves in the meeting', () => {
     expect(withAgendaItem(deletable, 'post', item.id, null).can.delete).toBe(false);
     expect(withActionItems(deletable, []).can.delete).toBe(false);
     expect(withActionItem(deletable, { ...deletable.actionItems[0], version: 2 }).can.delete).toBe(false);
-    expect(withTarget(deletable, 'ape', { value: '1', version: 3 }).can).toEqual({ ...deletable.can, delete: false });
+    expect(withTarget(deletable, 'ape', { rate: 1, value: 32, typed: null, version: 3 }).can).toEqual({ ...deletable.can, delete: false });
   });
 
   it('an agenda item saved, added or removed — and the meeting no longer unwritten', () => {
@@ -173,10 +294,10 @@ describe('P18.1-T2 AC-7 what a landed write leaves in the meeting', () => {
     expect(withActionItem(unwritten, { ...rows[0], id: 'ai-5' }).actionItems).toHaveLength(5);
   });
 
-  it('a *Monthly Target* cell, the rest of the scorecard untouched', () => {
-    const after = withTarget(unwritten, 'manpower', { value: '190', version: 1 });
-    expect(after.scorecard.rows.find((r) => r.key === 'manpower')?.monthlyTarget).toEqual({ value: '190', version: 1 });
-    expect(after.scorecard.rows.find((r) => r.key === 'ape')?.monthlyTarget).toEqual({ value: 'TBD', version: 2 });
+  it('P18.97-T1 AC-10 a *Monthly Target* cell, as the server answered it, the rest of the scorecard untouched', () => {
+    const after = withTarget(unwritten, 'manpower', { rate: 2, value: 64, typed: null, version: 1 });
+    expect(after.scorecard.rows.find((r) => r.key === 'manpower')?.monthlyTarget).toEqual({ rate: 2, value: 64, typed: null, version: 1 });
+    expect(after.scorecard.rows.find((r) => r.key === 'ape')?.monthlyTarget).toEqual({ rate: null, value: null, typed: null, version: 2 });
     expect(after.writtenIn).toBe(true);
   });
 });
@@ -241,19 +362,21 @@ describe('P18.1-T2 AC-7 writes to one item go one after another', () => {
 });
 
 /**
- * D-copy: the tabs' own strings use none of the six words, no phase, no id and no permission code. The prototype's
- * source footnote — *"… as tagged to this KPM."* (`:2475`) — is verbatim and the one exception.
+ * D-copy: the tabs' own strings use none of the six words, no phase, no id and no permission code — the footnotes in
+ * our metrics' words included, which say *the monthly production file* (P18.97-T1 AC-12). The prototype's *Source* line
+ * and its *"… as tagged to this KPM."* (`:2475`), the one exception, are gone with the per-cell ⓘ.
  */
 describe('P18.1-T2 the tabs’ copy', () => {
   const SIX_WORDS = /\boffice\b|\bKPM\b|reports? to|tagged to|untagged|unassigned/i;
   const PHASE = /\bphase\b|\bP\d+(\.\d+)?-T\d+/i;
 
-  it('the own strings, with values in their holes', () => {
-    const own = Object.values(TABS_OWN_COPY).map((v) => {
-      if (typeof v !== 'function') return v;
-      if (v === TABS_OWN_COPY.accessNote) return TABS_OWN_COPY.accessNote(['Wilson Tanoto', 'Maya Halim']);
-      return (v as (...args: unknown[]) => string)('{a}', '{b}');
-    });
+  it('the own strings, with values in their holes, and the footnotes', () => {
+    const own = Object.values(TABS_OWN_COPY).flatMap((v) => {
+      if (typeof v === 'object') return Object.values(v);
+      if (typeof v !== 'function') return [v];
+      if (v === TABS_OWN_COPY.accessNote) return [TABS_OWN_COPY.accessNote(['Wilson Tanoto', 'Maya Halim'])];
+      return [(v as (...args: unknown[]) => string)('{a}', '{b}')];
+    }).concat(FOOTNOTES.map((f) => f.text), Object.values(TABS_COPY.rows), Object.values(TABS_COPY.groups));
     expect(own.length).toBeGreaterThan(10);
     for (const text of own) {
       expect(text).not.toMatch(SIX_WORDS);
@@ -275,7 +398,7 @@ describe('P18.1-T2 the tabs’ copy', () => {
       const found: string[] = [];
       const visit = (node: ts.Node): void => {
         const text = renderable(node);
-        if (text !== null && /\s/.test(text.trim()) && (SIX_WORDS.test(text) || PHASE.test(text)) && text !== TABS_COPY.source) {
+        if (text !== null && /\s/.test(text.trim()) && (SIX_WORDS.test(text) || PHASE.test(text))) {
           found.push(`${f}: ${JSON.stringify(text.trim())}`);
         }
         ts.forEachChild(node, visit);
@@ -286,14 +409,14 @@ describe('P18.1-T2 the tabs’ copy', () => {
     expect(hits).toEqual([]);
   });
 
-  it('the prototype’s words verbatim: the asterisk, the footnotes, the headers and the statuses', () => {
-    expect(TABS_COPY.rows.new_agent_3m).toBe('3M new agent %*');
-    expect(TABS_COPY.note).toBe(
-      'Note: AA = Active Agent; 3M new agent % is the share of new agents with a first paid and issued case by day 90 of their join date, of those whose 90 days are over.',
-    );
-    expect(TABS_COPY.source).toBe(
-      'Source: Manpower, APE, average case size, producing agents, avg. monthly AA, FLC and case submission as tagged to this KPM.',
-    );
+  it('P18.97-T1 AC-4 the reference slide’s words: its rows in its order, its groups; the prototype’s headers and statuses verbatim', () => {
+    expect(Object.values(TABS_COPY.rows)).toEqual([
+      'APE (Rp M)', 'Manpower', 'FLC (avg. monthly)', 'Annual Active Agents', '3M new agent %', 'Avg. monthly AA',
+      'Case submission', 'Cases/producing agents', 'Avg. Case Size (Rp jt)',
+    ]);
+    expect(TABS_COPY.groups).toEqual({ year: 'Full Year & YTD View', month: 'Monthly View' });
+    // The row stays *APE* until OD-231 is answered; *Producing agents* reads *Annual Active Agents* everywhere.
+    expect(JSON.stringify(TABS_COPY)).not.toMatch(/Net APE|Producing agents|New AA/);
     expect(Object.values(TABS_COPY.headers)).toEqual(
       ['Key initiative', 'Success metric', 'Action item', 'PIC', 'Status', 'Remarks / Target'],
     );

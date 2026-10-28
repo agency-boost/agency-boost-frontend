@@ -1163,7 +1163,7 @@ export function RatioSetEditor({
                 label: ratio.comparison === 'band' ? 'Within, either side' : 'On track at or above',
                 hint: ratio.comparison === 'band'
                   ? 'Percentage points either side of an even split.'
-                  : 'Typed the way it is shown — 15 for 15,0% as a percentage, 0,30 as a number.',
+                  : 'Typed the way it is shown — 15 for 15% as a percentage, 0,30 as a number.',
               },
               // A band is points and has no other way to be written, so it gets no choice.
               ...(ratio.comparison === 'band' ? [] : [{

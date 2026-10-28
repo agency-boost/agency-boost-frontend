@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
 import {
   attachPitchDocument, formatFileSize, PDF_MAX_BYTES, PITCH_COPY, PITCH_OWN_COPY, pitchDocumentUrl,
-  readPitchMaterials, requestPitchUpload, setPitchConfirmation,
+  readPitchMaterials, requestPitchUpload, setPitchConfirmation, UNDER_A_KILOBYTE,
 } from './recruitment-pitch';
 
 const SIX_WORDS = /\boffice\b|\bKPM\b|reports to|tagged to|untagged|unassigned/i;
@@ -21,6 +21,19 @@ describe('the pitch documents’ client (P17-T4 routes)', () => {
     const { calls } = stubFetch({ '/url': { body: { url: 'https://cdn.test/x', expiresAt: '2026-10-09T00:05:00Z' } } });
     await pitchDocumentUrl('howtojoin');
     expect(calls[0].url).toMatch(/\/recruitment\/pitch-materials\/howtojoin\/url$/);
+  });
+
+  it('P18.97-T5 AC-2 asks for an optional document’s link and attaches one by the same routes, its code in the address', async () => {
+    const { calls } = stubFetch({
+      '/url': { body: { url: 'https://cdn.test/x', expiresAt: '2026-10-09T00:05:00Z' } },
+      '/kpm/settings/recruitment-pitch/': { body: {} },
+    });
+    await pitchDocumentUrl('company');
+    await attachPitchDocument('agency', 'dev/kpm-1/recruitment-pitch/01B');
+    expect(calls.map((c) => [c.init.method ?? 'GET', c.url.replace(/^.*\/api\/v1/, '')])).toEqual([
+      ['GET', '/recruitment/pitch-materials/company/url'],
+      ['PUT', '/kpm/settings/recruitment-pitch/agency'],
+    ]);
   });
 
   it('asks for a signature with the file’s name, type and size', async () => {
@@ -55,7 +68,16 @@ describe('formatFileSize', () => {
 
   it('writes a small file in KB rather than as 0.0 MB, and never as 0 KB', () => {
     expect(formatFileSize(14_336)).toBe('14 KB');
-    expect(formatFileSize(10)).toBe('1 KB');
+    expect(formatFileSize(1024)).toBe('1 KB');
+    expect(formatFileSize(1535)).toBe('1 KB');
+    expect(formatFileSize(1536)).toBe('2 KB');
+  });
+
+  it('P18.97-T5 AC-4 writes a file under 1 KB as “< 1 KB”, never rounded up to 1 KB (UI-029; I-521)', () => {
+    expect(UNDER_A_KILOBYTE).toBe('< 1 KB');
+    // The seed's one-page demonstration PDFs are a few hundred bytes; storage's figure, as the server serves it.
+    for (const bytes of [0, 1, 10, 640, 1023]) expect([bytes, formatFileSize(bytes)]).toEqual([bytes, '< 1 KB']);
+    expect(formatFileSize(1024)).toBe('1 KB');
   });
 
   it('names the bound the API signs up to', () => {
@@ -64,8 +86,15 @@ describe('formatFileSize', () => {
 });
 
 describe('the pitch’s words', () => {
+  it('P18.97-T5 AC-1, AC-2 a partial document reads “Uploaded · needs confirmation”, and an optional one is tagged “Optional”', () => {
+    expect(PITCH_COPY.needsConfirmation).toBe('Uploaded · needs confirmation');
+    expect(PITCH_COPY.optional).toBe('Optional');
+    // The office's "{n}/{m} confirmed" is gone: nothing but the ring has the shape x/y (ADR-0177).
+    expect(PITCH_COPY).not.toHaveProperty('confirmed');
+    expect([PITCH_COPY.missing, PITCH_COPY.uploaded, PITCH_COPY.complete]).toEqual(['Missing', 'Uploaded', 'Complete']);
+  });
+
   it('P18.95-T7 AC-1 are the prototype’s (`Recruitment_Section.html:681-818`), but for the client’s two lines', () => {
-    expect(PITCH_COPY.confirmed(2, 4)).toBe('2/4 confirmed');
     // P18.95-T7 AC-1 (grey text rows 11 and 12): the client's words where the prototype's were.
     expect(PITCH_COPY.noFile).toBe('Not uploaded yet');
     expect(PITCH_COPY.updated('2.4 MB', '12 Sep 2026')).toBe('2.4 MB · updated 12 Sep 2026');
@@ -80,6 +109,7 @@ describe('the pitch’s words', () => {
       ...(Object.values(PITCH_OWN_COPY).filter((v) => typeof v === 'string') as string[]),
       PITCH_OWN_COPY.ringName(2, 4), PITCH_OWN_COPY.viewName('FAQ'), PITCH_OWN_COPY.uploadName('FAQ'),
       PITCH_OWN_COPY.replaceName('FAQ'), PITCH_OWN_COPY.attached('a.pdf', true), PITCH_COPY.settingsTitle,
+      PITCH_COPY.needsConfirmation, PITCH_COPY.optional, UNDER_A_KILOBYTE,
     ];
     for (const text of own) expect(text).not.toMatch(SIX_WORDS);
   });

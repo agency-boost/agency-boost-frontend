@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { TAP_AREA } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
@@ -9,9 +9,10 @@ import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client
 import { cn } from '@/lib/cn';
 import { useScrollLock } from '@/lib/use-scroll-lock';
 import {
-  figureWords, isReservedCode, OWN_COPY, progressWords, PROTOTYPE_COPY, readCampaign, showsChase,
+  figureWords, isReservedCode, OWN_COPY, progressWords, PROTOTYPE_COPY, ratioUnitsOf, readCampaign, showsChase,
   type CampaignCard, type CampaignDetail, type CampaignRequirement, type ProgressRow,
 } from '@/lib/campaigns';
+import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { ChaseButton, DialogTags, Poster, PromotionLabel } from './campaign-parts';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -233,6 +234,9 @@ export function CampaignDialog({
  */
 function Requirements({ campaign }: { campaign: CampaignDetail }) {
   const headingId = useId();
+  // A ratio requirement in the office's unit for it, as the card writes it (P18.97-T7; ADR-0174 §2).
+  const { config } = useTenantConfig();
+  const ratioUnits = useMemo(() => ratioUnitsOf(config?.ratios), [config]);
   // One progress row per requirement, in the requirements' order: by position, never by metric, so two
   // requirements on one metric can never share a row.
   const rows = campaign.progress?.rows ?? [];
@@ -247,19 +251,21 @@ function Requirements({ campaign }: { campaign: CampaignDetail }) {
       </h3>
       <ul>
         {campaign.requirements.map((r, i) => (
-          <RequirementRow key={i} requirement={r} progress={campaign.progress ? rows[i] : undefined} />
+          <RequirementRow key={i} requirement={r} progress={campaign.progress ? rows[i] : undefined} ratioUnit={ratioUnits.get(r.metricKey)} />
         ))}
       </ul>
     </section>
   );
 }
 
-function RequirementRow({ requirement, progress }: { requirement: CampaignRequirement; progress: ProgressRow | undefined }) {
+function RequirementRow({
+  requirement, progress, ratioUnit,
+}: { requirement: CampaignRequirement; progress: ProgressRow | undefined; ratioUnit?: 'percent' | 'decimal' }) {
   // A stored requirement nothing measures says so, whether or not the campaign has started.
   const words = !requirement.measured
     ? { text: OWN_COPY.notMeasured, met: false, figure: false }
-    : progressWords(progress);
-  const target = figureWords(requirement.value, requirement.unit);
+    : progressWords(progress, ratioUnit);
+  const target = figureWords(requirement.value, requirement.unit, ratioUnit);
   return (
     <li className="flex items-center justify-between gap-3 border-b border-hairline py-2.5 last:border-b-0" data-requirement={requirement.metricKey}>
       <span className="min-w-0 text-[0.84375rem] font-medium text-navy">{requirement.metricName}</span>

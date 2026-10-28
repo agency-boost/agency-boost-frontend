@@ -120,12 +120,12 @@ const card = (name: string) => screen.findByRole('region', { name });
 describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('AC-1: opens on this month — the produced figure, the target, the attainment and its bar', async () => {
+  it('AC-1, P18.97-T3 AC-1: opens on this month — the produced figure, the target, the attainment whole and its bar', async () => {
     show(summary());
     const goal = await card('Goal vs. actual (APE)');
 
     expect(within(goal).getByText('Rp 30 jt')).toBeInTheDocument();
-    expect(goal).toHaveTextContent('of Rp 75 jt target40,0%');
+    expect(goal).toHaveTextContent('of Rp 75 jt target40%');
     expect(within(goal).getByText('This month')).toBeInTheDocument();
     expect(within(goal).getByRole('progressbar', { name: 'This month’s target' })).toHaveAttribute('aria-valuenow', '40');
     // The month the figures are for: the select names it on the screen (P18.8-T11), the line on paper.
@@ -141,7 +141,7 @@ describe('the Personal Summary — goal versus actual, and the gap (P10-T4)', ()
 
     const goal = await card('Goal vs. actual (APE)');
     expect(within(goal).getByText('Rp 230 jt')).toBeInTheDocument();
-    expect(goal).toHaveTextContent('of Rp 500 jt target46,0%');
+    expect(goal).toHaveTextContent('of Rp 500 jt target46%');
     expect(within(goal).getByText('This year')).toBeInTheDocument();
     expect(await card('The gap')).toHaveTextContent('Remaining this yearRp 270 jt');
   });
@@ -487,11 +487,11 @@ describe('the Personal Summary — insight cards, named rules over your own numb
     expect(screen.queryByText(/rules, not AI/i)).not.toBeInTheDocument();
   });
 
-  it('AC-1: a ratio below its benchmark goes on the improvement card, written as the ratio screen writes it', async () => {
+  it('AC-1, P18.97-T3 AC-2: a ratio below its benchmark goes on the improvement card, written as the ratio screen writes it — its tenth, the benchmark as typed', async () => {
     show(summary({ insights: INSIGHTS }));
     const improve = await card('How you can improve your performance');
 
-    expect(improve).toHaveTextContent('Selling success rate is 9,1% over the last 30 days, below its benchmark of 15,0%');
+    expect(improve).toHaveTextContent('Selling success rate is 9,1% over the last 30 days, below its benchmark of 15%');
     expect(within(improve).getByRole('link', { name: 'Activity Ratios' })).toHaveAttribute('href', '/activity/ratio');
   });
 

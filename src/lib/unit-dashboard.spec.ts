@@ -51,10 +51,10 @@ describe('the words a row is drawn in', () => {
     expect(rowName(DIMAS)).toBe('Dimas Pratama');
   });
 
-  it('P15-T2 AC-3 writes the goal line over or short, over its achieved-of-target — compact, one Rp (UI-030, ADR-0167 §1)', () => {
-    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82,0% · Rp 14,4 jt short', sub: 'Rp 65,6 jt of 80 jt' });
+  it('P15-T2 AC-3, P18.97-T3 AC-1 writes the goal line over or short — the percentage whole — over its achieved-of-target, compact, one Rp (UI-030)', () => {
+    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14,4 jt short', sub: 'Rp 65,6 jt of 80 jt' });
     expect(goalWords(goalCell({ actualMinor: rp(108), attainmentPct: 135, targetMet: true, overMinor: rp(28) })))
-      .toEqual({ tone: 'over', line: '135,0% · +Rp 28 jt over', sub: 'Rp 108 jt of 80 jt' });
+      .toEqual({ tone: 'over', line: '135% · +Rp 28 jt over', sub: 'Rp 108 jt of 80 jt' });
     // The client's own example (UI-030): it wrapped as *Rp 357.500.000 of Rp 712.666.667*.
     expect(goalWords({ targetMinor: rp(712.666667), actualMinor: rp(357.5), attainmentPct: 50 }).sub).toBe('Rp 357,5 jt of 712,7 jt');
   });
@@ -85,7 +85,7 @@ describe('the words a row is drawn in', () => {
     expect(goalBar(goalCell({ attainmentPct: 135 }))).toBe(100);
     expect(goalBar(goalCell({ attainmentPct: 45.6 }))).toBe(46);
     expect(goalBar(goalCell({ attainmentPct: -3 }))).toBe(0);
-    // A percentage with nothing to show is the cell's own zero (the line's *0,0%*), drawn as an empty bar.
+    // A percentage with nothing to show is the cell's own zero (the line's *0%*), drawn as an empty bar.
     expect(goalBar({ targetMinor: rp(100), actualMinor: rp(0), attainmentPct: null })).toBe(0);
     // No target, a month made already, no figure: nothing to draw — an empty track would read as zero.
     expect(goalBar(goalCell({ set: false, targetMinor: null, attainmentPct: null }))).toBeNull();
@@ -107,10 +107,10 @@ describe('the words a row is drawn in', () => {
   });
 
   it('P15-T2 AC-4 works a total’s over and short from its two sums, when the server sends no gap', () => {
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(120), attainmentPct: 120 }).line).toBe('120,0% · +Rp 20 jt over');
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: 40 }).line).toBe('40,0% · Rp 60 jt short');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(120), attainmentPct: 120 }).line).toBe('120% · +Rp 20 jt over');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: 40 }).line).toBe('40% · Rp 60 jt short');
     // A percentage with nothing to show is the cell's own zero, not a missing one.
-    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: null }).line).toBe('0,0% · Rp 60 jt short');
+    expect(goalWords({ targetMinor: rp(100), actualMinor: rp(40), attainmentPct: null }).line).toBe('0% · Rp 60 jt short');
   });
 
   it('P15-T2 AC-3 writes the leads lines, the recruit line a dash when there is nothing to recruit', () => {

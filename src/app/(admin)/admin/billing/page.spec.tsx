@@ -80,10 +80,10 @@ describe('the quote tool (P13.2-T2)', () => {
       await screen.findByText('Estimate your price');
 
       expect(cards().map((c) => c.textContent)).toEqual([
-        '1–10 leadersRp 500.000/moRp 400.000 /leader/moSave 20,0%Your tier',
-        '11–20 leadersRp 475.000/moRp 375.000 /leader/moSave 21,0%',
-        '21–50 leadersRp 450.000/moRp 350.000 /leader/moSave 22,0%',
-        '51–100 leadersRp 425.000/moRp 300.000 /leader/moSave 29,0%',
+        '1–10 leadersRp 500.000/moRp 400.000 /leader/moSave 20%Your tier',
+        '11–20 leadersRp 475.000/moRp 375.000 /leader/moSave 21%',
+        '21–50 leadersRp 450.000/moRp 350.000 /leader/moSave 22%',
+        '51–100 leadersRp 425.000/moRp 300.000 /leader/moSave 29%',
         "101+ leadersCustom pricing based on your unit's structure.Talk to us",
       ]);
       // The 101+ tier's rates are never on a card.

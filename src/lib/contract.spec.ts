@@ -283,6 +283,10 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['leader-meetings.ts', 'MeetingListView', 'MeetingListViewDto'],
   ['leader-meetings.ts', 'Scorecard', 'ScorecardDto'],
   ['leader-meetings.ts', 'ScorecardRow', 'ScorecardRowDto'],
+  // P18.97-T1 (ADR-0175): each column's months, a target as a rate and its value, and the (*) notes' periods.
+  ['leader-meetings.ts', 'ColumnPeriod', 'ColumnPeriodDto'],
+  ['leader-meetings.ts', 'MonthlyTarget', 'MonthlyTargetDto'],
+  ['leader-meetings.ts', 'PartialPeriod', 'PartialPeriodDto'],
   ['leader-meetings.ts', 'AgendaItem', 'AgendaItemDto'],
   ['leader-meetings.ts', 'ActionItem', 'LeaderActionItemDto'],
   ['leader-meetings.ts', 'ShareLink', 'ShareLinkDto'],
@@ -1028,7 +1032,7 @@ describe('the forum’s routes match the API document (P18.1-T2, P18.1-T3)', () 
       await forum.saveActionItem('m1', 'x1', { status: 'planned', version: 1 });
       await forum.removeActionItem('m1', 'x1', 1);
       await forum.reorderActionItems('m1', ['x1']);
-      await forum.saveMonthlyTarget('m1', 'ape', { value: 'TBD', version: 0 });
+      await forum.saveMonthlyTarget('m1', 'ape', { rate: null, version: 0 });
       await forum.createShareLink('m1');
       await forum.revokeShareLinks('m1');
       await forum.readSharedMeeting('tok');

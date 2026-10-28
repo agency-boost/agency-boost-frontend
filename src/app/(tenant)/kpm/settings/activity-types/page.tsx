@@ -1,7 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SettingsScreen, TenantConfigBars } from '@/components/settings-screen';
+import { ActionMenu, type ActionMenuItem } from '@/components/ui/action-menu';
+import { ConfigBadge } from '@/components/ui/config-badge';
 import { DragHandle } from '@/components/ui/drag-handle';
 import { ACTIVITY_SETTINGS_TABS } from '@/components/settings-tabs';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -17,6 +19,7 @@ import { planSummaryTile, summaryGroups, summaryTileName, tileRefusal } from '@/
 import { reservedRefusal } from '@/lib/reserved-types';
 import { BINDING_ROLE_LABEL, readOwnActivityBinding, rolesByCode, type BindingRole } from '@/lib/activity-binding';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
+import { useMediaQuery } from '@/lib/use-media-query';
 import {
   applyConfigChanges,
   stageChange,
@@ -27,6 +30,21 @@ import {
   type ConfigChange,
   type ActivityTypeRow,
 } from '@/lib/tenant-config';
+
+/** What archiving a section does, said beside its control: inline from 1024px, in the ⋮ below it. */
+const ARCHIVE_SECTION_HINT = 'Archives the section and everything in it.';
+
+/** The two section actions that open an editor in their line, by their words — the inline link's and the ⋮ item's. */
+const OPENER_WORDS = { rename: 'Rename', scope: 'Change who it applies to' } as const;
+type Opener = keyof typeof OPENER_WORDS;
+
+/**
+ * **The chip on a bound type: the stage it counts as** (P18.97-T4 AC-1, ADR-0176 §3; the client's UI-022: *"Set
+ * Appointment Set appointment"* read as a name and its alias run together). It is no name of the type but the cascade
+ * stage the office's activity binding counts it as (ADR-0163 §3), so it says so — *Counts as: Sales meeting* — on the
+ * quiet chip the prototype draws for the activity a cascade column counts (`.activity-tag`, `Overall.html:718-721`).
+ */
+const countsAs = (stage: string) => `Counts as: ${stage}`;
 
 /**
  * What this office counts (P4-T1, `KPM_Owner.html:1340-1440`).
@@ -43,6 +61,13 @@ import {
  */
 export default function ActivityTypesPage() {
   const canWrite = useCan('tenant_config:write');
+  /*
+   * **Below 1024px a section's three actions sit behind one ⋮** (P18.97-T6 AC-3, ADR-0178 §2; the client's UI-037:
+   * *Rename*, *Change who it applies to* and *Archive the section* wrapped to two rows on a phone and three on a
+   * tablet). Asked where the page mounts, before its read, so the sections never draw one way and then the other;
+   * from 1024px the hook answers false and the row is the inline links it was, to the byte.
+   */
+  const belowDesktop = useMediaQuery(['phone', 'tablet']);
   /*
    * **Which types the office's activity binding names** (ADR-0163 §3, P18.9-T2 AC-3): the Owner and the Admin read
    * it, the Super Admin keeps it. A bound type wears its role beside its name — the explicit request of the product
@@ -73,6 +98,15 @@ export default function ActivityTypesPage() {
    * this — that is the identity, and invariant §4 is why.
    */
   const [renaming, setRenaming] = useState<string | null>(null);
+  /*
+   * **Where the focus goes when a section's editor opens and closes** (WCAG 2.4.3; P18.97-T4, parity F-255). *Rename*
+   * and *Change who it applies to* replace the line they sit on with an editor, so the control that opened it is gone
+   * the moment it is chosen — and the focus with it, to the top of the page. Each section's line is held here, so
+   * opening moves the focus to the editor's first control and closing gives it back to what opened it: the inline
+   * link from 1024px, the section's ⋮ below it. Refs, not attributes: the line's markup at 1024px is pinned.
+   */
+  const lines = useRef(new Map<string, HTMLDivElement>());
+  const editors = useRef<{ renaming: string | null; scoping: string | null }>({ renaming: null, scoping: null });
   /*
    * `tile` is the section's summary tile (ADR-0064): the name of the tile it counts toward on the
    * agents' strip, or empty for a tile of its own. One field in this edit, not a card of its own
@@ -123,6 +157,27 @@ export default function ActivityTypesPage() {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    const was = editors.current;
+    editors.current = { renaming, scoping };
+    /** The editor's first control, or what opened it — the link by its words from 1024px, the ⋮ below. */
+    const focusIn = (id: string, into: 'editor' | Opener) => {
+      const line = lines.current.get(id);
+      if (!line) return;
+      const target = into === 'editor'
+        ? line.querySelector<HTMLElement>('input, select, textarea, button')
+        : belowDesktop
+          ? line.querySelector<HTMLElement>('button[aria-haspopup="menu"]')
+          : [...line.querySelectorAll<HTMLElement>('button')].find((b) => b.textContent === OPENER_WORDS[into]);
+      target?.focus();
+    };
+    // Closed first, then opened: moving straight from one section's editor to another's ends in the new one.
+    if (was.renaming && was.renaming !== renaming) focusIn(was.renaming, 'rename');
+    if (was.scoping && was.scoping !== scoping) focusIn(was.scoping, 'scope');
+    if (renaming && renaming !== was.renaming) focusIn(renaming, 'editor');
+    if (scoping && scoping !== was.scoping) focusIn(scoping, 'editor');
+  }, [renaming, scoping, belowDesktop]);
 
   useEffect(() => {
     if (!canReadBinding) return;
@@ -291,6 +346,49 @@ export default function ActivityTypesPage() {
     // not happened yet, and hiding it takes the Undo away with it.
     ).filter(({ row, staged: mark }) => showArchived || row.status === 'active' || mark),
   }));
+
+  /*
+   * **A section's actions, once** — the inline links from 1024px and the ⋮'s items below it do the same four things
+   * (P18.97-T6 AC-3), so the two cannot come to differ. Archiving and restoring are staged, as every edit here is.
+   */
+  type Section = (typeof shown)[number];
+  const startRename = (category: Section) => {
+    setTileError(null);
+    setRenaming(category.id);
+    setSectionDraft({
+      label: category.label,
+      description: category.description ?? '',
+      tile: summaryTileName(category),
+    });
+  };
+  const startScoping = (category: Section) => {
+    setScoping(category.id);
+    setRungs(category.appliesToOrgLevelCodes);
+  };
+  const archiveSection = (category: Section) => stage({
+    op: 'category.archive',
+    id: category.id,
+    expectedVersion: category.version,
+  });
+  const restoreSection = (category: Section) => stage({
+    op: 'category.restore',
+    id: category.id,
+    expectedVersion: category.version,
+  });
+  /** The ⋮'s items, in the inline links' order and words; archive and restore held while a write is out, as theirs. */
+  const sectionMenu = (category: Section): ActionMenuItem[] => [
+    { label: 'Rename', onSelect: () => startRename(category) },
+    { label: 'Change who it applies to', onSelect: () => startScoping(category) },
+    category.status === 'active'
+      ? {
+        label: 'Archive the section',
+        tone: 'alert',
+        hint: ARCHIVE_SECTION_HINT,
+        disabled: busy !== null,
+        onSelect: () => archiveSection(category),
+      }
+      : { label: 'Restore the section', disabled: busy !== null, onSelect: () => restoreSection(category) },
+  ];
 
   /**
    * The badge an agent sees beside a row, counted over the **live** rows only.
@@ -507,7 +605,13 @@ export default function ActivityTypesPage() {
                 <p className="mt-1 text-sm text-muted">{category.description}</p>
               )}
 
-              <div className="mt-2 flex flex-wrap items-center gap-2 border-b border-hairline pb-3">
+              <div
+                ref={(line) => {
+                  if (line) lines.current.set(category.id, line);
+                  else lines.current.delete(category.id);
+                }}
+                className="mt-2 flex flex-wrap items-center gap-2 border-b border-hairline pb-3"
+              >
                 {scoping === category.id ? (
                   <>
                     <fieldset className="min-w-0 flex-1">
@@ -654,41 +758,23 @@ export default function ActivityTypesPage() {
                       <span className="text-muted">Applies to </span>
                       <strong>{appliesTo(category.appliesToOrgLevelCodes)}</strong>
                     </p>
-                    {canWrite && (
+                    {canWrite && (belowDesktop ? (
+                      // One ⋮ at the line's end, named for its section, the menu's keys and words its own.
+                      <ActionMenu label={`Actions for ${category.label}`} items={sectionMenu(category)} />
+                    ) : (
                       <>
-                        <Button
-                          variant="inline"
-                          onClick={() => {
-                            setTileError(null);
-                            setRenaming(category.id);
-                            setSectionDraft({
-                              label: category.label,
-                              description: category.description ?? '',
-                              tile: summaryTileName(category),
-                            });
-                          }}
-                        >
+                        <Button variant="inline" onClick={() => startRename(category)}>
                           Rename
                         </Button>
-                        <Button
-                          variant="inline"
-                          onClick={() => {
-                            setScoping(category.id);
-                            setRungs(category.appliesToOrgLevelCodes);
-                          }}
-                        >
+                        <Button variant="inline" onClick={() => startScoping(category)}>
                           Change who it applies to
                         </Button>
                         {category.status === 'active' ? (
                           <Button
                             variant="inlineDanger"
                             disabled={busy !== null}
-                            title="Archives the section and everything in it."
-                            onClick={() => stage({
-                              op: 'category.archive',
-                              id: category.id,
-                              expectedVersion: category.version,
-                            })}
+                            title={ARCHIVE_SECTION_HINT}
+                            onClick={() => archiveSection(category)}
                           >
                             Archive the section
                           </Button>
@@ -696,17 +782,13 @@ export default function ActivityTypesPage() {
                           <Button
                             variant="inline"
                             disabled={busy !== null}
-                            onClick={() => stage({
-                              op: 'category.restore',
-                              id: category.id,
-                              expectedVersion: category.version,
-                            })}
+                            onClick={() => restoreSection(category)}
                           >
                             Restore the section
                           </Button>
                         )}
                       </>
-                    )}
+                    ))}
                   </>
                 )}
               </div>
@@ -809,14 +891,19 @@ export default function ActivityTypesPage() {
                         <>
                           <p className="text-md text-navy">
                             {type.label}
+                            {/* The stage it counts as, said as one, and set apart from the name (P18.97-T4 AC-1). */}
                             {bound.has(type.code) && (
-                              <span
-                                className="ml-2 rounded-full bg-canvas px-2 py-0.5 text-sm text-muted"
-                                title={`The summary and the goal plan count this as ${BINDING_ROLE_LABEL[bound.get(type.code)!]}. `
-                                  + 'A Super Admin changes which activities count.'}
+                              <ConfigBadge
+                                tone="navy"
+                                className="ml-2 align-middle normal-case tracking-normal"
                               >
-                                {BINDING_ROLE_LABEL[bound.get(type.code)!]}
-                              </span>
+                                <span
+                                  title={`The summary and the goal plan count this as ${BINDING_ROLE_LABEL[bound.get(type.code)!]}. `
+                                    + 'A Super Admin changes which activities count.'}
+                                >
+                                  {countsAs(BINDING_ROLE_LABEL[bound.get(type.code)!])}
+                                </span>
+                              </ConfigBadge>
                             )}
                           </p>
                           {type.description && (

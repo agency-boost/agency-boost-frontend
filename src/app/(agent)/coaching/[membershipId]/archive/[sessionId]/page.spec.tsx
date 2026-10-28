@@ -206,16 +206,16 @@ describe('a past session’s archive (P11-T10)', () => {
 
       const goal = await card('Goal');
       expect(goal).toHaveTextContent('Rp 65,6 jt / Rp 80 jt');
-      expect(goal).toHaveTextContent('82,0%');
+      expect(goal).toHaveTextContent('82%');
       expect(goal).toHaveTextContent('Rp 14,4 jt remaining this month.');
       expect(goal).toHaveTextContent('Rp 620 jt / Rp 960 jt');
       expect(within(goal).queryByRole('button')).not.toBeInTheDocument();
 
       const ratios = await card('Ratios');
       expect(within(ratios).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-        'Selling success rate18,0%Benchmark: 15,0%',
+        'Selling success rate18,0%Benchmark: 15%',
         // The snapshot keeps the sides as the live read named them that day, and reads as two shares (P13.1-T6 AC-7).
-        'Sales vs. Recruitment70,0% Sales · 30,0% RecruitmentBenchmark: 35,0%–65,0% each side',
+        'Sales vs. Recruitment70,0% Sales · 30,0% RecruitmentBenchmark: 35%–65% each side',
       ]);
 
       const week = await card(/^Activity/);
@@ -379,7 +379,7 @@ describe('a past session’s archive (P11-T10)', () => {
   });
 
   describe('⬇ Download as PDF', () => {
-    it('P11-T10 AC-3 prints the session from its own read, under a title naming her and the day, and takes the paper away after', async () => {
+    it('P11-T10 AC-3, P18.97-T3 AC-3 prints the session from its own read, its money compact, under a title naming her and the day, and takes the paper away after', async () => {
       const { seen, print } = stubPrint();
       const { calls } = show();
       const download = await screen.findByRole('button', { name: 'Download as PDF' });
@@ -401,8 +401,9 @@ describe('a past session’s archive (P11-T10)', () => {
         '[x] Confirm submission paperwork with Bp. Andi',
         '[ ] Follow up with Alvin Sanjaya',
         'Goal',
-        'This month: Rp 65.600.000 / Rp 80.000.000',
-        'This year: Not uploaded yet / Rp 960.000.000',
+        // Compact, as every figure is but a price and the file's own (P18.97-T3 AC-3, ADR-0174 §4).
+        'This month: Rp 65,6 jt / Rp 80 jt',
+        'This year: Not uploaded yet / Rp 960 jt',
         'Coaching tips',
         '1. Confirm the next meeting before you leave the current one.',
         'Next action items — from leads',

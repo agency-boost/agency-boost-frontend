@@ -12,10 +12,11 @@ import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client
 import { cn } from '@/lib/cn';
 import { CONTENT_TERM_KEYS, firstMentions, type TermKey } from '@/lib/terms';
 import {
-  campaignHref, chasedToast, chaseCampaign, OWN_COPY, PROTOTYPE_COPY, readCampaigns, requirementsLine,
+  campaignHref, chasedToast, chaseCampaign, OWN_COPY, PROTOTYPE_COPY, ratioUnitsOf, readCampaigns, requirementsLine,
   SEASONAL_FILTERS, seasonalSections, showsChase, structuralSections, unchaseCampaign, unchasedToast,
-  type CampaignCard, type CampaignList as CampaignListView, type CampaignSection, type SeasonalFilter,
+  type CampaignCard, type CampaignList as CampaignListView, type CampaignSection, type RatioUnits, type SeasonalFilter,
 } from '@/lib/campaigns';
+import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { ChaseButton, Poster, PromotionLabel } from './campaign-parts';
 
 /** What the dialog beneath the list needs from it: how to close, and how to tell it a chase changed. */
@@ -80,6 +81,12 @@ export function CampaignList({ children }: { children?: ReactNode }) {
   const { toast, show } = useToast();
   /** Whether this list pushed the dialog's address — so closing it can go back rather than forward. */
   const openedHere = useRef(false);
+  /**
+   * **A ratio requirement in the office's unit for it** (P18.97-T7; ADR-0174 §2): *Recruitment success rate 30%*, as the
+   * settings write it since P18.97-T4 AC-8, where the card read *0,30*. From the office's published configuration.
+   */
+  const { config } = useTenantConfig();
+  const ratioUnits = useMemo(() => ratioUnitsOf(config?.ratios), [config]);
 
   const load = useCallback(() => {
     let live = true;
@@ -141,7 +148,7 @@ export function CampaignList({ children }: { children?: ReactNode }) {
   const sections = list
     ? (type === 'seasonal' ? seasonalSections(list.campaigns, filter) : structuralSections(list.campaigns))
     : [];
-  const terms = cardTerms(sections);
+  const terms = cardTerms(sections, ratioUnits);
 
   return (
     <DialogHost.Provider value={host}>
@@ -168,6 +175,7 @@ export function CampaignList({ children }: { children?: ReactNode }) {
                   onChase={() => void chase(card)}
                   onOpen={() => open(card.code)}
                   terms={terms.get(card.code)}
+                  ratioUnits={ratioUnits}
                 />
               ))}
             </Section>
@@ -282,7 +290,7 @@ function Section({ section, children }: { section: CampaignSection; children: Re
  * it disabled with its reason: the poster's *Ended* says why. Every authored word is text, never markup.
  */
 function Card({
-  card, canChase, busy, error, onChase, onOpen, terms = [],
+  card, canChase, busy, error, onChase, onOpen, terms = [], ratioUnits,
 }: {
   card: CampaignCard;
   canChase: boolean;
@@ -292,6 +300,8 @@ function Card({
   onOpen: () => void;
   /** The terms this card is the first to name: its title's, blurb's, prize's and *Needs:* line's (`cardTerms`). */
   terms?: TermKey[][];
+  /** How the office writes each ratio, so a requirement on one reads in that unit (P18.97-T7). */
+  ratioUnits?: RatioUnits;
 }) {
   const titleId = useId();
   const [titleTerms = [], blurbTerms = [], rewardTerms = [], needsTerms = []] = terms;
@@ -330,7 +340,7 @@ function Card({
         {card.requirements.length > 0 && (
           <p className="mb-[9px] text-[0.78125rem] leading-normal text-navy">
             <span className="font-bold text-muted">{OWN_COPY.needs}</span>{' '}
-            <TermText text={requirementsLine(card.requirements)} terms={needsTerms} />
+            <TermText text={requirementsLine(card.requirements, ratioUnits)} terms={needsTerms} />
           </p>
         )}
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -357,10 +367,10 @@ function Card({
  * cards in the order they are drawn, each card's title, blurb, prize and *Needs:* line in reading order. A term the
  * list names on twelve cards gets one ⓘ, on the first.
  */
-function cardTerms(sections: readonly CampaignSection[]): Map<string, TermKey[][]> {
+function cardTerms(sections: readonly CampaignSection[], ratioUnits?: RatioUnits): Map<string, TermKey[][]> {
   const cards = sections.flatMap((section) => section.items);
   const texts = cards.flatMap((card) => [
-    card.title, card.blurb, card.reward, card.requirements.length > 0 ? requirementsLine(card.requirements) : null,
+    card.title, card.blurb, card.reward, card.requirements.length > 0 ? requirementsLine(card.requirements, ratioUnits) : null,
   ]);
   const found = firstMentions(texts, CONTENT_TERM_KEYS);
   return new Map(cards.map((card, i) => [card.code, found.slice(i * 4, i * 4 + 4)]));

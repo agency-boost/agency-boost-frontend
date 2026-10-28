@@ -1,10 +1,12 @@
-import { act, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createHash } from 'node:crypto';
+import { useLayoutEffect } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
-import { PHONE_QUERY } from '@/lib/use-phone';
+import { atWidth, wears } from '@test/harness';
 import { AppShell, PageHeader, type NavSection } from './app-shell';
 
 // Mutable so the phone's drawer can watch the route move under it (P18.95-T2 AC-2); every other test reads `/admin`.
@@ -400,26 +402,11 @@ describe('AppShell', () => {
   });
 });
 
-/**
- * A screen of a given width, as far as the shell can ask: `matchMedia`, which jsdom does not have.
- * `resize` moves the width afterwards and tells whoever is listening, as a phone turned on its side does.
+/*
+ * A screen of a given width, as far as the shell can ask: `atWidth` (`test/harness.tsx`), which answers each of
+ * `useMediaQuery`'s three ranges for the width. Until P18.97-T6 this file had its own, which answered the phone's
+ * query alone: 768 was then a desktop to the shell, which was true until a tablet opened on the rail.
  */
-function atWidth(px: number) {
-  let width = px;
-  const listeners = new Set<() => void>();
-  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-    media: query,
-    get matches() { return query === PHONE_QUERY && width < 768; },
-    addEventListener: (_: string, fn: () => void) => listeners.add(fn),
-    removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
-  })));
-  return {
-    resize(next: number) {
-      width = next;
-      act(() => listeners.forEach((fn) => fn()));
-    },
-  };
-}
 
 /**
  * **The phone's menu** (P18.95-T2, ADR-0167 §3, OD-198; the client's UI review, UI-009). Below 768px ☰ in the
@@ -704,7 +691,7 @@ describe('below 768px, ☰ opens the sidebar as a drawer (P18.95-T2)', () => {
     expect(onSignOut).toHaveBeenCalledTimes(1);
   });
 
-  it('P18.95-T2 AC-1 changes nothing at 768px: no drawer, the sidebar holds the nav, the chip opens its panel upward', async () => {
+  it('P18.95-T2 AC-1 opens no drawer at 768px: the sidebar holds the nav, the chip opens its panel upward', async () => {
     renderPhoneShell(768);
     // ☰ is in the markup and hidden by its class from 768px; pressing it there opens nothing.
     expect(burger()).toHaveClass('md:hidden');
@@ -716,7 +703,8 @@ describe('below 768px, ☰ opens the sidebar as a drawer (P18.95-T2)', () => {
     const sidebarNav = screen.getByRole('navigation', { name: 'Main' });
     expect(sidebarNav).toHaveAttribute('id', 'sidebar-nav');
     expect(sidebarNav).toHaveClass('hidden', 'md:block');
-    expect(screen.getByRole('button', { name: 'Collapse the sidebar' })).toBeInTheDocument();
+    // The sidebar's own nav, as the rail since P18.97-T6 AC-1: a tablet opens on it (UI-033).
+    expect(screen.getByRole('button', { name: 'Expand the sidebar' })).toBeInTheDocument();
 
     await userEvent.click(barChip());
     const open = document.getElementById('sidebar-user-actions')!;
@@ -1038,14 +1026,26 @@ describe('below 768px, the avatar holds the account and the notices (P18.95-T12)
    * aside, which follow render order. The fixture passes `fullName` and the notices, which the desktop chip must not
    * read. A change here is a change to the tablet and the desktop the client has not reviewed (ADR-0167 §12): if it
    * is meant, it is registered, and the digests are taken again.
+   *
+   * *Retaken 2026-10-28 (P18.97-T6 AC-1, AC-5; parity I-522):* **768px changed, and 1280px did not.** The client has
+   * reviewed the tablet (UI-033), and from 768 to 1023px the sidebar opens on the rail: the 56px column, the mark
+   * with the toggle under it reading *Expand the sidebar*, the glyphs named by their labels, and the bell above the
+   * avatar — the rail as a desktop has drawn it since 2026-09-24, nothing else (the next case proves the two equal).
+   * `T6_TABLET` is that markup, captured from this fixture on the T6 build; `BEFORE_T12` still holds at 1280px, so the
+   * desktop is unchanged to the byte.
    */
   const BEFORE_T12 = {
     closed: '13fbabe71d23dac7ac3706efde8438f7f798afccf4346825e4425c086264084f',
     open: '78d55ee46f5b85e26a69379d471747902b9fd8c4fe8a20387eee2628dfa613c9',
   };
+  const T6_TABLET = {
+    closed: '509090f496b8db38735646d96a6fe98c68ed28025d594baaebeb1dd9bbe7b0ad',
+    open: '1dafc10cde45fd6282eaabc68f287281fa646c458048dd1335192f285b7cc255',
+  };
+  const DIGESTS = { 768: T6_TABLET, 1280: BEFORE_T12 } as const;
   const digest = (html: string) => createHash('sha256').update(html.replace(/_r_[0-9a-z]+_/g, '_id_')).digest('hex');
 
-  it.each([768, 1280])('P18.95-T12 AC-5 draws the bar at %ipx exactly as before: the chip with the name, the bell beside it', async (px) => {
+  it.each([768, 1280] as const)('P18.95-T12 AC-5, P18.97-T6 AC-5 draws the bar at %ipx to its recorded digest: the bell says how many, the chip who', async (px) => {
     window.localStorage.clear();
     atWidth(px);
     render(
@@ -1059,14 +1059,319 @@ describe('below 768px, the avatar holds the account and the notices (P18.95-T12)
         <p>content</p>
       </AppShell>,
     );
-    expect(digest(bar().outerHTML)).toBe(BEFORE_T12.closed);
-    // Read as before: the chip says who, the bell says how many.
+    expect(digest(bar().outerHTML)).toBe(DIGESTS[px].closed);
+    // The chip says who — by its words from 1024px, by its name in the rail — and the bell says how many.
     expect(within(bar()).getByRole('button', { name: 'Notifications, 12 unread' })).toBeInTheDocument();
     expect(within(bar()).queryByRole('button', { name: /^Account/ })).not.toBeInTheDocument();
+    expect(within(bar()).getByRole('button', { name: px === 768 ? 'Expand the sidebar' : 'Collapse the sidebar' }))
+      .toBeInTheDocument();
 
     await userEvent.click(within(bar()).getByRole('button', { name: /Rina Wijaya/ }));
-    expect(digest(bar().outerHTML)).toBe(BEFORE_T12.open);
+    expect(digest(bar().outerHTML)).toBe(DIGESTS[px].open);
     expect(within(panel()!).queryByRole('link', { name: /Notifications/ })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * **A tablet opens on the rail** (P18.97-T6 AC-1, ADR-0178 §1; the client's KPM Owner review of 2026-10-27, UI-033:
+ * at 768px the sidebar took 252px and left the page 501). From 768 to 1023px the sidebar is the icon rail by
+ * default, and opening it full is remembered for that range on its own (`ab.sidebar.rail.tablet`); from 1024px the
+ * sidebar and its remembered choice (`ab.sidebar.rail`) are as they were; below 768px the ☰ drawer is unchanged.
+ */
+describe('P18.97-T6 AC-1 a tablet opens on the rail, and remembers opening it full on its own', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    window.localStorage.clear();
+  });
+
+  const TABLET_KEY = 'ab.sidebar.rail.tablet';
+  const DESK_KEY = 'ab.sidebar.rail';
+
+  const shell = () => (
+    <AppShell
+      sections={SECTIONS}
+      user={USER}
+      account={{ href: '/profile', onSignOut: vi.fn() }}
+      notifications={{ href: '/notifications', unread: 2 }}
+      brandTag="KPM OWNER"
+      title="Log Activity"
+    >
+      <p>content</p>
+    </AppShell>
+  );
+  /** The shell at a width, with whatever a reader's browser already remembers. */
+  function at(px: number, stored: Record<string, string> = {}) {
+    window.localStorage.clear();
+    for (const [key, value] of Object.entries(stored)) window.localStorage.setItem(key, value);
+    const width = atWidth(px);
+    return { ...render(shell()), width };
+  }
+  const aside = () => document.querySelector('aside')!;
+  const toggle = () => screen.getByRole('button', { name: /^(Expand|Collapse) the sidebar$/ });
+  /** Which the sidebar is: the rail, or full. */
+  const drawn = () => (toggle().getAttribute('aria-label') === 'Expand the sidebar' ? 'rail' : 'full');
+  const stored = () => ({ tablet: window.localStorage.getItem(TABLET_KEY), desk: window.localStorage.getItem(DESK_KEY) });
+  const withoutIds = (html: string) => html.replace(/_r_[0-9a-z]+_/g, '_id_');
+
+  it.each([768, 1023])('P18.97-T6 AC-1 at %ipx opens on the rail: a glyph per item, its name and its tooltip', (px) => {
+    at(px);
+    expect(drawn()).toBe('rail');
+    expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle()).toHaveAttribute('title', 'Expand the sidebar');
+    // The 56px column, by the class that cannot fail to exist, and not the 252px one.
+    expect(wears(aside(), px).split(' ')).toContain('w-[var(--sidebar-rail-width)]');
+    expect(wears(aside(), px).split(' ')).not.toContain('w-sidebar');
+    // Every item is its glyph, named and tipped by its label; the words are not drawn.
+    const item = screen.getByRole('link', { name: 'Activity management' });
+    expect(item).toHaveAttribute('title', 'Activity management');
+    expect(screen.queryByText('Activity management')).toBeNull();
+    expect(screen.getByTitle('Advanced analytics — Upcoming')).toBeInTheDocument();
+    // The groups flatten: no heading to click, so nothing behind one.
+    expect(screen.queryByRole('button', { name: /Personal tools/ })).toBeNull();
+    // The mark stays and the wordmark goes; the bell stands above the avatar.
+    expect(wears(screen.getByText('AgencyBoost'), px).split(' ')).toContain('hidden');
+    const bell = screen.getByRole('button', { name: 'Notifications, 2 unread' });
+    const chip = screen.getByRole('button', { name: 'Rina Wijaya — Agent · KPM 0417' });
+    expect(bell.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Nothing is written by arriving.
+    expect(stored()).toEqual({ tablet: null, desk: null });
+  });
+
+  /*
+   * *Found by axe on the tablet's rail* (parity F-253): the first run of axe with the rail drawn. An *Upcoming* item
+   * has no `href`, so no role, and carried its name in `aria-label`, which ARIA allows on no element without a role;
+   * and a count rode the glyph as a dot and was in no name, where this file's comments and the design doc said it
+   * was. Both were true of the desktop's rail since 2026-09-24; a tablet now opens on it.
+   */
+  const EVERY_KIND: readonly NavSection[] = [
+    { label: null, divider: true, items: [{ label: 'Overview', href: '/admin', icon: 'gauge', active: true }] },
+    {
+      label: 'Reporting',
+      items: [
+        { label: 'Leaders past the limit', href: '/admin/leader-limit-requests', icon: 'users', badge: 2 },
+        { label: 'Your 90-day activation', href: '/activation', icon: 'clipboard', done: true },
+        { label: 'Advanced analytics', href: '/kpm/advanced-analytics', icon: 'chartUp', upcoming: true },
+      ],
+    },
+  ];
+
+  it('P18.97-T6 F-253 an Upcoming item in the rail says its name in words, with its tooltip, and no aria-label', () => {
+    atWidth(768);
+    render(<AppShell sections={EVERY_KIND} user={USER} upcomingLabel="Upcoming"><p>content</p></AppShell>);
+    const item = screen.getByTitle('Advanced analytics — Upcoming');
+    expect(item.tagName).toBe('A');
+    expect(item).not.toHaveAttribute('href');
+    expect(item).not.toHaveAttribute('aria-label');
+    expect(item).toHaveAttribute('aria-disabled', 'true');
+    expect(within(item).getByText('Advanced analytics — Upcoming')).toHaveClass('sr-only');
+  });
+
+  it('P18.97-T6 F-253 a count is in a rail item’s name and tooltip — and wider, the row’s words are as they were', () => {
+    const width = atWidth(768);
+    render(<AppShell sections={EVERY_KIND} user={USER}><p>content</p></AppShell>);
+    const counted = screen.getByRole('link', { name: 'Leaders past the limit, 2' });
+    expect(counted).toHaveAttribute('title', 'Leaders past the limit, 2');
+    // The dot still rides the glyph, for the eye.
+    expect(counted.querySelector('.bg-alert')).not.toBeNull();
+    expect(screen.getByRole('link', { name: 'Your 90-day activation — complete' })).toBeInTheDocument();
+
+    width.resize(1280);
+    const wide = screen.getByRole('link', { name: /Leaders past the limit/ });
+    expect(wide).not.toHaveAttribute('aria-label');
+    expect(wide).toHaveTextContent('Leaders past the limit2');
+    expect(screen.getByText('Advanced analytics').closest('a')).not.toHaveAttribute('title');
+  });
+
+  it('P18.97-T6 AC-1, F-253 has no axe violations on the rail, with every kind of item in it', async () => {
+    atWidth(1023);
+    const { container } = render(
+      <AppShell
+        sections={EVERY_KIND}
+        user={USER}
+        account={{ href: '/profile', onSignOut: vi.fn() }}
+        notifications={{ href: '/notifications', unread: 2 }}
+        brandTag="KPM OWNER"
+        title="Log Activity"
+      >
+        <p>content</p>
+      </AppShell>,
+    );
+    expect(drawn()).toBe('rail');
+    const results = await axe(container, { rules: { 'color-contrast': { enabled: false } } });
+    expect(results.violations ?? []).toHaveLength(0);
+  });
+
+  it('P18.97-T6 AC-1 the tablet’s rail is the desktop’s rail, to the attribute', async () => {
+    const { unmount } = at(1280);
+    await userEvent.click(screen.getByRole('button', { name: 'Collapse the sidebar' }));
+    // The toggle keeps the focus the click gave it; the markup is the question here.
+    const collapsedOnDesktop = withoutIds(aside().outerHTML);
+    unmount();
+
+    at(768);
+    expect(withoutIds(aside().outerHTML)).toBe(collapsedOnDesktop);
+  });
+
+  it.each([1024, 1280])('P18.97-T6 AC-1 at %ipx opens full, as before', (px) => {
+    at(px);
+    expect(drawn()).toBe('full');
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true');
+    expect(wears(aside(), px).split(' ')).toContain('w-sidebar');
+    expect(screen.getByRole('button', { name: /Personal tools/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Activity management')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['nothing remembered', {}],
+    ['both sizes remembering the rail', { [TABLET_KEY]: '1', [DESK_KEY]: '1' }],
+  ])('P18.97-T6 AC-1 at 767px, with %s, is the phone’s bar: ☰ opens the drawer whole, and there is no rail', async (_case, remembered) => {
+    at(767, remembered);
+    expect(screen.queryByRole('button', { name: /the sidebar$/ })).toBeNull();
+    expect(screen.queryByRole('navigation', { name: 'Main' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+    const menu = screen.getByRole('dialog', { name: 'Menu' });
+    expect(within(menu).getByRole('button', { name: /Personal tools/ })).toBeInTheDocument();
+    expect(within(menu).getByText('Activity management')).toBeInTheDocument();
+  });
+
+  it('P18.97-T6 AC-1 opening it full on a tablet is remembered for a tablet alone, and the desktop keeps its own', async () => {
+    const { width, unmount } = at(768);
+    await userEvent.click(toggle());
+    expect(drawn()).toBe('full');
+    expect(toggle()).toHaveAttribute('aria-expanded', 'true');
+    expect(stored()).toEqual({ tablet: '0', desk: null });
+
+    // A desktop has its own default, the full sidebar; collapsing it there writes the desktop's choice only.
+    width.resize(1024);
+    expect(drawn()).toBe('full');
+    await userEvent.click(toggle());
+    expect(drawn()).toBe('rail');
+    expect(stored()).toEqual({ tablet: '0', desk: '1' });
+
+    // Each size shows its own as the width crosses 1024px.
+    width.resize(1023);
+    expect(drawn()).toBe('full');
+    width.resize(1280);
+    expect(drawn()).toBe('rail');
+    unmount();
+
+    // And after a reload.
+    at(900, { [TABLET_KEY]: '0', [DESK_KEY]: '1' });
+    expect(drawn()).toBe('full');
+  });
+
+  it('P18.97-T6 AC-1 collapsing it again on a tablet is remembered as well', async () => {
+    const { unmount } = at(900, { [TABLET_KEY]: '0' });
+    expect(drawn()).toBe('full');
+    await userEvent.click(toggle());
+    expect(drawn()).toBe('rail');
+    expect(stored()).toEqual({ tablet: '1', desk: null });
+    unmount();
+    at(900, { [TABLET_KEY]: '1' });
+    expect(drawn()).toBe('rail');
+  });
+
+  it.each([
+    ['the desktop’s rail and the tablet’s full sidebar', { [DESK_KEY]: '1', [TABLET_KEY]: '0' }, 'rail', 'full'],
+    ['the desktop’s full sidebar and the tablet’s rail', { [DESK_KEY]: '0', [TABLET_KEY]: '1' }, 'full', 'rail'],
+    ['the desktop’s rail, and nothing for a tablet', { [DESK_KEY]: '1' }, 'rail', 'rail'],
+    ['the tablet’s full sidebar, and nothing for a desktop', { [TABLET_KEY]: '0' }, 'full', 'full'],
+  ] as const)('P18.97-T6 AC-1 keeps the two choices apart — %s', (_case, remembered, desk, tablet) => {
+    const { width } = at(1280, remembered);
+    expect(drawn()).toBe(desk);
+    width.resize(768);
+    expect(drawn()).toBe(tablet);
+    width.resize(1023);
+    expect(drawn()).toBe(tablet);
+    width.resize(1024);
+    expect(drawn()).toBe(desk);
+    // Crossing the line reads the choices; it never writes one.
+    const kept: Record<string, string> = remembered;
+    expect(stored()).toEqual({ tablet: kept[TABLET_KEY] ?? null, desk: kept[DESK_KEY] ?? null });
+  });
+
+  it('P18.97-T6 AC-1 with storage refused, each size keeps its default, and the toggle still works for the visit', async () => {
+    const refuse = () => { throw new DOMException('The operation is insecure.', 'SecurityError'); };
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(refuse);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(refuse);
+    const width = atWidth(768);
+    const { unmount } = render(shell());
+    expect(drawn()).toBe('rail');
+
+    await userEvent.click(toggle());
+    expect(drawn()).toBe('full');
+    width.resize(1024);
+    expect(drawn()).toBe('full');
+    await userEvent.click(toggle());
+    expect(drawn()).toBe('rail');
+    width.resize(768);
+    expect(drawn()).toBe('full');
+    unmount();
+
+    // Nothing could be kept, so a reload is each size's default again.
+    render(shell());
+    expect(drawn()).toBe('rail');
+    width.resize(1024);
+    expect(drawn()).toBe('full');
+  });
+
+  it('P18.97-T6 AC-1 with no storage at all, a tablet still opens on the rail', () => {
+    // A browser with site data blocked throws on the accessor itself, before any key is asked.
+    const own = Object.getOwnPropertyDescriptor(window, 'localStorage');
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get: () => { throw new DOMException('The operation is insecure.', 'SecurityError'); },
+    });
+    try {
+      atWidth(800);
+      render(shell());
+      expect(drawn()).toBe('rail');
+    } finally {
+      if (own) Object.defineProperty(window, 'localStorage', own);
+      else delete (window as { localStorage?: Storage }).localStorage;
+    }
+  });
+
+  /*
+   * **No frame of the wrong sidebar** (AC-1, AC-2). The shell mounts once the session is read, so its first render
+   * cannot know the width; it answers before the browser paints. Mounted outside `act`, as a browser mounts it, a
+   * microtask queued from the commit that mounts it — which runs before the browser could paint — already reads the
+   * rail on a tablet, and each size's remembered choice. An answer in an ordinary effect would still read the full
+   * sidebar there: the effect runs in a later task, after a paint.
+   */
+  it.each([
+    [800, {}, 'rail'],
+    [800, { [TABLET_KEY]: '0' }, 'full'],
+    [1280, {}, 'full'],
+    [1280, { [DESK_KEY]: '1' }, 'rail'],
+  ] as const)('P18.97-T6 AC-1 at %ipx with %o is drawn %s from the first paint', async (px, remembered, expected) => {
+    window.localStorage.clear();
+    for (const [key, value] of Object.entries(remembered)) window.localStorage.setItem(key, value);
+    atWidth(px);
+    const seen: (string | null)[] = [];
+    function BeforePaint({ children }: { children: React.ReactNode }) {
+      useLayoutEffect(() => {
+        queueMicrotask(() => {
+          seen.push(document.querySelector('button[aria-controls="sidebar-nav"]')?.getAttribute('aria-label') ?? null);
+        });
+      }, []);
+      return children;
+    }
+    const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const wasAct = env.IS_REACT_ACT_ENVIRONMENT;
+    env.IS_REACT_ACT_ENVIRONMENT = false;
+    const host = document.body.appendChild(document.createElement('div'));
+    const root = createRoot(host);
+    try {
+      root.render(<BeforePaint>{shell()}</BeforePaint>);
+      await vi.waitFor(() => expect(seen).toHaveLength(1));
+      expect(seen[0]).toBe(expected === 'rail' ? 'Expand the sidebar' : 'Collapse the sidebar');
+    } finally {
+      root.unmount();
+      host.remove();
+      env.IS_REACT_ACT_ENVIRONMENT = wasAct;
+    }
   });
 });
 

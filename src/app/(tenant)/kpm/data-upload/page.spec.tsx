@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { atWidth, digestAt, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
+import { showFigure } from './correction-panel';
 import DataUploadPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -239,6 +240,32 @@ describe('Data upload — the month table (P9-T1)', () => {
     renderWithSession(<DataUploadPage />, { me: OWNER });
 
     expect(await screen.findByText('Rp 150.000.000')).toBeInTheDocument();
+  });
+
+  it('P18.97-T3 AC-2, AC-3 keeps the file’s own figures as filed: money to the rupiah, a persistency’s every place and no ,0', async () => {
+    // Data upload's cells are where precision matters (ADR-0174 §3, §4): never *Rp 5,7 M*, never *87%* for 87,35.
+    stubFetch(routes(month([rina({
+      metrics: {
+        ...blank(),
+        ape: { monthly: cell(5_672_500_000_00), ytd: empty },
+        persistency: { monthly: cell(87.35), ytd: cell(90) },
+      },
+    })], 1)));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+
+    const row = (await screen.findAllByRole('row')).find((r) => within(r).queryByText('Rina Wijaya'))!;
+    expect(within(row).getByText('Rp 5.672.500.000')).toBeInTheDocument();
+    expect(within(row).getByText('87,35%')).toBeInTheDocument();
+    expect(within(row).getByText('90%')).toBeInTheDocument();
+    expect(within(row).queryByText(/,0%/)).not.toBeInTheDocument();
+  });
+
+  it('P18.97-T3 AC-2, AC-3 writes the correction panel’s and its confirmation’s figures as the cells do', () => {
+    expect(showFigure('ape', 5_672_500_000_00)).toBe('Rp 5.672.500.000');
+    expect(showFigure('persistency', 87.35)).toBe('87,35%');
+    expect(showFigure('persistency', 87)).toBe('87%');
+    expect(showFigure('policyCount', 3)).toBe('3');
+    expect(showFigure('persistency', null)).toBe('nothing reported');
   });
 
   it('says so when nothing has been uploaded, and still lists everybody', async () => {
@@ -987,12 +1014,11 @@ describe('Data upload — whose each figure is (P9-T6)', () => {
     },
   });
 
+  // *Amended 2026-10-28 (P18.97-T4 AC-2; UI-023):* the 45-word sentence is the client's one-line legend.
   it('says once, above the table, that figures are the carrier’s unless marked', async () => {
     stubFetch(routes(month([withCorrections()], 1)));
     renderWithSession(<DataUploadPage />, { me: OWNER });
-    expect(await screen.findByText(/Figures are from the carrier’s file unless marked/)).toHaveTextContent(
-      'Figures are from the carrier’s file unless marked ✎ corrected by hand; —a dash is nothing reported.',
-    );
+    expect(await screen.findByText(/= corrected by hand/)).toHaveTextContent('✎ = corrected by hand');
   });
 
   it('marks a corrected figure, with who, when and why for a reader and a screen reader', async () => {
@@ -1070,14 +1096,12 @@ describe('Data upload — the Active (MAA) column (OD-21, ADR-0054)', () => {
     expect(within(await mark('Rina Wijaya')).getByRole('img', { name: 'Not reported' })).toBeInTheDocument();
   });
 
-  it('says what the column is beside the table, in the prototype’s words, rather than in a hover', async () => {
+  // *Amended 2026-10-28 (P18.97-T4 AC-2; UI-023):* the column's sentence is the legend's third part, the client's words.
+  it('says what the column is beside the table, rather than in a hover', async () => {
     stubFetch(routes(month([rina({ monthlyActiveAgent: true })], 1)));
     renderWithSession(<DataUploadPage />, { me: OWNER });
 
-    expect(await screen.findByText(/Figures are from the carrier’s file unless marked/)).toHaveTextContent(
-      'Active (MAA): Derived, not entered — Active this month if Monthly APE > 0 or Monthly # of Policy > 0. '
-        + 'A dash until that is known.',
-    );
+    expect(await screen.findByText(/^Active = /)).toHaveTextContent('Active = APE or policies > 0 this month');
   });
 
   it('is not a column of the preview — a file says what to write, not who is active', async () => {
@@ -1190,5 +1214,413 @@ describe('Data upload — the prototype’s order (P13.1-T7)', () => {
       .map(([group, metric]) => `${metric} — ${group}`);
     // `HEADER` is the backend's pinned version-1 header (`production-template.spec.ts`).
     expect(screenOrder).toEqual(HEADER.split(',').slice(2).map((h) => h.replace(' (Rp M)', '')));
+  });
+});
+
+/**
+ * **The intro and the legend, in the client's words** (P18.97-T4 AC-2, ADR-0176 §6; the client's KPM Owner review of
+ * 2026-10-27, UI-023: *"APE ⓘ What is APE? , rolling persistency, …"*, and a 45-word legend). The intro is one sentence
+ * with *APE*'s ⓘ after it; the legend is one line — the grey-text table's *Show* at every size.
+ */
+describe('P18.97-T4 AC-2 Data upload’s intro and legend', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const LEGEND = '✎ = corrected by hand · —a dash = not reported · Active = APE or policies > 0 this month';
+
+  it('P18.97-T4 AC-2 reads the intro as one sentence, its ⓘ after the full stop and never inside it', async () => {
+    stubFetch(routes(month([rina()])));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    const tip = await screen.findByRole('button', { name: 'What is APE?' });
+    const intro = tip.closest('p')!;
+    // The sentence, then the ⓘ's own name: nothing of the ⓘ between its words.
+    expect(intro).toHaveTextContent(
+      /^APE, rolling persistency, recruitment, new active agents, FYP and # of policy — one file per month, matched by agent code\. ⓘ\s*What is APE\?/,
+    );
+    expect(intro.lastElementChild!.contains(tip)).toBe(true);
+  });
+
+  it('P18.97-T4 AC-2 says the legend in one line of three parts, the dash spoken as a dash', async () => {
+    stubFetch(routes(month([withCorrectionsRow()], 1)));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    const legend = (await screen.findByText(/= corrected by hand/)).closest('p')!;
+    expect(legend).toHaveTextContent(LEGEND);
+    expect(legend.textContent).not.toMatch(/Figures are from|Derived, not entered|A dash until/);
+    // Each part whole, so a narrow screen breaks the line between them and never inside one.
+    expect(legend.querySelectorAll('.whitespace-nowrap')).toHaveLength(3);
+    expect(within(legend).getByText('—')).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it.each([375, 767, 768, 1023, 1024, 1280])('P18.97-T4 AC-2 at %ipx shows the legend: no size takes it away', async (px) => {
+    atWidth(px);
+    stubFetch(routes(month([rina()])));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    const legend = (await screen.findByText(/= corrected by hand/)).closest('p')!;
+    expect(wears(legend, px).split(' ')).not.toContain('hidden');
+    expect(legend).toHaveTextContent(LEGEND);
+  });
+
+  it('P18.97-T4 AC-10 says a template that could not be prepared without a code the browser made', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { mock } = stubFetch(routes(month([rina()])));
+    // The template's request never arrives, as a dropped connection's does: `fetch` itself refuses.
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('/template')) throw new TypeError('Failed to fetch');
+      return mock(url, init);
+    }));
+    renderWithSession(<DataUploadPage />, { me: OWNER });
+    const said = (await screen.findByText(/The template could not be prepared/)).closest('[role="alert"]')!;
+    expect(said).toHaveTextContent('Could not reach the server. Check your connection and try again.');
+    expect(said.textContent).not.toMatch(/NETWORK/);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[NETWORK]'));
+    warn.mockRestore();
+  });
+});
+
+/** Rina, with one figure corrected by hand — the legend's ✎ on the table. */
+function withCorrectionsRow() {
+  return rina({
+    metrics: {
+      ...Object.fromEntries(['persistency', 'recruitment', 'newActiveAgents', 'policyCount'].map((m) => [m, { monthly: { value: null, provenance: null }, ytd: { value: null, provenance: null } }])),
+      ape: { monthly: { value: 200_000_000, provenance: 'corrected', correctedAt: '2026-09-26T03:00:00Z', correctedByName: 'Maya Halim', reason: 'Carrier restated it' }, ytd: { value: 900_000_000, provenance: 'imported' } },
+      fyp: { monthly: { value: null, provenance: null }, ytd: { value: null, provenance: null } },
+    },
+  });
+}
+
+/**
+ * **The month on a phone: a card per agent, and an edit sheet** (P18.97-T7 AC-2, AC-6, ADR-0178 §4, §5; the client's
+ * KPM Owner review of 2026-10-27, UI-034: the table, 1816px; UI-040: 340 tappable cells under 44px). Below 768px each
+ * member is a card, and a tap opens a sheet of their twelve figures as labelled fields, each saved through the
+ * unchanged `PATCH /kpm/data-upload/cell` with its reason. At 768px and wider the page it was, to the byte.
+ */
+describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T03:00:00Z')); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  const corrected = (value: number | null) => ({
+    value, provenance: 'corrected' as const,
+    correction: { by: 'Maya Halim', at: '2026-09-18T03:00:00Z', reason: 'Carrier restated it' },
+  });
+  /** Rina with a figure in every kind — money, a persistency, counts — one corrected by hand; Budi with nothing. */
+  const RINA = rina({
+    metrics: {
+      ...blank(),
+      ape: { monthly: cell(150_000_000), ytd: cell(900_000_000) },
+      persistency: { monthly: cell(87.35), ytd: cell(86) },
+      policyCount: { monthly: cell(2), ytd: corrected(11) },
+    },
+    monthlyActiveAgent: true,
+  });
+  const BUDI = { ...budi(), monthlyActiveAgent: null };
+
+  /** Every grant the page has: the template, the upload, the history, the lock, and correcting a figure. */
+  const ALL = makeMe({ membership, permissions: [...EVERYTHING.permissions, 'data_upload:correct_cell'] });
+  const everything = (over: Record<string, unknown> = {}) => ({
+    ...routes(month([RINA, BUDI], 1)),
+    '/kpm/data-upload/history': { body: { month: '2026-09', batches: [batch(), REVERTED] } },
+    ...over,
+  });
+
+  /** The page's markup on the build before P18.97-T7, rendered from this fixture on 2026-10-28. */
+  const BEFORE_T7: Record<768 | 1280, string> = {
+    768: '28a6dd8b74be26ceef6a2d2633e320d79f66195773066049291f0348e0655809',
+    1280: '28a6dd8b74be26ceef6a2d2633e320d79f66195773066049291f0348e0655809',
+  };
+
+  it.each([768, 1280] as const)('P18.97-T7 AC-2 at %ipx draws the month table and its controls as they were, to the byte', async (px) => {
+    atWidth(px);
+    stubFetch(everything());
+    const { container } = renderWithSession(<DataUploadPage />, { me: ALL });
+    await screen.findByRole('table', { name: 'Data for Sep 2026' });
+    await screen.findByRole('link', { name: 'Download template' });
+    await screen.findByText(/KPM0417-agent-data-Sep-2026-corrected\.csv/);
+    expect(digestAt(container, px)).toBe(BEFORE_T7[px]);
+  });
+
+  /** The server's answer to one correction: what was there, what is now, the month one revision on. */
+  const answer = ({ body }: { body: unknown }) => {
+    const sent = body as { metric: 'ape' | 'persistency' | 'policyCount'; cadence: 'monthly' | 'ytd'; value: number | null; revision: number };
+    const before = (RINA.metrics as Record<string, Record<string, { value: number | null }>>)[sent.metric][sent.cadence].value;
+    return {
+      body: {
+        membershipId: 'mem-rina', metric: sent.metric, cadence: sent.cadence, changed: true,
+        before: { value: before, provenance: 'imported' }, after: { value: sent.value, provenance: 'corrected' },
+        state: state('2026-09', { revision: sent.revision + 1 }),
+      },
+    };
+  };
+  const cardsOf = () => screen.findByRole('list', { name: 'Data for Sep 2026' });
+  const cardOf = (name: string) => screen.getByText(name, { selector: 'button, span' }).closest('li')!;
+  const openSheet = async (name = 'Rina Wijaya') => {
+    await cardsOf();
+    fireEvent.click(screen.getByRole('button', { name: `Correct figures for ${name}` }));
+    return screen.getByRole('dialog', { name: `Correct figures for ${name}` });
+  };
+  const patches = (calls: { url: string; init: RequestInit }[]) => calls
+    .filter((c) => c.url.includes('/kpm/data-upload/cell'))
+    .map((c) => JSON.parse(c.init.body as string));
+
+  it.each([375, 767])('P18.97-T7 AC-2 at %ipx draws a card per agent and no table, each figure under its heading', async (px) => {
+    atWidth(px);
+    stubFetch(everything());
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    const cards = await cardsOf();
+    expect(screen.queryByRole('table', { name: 'Data for Sep 2026' })).not.toBeInTheDocument();
+    expect(within(cards).getAllByRole('listitem')).toHaveLength(2);
+    const rina = cardOf('Rina Wijaya');
+    expect(rina).toHaveTextContent('PRU-001');
+    // The table's two groups, each its six figures under their headings, in the table's order and formats.
+    const month = within(rina).getByRole('group', { name: 'This Month' });
+    expect([...month.querySelectorAll('dt')].map((dt) => dt.textContent))
+      .toEqual(['APE', 'Rolling Persistency (%)', 'Recruitment', 'New Active Agents', 'FYP', '# of Policy']);
+    expect([...month.querySelectorAll('dd')].map((dd) => dd.textContent))
+      .toEqual(['Rp 1.500.000', '87,35%', '—', '—', '—', '2']);
+    const ytd = within(rina).getByRole('group', { name: 'YTD' });
+    expect(within(ytd).getByText('Rp 9.000.000')).toBeInTheDocument();
+    // A figure corrected by hand keeps its ✎ and, for a screen reader, who, when and why.
+    expect(ytd).toHaveTextContent('11✎');
+    expect(ytd).toHaveTextContent('corrected by hand by Maya Halim on 18 Sep 2026 — “Carrier restated it”');
+    expect(within(rina).getByRole('img', { name: 'Active' })).toBeInTheDocument();
+    expect(within(cardOf('Budi Santoso')).getByRole('img', { name: 'Not reported' })).toBeInTheDocument();
+    // On a phone the tap is the agent's, so the line says so.
+    expect(screen.getByText('Tap an agent to correct their figures — no need to re-upload for a single fix.')).toBeInTheDocument();
+  });
+
+  it('P18.97-T7 AC-2 edits no cell on a phone: no figure is a control, the card is, and a reader’s card is neither', async () => {
+    atWidth(375);
+    stubFetch(everything());
+    const { unmount } = renderWithSession(<DataUploadPage />, { me: ALL });
+    await cardsOf();
+    expect(screen.queryByRole('button', { name: /^Correct APE this month/ })).not.toBeInTheDocument();
+    const name = screen.getByRole('button', { name: 'Correct figures for Rina Wijaya' });
+    expect(name).toHaveAttribute('aria-haspopup', 'dialog');
+    // Its tap covers the card, and the focus ring is drawn round the card.
+    expect(name.className).toContain("after:absolute after:inset-0");
+    expect(cardOf('Rina Wijaya').className).toContain('relative');
+    unmount();
+
+    stubFetch(everything());
+    renderWithSession(<DataUploadPage />, { me: EVERYTHING });
+    await cardsOf();
+    expect(screen.queryByRole('button', { name: /^Correct figures for/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tap an agent/)).not.toBeInTheDocument();
+  });
+
+  it('P18.97-T7 AC-2 holds a locked month’s cards still', async () => {
+    atWidth(375);
+    stubFetch(everything({ '/kpm/data-upload/': { body: month([RINA, BUDI], 1, '2026-09', state('2026-09', { locked: true, reason: 'schedule' })) } }));
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    await cardsOf();
+    expect(screen.queryByRole('button', { name: /^Correct figures for/ })).not.toBeInTheDocument();
+  });
+
+  it('P18.97-T7 AC-2 never draws the table first on a phone: the width is asked before the month answers', async () => {
+    atWidth(375);
+    stubFetch(everything());
+    // The month's table, that is: the frame before the width answers is a skeleton (`role="status"`), never figures.
+    let drew = false;
+    const figures = (el: Element) => [el, ...el.querySelectorAll('table')]
+      .some((t) => t.matches('table') && t.closest('[role="status"]') === null);
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof Element && figures(node)) drew = true;
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    await cardsOf();
+    await screen.findByText(/KPM0417-agent-data-Sep-2026-corrected\.csv/);
+    observer.disconnect();
+    expect(drew).toBe(false);
+  });
+
+  it('P18.97-T7 AC-2, AC-5 opens the agent’s sheet: twelve labelled figures, 16px fields 44px tall, held as the cells hold them', async () => {
+    atWidth(375);
+    stubFetch(everything());
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    const sheet = await openSheet();
+    expect(sheet.closest('[data-placement]')).toHaveAttribute('data-placement', 'sheet');
+    expect(sheet).toHaveAccessibleDescription('PRU-001 · Sep 2026');
+    // Opened on its title, so no keyboard rises before a field is chosen.
+    expect(sheet).toHaveFocus();
+    expect(within(sheet).getAllByRole('group').map((g) => g.querySelector('legend')!.textContent)).toEqual(['This Month', 'YTD']);
+    const ape = within(sheet).getByLabelText('APE this month');
+    expect(ape).toHaveValue('1.500.000');
+    expect(within(sheet).getByLabelText('APE year to date')).toHaveValue('9.000.000');
+    expect(within(sheet).getByLabelText('Rolling persistency this month')).toHaveValue('87,35');
+    expect(within(sheet).getByLabelText('# of policy this month')).toHaveValue('2');
+    expect(within(sheet).getByLabelText('FYP this month')).toHaveValue('');
+    // Whose a corrected figure is, under its field, as the table's ✎ says it.
+    expect(within(sheet).getByLabelText('# of policy year to date'))
+      .toHaveAccessibleDescription('corrected by hand by Maya Halim on 18 Sep 2026 — “Carrier restated it”');
+    // Every field a text box of the shared style — 16px on a phone through the field rule (globals.css; theme.spec.ts) —
+    // and 48px tall there, so an input inside a box with *Rp* or *%* still has 44px; nothing a size of its own the rule
+    // could not reach.
+    const boxes = within(sheet).getAllByRole('textbox');
+    expect(boxes).toHaveLength(13);
+    for (const box of boxes) {
+      expect(box.tagName).toBe('INPUT');
+      expect(box.className).toMatch(/\btext-base\b/);
+      expect(box.className).not.toMatch(/text-\[/);
+      const tall = box.closest('span.inline-flex') ?? box;
+      expect(wears(tall, 375).split(' ')).toEqual(expect.arrayContaining(['w-full', 'h-12']));
+    }
+    for (const button of within(sheet.closest('[data-placement]') as HTMLElement).getAllByRole('button', { name: /^(Save corrections|Cancel)$/ })) {
+      expect(wears(button, 375).split(' ')).toContain('h-11');
+    }
+  });
+
+  it('P18.97-T7 AC-2 saves each changed figure through PATCH /kpm/data-upload/cell with its reason, the year before the month it would pass', async () => {
+    atWidth(375);
+    const { calls } = stubFetch({ ...everything(), 'PATCH /kpm/data-upload/cell': answer });
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    const sheet = await openSheet();
+    // The month raised past the year held: the year goes first, so the server never holds a month above its year.
+    fireEvent.change(within(sheet).getByLabelText('APE this month'), { target: { value: '12000000' } });
+    fireEvent.change(within(sheet).getByLabelText('APE year to date'), { target: { value: '15.000.000' } });
+    fireEvent.change(within(sheet).getByLabelText('Rolling persistency this month'), { target: { value: '88,5' } });
+    fireEvent.change(within(sheet).getByLabelText('Why is it being corrected?'), { target: { value: 'Carrier restated it' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
+
+    expect(await screen.findByText(
+      'Corrected 3 figures for Rina Wijaya: APE year to date Rp 9.000.000 → Rp 15.000.000; APE this month Rp 1.500.000 → Rp 12.000.000; Rolling persistency this month 87,35% → 88,5%.',
+    )).toBeInTheDocument();
+    // Each on the revision the one before it answered: the month's 3, then 4, then 5.
+    expect(patches(calls)).toEqual([
+      { month: '2026-09', membershipId: 'mem-rina', metric: 'ape', cadence: 'ytd', value: 1_500_000_000, revision: 3, reason: 'Carrier restated it' },
+      { month: '2026-09', membershipId: 'mem-rina', metric: 'ape', cadence: 'monthly', value: 1_200_000_000, revision: 4, reason: 'Carrier restated it' },
+      { month: '2026-09', membershipId: 'mem-rina', metric: 'persistency', cadence: 'monthly', value: 88.5, revision: 5, reason: 'Carrier restated it' },
+    ]);
+    expect(calls.filter((c) => c.url.includes('/kpm/data-upload/cell')).every((c) => c.init.method === 'PATCH')).toBe(true);
+    // The sheet is put away and the month read again, as after a correction on the table.
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(calls.filter((c) => /\/kpm\/data-upload\/2026-09$/.test(c.url))).toHaveLength(2));
+  });
+
+  it('P18.97-T7 AC-2 asks for a reason before sending anything, and saves nothing unchanged', async () => {
+    atWidth(375);
+    const { calls } = stubFetch({ ...everything(), 'PATCH /kpm/data-upload/cell': answer });
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    const sheet = await openSheet();
+    expect(screen.getByRole('button', { name: 'Save corrections' })).toBeDisabled();
+    fireEvent.change(within(sheet).getByLabelText('# of policy this month'), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
+    expect(within(sheet).getByLabelText('Why is it being corrected?')).toHaveAccessibleDescription(/Say why the figure is being corrected\./);
+    fireEvent.change(within(sheet).getByLabelText('# of policy this month'), { target: { value: 'tiga' } });
+    fireEvent.change(within(sheet).getByLabelText('Why is it being corrected?'), { target: { value: 'x' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
+    expect(within(sheet).getByLabelText('# of policy this month')).toHaveAccessibleDescription('# of policy this month is not a number.');
+    expect(patches(calls)).toEqual([]);
+  });
+
+  it('P18.97-T7 AC-2 puts a refusal on its figure, keeps what saved before it, and says both once the sheet closes', async () => {
+    atWidth(375);
+    const refusal = {
+      status: 422,
+      body: { error: { code: 'UPLOAD_VALUE_OUT_OF_RANGE', message: 'Rolling persistency year to date is above 100 — persistency is a percentage.', requestId: 'r' } },
+    };
+    const { calls } = stubFetch({
+      ...everything(),
+      // The server's range rule, as it answers it: a persistency over 100 is refused.
+      'PATCH /kpm/data-upload/cell': (call) => ((call.body as { value: number }).value > 100 ? refusal : answer(call)),
+    });
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    const sheet = await openSheet();
+    fireEvent.change(within(sheet).getByLabelText('# of policy this month'), { target: { value: '3' } });
+    fireEvent.change(within(sheet).getByLabelText('Rolling persistency year to date'), { target: { value: '140' } });
+    fireEvent.change(within(sheet).getByLabelText('Why is it being corrected?'), { target: { value: 'Carrier restated it' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
+
+    const ytd = within(sheet).getByLabelText('Rolling persistency year to date');
+    await waitFor(() => expect(ytd).toHaveAccessibleDescription('Rolling persistency year to date is above 100 — persistency is a percentage.'));
+    expect(screen.getByRole('dialog', { name: 'Correct figures for Rina Wijaya' })).toBeInTheDocument();
+    // The month's figure saved; sent again it would be nothing, so only the year goes, on the revision the first answered.
+    fireEvent.change(ytd, { target: { value: '89' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
+    expect(await screen.findByText(
+      'Corrected 2 figures for Rina Wijaya: # of policy this month 2 → 3; Rolling persistency year to date 86% → 89%.',
+    )).toBeInTheDocument();
+    expect(patches(calls).map((b) => [b.metric, b.value, b.revision])).toEqual([
+      ['policyCount', 3, 3], ['persistency', 140, 4], ['persistency', 89, 4],
+    ]);
+  });
+
+  it('P18.97-T7 AC-2 reports what saved when the sheet is closed after a refusal', async () => {
+    atWidth(375);
+    const { calls } = stubFetch({
+      ...everything(),
+      'PATCH /kpm/data-upload/cell': [answer, () => ({ status: 409, body: { error: { code: 'VERSION_CONFLICT', message: 'Sep 2026 has changed since you looked at it.', requestId: 'r' } } })],
+    });
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    const sheet = await openSheet();
+    fireEvent.change(within(sheet).getByLabelText('# of policy this month'), { target: { value: '4' } });
+    fireEvent.change(within(sheet).getByLabelText('Recruitment this month'), { target: { value: '1' } });
+    fireEvent.change(within(sheet).getByLabelText('Why is it being corrected?'), { target: { value: 'x' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
+    // A refusal about the month is said above the buttons, in the sheet.
+    expect(await within(sheet).findByText('Sep 2026 has changed since you looked at it.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(await screen.findByText('Corrected Recruitment this month for Rina Wijaya: nothing reported → 1.')).toBeInTheDocument();
+    expect(patches(calls)).toHaveLength(2);
+  });
+
+  it('P18.97-T7 AC-2 clears an emptied figure only after asking, naming it, with an explicit null', async () => {
+    atWidth(375);
+    const { calls } = stubFetch({ ...everything(), 'PATCH /kpm/data-upload/cell': answer });
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    const sheet = await openSheet();
+    fireEvent.change(within(sheet).getByLabelText('APE this month'), { target: { value: '' } });
+    fireEvent.change(within(sheet).getByLabelText('Why is it being corrected?'), { target: { value: 'Belongs to August' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
+
+    const ask = screen.getByRole('dialog', { name: /^Clear APE this month for Rina Wijaya in Sep 2026\?/ });
+    expect(ask).toHaveTextContent('The figure is emptied, as if nothing had been reported, and your reason is kept with the change.');
+    expect(patches(calls)).toEqual([]);
+    fireEvent.click(within(ask).getByRole('button', { name: 'Clear figure' }));
+    expect(await screen.findByText('Corrected APE this month for Rina Wijaya: Rp 1.500.000 → nothing reported.')).toBeInTheDocument();
+    expect(patches(calls)).toEqual([
+      { month: '2026-09', membershipId: 'mem-rina', metric: 'ape', cadence: 'monthly', value: null, revision: 3, reason: 'Belongs to August' },
+    ]);
+  });
+
+  it('P18.97-T7 AC-2 puts the sheet away on Cancel, Escape or the backdrop, sending nothing and saying nothing', async () => {
+    atWidth(375);
+    const { calls } = stubFetch({ ...everything(), 'PATCH /kpm/data-upload/cell': answer });
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    let sheet = await openSheet();
+    fireEvent.change(within(sheet).getByLabelText('APE this month'), { target: { value: '9' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    sheet = await openSheet();
+    // Opened again, it holds the month's figures, not what was typed before.
+    expect(within(sheet).getByLabelText('APE this month')).toHaveValue('1.500.000');
+    fireEvent.keyDown(sheet, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(patches(calls)).toEqual([]);
+    expect(screen.queryByText(/^Corrected /)).not.toBeInTheDocument();
+  });
+
+  it('P18.97-T7 AC-6 makes every field and button of the page a 44px target on a phone, and nothing at 768px', async () => {
+    atWidth(375);
+    stubFetch(everything());
+    renderWithSession(<DataUploadPage />, { me: ALL });
+    await cardsOf();
+    const link = await screen.findByRole('link', { name: 'Download template' });
+    const tall = [
+      screen.getByLabelText('Month'),
+      link,
+      screen.getByLabelText('+ Upload filled template').nextElementSibling!,
+    ];
+    for (const el of tall) {
+      expect(wears(el, 375).split(' ')).toContain('h-11');
+      expect(wears(el, 768).split(' ')).not.toContain('h-11');
+    }
+    // The month's lock and the history's Revert are inline buttons, 44 × 44 on a phone already (`TAP_TARGET`).
+    for (const name of ['Lock month', 'Revert']) {
+      expect(wears(screen.getAllByRole('button', { name })[0], 375).split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
+    }
   });
 });

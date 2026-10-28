@@ -2,7 +2,7 @@ import { api } from './api-client';
 import {
   dayInZone, formatNumber, formatPercent, formatRupiahCompact, OFFICE_TIME_ZONE, zoneOffsetMs,
 } from './format';
-import { formatBenchmark } from './ratio-format';
+import { formatBenchmark, formatRatioForStatus, unitFor, type RatioDisplayUnit } from './ratio-format';
 
 /**
  * **Campaigns** (`docs/02-specs/functional/campaigns.md`, P18.5-T7 to T9): the shapes the field reads answer,
@@ -257,16 +257,36 @@ const COMPARATOR: Record<Comparator, string> = { gte: '', gt: 'more than ', lte:
  * A figure in its unit: rupiah from sen (X-68's rule, invariant §9), a percentage, a ratio as the ratio card
  * writes it, or a count.
  *
- * **Compact and lossless** (ADR-0167 §1): a card's line and the dialog's rows are not a table, so *Rp 500 jt*;
- * but a requirement is a rule, and *Rp 2,5 M* for 2.450.000.000 would state a different one — so a figure that
- * compact writing would round is written in full. A percentage to one decimal, or the two a threshold was set to.
+ * **Compact and lossless** (ADR-0167 §1, ADR-0174 §3, §4): *Rp 500 jt*; but a requirement is a rule, and *Rp 2,5
+ * M* for 2.450.000.000 would state a different one — so a figure that compact writing would round is written in
+ * full. A percentage with the places a threshold was set to and no *,0* — *30%*, *75,55%* — and a figure read
+ * against it with every place it has, so *74,96% / 75%* can never read *75% / 75%*. **A ratio in `ratioUnit`**, the
+ * unit the office writes that ratio in (P18.97-T4 AC-8, ADR-0176 §8; UI-030: *"Recruitment success rate at least
+ * 0,30"* on the campaigns settings): a success rate *30%*, leads per activity *1,50*; a caller that does not know it
+ * gets the number, as before.
  */
-export function figureWords(value: number, unit: string): string {
+export function figureWords(value: number, unit: string, ratioUnit: 'percent' | 'decimal' = 'decimal'): string {
   if (unit === 'idr_minor') return formatRupiahCompact(value, { lossless: true });
-  if (unit === 'percentage') return formatPercent(value, { maxDecimals: 2 });
-  if (unit === 'ratio') return formatBenchmark(value, 'decimal');
+  if (unit === 'percentage') return formatPercent(value, { lossless: true });
+  // A rate in the office's own unit for that ratio when the caller knows it — *30%* — else as a number, *0,30*.
+  if (unit === 'ratio') return formatBenchmark(value, ratioUnit);
   if (unit === 'percentage_points') return formatBenchmark(value, 'points');
   return formatNumber(value, { maxDecimals: 2 });
+}
+
+/**
+ * **How the office writes each of its ratios, by its code** — a ratio's code is its metric's key — so a requirement on
+ * one reads as the ratio card and the settings do: *30%* for a success rate the office writes as a percentage, *1,50*
+ * for one it writes as a number (P18.97-T4 AC-8 on the settings; P18.97-T7 on the agents' cards and dialog, ADR-0174 §2,
+ * *one way of writing a percentage*). From the office's published configuration (`useTenantConfig`), whose read every
+ * shell holds; with none yet, nothing — and a ratio reads as a number, as before.
+ */
+export type RatioUnits = ReadonlyMap<string, 'percent' | 'decimal'>;
+
+export function ratioUnitsOf(
+  ratios: readonly { code: string; displayUnit?: RatioDisplayUnit | null; comparison: 'gte' | 'band' }[] | null | undefined,
+): RatioUnits {
+  return new Map((ratios ?? []).map((ratio) => [ratio.code, unitFor(ratio) === 'percent' ? 'percent' : 'decimal'] as const));
 }
 
 /**
@@ -287,10 +307,14 @@ const NOUNS: Readonly<Record<string, readonly [one: string, many: string]>> = {
 /**
  * One requirement in the card's words: ***Rp 16 jt APE***, ***3 new hires***, *more than 2 new active agents* — the
  * target compact only where that loses nothing (`figureWords`), then what it counts. Without a noun, the
- * prototype's `{label} {target}` (`reqRowHtml`, `:8031-8034`): *Selling success rate 0,15*.
+ * prototype's `{label} {target}` (`reqRowHtml`, `:8031-8034`): *Selling success rate 15%* — **a ratio in the office's
+ * unit for it** (`ratioUnits`, P18.97-T7), where it read *0,15* while the settings read *15%*.
  */
-export function requirementWords(r: Pick<CampaignRequirement, 'metricKey' | 'metricName' | 'comparator' | 'value' | 'unit'>): string {
-  const target = `${COMPARATOR[r.comparator] ?? ''}${figureWords(r.value, r.unit)}`;
+export function requirementWords(
+  r: Pick<CampaignRequirement, 'metricKey' | 'metricName' | 'comparator' | 'value' | 'unit'>,
+  ratioUnits?: RatioUnits,
+): string {
+  const target = `${COMPARATOR[r.comparator] ?? ''}${figureWords(r.value, r.unit, ratioUnits?.get(r.metricKey))}`;
   const noun = NOUNS[r.metricKey];
   if (!noun) return `${r.metricName} ${target}`;
   return `${target} ${r.value === 1 ? noun[0] : noun[1]}`;
@@ -300,8 +324,8 @@ export function requirementWords(r: Pick<CampaignRequirement, 'metricKey' | 'met
  * The card's line after *Needs:*, every requirement in its words **joined by *" + "*** (P18.95-T10 AC-3), where the
  * prototype joined them by *" | "* (`:8032`): *Rp 16 jt APE + 3 new hires*.
  */
-export const requirementsLine = (requirements: readonly CampaignRequirement[]) =>
-  requirements.map(requirementWords).join(' + ');
+export const requirementsLine = (requirements: readonly CampaignRequirement[], ratioUnits?: RatioUnits) =>
+  requirements.map((r) => requirementWords(r, ratioUnits)).join(' + ');
 
 /**
  * Whether the chase is drawn at all: the server lets the reader chase here (`can.chase`), and **the campaign has
@@ -332,16 +356,30 @@ export const rowSubline = (c: ChasedCampaign) => c.runs;
 /**
  * A requirement row's progress in the dialog (OD-157): *"{current} of {target}"* while there is a figure to
  * read, and why not where there is none — `null` where the row shows its target alone (upcoming).
+ *
+ * **A ratio in the office's unit for it** (`ratioUnit`, P18.97-T7; ADR-0174 §2): its target as typed — *30%* — and the
+ * reader's figure as a ratio beside its benchmark is written, a percentage to its tenth, a number to two places, with
+ * a place more where the rounding would reach a target it falls short of (`formatRatioForStatus`) — *28,6% of 30%*,
+ * *29,96% of 30%*, never *30,0% of 30%* unmet.
  */
-export function progressWords(row: ProgressRow | undefined): { text: string; met: boolean; figure: boolean } | null {
+export function progressWords(
+  row: ProgressRow | undefined,
+  ratioUnit?: 'percent' | 'decimal',
+): { text: string; met: boolean; figure: boolean } | null {
   if (!row) return null;
   if (row.state === 'not_uploaded') return { text: OWN_COPY.notUploaded, met: false, figure: false };
   if (row.state === 'nothing_logged') return { text: OWN_COPY.nothingLogged, met: false, figure: false };
   if (row.state === 'not_measured') return { text: OWN_COPY.notMeasured, met: false, figure: false };
   if (row.current === null) return { text: OWN_COPY.notUploaded, met: false, figure: false };
+  const met = row.state === 'met';
+  // Short of a target it must reach: the place more is written; met, or over a ceiling it must stay under, it is not.
+  const short = !met && row.current < row.target;
+  const current = row.unit === 'ratio' && ratioUnit
+    ? formatRatioForStatus(row.current, ratioUnit, row.target, short ? 'alert' : 'neutral')
+    : figureWords(row.current, row.unit);
   return {
-    text: `${figureWords(row.current, row.unit)} of ${figureWords(row.target, row.unit)}`,
-    met: row.state === 'met',
+    text: `${current} of ${figureWords(row.target, row.unit, ratioUnit)}`,
+    met,
     figure: true,
   };
 }

@@ -70,40 +70,89 @@ export interface MeetingListView {
   limits: ForumLimits;
 }
 
-export type ColumnKey = 'fy' | 'ytd' | 'thisMonthLastYear' | 'lastMonth' | 'thisMonth';
-export const COLUMN_KEYS: readonly ColumnKey[] = ['fy', 'ytd', 'thisMonthLastYear', 'lastMonth', 'thisMonth'];
+/**
+ * The six computed columns, in the client's reference slide's order (ADR-0175 §1): the *Full Year & YTD View* — *Full
+ * Year {Y−1}*, ***YTD {Y−1}***, *YTD {Y}* — then the *Monthly View*'s three months; *Monthly Target* is typed.
+ */
+export type ColumnKey = 'fy' | 'ytdLastYear' | 'ytd' | 'thisMonthLastYear' | 'lastMonth' | 'thisMonth';
+export const COLUMN_KEYS: readonly ColumnKey[] = ['fy', 'ytdLastYear', 'ytd', 'thisMonthLastYear', 'lastMonth', 'thisMonth'];
+/** *Full Year & YTD View*. */
+export const YEAR_COLUMN_KEYS: readonly ColumnKey[] = ['fy', 'ytdLastYear', 'ytd'];
+/** *Monthly View*'s computed three; *Monthly Target* closes the group. */
+export const MONTH_COLUMN_KEYS: readonly ColumnKey[] = ['thisMonthLastYear', 'lastMonth', 'thisMonth'];
 
+/** The nine rows, in the slide's order. `producing_agents` is *Annual Active Agents*: the key is the stored one. */
 export type RowKey =
-  | 'ape' | 'manpower' | 'flc' | 'producing_agents' | 'new_aa' | 'new_agent_3m'
-  | 'avg_monthly_aa' | 'case_submission' | 'average_case_size';
+  | 'ape' | 'manpower' | 'flc' | 'producing_agents' | 'new_agent_3m'
+  | 'avg_monthly_aa' | 'case_submission' | 'cases_per_producing_agent' | 'average_case_size';
 
-/** The six rows whose *Monthly Target* is typed; the other three are blocked there. */
-export type TargetRowKey = 'ape' | 'manpower' | 'flc' | 'new_aa' | 'avg_monthly_aa' | 'case_submission';
+/** The five rows whose *Monthly Target* is typed, as a rate per unit; the others take none. */
+export type TargetRowKey = 'ape' | 'manpower' | 'flc' | 'avg_monthly_aa' | 'case_submission';
 
 export type ScorecardCell =
-  /** `value` exact: minor units for `idr_minor`, a whole or fractional count, a whole percentage. */
+  /** `value` exact: minor units for `idr_minor`, a whole or fractional count, a whole percentage, a ratio. */
   | { kind: 'figure'; value: number; leavesOut: string[] /* YYYY-MM months of the period not held */ }
   /** *pending data*: no source holds the figure for its period. */
   | { kind: 'pending' }
-  /** *—*: a ratio over nothing whose months are held (*Average Case Size* over no policies). */
+  /** *—*: a ratio over nothing whose months are held (*Avg. Case Size* over no policies, *Cases/producing agents* over nobody). */
   | { kind: 'none' }
-  /** Drawn blocked, as the prototype draws it. */
-  | { kind: 'blocked' };
+  /** *Not tracked*: a row the table leaves empty in this column. */
+  | { kind: 'blocked' }
+  /** *—*: a column or a row a scorecard kept before it existed does not hold (ADR-0175 §8). */
+  | { kind: 'unrecorded' };
+
+/** The months a column names, `YYYY-MM` to `YYYY-MM`, from the meeting's month: its header's second line. */
+export interface ColumnPeriod {
+  from: string;
+  to: string;
+}
+
+/**
+ * A *Monthly Target*, typed as a rate per unit (ADR-0175 §4): the rate in the row's unit — IDR minor units for *APE*,
+ * a count for the others — and the server's **value**, `rate × # of units`; or, with no rate, a target typed as text
+ * before rates, shown as typed. Never typed: version 0.
+ */
+export interface MonthlyTarget {
+  rate: number | null;
+  value: number | null;
+  typed: string | null;
+  version: number;
+}
+
+/**
+ * What a phone's card reads beside *YTD {Y}* and *YTD {Y−1}*: the change the server computed, whole and signed, in its
+ * `unit` — `percent`, a percentage of last year's figure, or `points`, the difference in percentage points on a row
+ * whose own figure is a percentage (*3M new agent %*; P18.97-T8 F1, parity F-256).
+ */
+export type YtdChange = { kind: 'figure'; value: number; unit: 'percent' | 'points' } | { kind: 'none' };
 
 export interface ScorecardRow {
   key: RowKey;
-  unit: 'idr_minor' | 'count' | 'percentage';
+  unit: 'idr_minor' | 'count' | 'percentage' | 'ratio';
   cells: Record<ColumnKey, ScorecardCell>;
-  /** `null` where the prototype blocks the cell. A cell never typed is `{ value: '', version: 0 }`. */
-  monthlyTarget: { value: string; version: number } | null;
+  ytdChange: YtdChange;
+  /** `null` on a row the table does not track month by month. */
+  monthlyTarget: MonthlyTarget | null;
+}
+
+/** *AS OF*: a day; none while the office has no file (nothing drawn); unrecorded on a scorecard kept before it (*—*). */
+export type ScorecardAsOf = { kind: 'date'; date: string } | { kind: 'none' } | { kind: 'unrecorded' };
+
+/** A period a figure of which leaves months out: its *(\*)* note. */
+export interface PartialPeriod {
+  column: ColumnKey;
+  leavesOut: string[];
 }
 
 export interface Scorecard {
-  /** `YYYY` for `fy` and `ytd`; `YYYY-MM` for the three months. */
-  periods: Record<ColumnKey, string>;
+  periods: Record<ColumnKey, ColumnPeriod>;
+  /** `units` is *# of AB* + *# of AAB* — or, on a scorecard kept before that, the number it was kept with. */
   chips: { manpower: number; agents: number; units: number; ab: number; aab: number };
-  /** Nine, in the prototype's order. */
+  /** Nine, in the slide's order. */
   rows: ScorecardRow[];
+  asOf: ScorecardAsOf;
+  /** In column order; empty when every figure covers its whole period. */
+  partialPeriods: PartialPeriod[];
   /** `null` while live; the instant it was frozen onto the meeting otherwise. */
   frozenAt: string | null;
 }
@@ -206,8 +255,9 @@ export const removeActionItem = (meetingId: string, itemId: string, version: num
 export const reorderActionItems = (meetingId: string, itemIds: string[]) =>
   api<ActionItem[]>(`/leader-meetings/${encodeURIComponent(meetingId)}/action-items/order`, { method: 'PUT', body: { itemIds } });
 
-export const saveMonthlyTarget = (meetingId: string, row: TargetRowKey, body: { value: string; version: number }) =>
-  api<{ value: string; version: number }>(`/leader-meetings/${encodeURIComponent(meetingId)}/monthly-targets/${row}`, { method: 'PUT', body });
+/** A rate per unit, in the row's unit (IDR minor units for `ape`), or `null` to clear it; answered as the table draws it. */
+export const saveMonthlyTarget = (meetingId: string, row: TargetRowKey, body: { rate: number | null; version: number }) =>
+  api<MonthlyTarget>(`/leader-meetings/${encodeURIComponent(meetingId)}/monthly-targets/${row}`, { method: 'PUT', body });
 
 /** Each opening of *Share* makes a fresh link: only its hash is kept, so a link cannot be shown twice. */
 export const createShareLink = (meetingId: string) =>
@@ -253,9 +303,11 @@ export interface MeetingWriter {
  */
 export const FORUM_COPY = {
   title: 'Strategic Leader Forum',
+  /**
+   * The page's one subtitle. The list's own line (`:2004`, *"Biweekly strategic check-ins … updated together."*) is gone
+   * at every size (P18.97-T2 AC-1; the client's grey-text row for UI-015, ADR-0176 §11): it said this again.
+   */
   sub: 'Biweekly check-ins with your core leaders — agenda, notes, and action items',
-  listLine:
-    'Biweekly strategic check-ins with your core leaders — agenda, discussion notes, and action items, updated together.',
   filters: { all: 'All', upcoming: 'Upcoming', past: 'Past' },
   newMeeting: '+ New meeting',
   open: 'Open',
@@ -269,7 +321,8 @@ export const FORUM_COPY = {
   share: 'Share',
   savePdf: 'Save as PDF',
   save: 'Save',
-  canEdit: 'Can edit this MOM',
+  /** *Can edit this MOM* (`:2723`) in the client's words (P18.97-T2 AC-3, ADR-0176 §3): *MOM* was unexplained (UI-015). */
+  canEdit: 'Can edit these minutes',
   manageTags: 'Manage tags →',
   you: '(You)',
   tabs: { overview: 'Overview & Stats', agenda: 'Agenda', actions: 'Action Items' },
@@ -295,7 +348,8 @@ export const FORUM_COPY = {
     hasMinutes: "Something has been written in this meeting, so it can't be deleted.",
   },
   shareDialog: {
-    title: 'Share this MOM',
+    /** *Share this MOM* (`:2737`), as *Can edit these minutes* (P18.97-T2 AC-3). */
+    title: 'Share these minutes',
     copy: 'Copy link',
     /** The copy controls' one wording since 2026-10-26 (P18.95-T1 AC-6, ADR-0167 §5); `:2764` said *Link copied to clipboard*. */
     copied: CONFIRMED.linkCopied,

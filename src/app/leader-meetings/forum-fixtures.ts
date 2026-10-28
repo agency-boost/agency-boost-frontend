@@ -130,30 +130,38 @@ export const listView = (overrides: Partial<MeetingListView> = {}): MeetingListV
   ...overrides,
 });
 
-const figure = (value: number): ScorecardCell => ({ kind: 'figure', value, leavesOut: [] });
+const figure = (value: number, leavesOut: string[] = []): ScorecardCell => ({ kind: 'figure', value, leavesOut });
 const cells = (make: (column: ColumnKey) => ScorecardCell): Record<ColumnKey, ScorecardCell> => ({
-  fy: make('fy'), ytd: make('ytd'), thisMonthLastYear: make('thisMonthLastYear'), lastMonth: make('lastMonth'), thisMonth: make('thisMonth'),
+  fy: make('fy'), ytdLastYear: make('ytdLastYear'), ytd: make('ytd'),
+  thisMonthLastYear: make('thisMonthLastYear'), lastMonth: make('lastMonth'), thisMonth: make('thisMonth'),
 });
 const row = (
   key: RowKey, unit: ScorecardRow['unit'], make: (column: ColumnKey) => ScorecardCell,
-  monthlyTarget: ScorecardRow['monthlyTarget'],
-): ScorecardRow => ({ key, unit, cells: cells(make), monthlyTarget });
-const left = (column: ColumnKey) => column === 'fy' || column === 'ytd';
+  monthlyTarget: ScorecardRow['monthlyTarget'], ytdChange: ScorecardRow['ytdChange'] = { kind: 'none' },
+): ScorecardRow => ({ key, unit, cells: cells(make), ytdChange, monthlyTarget });
+const left = (column: ColumnKey) => column === 'fy' || column === 'ytdLastYear' || column === 'ytd';
+const target = (rate: number | null, value: number | null, version: number) => ({ rate, value, typed: null, version });
 
+/** #14's scorecard, the reference slide's table: 9 units — 5 ABs and 4 AABs — and its targets as rates. */
 export const scorecard = (overrides: Partial<Scorecard> = {}): Scorecard => ({
-  periods: { fy: '2025', ytd: '2026', thisMonthLastYear: '2025-10', lastMonth: '2026-09', thisMonth: '2026-10' },
-  chips: { manpower: 187, agents: 155, units: 8, ab: 8, aab: 24 },
+  periods: {
+    fy: { from: '2025-01', to: '2025-12' }, ytdLastYear: { from: '2025-01', to: '2025-10' }, ytd: { from: '2026-01', to: '2026-10' },
+    thisMonthLastYear: { from: '2025-10', to: '2025-10' }, lastMonth: { from: '2026-09', to: '2026-09' }, thisMonth: { from: '2026-10', to: '2026-10' },
+  },
+  chips: { manpower: 28, agents: 19, units: 9, ab: 5, aab: 4 },
   rows: [
-    row('ape', 'idr_minor', () => figure(84_000_000_000), { value: 'TBD', version: 1 }),
-    row('manpower', 'count', () => figure(187), { value: '', version: 0 }),
-    row('flc', 'count', () => ({ kind: 'pending' }), { value: '8 (1 @ unit)', version: 1 }),
-    row('producing_agents', 'count', (c) => (left(c) ? figure(71) : { kind: 'blocked' }), null),
-    row('new_aa', 'count', () => figure(3), { value: 'TBD', version: 1 }),
-    row('new_agent_3m', 'percentage', (c) => (left(c) ? figure(24) : { kind: 'blocked' }), null),
-    row('avg_monthly_aa', 'count', () => figure(11), { value: '22 (3 @ unit)', version: 1 }),
-    row('case_submission', 'count', () => figure(22), { value: 'TBD', version: 1 }),
+    row('ape', 'idr_minor', (c) => (c === 'thisMonth' ? { kind: 'pending' } : figure(c === 'ytd' ? 580_000_000_000 : 490_000_000_000)), target(null, null, 1), { kind: 'figure', value: 18, unit: 'percent' }),
+    row('manpower', 'count', () => figure(28), target(null, null, 0), { kind: 'figure', value: 4, unit: 'percent' }),
+    row('flc', 'count', () => ({ kind: 'pending' }), target(1, 9, 1)),
+    row('producing_agents', 'count', (c) => (left(c) ? figure(23) : { kind: 'blocked' }), null, { kind: 'figure', value: 10, unit: 'percent' }),
+    row('new_agent_3m', 'percentage', (c) => (left(c) ? figure(50) : { kind: 'blocked' }), null, { kind: 'figure', value: 0, unit: 'points' }),
+    row('avg_monthly_aa', 'count', () => figure(19), target(3, 27, 1), { kind: 'figure', value: 6, unit: 'percent' }),
+    row('case_submission', 'count', (c) => (c === 'thisMonth' ? { kind: 'pending' } : figure(c === 'ytd' ? 330 : 300)), target(null, null, 1), { kind: 'figure', value: 10, unit: 'percent' }),
+    row('cases_per_producing_agent', 'ratio', (c) => (left(c) ? figure(14.3) : { kind: 'blocked' }), null, { kind: 'figure', value: 0, unit: 'percent' }),
     row('average_case_size', 'idr_minor', (c) => (left(c) ? { kind: 'none' } : { kind: 'blocked' }), null),
   ],
+  asOf: { kind: 'date', date: '2026-10-26' },
+  partialPeriods: [],
   frozenAt: null,
   ...overrides,
 });

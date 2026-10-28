@@ -29,14 +29,25 @@ const SOURCE: Record<string, string> = {
 };
 
 /**
- * A figure in the table's own format, or *nothing reported*: money in full, as a table's is (ADR-0167 §1),
- * a persistency to at least one decimal **and every decimal it was filed with** — a figure checked against the
- * carrier's file is never rounded on its way to the reader — and a count as it is.
+ * `corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”` — whose a figure is, as the table's ✎ says
+ * it and, on a phone, the edit sheet's field (P18.97-T7 AC-2).
+ */
+export function correctedNote(cell: MetricCell): string {
+  const c = cell.correction;
+  const verb = cell.value === null ? 'emptied by hand' : 'corrected by hand';
+  if (!c) return verb;
+  return `${verb}${c.by ? ` by ${c.by}` : ''}${c.at ? ` on ${formatDayLong(c.at)}` : ''}${c.reason ? ` — “${c.reason}”` : ''}`;
+}
+
+/**
+ * A figure in the table's own format, or *nothing reported*: money in full, as Data upload's cells write it
+ * (ADR-0174 §4), a persistency with **every decimal it was filed with** and no *,0* (§3) — a figure checked against
+ * the carrier's file is never rounded on its way to the reader — and a count as it is.
  */
 export function showFigure(metric: ProductionMetric, value: number | null): string {
   if (value === null) return 'nothing reported';
   if (MONEY_METRICS.includes(metric)) return formatRupiah(value);
-  if (metric === 'persistency') return formatPercent(value, { maxDecimals: 4 });
+  if (metric === 'persistency') return formatPercent(value, { lossless: true });
   return formatNumber(value, { maxDecimals: 4 });
 }
 

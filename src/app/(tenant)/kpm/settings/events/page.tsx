@@ -16,6 +16,7 @@ import { suggestCode } from '@/lib/config-code';
 import { useCan } from '@/lib/session';
 import { ADMIN_COPY, officeInstant, officeWallClock, OWNER_PROTOTYPE_COPY } from '@/lib/events-admin';
 import { formatCalendarDay } from '@/lib/format';
+import { byPhaseAndDate } from '@/lib/settings-order';
 import { useHashTab } from '@/lib/use-hash-tab';
 import {
   archiveEvent, archiveEventType, createEvent, createEventType, listEventTypes, listEvents,
@@ -182,7 +183,8 @@ export default function EventsSettingsPage() {
 
   function eventsTab() {
     if (events === null || types === null) return <SkeletonCards count={3} />;
-    const shown = events.filter((e) => showArchived || e.status === 'active');
+    // Upcoming, then happening now, then past — each by date (P18.97-T4 AC-8, ADR-0176 §8; UI-030).
+    const shown = byPhaseAndDate(events.filter((e) => showArchived || e.status === 'active'));
     const active = types.filter((t) => t.status === 'active');
 
     return (

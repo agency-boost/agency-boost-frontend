@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { PublishBar } from '@/components/publish-bar';
 import { SettingsScreen } from '@/components/settings-screen';
+import { BelowDesktopTip } from '@/components/ui/below-desktop-tip';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { DragHandle } from '@/components/ui/drag-handle';
 import {
@@ -10,7 +11,9 @@ import {
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
+import { SHOWN_FROM_DESKTOP } from '@/components/ui/tablet';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import { useHashTab } from '@/lib/use-hash-tab';
 import { suggestCode } from '@/lib/config-code';
 import { useCan } from '@/lib/session';
@@ -54,6 +57,13 @@ const TABS = [
   { label: 'Ladder', href: '#ladder' },
   { label: 'Skills', href: '#skills' },
 ];
+
+/**
+ * **The ladder's grey sentence, in the client's words** (P18.97-T4 AC-6, ADR-0176 §6; the grey-text table of 2026-10-27,
+ * UI-027 — 27 words on how a stage is decided, *ⓘ · ⓘ · Show*): shown from 1024px, behind an ⓘ beside *The ladder*
+ * below it.
+ */
+const LADDER_NOTE = 'A person’s stage = highest stage with all milestones ticked.';
 
 export default function CapabilityMappingPage() {
   const canWrite = useCan('tenant_config:write');
@@ -291,13 +301,12 @@ export default function CapabilityMappingPage() {
         <>
         <Card className="p-0">
           <div className="border-b border-hairline px-4 py-3 sm:px-5">
-            <h2 className="font-display text-lg font-bold text-navy">The ladder</h2>
+            <div className="flex items-center gap-1">
+              <h2 className="font-display text-lg font-bold text-navy">The ladder</h2>
+              {catalog.stages.length > 0 && <BelowDesktopTip text={LADDER_NOTE} />}
+            </div>
             {catalog.stages.length > 0 && (
-              <p className="mt-1 text-sm text-muted">
-                Four stages. Somebody is at the highest stage whose milestones are all ticked — so
-                reordering these changes where they sit on the page and <strong>nobody&rsquo;s
-                stage</strong>.
-              </p>
+              <p className={cn('mt-1 text-sm text-muted', SHOWN_FROM_DESKTOP)}>{LADDER_NOTE}</p>
             )}
           </div>
           {/*

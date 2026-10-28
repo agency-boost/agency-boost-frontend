@@ -517,3 +517,38 @@ describe('the office’s Events screen in a browser outside Jakarta', () => {
     expect(sent.endsAt).toBe('2026-10-01T07:30:00.000Z');
   });
 });
+
+/**
+ * **The events settings in order** (P18.97-T4 AC-8, ADR-0176 §8; the client's KPM Owner review of 2026-10-27, UI-030:
+ * *"past events first, upcoming at the bottom"*): upcoming soonest first, then happening now, then past latest first —
+ * the order the agents' Events list reads its sections in.
+ */
+describe('P18.97-T4 AC-8 the events settings: upcoming, then running, then past', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P18.97-T4 AC-8 lists upcoming soonest first, then happening now, then past latest first', async () => {
+    render([type()], [
+      event({ id: 'e1', code: 'BOOTCAMP', title: 'New Agent Bootcamp', phase: 'past', startsAt: '2026-09-08T02:00:00.000Z' }),
+      event({ id: 'e2', code: 'AWARDS', title: 'Awards night', phase: 'past', startsAt: '2026-10-10T11:00:00.000Z' }),
+      event({ id: 'e3', code: 'TOWNHALL', title: 'Town Hall', phase: 'running', startsAt: '2026-10-28T02:00:00.000Z' }),
+      event({ id: 'e4', code: 'KICKOFF', title: 'Kickoff 2027', phase: 'upcoming', startsAt: '2027-01-08T02:00:00.000Z' }),
+      event({ id: 'e5', code: 'LAUNCH', title: 'Product launch', phase: 'upcoming', startsAt: '2026-11-12T02:00:00.000Z' }),
+    ]);
+    await screen.findByText('Town Hall');
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Product launch', 'Kickoff 2027', 'Town Hall', 'Awards night', 'New Agent Bootcamp',
+    ]);
+  });
+
+  it('P18.97-T4 AC-8 keeps an archived event in its own phase’s place when archived ones are shown', async () => {
+    render([type()], [
+      event({ id: 'e1', code: 'OLD', title: 'Archived launch', phase: 'past', status: 'archived', startsAt: '2026-10-20T02:00:00.000Z' }),
+      event({ id: 'e2', code: 'NEXT', title: 'Next training', phase: 'upcoming', startsAt: '2026-11-01T02:00:00.000Z' }),
+      event({ id: 'e3', code: 'PAST', title: 'Older training', phase: 'past', startsAt: '2026-08-01T02:00:00.000Z' }),
+    ]);
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Show archived' }));
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'Next training', 'Archived launch', 'Older training',
+    ]);
+  });
+});

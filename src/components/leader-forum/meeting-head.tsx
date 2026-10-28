@@ -19,7 +19,8 @@ const OUTLINED = 'border-[1.5px] border-navy bg-transparent text-navy hover:bg-n
  * **A meeting's head** (`:2709-2733`; *The head*): the title; *"{date} · Upcoming"* — the date a button for
  * whoever may move or delete the meeting, opening *Meeting details* (ADR-0130 §4); the cadence note; *Share*,
  * *Save as PDF* and *Save* for whoever may do each, *Save* the amber primary with navy text (an action,
- * ADR-0137); then *Can edit this MOM* and its chips, and *Manage tags →* for whoever may tag.
+ * ADR-0137); then *Can edit these minutes* (P18.97-T2 AC-3; the prototype's *Can edit this MOM*) and its chips, and
+ * *Manage tags →* for whoever may tag.
  *
  * In print the head stays — the title, the date and who can edit, as the prototype prints them — and its
  * controls, the cadence note and *Manage tags →* go (`:756-765`).
@@ -91,7 +92,7 @@ export function MeetingHead({
 }
 
 /**
- * ***Can edit this MOM*** (`:2722-2726`; D-coeditors): the Owner first, on the amber avatar (`:659`), then the
+ * ***Can edit these minutes*** (`:2722-2726`, *Can edit this MOM* there; D-coeditors): the Owner first, on the amber avatar (`:659`), then the
  * Admins, then the Core Leaders, each once, *"{name} · {rung}"* and *"(You)"* after the reader's own name.
  * Live while the meeting is upcoming; once it is over, the list written onto it then (F-186).
  */

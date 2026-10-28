@@ -2,19 +2,24 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { SettingsScreen } from '@/components/settings-screen';
-import { DragHandle } from '@/components/ui/drag-handle';
+import { BelowDesktopTip } from '@/components/ui/below-desktop-tip';
+import { DRAG_HANDLE_CLASS, DragHandle } from '@/components/ui/drag-handle';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   Button, Card, CodeField, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
+import { CONTROL_PHONE, TAP_TARGET } from '@/components/ui/phone';
+import { ReorderArrows } from '@/components/ui/reorder-arrows';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { SHOWN_FROM_DESKTOP } from '@/components/ui/tablet';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { OWN_COPY, PROTOTYPE_COPY } from '@/lib/activation';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { suggestCode } from '@/lib/config-code';
 import { useCan } from '@/lib/session';
+import { usePhone } from '@/lib/use-phone';
 import {
   listTraining, publishActivationChecklist, readActivationChecklist, saveActivationDraft,
   type ActivationChecklist, type ActivationDraft, type ActivationLink, type ActivationVersion,
@@ -122,6 +127,18 @@ const move = <T,>(rows: T[], from: number, to: number): T[] => {
  * the next version, which is given to hires who start after it. Somebody halfway through their
  * ninety days keeps the checklist they started on.
  */
+/**
+ * **The checklist's two grey sentences, in the client's words, each with its verdict per size** (P18.97-T4 AC-6,
+ * ADR-0176 §6; the grey-text table of 2026-10-27, UI-027). From 1024px both are shown; at 768–1023px both are behind
+ * an ⓘ beside their subject; below 768px the first is behind its ⓘ and the second is removed.
+ */
+const GREY = {
+  /** Was 32 words: who a published version reaches, and why one is never edited. *ⓘ · ⓘ · Show.* */
+  newVersions: 'New versions apply to new hires only.',
+  /** Was the prototype's 27-word toolbar sentence, the AUTO badge's explanation. *Remove · ⓘ · Show.* */
+  linkedItems: 'Linked items complete automatically.',
+} as const;
+
 export default function ActivationChecklistPage() {
   const canWrite = useCan('tenant_config:write');
   // The screen's own gate (P18.5-T3): a field member meets the refusal, and nothing is asked for them.
@@ -145,6 +162,12 @@ export default function ActivationChecklistPage() {
    */
   const [dragging, setDragging] = useState<{ aspect: string; item?: string } | null>(null);
   const [over, setOver] = useState<string | null>(null);
+  /*
+   * **On a phone, ↑ and ↓ beside each handle** (P18.97-T7 AC-6, ADR-0178 §5; UI-040): a drag never starts on a touch
+   * screen and its handle's keys need a keyboard, so the list could not be reordered there at all. They move a row
+   * through the same `move` the handle's keys do; and below 768px every control here is a 44 × 44px target.
+   */
+  const phone = usePhone();
 
   const load = useCallback(async () => {
     try {
@@ -260,8 +283,19 @@ export default function ActivationChecklistPage() {
             <DragHandle
               label={aspect.label}
               disabled={busy}
+              className={cn(DRAG_HANDLE_CLASS, TAP_TARGET)}
               onPick={() => setDragging({ aspect: aspect.code })}
               onDrop={() => { setDragging(null); setOver(null); }}
+              onMove={(by) => change({ aspects: move(draft!.aspects, at, at + by) })}
+            />
+          )}
+          {/* Not while its name is being edited: the field takes the line, and a name is not an order. */}
+          {canWrite && phone && editing !== `aspect-${aspect.code}` && (
+            <ReorderArrows
+              label={aspect.label}
+              index={at}
+              count={draft!.aspects.length}
+              disabled={busy}
               onMove={(by) => change({ aspects: move(draft!.aspects, at, at + by) })}
             />
           )}
@@ -273,6 +307,7 @@ export default function ActivationChecklistPage() {
                 id={`code-aspect-${aspect.code}`}
                 value={aspect.code}
                 reason="Every hire's progress on this aspect points at it."
+                inputClassName={CONTROL_PHONE}
               />
               <Field label="Name" htmlFor={`aspect-name-${aspect.code}`} className="min-w-60 flex-1">
                 <TextInput
@@ -280,11 +315,13 @@ export default function ActivationChecklistPage() {
                   value={editLabel}
                   disabled={busy}
                   onChange={(e) => setEditLabel(e.target.value)}
+                  className={CONTROL_PHONE}
                 />
               </Field>
               <FieldRow.Actions>
                 <Button
                   disabled={busy || !editLabel.trim()}
+                  className={CONTROL_PHONE}
                   onClick={() => {
                     patchAspect(aspect.code, { label: editLabel.trim() });
                     setEditing(null);
@@ -292,7 +329,7 @@ export default function ActivationChecklistPage() {
                 >
                   Save
                 </Button>
-                <Button variant="secondary" disabled={busy} onClick={() => setEditing(null)}>
+                <Button variant="secondary" disabled={busy} className={CONTROL_PHONE} onClick={() => setEditing(null)}>
                   Cancel
                 </Button>
               </FieldRow.Actions>
@@ -317,6 +354,7 @@ export default function ActivationChecklistPage() {
                 </Button>
                 <Button
                   variant="secondary"
+                  className={CONTROL_PHONE}
                   onClick={() => {
                     setAddingAspect(false);
                     setAddingTo(aspect.code);
@@ -374,9 +412,20 @@ export default function ActivationChecklistPage() {
                   <DragHandle
                     label={item.label}
                     disabled={busy}
-                    className="cursor-grab select-none text-md text-muted disabled:cursor-not-allowed"
+                    className={cn(DRAG_HANDLE_CLASS, TAP_TARGET)}
                     onPick={() => setDragging({ aspect: aspect.code, item: item.code })}
                     onDrop={() => { setDragging(null); setOver(null); }}
+                    onMove={(by) => patchAspect(aspect.code, {
+                      items: move(aspect.items, index, index + by),
+                    })}
+                  />
+                )}
+                {canWrite && phone && editing !== item.code && (
+                  <ReorderArrows
+                    label={item.label}
+                    index={index}
+                    count={aspect.items.length}
+                    disabled={busy}
                     onMove={(by) => patchAspect(aspect.code, {
                       items: move(aspect.items, index, index + by),
                     })}
@@ -390,6 +439,7 @@ export default function ActivationChecklistPage() {
                         id={`code-item-code-${item.code}`}
                         value={item.code}
                         reason="Every hire's progress on this item points at it."
+                        inputClassName={CONTROL_PHONE}
                       />
                       <FieldRow>
                         <Field label="Item" htmlFor={`label-${item.code}`} className="min-w-60 flex-1">
@@ -397,11 +447,13 @@ export default function ActivationChecklistPage() {
                             id={`label-${item.code}`}
                             value={editLabel}
                             onChange={(e) => setEditLabel(e.target.value)}
+                            className={CONTROL_PHONE}
                           />
                         </Field>
                         <FieldRow.Actions>
                           <Button
                             disabled={!editLabel.trim()}
+                            className={CONTROL_PHONE}
                             onClick={() => {
                               patchItem(aspect.code, item.code, { label: editLabel.trim() });
                               setEditing(null);
@@ -409,7 +461,7 @@ export default function ActivationChecklistPage() {
                           >
                             Save
                           </Button>
-                          <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                          <Button variant="secondary" className={CONTROL_PHONE} onClick={() => setEditing(null)}>Cancel</Button>
                         </FieldRow.Actions>
                       </FieldRow>
                     </div>
@@ -435,7 +487,7 @@ export default function ActivationChecklistPage() {
                       {data ? (
                         /* The same select, holding the one thing it completes from and offering nothing else: the
                            Owner reads it as data-backed, where *No link (manual)* said a leader ticks it (G2). */
-                        <Select id={`link-${item.code}`} value={data.kind} disabled onChange={() => undefined}>
+                        <Select id={`link-${item.code}`} value={data.kind} disabled onChange={() => undefined} className={CONTROL_PHONE}>
                           <option value={data.kind}>{OWN_COPY.fromData(data.label)}</option>
                         </Select>
                       ) : (
@@ -443,6 +495,7 @@ export default function ActivationChecklistPage() {
                           id={`link-${item.code}`}
                           value={item.autoLink ?? ''}
                           disabled={busy}
+                          className={CONTROL_PHONE}
                           onChange={(e) => patchItem(aspect.code, item.code, {
                             autoLink: e.target.value === '' ? null : e.target.value,
                           })}
@@ -491,6 +544,7 @@ export default function ActivationChecklistPage() {
             <Field label="Item" htmlFor="new-item-label" className="min-w-60 flex-1">
               <TextInput
                 id="new-item-label"
+                className={CONTROL_PHONE}
                 value={entry.label}
                 onChange={(e) => setEntry((d) => ({
                   ...d, label: e.target.value, code: d.codeTouched ? d.code : suggestCode(e.target.value),
@@ -505,6 +559,7 @@ export default function ActivationChecklistPage() {
             >
               <TextInput
                 id="new-item-code"
+                className={CONTROL_PHONE}
                 value={entry.code}
                 onChange={(e) => setEntry((d) => ({
                   ...d, code: e.target.value.toUpperCase(), codeTouched: e.target.value !== '',
@@ -514,6 +569,7 @@ export default function ActivationChecklistPage() {
             <FieldRow.Actions>
               <Button
                 disabled={!entry.label.trim() || !entry.code.trim()}
+                className={CONTROL_PHONE}
                 onClick={() => {
                   patchAspect(aspect.code, {
                     items: [...aspect.items, {
@@ -525,7 +581,7 @@ export default function ActivationChecklistPage() {
               >
                 Add
               </Button>
-              <Button variant="secondary" onClick={() => setAddingTo(null)}>Cancel</Button>
+              <Button variant="secondary" className={CONTROL_PHONE} onClick={() => setAddingTo(null)}>Cancel</Button>
             </FieldRow.Actions>
           </FieldRow>
         )}
@@ -542,13 +598,18 @@ export default function ActivationChecklistPage() {
       permission="activation_settings:read"
       error={error}
       toolbar={{
-        /* The prototype's own sentence, which is the whole explanation of the AUTO badge. */
-        hint: 'Applies to every new hire’s 90-day activation. Items linked to a feature or '
-          + 'training module auto-complete when the agent does that action — no manual check-off needed.',
+        /* The prototype's own sentence, the whole explanation of the AUTO badge, in the client's words: shown from
+           1024px, an ⓘ in its place at 768–1023px, and nothing on a phone — each AUTO badge says what it waits for. */
+        hint: (
+          <>
+            <span className={SHOWN_FROM_DESKTOP}>{GREY.linkedItems}</span>
+            <BelowDesktopTip text={GREY.linkedItems} onPhone="remove" />
+          </>
+        ),
         actions: (
           <>
             {canWrite && draft && !addingAspect && (
-              <Button onClick={() => {
+              <Button className={CONTROL_PHONE} onClick={() => {
                 setAddingTo(null);
                 setAddingAspect(true);
                 setEntry({ label: '', code: '', codeTouched: false, first: '' });
@@ -595,12 +656,10 @@ export default function ActivationChecklistPage() {
                   publish version 1.
                 </>
               )}
+              {/* Below 1024px the sentence under this one is its ⓘ, beside the version it is about (P18.97-T4 AC-6). */}
+              <BelowDesktopTip text={GREY.newVersions} className="ml-1" />
             </p>
-            <p className="mt-2 text-md text-muted">
-              Publishing gives the new version to hires who start <strong>after</strong> it. Anybody
-              part-way through their ninety days keeps the checklist they started on, which is why a
-              published version is never edited.
-            </p>
+            <p className={cn('mt-2 text-md text-muted', SHOWN_FROM_DESKTOP)}>{GREY.newVersions}</p>
             {/* The one setting this screen shows and does not own. It used to end "— change it in
                 Branch info", linking there; Branch info has no window field and no screen edits
                 the window, so the sentence states the fact and points nowhere (X-45). */}
@@ -613,6 +672,7 @@ export default function ActivationChecklistPage() {
                 {/* The starting point is savable as it stands: saving it is what makes the office
                     have a checklist at all. */}
                 <Button
+                  className={CONTROL_PHONE}
                   disabled={busy || draft.aspects.length === 0
                     || (!dirty && (hasDraft || server.published !== null))}
                   onClick={() => void run(() => saveActivationDraft(draft))}
@@ -621,6 +681,7 @@ export default function ActivationChecklistPage() {
                 </Button>
                 <Button
                   variant="secondary"
+                  className={CONTROL_PHONE}
                   disabled={busy || dirty || !hasDraft}
                   title={dirty ? 'Save the draft first.' : undefined}
                   onClick={() => void run(publishActivationChecklist)}
@@ -630,6 +691,7 @@ export default function ActivationChecklistPage() {
                 {dirty && (
                   <Button
                     variant="secondary"
+                    className={CONTROL_PHONE}
                     disabled={busy}
                     onClick={() => {
                       const current = server.draft ?? server.published;
@@ -658,6 +720,7 @@ export default function ActivationChecklistPage() {
                 <Field label="Aspect" htmlFor="new-aspect-label" className="min-w-60 flex-1">
                   <TextInput
                     id="new-aspect-label"
+                    className={CONTROL_PHONE}
                     value={entry.label}
                     onChange={(e) => setEntry((d) => ({
                       ...d,
@@ -674,6 +737,7 @@ export default function ActivationChecklistPage() {
                 >
                   <TextInput
                     id="new-aspect-code"
+                    className={CONTROL_PHONE}
                     value={entry.code}
                     onChange={(e) => setEntry((d) => ({
                       ...d, code: e.target.value.toUpperCase(), codeTouched: e.target.value !== '',
@@ -683,6 +747,7 @@ export default function ActivationChecklistPage() {
                 <Field label="Its first item" htmlFor="new-aspect-item" className="min-w-60 flex-1">
                   <TextInput
                     id="new-aspect-item"
+                    className={CONTROL_PHONE}
                     value={entry.first}
                     onChange={(e) => setEntry((d) => ({ ...d, first: e.target.value }))}
                   />
@@ -691,6 +756,7 @@ export default function ActivationChecklistPage() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button
                   disabled={!entry.label.trim() || !entry.code.trim() || !entry.first.trim()}
+                  className={CONTROL_PHONE}
                   onClick={() => {
                     change({
                       aspects: [...draft.aspects, {
@@ -708,7 +774,7 @@ export default function ActivationChecklistPage() {
                 >
                   Add the aspect
                 </Button>
-                <Button variant="secondary" onClick={() => setAddingAspect(false)}>Cancel</Button>
+                <Button variant="secondary" className={CONTROL_PHONE} onClick={() => setAddingAspect(false)}>Cancel</Button>
               </div>
             </Card>
           )}

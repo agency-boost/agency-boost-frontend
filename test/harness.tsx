@@ -1,12 +1,100 @@
-import { render, type RenderResult } from '@testing-library/react';
+import { act, render, type RenderResult } from '@testing-library/react';
+import { createHash } from 'node:crypto';
 import { Suspense } from 'react';
 import { vi } from 'vitest';
 import { SessionContext, type Me, type SessionValue } from '@/lib/session';
 
 /**
- * Test doubles for the two things every screen depends on: who is signed in, and what
- * the API answered.
+ * Test doubles for the things every screen depends on: who is signed in, what the API answered, and — for a
+ * screen that changes by size — how wide the screen is.
  */
+
+/**
+ * Whether a media query holds at a width, read the way a browser reads the ones this app asks:
+ * `(min-width: Npx)` and `(max-width: Npx)` joined by `and`, a comma list of them, and Tailwind's
+ * `not all and (min-width: Npx)`, which is what a `max-lg:` class compiles to. Anything else — a pointer, a
+ * colour scheme — does not hold, as the phone-only stubs before this answered it.
+ */
+export function matchesAt(query: string, px: number): boolean {
+  return query.split(',').some((part) => {
+    let rest = part.trim();
+    const negated = /^not\s+all\s+and\s+/.exec(rest);
+    if (negated) rest = rest.slice(negated[0].length);
+    const features = rest.split(/\s+and\s+/);
+    const read = features.map((feature) => /^\((min|max)-width:\s*([\d.]+)px\)$/.exec(feature.trim()));
+    if (read.some((m) => m === null)) return false;
+    const holds = read.every((m) => (m![1] === 'min' ? px >= Number(m![2]) : px <= Number(m![2])));
+    return negated ? !holds : holds;
+  });
+}
+
+/**
+ * **A screen of a given width, as far as a component can ask** — `matchMedia`, which jsdom does not have —
+ * answering every query by `matchesAt`, so the three ranges of `useMediaQuery` (`lib/use-media-query.ts`) are each
+ * the width's: 767 is a phone, 768 and 1023 a tablet, 1024 a desktop (P18.97-T6 AC-2). `resize` moves the width
+ * afterwards and tells whoever is listening, as a tablet turned on its side does.
+ *
+ * A spec about the phone alone may still stub `matches: query === PHONE_QUERY`; a spec about a tablet must use
+ * this, since a phone-only stub reads every tablet query as false and draws the desktop at 768.
+ */
+export function atWidth(px: number) {
+  let width = px;
+  const listeners = new Set<() => void>();
+  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    media: query,
+    get matches() { return matchesAt(query, width); },
+    addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+    removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+  })));
+  return {
+    resize(next: number) {
+      width = next;
+      act(() => listeners.forEach((fn) => fn()));
+    },
+  };
+}
+
+/** Tailwind's screens, as `tailwind.config.ts` leaves them: its defaults. */
+const SCREENS: Record<string, number> = { sm: 640, md: 768, lg: 1024, xl: 1280, '2xl': 1536 };
+
+/**
+ * **What an element wears at a width**: its classes whose screen variants hold there, each with those variants
+ * taken off — `max-lg:flex-nowrap` is `flex-nowrap` at 1023 and nothing at 1024, `md:w-sidebar` is `w-sidebar` from
+ * 768. jsdom applies no stylesheet, so this is how a spec reads a size that CSS decides; the order is the class
+ * attribute's, and the stylesheet still decides between two that conflict. A state variant (`focus-visible:`) stays.
+ */
+export function wears(el: Element, px: number): string {
+  return (el.getAttribute('class') ?? '').split(/\s+/).filter(Boolean).flatMap((token) => {
+    const variants: string[] = [];
+    let rest = token;
+    for (let m = /^([a-z0-9-]+):/.exec(rest); m; m = /^([a-z0-9-]+):/.exec(rest)) {
+      variants.push(m[1]);
+      rest = rest.slice(m[0].length);
+    }
+    const screens = variants.filter((v) => v.replace(/^max-/, '') in SCREENS);
+    const holds = screens.every((v) => (v.startsWith('max-') ? px < SCREENS[v.slice(4)] : px >= SCREENS[v]));
+    return holds ? [[...variants.filter((v) => !screens.includes(v)), rest].join(':')] : [];
+  }).join(' ');
+}
+
+/**
+ * **An element as it is printed at a width** (P18.97-T7): every element's classes those that hold there (`wears`), and
+ * React's generated ids made one, so a screen's markup at 768px or 1280px can be pinned to a digest taken before a
+ * phone-only change and compared after it — a `max-md:` class added for a phone wears nothing from 768px, and a
+ * component that renders something else on a phone renders what it did.
+ */
+export function drawnAt(el: Element, px: number): string {
+  const copy = el.cloneNode(true) as Element;
+  for (const node of [copy, ...Array.from(copy.querySelectorAll('*'))]) {
+    if (node.hasAttribute('class')) node.setAttribute('class', wears(node, px));
+  }
+  return copy.outerHTML.replace(/_r_[0-9a-z]+_/g, '_id_');
+}
+
+/** `drawnAt`'s markup as a SHA-256 digest, the form a spec records it in. */
+export function digestAt(el: Element, px: number): string {
+  return createHash('sha256').update(drawnAt(el, px)).digest('hex');
+}
 
 export function makeMe(overrides: Partial<Me> = {}): Me {
   return {

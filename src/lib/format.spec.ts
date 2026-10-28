@@ -6,7 +6,7 @@ import {
   formatDayLong, formatHour, formatMonth, formatMonthName, formatMonthSpan, formatNoticeFull, formatNoticeShort, formatNumber,
   formatOfficeDay, formatOfficeMonth, formatOfficeTime, formatPercent, formatRupiah, formatRupiahCompact, formatRupiahCompactPair, formatShortDay, formatTimeSpan, formatTripWhen,
   formatWeekday, formatWeekdayDay, formatWeekRange, formatWhen, MINOR_UNITS_PER_MAJOR, monthInZone, OFFICE_TIME_ZONE, parseDecimal,
-  toMajor, toMinor,
+  PERCENT_LOSSLESS_MAX_DECIMALS, percentOf, RUPIAH_PER_UNIT, toMajor, toMinor,
 } from './format';
 
 describe('formatDay', () => {
@@ -290,9 +290,14 @@ describe('formatRupiah, in full (P18.95-T1 AC-2)', () => {
     expect(toMajor(150_000)).toBe(1_500);
     expect(toMinor(1_500)).toBe(150_000);
   });
+
+  it('P18.97-T1 AC-15 holds each compact unit’s size once, by its mark — what the forum’s header units read (ADR-0174 §4, §5)', () => {
+    expect(RUPIAH_PER_UNIT).toEqual({ M: 1_000_000_000, jt: 1_000_000, rb: 1_000 });
+    for (const [mark, size] of Object.entries(RUPIAH_PER_UNIT)) expect(formatRupiahCompact(rp(size))).toBe(`Rp 1 ${mark}`);
+  });
 });
 
-/** ADR-0167 §1, AC-2: the compact form, at each threshold and edge (`metrics-and-definitions.md`, *Compact money*). */
+/** ADR-0167 §1, AC-2: the compact form, at each threshold and edge (`metrics-and-definitions.md` §B.25). */
 describe('formatRupiahCompact (P18.95-T1 AC-2)', () => {
   it.each([
     [0, 'Rp 0'],
@@ -341,8 +346,50 @@ describe('formatRupiahCompact (P18.95-T1 AC-2)', () => {
   });
 });
 
-/** ADR-0167 §1, AC-3: numbers and percentages in id-ID. */
-describe('formatNumber and formatPercent (P18.95-T1 AC-3)', () => {
+/**
+ * ADR-0174 §4 (OD-227), P18.97-T3 AC-3: **money in Indonesian units, compact wherever it is drawn** — a table too —
+ * and in full only where precision matters. Each unit's boundary, from both sides.
+ */
+describe('money in miliar, juta and ribu (P18.97-T3 AC-3)', () => {
+  it.each([
+    [999, 'Rp 999'],
+    [1_000, 'Rp 1 rb'],
+    [999_949, 'Rp 999,9 rb'],
+    [999_950, 'Rp 1 jt'],
+    [1_000_000, 'Rp 1 jt'],
+    [150_000_000, 'Rp 150 jt'],
+    [999_949_999, 'Rp 999,9 jt'],
+    [999_950_000, 'Rp 1 M'],
+    [1_000_000_000, 'Rp 1 M'],
+    [5_672_500_000, 'Rp 5,7 M'],
+    [5_800_000_000, 'Rp 5,8 M'],
+    [999_949_999_999, 'Rp 999,9 M'],
+    [1_000_000_000_000, 'Rp 1.000 M'],
+    [1_500_000_000_000, 'Rp 1.500 M'],
+  ])('P18.97-T3 AC-3 writes Rp %i compact as %s', (rupiah, text) => {
+    expect(formatRupiahCompact(rp(rupiah))).toBe(text);
+  });
+
+  it('P18.97-T3 AC-3 has no triliun: a thousand miliar and more stays in M, grouped', () => {
+    expect(formatRupiahCompact(rp(2_345_600_000_000))).toBe('Rp 2.345,6 M');
+  });
+
+  it('P18.97-T3 AC-3 writes the analytics’ Rp 5.672.500.000 as Rp 5,7 M, at most one decimal and no ,0 (UI-019)', () => {
+    expect(formatRupiahCompact(rp(5_672_500_000))).toBe('Rp 5,7 M');
+    expect(formatRupiahCompact(rp(6_000_000_000))).toBe('Rp 6 M');
+    expect(formatRupiahCompactPair(rp(5_672_500_000), rp(6_000_000_000), 'of')).toBe('Rp 5,7 M of 6 M');
+  });
+
+  it('P18.97-T3 AC-3 keeps the full form for where precision matters — Data upload, an input’s echo, a price', () => {
+    // The one full formatter those three call: the carrier's figure to the rupiah, a typed figure as typed, a price.
+    expect(formatRupiah(rp(5_672_500_000))).toBe('Rp 5.672.500.000');
+    expect(formatRupiah(rp(350_000))).toBe('Rp 350.000');
+    expect(formatRupiah(rp(-20_000))).toBe('-Rp 20.000');
+  });
+});
+
+/** ADR-0167 §1, AC-3: numbers in id-ID. */
+describe('formatNumber (P18.95-T1 AC-3)', () => {
   it('groups a thousand with a dot and writes a decimal with a comma', () => {
     expect(formatNumber(1_250)).toBe('1.250');
     expect(formatNumber(1_250_000)).toBe('1.250.000');
@@ -359,22 +406,121 @@ describe('formatNumber and formatPercent (P18.95-T1 AC-3)', () => {
     expect(formatNumber(Number.NaN)).toBe('');
   });
 
-  it('writes a percentage to one decimal, with a comma', () => {
-    expect(formatPercent(15)).toBe('15,0%');
-    expect(formatPercent(57.5)).toBe('57,5%');
-    expect(formatPercent(9.14)).toBe('9,1%');
-    expect(formatPercent(100)).toBe('100,0%');
-    expect(formatPercent(0)).toBe('0,0%');
-    expect(formatPercent(-12.5)).toBe('-12,5%');
-    expect(formatPercent(1_250)).toBe('1.250,0%');
+});
+
+/**
+ * ADR-0174 §1–§3 (OD-226, OD-213), P18.97-T3: **a percentage is whole**, rounded half up, with no *,0*; a ratio
+ * beside its benchmark keeps its tenth; a figure stated as a rule or a record keeps the places it has. The same
+ * cases are pinned in `backend/src/common/format/format.spec.ts`, which writes the API's own sentences.
+ */
+describe('formatPercent (P18.97-T3 AC-1, AC-2)', () => {
+  it.each([
+    [0, '0%'],
+    [0.04, '0%'],
+    [0.05, '0%'],
+    [0.4, '0%'],
+    [0.5, '1%'],
+    [15, '15%'],
+    [57.4, '57%'],
+    [57.5, '58%'],
+    [96.4, '96%'],
+    [99.4, '99%'],
+    [99.5, '100%'],
+    [100, '100%'],
+    [999, '999%'],
+    [1_250, '1.250%'],
+  ])('P18.97-T3 AC-1 writes %d%% whole, rounded half up, with no ,0: %s', (value, text) => {
+    expect(formatPercent(value)).toBe(text);
+  });
+
+  it('P18.97-T3 AC-1 writes 27 of 28 as 96%, the whole percent the server served (UI-018)', () => {
+    // `rateOver` rounds 96,43 once, in integers; the screen writes the 96 it was given, and never a ,0 after it.
+    expect(formatPercent(96)).toBe('96%');
+    expect(formatPercent(57)).toBe('57%');
+  });
+
+  it('P18.97-T3 AC-1 writes a negative change whole, half away from zero, and one that rounds to nothing unsigned', () => {
+    expect(formatPercent(-12)).toBe('-12%');
+    expect(formatPercent(-12.5)).toBe('-13%');
+    expect(formatPercent(-12.4)).toBe('-12%');
+    expect(formatPercent(-0.4)).toBe('0%');
+    expect(formatPercent(-0.01, { decimals: 1 })).toBe('0,0%');
+  });
+
+  it('P18.97-T3 AC-1 writes nothing for what is not a number — a missing rate is the caller’s —', () => {
+    expect(formatPercent(Number.NaN)).toBe('');
     expect(formatPercent(Number.POSITIVE_INFINITY)).toBe('');
   });
 
-  it('keeps a second decimal only where it is asked for, and never fewer than one', () => {
-    expect(formatPercent(7.25, { maxDecimals: 2 })).toBe('7,25%');
-    expect(formatPercent(40, { maxDecimals: 2 })).toBe('40,0%');
-    expect(formatPercent(29.63, { maxDecimals: 2 })).toBe('29,63%');
-    expect(formatPercent(-0.01)).toBe('0,0%');
+  it.each([
+    [0, '0,0%'],
+    [0.04, '0,0%'],
+    [0.05, '0,1%'],
+    [0.5, '0,5%'],
+    [9.14, '9,1%'],
+    [29.6, '29,6%'],
+    [30, '30,0%'],
+    [99.5, '99,5%'],
+    [99.96, '100,0%'],
+    [100, '100,0%'],
+  ])('P18.97-T3 AC-2 keeps a ratio’s tenth where it is asked for, `{ decimals: 1 }`: %d is %s', (value, text) => {
+    expect(formatPercent(value, { decimals: 1 })).toBe(text);
+  });
+
+  it('P18.97-T3 AC-2 keeps a second place only up to the most it is asked for, never fewer than the fixed ones', () => {
+    expect(formatPercent(65.04, { decimals: 1, maxDecimals: 2 })).toBe('65,04%');
+    expect(formatPercent(40, { decimals: 1, maxDecimals: 2 })).toBe('40,0%');
+    expect(formatPercent(29.63, { decimals: 2 })).toBe('29,63%');
+    expect(formatPercent(14.96, { decimals: 2 })).toBe('14,96%');
+  });
+
+  it.each([
+    [30, '30%'],
+    [7.25, '7,25%'],
+    [87.35, '87,35%'],
+    [75.55, '75,55%'],
+    [15.5, '15,5%'],
+    [40, '40%'],
+    [0, '0%'],
+  ])('P18.97-T3 AC-2 `lossless`: a rule or a record keeps the places it has, and no ,0 — %d is %s', (value, text) => {
+    expect(formatPercent(value, { lossless: true })).toBe(text);
+  });
+
+  it('P18.97-T3 AC-2 `lossless` keeps at most four places, so a proportion’s binary noise is never written', () => {
+    expect(PERCENT_LOSSLESS_MAX_DECIMALS).toBe(4);
+    // `0.0725 × 100` is 7.249999999999999, `0.57 × 100` 56.99999999999999 and `0.07 × 100` 7.000000000000001.
+    expect(formatPercent(0.0725 * 100, { lossless: true })).toBe('7,25%');
+    expect(formatPercent(0.57 * 100, { lossless: true })).toBe('57%');
+    expect(formatPercent(0.07 * 100, { lossless: true })).toBe('7%');
+    expect(formatPercent(87.3456, { lossless: true })).toBe('87,3456%');
+    expect(formatPercent(87.34567, { lossless: true })).toBe('87,3457%');
+  });
+
+  it('P18.97-T3 F-254 percentOf: an exact half rounds up in integers — 23 of 40 is 58, which Math.round makes 57', () => {
+    expect(Math.round((23 / 40) * 100)).toBe(57);
+    expect(percentOf(23, 40)).toBe(58);
+    expect(formatPercent(percentOf(23, 40)!)).toBe('58%');
+  });
+
+  it.each([
+    [27, 28, 96], [4, 28, 14], [9, 28, 32], [1, 11, 9], [2, 9, 22], [1, 8, 13], [4, 138, 3], [0, 5, 0], [5, 5, 100], [7, 5, 140],
+  ])('P18.97-T3 F-254 percentOf %i of %i is %i, the server’s rateOver rule (UI-018)', (part, of, pct) => {
+    expect(percentOf(part, of)).toBe(pct);
+  });
+
+  it('P18.97-T3 F-254 percentOf rounds a negative half toward +∞ as Math.round does, and is null over nobody', () => {
+    expect(percentOf(-23, 40)).toBe(-57);
+    expect(percentOf(3, 0)).toBeNull();
+    expect(percentOf(3, -2)).toBeNull();
+    expect(percentOf(Number.NaN, 4)).toBeNull();
+    expect(percentOf(1, Number.POSITIVE_INFINITY)).toBeNull();
+  });
+
+  it('P18.97-T3 AC-2 no percentage is rounded twice: a whole one the server served is written as it came', () => {
+    // A rate rounded to a tenth and then to a whole moves a tie: 50,45 → 50,5 → 51 where once it is 50. The server
+    // serves a share whole, from its counts (`rateOver`), so the screen's whole rounding of it changes nothing.
+    for (const whole of [0, 1, 50, 57, 96, 100]) expect(formatPercent(whole)).toBe(`${whole}%`);
+    expect(formatPercent(50.45)).toBe('50%');
   });
 });
 
@@ -432,7 +578,7 @@ describe('formatDayClock, formatOfficeMonth and formatRupiahCompactPair (P18.95-
 
 /**
  * **One rule in two places, pinned to each other** (ADR-0167 §1, invariant §7): the API writes its own sentences
- * through `backend/src/common/format/format.ts`, which mirrors this module. Read from its source, as
+ * through `backend/src/common/format/format.ts`, which shares this module's forms. Read from its source, as
  * `OFFICE_TIME_ZONE` is, so the month names and the compact units cannot drift between a refusal and a screen.
  */
 describe('the backend formatter writes what this one writes (P18.95-T1 AC-4)', () => {

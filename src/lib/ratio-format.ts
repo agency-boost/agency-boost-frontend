@@ -3,16 +3,18 @@
  *
  * **The one place a benchmark is formatted.** The stored value is a proportion or a number;
  * the API says which unit it is written in (`displayUnit`), and this turns the pair into the
- * text the metric registry states — `15,0%`, `0,30`, `±30 points`. Until this existed every
+ * text the metric registry states — `15%`, `0,30`, `±30 points`. Until this existed every
  * settings screen printed the stored value, so an Owner read `0.15` for a success rate.
  *
  * **In `id-ID` since ADR-0167 §1** (parity I-395): a decimal takes a comma, through `lib/format.ts`'s
- * `formatNumber` and `formatPercent`.
+ * `formatNumber` and `formatPercent`. **Since ADR-0174 §2** (parity I-501) a benchmark reads as typed — `30%`,
+ * `15,5%`, never `30,0%` — and a computed ratio keeps its tenth, `29,6%`, because beside its benchmark the
+ * tenth decides the status; a ratio written as a number keeps its two places, `0,30`.
  *
  * The decimal places live here and nowhere else: the backend holds the unit and never
  * formats, so this is not a second copy of anything (invariant §7).
  *
- * **Input is typed the way it is shown.** An Owner reads `15,0%` and types `15`, not `0.15`;
+ * **Input is typed the way it is shown.** An Owner reads `15%` and types `15`, not `0.15`;
  * the conversion back is {@link benchmarkFromInput}, which takes a comma or a point (`parseDecimal`).
  * Anything else would be a field whose value means something different from the number beside it.
  */
@@ -23,7 +25,7 @@ export type RatioDisplayUnit = 'percent' | 'decimal' | 'points';
 
 /** What each unit is called where an Owner chooses one. */
 export const DISPLAY_UNIT_LABEL: Record<Exclude<RatioDisplayUnit, 'points'>, string> = {
-  percent: 'A percentage — 15,0%',
+  percent: 'A percentage — 15%',
   decimal: 'A number — 0,30',
 };
 
@@ -52,22 +54,30 @@ export function unitFor(ratio: { displayUnit?: RatioDisplayUnit | null; comparis
 const trimmed = (value: number, places: number) => String(Number(value.toFixed(places)));
 
 /**
- * `15,0%`, `0,30`, `±30 points`.
- *
- * Percentages to one decimal and numbers to two, as `metrics-and-definitions.md` states for
- * each ratio. Points are whole where they are whole — the balance band is `±30`, and
- * `±30.0 points` would claim a precision nobody set.
+ * `30%`, `15,5%`, `0,30`, `±30 points` — **a benchmark reads as typed** (ADR-0174 §2): a percentage keeps the
+ * places it was set with and no more (`lossless`, so `30%`, never `30,0%`), as the field beside it is typed; a
+ * number to two places, as `metrics-and-definitions.md` states for each ratio. Points are whole where they are
+ * whole — the balance band is `±30`, and `±30.0 points` would claim a precision nobody set.
  */
 export function formatBenchmark(value: number, unit: RatioDisplayUnit): string {
-  if (unit === 'percent') return formatPercent(value * 100);
+  if (unit === 'percent') return formatPercent(value * 100, { lossless: true });
   if (unit === 'points') return `±${formatNumber(value, { maxDecimals: 1 })} points`;
   return formatNumber(value, { decimals: 2 });
 }
 
+/** The places a computed ratio keeps: a percentage its tenth (ADR-0174 §2), a number its two (`0,38`). */
+const RATIO_PLACES: Record<Exclude<RatioDisplayUnit, 'points'>, number> = { percent: 1, decimal: 2 };
+
+/** A ratio's figure to `places`, in its unit: `29,6%`, `0,38`. */
+const ratioText = (value: number, unit: Exclude<RatioDisplayUnit, 'points'>, places: number) =>
+  (unit === 'percent' ? formatPercent(value * 100, { decimals: places }) : formatNumber(value, { decimals: places }));
+
 /**
- * A computed ratio, written as its benchmark is (P10-T2): `9,1%`, `0,38`, and the balance's lean as
- * whole points — `24 points`, without a sign, since the sentence around it says which way. `null` is
- * *not enough data* and is written `–`, the prototype's own (`Overall.html:5330`): never `0`.
+ * A computed ratio (P10-T2): **a percentage to its tenth** — `9,1%`, `29,6%`, `30,0%` — because it is read
+ * against its benchmark and the tenth can change its status (ADR-0174 §2, the one percentage that keeps a
+ * decimal); a number to two places, `0,38`; and the balance's lean as whole points — `24 points`, without a sign,
+ * since the sentence around it says which way. `null` is *not enough data* and is written `–`, the prototype's own
+ * (`Overall.html:5330`): never `0`.
  */
 export function formatRatioValue(value: number | null, unit: RatioDisplayUnit): string {
   if (value === null) return '–';
@@ -75,17 +85,21 @@ export function formatRatioValue(value: number | null, unit: RatioDisplayUnit): 
     const points = Math.round(Math.abs(value));
     return `${points} ${points === 1 ? 'point' : 'points'}`;
   }
-  return formatBenchmark(value, unit);
+  return ratioText(value, unit, RATIO_PLACES[unit]);
 }
 
 /**
  * A computed ratio written so that **the number never contradicts the status beside it**.
  *
  * The status is judged on the exact value, and the display rounds: `8 ÷ 27` is 0.296 — below a 0.30
- * benchmark — and `formatRatioValue` writes it `0,30`, beside *Benchmark: 0,30* and *Below benchmark*.
- * A lean of 30.43 points is outside a ±30 band and writes `30 points`. Where the rounded figure would
- * land on the benchmark's own text or inside its band while the status says it missed, one more decimal
- * is written: `0,296`, `30,4 points`.
+ * benchmark — and `formatRatioValue` writes it `0,30`, beside *Benchmark: 0,30* and *Below benchmark*;
+ * 0.2996 is `30,0%` beside a `30%` benchmark. A lean of 30.43 points is outside a ±30 band and writes `30 points`.
+ * Where the rounded figure would reach the benchmark, or land inside its band, while the status says it
+ * missed, one more decimal is written: `0,296`, `29,96%`, `30,4 points`.
+ *
+ * **Read back from what is written**, not from the value: the figure on the screen is what must not reach the
+ * benchmark, so it is parsed as printed and compared with the benchmark as a number — `30,0%` against `30%` is a
+ * tie, which a comparison of the two texts would miss (ADR-0174 writes them differently on purpose).
  */
 export function formatRatioForStatus(
   value: number | null, unit: RatioDisplayUnit, benchmark: number, status: 'success' | 'alert' | 'neutral',
@@ -96,8 +110,11 @@ export function formatRatioForStatus(
     const lean = Math.abs(value);
     return Math.round(lean) <= benchmark ? `${formatNumber(lean, { decimals: 1 })} points` : text;
   }
-  if (text !== formatBenchmark(benchmark, unit)) return text;
-  return unit === 'percent' ? `${formatNumber(value * 100, { decimals: 2 })}%` : formatNumber(value, { decimals: 3 });
+  const shown = parseDecimal(text.replace('%', ''));
+  // The benchmark in the figure's own unit, rid of a product's binary noise (`0.57 × 100` is `56.99999999999999`).
+  const mark = Number((unit === 'percent' ? benchmark * 100 : benchmark).toFixed(8));
+  if (shown < mark) return text;
+  return ratioText(value, unit, RATIO_PLACES[unit] + 1);
 }
 
 /**

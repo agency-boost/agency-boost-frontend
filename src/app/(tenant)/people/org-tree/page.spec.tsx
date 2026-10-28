@@ -1,7 +1,8 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
-import { makeMe, renderInLayout, stubFetch } from '@test/harness';
+import { atWidth, digestAt, makeMe, renderInLayout, stubFetch, wears } from '@test/harness';
 import OrgTreePage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -153,5 +154,98 @@ describe('org tree (P3-T8)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Not available to you');
     // The gate's code is on the refusal as data, and never in its words (P11-T6).
     expect(screen.getByRole('alert')).toHaveAttribute('data-permission', 'org_tree:read');
+  });
+});
+
+/**
+ * **The office's tree on a phone** (P18.97-T7 AC-4, ADR-0178 §5; the client's KPM Owner review of 2026-10-27, UI-036:
+ * only Wilson Tanoto, layer 1, in view, the connectors running off to the right). Below 768px the indented list that
+ * opens and closes (`OrgTree asList`), as `/group-tree` has drawn since P18.95-T8; at 768px and wider the canvas it
+ * was — the client's *Don't change* for a desktop.
+ */
+describe('P18.97-T7 AC-4 the office’s tree on a phone (UI-036)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Wilson leads Agus, who leads Sari, who leads Dimas; and Rina, placed under nobody. */
+  const FOREST = {
+    nodes: [
+      node({ membershipId: 'mem-owner', fullName: 'Wilson Tanoto', initials: 'WT', role: 'ab', layer: 1, isLeader: true,
+        directCount: 1, directCounts: { ab: 1, aab: 0, agent: 0, total: 1 }, isSelf: true }),
+      node({ membershipId: 'mem-ab', fullName: 'Agus Prasetyo', initials: 'AP', role: 'ab', layer: 2, leaderId: 'mem-owner',
+        isLeader: true, directCount: 1, directCounts: { ab: 0, aab: 1, agent: 0, total: 1 } }),
+      node({ membershipId: 'mem-sari', fullName: 'Sari Puspita', initials: 'SP', role: 'aab', layer: 3, leaderId: 'mem-ab',
+        isLeader: true, directCount: 1, directCounts: { ab: 0, aab: 0, agent: 1, total: 1 } }),
+      node({ membershipId: 'mem-dimas', fullName: 'Dimas Pratama', initials: 'DP', role: 'agent', layer: 4, leaderId: 'mem-sari' }),
+      node({ membershipId: 'mem-rina', fullName: 'Rina Wijaya', initials: 'RW', role: 'agent', layer: 1 }),
+    ],
+    leader: null,
+    rootIds: ['mem-owner', 'mem-rina'],
+    selfId: 'mem-owner',
+    counts: { ab: 1, aab: 1, agent: 2, total: 4 },
+  };
+
+  /** The page's markup on the build before P18.97-T7, rendered from this fixture on 2026-10-28. */
+  const BEFORE_T7: Record<768 | 1280, string> = {
+    768: '14efc4bd063b0f1b9447d13d87e40f0b8c89a523a05d7e9e3ff195dac5137ea2',
+    1280: '14efc4bd063b0f1b9447d13d87e40f0b8c89a523a05d7e9e3ff195dac5137ea2',
+  };
+
+  it.each([768, 1280] as const)('P18.97-T7 AC-4 at %ipx draws the canvas it drew, to the byte', async (px) => {
+    atWidth(px);
+    open(FOREST);
+    await screen.findByText('Layer 1');
+    expect(screen.getByTestId('tree-canvas')).toBeInTheDocument();
+    expect(digestAt(screen.getByRole('main'), px)).toBe(BEFORE_T7[px]);
+  });
+  const line = (id: string) => document.querySelector<HTMLElement>(`[data-node="${id}"]`);
+  const row = (id: string) => line(id)!.firstElementChild as HTMLElement;
+
+  it.each([375, 767])('P18.97-T7 AC-4 at %ipx draws the indented list, not the canvas, opened on the reader one level down', async (px) => {
+    atWidth(px);
+    open(FOREST);
+    await screen.findByText('YOU');
+    expect(screen.queryByTestId('tree-canvas')).not.toBeInTheDocument();
+    expect(screen.queryByText('Layer 1')).not.toBeInTheDocument();
+    // Wilson, his direct report, and Rina, who reports to nobody; Agus's unit closed.
+    expect(['mem-owner', 'mem-ab', 'mem-sari', 'mem-dimas', 'mem-rina'].map((id) => line(id) !== null))
+      .toEqual([true, true, false, false, true]);
+    expect([row('mem-owner').style.paddingLeft, row('mem-ab').style.paddingLeft]).toEqual(['0px', '16px']);
+    // Each line a card's content: the initials, the name (its link), the rung's badge.
+    expect(row('mem-ab')).toHaveTextContent(/^\+APAgus PrasetyoAB/);
+    // The forest's sentence stays above it.
+    expect(screen.getByText(/2 people report to nobody/)).toBeInTheDocument();
+  });
+
+  it('P18.97-T7 AC-4 opens a unit and closes it, each line linking as its card does', async () => {
+    atWidth(375);
+    open(FOREST);
+    const show = await screen.findByRole('button', { name: 'Show who reports to Agus Prasetyo' });
+    expect(show).toHaveAttribute('aria-expanded', 'false');
+    expect(wears(show, 375).split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
+    await userEvent.click(show);
+    expect(line('mem-sari')).not.toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Show who reports to Sari Puspita' }));
+    expect(row('mem-dimas').style.paddingLeft).toBe('48px');
+    expect(within(row('mem-ab')).getByRole('link', { name: 'Agus Prasetyo' })).toHaveAttribute('href', '/unit/dashboard/mem-ab');
+    expect(within(row('mem-dimas')).getByRole('link', { name: 'Dimas Pratama' })).toHaveAttribute('href', '/people/members/mem-dimas');
+    await userEvent.click(screen.getByRole('button', { name: 'Hide who reports to Agus Prasetyo' }));
+    expect(line('mem-sari')).toBeNull();
+  });
+
+  it('P18.97-T7 AC-4 never draws the canvas first on a phone: the width is asked before the tree answers', async () => {
+    atWidth(375);
+    let drew = false;
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof Element && (node.matches('[data-testid="tree-canvas"]') || node.querySelector('[data-testid="tree-canvas"]'))) drew = true;
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    open(FOREST);
+    await screen.findByText('YOU');
+    observer.disconnect();
+    expect(drew).toBe(false);
   });
 });

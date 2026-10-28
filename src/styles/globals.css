@@ -213,6 +213,31 @@ h3 {
 }
 
 /**
+ * **Below 1024px, a tab row that is one row there too fades as a phone's does** (P18.97-T6 AC-4; ADR-0178 §2, the
+ * client's UI-038): `/people/members`' tabs, which scroll on a tablet as well as on a phone. Only a row that says so,
+ * `data-tab-row='below-desktop'` (`tablet.ts`) — every other strip wraps from 768px and keeps no mask there, as
+ * before. The masks are the phone's, above; this is the query a `max-lg:` class compiles to (`theme.spec.ts`).
+ */
+@media not all and (min-width: 1024px) {
+  [data-tab-row='below-desktop'][data-fade='end'] {
+    -webkit-mask-image: linear-gradient(to left, transparent, black var(--tab-fade));
+    mask-image: linear-gradient(to left, transparent, black var(--tab-fade));
+  }
+
+  [data-tab-row='below-desktop'][data-fade='start'] {
+    -webkit-mask-image: linear-gradient(to right, transparent, black var(--tab-fade));
+    mask-image: linear-gradient(to right, transparent, black var(--tab-fade));
+  }
+
+  [data-tab-row='below-desktop'][data-fade='both'] {
+    -webkit-mask-image: linear-gradient(to right, transparent, black var(--tab-fade),
+        black calc(100% - var(--tab-fade)), transparent);
+    mask-image: linear-gradient(to right, transparent, black var(--tab-fade),
+        black calc(100% - var(--tab-fade)), transparent);
+  }
+}
+
+/**
  * Print (P10-T8, ADR-0061) — the page as it is seen, on white.
  *
  * **Colours are printed exactly.** A browser leaves backgrounds off by default, and on this product the

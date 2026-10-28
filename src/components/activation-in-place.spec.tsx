@@ -282,7 +282,7 @@ describe('P18.96-T7 AC-2 (UI-008): a tick keeps the page where it is', () => {
     const box = within(row('CRM_SETUP')).getByRole('checkbox', { name: 'Set up company CRM system' });
 
     await userEvent.click(box);
-    expect(await screen.findByText('100,0% complete')).toBeInTheDocument();
+    expect(await screen.findByText('100% complete')).toBeInTheDocument();
     expect(session.reload).toHaveBeenCalledTimes(1);
     await within(row('CRM_SETUP')).findByText('Saved ✓');
 

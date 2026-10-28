@@ -209,7 +209,9 @@ function Item({
           <TextInput
             density="cell"
             aria-label={TABS_OWN_COPY.agendaPic(sectionName, n)}
-            placeholder="—"
+            // P18.97-T2 AC-5 (I-500; the client's UI-015, every PIC *—*): an empty PIC prompts its editor, and saves
+            // nothing — a placeholder is no value. Anybody else reads *—*, above.
+            placeholder={TABS_OWN_COPY.addPic}
             value={pic.value}
             maxLength={meeting.limits.picMax}
             onFocus={pic.focus}

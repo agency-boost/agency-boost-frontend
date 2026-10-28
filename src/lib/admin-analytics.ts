@@ -1,5 +1,5 @@
 import { api } from './api-client';
-import { formatMonth, formatNumber, formatPercent } from './format';
+import { formatMonth, formatNumber, formatPercent, percentOf } from './format';
 import { tenantStatusTone, tenantStatusWord, type TenantRow } from './admin';
 
 /**
@@ -81,14 +81,15 @@ export const readPlatformAnalytics = () => api<PlatformAnalyticsView>('/admin/an
 export const formatCount = (n: number) => formatNumber(n);
 
 /**
- * The share of `of` that `part` is, rounded to a whole percent; `null` over nobody, which the screen
+ * The share of `of` that `part` is, a whole percent rounded half up in integers (`percentOf`, the server's `rateOver`
+ * rule — P18.97-T3, parity F-254: 23 of 40 is 58%, where `Math.round` read 57); `null` over nobody, which the screen
  * leaves unsaid rather than printing a percentage of zero people.
  */
 export function shareOf(part: number, of: number): number | null {
-  return of > 0 ? Math.round((part / of) * 100) : null;
+  return percentOf(part, of);
 }
 
-/** *Signed in within …*: the count, and what share of the row's members it is (*"12 (80,0%)"*). */
+/** *Signed in within …*: the count, and what share of the row's members it is (*"12 (80%)"*), whole (ADR-0174 §1). */
 export function signedInWords(signedIn: number, members: number): string {
   const pct = shareOf(signedIn, members);
   return pct === null ? formatCount(signedIn) : `${formatCount(signedIn)} (${formatPercent(pct)})`;

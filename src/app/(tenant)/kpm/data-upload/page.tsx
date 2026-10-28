@@ -4,19 +4,26 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Page } from '@/components/page';
 import { TermTip } from '@/components/ui/term-tip';
 import { Cell, Row, type Column } from '@/components/ui/data-table';
+import { ConsoleCode } from '@/components/ui/console-code';
 import { Button, buttonClass, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
-import { SkeletonBar, SkeletonTable } from '@/components/ui/skeleton';
+import { CHECK_LINE_PHONE, CONTROL_PHONE } from '@/components/ui/phone';
+import { CardField, RowCard, RowCards } from '@/components/ui/row-cards';
+import { SkeletonBar, SkeletonCards, SkeletonTable } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { errorReference } from '@/lib/browser-errors';
 import { cn } from '@/lib/cn';
 import { formatDayLong, formatNumber, formatPercent, formatRupiah, monthInZone } from '@/lib/format';
 import { useCan } from '@/lib/session';
 import {
-  CADENCE_GROUP_LABEL, commitUpload, FIGURE_COLUMNS, figureLabel, METRIC_COLUMN_LABEL, MONEY_METRICS, previewUpload,
-  readMonth, readTemplate, templateHref, type CorrectionResult, type ImportResult, type MetricCell, type MonthState,
-  type MonthView, type PreviewCell, type ProductionMetric, type TemplateFile, type UploadPreview,
+  CADENCE_GROUP_LABEL, CADENCES, commitUpload, FIGURE_COLUMNS, figureLabel, METRIC_COLUMN_LABEL, MONEY_METRICS,
+  previewUpload, PRODUCTION_METRICS, readMonth, readTemplate, templateHref, type CorrectionResult, type ImportResult,
+  type MetricCell, type MonthRow, type MonthState, type MonthView, type PreviewCell, type ProductionMetric,
+  type TemplateFile, type UploadPreview,
 } from '@/lib/production';
+import { usePhone } from '@/lib/use-phone';
 import { readBranchInfo } from '@/lib/tenant-config';
-import { CorrectionPanel, type Editing, showFigure } from './correction-panel';
+import { CorrectionPanel, correctedNote, type Editing, showFigure } from './correction-panel';
+import { correctedWords, FiguresSheet } from './figures-sheet';
 import { FigureCell, FigureTable, GROUP_DIVIDER, opensGroup } from './figure-table';
 import { ImportHistory } from './import-history';
 import { monthLabel, plural } from './month-label';
@@ -36,12 +43,27 @@ import { MonthLock } from './month-lock';
  * reported this person; a `0` says it reported nothing produced. An empty table would say the office
  * has nobody, and a table of zeroes that nobody produced — neither is true.
  */
+/**
+ * **The month table's legend, in the client's words** (P18.97-T4 AC-2; UI-023): *"✎ = corrected by hand · — = not
+ * reported · Active = APE or policies > 0 this month"*. `spoken` is what a screen reader says for a glyph it would pass
+ * over.
+ */
+const LEGEND: readonly { symbol: string; spoken?: string; meaning: string }[] = [
+  { symbol: '✎', meaning: 'corrected by hand' },
+  { symbol: '—', spoken: 'a dash', meaning: 'not reported' },
+  { symbol: 'Active', meaning: 'APE or policies > 0 this month' },
+];
+
 export default function DataUploadPage() {
   return (
     <Page
       title="Data upload"
-      // *APE*'s first appearance on the screen carries its ⓘ (P18.95-T9 AC-3; UI-028).
-      subtitle={<>APE <TermTip term="APE" />, rolling persistency, recruitment, new active agents, FYP and # of policy — one file per month, matched by agent code.</>}
+      /*
+       * *APE*'s first appearance on the screen carries its ⓘ (P18.95-T9 AC-3; UI-028) — **after the sentence, never
+       * inside it** (P18.97-T4 AC-2, ADR-0176 §6; UI-023: *"APE ⓘ What is APE? , rolling persistency, …"* read as
+       * one broken sentence to the client and to a screen reader).
+       */
+      subtitle={<>APE, rolling persistency, recruitment, new active agents, FYP and # of policy — one file per month, matched by agent code. <TermTip term="APE" /></>}
       permission="data_upload:read"
     >
       <MonthTable />
@@ -92,14 +114,15 @@ function TemplateDownload({ month }: { month: string }) {
   if (!allowed) return null;
 
   if (error) {
+    // The server's code and request id for support, and none for a failure the browser detected (P18.97-T4 AC-10).
+    const reference = errorReference(error);
     return (
       <p role="alert" className="flex min-h-10 flex-wrap items-center gap-x-2 text-sm text-alert">
         <span>The template could not be prepared. {error.message}</span>
         <Button variant="inline" onClick={() => setAttempt((n) => n + 1)}>Try again</Button>
-        <span className="text-2xs text-muted">
-          {error.code}
-          {error.requestId && error.requestId !== 'unknown' ? ` · ${error.requestId}` : ''}
-        </span>
+        {reference === null
+          ? <ConsoleCode code={error.code} message={error.message} />
+          : <span className="text-2xs text-muted">{reference}</span>}
       </p>
     );
   }
@@ -109,7 +132,7 @@ function TemplateDownload({ month }: { month: string }) {
   return (
     // The prototype's glyph before the word, kept out of the link's name as the Summary's ⬇ Download keeps
     // it (ADR-0068): a screen reader says *Download template*, not *downwards black arrow* first.
-    <a href={templateHref(template)} download={template.filename} className={buttonClass('secondary', 'gap-1')}>
+    <a href={templateHref(template)} download={template.filename} className={buttonClass('secondary', cn('gap-1', CONTROL_PHONE))}>
       <span aria-hidden="true">⬇</span>Download template
     </a>
   );
@@ -149,6 +172,15 @@ function MonthTable() {
   /** The figure being corrected, if one is (P9-T5). */
   const [editing, setEditing] = useState<Editing | null>(null);
   const canCorrect = useCan('data_upload:correct_cell');
+  /*
+   * **Below 768px a card per agent, and a sheet of their figures** (P18.97-T7 AC-2, ADR-0178 §4; the client's UI-034:
+   * the month's table, 1816px on a 375px screen; UI-040: 340 tappable cells under 44px). Asked here, where the screen
+   * mounts and before the month answers, so a phone never draws the table first. No cell is edited in a table on a
+   * phone: a card's tap opens `FiguresSheet`, whose fields save through the same `PATCH /kpm/data-upload/cell`.
+   */
+  const phone = usePhone();
+  /** The agent whose sheet is open, on a phone. */
+  const [sheetFor, setSheetFor] = useState<string | null>(null);
 
   useEffect(() => {
     setView(null);
@@ -163,6 +195,7 @@ function MonthTable() {
     reading.current += 1;
     setUpload({ kind: 'idle' });
     setEditing(null);
+    setSheetFor(null);
     readMonth(month)
       .then((next) => { if (live) setView(next); })
       .catch((err) => { if (live) setError(toDisplayError(err)); });
@@ -202,6 +235,13 @@ function MonthTable() {
   };
   /** A figure is a control only for somebody who may correct it, in a month that is open. */
   const correctable = !!view && canCorrect && !view.state.locked;
+  /** The sheet's agent, as the month has them. */
+  const sheetRow = sheetFor ? view?.rows.find((r) => r.membershipId === sheetFor) ?? null : null;
+  /** The sheet closed: what it saved is said and the month read again; with nothing saved, nothing moves. */
+  const sheetClosed = (row: MonthRow, results: CorrectionResult[]) => {
+    setSheetFor(null);
+    if (results.length > 0) wrote(correctedWords(row.name, results));
+  };
 
   const read = async (file: File) => {
     if (!view) return;
@@ -240,6 +280,7 @@ function MonthTable() {
           <TextInput
             id="upload-month"
             type="month"
+            className={CONTROL_PHONE}
             value={month}
             onChange={(e) => {
               if (!e.target.value) return;
@@ -292,9 +333,9 @@ function MonthTable() {
 
       {error && <ErrorBanner {...error} />}
 
-      {!error && view === null && (
-        <SkeletonTable caption={`Data for ${monthLabel(month)}`} columns={tableColumns} rows={5} />
-      )}
+      {!error && view === null && (phone
+        ? <SkeletonCards count={3} label={`Loading the data for ${monthLabel(month)}…`} />
+        : <SkeletonTable caption={`Data for ${monthLabel(month)}`} columns={tableColumns} rows={5} />)}
 
       {view && (
         <>
@@ -308,21 +349,44 @@ function MonthTable() {
           </p>
           {correctable && (
             <p className="-mt-2 mb-1 text-sm text-muted">
-              Tap any number to correct it manually — no need to re-upload for a single fix.
+              {/* On a phone the tap is the agent's card, which opens their figures (P18.97-T7 AC-2). */}
+              {phone
+                ? 'Tap an agent to correct their figures — no need to re-upload for a single fix.'
+                : 'Tap any number to correct it manually — no need to re-upload for a single fix.'}
             </p>
           )}
-          {/* Where every figure came from, said once rather than on every cell (P9-T6 AC-4). */}
+          {/*
+            * Where every figure came from, said once rather than on every cell (P9-T6 AC-4) — **in the client's one line, at
+            * every size** (P18.97-T4 AC-2, ADR-0176 §6; the grey-text table, UI-023: 45 words). Each of its three parts
+            * stays whole, so a narrow screen breaks the line between them, never inside one. The dash is said as a
+            * dash, as before: a screen reader passes over the glyph.
+            */}
           <p className="mb-3 text-xs text-muted">
-            Figures are from the carrier’s file unless marked <span className="font-bold text-navy">✎</span>{' '}
-            corrected by hand; <span aria-hidden="true">—</span><span className="sr-only">a dash</span> is nothing reported.
-            {' '}<span className="font-semibold text-navy">Active (MAA):</span> Derived, not entered — Active this
-            month if Monthly APE &gt; 0 or Monthly # of Policy &gt; 0. A dash until that is known.
+            {LEGEND.map((part, i) => (
+              <span key={part.symbol}>
+                {i > 0 && ' · '}
+                <span className="whitespace-nowrap">
+                  {part.spoken ? (
+                    <><span aria-hidden="true">{part.symbol}</span><span className="sr-only">{part.spoken}</span></>
+                  ) : part.symbol}
+                  {' = '}{part.meaning}
+                </span>
+              </span>
+            ))}
           </p>
 
           {/*
             * **The prototype's order** (P13.1-T7): the name, the code, this month's six, the year's six,
             * then *Active (MAA)* — and the rows in the order the org tree reads, which is the server's.
             */}
+          {phone ? (
+            <AgentCards
+              rows={view.rows}
+              caption={`Data for ${monthLabel(view.month)}`}
+              correctable={correctable}
+              onOpen={setSheetFor}
+            />
+          ) : (
           <FigureTable caption={`Data for ${monthLabel(view.month)}`} active tableClassName="min-w-[102.5rem]">
             {(headersOf) => view.rows.map((row) => (
               <Row key={row.membershipId}>
@@ -354,11 +418,84 @@ function MonthTable() {
               </Row>
             ))}
           </FigureTable>
+          )}
+          {/* Opened from a phone's card only; kept open should the window widen, until it is closed and says what it saved. */}
+          {correctable && sheetRow && (
+            <FiguresSheet
+              key={sheetRow.membershipId}
+              row={sheetRow}
+              month={view.month}
+              revision={view.state.revision}
+              onClose={(results) => sheetClosed(sheetRow, results)}
+            />
+          )}
 
           <ImportHistory month={view.month} state={view.state} generation={generation} onReverted={reverted} />
         </>
       )}
     </>
+  );
+}
+
+/**
+ * **The month as a card per agent** (P18.97-T7 AC-2, ADR-0178 §4; UI-034), through the shared card pieces
+ * (`components/ui/row-cards.tsx`), in the table's order and words: the name and the code, then *This Month*'s six and
+ * *YTD*'s six, each figure under its heading — money in full, a dash for nothing reported, ✎ on one corrected by hand,
+ * as the cells write them — and *Active (MAA)*. **For somebody who may correct a figure, in a month that is open, the
+ * name is the card's button**, *Correct figures for {name}*: its tap covers the card and opens the agent's sheet, and the
+ * focus ring is drawn round the card. Otherwise the card is read and nothing more.
+ */
+function AgentCards({
+  rows, caption, correctable, onOpen,
+}: {
+  rows: readonly MonthRow[];
+  caption: string;
+  correctable: boolean;
+  onOpen: (membershipId: string) => void;
+}) {
+  return (
+    <RowCards label={caption}>
+      {rows.map((row) => (
+        <RowCard key={row.membershipId} data-row={row.membershipId} className="relative">
+          <p className="min-w-0">
+            {correctable ? (
+              <button
+                type="button"
+                aria-label={`Correct figures for ${row.name}`}
+                aria-haspopup="dialog"
+                onClick={() => onOpen(row.membershipId)}
+                className={cn(
+                  'break-words text-left text-md font-semibold text-navy underline underline-offset-2',
+                  "after:absolute after:inset-0 after:rounded-sm after:content-['']",
+                  'focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2',
+                  'focus-visible:after:-outline-offset-2 focus-visible:after:outline-amber',
+                )}
+              >
+                {row.name}
+              </button>
+            ) : (
+              <span className="break-words text-md font-semibold text-navy">{row.name}</span>
+            )}
+            <span className="block whitespace-nowrap text-sm font-semibold text-muted">{row.agentCode}</span>
+          </p>
+          {CADENCES.map((cadence) => (
+            <div key={cadence} role="group" aria-label={CADENCE_GROUP_LABEL[cadence]} className="mt-3 border-t border-hairline pt-2.5">
+              <p aria-hidden="true" className="text-xs font-bold uppercase tracking-wide text-navy">{CADENCE_GROUP_LABEL[cadence]}</p>
+              <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2.5">
+                {PRODUCTION_METRICS.map((metric) => (
+                  <CardField key={metric} label={METRIC_COLUMN_LABEL[metric]}>
+                    <span className="text-md"><Figure metric={metric} cell={row.metrics[metric][cadence]} /></span>
+                  </CardField>
+                ))}
+              </dl>
+            </div>
+          ))}
+          <dl className="mt-3 border-t border-hairline pt-2.5">
+            <CardField label="Active (MAA)"><ActiveMark active={row.monthlyActiveAgent} /></CardField>
+          </dl>
+        </RowCard>
+      ))}
+    </RowCards>
   );
 }
 
@@ -420,21 +557,14 @@ function ActiveMark({ active }: { active: boolean | null | undefined }) {
   );
 }
 
-/** `corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”` */
-function correctedNote(cell: MetricCell): string {
-  const c = cell.correction;
-  const verb = cell.value === null ? 'emptied by hand' : 'corrected by hand';
-  if (!c) return verb;
-  return `${verb}${c.by ? ` by ${c.by}` : ''}${c.at ? ` on ${formatDayLong(c.at)}` : ''}${c.reason ? ` — “${c.reason}”` : ''}`;
-}
-
 /**
  * Money in full rupiah, persistency with its sign, counts as they are — the table's own formats, in `id-ID`
- * (ADR-0167 §1): a persistency to at least one decimal and every decimal the file had, never rounded.
+ * (ADR-0167 §1). **The file's own figures, so in full** (ADR-0174 §3, §4: Data upload's cells are where precision
+ * matters): money to the rupiah, and a persistency with every decimal the file had — *87,35%*, *87%* — never rounded.
  */
 function formatFigure(metric: ProductionMetric, value: number): string {
   if (MONEY_METRICS.includes(metric)) return formatRupiah(value);
-  if (metric === 'persistency') return formatPercent(value, { maxDecimals: 4 });
+  if (metric === 'persistency') return formatPercent(value, { lossless: true });
   return formatNumber(value, { maxDecimals: 4 });
 }
 
@@ -479,6 +609,7 @@ function UploadButton({ busy, onFile }: { busy: boolean; onFile: (file: File) =>
         aria-hidden="true"
         className={cn(
           buttonClass('primary'),
+          CONTROL_PHONE,
           'peer-disabled:opacity-60',
           'peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-amber',
         )}
@@ -526,7 +657,7 @@ function UploadResult({
         <p className="mb-2 text-md font-semibold text-navy">“{state.filename}” was not read. Nothing has been saved.</p>
         <ErrorBanner {...state.error} />
         <div className="mt-3">
-          <Button variant="secondary" onClick={onCancel}>Dismiss</Button>
+          <Button variant="secondary" onClick={onCancel} className={CONTROL_PHONE}>Dismiss</Button>
         </div>
       </Card>
     );
@@ -709,11 +840,11 @@ function PreviewCard({
 
       <div className="mt-3 flex flex-wrap items-center gap-2.5">
         {canConfirm && (
-          <Button onClick={confirm} disabled={confirming || nothing || monthState.locked}>
+          <Button onClick={confirm} disabled={confirming || nothing || monthState.locked} className={CONTROL_PHONE}>
             {confirming ? 'Importing…' : 'Confirm import'}
           </Button>
         )}
-        <Button variant="secondary" onClick={onCancel} disabled={confirming}>Cancel</Button>
+        <Button variant="secondary" onClick={onCancel} disabled={confirming} className={CONTROL_PHONE}>Cancel</Button>
         {canConfirm && monthState.locked && (
           <span className="text-sm text-muted">{monthLabel(month)} is locked — reopen it to import.</span>
         )}
@@ -808,7 +939,7 @@ function CorrectionChoice({
         {' '}The file says {formatFigure(cell.metric, cell.after!)}
         {same ? ' — the figure the correction replaced, so this is probably the old file' : ''}.
       </p>
-      <label className="mt-1 inline-flex cursor-pointer items-center gap-2 text-navy">
+      <label className={cn('mt-1 inline-flex cursor-pointer items-center gap-2 text-navy', CHECK_LINE_PHONE)}>
         <input
           type="checkbox"
           className="h-4 w-4 accent-navy"

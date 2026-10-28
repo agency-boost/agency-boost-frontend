@@ -1,8 +1,7 @@
-import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
-import { PHONE_QUERY } from '@/lib/use-phone';
+import { atWidth as screenAt, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
 import { AgentShell } from './agent-shell';
 import { AdminShell } from './admin-shell';
 import { TenantShell } from './tenant-shell';
@@ -612,21 +611,8 @@ describe('P18.95-T2 AC-2 the phone’s drawer holds each shell’s sidebar', () 
     route.path = '/group-tree';
   });
 
-  /** A width the shell can ask about, and move: `matchMedia`, which jsdom does not have. */
-  function atWidth(px: number) {
-    let width = px;
-    const listeners = new Set<() => void>();
-    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-      media: query,
-      get matches() { return query === PHONE_QUERY && width < 768; },
-      addEventListener: (_: string, fn: () => void) => listeners.add(fn),
-      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
-    })));
-    return (next: number) => {
-      width = next;
-      act(() => listeners.forEach((fn) => fn()));
-    };
-  }
+  /** A width the shell can ask about, and move — each of the three ranges answered for it (`test/harness.tsx`). */
+  const atWidth = (px: number) => screenAt(px).resize;
 
   const SUPER = makeMe({
     user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
@@ -692,20 +678,7 @@ describe('P18.95-T12 the phone’s bar in each shell: the avatar holds the accou
     route.path = '/group-tree';
   });
 
-  function atWidth(px: number) {
-    let width = px;
-    const listeners = new Set<() => void>();
-    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
-      media: query,
-      get matches() { return query === PHONE_QUERY && width < 768; },
-      addEventListener: (_: string, fn: () => void) => listeners.add(fn),
-      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
-    })));
-    return (next: number) => {
-      width = next;
-      act(() => listeners.forEach((fn) => fn()));
-    };
-  }
+  const atWidth = (px: number) => screenAt(px).resize;
 
   const SUPER = makeMe({
     user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
@@ -808,10 +781,15 @@ describe('P18.95-T12 the phone’s bar in each shell: the avatar holds the accou
     }
   });
 
-  it.each(SHELLS)('the %s shell from 768px: the chip with the name and the bell beside it, as before', async (_shell, render, me, path) => {
+  /*
+   * *Changed 2026-10-28 (P18.97-T6 AC-1):* this read *from 768px*, and its stub answered the phone's query alone, so
+   * 768 was a desktop to the shell. From 768 to 1023px the sidebar now opens on the rail (UI-033): the full chip and
+   * the bell beside it are the desktop's, from 1024px, and a tablet's sidebar opened full (the case after).
+   */
+  it.each(SHELLS)('the %s shell from 1024px: the chip with the name and the bell beside it, as before', async (_shell, render, me, path) => {
     route.path = path;
     inbox(3);
-    atWidth(768);
+    atWidth(1024);
     renderWithSession(render(), { me });
     const bell = await within(bar()).findByRole('button', { name: 'Notifications, 3 unread' });
     expect(within(bell).getByText('3')).toBeInTheDocument();
@@ -820,5 +798,104 @@ describe('P18.95-T12 the phone’s bar in each shell: the avatar holds the accou
     // The bell is the sidebar's foot's last control, after the chip, as it was.
     const row = bell.parentElement!.parentElement!;
     expect(row.lastElementChild).toBe(bell.parentElement);
+  });
+
+  it.each(SHELLS)('P18.97-T6 AC-1 the %s shell from 768px: the rail’s foot — the bell above the avatar — and opened full, the chip and the bell as from 1024px', async (_shell, render, me, path, _links, line) => {
+    route.path = path;
+    inbox(3);
+    atWidth(768);
+    window.localStorage.clear();
+    renderWithSession(render(), { me });
+    const bell = await within(bar()).findByRole('button', { name: 'Notifications, 3 unread' });
+    // The avatar alone, the name and the profile line in its name; never the phone's avatar menu.
+    const chip = within(bar()).getByRole('button', { name: `Rina — ${line}` });
+    expect(chip).toHaveTextContent(/^RW$/);
+    expect(within(bar()).queryByRole('button', { name: /^Account/ })).not.toBeInTheDocument();
+    expect(bell.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await userEvent.click(within(bar()).getByRole('button', { name: 'Expand the sidebar' }));
+    const full = within(bar()).getByRole('button', { name: /Rina/ });
+    expect(full).toHaveTextContent(/Rina/);
+    const row = within(bar()).getByRole('button', { name: 'Notifications, 3 unread' }).parentElement!.parentElement!;
+    expect(row.lastElementChild).toContainElement(within(bar()).getByRole('button', { name: 'Notifications, 3 unread' }));
+    window.localStorage.clear();
+  });
+});
+
+/**
+ * **Every shell opens on the rail on a tablet** (P18.97-T6 AC-1, ADR-0178 §1; the client's UI-033, reviewed in the
+ * office's but asked of every shell): the field's, the office's and the console's all draw their sidebar through
+ * `AppShell`, so each opens on the rail from 768 to 1023px, full from 1024px, and as the phone's bar below 768px.
+ * One reader's choice is one browser's, so a tablet opened full in one shell is opened full in the others.
+ */
+describe('P18.97-T6 AC-1 every shell: the rail from 768 to 1023px, full from 1024px, the phone’s bar below 768px', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.localStorage.clear();
+    route.path = '/group-tree';
+  });
+
+  const SUPER = makeMe({
+    user: { ...makeMe().user, platformRole: 'super_admin' }, membership: null, permissions: ['kpm:list_all'],
+  });
+  const SHELLS = [
+    ['field', () => <AgentShell title="x">body</AgentShell>, AGENT, '/leads', 'Leads management', 'Personal tools'],
+    ['office', () => <TenantShell title="x">body</TenantShell>, OWNER, '/people/members', 'All members', 'People'],
+    ['console', () => <AdminShell title="x">body</AdminShell>, SUPER, '/admin/tenants', 'All KPMs', 'Platform admin'],
+  ] as const;
+  const toggle = () => screen.queryByRole('button', { name: /^(Expand|Collapse) the sidebar$/ });
+  const aside = () => document.querySelector('aside')!;
+
+  it.each(SHELLS.flatMap(([shell, ...rest]) => [767, 768, 1023, 1024].map((px) => [shell, px, ...rest] as const)))(
+    'P18.97-T6 AC-1 the %s shell at %ipx',
+    async (_shell, px, render, me, path, current, group) => {
+      route.path = path;
+      window.localStorage.clear();
+      screenAt(px);
+      renderWithSession(render(), { me });
+      if (px < 768) {
+        // The phone's bar, unchanged: ☰, no sidebar nav, no rail to open or close.
+        expect(toggle()).toBeNull();
+        expect(screen.queryByRole('navigation', { name: 'Main' })).toBeNull();
+        await userEvent.click(screen.getByRole('button', { name: 'Open menu' }));
+        const menu = within(screen.getByRole('dialog', { name: 'Menu' }));
+        expect(menu.getByRole('button', { name: new RegExp(group) })).toBeInTheDocument();
+        expect(menu.getByRole('link', { name: current })).toHaveAttribute('aria-current', 'page');
+        return;
+      }
+      const nav = within(screen.getByRole('navigation', { name: 'Main' }));
+      const here = nav.getByRole('link', { name: current });
+      expect(here).toHaveAttribute('aria-current', 'page');
+      if (px < 1024) {
+        expect(toggle()).toHaveAttribute('aria-label', 'Expand the sidebar');
+        expect(wears(aside(), px).split(' ')).toContain('w-[var(--sidebar-rail-width)]');
+        // A glyph per item, named and tipped by its label; no heading to click.
+        expect(here).toHaveAttribute('title', current);
+        expect(here.textContent).toBe('');
+        expect(nav.queryByRole('button', { name: new RegExp(group) })).toBeNull();
+      } else {
+        expect(toggle()).toHaveAttribute('aria-label', 'Collapse the sidebar');
+        expect(wears(aside(), px).split(' ')).toContain('w-sidebar');
+        expect(here).toHaveTextContent(current);
+        expect(nav.getByRole('button', { name: new RegExp(group) })).toHaveAttribute('aria-expanded', 'true');
+      }
+      expect(window.localStorage.getItem('ab.sidebar.rail.tablet')).toBeNull();
+    },
+  );
+
+  it('P18.97-T6 AC-1 a tablet opened full in the office’s shell is opened full in the field’s, and a desktop is left alone', async () => {
+    route.path = '/people/members';
+    window.localStorage.clear();
+    screenAt(900);
+    const office = renderWithSession(<TenantShell title="x">body</TenantShell>, { me: OWNER });
+    await userEvent.click(screen.getByRole('button', { name: 'Expand the sidebar' }));
+    expect(window.localStorage.getItem('ab.sidebar.rail.tablet')).toBe('0');
+    expect(window.localStorage.getItem('ab.sidebar.rail')).toBeNull();
+    office.unmount();
+    cleanup();
+
+    route.path = '/leads';
+    renderWithSession(<AgentShell title="x">body</AgentShell>, { me: AGENT });
+    expect(screen.getByRole('button', { name: 'Collapse the sidebar' })).toBeInTheDocument();
   });
 });

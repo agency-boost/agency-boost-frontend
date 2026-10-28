@@ -176,10 +176,10 @@ export function goalInputsOf(goal: Goal): GoalInputs {
 }
 
 /*
- * **Money's unit and its two formatters live in `lib/format.ts`** since ADR-0167 §1 (parity I-394): the full
- * `formatRupiah`, `Rp 500.000.000`, for a table, an input and an export, and `formatRupiahCompact`, `Rp 500 jt`,
- * for everything else. Re-exported here because a goal's screens, and many others, have always imported them
- * from this module.
+ * **Money's unit and its two formatters live in `lib/format.ts`** since ADR-0167 §1 (parity I-394, I-502): the
+ * compact `formatRupiahCompact`, `Rp 500 jt`, everywhere — a table too, since ADR-0174 §4 — and the full
+ * `formatRupiah`, `Rp 500.000.000`, only where precision matters: Data upload, an input and what it echoes, a
+ * price. Re-exported here because a goal's screens, and many others, have always imported them from this module.
  */
 export { formatRupiah, formatRupiahCompact, MINOR_UNITS_PER_MAJOR, toMajor, toMinor } from '@/lib/format';
 

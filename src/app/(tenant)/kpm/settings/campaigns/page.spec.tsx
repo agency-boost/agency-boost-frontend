@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { TenantConfigProvider } from '@/lib/tenant-config-cache';
 import CampaignsSettingsPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -130,10 +131,11 @@ describe('the office’s Campaigns screen', () => {
     expect(screen.getByText('Ended')).toBeInTheDocument();
   });
 
+  // *This office* since P18.97-T4 AC-8 (UI-030), where it read *Your office’s*.
   it('marks the office’s own campaign as the office’s', async () => {
     render();
 
-    expect(await screen.findByText('Your office’s')).toBeInTheDocument();
+    expect(await screen.findByText('This office')).toBeInTheDocument();
   });
 
   it('shows the tiers read-only, with the reason rather than inert controls', async () => {
@@ -339,7 +341,8 @@ describe('the office’s Campaigns screen', () => {
         }],
       });
       const stub = render([old]);
-      const row = (await screen.findByText(/Training completion more than 80,0%/)).closest('li')!;
+      // A threshold keeps the places it was set with, and no ,0 (P18.97-T3 AC-2).
+      const row = (await screen.findByText(/Training completion more than 80%/)).closest('li')!;
       expect(within(row).getByText('Not measured yet')).toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
       const select = screen.getByLabelText('Requirement 1');
@@ -437,5 +440,77 @@ describe('the office’s Campaigns screen', () => {
       expect(row).not.toHaveTextContent('The last push of the year.');
       expect(row).not.toHaveTextContent(/Seasonal|⭐/);
     });
+  });
+});
+
+/**
+ * **The campaigns settings in order, tagged *This office*, a rate as a percentage** (P18.97-T4 AC-8, ADR-0176 §8; the
+ * client's KPM Owner review of 2026-10-27, UI-030: *"UPCOMING, RUNNING, ENDED mixed; tag "YOUR OFFICE'S"; "Recruitment
+ * success rate at least 0,30""*). Upcoming soonest first, running soonest first, ended latest first; a requirement on
+ * one of the office's ratios in that ratio's unit — a success rate *30%*, leads per activity *1,50* (ADR-0174).
+ */
+describe('P18.97-T4 AC-8 the campaigns settings: order, This office, rates', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const ratio = (code: string, label: string, displayUnit: 'percent' | 'decimal') => ({
+    id: code, code, label, numerator: [], denominator: [], benchmark: 0.3, comparison: 'gte', displayUnit,
+    displayOrder: 1, version: 1, status: 'active', origin: 'platform', appliesToOrgLevelCodes: [],
+  });
+  const RATIOS = [
+    ratio('RECRUITMENT_SUCCESS_RATE', 'Recruitment success rate', 'percent'),
+    ratio('LEADS_PER_ACTIVITY', 'Leads per activity', 'decimal'),
+  ];
+
+  function renderWithConfig(campaigns: unknown[]) {
+    stubFetch({
+      '/kpm/settings/campaigns/rules': { body: [] },
+      '/kpm/settings/campaigns': { body: campaigns },
+      '/metrics': { body: [] },
+      '/kpm/settings/publish-state': {
+        body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+      },
+      '/kpm/config': { body: { activity: [], ratios: RATIOS, leadPipelines: [], training: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+    });
+    renderWithSession(<TenantConfigProvider><CampaignsSettingsPage /></TenantConfigProvider>, { me: OWNER });
+  }
+
+  it('P18.97-T4 AC-8 lists upcoming, then running, then ended — each by date', async () => {
+    renderWithConfig([
+      campaign({ id: 'a', code: 'OLD', title: 'Last year’s drive', phase: 'ended', startsAt: '2025-10-01T00:00:00.000Z' }),
+      campaign({ id: 'b', code: 'NEXT', title: 'January kick-off', phase: 'upcoming', startsAt: '2027-01-05T00:00:00.000Z' }),
+      campaign({ id: 'c', code: 'NOW', title: 'Year-End Star Club Drive', phase: 'running', startsAt: '2026-10-01T00:00:00.000Z' }),
+      campaign({ id: 'd', code: 'SOON', title: 'November sprint', phase: 'upcoming', startsAt: '2026-11-03T00:00:00.000Z' }),
+      campaign({ id: 'e', code: 'SPRING', title: 'Spring drive', phase: 'ended', startsAt: '2026-03-01T00:00:00.000Z' }),
+    ]);
+    await screen.findByText('Year-End Star Club Drive');
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
+      'November sprint', 'January kick-off', 'Year-End Star Club Drive', 'Spring drive', 'Last year’s drive',
+    ]);
+  });
+
+  it('P18.97-T4 AC-8 tags the office’s own campaign This office, and never Your office’s', async () => {
+    renderWithConfig([campaign()]);
+    expect(await screen.findByText('This office')).toBeInTheDocument();
+    expect(screen.queryByText(/Your office’s/)).toBeNull();
+  });
+
+  it('P18.97-T4 AC-8 writes a requirement on a rate as a percentage, and one on a count of a count as the number', async () => {
+    renderWithConfig([campaign({
+      requirements: [
+        { metricKey: 'RECRUITMENT_SUCCESS_RATE', metricName: 'Recruitment success rate', comparator: 'gte', value: 0.3, unit: 'ratio', measured: true },
+        { metricKey: 'LEADS_PER_ACTIVITY', metricName: 'Leads per activity', comparator: 'gte', value: 1.5, unit: 'ratio', measured: true },
+      ],
+    })]);
+    expect(await screen.findByText('Recruitment success rate at least 30%')).toBeInTheDocument();
+    expect(screen.getByText('Leads per activity at least 1,50')).toBeInTheDocument();
+    expect(screen.queryByText(/at least 0,30/)).toBeNull();
+  });
+
+  it('P18.97-T4 AC-8 writes a ratio the office does not hold as the number, as before', async () => {
+    renderWithConfig([campaign({
+      requirements: [{ metricKey: 'MEETING_PER_APPROACH', metricName: 'Set appointment to meeting', comparator: 'gte', value: 0.3, unit: 'ratio', measured: true }],
+    })]);
+    expect(await screen.findByText('Set appointment to meeting at least 0,30')).toBeInTheDocument();
   });
 });

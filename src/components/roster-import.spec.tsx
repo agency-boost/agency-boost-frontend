@@ -57,19 +57,25 @@ describe('importing a roster (P3.6-T4)', () => {
 
   it('offers the file the API composed, examples and all', async () => {
     // A template the screen built itself would drift from the one the parser demands, and
-    // the worked examples are the part most worth not paraphrasing.
+    // the worked examples are the part most worth not paraphrasing. *Download template* since P18.97-T4 AC-4, in
+    // view whichever way in is chosen.
     render();
-    await userEvent.click(screen.getByLabelText('Upload a CSV file'));
-    const link = await screen.findByRole('link', { name: 'Download the template' });
+    const link = await screen.findByRole('link', { name: 'Download template' });
     expect(link).toHaveAttribute('download', 'roster-template.csv');
     const downloaded = decodeURIComponent(link.getAttribute('href') ?? '');
     expect(downloaded).toContain(HEADER);
     expect(downloaded).toContain('# Agus Prasetyo');
   });
 
-  it('says the examples are commented, so nobody deletes them out of fear', async () => {
+  /*
+   * *Amended 2026-10-28 (P18.97-T4 AC-4; UI-025):* the page's sentence about the commented examples left with the rest
+   * of the 120 words (*Remove* at every size). The template the reader downloads says it, on its first lines.
+   */
+  it('says the examples are commented, so nobody deletes them out of fear — in the template itself', async () => {
     render();
-    expect(await screen.findByText(/commented out/)).toBeInTheDocument();
+    const link = await screen.findByRole('link', { name: 'Download template' });
+    expect(decodeURIComponent(link.getAttribute('href') ?? '')).toMatch(/^data:text\/csv;charset=utf-8,# Examples below are commented out\./);
+    expect(screen.queryByText(/commented out/)).toBeNull();
   });
 
   it('offers pasting first, because it needs no file at all', () => {
@@ -102,17 +108,19 @@ describe('importing a roster (P3.6-T4)', () => {
     );
   });
 
+  // *Amended 2026-10-28 (P18.97-T4 AC-4; UI-025):* said in the columns' table, a row each, where it was a paragraph.
   it('P18.8-T4 AC-2: says what each of the nine columns takes, the rungs written AB, AAB and Agent', async () => {
     render();
-    const said = (await screen.findByText(/One row per person/)).textContent ?? '';
-    expect(said).toContain('(digits only)');
+    const said = within(await screen.findByRole('table', { name: /The file’s columns, in order/ })).getAllByRole('row')
+      .map((row) => row.textContent).join(' | ');
+    expect(said).toContain('digits only');
     expect(said).toContain('AB, AAB or Agent');
     expect(said).toContain('YYYY-MM-DD');
     expect(said).toContain('at least 18');
     expect(said).toContain('YYYY-MM');
     expect(said).toContain('full-time or part-time');
     expect(said).toContain('male or female');
-    expect(said).toContain("Every column but the leader's is required.");
+    expect(said).toContain('Leader’s agent code (optional)');
     expect(said).not.toMatch(/\bab, aab or agent\b/);
   });
 
@@ -287,4 +295,83 @@ describe('importing a roster (P3.6-T4)', () => {
   });
 
 
+});
+
+/**
+ * **The import's instructions as a table of its columns, with *Download template* always in view** (P18.97-T4 AC-4,
+ * ADR-0176 §6; the client's KPM Owner review of 2026-10-27, UI-025 — 120 words, *Remove* at every size). `/people/import`
+ * (the Owner, the Admin) and `/admin/tenants/[kpmId]/roster` (the Super Admin) draw this one component, so they read
+ * the same.
+ */
+describe('P18.97-T4 AC-4 the import’s columns and its template', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const OWNER = makeMe({
+    membership: {
+      membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+      isKpmOwner: true, isKpmAdmin: false, directCount: 2,
+    },
+    permissions: ['kpm:import_roster'],
+  });
+  const CLIENTS_COLUMNS = [
+    'Name', 'Email', 'Agent code', 'Role', 'Leader’s agent code (optional)', 'Date of birth', 'Join month',
+    'Full/part-time', 'Gender',
+  ];
+
+  it.each([['the Super Admin', SUPER_ADMIN], ['an Owner', OWNER]])(
+    'P18.97-T4 AC-4 lists the nine columns in the file’s order, in the client’s words, for %s', async (_who, me) => {
+      stubFetch(TEMPLATE);
+      renderWithSession(<RosterImport kpmId="kpm-1" backHref="/back" />, { me });
+      const table = await screen.findByRole('table', { name: /The file’s columns, in order/ });
+      const [, ...rows] = within(table).getAllByRole('row');
+      expect(rows.map((row) => within(row).getAllByRole('cell')[0].textContent)).toEqual(CLIENTS_COLUMNS);
+      expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['Column', 'What it holds']);
+    },
+  );
+
+  it('P18.97-T4 AC-4 has no paragraph of instructions left', async () => {
+    render();
+    await screen.findByRole('link', { name: 'Download template' });
+    for (const gone of [/One row per person:/, /order does not matter/, /Pasting works from Excel/, /Every column but the leader/]) {
+      expect(screen.queryByText(gone)).toBeNull();
+    }
+  });
+
+  it('P18.97-T4 AC-4 keeps Download template in view whichever way in is chosen, above the choice', async () => {
+    render();
+    const link = await screen.findByRole('link', { name: 'Download template' });
+    const choice = screen.getByRole('group', { name: 'How are you adding them?' });
+    expect(link.compareDocumentPosition(choice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.click(screen.getByLabelText('Upload a CSV file'));
+    expect(screen.getByRole('link', { name: 'Download template' })).toBe(link);
+    await userEvent.click(screen.getByLabelText('Paste from a spreadsheet'));
+    expect(screen.getByRole('link', { name: 'Download template' })).toBeInTheDocument();
+    // The prototype's glyph, kept out of the link's name.
+    expect(link.firstElementChild).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('P18.97-T4 AC-4 says a template on its way as a wait, and one that failed with a way to ask again', async () => {
+    let answer: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => { answer = resolve; });
+    let reads = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      reads += 1;
+      if (reads === 1) {
+        await held;
+        return { ok: false, status: 500, json: async () => ({ error: { code: 'INTERNAL_ERROR', message: 'Something went wrong on our side.', requestId: 'r-1' } }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => TEMPLATE['/admin/tenants/roster-template'].body } as Response;
+    }));
+    renderWithSession(<RosterImport kpmId="kpm-1" backHref="/back" />, { me: SUPER_ADMIN });
+    expect(screen.getByRole('status')).toHaveTextContent('Loading the template…');
+    expect(screen.queryByRole('link', { name: 'Download template' })).toBeNull();
+    answer();
+    const failed = await screen.findByRole('alert');
+    expect(failed).toHaveTextContent('The template could not be prepared. Something went wrong on our side.');
+    // The server's code and request id, for support (P18.97-T4 AC-10).
+    expect(failed).toHaveTextContent('INTERNAL_ERROR · r-1');
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('link', { name: 'Download template' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
 });

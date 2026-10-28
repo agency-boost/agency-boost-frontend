@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, stubFetch } from '@test/harness';
+import { atWidth, digestAt, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
 import { GCS_UPLOAD_URL, gcsSignedUpload } from '@test/storage-fixtures';
 import KpmProductsPage from './page';
 
@@ -618,5 +618,180 @@ describe('the office’s Products screen', () => {
       expect(screen.queryByRole('button', { name: /^(Upload|Replace) / })).not.toBeInTheDocument();
       expect(within(row('Brochure')).getByRole('button', { name: 'Open' })).toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * ***Review* beside *Waiting for your approval*** (P18.97-T4 AC-7, ADR-0176 §7; the client's KPM Owner review of
+ * 2026-10-27, UI-028: *"WAITING FOR YOUR APPROVAL"* on PRUFuture and PRUWarisan with no action on the row). It opens
+ * the product's script review on *Script approvals* — its card, where it is approved or sent back — for whoever holds
+ * `sales_script:approve`; the API refuses everybody else (`kpm-product.controller.int.spec.ts`, backend).
+ */
+describe('P18.97-T4 AC-7 Review beside the badge', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const PENDING = [
+    product({ reviewState: 'pending', displayName: field('PRUFuture') }),
+    product({ productId: 'p2', code: 'PRUANUGERAH', displayName: field('PRUAnugerah'), reviewState: 'rejected', rejectionReason: 'Terlalu kuat.' }),
+    product({ productId: 'p3', code: 'PRUTERM', displayName: field('PRUterm'), reviewState: 'approved' }),
+  ];
+  const ADMIN = makeMe({
+    membership: { ...member, isKpmOwner: false, isKpmAdmin: true },
+    permissions: ['tenant_config:read', 'product_settings:read', 'tenant_config:write', 'sales_script:approve'],
+  });
+
+  it.each([['the Owner', OWNER], ['an Admin', ADMIN]])(
+    'P18.97-T4 AC-7 offers %s Review beside Waiting for your approval, and on no other row', async (_who, me) => {
+      render(PENDING, me);
+      const review = await screen.findByRole('button', { name: 'Review PRUFuture' });
+      expect(review).toHaveTextContent(/^Review$/);
+      // Beside the badge, in its line.
+      expect(review.parentElement).toContainElement(screen.getByText('Waiting for your approval'));
+      expect(screen.getAllByRole('button', { name: /^Review / })).toHaveLength(1);
+      expect(screen.getByText('Sent back')).toBeInTheDocument();
+    },
+  );
+
+  it('P18.97-T4 AC-7 opens that product’s script review, its card taking the focus, Approve and Send back on it', async () => {
+    render(PENDING);
+    await userEvent.click(await screen.findByRole('button', { name: 'Review PRUFuture' }));
+    expect(window.location.hash).toBe('#approvals');
+    const heading = await screen.findByRole('heading', { name: 'PRUFuture' });
+    await waitFor(() => expect(heading).toHaveFocus());
+    const card = heading.closest('li')!;
+    expect(within(card).getByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: 'Send back' })).toBeInTheDocument();
+    // A landing for script, not a tab stop of its own.
+    expect(heading).toHaveAttribute('tabindex', '-1');
+  });
+
+  it.each([['somebody who may write a script but not approve one', WRITER], ['a reader', READER]])(
+    'P18.97-T4 AC-7 offers %s no Review: the badge is said, the action is not theirs', async (_who, me) => {
+      render(PENDING, me);
+      expect(await screen.findByText('Waiting for your approval')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Review/ })).toBeNull();
+    },
+  );
+});
+
+/**
+ * **The shelf's grey sentence per size** (P18.97-T4 AC-6, ADR-0176 §6; the client's grey-text table of 2026-10-27,
+ * UI-027): *"Your changes apply to this office only."* — the 50 words it replaces — shown from 1024px, behind an ⓘ
+ * after the shelf's count line at 768–1023px and below 768px (*ⓘ · ⓘ · Show*).
+ */
+describe('P18.97-T4 AC-6 the products’ grey text per size', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const NOTE = 'Your changes apply to this office only.';
+
+  async function parts(px: number) {
+    atWidth(px);
+    render();
+    const tip = await screen.findByRole('button', { name: NOTE });
+    const sentence = screen.getAllByText(NOTE).find((el) => el.tagName === 'P')!;
+    return { sentence: wears(sentence, px).split(' '), tip: wears(tip.parentElement!, px).split(' '), glyph: tip };
+  }
+
+  it.each([1024, 1280])('P18.97-T4 AC-6 at %ipx shows the sentence and draws no ⓘ', async (px) => {
+    const { sentence, tip } = await parts(px);
+    expect(sentence).not.toContain('hidden');
+    expect(tip).toContain('hidden');
+  });
+
+  it.each([767, 768, 1023])('P18.97-T4 AC-6 at %ipx hides the sentence and keeps it behind the ⓘ after the count', async (px) => {
+    const { sentence, tip, glyph } = await parts(px);
+    expect(sentence).toContain('hidden');
+    expect(tip).not.toContain('hidden');
+    expect(glyph.closest('p')).toHaveTextContent(/^1 products · 1 your agents can sell/);
+    await userEvent.click(glyph);
+    expect(screen.getByRole('tooltip', { hidden: true })).toHaveTextContent(NOTE);
+  });
+
+  it('P18.97-T4 AC-6 says the whole catalog sentence no more', async () => {
+    render();
+    await screen.findByRole('button', { name: NOTE });
+    expect(screen.queryByText(/This catalog is your company’s/)).toBeNull();
+    expect(screen.queryByText(/when they improve a script/)).toBeNull();
+  });
+});
+
+/**
+ * **44px targets on a phone** (P18.97-T7 AC-6, ADR-0178 §5; the client's KPM Owner review of 2026-10-27, UI-040: 33
+ * tappable controls under 44px, the *Agents sell it* switch on every row among them). Below 768px every button, field
+ * and switch is a 44 × 44 target; at 768px and wider the shelf is as it was, to the byte.
+ */
+describe('P18.97-T7 AC-6 the products’ targets on a phone (UI-040)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const SHELF = [
+    product(),
+    product({ productId: 'p2', code: 'PRULINK', companyName: 'PRULink', displayName: field('PRULink'), reviewState: 'pending', active: field(false) }),
+  ];
+
+  /** The shelf's markup on the build before P18.97-T7, at rest and with a product open, from this fixture on 2026-10-28. */
+  const BEFORE_T7: Record<'rest' | 'open', Record<768 | 1280, string>> = {
+    rest: {
+      768: '3a7183f76d8d7a67aa69ac80cd2a851590cef56f25994b9413a574fe07de0bf8',
+      1280: 'dd3a4757fcfa2ce9cdb7dfc6580ab3dafdd162bb4203c3397f36b37217cbfaad',
+    },
+    open: {
+      768: 'edab66e0c37a2442c641ee5666452fc31c674b8f92f874a53ee2e5d40b2ccb40',
+      1280: '2ad26be6a8daa3c6dc670abe87a3a93576c568a6cab6cc1a958d0e46b30a4991',
+    },
+  };
+
+  it.each([768, 1280] as const)('P18.97-T7 AC-6 at %ipx draws the shelf as it was, to the byte', async (px) => {
+    atWidth(px);
+    render(SHELF);
+    await screen.findByText('PRULink');
+    // The whole screen: the tabs, the publish bar, the count and every row (`main` is the shell's, which this spec has not).
+    const page = () => document.body.firstElementChild!;
+    expect(digestAt(page(), px)).toBe(BEFORE_T7.rest[px]);
+    await userEvent.click(screen.getAllByRole('button', { name: 'Customize' })[0]);
+    await screen.findByLabelText('What your office calls it');
+    expect(digestAt(page(), px)).toBe(BEFORE_T7.open[px]);
+  });
+  it.each([375, 767])('P18.97-T7 AC-6 at %ipx makes Agents sell it a 44 × 44px target, the track as drawn', async (px) => {
+    atWidth(px);
+    render(SHELF);
+    await screen.findByText('PRULink');
+    for (const toggle of screen.getAllByRole('switch', { name: 'Agents sell it' })) {
+      // The transparent input — what a finger and a screen reader meet — a 44px square on the track.
+      expect(wears(toggle, px).split(' ')).toEqual(expect.arrayContaining(['h-11', 'w-11', 'left-1/2', 'top-1/2']));
+      expect(wears(toggle, 768).split(' ')).toEqual(expect.arrayContaining(['h-full', 'w-full']));
+      expect(wears(toggle, 768).split(' ')).not.toContain('h-11');
+      // Its line 44px tall, so the square reaches over nothing above or below; the track itself unchanged.
+      const line = toggle.parentElement!.parentElement!;
+      expect(wears(line, px).split(' ')).toContain('min-h-11');
+      expect(wears(toggle.parentElement!, px)).toBe(wears(toggle.parentElement!, 768));
+    }
+  });
+
+  it('P18.97-T7 AC-6 makes every button and field of a product, and of the approvals, a 44px target on a phone', async () => {
+    atWidth(375);
+    render(SHELF);
+    await screen.findByText('PRULink');
+    await userEvent.click(screen.getAllByRole('button', { name: 'Customize' })[0]);
+    await screen.findByLabelText('What your office calls it');
+    const controls = [
+      screen.getByLabelText('What your office calls it'),
+      screen.getByLabelText('Code'),
+      screen.getByRole('button', { name: 'Save the name' }),
+      ...screen.getAllByRole('button', { name: 'Save' }),
+    ];
+    for (const control of controls) {
+      expect(wears(control, 375).split(' ')).toContain('h-11');
+      expect(wears(control, 768).split(' ')).not.toContain('h-11');
+    }
+    // The row's text actions — *Customize*, *Review*, *Close*, a document's *+ Upload* — are 44 × 44 on a phone already.
+    for (const name of ['Close', 'Review PRULink']) {
+      expect(wears(screen.getByRole('button', { name }), 375).split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
+    }
+
+    await userEvent.click(screen.getByRole('link', { name: 'Script approvals' }));
+    const approve = await screen.findByRole('button', { name: 'Approve' });
+    await userEvent.click(screen.getByRole('button', { name: 'Send back' }));
+    for (const name of ['Approve', 'Send it back', 'Cancel']) {
+      expect(wears(name === 'Approve' ? approve : screen.getByRole('button', { name }), 375).split(' ')).toContain('h-11');
+    }
   });
 });

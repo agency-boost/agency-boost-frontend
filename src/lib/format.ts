@@ -11,12 +11,20 @@
  *
  * - a date `26 Okt 2026`; with its weekday `Senin, 26 Okt 2026`; a month `Okt 2026`; a date and time
  *   `26 Okt 2026, 13.05`; a time `13.05`;
- * - money **compact** on a card, a tile, a summary, a chip and in a sentence — `Rp 357,5 jt` — and
- *   **in full** in a table's cell, an input and an export — `Rp 357.500.000`;
- * - a percentage to one decimal, `15,0%`; a decimal with a comma, `2,13`; a thousand with a dot, `1.250`.
+ * - a decimal with a comma, `2,13`; a thousand with a dot, `1.250`.
  *
- * The English words around them stay (OD-197): only the formatting is Indonesian. The backend writes its
- * own sentences by the same rules, in `backend/src/common/format/format.ts`.
+ * **Percentages and money since ADR-0174** (OD-226, OD-227; P18.97-T3; parity I-501, I-502), the client's KPM
+ * Owner findings of 2026-10-27:
+ *
+ * - a percentage **whole**, rounded half up, with no *,0* — `96%` — but a ratio compared with its benchmark keeps
+ *   its tenth (`29,6%`), and a figure stated as a rule or a record keeps the places it has (`7,25%`);
+ * - money **compact** everywhere — a card, a tile, a sentence **and a table** — `Rp 357,5 jt`, and **in full**
+ *   only in Data upload's cells and correction panel, an input and what it echoes, and a price — `Rp 357.500.000`.
+ *
+ * The English words around them stay (OD-197): only the formatting is Indonesian, until Phase 18.98 adds
+ * English through these same functions (ADR-0174 §6). The backend writes its own sentences in the same forms,
+ * in `backend/src/common/format/format.ts`; a ratio's tenth beside its benchmark and `lossless`' cap of
+ * {@link PERCENT_LOSSLESS_MAX_DECIMALS} places are this module's alone (`metrics-and-definitions.md` §B.25).
  *
  * **Built from tables, not `toLocaleDateString('id-ID')`.** Runtimes disagree about `id-ID`'s August
  * (*Agu* or *Agt*) and about the separator before a time, and a screen must print the same characters
@@ -398,15 +406,64 @@ export function formatNumber(value: number, { decimals, maxDecimals }: { decimal
   return /^-0(,0+)?$/.test(text) ? text.slice(1) : text;
 }
 
-/**
- * A percentage, **to one decimal** (ADR-0167 §1: *"Percentages keep one decimal"*): `15,0%`, `57,5%`, `100,0%`.
- * `value` is already in percent — 15 for 15%. `maxDecimals` lets a figure keep more where rounding it would
- * misstate what is stored (a commission rate of 7,25%, `formatRate`) or a status (`formatRatioForStatus`).
+/*
+ * ── Percentages (ADR-0174 §1–§3, OD-226, OD-213; parity I-501) ──────────────────────────────────
+ *
+ * **A percentage is a whole number, rounded half up, with no *,0*** — `96%` for 27 of 28. The server rounds a
+ * share once, in integers (`rateOver`), and this writes what it served: **no percentage is rounded twice**, and
+ * a screen computes none (invariant §7). Two exceptions, each its caller's to ask for:
+ *
+ * - **a ratio compared with its benchmark keeps its tenth**, `{ decimals: 1 }` — `29,6%` beside a `30%`
+ *   benchmark, where `30%` would contradict *below* (`lib/ratio-format.ts`, `lib/ratio-balance.ts`);
+ * - **a figure stated as a rule or as a record keeps the places it has**, `{ lossless: true }` — a benchmark as
+ *   typed (`30%`, `15,5%`), a threshold (a campaign's, an MOC criterion's), a commission rate (`7,25%`), the
+ *   carrier's persistency as Data upload shows it (`87,35%`), the rate an input echoes. Rounding one would state a
+ *   different rule or misstate the file.
  */
-export function formatPercent(value: number, { maxDecimals = 1 }: { maxDecimals?: number } = {}): string {
+
+/**
+ * The most places `lossless` keeps — the places a benchmark is typed to (`benchmarkToInput`) and Data upload
+ * reads a persistency to — so the binary noise of `0.0725 × 100` (`7.249999999999999`) is never written.
+ * `metrics-and-definitions.md` §B.25.
+ */
+export const PERCENT_LOSSLESS_MAX_DECIMALS = 4;
+
+/**
+ * A percentage, **whole** (ADR-0174 §1): `96%`, `58%` for 57,5, `100%`, `0%`. `value` is already in percent — 15
+ * for 15%. Rounding is half up — away from zero for a negative change, `-13%` for -12,5 — `Intl`'s.
+ *
+ * - `decimals` — the places always written: `{ decimals: 1 }` is a ratio beside its benchmark, `29,6%`, `30,0%`;
+ * - `maxDecimals` — up to that many, trailing zeros dropped past `decimals`: a balance's split that needs a second
+ *   place to stay on its side of the band, `{ decimals: 1, maxDecimals: 2 }` is `65,04%` and `40,0%`;
+ * - `lossless` — a figure stated as a rule or a record: every place it has, up to
+ *   {@link PERCENT_LOSSLESS_MAX_DECIMALS}, none when it has none — `7,25%`, `30%`.
+ */
+export function formatPercent(
+  value: number,
+  { decimals = 0, maxDecimals, lossless = false }: { decimals?: number; maxDecimals?: number; lossless?: boolean } = {},
+): string {
   if (!Number.isFinite(value)) return '';
-  const text = numberFormat(1, Math.max(1, maxDecimals)).format(value);
-  return `${/^-0,0+$/.test(text) ? text.slice(1) : text}%`;
+  const max = Math.max(decimals, maxDecimals ?? (lossless ? PERCENT_LOSSLESS_MAX_DECIMALS : decimals));
+  const text = numberFormat(decimals, max).format(value);
+  // `-0%` is written `0%`: a change that rounds to nothing has no sign.
+  return `${/^-0(,0+)?$/.test(text) ? text.slice(1) : text}%`;
+}
+
+/**
+ * **`part / of` as a whole percent, rounded half up in integers** (P18.97-T3, parity F-254; the client's UI-018,
+ * *"correctly rounded"*) — the server's rule (`rateOver`, `wholePercent`; `metrics-and-definitions.md` §A.11), for
+ * the few shares a screen still works out from two figures it was served: the Overview's trend against last month,
+ * the Super Admin's signed-in shares, `ProgressBar`. A share the server serves is written as it came (invariant §7);
+ * this is for none of those.
+ *
+ * `Math.round(part / of * 100)` rounds the quotient's binary approximation — `23 / 40 * 100` is `57.49999999999999`,
+ * so an exact 57,5% read 57. `floor((200·part + of) / (2·of))` is exact for whole numbers below 2⁵³, which every
+ * count is. Half up is toward +∞, as `Math.round` is: −57,5 is −57. `null` when `of` is not above 0: there is no share
+ * of nobody, never 0% and never a division by zero.
+ */
+export function percentOf(part: number, of: number): number | null {
+  if (!Number.isFinite(part) || !Number.isFinite(of) || of <= 0) return null;
+  return Math.floor((200 * part + of) / (2 * of));
 }
 
 /**
@@ -440,16 +497,19 @@ export function parseDecimal(typed: string): number {
 }
 
 /*
- * ── Money (ADR-0167 §1, parity I-394) ───────────────────────────────────────────────────────────
+ * ── Money (ADR-0174 §4, OD-227; parity I-502, which narrows I-394) ─────────────────────────────
  *
  * **Integer minor units, IDR sen, everywhere** (invariant §9). A screen holds sen and writes rupiah
  * through one of two formatters, and which one is a rule, not a taste:
  *
- * - **`formatRupiah`, in full** — `Rp 500.000.000` — in a **table's cell**, beside or inside an **input**,
- *   and in an **export** (a print, a file, a quote): where a figure is read against others in a column,
- *   checked against what was typed, or kept.
- * - **`formatRupiahCompact`** — `Rp 500 jt` — **everywhere else**: a card, a KPI tile, a summary, a chip, a
- *   pill, a sentence and its tooltip.
+ * - **`formatRupiahCompact`** — `Rp 500 jt`, `Rp 5,8 M` — **everywhere**: a card, a KPI tile, a summary, a chip,
+ *   a pill, a sentence and its tooltip, a print **and a table's cell** (the analytics' `Rp 5.672.500.000` reads
+ *   `Rp 5,7 M`). *M* is *miliar* and *jt* is *juta* on every screen.
+ * - **`formatRupiah`, in full** — `Rp 500.000.000` — **only where precision matters**: Data upload's cells and
+ *   its correction panel (the carrier's file's own figures); an **input** and what it echoes (the read-only
+ *   figure that stands in one); and a **price** — the Super Admin's billing quote and a subscription's costs.
+ *
+ * Until Phase 18.98 there are only the Indonesian units (ADR-0174 §6); English adds *IDR 5.8B* through these.
  */
 
 /** IDR sen per rupiah. One place, so a screen cannot hold a second opinion about the unit. */
@@ -468,7 +528,8 @@ function rupiahOf(minor: number): { sign: string; rupiah: number } {
 }
 
 /**
- * `500000000` rupiah (in sen) as `Rp 500.000.000` — **in full**, for a table's cell, an input and an export.
+ * `500000000` rupiah (in sen) as `Rp 500.000.000` — **in full**, only where precision matters (ADR-0174 §4): Data
+ * upload's cells and correction panel, an input and what it echoes, and a price.
  * A negative keeps its minus in front, `-Rp 20.000`, as the billing quote's discounts always read.
  *
  * **Indonesian grouping**, which the prototype's `toLocaleString('en-US')` gets wrong for its own
@@ -481,19 +542,27 @@ export function formatRupiah(minor: number): string {
   return `${sign}Rp ${grouped(rupiah)}`;
 }
 
+/**
+ * **Rupiah in each compact unit, by the mark a screen writes after it** (ADR-0174 §4; `metrics-and-definitions.md`
+ * §B.25): `M` a *miliar*, `jt` a *juta*, `rb` a *ribu*. Held once, here — a screen that writes a figure in a header's
+ * unit, the forum's *APE (Rp M)* and *Avg. Case Size (Rp jt)*, reads its size from this, never a second `1e9`.
+ */
+export const RUPIAH_PER_UNIT = { M: 1_000_000_000, jt: 1_000_000, rb: 1_000 } as const;
+
 /** The compact units, largest first: *miliar*, *juta*, *ribu* (`metrics-and-definitions.md`, *Compact money*). */
 const COMPACT_UNITS = [
-  { size: 1_000_000_000, mark: 'M' },
-  { size: 1_000_000, mark: 'jt' },
-  { size: 1_000, mark: 'rb' },
+  { size: RUPIAH_PER_UNIT.M, mark: 'M' },
+  { size: RUPIAH_PER_UNIT.jt, mark: 'jt' },
+  { size: RUPIAH_PER_UNIT.rb, mark: 'rb' },
 ] as const;
 
 /**
- * A sum **compact**, for a card, a tile, a summary, a chip and a sentence: `Rp 750 rb`, `Rp 500 jt`,
- * `Rp 357,5 jt`, `Rp 1,2 M` (ADR-0167 §1; the thresholds and the rounding are `metrics-and-definitions.md`'s
- * *Compact money*, stated once):
+ * A sum **compact**, for every figure but those `formatRupiah` keeps — a card, a tile, a summary, a chip, a
+ * sentence and a table: `Rp 750 rb`, `Rp 500 jt`, `Rp 357,5 jt`, `Rp 1,2 M` (ADR-0174 §4; the thresholds and the
+ * rounding are `metrics-and-definitions.md` §B.25, stated once):
  *
- * - 1.000.000.000 and over in *M* (miliar), 1.000.000 in *jt* (juta), 1.000 in *rb* (ribu); below, in full;
+ * - 1.000.000.000 and over in *M* (miliar), 1.000.000 in *jt* (juta), 1.000 in *rb* (ribu); below, in full.
+ *   There is no *triliun*: a thousand *miliar* and more stays in *M*, grouped, `Rp 1.500 M`;
  * - **at most one decimal**, a comma, and no trailing *,0* — `Rp 500 jt`, never `Rp 500,0 jt`;
  * - **rounded half up on the digit shown, in integers** — `1.150` is `Rp 1,2 rb`, which `1.15 × 10` in floating
  *   point would make `Rp 1,1 rb` — and a figure that rounds up to a thousand of its unit is written in the next:
@@ -522,7 +591,7 @@ export function formatRupiahCompact(minor: number, { lossless = false }: { lossl
 }
 
 /**
- * Two compact sums read as one figure, **one `Rp` between them**: `Rp 357,5 jt / 712,7 jt` (UI-030, ADR-0167 §1).
+ * Two compact sums read as one figure, **one `Rp` between them**: `Rp 357,5 jt / 712,7 jt` (UI-030, ADR-0167 §1, ADR-0174 §4).
  * The client's example for the Unit Dashboard's *Direct Group production*, which wrapped as *Rp 357.500.000 /
  * Rp 712.666.667*; `joiner` is the word the screen already uses — `/` on a tile, `of` in a sentence.
  */

@@ -7,20 +7,28 @@ import {
 /*
  * P4-T25. Each of the five seeded benchmarks written the way `metrics-and-definitions.md`
  * states it — the defect was that the screens printed `0.15` for a success rate. The client's
- * benchmarks since ADR-0160 §2, and *Set appointment to meeting* a percent.
+ * benchmarks since ADR-0160 §2, and *Set appointment to meeting* a percent. **As typed since
+ * ADR-0174 §2** (P18.97-T3 AC-2): *30%*, never *30,0%*; a number keeps its two places.
  */
 describe('formatBenchmark', () => {
   it.each([
-    ['Selling success rate', 0.3, 'percent', '30,0%'],
-    ['Recruitment success rate', 0.3, 'percent', '30,0%'],
+    ['Selling success rate', 0.3, 'percent', '30%'],
+    ['Recruitment success rate', 0.3, 'percent', '30%'],
     ['Leads per activity', 1, 'decimal', '1,00'],
-    ['Set appointment to meeting', 0.5, 'percent', '50,0%'],
+    ['Set appointment to meeting', 0.5, 'percent', '50%'],
     ['Selling vs Recruitment', 30, 'points', '±30 points'],
     // The prototype's, which an office that kept them still holds.
-    ['a success rate at 15%', 0.15, 'percent', '15,0%'],
+    ['a success rate at 15%', 0.15, 'percent', '15%'],
     ['Meeting per approach at 1.50', 1.5, 'decimal', '1,50'],
-  ] as const)('writes %s as %s', (_, value, unit, text) => {
+  ] as const)('P18.97-T3 AC-2 writes %s as typed, %s', (_, value, unit, text) => {
     expect(formatBenchmark(value, unit)).toBe(text);
+  });
+
+  it('P18.97-T3 AC-2 keeps the places a percentage benchmark was typed with, and only those', () => {
+    expect(formatBenchmark(0.155, 'percent')).toBe('15,5%');
+    expect(formatBenchmark(0.1525, 'percent')).toBe('15,25%');
+    expect(formatBenchmark(0.57, 'percent')).toBe('57%');
+    expect(formatBenchmark(0.3, 'decimal')).toBe('0,30');
   });
 
   it('keeps a half point where one was set, and adds none where it was not', () => {
@@ -97,8 +105,11 @@ describe('unitFor', () => {
 });
 
 describe('formatRatioValue (P10-T2)', () => {
-  it('writes a rate as its benchmark is written', () => {
+  it('P18.97-T3 AC-2 keeps a rate’s tenth — it is read against its benchmark — and a number’s two places', () => {
     expect(formatRatioValue(0.0909, 'percent')).toBe('9,1%');
+    expect(formatRatioValue(0.296, 'percent')).toBe('29,6%');
+    expect(formatRatioValue(0.3, 'percent')).toBe('30,0%');
+    expect(formatRatioValue(0, 'percent')).toBe('0,0%');
     expect(formatRatioValue(0.375, 'decimal')).toBe('0,38');
     expect(formatRatioValue(2.25, 'decimal')).toBe('2,25');
     expect(formatRatioValue(2.125, 'decimal')).toBe('2,13');
@@ -120,6 +131,20 @@ describe('formatRatioForStatus — a rounded figure never reads as the other sid
   it('writes one more decimal where a miss would round onto the benchmark', () => {
     expect(formatRatioForStatus(8 / 27, 'decimal', 0.3, 'alert')).toBe('0,296');
     expect(formatRatioForStatus(0.1496, 'percent', 0.15, 'alert')).toBe('14,96%');
+  });
+
+  it('P18.97-T3 AC-2 compares the figure as written with the benchmark as a number: 30,0% beside 30% is a tie', () => {
+    // The two are written apart on purpose (a ratio keeps its tenth, a benchmark reads as typed), so the texts
+    // never match; the numbers do, and a miss that reads 30,0% beside *Benchmark: 30%* takes the extra place.
+    expect(formatRatioForStatus(0.2996, 'percent', 0.3, 'alert')).toBe('29,96%');
+    expect(formatRatioForStatus(0.296, 'percent', 0.3, 'alert')).toBe('29,6%');
+    expect(formatRatioForStatus(0.5696, 'percent', 0.57, 'alert')).toBe('56,96%');
+  });
+
+  it('P18.97-T3 AC-2 takes the extra place where the tenth would pass a benchmark typed to two places', () => {
+    // 15,56% is below a 15,58% benchmark, and its tenth, 15,6%, would read above it.
+    expect(formatRatioForStatus(0.1556, 'percent', 0.1558, 'alert')).toBe('15,56%');
+    expect(formatRatioForStatus(0.1553, 'percent', 0.1558, 'alert')).toBe('15,5%');
   });
 
   it('writes a lean just outside the band with its decimal, and one well outside as whole points', () => {

@@ -573,14 +573,15 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
                   {displayName(r)}
                 </Link>
               </Cell>
-              <Cell>
+              <Cell className="whitespace-nowrap">
                 <code className="text-sm">{r.agentCode}</code>
               </Cell>
               <Cell>
                 <RoleBadge role={r.role} />
               </Cell>
+              {/* The directory's words for one who leads nobody (P18.97-T4 AC-3; UI-024): *No team*. */}
               <Cell className="text-muted">
-                {r.isLeader ? `${r.directCount} direct` : 'Leads nobody'}
+                {r.isLeader ? `${r.directCount} direct` : 'No team'}
               </Cell>
             </Row>
           ))}

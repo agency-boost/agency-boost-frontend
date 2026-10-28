@@ -17,7 +17,7 @@ import {
  */
 const GRID = 'grid gap-4 grid-cols-[repeat(auto-fit,minmax(min(100%,430px),1fr))]';
 
-/** Shaped like the banner and the four cards, so they arrive in place (L-01, a Fill). */
+/** Shaped like the banner and the six cards, so they arrive in place (L-01, a Fill). */
 function PitchSkeleton() {
   return (
     <Skeleton label={PITCH_OWN_COPY.loading}>
@@ -26,7 +26,7 @@ function PitchSkeleton() {
         <SkeletonText lines={2} className="flex-1" />
       </div>
       <div className={GRID}>
-        {[0, 1, 2, 3].map((i) => (
+        {[0, 1, 2, 3, 4, 5].map((i) => (
           <div key={i} className="flex flex-col gap-3.5 rounded-lg border border-hairline bg-card px-5 py-5 sm:px-6">
             <SkeletonBar className="h-4 w-1/2" />
             <SkeletonText lines={2} />
@@ -49,7 +49,8 @@ function ReadFailed({ error, onRetry }: { error: ApiError; onRetry: () => void }
 }
 
 /**
- * The banner and the four cards, read from `GET /recruitment/pitch-materials` — the one read both the
+ * The banner and the six cards — the four the readiness counts, then the two optional ones, in the server's
+ * order (ADR-0177) — read from `GET /recruitment/pitch-materials`, the one read both the
  * office's page (`/kpm/settings/recruitment-pitch`, P17-T5) and the agents' tab
  * (`/recruitment/pitch-materials`, P17-T6) are drawn from.
  *

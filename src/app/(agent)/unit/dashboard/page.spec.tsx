@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderInLayout, renderWithSession, stubFetch, type StubReply } from '@test/harness';
 import {
@@ -94,7 +95,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       expect(screen.queryByText(/direct agents \(including/)).not.toBeInTheDocument();
       expect(screen.getByText('Direct Group production')).toBeInTheDocument();
       expect(screen.getByText('Rp 1 M / 1,3 M')).toBeInTheDocument();
-      expect(screen.getByText('78,0%')).toBeInTheDocument();
+      expect(screen.getByText('78%')).toBeInTheDocument();
       // P18.95-T9 AC-4: the prototype's *Potential Monthly Active Agents (Group)*, in plain words — on pace, not active.
       expect(screen.getByText('On pace to be active (Group)')).toBeInTheDocument();
       expect(screen.queryByText('Potential Monthly Active Agents (Group)')).not.toBeInTheDocument();
@@ -250,13 +251,13 @@ describe('the Unit Dashboard (P15-T2)', () => {
       expect(within(rowOf('Dewi Kartika')).queryByText('Personal')).not.toBeInTheDocument();
     });
 
-    it('P15-T2 AC-3 writes the goal over or short, over achieved of target', async () => {
+    it('P15-T2 AC-3, P18.97-T3 AC-1 writes the goal over or short, its percentage whole, over achieved of target', async () => {
       render();
       await table();
-      expect(rowOf('You (Agus)')).toHaveTextContent('135,0% · +Rp 28 jt overRp 108 jt of 80 jt');
-      expect(rowOf('Dimas Pratama')).toHaveTextContent('82,0% · Rp 14,4 jt shortRp 65,6 jt of 80 jt');
-      expect(within(rowOf('You (Agus)')).getByText('135,0% · +Rp 28 jt over')).toHaveClass('text-success');
-      expect(within(rowOf('Dimas Pratama')).getByText('82,0% · Rp 14,4 jt short')).toHaveClass('text-alert');
+      expect(rowOf('You (Agus)')).toHaveTextContent('135% · +Rp 28 jt overRp 108 jt of 80 jt');
+      expect(rowOf('Dimas Pratama')).toHaveTextContent('82% · Rp 14,4 jt shortRp 65,6 jt of 80 jt');
+      expect(within(rowOf('You (Agus)')).getByText('135% · +Rp 28 jt over')).toHaveClass('text-success');
+      expect(within(rowOf('Dimas Pratama')).getByText('82% · Rp 14,4 jt short')).toHaveClass('text-alert');
     });
 
     it('P15-T2 AC-3 says Not uploaded yet and No goal set, never 0', async () => {
@@ -387,7 +388,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       await table();
       const totalRow = screen.getByRole('rowheader', { name: 'Your Unit — Total' }).closest('tr')!;
       const cells = within(totalRow).getAllByRole('cell');
-      expect(cells[0]).toHaveTextContent('82,0% · Rp 57,6 jt shortRp 262,4 jt of 320 jt');
+      expect(cells[0]).toHaveTextContent('82% · Rp 57,6 jt shortRp 262,4 jt of 320 jt');
       // A total chases nothing (`:7458`, P18.5-T7 AC-7).
       expect(cells[1]).toHaveTextContent(/^—$/);
       expect(within(cells[1]).queryByRole('button')).not.toBeInTheDocument();
@@ -420,7 +421,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       render(paired);
       await table();
       const cells = within(screen.getByRole('rowheader', { name: 'Your Unit — Total' }).closest('tr')!).getAllByRole('cell');
-      expect(cells[0]).toHaveTextContent('9,0% · Rp 129,7 jt short');
+      expect(cells[0]).toHaveTextContent('9% · Rp 129,7 jt short');
       expect(cells[0]).toHaveTextContent('Rp 13 jt of 142,7 jt');
     });
 
@@ -1167,7 +1168,7 @@ describe('P18.95-T3 — the roster as cards on a phone', () => {
     const dimas = cardOf('Dimas Pratama');
     expect(dimas).toHaveTextContent(goal!);
     expect(dimas).toHaveTextContent(last!);
-    expect(goal).toBe('82,0% · Rp 14,4 jt shortRp 65,6 jt of 80 jt');
+    expect(goal).toBe('82% · Rp 14,4 jt shortRp 65,6 jt of 80 jt');
     expect(last).toBe('12 days ago · overdueby Agus Santoso');
     expect(within(dimas).getByText('12 days ago · overdue')).toHaveClass('text-alert');
     expect(within(dimas).getByRole('button', { name: 'Watch closely' })).toHaveAccessibleDescription(
@@ -1283,7 +1284,7 @@ describe('P18.95-T3 — the roster as cards on a phone', () => {
     await cards();
     const total = within(screen.getByRole('list', { name: 'Your Unit' })).getAllByRole('listitem')[0];
     expect([...total.querySelectorAll('dt')].map((dt) => dt.textContent)).toEqual(['Goal progress', 'Leads', 'Activity', 'Status']);
-    expect(total).toHaveTextContent('82,0% · Rp 57,6 jt short');
+    expect(total).toHaveTextContent('82% · Rp 57,6 jt short');
     expect(total).toHaveTextContent('Sales: 36 · 16 closingRecruit: 1 potential recruit');
     expect(total).toHaveTextContent('340 / 380 goal activities');
     expect(total).toHaveTextContent('On pace to be active: 3/4');
@@ -1422,6 +1423,36 @@ describe('P18.96-T5 — who counts where (ADR-0172)', () => {
 });
 
 /** The reader's own row as the fixture holds it. */
+/**
+ * **The roster's cards read their pieces from `components/ui/row-cards.tsx`** (P18.97-T7 AC-1, ADR-0178 §4): *CardField*
+ * and *CardGroup* moved out of the roster so the Owner's wide tables draw the same cards on a phone. The move changed
+ * no markup: the cards, two opened, digested as they were drawn before it.
+ */
+describe('P18.97-T7 AC-1 the roster’s cards from the shared pieces', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.removeEventListener('click', stayPut);
+  });
+
+  /** The roster's cards on the build before P18.97-T7, two of them opened, from this fixture on 2026-10-28. */
+  const BEFORE_T7 = 'f433b4f8bcee69f2fdceed03ed851f1087a68590c25650bfc8aff7ac973cd7f4';
+
+  it('P18.97-T7 AC-1 draws the roster’s cards as they were, to the byte', async () => {
+    document.addEventListener('click', stayPut);
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      media: query, matches: query === PHONE_QUERY, addEventListener: () => {}, removeEventListener: () => {},
+    })));
+    render();
+    const list = await screen.findByRole('list', { name: 'Your Unit' });
+    const roster = list.closest('.rounded-lg')!;
+    // A person's card and the reader's own opened, so their details are in the markup too.
+    fireEvent.click(screen.getByRole('button', { name: 'View details for Dimas Pratama' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View details for you' }));
+    const html = roster.outerHTML.replace(/_r_[0-9a-z]+_/g, '_id_');
+    expect(createHash('sha256').update(html).digest('hex')).toBe(BEFORE_T7);
+  });
+});
+
 function AGUS_ME_ROW() {
   return dashboard().yourUnit.rows[0];
 }

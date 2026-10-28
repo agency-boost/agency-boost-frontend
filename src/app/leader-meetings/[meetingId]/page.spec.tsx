@@ -57,10 +57,11 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
       expect(date).toHaveTextContent('13 Okt 2026');
     });
 
-    it('P18.1-T2 AC-3: Can edit this MOM — the Owner first, then the Admins, then the Core Leaders, "(You)" after the reader', async () => {
+    it('P18.1-T2 AC-3, P18.97-T2 AC-3: Can edit these minutes — the Owner first, then the Admins, then the Core Leaders, "(You)" after the reader', async () => {
       open();
-      const label = await screen.findByText('Can edit this MOM');
-      const chips = within(screen.getByRole('list', { name: 'Can edit this MOM' })).getAllByRole('listitem');
+      const label = await screen.findByText('Can edit these minutes');
+      expect(screen.queryByText(/\bMOM\b/)).toBeNull();
+      const chips = within(screen.getByRole('list', { name: 'Can edit these minutes' })).getAllByRole('listitem');
       expect(label).toBeInTheDocument();
       expect(chips.map((c) => c.textContent)).toEqual([
         'WTWilson Tanoto (You) · AB', 'MHMaya Halim · AAB', 'ASAgus Santoso · AB', 'SDSari Dewanti · AAB', 'YPYosef Pratama · AB',
@@ -137,7 +138,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
       }));
       await screen.findByRole('heading', { level: 2, name: 'Strategic Check-in — #13' });
       expect(head().getByText('26 Sep 2026 · Completed')).toBeInTheDocument();
-      expect(within(screen.getByRole('list', { name: 'Can edit this MOM' })).getAllByRole('listitem')).toHaveLength(4);
+      expect(within(screen.getByRole('list', { name: 'Can edit these minutes' })).getAllByRole('listitem')).toHaveLength(4);
     });
   });
 
@@ -251,7 +252,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
     });
   });
 
-  describe('Share this MOM (P18.1-T3, I-256)', () => {
+  describe('Share these minutes (P18.1-T3, I-256; P18.97-T2 AC-3)', () => {
     const link = { token: 'tok_abc-123', expiresAt: '2026-10-23T18:00:00.000Z' };
 
     it('P18.1-T3 AC-1: each opening makes a fresh link, shows its address read-only and the hint, dated in Jakarta', async () => {
@@ -259,8 +260,8 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
         'POST /leader-meetings/m-14/share-links': [{ status: 201, body: link }, { status: 201, body: { ...link, token: 'tok_second' } }],
       });
       await userEvent.click(await screen.findByRole('button', { name: 'Share' }));
-      const dialog = within(screen.getByRole('dialog', { name: 'Share this MOM' }));
-      const field = await dialog.findByRole('textbox', { name: 'Share this MOM' });
+      const dialog = within(screen.getByRole('dialog', { name: 'Share these minutes' }));
+      const field = await dialog.findByRole('textbox', { name: 'Share these minutes' });
       expect(field).toHaveValue(`${window.location.origin}/leader-meetings/shared/tok_abc-123`);
       expect(field).toHaveAttribute('readonly');
       // 18:00 UTC on the 23rd is the 24th in Jakarta.

@@ -495,8 +495,8 @@ export interface GoalWords {
  * *No goal set* (ADR-0080), and no actual *Not uploaded yet*.
  *
  * **Compact, by the client's own example** (UI-030, ADR-0167 §1): *"Rp 357,5 jt of 712,7 jt"*, one `Rp` for the
- * pair, where *"Rp 357.500.000 of Rp 712.666.667"* wrapped in the cell. The one table cell written compact: it is
- * a two-line summary of the row's goal, not a column of figures read against each other.
+ * pair, where *"Rp 357.500.000 of Rp 712.666.667"* wrapped in the cell — as every table's money is since ADR-0174
+ * §4; the percentage whole (§1), *50% · Rp 355,2 jt short*.
  */
 export function goalWords(figures: {
   targetMinor: number | null;

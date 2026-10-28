@@ -49,6 +49,12 @@ export interface Member {
   /** Set only on a removed row. */
   removedAt: string | null;
   /**
+   * **The office date the person came back, if they did** (P18.97-T4 AC-3, ADR-0176 §5), the server's: on a live
+   * membership that follows a removed one, its own join date — *Rejoined* beside the status; on the removed one, the
+   * later membership's — *Rejoined {date}* under *Removed*. Optional, for a read older than it; absent is *never left*.
+   */
+  rejoinedOn?: string | null;
+  /**
    * What **this viewer** may do to this person, decided by the server (P3.5-T13).
    *
    * Three flags because the permission matrix has three rows: Agent⇄AAB is a direct

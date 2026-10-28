@@ -5,14 +5,14 @@ import { describe, expect, it } from 'vitest';
 import { parse, renderable, sourceFiles, SRC } from '@test/copy-scan';
 import { APE, campaign, CHALLENGE, chased, LIST, MDRT, NEW_HIRE, PERSISTENCY, PROMO_AGENT, PUSH, SPRINT } from '@test/campaigns-fixtures';
 import {
-  chasedToast, figureWords, kindLabel, OWN_COPY, POSTER_COLORS, progressWords, requirementsLine, requirementWords, rowSubline,
+  chasedToast, figureWords, kindLabel, OWN_COPY, POSTER_COLORS, progressWords, ratioUnitsOf, requirementsLine, requirementWords, rowSubline,
   seasonalSections, showsChase, statusWords, structuralSections, unchasedToast,
 } from './campaigns';
 
 describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
   it('P18.5-T7 AC-3 money is rupiah from sen, never raw sen (invariant §9, X-68’s rule)', () => {
     expect(figureWords(50_000_000_000, 'idr_minor')).toBe('Rp 500 jt');
-    expect(figureWords(90, 'percentage')).toBe('90,0%');
+    expect(figureWords(90, 'percentage')).toBe('90%');
     expect(figureWords(3, 'count')).toBe('3');
     expect(figureWords(0.15, 'ratio')).toBe('0,15');
   });
@@ -23,6 +23,15 @@ describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
     expect(figureWords(240_000_000_000, 'idr_minor')).toBe('Rp 2,4 M');
     expect(figureWords(92.5, 'percentage')).toBe('92,5%');
     expect(figureWords(1_250, 'count')).toBe('1.250');
+  });
+
+  it('P18.97-T3 AC-2 a threshold keeps the places it was set with, and no ,0: 90%, 92,5%, 75,55%', () => {
+    expect(figureWords(90, 'percentage')).toBe('90%');
+    expect(figureWords(92.5, 'percentage')).toBe('92,5%');
+    expect(figureWords(75.55, 'percentage')).toBe('75,55%');
+    // A ratio's threshold is written as the ratio is, two places; a balance's in points.
+    expect(figureWords(0.3, 'ratio')).toBe('0,30');
+    expect(figureWords(30, 'percentage_points')).toBe('±30 points');
   });
 
   it('P18.95-T10 AC-3 the client’s line: Needs: Rp 16 jt APE + 3 new hires', () => {
@@ -50,7 +59,7 @@ describe('a campaign in words (P18.5-T7 AC-3, P18.5-T8 AC-6)', () => {
     expect(requirementWords(count('MAA_COUNT_IN_UNIT', 5))).toBe('5 active agents in unit');
     expect(requirementWords(count('MAA_COUNT_IN_UNIT', 1))).toBe('1 active agent in unit');
     expect(requirementWords(count('CASCADE_ACTIVITY_TOUCHES', 40))).toBe('40 goal activities');
-    expect(requirementWords(PERSISTENCY)).toBe('90,0% rolling persistency');
+    expect(requirementWords(PERSISTENCY)).toBe('90% rolling persistency');
     expect(requirementWords({ ...NEW_HIRE(2), comparator: 'lt' })).toBe('under 2 new hires');
     expect(requirementWords({ ...NEW_HIRE(2), comparator: 'gt' })).toBe('more than 2 new hires');
     expect(requirementWords({ ...APE(500), comparator: 'lte' })).toBe('at most Rp 500 jt APE');
@@ -203,5 +212,58 @@ describe('the campaigns module’s own copy', () => {
   it('writes none of OD-39’s six words beyond the prototype’s own', () => {
     const offenders = files.flatMap((f) => sixWords(f, readFileSync(join(SRC, f), 'utf8')).map((hit) => `src/${f}: ${hit}`));
     expect(offenders).toEqual([]);
+  });
+});
+
+/** P18.97-T4 AC-8 (ADR-0176 §8; UI-030): a requirement on a ratio in the unit the office writes that ratio in. */
+describe('P18.97-T4 AC-8 figureWords writes a ratio in its own unit', () => {
+  it('P18.97-T4 AC-8 a success rate as a percentage, as typed; a count of a count as the number; unknown as before', () => {
+    expect(figureWords(0.3, 'ratio', 'percent')).toBe('30%');
+    expect(figureWords(0.155, 'ratio', 'percent')).toBe('15,5%');
+    expect(figureWords(1.5, 'ratio', 'decimal')).toBe('1,50');
+    expect(figureWords(0.3, 'ratio')).toBe('0,30');
+    // Only a ratio reads its unit: every other figure is written as it was.
+    expect(figureWords(90, 'percentage', 'decimal')).toBe('90%');
+  });
+});
+
+/**
+ * **A ratio requirement in the office's unit for it, on the agents' cards and dialog** (P18.97-T7; ADR-0174 §2, *one way
+ * of writing a percentage*): the settings read *Recruitment success rate at least 30%* since P18.97-T4 AC-8, and the
+ * card read *0,30*.
+ */
+describe('P18.97-T7 a ratio requirement in the office’s unit', () => {
+  const ratio = { code: 'RECRUIT_SUCCESS_RATE', comparison: 'gte' as const, displayUnit: 'percent' as const };
+  const units = ratioUnitsOf([ratio, { code: 'LEADS_PER_ACTIVITY', comparison: 'gte', displayUnit: 'decimal' }, { code: 'BALANCE', comparison: 'band' }]);
+  const requirement = {
+    metricKey: 'RECRUIT_SUCCESS_RATE', metricName: 'Recruitment success rate', comparator: 'gte' as const, value: 0.3, unit: 'ratio',
+    measured: true,
+  };
+
+  it('P18.97-T7 reads each ratio’s unit from the office’s configuration, by its code', () => {
+    expect([...units]).toEqual([['RECRUIT_SUCCESS_RATE', 'percent'], ['LEADS_PER_ACTIVITY', 'decimal'], ['BALANCE', 'decimal']]);
+    expect([...ratioUnitsOf(undefined)]).toEqual([]);
+    // A snapshot published before units existed carries none: a number, as the ratio card falls back.
+    expect(ratioUnitsOf([{ code: 'OLD', comparison: 'gte' }]).get('OLD')).toBe('decimal');
+  });
+
+  it('P18.97-T7 writes the card’s requirement as the settings do: 30%, and a number where the office writes one', () => {
+    expect(requirementWords(requirement, units)).toBe('Recruitment success rate 30%');
+    expect(requirementsLine([requirement, { ...requirement, metricKey: 'LEADS_PER_ACTIVITY', metricName: 'Leads per activity', value: 1.5 }], units))
+      .toBe('Recruitment success rate 30% + Leads per activity 1,50');
+    // With no configuration read yet, a number, as before.
+    expect(requirementWords(requirement)).toBe('Recruitment success rate 0,30');
+  });
+
+  it('P18.97-T7 writes a ratio’s progress in its unit: the target as typed, the figure to its tenth, a place more short of it', () => {
+    const row = (current: number | null, state: 'met' | 'not_met' | 'in_progress') => ({
+      metricKey: 'RECRUIT_SUCCESS_RATE', current, target: 0.3, unit: 'ratio', state,
+    });
+    expect(progressWords(row(0.2857, 'in_progress'), 'percent')?.text).toBe('28,6% of 30%');
+    // 29,96% would round to 30,0% beside a 30% it has not reached: one place more.
+    expect(progressWords(row(0.2996, 'not_met'), 'percent')?.text).toBe('29,96% of 30%');
+    expect(progressWords(row(0.3125, 'met'), 'percent')).toEqual({ text: '31,3% of 30%', met: true, figure: true });
+    expect(progressWords(row(0.2857, 'in_progress'), 'decimal')?.text).toBe('0,29 of 0,30');
+    expect(progressWords(row(0.2857, 'in_progress'))?.text).toBe('0,29 of 0,30');
   });
 });

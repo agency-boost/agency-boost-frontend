@@ -603,7 +603,8 @@ describe('Goal Settings (P8-T3)', () => {
       // The submissions column is the hero.
       expect(document.querySelector('[data-hero="true"]')).toHaveTextContent('Submission polis');
       // And the arrow's percentage is spelled out, because the glyph is decorative.
-      expect(screen.getByText('30,0% from set appointment to sales meeting')).toBeInTheDocument();
+      // The plan's own rate, as its field holds it (P18.97-T3 AC-2): an input's echo keeps its places, and no ,0.
+      expect(screen.getByText('30% from set appointment to sales meeting')).toBeInTheDocument();
     });
 
     it('P18.8-T10 AC-3 names the cascade in the client’s words, each month above its week', async () => {
@@ -777,6 +778,16 @@ describe('Goal settings — the APE already produced, once the office holds prod
     // Rp 120.000.000 in the field, and nowhere else: not again as *Rp 120 jt* in a tile beneath it.
     expect(screen.getAllByText(/^Rp 120(\.000\.000| jt)$/)).toHaveLength(1);
     expect(screen.getByText('Remaining needed').closest('[data-variant]')).toHaveTextContent('Rp 380 jt');
+  });
+
+  it('P18.97-T3 AC-3: keeps the figure that stands in a field in full, and writes every other sum compact', async () => {
+    // An input and what it echoes is where precision matters (ADR-0174 §4): the read-only *APE already produced this
+    // year* stands in the box, so it reads to the rupiah; the tile beside the plan is a summary, so it is short.
+    render({ '/goals': { body: imported() } });
+    await screen.findByText('Remaining needed');
+    expect(screen.getByText('Rp 120.000.000')).toBeInTheDocument();
+    expect(screen.getByText('Remaining needed').closest('[data-variant]')).toHaveTextContent('Rp 380 jt');
+    expect(screen.getByText('Remaining needed').closest('[data-variant]')).not.toHaveTextContent('Rp 380.000.000');
   });
 
   it('says so when the office corrected it by hand', async () => {

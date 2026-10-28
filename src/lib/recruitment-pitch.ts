@@ -3,15 +3,17 @@ import { formatNumber } from './format';
 import type { SignedUpload } from './tenant-config';
 
 /**
- * The office's four recruitment pitch documents (P17-T4 to P17-T6, D-slots, D-replace,
- * D-agent-view, D-settings).
+ * The office's recruitment pitch documents (P17-T4 to P17-T6, D-slots, D-replace, D-agent-view,
+ * D-settings; ADR-0177): the four the readiness counts, then *Company Profile* and *Agency Profile*,
+ * optional.
  *
- * **Every slot's title, its checklist and the checklist's labels are the server's** (the domain
- * constants, `Recruitment_Section.html:626-661`), so nothing here names a slot but its code's type.
- * A slot's state is the server's too, by the one completion rule it states once; this module draws it.
+ * **Every slot's title, whether it is required, its checklist and the checklist's labels are the
+ * server's** (the domain constants, `Recruitment_Section.html:626-661`), so nothing here names a slot but
+ * its code's type. A slot's state is the server's too, by the one completion rule it states once, and so
+ * are the banner's counts, over the required alone; this module draws them.
  */
 
-export type PitchSlotCode = 'opportunity' | 'proof' | 'faq' | 'howtojoin';
+export type PitchSlotCode = 'opportunity' | 'proof' | 'faq' | 'howtojoin' | 'company' | 'agency';
 
 /** `missing` no file; `complete` every item ticked; `partial` one open; `uploaded` a file, no checklist. */
 export type PitchSlotState = 'missing' | 'complete' | 'partial' | 'uploaded';
@@ -33,6 +35,8 @@ export interface PitchSlot {
   slot: PitchSlotCode;
   title: string;
   line: string;
+  /** `false` for an optional document: tagged *Optional*, never *Missing*, counted in no figure of the banner. */
+  required: boolean;
   state: PitchSlotState;
   file: PitchFile | null;
   /** `[]` for a slot with none. Who ticked is never sent. */
@@ -41,6 +45,7 @@ export interface PitchSlot {
   version: number;
 }
 
+/** The banner's counts — the server's, over the required slots alone (ADR-0177 §3). */
 export interface PitchSummary {
   /** `complete` or `uploaded`. */
   done: number;
@@ -60,7 +65,7 @@ export interface PitchDocumentLink {
   expiresAt: string;
 }
 
-/** The four slots, their states and the counts: the agents' tab and the office's page read the same. */
+/** The six slots, their states and the counts: the agents' tab and the office's page read the same. */
 export const readPitchMaterials = () => api<PitchMaterialsView>('/recruitment/pitch-materials');
 
 /** A link signed for 300 seconds, asked for when *View PDF* is pressed and never held. */
@@ -97,24 +102,43 @@ export const setPitchConfirmation = (
  */
 export const PDF_MAX_BYTES = 25 * 1024 * 1024;
 
+/** The smallest size written in KB: anything smaller reads {@link UNDER_A_KILOBYTE} (I-521). */
+const KILOBYTE = 1024;
+
+/** A file smaller than a kilobyte, written as what it is rather than rounded up to `1 KB` (ADR-0177 §4). */
+export const UNDER_A_KILOBYTE = '< 1 KB';
+
 /**
  * `2,4 MB`, as the prototype writes a file's size (`:768`) with `id-ID`'s comma (ADR-0167 §1); a small file in KB
- * rather than `0,0 MB`. The one size formatter: the training modules' files use it too.
+ * rather than `0,0 MB`; and **a file under 1 KB as `< 1 KB`** (ADR-0177 §4, P18.97-T5 AC-4; parity I-521), where it
+ * read `1 KB` — the seed's one-page demonstration PDFs, which looked like placeholders. The size is the one storage
+ * reported, which the server serves; nothing here rounds it up. The one size formatter: the training modules'
+ * files use it too.
  */
 export function formatFileSize(bytes: number): string {
-  return bytes >= 1024 * 1024
-    ? `${formatNumber(bytes / 1024 / 1024, { decimals: 1 })} MB`
-    : `${formatNumber(Math.max(1, Math.round(bytes / 1024)))} KB`;
+  if (bytes >= KILOBYTE * KILOBYTE) return `${formatNumber(bytes / KILOBYTE / KILOBYTE, { decimals: 1 })} MB`;
+  if (bytes < KILOBYTE) return UNDER_A_KILOBYTE;
+  return `${formatNumber(Math.round(bytes / KILOBYTE))} KB`;
 }
 
-/** The pitch's words, verbatim (`Recruitment_Section.html:681-818`; D-copy). */
+/** The pitch's words, verbatim (`Recruitment_Section.html:681-818`; D-copy) but where a dated line says otherwise. */
 export const PITCH_COPY = {
   settingsTitle: 'Recruitment pitch',
   missing: 'Missing',
   complete: 'Complete',
   uploaded: 'Uploaded',
-  confirmed: (ticked: number, total: number) => `${ticked}/${total} confirmed`,
-  /** The client's words at every size (P18.95-T7 AC-1, grey text row 12; ADR-0167 §7). */
+  /**
+   * **A file whose checklist is not finished** (`partial`), on both pages and for every reader — the client's words
+   * (UI-029; ADR-0177 §1, P18.97-T5 AC-1; parity I-519), where the office read *"{n}/{m} confirmed"* (`:688`) and
+   * agents *Uploaded* (`:696`). The checklist's own boxes still show which items are ticked.
+   */
+  needsConfirmation: 'Uploaded · needs confirmation',
+  /** The tag on an optional document — *Company Profile*, *Agency Profile* (UI-042; ADR-0177 §2; parity I-520). */
+  optional: 'Optional',
+  /**
+   * The client's words at every size (P18.95-T7 AC-1, grey text row 12; ADR-0167 §7) — under a required card's
+   * *Missing*, and on an empty optional card, which never reads *Missing* (ADR-0177 §2).
+   */
   noFile: 'Not uploaded yet',
   updated: (size: string, day: string) => `${size} · updated ${day}`,
   fileIcon: 'PDF',

@@ -299,7 +299,7 @@ describe('the subscription’s cost (P18.8-T3)', () => {
   });
 });
 
-/** ADR-0167 §1: the quote's paper writes dates as every screen does; the card's saving to one decimal. */
+/** ADR-0167 §1: the quote's paper writes dates as every screen does; the card's saving whole (ADR-0174 §1, OD-213). */
 describe('the quote’s dates and the cards’ saving in id-ID (P18.95-T1 AC-1, AC-3)', () => {
   it('prints a typed DD/MM/YYYY date as `15 Okt 2026`, and what is not a day as it was typed', () => {
     expect(quoteDay('15/10/2026')).toBe('15 Okt 2026');
@@ -307,11 +307,11 @@ describe('the quote’s dates and the cards’ saving in id-ID (P18.95-T1 AC-1, 
     expect(quoteDay('31/02/2027')).toBe('31/02/2027');
   });
 
-  it('writes the six-month saving as `Save 20,0%`, from the registry’s whole percent', () => {
-    expect(TIERS.slice(0, 4).map(saveWords)).toEqual(['Save 20,0%', 'Save 21,0%', 'Save 22,0%', 'Save 29,0%']);
+  it('P18.97-T3 AC-1 writes the six-month saving as `Save 20%`, the registry’s whole percent with no ,0', () => {
+    expect(TIERS.slice(0, 4).map(saveWords)).toEqual(['Save 20%', 'Save 21%', 'Save 22%', 'Save 29%']);
   });
 
-  it('keeps every price in full: a price is exact, and the quote is a document', () => {
+  it('P18.97-T3 AC-3 keeps every price in full: a price is exact, and the quote is a document', () => {
     expect(money(40_000_000)).toBe('Rp 400.000');
     expect(perLeaderDiscount(1_875_000)).toBe('-Rp 18.750/leader/mo');
   });

@@ -11,9 +11,10 @@ import {
   ANALYTICS_PERIODS, OWN_COPY, PROTOTYPE_COPY, readKpmAnalytics,
   type AnalyticsPeriod, type KpmAnalyticsView,
 } from '@/lib/kpm-analytics';
+import { usePhone } from '@/lib/use-phone';
 import { MocDialog, type MocOpen } from './moc';
 import { MonthlyProductionChart } from './monthly-production';
-import { UnitComparisonTable } from './unit-comparison';
+import { UnitComparisonCards, UnitComparisonTable } from './unit-comparison';
 
 /**
  * KPM analytics' *Overview* tab (`KPM_Owner.html:1233-1260`; P18-T2): *Unit comparison* with its *Period*,
@@ -27,6 +28,10 @@ import { UnitComparisonTable } from './unit-comparison';
  * The states the prototype lacks are Fills (L-01): a skeleton shaped like the table and the chart, an
  * error with a retry, and a team with no AB yet, which says so in plain words and still shows the
  * months' production.
+ *
+ * **Below 768px the comparison is a card per agency** (P18.97-T7 AC-1, ADR-0178 §4; the client's UI-034: the table,
+ * 1329px on a 375px screen): `usePhone`, asked here where the screen mounts and before the read has answered, so a
+ * phone never draws the table first; its skeleton is cards too. At 768px and wider the table it was, to the byte.
  */
 export function KpmAnalytics({ period }: { period: AnalyticsPeriod }) {
   const router = useRouter();
@@ -44,6 +49,7 @@ export function KpmAnalytics({ period }: { period: AnalyticsPeriod }) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [listed, setListed] = useState<ReadonlySet<string>>(() => new Set());
   const [moc, setMoc] = useState<MocOpen | null>(null);
+  const phone = usePhone();
 
   useEffect(() => {
     let live = true;
@@ -86,7 +92,7 @@ export function KpmAnalytics({ period }: { period: AnalyticsPeriod }) {
           <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
         </div>
       )}
-      {!view && !error && <AnalyticsSkeleton />}
+      {!view && !error && <AnalyticsSkeleton phone={phone} />}
 
       {view && (
         <>
@@ -94,6 +100,16 @@ export function KpmAnalytics({ period }: { period: AnalyticsPeriod }) {
             <Card className="p-0">
               <EmptyState title={OWN_COPY.noAbTitle} action={<p>{OWN_COPY.noAbLine}</p>} />
             </Card>
+          ) : phone ? (
+            <UnitComparisonCards
+              view={view}
+              labelledBy={comparisonId}
+              expanded={expanded}
+              onToggle={toggle}
+              listed={listed}
+              onToggleList={toggleList}
+              onOpenMoc={setMoc}
+            />
           ) : (
             <UnitComparisonTable
               view={view}
@@ -164,24 +180,38 @@ function PeriodSelect({ period, onChoose }: { period: AnalyticsPeriod; onChoose:
 /** The bars' outline while the months are read: a shape, not figures. */
 const CHART_OUTLINE = [40, 55, 50, 70, 65, 85];
 
-/** The table and the chart, in outline, while the comparison is read. */
-function AnalyticsSkeleton() {
+/** The table and the chart, in outline, while the comparison is read — on a phone, the cards in place of the table. */
+function AnalyticsSkeleton({ phone }: { phone: boolean }) {
   return (
     <Skeleton label={OWN_COPY.loading}>
-      <div className="rounded-lg border border-hairline bg-card">
-        <div className="flex gap-6 border-b border-hairline bg-base px-4 py-3">
-          {[0, 1, 2, 3, 4].map((i) => <SkeletonBar key={i} className="h-2.5 w-1/6" />)}
+      {phone ? (
+        <div className="space-y-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="rounded-lg border border-hairline bg-card p-4">
+              <SkeletonBar className="h-4 w-1/2" />
+              <SkeletonBar className="mt-3 h-2.5 w-1/4" />
+              <SkeletonBar className="mt-2 h-3.5 w-2/3" />
+              <SkeletonBar className="mt-3 h-2.5 w-1/4" />
+              <SkeletonBar className="mt-2 h-3.5 w-1/2" />
+            </div>
+          ))}
         </div>
-        {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className="flex gap-6 border-b border-hairline px-4 py-4 last:border-b-0">
-            <SkeletonBar className="h-3.5 w-1/5" />
-            <SkeletonBar className="h-3.5 w-1/12" />
-            <SkeletonBar className="h-3.5 w-1/6" />
-            <SkeletonBar className="h-3.5 w-1/6" />
-            <SkeletonBar className="h-3.5 w-1/12" />
+      ) : (
+        <div className="rounded-lg border border-hairline bg-card">
+          <div className="flex gap-6 border-b border-hairline bg-base px-4 py-3">
+            {[0, 1, 2, 3, 4].map((i) => <SkeletonBar key={i} className="h-2.5 w-1/6" />)}
           </div>
-        ))}
-      </div>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex gap-6 border-b border-hairline px-4 py-4 last:border-b-0">
+              <SkeletonBar className="h-3.5 w-1/5" />
+              <SkeletonBar className="h-3.5 w-1/12" />
+              <SkeletonBar className="h-3.5 w-1/6" />
+              <SkeletonBar className="h-3.5 w-1/6" />
+              <SkeletonBar className="h-3.5 w-1/12" />
+            </div>
+          ))}
+        </div>
+      )}
       <SkeletonBar className="mt-[34px] h-4 w-40" />
       <div className="mt-3.5 flex h-[140px] items-end gap-3.5 rounded-lg border border-hairline bg-card p-5">
         {CHART_OUTLINE.map((height, i) => (

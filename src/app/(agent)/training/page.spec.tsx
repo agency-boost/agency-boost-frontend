@@ -307,3 +307,40 @@ describe('P18.95-T3 — /training/* on a phone', () => {
     expect(screen.queryByRole('list', { name: 'Prospecting modules' })).not.toBeInTheDocument();
   });
 });
+
+/**
+ * **A category with no published module is not offered to a field member** (P18.97-T4 AC-9, ADR-0176 §9; the client's
+ * KPM Owner review of 2026-10-27, UI-031: *Product, Recruiting, Team Management, Soft Skills, Company and KPM are
+ * "EMPTY" but appear as tabs for agents*). `GET /training/progress` leaves such a category out — or, where the member
+ * has history under it, reads it as not offered — so the subtabs are the categories the read offers, and nothing else.
+ */
+describe('P18.97-T4 AC-9 an empty training category draws no tab', () => {
+  beforeEach(() => { nav.replace.mockReset(); nav.push.mockReset(); });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const PRODUCT_HISTORY = category('PRODUCT', 'Product', [
+    skill('PRODUCT_BASICS', 'Product Basics', [], {
+      offered: false, archived: [{ code: 'OLD_PRODUCT_TALK', title: 'The old product talk', formats: ['file'], status: 'done', completedAt: '2026-03-02T00:00:00.000Z' }],
+    }),
+  ], { offered: false });
+
+  it('P18.97-T4 AC-9 draws one tab for each category the read offers — Sales alone, as the server now answers', async () => {
+    list('SALES', { 'GET /training/progress': { body: progressView([SALES]) } });
+    await title('Training Modules');
+    const tabs = screen.getByRole('navigation', { name: 'Training' });
+    expect(within(tabs).getAllByRole('link').map((a) => a.textContent)).toEqual(['Sales']);
+  });
+
+  it('P18.97-T4 AC-9 draws no tab for a category read as not offered, though it holds the member’s history', async () => {
+    list('SALES', { 'GET /training/progress': { body: progressView([SALES, PRODUCT_HISTORY]) } });
+    await title('Training Modules');
+    const tabs = screen.getByRole('navigation', { name: 'Training' });
+    expect(within(tabs).queryByRole('link', { name: 'Product' })).toBeNull();
+  });
+
+  it('P18.97-T4 AC-9 answers its address as not found rather than opening it onto nothing', async () => {
+    list('PRODUCT', { 'GET /training/progress': { body: progressView([SALES, PRODUCT_HISTORY]) } });
+    expect(await screen.findByRole('heading', { level: 2, name: 'This category can’t be found.' })).toBeInTheDocument();
+    expect(screen.queryByText('Modules for this category are coming soon.')).toBeNull();
+  });
+});

@@ -4,14 +4,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { PublishBar } from '@/components/publish-bar';
 import { PdfUploadNotice, usePdfUpload } from '@/components/recruitment/pdf-upload';
 import { SettingsScreen } from '@/components/settings-screen';
+import { BelowDesktopTip } from '@/components/ui/below-desktop-tip';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   Button, Card, CodeField, Field, Switch, Textarea, TextInput,
 } from '@/components/ui/field';
 import { InlineSaveStatus, useInlineSave } from '@/components/ui/inline-save-status';
+import { CONTROL_PHONE } from '@/components/ui/phone';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { SHOWN_FROM_DESKTOP } from '@/components/ui/tablet';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { cn } from '@/lib/cn';
 import { useCan } from '@/lib/session';
 import { useHashTab } from '@/lib/use-hash-tab';
 import {
@@ -37,6 +41,12 @@ const SCRIPT_FIELDS: { key: string; label: string; lines?: number; list?: true }
  * field replaces the company's tagline wherever agents read one, once approved (OD-136).
  */
 const DESCRIPTION_LABEL = 'Short description (shown to agents)';
+
+/**
+ * **The shelf's one grey sentence, in the client's words** (P18.97-T4 AC-6, ADR-0176 §6; the grey-text table, UI-027):
+ * the 50 words on whose catalog this is read as this, shown from 1024px and behind an ⓘ below it.
+ */
+const SHELF_NOTE = 'Your changes apply to this office only.';
 
 const REVIEW: Record<string, { tone: 'won' | 'open'; text: string }> = {
   pending: { tone: 'open', text: 'Waiting for your approval' },
@@ -132,6 +142,11 @@ export default function KpmProductsPage() {
    */
   const canApprove = useCan('sales_script:approve');
   const [tab, setTab] = useHashTab(TABS);
+  /**
+   * The product whose *Review* was chosen on the shelf (P18.97-T4 AC-7, ADR-0176 §7; UI-028): its card on *Script
+   * approvals* takes the focus once the queue holds it, so the reader lands on the script they asked to review.
+   */
+  const [reviewing, setReviewing] = useState<string | null>(null);
   const [sendingBack, setSendingBack] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [rows, setRows] = useState<KpmProductRow[] | null>(null);
@@ -191,6 +206,16 @@ export default function KpmProductsPage() {
 
   useEffect(() => { if (canRead && tab === '#approvals') void loadQueue(); }, [tab, loadQueue, canRead]);
 
+  // *Review*'s landing: the product's card, once it is drawn — the queue read may still be on its way.
+  useEffect(() => {
+    if (tab !== '#approvals' || reviewing === null || queue === null) return;
+    const card = document.getElementById(`review-${reviewing}`);
+    if (!card) return;
+    card.scrollIntoView?.({ block: 'center' });
+    card.focus();
+    setReviewing(null);
+  }, [tab, reviewing, queue]);
+
   const run = async (action: () => Promise<KpmProductRow>) => {
     setBusy(true);
     setError(null);
@@ -226,23 +251,18 @@ export default function KpmProductsPage() {
     return (
       <div className="flex flex-col gap-4">
         <Card>
-          <p className="text-md text-navy">
-            <strong>This catalog is your company’s.</strong>{' '}
-            <span className="text-muted">
-              Which of it you sell, and the words you sell it with, are yours — and they apply to
-              this office only. Anything you have not changed follows your company, so when they
-              improve a script you get it without doing anything.
-            </span>
-          </p>
+          <p className={cn('text-md text-muted', SHOWN_FROM_DESKTOP)}>{SHELF_NOTE}</p>
           {/*
             * Counted from what is actually sellable. The prototype's header reads "6 active" over
-            * seven toggles, because it counts a list it no longer matches (P5-T5 AC-8).
+            * seven toggles, because it counts a list it no longer matches (P5-T5 AC-8). Below 1024px it is the card's
+            * first line, and the sentence above it is the ⓘ after it (P18.97-T4 AC-6).
             */}
-          <p className="mt-2 text-sm text-muted">
+          <p className="text-sm text-muted lg:mt-2">
             {rows.length} products · <strong>{selling}</strong> your agents can sell
             {rows.some((p) => !p.sellable) && (
               <> · {rows.filter((p) => !p.sellable).length} withdrawn by {company}</>
             )}
+            <BelowDesktopTip text={SHELF_NOTE} className="ml-1" />
           </p>
         </Card>
 
@@ -285,6 +305,23 @@ export default function KpmProductsPage() {
                           {REVIEW[product.reviewState].text}
                         </ConfigBadge>
                       )}
+                      {/*
+                        * **The badge's action, beside it** (P18.97-T4 AC-7, ADR-0176 §7; UI-028: *"WAITING FOR YOUR
+                        * APPROVAL"* with no way to act on it from the row): the product's script review, where it is
+                        * approved or sent back — for whoever holds `sales_script:approve`, which the API checks again.
+                        */}
+                      {product.reviewState === 'pending' && canApprove && (
+                        <Button
+                          variant="inline"
+                          aria-label={`Review ${product.displayName.value}`}
+                          onClick={() => {
+                            setReviewing(product.productId);
+                            setTab('#approvals');
+                          }}
+                        >
+                          Review
+                        </Button>
+                      )}
                     </p>
                   </div>
 
@@ -304,6 +341,8 @@ export default function KpmProductsPage() {
                           label="Agents sell it"
                           checked={product.active.value}
                           disabled={busy || !canWrite}
+                          // A 44 × 44px target on a phone, the track as drawn (P18.97-T7 AC-6; UI-040).
+                          phoneTarget
                           // It saves itself, and says so beside it (P18.95-T1 AC-5): a retry sends this same value
                           // again. The reason for a refusal stays in the alert above the shelf, where it was.
                           onChange={(next) => void inline.save(sellKey(product.productId), async () =>
@@ -379,7 +418,8 @@ export default function KpmProductsPage() {
                 <Card>
                   <div className="flex flex-wrap items-center gap-3">
                     <div className="min-w-0 flex-1">
-                      <h2 className="text-md font-semibold text-navy">
+                      {/* Where the shelf's *Review* lands (P18.97-T4 AC-7): focusable by script, never a tab stop. */}
+                      <h2 id={`review-${product.productId}`} tabIndex={-1} className="text-md font-semibold text-navy">
                         {product.displayName.value}
                       </h2>
                       <p className="mt-1 flex flex-wrap items-center gap-2">
@@ -417,6 +457,7 @@ export default function KpmProductsPage() {
                       <div className="flex flex-wrap gap-2">
                         <Button
                           disabled={busy}
+                          className={CONTROL_PHONE}
                           onClick={() => void decide(() => approveScript(product.productId))}
                         >
                           Approve
@@ -450,6 +491,7 @@ export default function KpmProductsPage() {
                       <div className="mt-2 flex flex-wrap gap-2">
                         <Button
                           disabled={busy || !reason.trim()}
+                          className={CONTROL_PHONE}
                           onClick={() => void decide(async () => {
                             const next = await rejectScript(product.productId, reason.trim());
                             setSendingBack(null);
@@ -461,6 +503,7 @@ export default function KpmProductsPage() {
                         <Button
                           variant="secondary"
                           disabled={busy}
+                          className={CONTROL_PHONE}
                           onClick={() => setSendingBack(null)}
                         >
                           Cancel
@@ -509,6 +552,7 @@ export default function KpmProductsPage() {
           value={product.code}
           reason={`Your company’s. Every office of ${company} uses the same one.`}
           className="max-w-xs"
+          inputClassName={CONTROL_PHONE}
         />
 
         <Field
@@ -523,12 +567,13 @@ export default function KpmProductsPage() {
             id={`name-${product.productId}`}
             value={draft.displayName ?? ''}
             disabled={!canWrite || busy}
+            className={CONTROL_PHONE}
             onChange={(e) => setDraft((n) => ({ ...n, displayName: e.target.value }))}
           />
         </Field>
         {canWrite && (
           <div className="mt-2 flex flex-wrap gap-2">
-            <Button disabled={busy} onClick={() => void save('displayName')}>Save the name</Button>
+            <Button disabled={busy} className={CONTROL_PHONE} onClick={() => void save('displayName')}>Save the name</Button>
             {product.displayName.overridden && (
               <Button
                 variant="inline"
@@ -567,7 +612,7 @@ export default function KpmProductsPage() {
           </Field>
           {canWrite && (
             <div className="mt-2 flex flex-wrap gap-2">
-              <Button variant="secondary" disabled={busy} onClick={() => void save('description')}>
+              <Button variant="secondary" disabled={busy} className={CONTROL_PHONE} onClick={() => void save('description')}>
                 Save
               </Button>
               {product.description?.overridden && (
@@ -617,7 +662,7 @@ export default function KpmProductsPage() {
             </Field>
             {canWrite && (
               <div className="mt-2 flex flex-wrap gap-2">
-                <Button variant="secondary" disabled={busy} onClick={() => void save(f.key)}>
+                <Button variant="secondary" disabled={busy} className={CONTROL_PHONE} onClick={() => void save(f.key)}>
                   Save
                 </Button>
                 {product.script[f.key]?.overridden && (

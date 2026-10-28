@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
 import { makeMe, renderInLayout, renderWithSession, stubFetch, type StubReply } from '@test/harness';
-import { EMPTY, NOBODY, NOT_LOGGED, overviewView } from './overview-fixtures';
+import { EMPTY, NOBODY, NOT_LOGGED, noTeam, overviewView } from './overview-fixtures';
 import KpmOverviewPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -99,7 +99,9 @@ describe('KPM Overview (P18-T1)', () => {
       expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
         'Team composition', 'Engagement', 'Coaching coverage', 'Recruitment pipeline', 'Production — this year',
       ]);
-      expect(within(section('Engagement')).getByText('Last 7 days')).toBeInTheDocument();
+      // P18.97-T3 AC-6 (UI-020): the sub-line names the two periods its cards read, where it read *Last 7 days* alone.
+      expect(within(section('Engagement')).getByText('This month · Last 7 days')).toBeInTheDocument();
+      expect(within(section('Engagement')).queryByText('Last 7 days')).not.toBeInTheDocument();
     });
 
     it('AC-2: is no longer a sign — nothing upcoming, nothing pointing elsewhere', async () => {
@@ -157,14 +159,14 @@ describe('KPM Overview (P18-T1)', () => {
       await loaded();
       const card = within(section('Engagement')).getByRole('heading', { name: 'Agents who logged activity this month' }).parentElement!;
       expect(within(card).getByText('Logged at least one activity this month')).toBeInTheDocument();
-      expect(card).toHaveTextContent('142/ 18776,0%');
+      expect(card).toHaveTextContent('142/ 18776%');
       expect(screen.queryByText('Monthly active agents')).not.toBeInTheDocument();
     });
 
-    it('AC-4: the trend is against last month to the same day, Up with its rise', async () => {
+    it('AC-4, P18.97-T3 AC-1: the trend is against last month to the same day, Up with its rise, whole', async () => {
       render();
       await loaded();
-      expect(within(section('Engagement')).getByText(/^Up from 138 last month/)).toHaveTextContent('Up from 138 last month (+3,0%)');
+      expect(within(section('Engagement')).getByText(/^Up from 138 last month/)).toHaveTextContent('Up from 138 last month (+3%)');
     });
 
     it('AC-4: Down, with its fall, when fewer have logged than by this day last month', async () => {
@@ -172,7 +174,7 @@ describe('KPM Overview (P18-T1)', () => {
         engagement: { loggedThisMonth: { count: 120, of: 187, pct: 64, lastMonthToDate: 150 }, loggedThisWeek: { logged: 1, notLogged: 0, pct: 100 } },
       }));
       await loaded();
-      expect(within(section('Engagement')).getByText(/^Down from 150 last month/)).toHaveTextContent('Down from 150 last month (−20,0%)');
+      expect(within(section('Engagement')).getByText(/^Down from 150 last month/)).toHaveTextContent('Down from 150 last month (−20%)');
     });
 
     it('AC-4: no trend line when there is nothing to compare against', async () => {
@@ -186,7 +188,7 @@ describe('KPM Overview (P18-T1)', () => {
       await loaded();
       const card = within(section('Engagement')).getByRole('heading', { name: 'Activity logging — this week' }).parentElement!;
       expect(within(card).getByText("Who has and hasn't logged in the last 7 days")).toBeInTheDocument();
-      expect(card).toHaveTextContent('118logged · 69 not logged63,0%');
+      expect(card).toHaveTextContent('118logged · 69 not logged63%');
     });
 
     it('AC-4 (D-audit): the list is read only when the reveal is opened, and once', async () => {
@@ -265,16 +267,16 @@ describe('KPM Overview (P18-T1)', () => {
   });
 
   describe('Coaching coverage (AC-5)', () => {
-    it('AC-5: coached in the last 7 and 30 days, in the prototype’s status colours', async () => {
+    it('AC-5, P18.97-T3 AC-1: coached in the last 7 and 30 days, whole, in the prototype’s status colours', async () => {
       render();
       await loaded();
       const coverage = within(section('Coaching coverage'));
       const seven = coverage.getByText('Coached in last 7 days').nextElementSibling!;
       const thirty = coverage.getByText('Coached in last 30 days').nextElementSibling!;
-      expect(seven).toHaveTextContent('112/ 18760,0%');
-      expect(thirty).toHaveTextContent('148/ 18779,0%');
-      expect(within(seven as HTMLElement).getByText('60,0%').className).toContain('text-alert');
-      expect(within(thirty as HTMLElement).getByText('79,0%').className).toContain('text-success');
+      expect(seven).toHaveTextContent('112/ 18760%');
+      expect(thirty).toHaveTextContent('148/ 18779%');
+      expect(within(seven as HTMLElement).getByText('60%').className).toContain('text-alert');
+      expect(within(thirty as HTMLElement).getByText('79%').className).toContain('text-success');
     });
 
     it('AC-5: AB coaching frequency, lowest first, four shown, with each AB’s team and share', async () => {
@@ -284,10 +286,10 @@ describe('KPM Overview (P18-T1)', () => {
       expect(board.getByRole('heading', { name: 'AB coaching frequency' })).toBeInTheDocument();
       const rows = board.getAllByRole('listitem');
       expect(rows.map((r) => r.textContent)).toEqual([
-        'Hendra Wibowo · 31 in team6/31 · 19,0%',
-        'Budi Santoso · 18 in team5/18 · 28,0%',
-        'Fajar Nugroho · 22 in team9/22 · 41,0%',
-        'Lina Chandra · 15 in team8/15 · 53,0%',
+        'Hendra Wibowo · 31 in team6/31 · 19%',
+        'Budi Santoso · 18 in team5/18 · 28%',
+        'Fajar Nugroho · 22 in team9/22 · 41%',
+        'Lina Chandra · 15 in team8/15 · 53%',
       ]);
       expect(board.getByText(/^Showing 4 of 8 ABs/)).toBeInTheDocument();
     });
@@ -304,11 +306,29 @@ describe('KPM Overview (P18-T1)', () => {
       expect(more).toHaveAttribute('aria-expanded', 'true');
       expect(board.getAllByRole('listitem')).toHaveLength(8);
       expect(board.getByText(/^Showing 8 of 8 ABs/)).toBeInTheDocument();
-      expect(board.getByText('Wilson Tanoto').closest('li')).toHaveTextContent('23/28 · 82,0%');
+      expect(board.getByText('Wilson Tanoto').closest('li')).toHaveTextContent('23/28 · 82%');
       expect(calls.length).toBe(before);
 
       await userEvent.click(board.getByRole('button', { name: 'show fewer' }));
       expect(board.getAllByRole('listitem')).toHaveLength(4);
+    });
+
+    it('P18.97-T3 AC-5: every AB is listed — one who leads nobody last, No team where the rate would be (UI-017)', async () => {
+      const view = overviewView();
+      const leaderboard = [...view.coaching.leaderboard, noTeam('mem-maya-h', 'Maya Halim')];
+      render(OWNER, {}, { ...view, coaching: { ...view.coaching, leaderboard } });
+      await loaded();
+      const board = within(section('Coaching coverage'));
+      // *"Showing 4 of {n} ABs"* counts them all: the eight who lead somebody and Maya.
+      expect(board.getByText(/^Showing 4 of 9 ABs/)).toBeInTheDocument();
+      await userEvent.click(board.getByRole('button', { name: 'view full ranking →' }));
+      const rows = board.getAllByRole('listitem');
+      expect(rows).toHaveLength(9);
+      expect(rows[8]).toHaveTextContent(/^Maya HalimNo team$/);
+      // No bar, no *0 in team*, no 0% and no dash: a team nobody leads is not a team nobody coached.
+      expect(rows[8].querySelector('[aria-hidden="true"].rounded-pill')).toBeNull();
+      expect(rows[8].textContent).not.toMatch(/0%|in team|—/);
+      expect(within(rows[8]).getByText('No team').className).toContain('text-muted');
     });
 
     it('AC-9: says so when no AB leads a team, and a rate over nobody is a dash, never 0%', async () => {
@@ -317,162 +337,196 @@ describe('KPM Overview (P18-T1)', () => {
       const coverage = within(section('Coaching coverage'));
       expect(coverage.getByText('No AB leads a team yet.')).toBeInTheDocument();
       expect(coverage.getAllByText('No rate: nobody to count')).toHaveLength(2);
-      expect(section('Coaching coverage').textContent).not.toMatch(/(^|[^\d,])0,0%/);
+      expect(section('Coaching coverage').textContent).not.toMatch(/(^|[^\d,])0(,0)?%/);
     });
   });
 
-  describe('Recruitment pipeline (AC-6)', () => {
-    it('AC-6: the four tiles are figures, not links', async () => {
-      render();
-      await loaded();
-      const pipeline = section('Recruitment pipeline');
-      expect(within(pipeline).getByText('Expected to close').nextElementSibling).toHaveTextContent('13');
-      expect(within(pipeline).getByText('Last month').nextElementSibling).toHaveTextContent('11');
-      expect(within(pipeline).getByText('Pipeline now').nextElementSibling).toHaveTextContent('80');
-      expect(within(pipeline).queryByRole('link')).not.toBeInTheDocument();
-      expect(within(pipeline).queryByRole('button')).not.toBeInTheDocument();
-    });
-
-    it('AC-6: the Target is a labelled number input holding this month’s target, and the pill judges against it', async () => {
-      render();
-      await loaded();
-      const input = screen.getByLabelText('Target');
-      expect(input).toHaveAttribute('type', 'number');
-      expect(input).toHaveValue(15);
-      expect(within(section('Recruitment pipeline')).getByText('2 short of target (13 of 15)').className).toContain('text-alert');
-    });
-
-    it('AC-6: the pill’s three sentences, verbatim, as the number is typed', async () => {
-      render(OWNER, { 'PUT /kpm/overview/recruit-target': (call) => ({ body: call.body }) });
-      await loaded();
-      const input = screen.getByLabelText('Target');
-      const pipeline = within(section('Recruitment pipeline'));
-
-      await userEvent.clear(input);
-      await userEvent.type(input, '13');
-      expect(pipeline.getByText('On track to hit target (13 of 13)').className).toContain('text-success');
-
-      await userEvent.clear(input);
-      await userEvent.type(input, '10');
-      expect(pipeline.getByText('3 ahead of target (13 of 10)').className).toContain('text-success');
-    });
-
-    it('AC-6: saves the target for the office’s current month once typing settles, and only then', async () => {
-      const { calls } = render(OWNER, { 'PUT /kpm/overview/recruit-target': (call) => ({ body: call.body }) });
-      await loaded();
-      const input = screen.getByLabelText('Target');
-      await userEvent.clear(input);
-      await userEvent.type(input, '18');
-
-      await waitFor(() => expect(writes(calls)).toHaveLength(1));
-      expect(JSON.parse(writes(calls)[0].init.body as string)).toEqual({ month: '2026-10', target: 18 });
-      // No save for the 1 on the way to 18, and none for the empty box the clear left.
-      expect(writes(calls)).toHaveLength(1);
-    });
-
-    it('AC-6: leaving the box saves what it holds at once, without waiting for the pause', async () => {
-      const { calls } = render(OWNER, { 'PUT /kpm/overview/recruit-target': (call) => ({ body: call.body }) });
-      await loaded();
-      const input = screen.getByLabelText('Target');
-      await userEvent.clear(input);
-      await userEvent.type(input, '22');
-      await userEvent.tab();
-      // Saved on leaving, not 600 ms later: a reader who types and moves on keeps what they typed.
-      await waitFor(() => expect(writes(calls)).toHaveLength(1));
-      expect(JSON.parse(writes(calls)[0].init.body as string)).toEqual({ month: '2026-10', target: 22 });
-      // The pause then finds the value kept already, and sends nothing more.
-      await act(() => new Promise((r) => { setTimeout(r, 700); }));
-      expect(writes(calls)).toHaveLength(1);
-    });
-
-    it('AC-6: the server’s refusal is said, and the box goes back to what is kept', async () => {
-      render(OWNER, {
-        'PUT /kpm/overview/recruit-target': {
-          status: 400,
-          body: { error: { code: 'VALIDATION_FAILED', message: 'The target must be a whole number from 0.', requestId: 'r-2' } },
-        },
-      });
-      await loaded();
-      const input = screen.getByLabelText('Target');
-      await userEvent.clear(input);
-      await userEvent.type(input, '20');
-
-      expect(await screen.findByRole('alert')).toHaveTextContent('The target was not saved. The target must be a whole number from 0.');
-      await waitFor(() => expect(input).toHaveValue(15));
-      expect(screen.getByText('2 short of target (13 of 15)')).toBeInTheDocument();
-    });
-
-    it('AC-6: sends nothing for a number that is not a whole number from 0, and says why', async () => {
-      const { calls } = render(OWNER, { 'PUT /kpm/overview/recruit-target': (call) => ({ body: call.body }) });
-      await loaded();
-      const input = screen.getByLabelText('Target');
-      await userEvent.clear(input);
-      await userEvent.type(input, '-3');
-
-      expect(screen.getByRole('alert')).toHaveTextContent('Enter a whole number from 0.');
-      expect(input).toHaveAttribute('aria-invalid', 'true');
-      await act(() => new Promise((r) => { setTimeout(r, 700); }));
-      expect(writes(calls)).toHaveLength(0);
-    });
-
-    it('AC-6: no pill without a target, rather than one judged against the prototype’s 15', async () => {
-      render(OWNER, {}, EMPTY);
-      await loaded();
-      expect(screen.getByLabelText('Target')).toHaveValue(null);
-      expect(within(section('Recruitment pipeline')).queryByText(/of target|target \(/)).not.toBeInTheDocument();
-    });
-
-    it.each([
-      ['an Admin, who holds it too (ADR-0028)', ADMIN, true],
-      ['an Owner', OWNER, true],
-      ['a reader without the target’s permission', makeMe({ ...OWNER, permissions: READ }), false],
-    ])('AC-1, AC-6: the Target input is offered to %s: %s', async (_who, me, offered) => {
-      render(me);
-      await loaded();
-      const pipeline = within(section('Recruitment pipeline'));
-      if (offered) {
-        expect(pipeline.getByLabelText('Target')).toBeInTheDocument();
-      } else {
-        expect(pipeline.queryByRole('spinbutton')).not.toBeInTheDocument();
-        expect(pipeline.getByText('Target').nextElementSibling).toHaveTextContent('15');
-        // The pill still reads against the target that is kept.
-        expect(pipeline.getByText('2 short of target (13 of 15)')).toBeInTheDocument();
-      }
-    });
-
-    it('AC-1, AC-6: a read-only support session sees the member’s Target input disabled, and writes nothing (roles §3.13)', async () => {
-      const { calls } = render(SUPPORT_READ_ONLY);
-      await loaded();
-      const input = within(section('Recruitment pipeline')).getByLabelText('Target');
-      expect(input).toBeDisabled();
-      expect(input).toHaveValue(15);
-      expect(calls.some((c) => c.init?.method === 'PUT')).toBe(false);
-    });
-
-    it('AC-6: a reader who cannot set it and has none sees a dash, never a 0', async () => {
-      render(makeMe({ ...OWNER, permissions: READ }), {}, EMPTY);
-      await loaded();
-      const tile = within(section('Recruitment pipeline')).getByText('Target').nextElementSibling!;
-      expect(tile).toHaveTextContent('—No target set');
-    });
-  });
-
-  describe('P18.95-T1 AC-5 — the Target says it is saved, beside it', () => {
-    /** The save confirmation in the field's own box: the nearest ancestor with a status for a child. */
-    const besides = (el: HTMLElement) => {
-      for (let box = el.parentElement; box; box = box.parentElement) {
-        const own = [...box.children].find((c) => c.getAttribute('role') === 'status');
-        if (own) return own as HTMLElement;
-        if (box.tagName === 'SECTION') break;
-      }
-      return null;
-    };
+  describe('Recruitment pipeline (AC-6; P18.97-T3 AC-7 — the Target a value with Edit)', () => {
+    const pipeline = () => within(section('Recruitment pipeline'));
+    /** The *Target* tile: its label, and what is under it. */
+    const tile = () => pipeline().getByText('Target').parentElement as HTMLElement;
+    const edit = () => pipeline().getByRole('button', { name: 'Edit target' });
+    const box = () => screen.getByLabelText('Target') as HTMLInputElement;
+    const accept = { 'PUT /kpm/overview/recruit-target': (call: { body: unknown }) => ({ body: call.body }) };
     const refused = {
       status: 500,
       body: { error: { code: 'INTERNAL_ERROR', message: 'Something went wrong.', requestId: 'r-9' } },
     };
+    /** Edit, and the box emptied: ready for a number. */
+    const openBox = async () => {
+      await userEvent.click(edit());
+      await userEvent.clear(box());
+    };
 
-    it('P18.95-T1 AC-5: says Saving… while the target is on its way, then Saved ✓ beside the box', async () => {
+    it('AC-6: the four tiles are figures, not links; the one control is the Target’s Edit', async () => {
+      render();
+      await loaded();
+      expect(pipeline().getByText('Expected to close').nextElementSibling).toHaveTextContent('13');
+      expect(pipeline().getByText('Last month').nextElementSibling).toHaveTextContent('11');
+      expect(pipeline().getByText('Pipeline now').nextElementSibling).toHaveTextContent('80');
+      expect(pipeline().queryByRole('link')).not.toBeInTheDocument();
+      expect(pipeline().getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Edit target']);
+    });
+
+    it('P18.97-T3 AC-7: the Target reads as a labelled value — Target, 15 — with Edit, and no box until Edit is pressed', async () => {
+      render();
+      await loaded();
+      expect(tile()).toHaveTextContent(/^Target15Edit$/);
+      expect(pipeline().queryByRole('spinbutton')).not.toBeInTheDocument();
+      // The visible word is *Edit*; its name says what it edits (WCAG 2.5.3: the words are in the name).
+      expect(edit()).toHaveTextContent(/^Edit$/);
+      expect(pipeline().getByText('2 short of target (13 of 15)').className).toContain('text-alert');
+    });
+
+    it('P18.97-T3 AC-7: Edit opens the labelled number input in the value’s place, holding the target, focused', async () => {
+      render();
+      await loaded();
+      await userEvent.click(edit());
+      expect(box()).toHaveAttribute('type', 'number');
+      expect(box()).toHaveValue(15);
+      expect(box()).toHaveFocus();
+      expect(pipeline().queryByRole('button', { name: 'Edit target' })).not.toBeInTheDocument();
+    });
+
+    it('P18.97-T3 AC-7: Enter saves the office’s current month, reads as a value again, and the toast says Target saved ✓', async () => {
+      const { calls } = render(OWNER, accept);
+      await loaded();
+      await openBox();
+      await userEvent.type(box(), '18{Enter}');
+
+      await waitFor(() => expect(tile()).toHaveTextContent(/^Target18Edit$/));
+      expect(writes(calls)).toHaveLength(1);
+      expect(JSON.parse(writes(calls)[0].init.body as string)).toEqual({ month: '2026-10', target: 18 });
+      expect(screen.getByText('Target saved ✓')).toBeInTheDocument();
+      // The field's own *Saved ✓* is the toast's now (OD-200), and the keyboard is back on *Edit*.
+      expect(screen.queryByText('Saved ✓')).not.toBeInTheDocument();
+      expect(edit()).toHaveFocus();
+      expect(pipeline().getByText('5 short of target (13 of 18)')).toBeInTheDocument();
+    });
+
+    it('P18.97-T3 AC-7: leaving the box saves what it holds at once, and the toast confirms it', async () => {
+      const { calls } = render(OWNER, accept);
+      await loaded();
+      await openBox();
+      await userEvent.type(box(), '22');
+      expect(writes(calls)).toHaveLength(0);
+      await userEvent.tab();
+
+      await waitFor(() => expect(tile()).toHaveTextContent(/^Target22Edit$/));
+      expect(JSON.parse(writes(calls)[0].init.body as string)).toEqual({ month: '2026-10', target: 22 });
+      expect(screen.getByText('Target saved ✓')).toBeInTheDocument();
+      // Nothing is sent while typing, nor after: no pause saves anything (OD-200's autosave is Enter or leaving).
+      await act(() => new Promise((r) => { setTimeout(r, 700); }));
+      expect(writes(calls)).toHaveLength(1);
+    });
+
+    it('P18.97-T3 AC-7: Escape leaves without saving, the value as it was, and gives the keyboard back to Edit', async () => {
+      const { calls } = render(OWNER, accept);
+      await loaded();
+      await openBox();
+      await userEvent.type(box(), '30');
+      // The pill judges what is typed, as `updateRecruitStatus()` does — and goes back with the value.
+      expect(pipeline().getByText('17 short of target (13 of 30)')).toBeInTheDocument();
+      await userEvent.keyboard('{Escape}');
+
+      expect(tile()).toHaveTextContent(/^Target15Edit$/);
+      expect(edit()).toHaveFocus();
+      expect(pipeline().getByText('2 short of target (13 of 15)')).toBeInTheDocument();
+      await act(() => new Promise((r) => { setTimeout(r, 50); }));
+      expect(writes(calls)).toHaveLength(0);
+      expect(screen.queryByText('Target saved ✓')).not.toBeInTheDocument();
+    });
+
+    it('AC-6, P18.97-T3 AC-7: the pill’s three sentences, verbatim, as the number is typed', async () => {
+      render(OWNER, accept);
+      await loaded();
+      await openBox();
+      await userEvent.type(box(), '13');
+      expect(pipeline().getByText('On track to hit target (13 of 13)').className).toContain('text-success');
+
+      await userEvent.clear(box());
+      await userEvent.type(box(), '10');
+      expect(pipeline().getByText('3 ahead of target (13 of 10)').className).toContain('text-success');
+    });
+
+    it('P18.97-T3 AC-7: the target kept already sends nothing, and reads as the value again', async () => {
+      const { calls } = render(OWNER, accept);
+      await loaded();
+      await userEvent.click(edit());
+      await userEvent.keyboard('{Enter}');
+
+      expect(tile()).toHaveTextContent(/^Target15Edit$/);
+      expect(writes(calls)).toHaveLength(0);
+      expect(screen.queryByText('Target saved ✓')).not.toBeInTheDocument();
+    });
+
+    it('AC-6, P18.97-T3 AC-7: a number that is not a whole number from 0 is never sent, the box says why, and leaving it keeps 15', async () => {
+      const { calls } = render(OWNER, accept);
+      await loaded();
+      await openBox();
+      await userEvent.type(box(), '-3{Enter}');
+
+      expect(screen.getByRole('alert')).toHaveTextContent('Enter a whole number from 0.');
+      expect(box()).toHaveAttribute('aria-invalid', 'true');
+      await userEvent.tab();
+      expect(tile()).toHaveTextContent(/^Target15Edit$/);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(writes(calls)).toHaveLength(0);
+    });
+
+    it('P18.97-T3 AC-7: Enter on an empty box says what it takes; leaving it empty clears nothing', async () => {
+      const { calls } = render(OWNER, accept);
+      await loaded();
+      await openBox();
+      await userEvent.keyboard('{Enter}');
+
+      expect(screen.getByRole('alert')).toHaveTextContent('Enter a whole number from 0.');
+      expect(box()).toHaveFocus();
+      await userEvent.tab();
+      expect(tile()).toHaveTextContent(/^Target15Edit$/);
+      expect(writes(calls)).toHaveLength(0);
+    });
+
+    it('P18.97-T3 AC-7: a refusal keeps the box with Couldn’t save — retry, and the retry sends the same target again', async () => {
+      const { calls } = render(OWNER, { 'PUT /kpm/overview/recruit-target': [refused, (call) => ({ body: call.body })] });
+      await loaded();
+      await openBox();
+      await userEvent.type(box(), '20{Enter}');
+
+      const retry = await within(tile()).findByRole('button', { name: "Couldn't save — retry: Target" });
+      // The box stays, holding what was refused, and the refusal's reason is said under the tiles.
+      expect(box()).toHaveValue(20);
+      expect(screen.getByRole('alert')).toHaveTextContent('The target was not saved. Something went wrong.');
+      expect(screen.queryByText('Target saved ✓')).not.toBeInTheDocument();
+
+      await userEvent.click(retry);
+
+      await waitFor(() => expect(tile()).toHaveTextContent(/^Target20Edit$/));
+      // The retry sent it once more; leaving the box towards the retry sent nothing of its own.
+      expect(writes(calls).map((c) => JSON.parse(c.init.body as string))).toEqual([
+        { month: '2026-10', target: 20 }, { month: '2026-10', target: 20 },
+      ]);
+      expect(screen.getByText('Target saved ✓')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(edit()).toHaveFocus();
+    });
+
+    it('P18.97-T3 AC-7: a newer target typed after a refusal is saved in its place, and the retry goes', async () => {
+      const { calls } = render(OWNER, { 'PUT /kpm/overview/recruit-target': [refused, (call) => ({ body: call.body })] });
+      await loaded();
+      await openBox();
+      await userEvent.type(box(), '20{Enter}');
+      await within(tile()).findByRole('button', { name: "Couldn't save — retry: Target" });
+
+      await userEvent.clear(box());
+      await userEvent.type(box(), '17{Enter}');
+
+      await waitFor(() => expect(tile()).toHaveTextContent(/^Target17Edit$/));
+      expect(writes(calls).map((c) => JSON.parse(c.init.body as string).target)).toEqual([20, 17]);
+      expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
+    });
+
+    it('P18.95-T1 AC-5, P18.97-T3 AC-7: says Saving… beside the box while the target is on its way, then the toast', async () => {
       const { mock } = stubFetch({ '/kpm/overview': { body: overviewView() } });
       let release: () => void = () => {};
       vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
@@ -482,91 +536,73 @@ describe('KPM Overview (P18-T1)', () => {
       }));
       renderWithSession(<KpmOverviewPage />, { me: OWNER });
       await loaded();
-      const input = screen.getByLabelText('Target');
-      expect(screen.queryByText('Saved ✓')).not.toBeInTheDocument();
+      await openBox();
+      await userEvent.type(box(), '18{Enter}');
 
-      await userEvent.clear(input);
-      await userEvent.type(input, '18');
-      await userEvent.tab();
-
-      await waitFor(() => expect(besides(input)).toHaveTextContent('Saving…'));
-      // Inside the Target's own tile, not elsewhere on the card.
-      expect(within(section('Recruitment pipeline')).getByText('Target').parentElement).toContainElement(besides(input));
+      await waitFor(() => expect(within(tile()).getByText('Saving…')).toBeInTheDocument());
+      // Inside the Target's own tile, and the box holds still while it goes.
+      expect(box()).toHaveAttribute('readonly');
       await act(async () => { release(); });
-      await waitFor(() => expect(besides(input)).toHaveTextContent('Saved ✓'));
-      expect(besides(input)).toHaveClass('text-success');
-      expect(screen.getAllByText('Saved ✓')).toHaveLength(1);
+      await waitFor(() => expect(tile()).toHaveTextContent(/^Target18Edit$/));
+      expect(screen.getByText('Target saved ✓')).toBeInTheDocument();
+      expect(screen.queryByText('Saved ✓')).not.toBeInTheDocument();
     });
 
-    it('P18.95-T1 AC-5: a refused target says Couldn’t save — retry, and the retry sends the same target again', async () => {
-      const { calls } = render(OWNER, {
-        'PUT /kpm/overview/recruit-target': [refused, (call) => ({ body: call.body })],
-      });
-      await loaded();
-      const input = screen.getByLabelText('Target');
-      await userEvent.clear(input);
-      await userEvent.type(input, '20');
-      await userEvent.tab();
-
-      const retry = await screen.findByRole('button', { name: "Couldn't save — retry: Target" });
-      expect(besides(input)).toContainElement(retry);
-      // What the screen said before still stands where it did, and the box still goes back to what is kept.
-      expect(screen.getByRole('alert')).toHaveTextContent('The target was not saved. Something went wrong.');
-      await waitFor(() => expect(input).toHaveValue(15));
-
-      await userEvent.click(retry);
-
-      await waitFor(() => expect(writes(calls)).toHaveLength(2));
-      expect(JSON.parse(writes(calls)[1].init.body as string)).toEqual({ month: '2026-10', target: 20 });
-      await waitFor(() => expect(besides(input)).toHaveTextContent('Saved ✓'));
-      // What the retry kept is what the box shows, and the refusal's sentence has gone with it.
-      expect(input).toHaveValue(20);
-      expect(input).toHaveFocus();
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
-      // The pause after the retry finds 20 kept, and sends nothing more.
-      await act(() => new Promise((r) => { setTimeout(r, 700); }));
-      expect(writes(calls)).toHaveLength(2);
-    });
-
-    it('P18.95-T1 AC-5: a newer target typed after a refusal is saved in its place, and the retry goes', async () => {
-      const { calls } = render(OWNER, {
-        'PUT /kpm/overview/recruit-target': [refused, (call) => ({ body: call.body })],
-      });
-      await loaded();
-      const input = screen.getByLabelText('Target');
-      await userEvent.clear(input);
-      await userEvent.type(input, '20');
-      await userEvent.tab();
-      await screen.findByRole('button', { name: "Couldn't save — retry: Target" });
-      await waitFor(() => expect(input).toHaveValue(15));
-
-      await userEvent.clear(input);
-      await userEvent.type(input, '17');
-      await userEvent.tab();
-
-      await waitFor(() => expect(besides(input)).toHaveTextContent('Saved ✓'));
-      expect(writes(calls).map((c) => JSON.parse(c.init.body as string).target)).toEqual([20, 17]);
-      expect(screen.queryByRole('button', { name: /^Couldn't save/ })).not.toBeInTheDocument();
-    });
-
-    it('P18.95-T1 AC-5: leaving the page before typing settles still sends the target, with nothing drawn for it', async () => {
-      const { calls } = stubFetch({
-        '/kpm/overview': { body: overviewView() },
-        'PUT /kpm/overview/recruit-target': (call) => ({ body: call.body }),
-      });
+    it('P18.95-T1 AC-5, P18.97-T3 AC-7: leaving the page with the box open still sends what it holds, with nothing drawn', async () => {
+      const { calls } = stubFetch({ '/kpm/overview': { body: overviewView() }, ...accept });
       const { unmount } = renderWithSession(<KpmOverviewPage />, { me: OWNER });
       await loaded();
-      const input = screen.getByLabelText('Target');
-      await userEvent.clear(input);
-      await userEvent.type(input, '30');
+      await openBox();
+      await userEvent.type(box(), '30');
       expect(writes(calls)).toHaveLength(0);
 
       unmount();
 
       await waitFor(() => expect(writes(calls)).toHaveLength(1));
       expect(JSON.parse(writes(calls)[0].init.body as string)).toEqual({ month: '2026-10', target: 30 });
-      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+      expect(screen.queryByText('Target saved ✓')).not.toBeInTheDocument();
+    });
+
+    it('AC-6, P18.97-T3 AC-7: none set reads No target set with Edit — and no pill judged against the prototype’s 15', async () => {
+      render(OWNER, {}, EMPTY);
+      await loaded();
+      expect(tile()).toHaveTextContent(/^TargetNo target setEdit$/);
+      expect(pipeline().queryByText(/of target|target \(/)).not.toBeInTheDocument();
+      await userEvent.click(edit());
+      expect(box()).toHaveValue(null);
+    });
+
+    it.each([
+      ['an Admin, who holds it too (ADR-0028)', ADMIN, true],
+      ['an Owner', OWNER, true],
+      ['a reader without the target’s permission', makeMe({ ...OWNER, permissions: READ }), false],
+    ])('AC-1, P18.97-T3 AC-7: Edit is offered to %s: %s', async (_who, me, offered) => {
+      render(me);
+      await loaded();
+      if (offered) {
+        expect(edit()).toBeEnabled();
+      } else {
+        expect(pipeline().queryByRole('button', { name: 'Edit target' })).not.toBeInTheDocument();
+        expect(pipeline().queryByRole('spinbutton')).not.toBeInTheDocument();
+        expect(tile()).toHaveTextContent(/^Target15$/);
+        // The pill still reads against the target that is kept.
+        expect(pipeline().getByText('2 short of target (13 of 15)')).toBeInTheDocument();
+      }
+    });
+
+    it('AC-1, P18.97-T3 AC-7: a read-only support session sees the member’s Edit disabled, and writes nothing (roles §3.13)', async () => {
+      const { calls } = render(SUPPORT_READ_ONLY);
+      await loaded();
+      expect(edit()).toBeDisabled();
+      expect(tile()).toHaveTextContent(/^Target15Edit$/);
+      expect(pipeline().queryByRole('spinbutton')).not.toBeInTheDocument();
+      expect(calls.some((c) => c.init?.method === 'PUT')).toBe(false);
+    });
+
+    it('AC-6, P18.97-T3 AC-7: a reader who cannot set it and has none reads No target set, never a 0', async () => {
+      render(makeMe({ ...OWNER, permissions: READ }), {}, EMPTY);
+      await loaded();
+      expect(tile()).toHaveTextContent(/^TargetNo target set$/);
     });
   });
 
@@ -577,7 +613,7 @@ describe('KPM Overview (P18-T1)', () => {
       const production = within(section('Production — this year'));
       expect(production.getByText('Rp 8,4 M')).toBeInTheDocument();
       expect(production.getByText('of Rp 12,5 M target')).toBeInTheDocument();
-      expect(production.getAllByText('67,0%')[0].className).toContain('text-alert');
+      expect(production.getAllByText('67%')[0].className).toContain('text-alert');
       expect(section('Production — this year').textContent).not.toMatch(/\d(\.\d)?[BM]\b/);
     });
 
@@ -615,10 +651,10 @@ describe('KPM Overview (P18-T1)', () => {
       expect(production.getByText('Tap a row to see the AABs inside that unit')).toBeInTheDocument();
       const rows = production.getAllByRole('button', { expanded: false }).filter((b) => b.closest('li'));
       expect(rows.map((r) => r.textContent)).toEqual([
-        '▸Hendra Wibowo AB41,0%Rp 620 jt / 1,5 M unit target',
-        '▸Budi Santoso AB60,0%Rp 540 jt / 900 jt unit target',
-        '▸Fajar Nugroho AB64,0%Rp 700 jt / 1,1 M unit target',
-        '▸Lina Chandra AB69,0%Rp 480 jt / 700 jt unit target',
+        '▸Hendra Wibowo AB41%Rp 620 jt / 1,5 M unit target',
+        '▸Budi Santoso AB60%Rp 540 jt / 900 jt unit target',
+        '▸Fajar Nugroho AB64%Rp 700 jt / 1,1 M unit target',
+        '▸Lina Chandra AB69%Rp 480 jt / 700 jt unit target',
       ]);
     });
 
@@ -632,8 +668,8 @@ describe('KPM Overview (P18-T1)', () => {
       const panel = document.getElementById(hendra.getAttribute('aria-controls')!)!;
       expect(panel).toBeVisible();
       expect(within(panel).getAllByRole('listitem').map((r) => r.textContent)).toEqual([
-        'Ika Wirawan AAB42,0%Rp 210 jt / 500 jt',
-        'Yoga Pratama AAB45,0%Rp 180 jt / 400 jt',
+        'Ika Wirawan AAB42%Rp 210 jt / 500 jt',
+        'Yoga Pratama AAB45%Rp 180 jt / 400 jt',
       ]);
 
       const lina = production.getByRole('button', { name: /^Lina Chandra/ });

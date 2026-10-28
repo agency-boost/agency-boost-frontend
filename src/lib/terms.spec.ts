@@ -37,10 +37,23 @@ describe.skipIf(!HAS_GLOSSARY)('P18.95-T9 AC-3 the terms and the glossary', () =
 });
 
 describe('P18.95-T9 AC-3 the terms', () => {
-  it('P18.95-T9 AC-3 holds the eleven the client named — APE, MDRT, AAB, NBO, NPA, BOP, JFW, touches, CI premium waiver, as-billed, Potential MAA', () => {
+  it('P18.95-T9 AC-3, P18.97-T3 AC-8 holds the eleven the client named, and MOC and the three clubs (UI-021)', () => {
     expect(TERM_KEYS).toEqual([
       'APE', 'MDRT', 'AAB', 'NBO', 'NPA', 'BOP', 'JFW', 'TOUCHES', 'CI_PREMIUM_WAIVER', 'AS_BILLED', 'POTENTIAL_MAA',
+      'MOC', 'STAR_CLUB', 'ELITE_CLUB', 'CHAIRMANS_CLUB',
     ]);
+  });
+
+  it('P18.97-T3 AC-8 names each club’s ⓘ for the club, and states no threshold: each company sets its own', () => {
+    expect(termQuestion('MOC')).toBe('What is MOC?');
+    expect(termQuestion('STAR_CLUB')).toBe('What is Star Club?');
+    expect(termQuestion('CHAIRMANS_CLUB')).toBe('What is Chairman’s Club?');
+    for (const key of ['MOC', 'STAR_CLUB', 'ELITE_CLUB', 'CHAIRMANS_CLUB'] as const) {
+      expect(TERMS[key].definition).not.toMatch(/Rp|\d/);
+    }
+    expect(termAt("Chairman's Club", 'CHAIRMANS_CLUB')).toEqual([0, 15]);
+    expect(termAt('Chairman’s Club', 'CHAIRMANS_CLUB')).toEqual([0, 15]);
+    expect(termAt('STAR CLUB', 'STAR_CLUB')).toEqual([0, 9]);
   });
 
   it.each(TERM_KEYS)('P18.95-T9 AC-3 gives %s one plain line', (key) => {
@@ -56,7 +69,7 @@ describe('P18.95-T9 AC-3 the terms', () => {
 describe.skipIf(!HAS_GLOSSARY)('P18.95-T9 AC-3 the terms against the glossary’s Gloss column', () => {
   it('P18.95-T9 AC-3 spells out each acronym as the glossary’s Gloss column does', () => {
     const gloss = (term: string) => GLOSSARY.split('\n').find((line) => line.startsWith(`| ${term} |`))!.split('|')[3].trim();
-    for (const key of ['APE', 'MDRT', 'AAB', 'NBO', 'BOP'] as const) {
+    for (const key of ['APE', 'MDRT', 'AAB', 'NBO', 'BOP', 'MOC'] as const) {
       expect(TERMS[key].definition.startsWith(`${gloss(TERMS[key].glossary)}:`)).toBe(true);
     }
   });
@@ -96,6 +109,11 @@ describe('P18.95-T9 AC-3 finding a term in somebody else’s words', () => {
     expect(CONTENT_TERM_KEYS).not.toContain('TOUCHES');
     expect(CONTENT_TERM_KEYS).not.toContain('POTENTIAL_MAA');
     expect(firstMentions(['A personal touch, every call'], CONTENT_TERM_KEYS)).toEqual([[]]);
+  });
+
+  it('P18.97-T3 AC-8 never looks for MOC or a club in content: the Year-End Star Club Drive is a campaign, not the tier', () => {
+    for (const key of ['MOC', 'STAR_CLUB', 'ELITE_CLUB', 'CHAIRMANS_CLUB'] as const) expect(CONTENT_TERM_KEYS).not.toContain(key);
+    expect(firstMentions(['Year-End Star Club Drive'], CONTENT_TERM_KEYS)).toEqual([[]]);
   });
 
   it('reads an office’s activities section by section, each label before its note, archived ones left out', () => {

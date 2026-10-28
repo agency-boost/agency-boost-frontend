@@ -58,8 +58,8 @@ describe('/new-hires, a year of new hires by their 3M result (P13-T5, P18.96-T6)
     expect(rows.map((r) => within(r).getByRole('rowheader').textContent)).toEqual([
       'Novi LestariAAB: Arief Hidayat', 'Budi HartonoAAB: Sari Puspita', 'Rina WijayaAAB: Sari Puspita', 'Fikri RamadhanDirect Unit',
     ]);
-    expect(within(rows[0]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['4 Agu 2026', '85 /90', '56,0%', '23 Agu 2026']);
-    expect(within(rows[1]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['27 Agu 2026', '62 /90', '25,0%', '—']);
+    expect(within(rows[0]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['4 Agu 2026', '85 /90', '56%', '23 Agu 2026']);
+    expect(within(rows[1]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['27 Agu 2026', '62 /90', '25%', '—']);
   });
 
   it('P18.96-T6 AC-3 a new hire with no checklist — an AAB placed as one — reads No checklist', async () => {
@@ -88,9 +88,9 @@ describe('/new-hires, a year of new hires by their 3M result (P13-T5, P18.96-T6)
     show();
     const indah = within(within(await card('Activated')).getByRole('row', { name: /Indah Permata/ })).getAllByRole('cell')[1];
     const mark = indah.querySelector('[data-overdue]')!;
-    expect(mark).toHaveTextContent(/^94,0%, overdue$/);
+    expect(mark).toHaveTextContent(/^94%, overdue$/);
     expect(within(indah).getByText(', overdue')).toHaveClass('sr-only');
-    expect(within(indah).getByText(/94,0%/)).toHaveClass('font-bold', 'text-alert');
+    expect(within(indah).getByText(/94%/)).toHaveClass('font-bold', 'text-alert');
     const novi = within(within(screen.getByRole('region', { name: IN_PROGRESS })).getByRole('row', { name: /Novi Lestari/ })).getAllByRole('cell')[2];
     expect(novi.querySelector('[data-overdue]')).toBeNull();
   });
@@ -98,10 +98,10 @@ describe('/new-hires, a year of new hires by their 3M result (P13-T5, P18.96-T6)
   it('P18.96-T6 AC-2 the 3M activation % is the server’s, with its counts, and each unit’s beside it', async () => {
     show();
     const top = within(await screen.findByRole('region', { name: '3M activation %' }));
-    expect(top.getByText('50,0%')).toBeInTheDocument();
+    expect(top.getByText('50%')).toBeInTheDocument();
     expect(top.getByText('2 activated · 2 not activated · 4 in progress')).toBeInTheDocument();
     expect(within(top.getByRole('list', { name: 'By unit' })).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      'Direct Unit 67,0%', 'AAB: Arief Hidayat 0,0%', 'AAB: Sari Puspita —No result yet',
+      'Direct Unit 67%', 'AAB: Arief Hidayat 0%', 'AAB: Sari Puspita —No result yet',
     ]);
   });
 
@@ -111,14 +111,14 @@ describe('/new-hires, a year of new hires by their 3M result (P13-T5, P18.96-T6)
     const select = top.getByRole('combobox', { name: 'Join month' });
     expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['All', 'Sep 2026', 'Agu 2026', 'Jul 2026']);
     await userEvent.selectOptions(select, '2026-07');
-    expect(top.getByText('67,0%', { selector: 'span.block' })).toBeInTheDocument();
+    expect(top.getByText('67%', { selector: 'span.block' })).toBeInTheDocument();
     expect(top.getByText('2 activated · 1 not activated · 0 in progress')).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: IN_PROGRESS })).getByText('No one here.')).toBeInTheDocument();
     expect(within(screen.getByRole('region', { name: 'Not activated' })).getAllByRole('rowheader').map((h) => h.textContent))
       .toEqual(['Lukman HakimDirect Unit']);
     // A unit with nobody that month: no figure, never 0%.
     expect(within(top.getByRole('list', { name: 'By unit' })).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      'Direct Unit 67,0%', 'AAB: Arief Hidayat —No result yet', 'AAB: Sari Puspita —No result yet',
+      'Direct Unit 67%', 'AAB: Arief Hidayat —No result yet', 'AAB: Sari Puspita —No result yet',
     ]);
   });
 

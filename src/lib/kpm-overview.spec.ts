@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   coachedWords, daysAgoWords, inTeam, lastLoggedWords, leftOutWords, markerAt, moreWords, newThisMonth, officeLine,
-  ofTarget, parseTarget, pctText, projectedWords, recruitPill, rungShort, showingWords, targetLegend,
-  toneOf, trendWords, unitNums,
+  ofTarget, OWN_COPY, parseTarget, pctText, projectedWords, PROTOTYPE_COPY, recruitPill, rungShort, showingWords,
+  targetLegend, targetValueWords, toneOf, trendWords, unitNums,
 } from './kpm-overview';
 
 const rp = (millions: number) => Math.round(millions * 1_000_000 * 100);
@@ -24,12 +24,19 @@ describe('KPM Overview words (P18-T1)', () => {
   });
 
   describe('the trend against last month to the same day (AC-4, D-figures)', () => {
-    it('AC-4: Up, with the rise relative to last month, rounded — 142 against 138 is +3,0% (`:977`; ADR-0167 §1)', () => {
-      expect(trendWords(142, 138)).toEqual({ direction: 'up', lead: 'Up from 138 last month', change: '+3,0%' });
+    it('AC-4, P18.97-T3 AC-1: Up, with the rise relative to last month, whole — 142 against 138 is +3% (`:977`; ADR-0174 §1)', () => {
+      expect(trendWords(142, 138)).toEqual({ direction: 'up', lead: 'Up from 138 last month', change: '+3%' });
     });
 
-    it('AC-4: Down, with the fall', () => {
-      expect(trendWords(120, 150)).toEqual({ direction: 'down', lead: 'Down from 150 last month', change: '−20,0%' });
+    it('AC-4, P18.97-T3 AC-1: Down, with the fall, whole and with no ,0', () => {
+      expect(trendWords(120, 150)).toEqual({ direction: 'down', lead: 'Down from 150 last month', change: '−20%' });
+    });
+
+    it('P18.97-T3 F-254 the change rounds an exact half up in integers: 63 against 40 is +58%, which Math.round made +57%', () => {
+      expect(Math.round(((63 - 40) / 40) * 100)).toBe(57);
+      expect(trendWords(63, 40)).toEqual({ direction: 'up', lead: 'Up from 40 last month', change: '+58%' });
+      // A fall of 23 on 40 is −57,5%: its size half up, so −58%, its sign apart.
+      expect(trendWords(17, 40)).toEqual({ direction: 'down', lead: 'Down from 40 last month', change: '−58%' });
     });
 
     it('AC-4: the same count is said as the same, with no percentage', () => {
@@ -64,10 +71,15 @@ describe('KPM Overview words (P18-T1)', () => {
   });
 
   describe('coverage and the leaderboard (AC-5)', () => {
-    it('AC-5: *"· {n} in team"* and *"{c}/{n} · {p}%"* (`:1027-1029`), the percentage to one decimal', () => {
+    it('AC-5, P18.97-T3 AC-1: *"· {n} in team"* and *"{c}/{n} · {p}%"* (`:1027-1029`), the percentage whole', () => {
       expect(inTeam(31)).toBe('· 31 in team');
-      expect(coachedWords({ coached: 6, teamSize: 31, pct: 19 })).toBe('6/31 · 19,0%');
-      expect(coachedWords({ coached: 0, teamSize: 0, pct: null })).toBe('0/0 · —');
+      expect(coachedWords({ coached: 6, teamSize: 31, pct: 19, leads: true })).toBe('6/31 · 19%');
+      expect(coachedWords({ coached: 0, teamSize: 0, pct: null, leads: true })).toBe('0/0 · —');
+    });
+
+    it('P18.97-T3 AC-5 an AB who leads nobody reads No team where the figure would be — never 0/0, never 0%', () => {
+      expect(coachedWords({ coached: 0, teamSize: 0, pct: null, leads: false })).toBe('No team');
+      expect(OWN_COPY.noTeam).toBe('No team');
     });
 
     it('AC-5 (D-copy): the count of ABs is counted, not the prototype’s 8 (`:1045`)', () => {
@@ -86,8 +98,14 @@ describe('KPM Overview words (P18-T1)', () => {
 
     it('AC-9: a rate over nobody is a dash, never 0%', () => {
       expect(pctText(null)).toBe('—');
-      expect(pctText(0)).toBe('0,0%');
-      expect(pctText(57.5)).toBe('57,5%');
+      expect(pctText(0)).toBe('0%');
+    });
+
+    it('P18.97-T3 AC-1: writes the server’s whole percent as it came — 96%, never 96,0% (UI-018, OD-213)', () => {
+      // 27 of 28 is 96,4, which `rateOver` serves as 96: one rounding, the server's, and no ,0 after it.
+      expect(pctText(96)).toBe('96%');
+      expect(pctText(57)).toBe('57%');
+      expect(pctText(100)).toBe('100%');
     });
   });
 
@@ -100,6 +118,17 @@ describe('KPM Overview words (P18-T1)', () => {
 
     it('AC-6 (D-recruit): no pill without a target', () => {
       expect(recruitPill(13, null)).toBeNull();
+    });
+
+    it('P18.97-T3 AC-7 the Target reads as a value — its number, or No target set — with Edit and its toast', () => {
+      expect(targetValueWords(15)).toBe('15');
+      expect(targetValueWords(0)).toBe('0');
+      expect(targetValueWords(null)).toBe('No target set');
+      expect([OWN_COPY.edit, OWN_COPY.editTarget, OWN_COPY.targetSaved]).toEqual(['Edit', 'Edit target', 'Target saved ✓']);
+    });
+
+    it('P18.97-T3 AC-6 Engagement’s sub-line names the two periods its cards read (UI-020)', () => {
+      expect(PROTOTYPE_COPY.engagementSub).toBe('This month · Last 7 days');
     });
 
     it('AC-11: a target is a whole number from 0, and nothing else is sent', () => {

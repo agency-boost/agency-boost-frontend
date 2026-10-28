@@ -335,7 +335,7 @@ describe('RatioSetEditor writes benchmarks in their unit (P4-T25)', () => {
     displayUnit: 'decimal' as const, displayOrder: 1, ...over,
   });
 
-  it('shows a percentage, a number and a band the way the registry writes them', () => {
+  it('shows a percentage, a number and a band the way the registry writes them — P18.97-T3 AC-2, as typed', () => {
     render(<RatioSetEditor
       available={[]}
       onChange={vi.fn()}
@@ -346,7 +346,7 @@ describe('RatioSetEditor writes benchmarks in their unit (P4-T25)', () => {
       ] }}
     />);
 
-    expect(screen.getByText('15,0%')).toBeInTheDocument();
+    expect(screen.getByText('15%')).toBeInTheDocument();
     expect(screen.getByText('0,30')).toBeInTheDocument();
     expect(screen.getByText('±30 points')).toBeInTheDocument();
   });

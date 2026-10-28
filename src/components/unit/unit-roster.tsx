@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useId, type MouseEvent, type ReactNode } from 'react';
 import { TAP_AREA } from '@/components/ui/phone';
+import { CardField, CardGroup } from '@/components/ui/row-cards';
 import { TermTip } from '@/components/ui/term-tip';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { cn } from '@/lib/cn';
@@ -597,12 +598,13 @@ function PersonRow({
 
 /*
  * ── On a phone: a card per person (P18.95-T3 AC-1) ──────────────────────────────────────────────
+ *
+ * `CardGroup` and `CardField` are the shared card pieces (`components/ui/row-cards.tsx`) since P18.97-T7 AC-1, which
+ * the Owner's wide tables draw their cards with too; moving them changed no markup here.
  */
 
 /** One step of nesting on a phone: half the table's, so a unit two deep still leaves its card the screen. */
 const PHONE_INDENT = 12;
-/** The table's header in small capitals (`HEAD`), over each value on a card: label above value (ADR-0167 §6). */
-const CARD_LABEL = 'text-xs font-semibold uppercase tracking-wide text-muted';
 /** A card's 16px gutter, and each step of nesting added to its left. */
 const cardIndent = (steps: number) => (steps > 0 ? { paddingLeft: 16 + steps * PHONE_INDENT } : undefined);
 
@@ -642,24 +644,6 @@ function RosterCards({
   );
 }
 
-/** A group's band (`GroupDivider`'s paint), as the heading of the lists under it. */
-function CardGroup({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
-  return (
-    <>
-      <h3 className="border-b border-hairline bg-navy/[0.045] px-4 py-2.5 font-display text-base font-bold text-navy">
-        {label}
-        {count !== undefined && (
-          <>
-            {' '}
-            <span className="ml-1.5 font-body font-semibold text-muted">· {count}</span>
-          </>
-        )}
-      </h3>
-      {children}
-    </>
-  );
-}
-
 /** A unit and every unit nested in it, each its own list: the total, the head, the team (`UnitBodies`). */
 function UnitCards({ unit, level, ...rowProps }: { unit: UnitGroup; level: number } & CardProps) {
   return (
@@ -677,16 +661,6 @@ function UnitCards({ unit, level, ...rowProps }: { unit: UnitGroup; level: numbe
       </ul>
       {unit.units.map((inner) => <UnitCards key={inner.head.membershipId} unit={inner} level={level + 1} {...rowProps} />)}
     </>
-  );
-}
-
-/** One value on a card, under its label. */
-function CardField({ label, children, className }: { label: ReactNode; children: ReactNode; className?: string }) {
-  return (
-    <div className={cn('flex min-w-0 flex-col gap-1', className)}>
-      <dt className={CARD_LABEL}>{label}</dt>
-      <dd className="min-w-0">{children}</dd>
-    </div>
   );
 }
 

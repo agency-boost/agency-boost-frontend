@@ -306,10 +306,11 @@ export const drawerHref = (code: string, filters: CatalogFilters) =>
 // ------------------------------------------------------------------------------------------ words
 
 /**
- * A proportion as the drawer prints it: `0.4` is `40,0%`, `0.125` is `12,5%`, `0.0725` is `7,25%` — one decimal
- * (ADR-0167 §1), and the second a rate was stored with, so the rate an agent reads is the rate stored.
+ * A commission rate as the drawer prints it: `0.4` is `40%`, `0.125` is `12,5%`, `0.0725` is `7,25%` — **the places
+ * it was stored with and no more** (ADR-0174 §3: a figure stated as a rule keeps its places, and has no *,0*), so
+ * the rate an agent reads is the rate stored. Two at most, the schedule's own (`toFixed(2)`).
  */
-export const formatRate = (rate: number) => formatPercent(Number((rate * 100).toFixed(2)), { maxDecimals: 2 });
+export const formatRate = (rate: number) => formatPercent(Number((rate * 100).toFixed(2)), { lossless: true });
 
 /** `{n} product` or `{n} products` (`Overall.html:10170`). */
 export const productCount = (n: number) => `${n} product${n === 1 ? '' : 's'}`;

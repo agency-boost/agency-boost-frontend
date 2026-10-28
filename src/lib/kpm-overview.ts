@@ -1,6 +1,6 @@
 import { shortOfRung } from '@/components/ui/role-badge';
 import { api } from './api-client';
-import { formatMonth, formatPercent, formatRupiahCompact, formatRupiahCompactPair } from './format';
+import { formatMonth, formatPercent, formatRupiahCompact, formatRupiahCompactPair, percentOf } from './format';
 
 /**
  * The KPM Overview (P18-T1, `KPM_Owner.html:936-1222`): the whole office in one scroll — Team composition,
@@ -86,13 +86,17 @@ export interface OverviewEngagement {
   loggedThisWeek: LoggedThisWeek;
 }
 
-/** One AB with a downline on *AB coaching frequency*: `LEADER_COACHING_FREQUENCY`, the last 7 days. */
+/**
+ * One AB on *AB coaching frequency*: `LEADER_COACHING_FREQUENCY`, the last 7 days. **Every AB is listed** (P18.97-T3
+ * AC-5, UI-017): one who leads nobody comes last, `leads: false`, its team 0 and its rate `null` — *No team*.
+ */
 export interface LeaderboardRow {
   membershipId: string;
   name: string;
   teamSize: number;
   coached: number;
   pct: number | null;
+  leads: boolean;
 }
 
 /** `COACHING_COVERAGE` over the office, both windows, and the leaderboard lowest first. */
@@ -227,7 +231,11 @@ export const PROTOTYPE_COPY = {
   title: 'Overview',
   composition: 'Team composition',
   engagement: 'Engagement',
-  engagementSub: 'Last 7 days',
+  /**
+   * The prototype's *Last 7 days* (`:965`), over a first card that counts the month: **the two periods its cards read**
+   * since P18.97-T3 AC-6 (ADR-0176 §3, UI-020; parity I-505) — data honesty, the line the prototype already has.
+   */
+  engagementSub: 'This month · Last 7 days',
   coaching: 'Coaching coverage',
   recruitment: 'Recruitment pipeline',
   production: 'Production — this year',
@@ -265,10 +273,16 @@ export const OWN_COPY = {
   noTarget: 'No target set',
   everybodyLogged: 'Everybody has logged in the last 7 days.',
   noLeaders: 'No AB leads a team yet.',
+  /** Where an AB who leads nobody's rate would be (P18.97-T3 AC-5; ADR-0176 §2, the glossary's *No team*). */
+  noTeam: 'No team',
   noUnits: 'No AB leads a unit yet.',
   showFewer: 'show fewer',
   targetInvalid: 'Enter a whole number from 0.',
   targetNotSaved: 'The target was not saved.',
+  /** The *Target*'s control and its toast (P18.97-T3 AC-7; ADR-0176 §4, OD-200, UI-020; parity I-506). */
+  edit: 'Edit',
+  editTarget: 'Edit target',
+  targetSaved: 'Target saved ✓',
   /** The figure's own name when it is shown as a dash: a screen reader hears *no rate*, not *dash*. */
   noRate: 'No rate: nobody to count',
 } as const;
@@ -283,7 +297,7 @@ export const officeLine = (office: OverviewOffice) => `${office.companyName} · 
 /** *"+6 new this month"* (`:946`). */
 export const newThisMonth = (n: number) => `+${n} new this month`;
 
-/** A percentage the server computed, to one decimal (ADR-0167 §1), or *—* over nobody. */
+/** A percentage the server computed, whole (ADR-0174 §1) — *96%*, never *96,0%* — or *—* over nobody. */
 export const pctText = (pct: number | null) => (pct === null ? '—' : formatPercent(pct));
 
 /**
@@ -307,17 +321,18 @@ export interface TrendWords {
 }
 
 /**
- * *"Up from 138 last month (+3,0%)"* (`:977`) or *"Down from …"*; the change is relative to last month's
- * figure, rounded — 142 against 138 is +3% — and written to one decimal (ADR-0167 §1). With nothing logged by this day last month there is no
- * percentage to give, so the line stops at the figure. `null` — nothing to compare against — draws no line.
+ * *"Up from 138 last month (+3%)"* (`:977`) or *"Down from …"*; the change is relative to last month's
+ * figure, rounded half up in integers — 142 against 138 is +3%, 23 more on 40 is +58% (`percentOf`; P18.97-T3, parity
+ * F-254) — and written whole (ADR-0174 §1). With nothing logged by this day last month there is no percentage to give,
+ * so the line stops at the figure. `null` — nothing to compare against — draws no line.
  */
 export function trendWords(now: number, lastMonthToDate: number | null): TrendWords | null {
   if (lastMonthToDate === null) return null;
   if (now === lastMonthToDate) return { direction: 'same', lead: `Same as last month (${now})`, change: null };
   const direction = now > lastMonthToDate ? 'up' : 'down';
   const lead = `${direction === 'up' ? 'Up' : 'Down'} from ${lastMonthToDate} last month`;
-  if (lastMonthToDate === 0) return { direction, lead, change: null };
-  const pct = Math.round((Math.abs(now - lastMonthToDate) / lastMonthToDate) * 100);
+  const pct = percentOf(Math.abs(now - lastMonthToDate), lastMonthToDate);
+  if (pct === null) return { direction, lead, change: null };
   return { direction, lead, change: `${direction === 'up' ? '+' : '−'}${formatPercent(pct)}` };
 }
 
@@ -340,9 +355,12 @@ export const moreWords = (n: number) => `+ ${n} more — full list on the People
 /** *"· 31 in team"* (`:1027`). */
 export const inTeam = (n: number) => `· ${n} in team`;
 
-/** *"6/31 · 19,0%"* (`:1029`). */
-export const coachedWords = (row: Pick<LeaderboardRow, 'coached' | 'teamSize' | 'pct'>) =>
-  `${row.coached}/${row.teamSize} · ${pctText(row.pct)}`;
+/**
+ * *"6/31 · 19%"* (`:1029`); ***No team*** for an AB who leads nobody (P18.97-T3 AC-5), where the figure would be — never
+ * *"0/0 · —"*, which reads as a team nobody coached.
+ */
+export const coachedWords = (row: Pick<LeaderboardRow, 'coached' | 'teamSize' | 'pct' | 'leads'>) =>
+  (row.leads ? `${row.coached}/${row.teamSize} · ${pctText(row.pct)}` : OWN_COPY.noTeam);
 
 /** *"Showing 4 of 8 ABs · "* (`:1045`, `:1218`), counted (D-copy). */
 export const showingWords = (shown: number, of: number) => `Showing ${shown} of ${of} ABs · `;
@@ -367,6 +385,12 @@ export function recruitPill(expected: number, target: number | null): PillWords 
   if (diff > 0) return { tone: 'success', text: `${diff} ahead of target (${expected} of ${target})` };
   return { tone: 'alert', text: `${Math.abs(diff)} short of target (${expected} of ${target})` };
 }
+
+/**
+ * The *Target* tile's value, read as a value (P18.97-T3 AC-7; ADR-0176 §4, UI-020): the number, or ***No target set***
+ * where the office never set one — the tile's own *Target* label above it, so it reads *Target: 15*.
+ */
+export const targetValueWords = (target: number | null) => (target === null ? OWN_COPY.noTarget : String(target));
 
 /** A typed target as the API takes it — a whole number from 0 — or `null` for anything else. */
 export function parseTarget(typed: string): number | null {

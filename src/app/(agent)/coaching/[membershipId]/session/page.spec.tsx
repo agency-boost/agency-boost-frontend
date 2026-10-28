@@ -387,16 +387,17 @@ describe('the session workspace (P11-T8)', () => {
   });
 
   describe('the Goal card', () => {
-    it('P11-T8 AC-4 shows the month and the year as her Summary does, in one money formatter, with what remains', async () => {
+    it('P11-T8 AC-4, P18.97-T3 AC-1 shows the month and the year as her Summary does, in one money formatter, the attainment whole, with what remains', async () => {
       const { calls } = show();
       const goal = await card('Goal');
 
       await within(goal).findByText(/Rp 65,6 jt/);
       expect(goal).toHaveTextContent('Rp 65,6 jt / Rp 80 jt');
-      expect(goal).toHaveTextContent('82,0%');
+      expect(goal).toHaveTextContent('82%');
+      expect(goal).not.toHaveTextContent('82,0%');
       expect(goal).toHaveTextContent('Rp 14,4 jt remaining this month.');
       expect(goal).toHaveTextContent('Rp 620 jt / Rp 960 jt');
-      expect(goal).toHaveTextContent('65,0%');
+      expect(goal).toHaveTextContent('65%');
       expect(goal).toHaveTextContent('Rp 340 jt remaining this year.');
       expect(within(goal).getByRole('progressbar', { name: 'This month’s target' })).toHaveAttribute('aria-valuenow', '82');
       expect(within(goal).getByText('Tap this year’s target to edit')).toBeInTheDocument();
@@ -491,7 +492,7 @@ describe('the session workspace (P11-T8)', () => {
   });
 
   describe('Ratios and Activity', () => {
-    it('P11-T8 AC-5 reads her ratios on her rung, the last 30 days, each against its benchmark', async () => {
+    it('P11-T8 AC-5, P18.97-T3 AC-2 reads her ratios on her rung, the last 30 days, each to its tenth against its benchmark as typed', async () => {
       const { calls } = show();
       const ratios = await card('Ratios');
 
@@ -499,11 +500,11 @@ describe('the session workspace (P11-T8)', () => {
       await within(ratios).findByText('18,0%');
       const lines = within(ratios).getAllByRole('listitem').map((li) => li.textContent);
       expect(lines).toEqual([
-        'Selling success rate18,0%Benchmark: 15,0%',
+        'Selling success rate18,0%Benchmark: 15%',
         'Leads per activity0,35Benchmark: 0,30',
-        'Recruitment success rate–Benchmark: 15,0%',
+        'Recruitment success rate–Benchmark: 15%',
         // Each side's share of the two, as her own Activity Ratios card writes it (P13.1-T6 AC-7).
-        'Sales vs. Recruitment70,0% Selling · 30,0% RecruitmentBenchmark: 35,0%–65,0% each side',
+        'Sales vs. Recruitment70,0% Selling · 30,0% RecruitmentBenchmark: 35%–65% each side',
       ]);
       expect(within(ratios).getByText('18,0%')).toHaveClass('text-success');
       expect(within(ratios).getByText('–')).toHaveClass('text-muted');

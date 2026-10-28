@@ -23,7 +23,15 @@ export interface MocOpen {
  * with the server's sentence saying which input is missing, and opens the same dialog, where the criteria
  * that could be read still show. A leader the company's rules do not cover (`null`) is a plain *—*.
  */
-export function MocCell({ moc, name, onOpen }: { moc: Moc | null; name: string; onOpen: (open: MocOpen) => void }) {
+export function MocCell({
+  moc, name, onOpen, className,
+}: {
+  moc: Moc | null;
+  name: string;
+  onOpen: (open: MocOpen) => void;
+  /** Beside its paint — on a phone's card, the 44px square that takes the tap (P18.97-T7 AC-1). */
+  className?: string;
+}) {
   if (!moc) return <span className="text-md text-muted">—</span>;
   const label = mocButtonName(moc, name);
   return (
@@ -37,6 +45,7 @@ export function MocCell({ moc, name, onOpen }: { moc: Moc | null; name: string; 
         moc.status === 'met' && 'bg-success/[0.12] text-success',
         moc.status === 'not_met' && 'bg-alert/10 text-alert',
         moc.status === 'unknown' && 'bg-muted/10 text-muted',
+        className,
       )}
     >
       <span aria-hidden="true">{moc.status === 'met' ? '✓' : moc.status === 'not_met' ? '✕' : '—'}</span>

@@ -370,7 +370,7 @@ export function quoteDay(typed: string): string {
   return day ? formatCalendarDay(day) : typed.trim();
 }
 
-/** The card's *Save 20,0%*: `savePct`'s whole percent, written to one decimal (ADR-0167 §1). */
+/** The card's *Save 20%*: `savePct`'s whole percent, written whole (ADR-0174 §1, OD-213). */
 export const saveWords = (tier: Pick<BillingTier, 'standardMinor' | 'sixMonthMinor'>) => `Save ${formatPercent(savePct(tier))}`;
 
 /**

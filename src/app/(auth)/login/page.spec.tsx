@@ -190,6 +190,46 @@ describe('login', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach the server.');
   });
 
+  /*
+   * P18.97-T4 AC-10 (ADR-0176 §10; the client's UI-032): the sign-in error read *"Could not reach the server. Check
+   * your connection and try again."* and under it a raw *NETWORK*. A failure the browser detected carries no request
+   * id and its code is internal — the sentence alone, and the code to the console; a server's answer keeps both.
+   */
+  describe('P18.97-T4 AC-10 a code the browser made is not shown', () => {
+    async function signInFailing(error: unknown) {
+      const signIn = vi.fn(async () => { throw error; });
+      renderWithSession(<LoginPage />, { signIn });
+      await userEvent.type(screen.getByLabelText('Email'), 'owner@kpm0417.test');
+      await userEvent.type(screen.getByLabelText('Password'), 'pw');
+      await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+      return screen.findByRole('alert');
+    }
+
+    it('P18.97-T4 AC-10 says a network failure as its sentence alone, and logs NETWORK to the console', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      onTestFinished(() => warn.mockRestore());
+      const alert = await signInFailing(new TypeError('Failed to fetch'));
+      expect(alert).toHaveTextContent(/^Could not reach the server\. Check your connection and try again\.$/);
+      expect(alert.textContent).not.toContain('NETWORK');
+      expect(warn).toHaveBeenCalledWith('[NETWORK] Could not reach the server. Check your connection and try again.');
+    });
+
+    it('P18.97-T4 AC-10 says a misconfiguration by its sentence, and keeps CONFIG off the page', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      onTestFinished(() => warn.mockRestore());
+      const alert = await signInFailing(new ApiConfigError('NEXT_PUBLIC_API_ORIGIN is not set.', 'NEXT_PUBLIC_API_ORIGIN'));
+      expect(alert).toHaveTextContent(/^NEXT_PUBLIC_API_ORIGIN is not set\.$/);
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/^\[CONFIG\] /));
+    });
+
+    it('P18.97-T4 AC-10 keeps a server’s code and request id under its sentence, which support asks for', async () => {
+      const alert = await signInFailing(new ApiRequestError(401, {
+        code: 'AUTH_INVALID_CREDENTIALS', message: 'Email or password is incorrect.', requestId: 'req-9',
+      }));
+      expect(alert).toHaveTextContent('Email or password is incorrect.AUTH_INVALID_CREDENTIALS · req-9');
+    });
+  });
+
   it('offers the reset path and the way to an account', () => {
     renderWithSession(<LoginPage />);
     expect(screen.getByRole('link', { name: /Forgot your password/ })).toHaveAttribute(

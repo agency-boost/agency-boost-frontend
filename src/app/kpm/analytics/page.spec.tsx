@@ -1,13 +1,14 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderInLayout, stubFetch, type StubReply } from '@test/harness';
+import { atWidth, digestAt, makeMe, renderInLayout, stubFetch, wears, type StubReply } from '@test/harness';
 import {
   ADMIN_ME, analyticsView, CORE_LEADER_ME, NO_AB, OWNER_ME, SHELL_STUBS,
 } from '@test/kpm-analytics-fixtures';
 import KpmAnalyticsLayout from './layout';
 import KpmAnalyticsPage from './page';
 import { landingFor } from '@/lib/landing';
+import { TERMS } from '@/lib/terms';
 
 const nav = vi.hoisted(() => ({ replace: vi.fn(), pathname: '/kpm/analytics', search: '' }));
 vi.mock('next/navigation', () => ({
@@ -32,6 +33,8 @@ const table = () => screen.findByRole('table', { name: 'Unit comparison' });
 const main = () => screen.getByRole('main');
 const reads = (calls: { url: string }[]) => calls.filter((c) => c.url.includes('/kpm/analytics')).map((c) => c.url);
 const rowOf = (name: string) => screen.getByRole('rowheader', { name }).closest('tr') as HTMLElement;
+/** The total row, first in the table — its name and, when someone left, its ⓘ's. */
+const total = () => screen.getByRole('rowheader', { name: /^Total — all 4 ABs/ }).closest('tr') as HTMLElement;
 
 /**
  * KPM analytics' *Overview* (P18-T2): *Unit comparison* by AB agency with its *(Direct)* and AAB rows, the
@@ -78,18 +81,24 @@ describe('KPM analytics (P18-T2)', () => {
       // Each heading's own words; the MOC heading's ⓘ and its bubble come after them, as *APE*'s do (P18.95-T9 AC-3).
       const words = (h: HTMLElement) => (h.querySelector('[role=tooltip]') ? h.textContent!.split('ⓘ')[0] : h.textContent);
       expect(screen.getAllByRole('columnheader').map(words)).toEqual([
-        'AB', 'Manpower', 'APE — This Month', 'APE — Annual', 'Coached (7d)', 'Active this month', 'Total leads', 'MOC',
+        // P18.97-T3 AC-9 (UI-021): the prototype's *Active this month* reads *Producing this month*.
+        'AB', 'Manpower', 'APE — This Month', 'APE — Annual', 'Coached (7d)', 'Producing this month', 'Total leads', 'MOC',
       ]);
     });
 
-    it('gives the MOC header the prototype’s tooltip, verbatim (:1247)', async () => {
+    it('gives the MOC header the prototype’s tooltip, verbatim (:1247) — P18.97-T3 AC-8: after the glossary’s line for MOC', async () => {
       open();
       await table();
-      const rules = screen.getByRole('button', { name: 'How is MOC decided?' });
-      expect(rules).toHaveAccessibleDescription(
-        'AAB: Net APE ≥ Rp 200 jt AND Monthly2 AA ≥ 2 AND Rolling Persistency DU ≥ 75,0%.\n'
-        + 'AB: (Net APE ≥ Rp 600 jt AND Monthly2 AA DU ≥ 4 / DG ≥ 6 AND Rolling Persistency DU/DG ≥ 75,0%) OR Direct AB (AB on AB) ≥ 5.',
+      // One ⓘ: what MOC is (UI-021), then the company's rules as the server composes them.
+      const rules = screen.getByRole('button', { name: 'What is MOC?' });
+      // The bubble keeps its lines (`whitespace-pre-line`): the term's, a blank line, then the rules' two.
+      expect(document.getElementById(rules.getAttribute('aria-describedby')!)!.textContent).toBe(
+        `${TERMS.MOC.definition}\n\n`
+        + 'AAB: Net APE ≥ Rp 200 jt AND Monthly2 AA ≥ 2 AND Rolling Persistency DU ≥ 75%.\n'
+        + 'AB: (Net APE ≥ Rp 600 jt AND Monthly2 AA DU ≥ 4 / DG ≥ 6 AND Rolling Persistency DU/DG ≥ 75%) OR Direct AB (AB on AB) ≥ 5.',
       );
+      expect(rules).toHaveAccessibleDescription(expect.stringMatching(/^Maintenance of Contract: .+ AAB: Net APE ≥ Rp 200 jt/));
+      expect(screen.queryByRole('button', { name: 'How is MOC decided?' })).not.toBeInTheDocument();
     });
 
     it('draws one row per agency, the total first, an AB two levels down in a row of its own (D-units)', async () => {
@@ -128,7 +137,7 @@ describe('KPM analytics (P18-T2)', () => {
     it('opens and closes an agency from its row, as the prototype’s row click does (:3417-3422)', async () => {
       open();
       await table();
-      await userEvent.click(within(rowOf('Hendra Wibowo')).getByText('Rp 1.300.000.000'));
+      await userEvent.click(within(rowOf('Hendra Wibowo')).getByText('Rp 1,3 M'));
       expect(screen.getByRole('rowheader', { name: 'Ika Wirawan' })).toBeInTheDocument();
     });
 
@@ -157,21 +166,50 @@ describe('KPM analytics (P18-T2)', () => {
   });
 
   describe('AC-3 the figures', () => {
-    it('writes each APE with "of {target} target" and the pill at the prototype’s 70%', async () => {
+    it('writes each APE with "of {target} target" and the pill at the prototype’s 70% — P18.97-T3 AC-1, AC-3: compact money, whole percentages', async () => {
       open();
       await table();
       const row = rowOf('Hendra Wibowo');
-      expect(within(row).getByText('Rp 62.000.000')).toBeInTheDocument();
-      expect(within(row).getByText(/^of Rp 150\.000\.000 target/)).toBeInTheDocument();
-      expect(within(row).getByText('41,0%')).toHaveClass('text-alert');
-      expect(within(row).getByText('87,0%')).toHaveClass('text-success');
+      expect(within(row).getByText('Rp 62 jt')).toBeInTheDocument();
+      expect(within(row).getByText(/^of Rp 150 jt target/)).toBeInTheDocument();
+      expect(within(row).getByText('41%')).toHaveClass('text-alert');
+      expect(within(row).getByText('87%')).toHaveClass('text-success');
+      // A table's money is compact too (ADR-0174 §4): no sum on the page is written to the rupiah.
+      expect(main().textContent).not.toMatch(/Rp \d{1,3}\.\d{3}\.\d{3}/);
     });
 
     it('colours the pill by the split the server sends, keeping no copy of its own (invariant §7)', async () => {
       open({ body: analyticsView('this_month', { thresholds: { statusSplitPct: 90 } }) });
       await table();
-      expect(within(rowOf('Hendra Wibowo')).getByText('87,0%')).toHaveClass('text-alert');
-      expect(within(rowOf('Wilson Tanoto (you)')).getByText('100,0%')).toHaveClass('text-success');
+      expect(within(rowOf('Hendra Wibowo')).getByText('87%')).toHaveClass('text-alert');
+      expect(within(rowOf('Wilson Tanoto (you)')).getByText('100%')).toHaveClass('text-success');
+    });
+
+    it('P18.97-T3 AC-10: writes the Producing share the server serves, and divides nothing (invariant §7)', async () => {
+      const view = analyticsView('this_month');
+      const [hendra, ...rest] = view.agencies;
+      // 21 of 31 is 68%; a served 58 is written as 58% — proof the screen takes the server's figure, not its own.
+      open({ body: { ...view, agencies: [{ ...hendra, activePct: 58 }, ...rest], total: { ...view.total, activePct: 31 } } });
+      await table();
+      expect(within(rowOf('Hendra Wibowo')).getByText('21 / 31')).toBeInTheDocument();
+      expect(within(rowOf('Hendra Wibowo')).getByText('58%')).toBeInTheDocument();
+      expect(within(rowOf('Hendra Wibowo')).queryByText('68%')).not.toBeInTheDocument();
+      expect(within(total()).getByText('54 / 68')).toBeInTheDocument();
+      expect(within(total()).getByText('31%')).toBeInTheDocument();
+    });
+
+    it('P18.97-T3 AC-4: the total’s APE — Annual says what it counts, Current members only, its ⓘ still naming what it leaves out', async () => {
+      const view = analyticsView('this_month');
+      open({ body: { ...view, total: { ...view.total, leaversExcludedMinor: 98_000_000_00 } } });
+      await table();
+      const annual = total().querySelectorAll('td')[2] as HTMLElement;
+      expect(within(annual).getByText('Current members only')).toBeInTheDocument();
+      expect(within(annual).getByText('Rp 5,8 M')).toBeInTheDocument();
+      // On the total alone: an agency's own row is its members by definition, and says nothing more.
+      expect(within(rowOf('Hendra Wibowo')).queryByText('Current members only')).not.toBeInTheDocument();
+      expect(screen.getByRole('button', {
+        name: 'Leaves out Rp 98 jt produced this year by members who have since left; the Overview’s year counts it.',
+      })).toBeInTheDocument();
     });
 
     it('writes Coached (7d), Active and Total leads as the prototype does', async () => {
@@ -179,9 +217,9 @@ describe('KPM analytics (P18-T2)', () => {
       await table();
       const row = rowOf('Hendra Wibowo');
       expect(within(row).getByText('6 / 31')).toBeInTheDocument();
-      expect(within(row).getByText('19,0%')).toBeInTheDocument();
+      expect(within(row).getByText('19%')).toBeInTheDocument();
       expect(within(row).getByText('21 / 31')).toBeInTheDocument();
-      expect(within(row).getByText('68,0%')).toBeInTheDocument();
+      expect(within(row).getByText('68%')).toBeInTheDocument();
       expect(within(row).getByText('23')).toBeInTheDocument();
       expect(within(row).getByText('15 sales (9 potential) · 8 recruit (5 potential)')).toBeInTheDocument();
     });
@@ -191,7 +229,7 @@ describe('KPM analytics (P18-T2)', () => {
       await table();
       const row = rowOf('Budi Santoso');
       expect(within(row).getAllByText('Not uploaded yet')).toHaveLength(2);
-      expect(within(row).getByText(/^of Rp 75\.000\.000 target$/)).toBeInTheDocument();
+      expect(within(row).getByText(/^of Rp 75 jt target$/)).toBeInTheDocument();
     });
 
     it('keeps the period in the address: choosing Previous month re-reads it and replaces the address', async () => {
@@ -200,7 +238,7 @@ describe('KPM analytics (P18-T2)', () => {
       await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Period' }), 'previous_month');
 
       expect(nav.replace).toHaveBeenCalledWith('/kpm/analytics?period=previous_month', { scroll: false });
-      expect(await screen.findByRole('columnheader', { name: 'Active last month' })).toBeInTheDocument();
+      expect(await screen.findByRole('columnheader', { name: 'Producing last month' })).toBeInTheDocument();
       expect(reads(calls)).toEqual([
         'http://api.test/api/v1/kpm/analytics?period=this_month',
         'http://api.test/api/v1/kpm/analytics?period=previous_month',
@@ -211,7 +249,7 @@ describe('KPM analytics (P18-T2)', () => {
       const first = open({ body: analyticsView('previous_month') }, { period: 'previous_month' });
       await table();
       expect(screen.getByRole('combobox', { name: 'Period' })).toHaveValue('previous_month');
-      expect(screen.getByRole('columnheader', { name: 'Active last month' })).toBeInTheDocument();
+      expect(screen.getByRole('columnheader', { name: 'Producing last month' })).toBeInTheDocument();
       expect(reads(first.calls)).toEqual(['http://api.test/api/v1/kpm/analytics?period=previous_month']);
     });
 
@@ -227,7 +265,7 @@ describe('KPM analytics (P18-T2)', () => {
       const cells = () => [...rowOf('Hendra Wibowo').querySelectorAll('td')].map((td) => td.textContent);
       const before = cells();
       await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Period' }), 'previous_month');
-      await screen.findByRole('columnheader', { name: 'Active last month' });
+      await screen.findByRole('columnheader', { name: 'Producing last month' });
       // F-174: the month's APE column says which month it reads, as *Active* does.
       // Its name then *What is APE?*, the ⓘ beside it (P18.95-T9 AC-3).
       expect(screen.getByRole('columnheader', { name: /^APE — Last Month/ })).toBeInTheDocument();
@@ -254,8 +292,8 @@ describe('KPM analytics (P18-T2)', () => {
     const view = analyticsView('this_month');
     open([{ body: { ...view, mocRulesText: 'AB: Net APE ≥ Rp750M OR Direct AB (AB on AB) ≥ 4.' } }]);
     await table();
-    const glyph = screen.getByRole('button', { name: 'How is MOC decided?' });
-    expect(glyph).toHaveAccessibleDescription('AB: Net APE ≥ Rp750M OR Direct AB (AB on AB) ≥ 4.');
+    const glyph = screen.getByRole('button', { name: 'What is MOC?' });
+    expect(glyph).toHaveAccessibleDescription(`${TERMS.MOC.definition} AB: Net APE ≥ Rp750M OR Direct AB (AB on AB) ≥ 4.`);
   });
 
   describe('AC-4 MOC', () => {
@@ -269,7 +307,7 @@ describe('KPM analytics (P18-T2)', () => {
       expect(rows[0]).toHaveTextContent('Net APE');
       expect(rows[0]).toHaveTextContent('Jan – Sep 2026');
       expect(rows[0]).toHaveTextContent('Rp 1,3 M / Rp 600 jt — Met');
-      expect(rows[3]).toHaveTextContent('82,0% / 75,0% — Met');
+      expect(rows[3]).toHaveTextContent('82% / 75% — Met');
       expect(rows[4]).toHaveTextContent('— OR — Direct AB (AB on AB)');
       expect(rows[4]).toHaveTextContent('1 / 5 — Gap');
       expect(within(dialog).getByText('Met via the standard three-criteria path.')).toBeInTheDocument();
@@ -301,7 +339,7 @@ describe('KPM analytics (P18-T2)', () => {
       const dialog = screen.getByRole('dialog', { name: 'Wilson Tanoto — Maintenance of Contract' });
       expect(dialog).toHaveAccessibleDescription('Not uploaded yet: Rolling Persistency — DU/DG.');
       expect(within(dialog).queryByText('Not yet met')).not.toBeInTheDocument();
-      expect(within(dialog).getAllByRole('listitem')[1]).toHaveTextContent('— / 75,0% — Not uploaded yet');
+      expect(within(dialog).getAllByRole('listitem')[1]).toHaveTextContent('— / 75% — Not uploaded yet');
     });
 
     it('says "See {name} above" on a (Direct) row and gives an AAB row its own verdict', async () => {
@@ -326,6 +364,23 @@ describe('KPM analytics (P18-T2)', () => {
       expect(within(rowOf('Wilson Tanoto (you)')).getByText("Chairman's Club")).toBeInTheDocument();
       expect(within(rowOf('Budi Santoso')).queryByText(/Club/)).not.toBeInTheDocument();
       expect(screen.getAllByText(/Club$/)).toHaveLength(2);
+    });
+
+    it('P18.97-T3 AC-8: each club’s ⓘ beside the first badge that shows it, the glossary’s one line (UI-021)', async () => {
+      const view = analyticsView('this_month');
+      const [hendra, owner, budi, fajar] = view.agencies;
+      // Budi and Fajar at Star Club too: Hendra's badge is the first, and the only one with the ⓘ.
+      const star = { code: 'STAR_CLUB', label: 'Star Club' };
+      open({ body: { ...view, agencies: [hendra, owner, { ...budi, club: star }, { ...fajar, club: star }] } });
+      await table();
+      const starTip = within(rowOf('Hendra Wibowo')).getByRole('button', { name: 'What is Star Club?' });
+      expect(starTip).toHaveAccessibleDescription(TERMS.STAR_CLUB.definition);
+      expect(screen.getAllByRole('button', { name: 'What is Star Club?' })).toHaveLength(1);
+      expect(within(rowOf('Wilson Tanoto (you)')).getByRole('button', { name: 'What is Chairman’s Club?' }))
+        .toHaveAccessibleDescription(TERMS.CHAIRMANS_CLUB.definition);
+      expect(within(rowOf('Budi Santoso')).queryByRole('button', { name: /^What is/ })).not.toBeInTheDocument();
+      // The dash's name is unchanged (AC-8).
+      expect(screen.queryByRole('button', { name: 'What is Elite Club?' })).not.toBeInTheDocument();
     });
 
     it('paints no badge with a raw colour', async () => {
@@ -517,5 +572,154 @@ describe('KPM analytics (P18-T2)', () => {
       await table();
       expect(main().textContent).not.toMatch(/phase|kpm_analytics/i);
     });
+  });
+});
+
+/**
+ * **The comparison as cards on a phone** (P18.97-T7 AC-1, ADR-0178 §4; the client's KPM Owner review of 2026-10-27,
+ * UI-034: the table, 1329px in some 318px). Below 768px a card per agency, each label above its value, through the
+ * shared card pieces (`components/ui/row-cards.tsx`), carrying what P18.97-T3 put on the table; at 768px and wider the
+ * table it was, to the byte.
+ */
+describe('P18.97-T7 AC-1 the comparison as cards on a phone (UI-034)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** The comparison's markup on the build before P18.97-T7, rendered from this fixture on 2026-10-28. */
+  const BEFORE_T7: Record<768 | 1280, string> = {
+    768: 'a5436f7afc8b6b5f23d9d9a41356394d39e5ec91049a0a07e2d83454ebf57b30',
+    1280: 'a5436f7afc8b6b5f23d9d9a41356394d39e5ec91049a0a07e2d83454ebf57b30',
+  };
+
+  it.each([768, 1280] as const)('P18.97-T7 AC-1 at %ipx draws the table it drew, to the byte', async (px) => {
+    atWidth(px);
+    open();
+    const comparison = (await table()).closest('.rounded-lg')!;
+    expect(digestAt(comparison, px)).toBe(BEFORE_T7[px]);
+  });
+  const cardsOf = () => screen.findByRole('list', { name: 'Unit comparison' });
+  /** The cards, the list's own: the total, then an agency each — the units opened inside an agency are its own. */
+  const cards = (list: HTMLElement) => [...list.children] as HTMLElement[];
+  const cardOf = (list: HTMLElement, name: string) => cards(list).find((li) => li.textContent?.includes(name))!;
+  const labels = (card: HTMLElement) => [...card.querySelectorAll(':scope > dl > div > dt')].map((dt) => dt.textContent);
+
+  it.each([375, 767])('P18.97-T7 AC-1 at %ipx draws a card per agency, the total first, each value under its heading, and no table', async (px) => {
+    atWidth(px);
+    open();
+    const list = await cardsOf();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    // Each card's first line, as a screen reader has it: the name, where its link opens, and *(you)*.
+    expect(cards(list).map((li) => li.querySelector('p')!.textContent)).toEqual([
+      'Total — all 4 ABs',
+      '▸Hendra Wibowo (opens their Unit Dashboard in a new tab)',
+      'Wilson Tanoto (opens your Unit Dashboard in a new tab) (you)',
+      'Budi Santoso (opens their Unit Dashboard in a new tab)',
+      'Fajar Nugroho (opens their Unit Dashboard in a new tab)',
+    ]);
+    const hendra = cardOf(list, 'Hendra Wibowo');
+    expect(labels(hendra)).toEqual([
+      'Manpower', 'APE — This Month', 'APE — Annual', 'Coached (7d)', 'Producing this month', 'Total leads', 'MOC',
+    ]);
+    // The row's figures, in the table's words.
+    expect(hendra).toHaveTextContent('6 / 31');
+    expect(hendra).toHaveTextContent('21 / 31');
+    expect(within(hendra).getByText('15 sales (9 potential) · 8 recruit (5 potential)')).toBeInTheDocument();
+    expect(within(cardOf(list, 'Budi Santoso')).getAllByText('Not uploaded yet')).toHaveLength(2);
+  });
+
+  it('P18.97-T7 AC-1 carries P18.97-T3’s words: Current members only, Producing this month at the server’s share, and each ⓘ once', async () => {
+    atWidth(375);
+    const view = analyticsView('this_month');
+    const [hendra, ...rest] = view.agencies;
+    open({ body: { ...view, agencies: [{ ...hendra, activePct: 58 }, ...rest], total: { ...view.total, activePct: 31, leaversExcludedMinor: 98_000_000_00 } } });
+    const list = await cardsOf();
+    const total = cards(list)[0];
+    // *Current members only* under the total's annual APE, and on no agency (AC-4).
+    expect(within(total).getByText('Current members only')).toBeInTheDocument();
+    expect(within(cardOf(list, 'Hendra Wibowo')).queryByText('Current members only')).not.toBeInTheDocument();
+    expect(within(total).getByRole('button', {
+      name: 'Leaves out Rp 98 jt produced this year by members who have since left; the Overview’s year counts it.',
+    })).toBeInTheDocument();
+    // *Producing this month*, its share the server's (AC-9, AC-10): 58 served where 21 of 31 would be 68.
+    expect(screen.getAllByText('Producing this month')).toHaveLength(5);
+    expect(within(cardOf(list, 'Hendra Wibowo')).getByText('58%')).toBeInTheDocument();
+    expect(within(total).getByText('31%')).toBeInTheDocument();
+    // APE's, AAB's and MOC's ⓘ on the first card, once; each club's on its first badge (AC-8).
+    for (const name of ['What is APE?', 'What is AAB?', 'What is MOC?']) {
+      expect(screen.getAllByRole('button', { name })).toHaveLength(1);
+      expect(within(total).getByRole('button', { name })).toBeInTheDocument();
+    }
+    expect(within(cardOf(list, 'Hendra Wibowo')).getByRole('button', { name: 'What is Star Club?' }))
+      .toHaveAccessibleDescription(TERMS.STAR_CLUB.definition);
+    expect(within(cardOf(list, 'Wilson Tanoto')).getByRole('button', { name: 'What is Chairman’s Club?' })).toBeInTheDocument();
+  });
+
+  it('P18.97-T7 AC-1 opens an agency’s units one step in, from its ▸ or a tap on the card, and its people from the manpower figure', async () => {
+    atWidth(375);
+    open();
+    const list = await cardsOf();
+    const hendra = cardOf(list, 'Hendra Wibowo');
+    const expand = within(hendra).getByRole('button', { name: 'Units in Hendra Wibowo’s agency' });
+    expect(expand).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(expand);
+    expect(expand).toHaveAttribute('aria-expanded', 'true');
+    const units = screen.getByRole('list', { name: 'Units in Hendra Wibowo’s agency' });
+    expect(expand).toHaveAttribute('aria-controls', units.id);
+    expect([...units.children].map((li) => li.querySelector('p')!.textContent)).toEqual([
+      'Hendra Wibowo (Direct) (opens their Unit Dashboard in a new tab) AB',
+      'Ika Wirawan (opens their Unit Dashboard in a new tab) AAB',
+      'Yoga Pratama (opens their Unit Dashboard in a new tab) AAB',
+    ]);
+    expect(within(units).getByText('See Hendra Wibowo above')).toBeInTheDocument();
+    // A tap on the card is the row's click; on a link or a button it is that control's.
+    fireEvent.click(within(hendra).getAllByText('Manpower')[0]);
+    expect(expand).toHaveAttribute('aria-expanded', 'false');
+
+    const people = within(hendra).getByRole('button', { name: /31 people in Hendra Wibowo’s agency/ });
+    await userEvent.click(people);
+    expect(people).toHaveAttribute('aria-expanded', 'true');
+    expect(within(screen.getByRole('list', { name: 'Hendra Wibowo' })).getAllByRole('listitem').map((li) => li.textContent))
+      .toEqual(['Dimas Pratama', 'Indah Lestari']);
+    expect(expand).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('P18.97-T7 AC-1 opens MOC’s dialog from the card, and a leader’s Unit Dashboard from their name', async () => {
+    atWidth(375);
+    open();
+    const list = await cardsOf();
+    await userEvent.click(within(cardOf(list, 'Hendra Wibowo')).getByRole('button', { name: 'MOC requirements met for Hendra Wibowo' }));
+    expect(screen.getByRole('dialog', { name: 'Hendra Wibowo — Maintenance of Contract' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    const link = within(cardOf(list, 'Hendra Wibowo')).getByRole('link', { name: 'Hendra Wibowo (opens their Unit Dashboard in a new tab)' });
+    expect(link).toHaveAttribute('href', '/unit/dashboard/mem-hendra');
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  it('P18.97-T7 AC-1 makes each control on a card a 44px target', async () => {
+    atWidth(375);
+    open();
+    const list = await cardsOf();
+    const hendra = cardOf(list, 'Hendra Wibowo');
+    const worn = (el: Element) => wears(el, 375).split(' ');
+    expect(worn(within(hendra).getByRole('button', { name: 'Units in Hendra Wibowo’s agency' }))).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
+    expect(worn(within(hendra).getByRole('button', { name: /people in Hendra Wibowo’s agency/ }))).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
+    expect(worn(within(hendra).getByRole('link', { name: /^Hendra Wibowo/ }))).toContain('min-h-11');
+    expect(worn(within(hendra).getByRole('button', { name: /^MOC requirements met/ }))).toContain("after:h-[max(100%,2.75rem)]");
+  });
+
+  it('P18.97-T7 AC-1 never draws the table first on a phone: the width is asked before the comparison answers', async () => {
+    atWidth(375);
+    let drew = false;
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof Element && (node.matches('table') || node.querySelector('table'))) drew = true;
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    open();
+    await cardsOf();
+    observer.disconnect();
+    expect(drew).toBe(false);
   });
 });

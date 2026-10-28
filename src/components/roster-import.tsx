@@ -3,8 +3,11 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
-import { Button, Card, ErrorBanner, Field, Textarea } from '@/components/ui/field';
+import { Button, buttonClass, Card, ErrorBanner, Field, Textarea } from '@/components/ui/field';
+import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { ConsoleCode } from '@/components/ui/console-code';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { errorReference } from '@/lib/browser-errors';
 import { useSession } from '@/lib/session';
 import { LeaderLimitNotice, isLeaderLimit } from './leader-limit-notice';
 import {
@@ -14,6 +17,25 @@ import {
   type ImportedPerson,
   type RosterPreview,
 } from '@/lib/admin';
+
+/**
+ * **The file's nine columns, in its order, and what each holds** (P18.97-T4 AC-4, ADR-0176 §6; the client's UI-025:
+ * the 120 words of instructions above the import, *Remove* at every size, become *"a short table of required columns
+ * … and a Download template button"*). The names are the client's; what each holds is the rule the parser applies,
+ * which the downloaded template spells out in full (`ROSTER_TEMPLATE`, backend `roster-csv.ts`). A code in a cell is
+ * what is typed in the file.
+ */
+const COLUMN_GUIDE: readonly { column: string; holds: React.ReactNode }[] = [
+  { column: 'Name', holds: 'Their full name' },
+  { column: 'Email', holds: 'An address nobody has registered yet' },
+  { column: 'Agent code', holds: 'The code their insurer issued, digits only' },
+  { column: 'Role', holds: <><code>AB</code>, <code>AAB</code> or <code>Agent</code></> },
+  { column: 'Leader’s agent code (optional)', holds: 'Empty for somebody who reports to nobody' },
+  { column: 'Date of birth', holds: <><code>YYYY-MM-DD</code>, at least 18 years ago</> },
+  { column: 'Join month', holds: <><code>YYYY-MM</code>, the month they joined the insurer</> },
+  { column: 'Full/part-time', holds: <><code>full-time</code> or <code>part-time</code></> },
+  { column: 'Gender', holds: <><code>male</code> or <code>female</code></> },
+];
 
 /**
  * Filling an office from a spreadsheet (P3.6-T4).
@@ -47,6 +69,9 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<'preview' | 'commit' | null>(null);
   const [template, setTemplate] = useState<{ file: string; examples: string[][] } | null>(null);
+  /** Why the template could not be read, so *Download template* can say so beside a way to ask again. */
+  const [templateError, setTemplateError] = useState<ApiError | null>(null);
+  const [templateAttempt, setTemplateAttempt] = useState(0);
 
   // The whole file comes from the API rather than being composed here. A template the
   // screen built itself would drift from the one the parser demands, and the failure
@@ -54,11 +79,12 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
   // and the worked examples in it are the part most worth not paraphrasing.
   useEffect(() => {
     let live = true;
+    setTemplateError(null);
     rosterTemplate()
       .then((t) => { if (live) setTemplate({ file: t.template, examples: t.examples }); })
-      .catch(() => { if (live) setTemplate(null); });
+      .catch((err) => { if (live) setTemplateError(toDisplayError(err)); });
     return () => { live = false; };
-  }, []);
+  }, [templateAttempt]);
 
   /**
    * Read the chosen file.
@@ -183,26 +209,44 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
       ) : (
         <Card>
           <h2 className="font-display text-lg font-bold text-navy">The file</h2>
-          <p className="mt-1 text-md text-muted">
-            One row per person: name, email, the agent code their insurer issued (digits only), their
-            rung by its code on your company&apos;s ladder (<code>AB</code>, <code>AAB</code> or <code>Agent</code>,
-            or a rung the company added), and the agent code of
-            whoever they report to — empty for somebody who reports to nobody. Then their date of
-            birth (<code>YYYY-MM-DD</code>; they must be at least 18), the month they joined the
-            insurer (<code>YYYY-MM</code>), <code>full-time</code> or <code>part-time</code>, and{' '}
-            <code>male</code> or <code>female</code>. Every column but the leader&apos;s is required.
-          </p>
-          <p className="mt-2 text-md text-muted">
-            A leader may be in the file or already in the office; order does not matter, because
-            the import creates leaders first either way.
-          </p>
-          <p className="mt-2 text-md text-muted">
-            You can paste the rows straight out of a spreadsheet, or download a template, fill it
-            in and upload it. Pasting works from Excel, Google Sheets, LibreOffice and Numbers —
-            select the rows, copy, and paste. The downloaded template carries three worked
-            examples, <strong>commented out</strong> with a <code>#</code> so they are never
-            imported.
-          </p>
+          {/* One row per person, these columns in this order (P18.97-T4 AC-4): the paragraph's every fact, a row each. */}
+          <DataTable
+            className="mt-3"
+            caption="The file’s columns, in order: one row per person"
+            columns={['Column', 'What it holds']}
+          >
+            {COLUMN_GUIDE.map(({ column, holds }) => (
+              <Row key={column}>
+                <Cell className="font-semibold">{column}</Cell>
+                <Cell className="text-muted">{holds}</Cell>
+              </Row>
+            ))}
+          </DataTable>
+
+          {/*
+            * **Always in view, above the choice of pasting or a file** (P18.97-T4 AC-4): the template was offered only
+            * once *Upload a CSV file* was chosen, so a reader who meant to paste never met it. The prototype's control
+            * and words, as Data upload's (`KPM_Owner.html:1301`); a wait is shaped like it, a failure says so beside a
+            * way to ask again.
+            */}
+          <div className="mt-4 flex min-h-10 flex-wrap items-center gap-x-2">
+            {templateHref ? (
+              <a href={templateHref} download="roster-template.csv" className={buttonClass('secondary', 'gap-1')}>
+                <span aria-hidden="true">⬇</span>Download template
+              </a>
+            ) : templateError ? (
+              <p role="alert" className="flex flex-wrap items-center gap-x-2 text-sm text-alert">
+                <span>The template could not be prepared. {templateError.message}</span>
+                <Button variant="inline" onClick={() => setTemplateAttempt((n) => n + 1)}>Try again</Button>
+                {/* A server's code and request id for support; none for a failure the browser detected (AC-10). */}
+                {errorReference(templateError) === null
+                  ? <ConsoleCode code={templateError.code} message={templateError.message} />
+                  : <span className="text-2xs text-muted">{errorReference(templateError)}</span>}
+              </p>
+            ) : (
+              <Skeleton label="Loading the template…"><SkeletonBar className="h-10 w-48" /></Skeleton>
+            )}
+          </div>
 
           {/* Two ways in, and the one that needs no file goes first. Copying cells out of
               a spreadsheet puts tab-separated text on the clipboard, so somebody can do
@@ -255,18 +299,6 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
             </Field>
           ) : (
             <>
-              {templateHref ? (
-                <a
-                  href={templateHref}
-                  download="roster-template.csv"
-                  className="mt-4 inline-block text-md font-semibold text-navy underline"
-                >
-                  Download the template
-                </a>
-              ) : (
-                <p className="mt-4 text-sm text-muted">Loading the template…</p>
-              )}
-
               <Field label="Roster file" htmlFor="roster" className="mt-4">
                 <input
                   id="roster"

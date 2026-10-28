@@ -22,14 +22,14 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
   beforeEach(() => { nav.push.mockReset(); nav.replace.mockReset(); });
   afterEach(() => vi.unstubAllGlobals());
 
-  it('P18.1-T2 AC-2: the title, the sub-line and the list’s own line, verbatim, in the Owner’s console', async () => {
+  it('P18.1-T2 AC-2, P18.97-T2 AC-1: the title and one subtitle — the list’s second line gone — in the Owner’s console', async () => {
     list();
     renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
     expect(await screen.findByRole('heading', { level: 1, name: 'Strategic Leader Forum' })).toBeInTheDocument();
     expect(screen.getByText('Biweekly check-ins with your core leaders — agenda, notes, and action items')).toBeInTheDocument();
-    expect(await screen.findByText(
-      'Biweekly strategic check-ins with your core leaders — agenda, discussion notes, and action items, updated together.',
-    )).toBeInTheDocument();
+    await screen.findByText('Strategic Check-in — #14');
+    expect(screen.queryByText(/^Biweekly strategic check-ins/)).toBeNull();
+    expect(screen.getAllByText(/^Biweekly/)).toHaveLength(1);
     // The console's own shell, with the item live.
     expect(screen.getByText('KPM OWNER')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Strategic Leader Forum' })).toHaveAttribute('href', '/leader-meetings');
@@ -69,9 +69,30 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
     expect(rows[1]).toHaveTextContent('2 open items');
     expect(clear.getByText('All clear')).toBeInTheDocument();
 
-    const open = upcoming.getByRole('link', { name: 'Open' });
-    expect(open).toHaveAttribute('href', '/leader-meetings/m-14');
-    expect(open).toHaveAccessibleDescription('Strategic Check-in — #14');
+    // P18.97-T2 AC-2: the whole card is one link — one stop, named by its title, described by its line — and *Open*
+    // the visible cue inside it, no link of its own.
+    const link = upcoming.getByRole('link', { name: 'Strategic Check-in — #14' });
+    expect(link).toHaveAttribute('href', '/leader-meetings/m-14');
+    expect(link).toHaveAccessibleDescription('13 Okt 2026 · Upcoming · 3 core leaders tagged');
+    expect(rows[0].querySelectorAll('a')).toHaveLength(1);
+    expect(link.querySelector('a, button')).toBeNull();
+    // The date block, the title, its line, the initials and *Open* all inside the one link.
+    for (const part of ['Okt', 'Strategic Check-in — #14', '13 Okt 2026 · Upcoming', 'AS', '4 open items', 'Open']) expect(link).toHaveTextContent(part);
+    expect(within(link).getByText('Open')).toHaveAttribute('aria-hidden', 'true');
+    expect(upcoming.queryByRole('link', { name: 'Open' })).toBeNull();
+  });
+
+  it('P18.97-T2 AC-2: one keyboard stop per card, in the list’s order', async () => {
+    list();
+    renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
+    await screen.findByText('Strategic Check-in — #14');
+    const user = userEvent.setup();
+    const links = cards().map((card) => within(card).getByRole('link'));
+    links[0].focus();
+    await user.tab();
+    expect(document.activeElement).toBe(links[1]);
+    await user.tab();
+    expect(document.activeElement).toBe(links[2]);
   });
 
   it('P18.1-T2 AC-2: the avatars are the people the count counts — a tagged Admin among them, an untagged one not', async () => {
@@ -214,7 +235,8 @@ describe('/leader-meetings — the list (P18.1-T2)', () => {
     renderWithSession(<LeaderMeetingsPage />, { me: OWNER_ME });
     await screen.findByText('Strategic Check-in — #14');
     const [first] = cards();
-    expect(first).toHaveClass('flex-wrap');
+    // The card is its link since P18.97-T2 AC-2: the link is the box that wraps.
+    expect(within(first).getByRole('link')).toHaveClass('flex-wrap');
     expect(within(first).getByRole('heading').parentElement).toHaveClass('min-w-0');
     expect(within(first).getByRole('heading')).toHaveClass('break-words');
   });

@@ -527,7 +527,9 @@ export function GoalCalculator({
                   hero: true,
                 },
               ]}
-              links={[formatPercent(draft.leadsToApptPct), formatPercent(draft.closingRatePct)]}
+              // The plan's own two rates, as the fields above hold them (ADR-0174 §3): an echo of an input keeps
+              // its places — *30%*, *33,3%* — where a whole percent would contradict the box it repeats.
+              links={[formatPercent(draft.leadsToApptPct, { lossless: true }), formatPercent(draft.closingRatePct, { lossless: true })]}
             />
           ) : (
             <p className="text-md text-alert">
