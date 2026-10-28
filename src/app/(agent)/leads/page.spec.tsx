@@ -395,6 +395,15 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
   });
 
   describe('AC-4 — every lead loads, with no pager', () => {
+    /*
+     * Drawing 450 rows of controls at once is the heaviest thing jsdom does in this suite: about 11 s on a laptop under
+     * coverage, and 31 s on GitHub's 2-vCPU runner on 2026-10-28, past the 30 s it had — the same before Phase 18.97 and
+     * after it. A CI runner gets three times the room, as `vitest.config.mts` gives every test (`testing-strategy.md`,
+     * *Timeouts on a CI runner*); a laptop keeps 30 s, so a draw that has really slowed down still fails where it is written.
+     */
+    const HEAVY_TEST_MS = process.env.CI ? 90_000 : 30_000;
+    const HEAVY_DRAW_MS = process.env.CI ? 60_000 : 20_000;
+
     it('AC-4, P13.1-T4 AC-8: loads 450 open leads in three requests of 200, draws 30, and the rest on Show more', async () => {
       const all = many(1, 450);
       const reads = stubPaged((q) => {
@@ -410,14 +419,14 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(document.body).toHaveTextContent('450 active leads');
 
       await userEvent.click(screen.getByRole('button', { name: 'Show more' }));
-      await waitFor(() => expect(names()).toHaveLength(450), { timeout: 20_000 });
+      await waitFor(() => expect(names()).toHaveLength(450), { timeout: HEAVY_DRAW_MS });
 
       expect(reads.map((q) => q.get('page'))).toEqual(['1', '2', '3']);
       expect(reads.every((q) => q.get('pageSize') === '200')).toBe(true);
       expect(names()[449]).toHaveValue('Lead 450');
       expect(names()[449]).toHaveAttribute('aria-label', 'Lead name, row 450');
       expect(screen.queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
-    }, 30_000);
+    }, HEAVY_TEST_MS);
 
     it('AC-4: starts again from page one on a header sort, and drops the old order’s late page', async () => {
       let releaseStale: (body: unknown) => void = () => {};
