@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { InviteShare } from '@/components/invite-share';
 import { DateField } from '@/components/ui/date-field';
 import { Button, ErrorBanner, Field, TextInput } from '@/components/ui/field';
@@ -79,6 +79,15 @@ export function AddAgentDialog({
     setTouched({});
     onClose();
   };
+
+  /*
+   * **Each opening starts on the office's today as last read.** The dialog is mounted closed with the page, when
+   * `/new-hires` has only the device's clock to go on; the invites' read brings the office's today after. Without this
+   * the first opening kept the device's day — and a device a day ahead held *Add agent* back as after today.
+   */
+  useEffect(() => {
+    if (open) setForm((f) => ({ ...f, joinDate: today }));
+  }, [open, today]);
 
   // What the form can say before the server does. The server's check remains the real one.
   const code = form.agentCode.trim();

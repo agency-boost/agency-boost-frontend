@@ -173,6 +173,9 @@ describe('P12-T2 — my calendar, week view', () => {
       const monday = await day('Senin, 28 Sep 2026');
       const top = () => parseFloat(monday.querySelector<HTMLElement>('[data-now]')!.style.top);
       expect(top()).toBeCloseTo((1438 / 60) * HOUR_PX);
+      // The line's clock starts in a passive effect, which a slow runner may not have run when the grid shows: flush it
+      // first, or the minute is advanced before the clock exists and it starts a minute late (CI, 2026-10-28).
+      await act(async () => {});
       await act(async () => { vi.advanceTimersByTime(60_000); });
       expect(top()).toBeCloseTo((1439 / 60) * HOUR_PX);
       expect(calls(stub, WEEK_READ)).toHaveLength(1);

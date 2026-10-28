@@ -41,6 +41,20 @@ describe('/new-hires: + Add agent, Review requests and Waiting to join (P18.96-T
     expect(within(dialog).getByLabelText('Join date')).toHaveValue(TODAY);
   });
 
+  it('P18.96-T3 AC-1 opens on the office’s today as the invites answered it, whatever the device’s clock says', async () => {
+    // The device a day ahead of the office: what the first opening used to keep, and then held back as after today.
+    vi.setSystemTime(new Date('2026-10-28T03:00:00.000Z'));
+    try {
+      show();
+      await userEvent.click(await screen.findByRole('button', { name: '+ Add agent' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Add agent' });
+      expect(within(dialog).getByLabelText('Join date')).toHaveValue(TODAY);
+      expect(within(dialog).getByLabelText('Join date')).toHaveAttribute('max', TODAY);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('P18.96-T3 AC-1 offers neither button, and asks nothing more, to a reader who may not add or decide', async () => {
     const { calls } = show({}, SARI_ME);
     // P18.96-T6: the roster's sections, where its cards per unit were.
