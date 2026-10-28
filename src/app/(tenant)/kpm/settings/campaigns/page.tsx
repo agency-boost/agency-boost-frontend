@@ -7,6 +7,7 @@ import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { POSTER_FILL } from '@/components/campaigns/campaign-parts';
 import { useLadder } from '@/components/ui/role-badge';
+import { DateField } from '@/components/ui/date-field';
 import { Button, Card, Field, Select, Textarea, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
@@ -362,22 +363,22 @@ export default function CampaignsSettingsPage() {
             hint={structural ? undefined : 'Asking for production figures, it runs in whole months: from a 1st to a month’s last day.'}
             className="min-w-48 flex-1"
           >
-            <TextInput
+            <DateField
               id="c-starts"
-              type="date"
               value={draft.startsAt}
               disabled={busy}
-              onChange={(e) => setDraft((n) => ({ ...n, startsAt: e.target.value }))}
+              onChange={(startsAt) => setDraft((n) => ({ ...n, startsAt }))}
+              className="w-full"
             />
           </Field>
           {!structural && (
             <Field label="Ends" htmlFor="c-ends" className="min-w-48 flex-1">
-              <TextInput
+              <DateField
                 id="c-ends"
-                type="date"
                 value={draft.endsAt}
                 disabled={busy}
-                onChange={(e) => setDraft((n) => ({ ...n, endsAt: e.target.value }))}
+                onChange={(endsAt) => setDraft((n) => ({ ...n, endsAt }))}
+                className="w-full"
               />
             </Field>
           )}

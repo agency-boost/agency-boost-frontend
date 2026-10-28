@@ -10,6 +10,7 @@ import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { TermText } from '@/components/ui/term-tip';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { useScrollLock } from '@/lib/use-scroll-lock';
 import { CONTENT_TERM_KEYS, firstMentions, type TermKey } from '@/lib/terms';
 import {
   formatRate, OWN_COPY, openDocumentLink, productPlanHref, PROTOTYPE_COPY, readCatalogProduct,
@@ -53,6 +54,9 @@ export function ProductDrawer({ code }: { code: string }) {
   const [tab, setTab] = useState<DrawerTab>('details');
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
+
+  // The catalog behind holds still while the drawer is open (P18.96-T1 AC-2); a dialog over it nests the lock.
+  useScrollLock(true);
 
   useEffect(() => {
     let live = true;
@@ -119,7 +123,7 @@ export function ProductDrawer({ code }: { code: string }) {
         aria-label={product ? undefined : PROTOTYPE_COPY.catalogTitle}
         tabIndex={-1}
         onKeyDown={keys}
-        className="fixed right-0 top-0 z-50 h-full w-full overflow-y-auto bg-card shadow-modal sm:w-[460px] sm:max-w-[92vw]"
+        className="fixed right-0 top-0 z-50 h-[100dvh] w-full overflow-y-auto overscroll-contain bg-card shadow-modal sm:w-[460px] sm:max-w-[92vw]"
       >
         <div className="px-5 pb-10 pt-[26px] sm:px-7">
           <div className="mb-1.5 flex justify-end">
@@ -259,7 +263,7 @@ function DetailsTab({ product, terms }: { product: CatalogProduct; terms: TermKe
           {product.commissionSchedule.length === 0 ? (
             <p className="m-0 text-base text-muted">{OWN_COPY.commissionNotSet}</p>
           ) : (
-            <table className="w-full max-w-[260px] border-collapse">
+            <table className="relative w-full max-w-[260px] border-collapse">
               <caption className="sr-only">{PROTOTYPE_COPY.commissionRate}</caption>
               <thead>
                 <tr>

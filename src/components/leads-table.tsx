@@ -8,6 +8,7 @@ import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
 import { Dialog } from '@/components/ui/dialog';
 import { DragHandle } from '@/components/ui/drag-handle';
 import { EmptyState } from '@/components/ui/empty-state';
+import { DateField } from '@/components/ui/date-field';
 import { Button, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import {
   InlineSaveField, InlineSaveStatus, useInlineSave, type InlineSaveOutcome, type InlineSaveState,
@@ -115,12 +116,6 @@ const sortValue = (sort: Sort) => (sort ? `${sort.key}:${sort.dir}` : 'saved');
 
 /** The table heading's look, on the card's two labels (`Overall.html:413-418`). */
 const CARD_LABEL = 'text-2xs font-semibold uppercase tracking-[0.03em] text-muted';
-
-/**
- * The date box's own calendar button is hidden, so the one on its left is the only one (P13.1-T4
- * AC-5). WebKit and Blink draw theirs on the right; Firefox's cannot be styled and stays.
- */
-const NO_NATIVE_PICKER = '[&::-webkit-calendar-picker-indicator]:hidden';
 
 interface List {
   rows: Lead[];
@@ -1050,23 +1045,6 @@ export function LeadsTable({
     ? `Last changed by ${row.lastEditedBy.name ?? (owner ? 'someone else' : 'someone in your office')}`
     : null);
 
-  /**
-   * The calendar icon left of the date opens the browser's own picker (P13.1-T4 AC-5).
-   *
-   * **A pointer's shortcut, and nothing a keyboard needs**: the date box is the control — its label,
-   * its typing, its own keys — and the icon is taken out of the tab order and hidden from assistive
-   * technology, so a row is not one stop longer and nothing is announced twice. `showPicker` is refused
-   * by a browser that lacks it or a box that is read-only; the focus is then the whole answer.
-   */
-  function openPicker(id: string, locked: boolean) {
-    if (locked) return;
-    const input = document.getElementById(id) as HTMLInputElement | null;
-    input?.focus();
-    try {
-      input?.showPicker();
-    } catch { /* The date can be typed; the focus is in the box. */ }
-  }
-
   /** The row's ⋮ menu: what can be done to this lead, each disabled with its reason where it is (AC-3). */
   function menuFor(row: Lead, locked: boolean, foreign: boolean): ActionMenuItem[] {
     const details: ActionMenuItem = { label: 'Lead details', glyph: '☎', onSelect: () => setDetailsFor(row.id) };
@@ -1337,38 +1315,27 @@ export function LeadsTable({
 
       date: (
         <InlineSaveField status={inline.statusOf(saveKey(row, 'nextActionDate'))} label={saveLabel('Next action date')}>
-          <div className="relative">
-            <button
-              type="button"
-              tabIndex={-1}
-              aria-hidden="true"
-              className={cn(
-                'absolute inset-y-0 left-0 flex w-6 items-center justify-center text-muted hover:text-navy',
-                sheet && 'w-9',
-                locked && 'cursor-not-allowed hover:text-muted',
-              )}
-              onClick={() => openPicker(dateId, locked)}
-            >
-              <NavIcon name="calendar" className={sheet ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
-            </button>
-            <TextInput
-              id={dateId}
-              type="date"
-              aria-label={nameOf('Next action date')}
-              density={density}
-              className={cn('w-full pl-6', NO_NATIVE_PICKER, isDraft && INERT_CONTROL, sheet && cn('pl-9', TAP_HEIGHT))}
-              value={draftOf(row, 'nextActionDate', row.nextActionDate)}
-              readOnly={locked}
-              onChange={(e) => {
-                if (locked) return;
-                setDraftValue(row.id, 'nextActionDate', e.target.value);
-                const value = e.target.value || null;
-                void saveField(row, 'nextActionDate', (version) => updateLead(row.id, { nextActionDate: value }, version), {
-                  fields: ['nextActionDate'],
-                });
-              }}
-            />
-          </div>
+          {/*
+            * The shared date field (P18.96-T2 AC-4): the day as the app writes it — never the browser's *mm/dd/yyyy* —
+            * with the calendar on its left (P13.1-T4 AC-5), and the device's picker opened by a click on the field.
+            */}
+          <DateField
+            id={dateId}
+            aria-label={nameOf('Next action date')}
+            density={density}
+            glyph="start"
+            className={cn('w-full', isDraft && INERT_CONTROL, sheet && TAP_HEIGHT)}
+            value={draftOf(row, 'nextActionDate', row.nextActionDate)}
+            readOnly={locked}
+            onChange={(next) => {
+              if (locked) return;
+              setDraftValue(row.id, 'nextActionDate', next);
+              const value = next || null;
+              void saveField(row, 'nextActionDate', (version) => updateLead(row.id, { nextActionDate: value }, version), {
+                fields: ['nextActionDate'],
+              });
+            }}
+          />
         </InlineSaveField>
       ),
 

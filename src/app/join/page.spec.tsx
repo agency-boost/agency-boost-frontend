@@ -171,3 +171,69 @@ describe('redeeming an invite (P3-T4)', () => {
     expect(screen.queryByRole('navigation')).toBeNull();
   });
 });
+
+describe('a leader’s invite to one person, for an account that exists (P18.96-T3 AC-4, ADR-0170 §4)', () => {
+  const BANNER = {
+    leaderName: 'Agus Prasetyo', kpm: { code: '0417', branchName: 'BSD City Branch' }, companyId: 'co-1', companyName: 'Prudential',
+    agentCode: '20001', joinDate: '2026-10-27', fullName: 'Yoga Pratama', existingAccount: true, expiresAt: '2026-11-10T03:00:00.000Z',
+  };
+  afterEach(() => {
+    query = new URLSearchParams();
+    replace.mockClear();
+    vi.unstubAllGlobals();
+  });
+
+  it('P18.96-T3 AC-4 shows whose team and which office, and accepts with one button, then goes to the landing', async () => {
+    query = new URLSearchParams('invite=kpm-1.secret');
+    const reload = vi.fn(async () => undefined);
+    const { calls } = stubFetch({
+      '/invites/kpm-1.secret/accept': { body: { kpmId: 'kpm-1', leaderName: 'Agus Prasetyo' } },
+      '/invites/kpm-1.secret': { body: BANNER },
+    });
+    renderWithSession(<JoinPage />, { me: NEWCOMER, reload });
+    expect(await screen.findByText("You're joining Agus Prasetyo's team · KPM 0417")).toBeInTheDocument();
+    expect(screen.getByText(/Agent code 20001 · Join date 27 Ok?c?t 2026/)).toBeInTheDocument();
+    // Not the leader-code check: no code field, and no preview of one.
+    expect(screen.queryByLabelText('Invite code')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Accept and join' }));
+    expect(calls.some((c) => c.url.endsWith('/invites/kpm-1.secret/accept') && c.init.method === 'POST')).toBe(true);
+    await vi.waitFor(() => expect(replace).toHaveBeenCalledWith('/'));
+    expect(reload).toHaveBeenCalled();
+  });
+
+  it('P18.96-T3 AC-4 signed out, it says to sign in and comes back here after', async () => {
+    query = new URLSearchParams('invite=kpm-1.secret');
+    stubFetch({ '/invites/kpm-1.secret': { body: BANNER } });
+    renderWithSession(<JoinPage />, { me: null });
+    expect(await screen.findByText("You're joining Agus Prasetyo's team · KPM 0417")).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Sign in to accept' }))
+      .toHaveAttribute('href', `/login?next=${encodeURIComponent('/join?invite=kpm-1.secret')}`);
+    expect(screen.queryByRole('button', { name: 'Accept and join' })).not.toBeInTheDocument();
+  });
+
+  it('P18.96-T3 AC-4 a refusal — another account’s code, or somebody already in an office — is said in the server’s words', async () => {
+    query = new URLSearchParams('invite=kpm-1.secret');
+    stubFetch({
+      '/invites/kpm-1.secret/accept': {
+        status: 409,
+        body: { error: { code: 'ORG_AGENT_ALREADY_TAGGED', message: 'You already belong to an office, so this invite cannot add you.', requestId: 'r' } },
+      },
+      '/invites/kpm-1.secret': { body: BANNER },
+    });
+    renderWithSession(<JoinPage />, { me: NEWCOMER });
+    await userEvent.click(await screen.findByRole('button', { name: 'Accept and join' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('You already belong to an office');
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it('P18.96-T3 AC-4 a link that opens nothing says so plainly', async () => {
+    query = new URLSearchParams('invite=kpm-1.secret');
+    stubFetch({
+      '/invites/kpm-1.secret': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'This invite was already used. Sign in instead.', requestId: 'r' } } },
+    });
+    renderWithSession(<JoinPage />, { me: NEWCOMER });
+    expect(await screen.findByRole('alert')).toHaveTextContent('This invite was already used. Sign in instead.');
+    expect(screen.queryByRole('button', { name: 'Accept and join' })).not.toBeInTheDocument();
+  });
+});
+

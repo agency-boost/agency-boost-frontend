@@ -57,6 +57,23 @@ function resolvedLinks(server: ActivationChecklist | null): Map<string, Activati
   return links;
 }
 
+/**
+ * **The three data-backed items, by code** (P18.96-T7 G2; ADR-0171 §3): *Close first case independently*, *Reach
+ * Independent Agent milestone* and *Weekly 1-on-1 check-in* store no link — their kind is bound by their code — and
+ * the server serves each its kind as `link`, a data kind's carrying its `form`. Read from every version it answered
+ * with, so an item the draft keeps keeps its kind; one that stores a link of its own reads that link, as the field
+ * does (`effectiveAutoLink`). Nothing here knows which codes are bound (invariant §7).
+ */
+function boundLinks(server: ActivationChecklist | null): Map<string, ActivationLink> {
+  const bound = new Map<string, ActivationLink>();
+  for (const version of [server?.published, server?.draft]) {
+    for (const aspect of version?.aspects ?? []) {
+      for (const item of aspect.items) if (item.autoLink === null && item.link?.form) bound.set(item.code, item.link);
+    }
+  }
+  return bound;
+}
+
 /** `ConfigBadge`'s pill, painted on the button that carries the badge's words (ADR-0062 §2, form 2). */
 const BADGE_FACE = 'h-auto w-auto whitespace-nowrap rounded-pill px-2 py-0.5 text-2xs font-bold uppercase tracking-wide';
 
@@ -148,6 +165,7 @@ export default function ActivationChecklistPage() {
   useEffect(() => { if (canRead) void load(); }, [load, canRead]);
 
   const links = resolvedLinks(server);
+  const bound = boundLinks(server);
 
   /** Every module agents are offered, which is the only kind an item may wait for. */
   const offered = modules.flatMap((c) => c.skills.flatMap((s) => s.modules))
@@ -332,6 +350,8 @@ export default function ActivationChecklistPage() {
 
         <ul className="flex flex-col divide-y divide-hairline">
           {aspect.items.map((item, index) => {
+            // P18.96-T7 G2: completes from the office's data, by its code — drawn so, and not re-linked here.
+            const data = item.autoLink === null ? bound.get(item.code) : undefined;
             return (
               <li
                 key={item.code}
@@ -402,6 +422,7 @@ export default function ActivationChecklistPage() {
                   )}
                 </div>
 
+                {data && <LinkBadge link={data} />}
                 {item.autoLink !== null && links.has(item.autoLink) && (
                   <LinkBadge link={links.get(item.autoLink)!} />
                 )}
@@ -411,26 +432,34 @@ export default function ActivationChecklistPage() {
                      phone, and a row that cannot shrink pushes the whole page sideways. */
                   <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
                     <Field label="Completes from" htmlFor={`link-${item.code}`} className="min-w-44 flex-1">
-                      <Select
-                        id={`link-${item.code}`}
-                        value={item.autoLink ?? ''}
-                        disabled={busy}
-                        onChange={(e) => patchItem(aspect.code, item.code, {
-                          autoLink: e.target.value === '' ? null : e.target.value,
-                        })}
-                      >
-                        <option value="">No link (manual)</option>
-                        <optgroup label="Feature">
-                          {FEATURE_LINKS.map((f) => (
-                            <option key={f.value} value={f.value}>{f.label}</option>
-                          ))}
-                        </optgroup>
-                        <optgroup label="Training module">
-                          {offered.map((m) => (
-                            <option key={m.code} value={`training:${m.code}`}>{m.title}</option>
-                          ))}
-                        </optgroup>
-                      </Select>
+                      {data ? (
+                        /* The same select, holding the one thing it completes from and offering nothing else: the
+                           Owner reads it as data-backed, where *No link (manual)* said a leader ticks it (G2). */
+                        <Select id={`link-${item.code}`} value={data.kind} disabled onChange={() => undefined}>
+                          <option value={data.kind}>{OWN_COPY.fromData(data.label)}</option>
+                        </Select>
+                      ) : (
+                        <Select
+                          id={`link-${item.code}`}
+                          value={item.autoLink ?? ''}
+                          disabled={busy}
+                          onChange={(e) => patchItem(aspect.code, item.code, {
+                            autoLink: e.target.value === '' ? null : e.target.value,
+                          })}
+                        >
+                          <option value="">No link (manual)</option>
+                          <optgroup label="Feature">
+                            {FEATURE_LINKS.map((f) => (
+                              <option key={f.value} value={f.value}>{f.label}</option>
+                            ))}
+                          </optgroup>
+                          <optgroup label="Training module">
+                            {offered.map((m) => (
+                              <option key={m.code} value={`training:${m.code}`}>{m.title}</option>
+                            ))}
+                          </optgroup>
+                        </Select>
+                      )}
                     </Field>
                     <Button
                       variant="inline"

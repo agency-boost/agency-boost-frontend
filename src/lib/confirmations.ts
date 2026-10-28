@@ -19,6 +19,13 @@ export const CONFIRMED = {
   eventCreated: 'Event created ✓',
   sessionStarted: 'Session started ✓',
   joined: 'Joined ✓',
+  // P18.96-T3 (ADR-0170): + Add agent's three outcomes and the invite's row actions.
+  agentAdded: 'Agent added ✓',
+  inviteCreated: 'Invite ready ✓',
+  transferRequested: 'Transfer requested ✓',
+  inviteResent: 'New link ready ✓',
+  inviteCancelled: 'Invite cancelled ✓',
+  requestApproved: 'Request approved ✓',
 } as const;
 
 /** A confirmation, and the sentence the screen already said after it, after a dash. */

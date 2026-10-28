@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -388,6 +388,21 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(box).toHaveTextContent('📅 1 Okt – 31 Des 2026');
     expect(within(box).getByText(/^Office-wide APE sprint for Q4\./)).toHaveClass('whitespace-pre-line');
     expect(box).toHaveTextContent('PrizeTop 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus');
+  });
+
+  it('P18.96-T1 AC-2 the dialog is capped at the dynamic viewport and scrolls inside, and the page behind holds still', async () => {
+    document.body.style.overflow = 'auto';
+    try {
+      dialogAt('APE_SPRINT');
+      const box = await dialog();
+      expect(box).toHaveClass('max-h-[calc(100dvh-2rem)]', 'overflow-y-auto', 'overscroll-contain');
+      expect(box.className).not.toContain('100vh');
+      expect(document.body.style.overflow).toBe('hidden');
+      cleanup();
+      expect(document.body.style.overflow).toBe('auto');
+    } finally {
+      document.body.style.overflow = '';
+    }
   });
 
   it('P18.5-T7 AC-4 Promotion path in a promotion’s dialog', async () => {

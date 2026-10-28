@@ -39,7 +39,13 @@ export interface Member {
    * member leads by rung and has not left. An offer — `PUT /members/:id/core-leader` refuses regardless.
    */
   canTagCoreLeader?: boolean;
+  /** The system's stamp: when the membership was made active. Not the join date. */
   joinedAt: string | null;
+  /**
+   * The person's **join date** here, an office date their leader gave (ADR-0169; P18.96-T2): what *Join date*
+   * prints. `null` while pending. Optional, for a read older than it.
+   */
+  joinDate?: string | null;
   /** Set only on a removed row. */
   removedAt: string | null;
   /**

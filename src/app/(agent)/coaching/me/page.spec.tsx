@@ -1,14 +1,19 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { makeMe, renderInLayout, stubFetch, type StubReply } from '@test/harness';
 import MyCoachingPage from './page';
 
+const nav = vi.hoisted(() => ({ search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/coaching/me',
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 const JORDAN = makeMe({
   user: {
@@ -90,7 +95,8 @@ const show = (routes: Record<string, StubReply | StubReply[]> = {}, me = JORDAN,
     '/coaching/sessions/s-0924/print': { body: PRINT },
     ...routes,
   });
-  const view = renderInLayout(AgentLayout, <MyCoachingPage searchParams={routeParams(query)} />, { me });
+  nav.search = new URLSearchParams(query).toString();
+  const view = renderInLayout(AgentLayout, <MyCoachingPage />, { me });
   return { ...stub, ...view };
 };
 

@@ -55,6 +55,7 @@ export function unitRow(membershipId: string, name: string, over: Partial<UnitRo
     lastOneOnOne: { days: 4, date: '2026-10-04', overdue: false, coach: { membershipId: 'mem-agus', name: 'Agus Santoso' } },
     status: 'watch_closely',
     pacingToMaa: true,
+    newHireBeforeFirstSale: false,
     followUp: null,
     chasingMdrt: false,
     campaigns: [],
@@ -67,6 +68,7 @@ export const total = (over: Partial<UnitTotal> = {}): UnitTotal => ({
   leadsCounts: { salesOpen: 36, salesClosing: 16, recruitOpen: 2, recruitNominated: 1 },
   touches: { logged: 340, target: 380 },
   potentialActive: { count: 3, of: 4 },
+  newHires: 0,
   ...over,
 });
 
@@ -156,7 +158,7 @@ export function dashboard(over: Partial<UnitDashboardView> = {}): UnitDashboardV
     head: { membershipId: 'mem-agus', name: 'Agus Santoso', isReader: true },
     empty: false,
     tiles: {
-      team: { total: 16, direct: 4, units: 3, underUnits: 9 },
+      team: { total: 16, direct: 4, units: 3, underUnits: 9, newHires: 0 },
       directGroupProduction: {
         targetMinor: rp(1280), actualMinor: rp(1000), attainmentPct: 78, missing: 2, gapMinor: rp(280), overMinor: 0, period: 'month',
       },
@@ -176,7 +178,7 @@ export const EMPTY = dashboard({
   head: { membershipId: 'mem-rina', name: 'Rina Wijaya', isReader: true },
   empty: true,
   tiles: {
-    team: { total: 0, direct: 0, units: 0, underUnits: 0 },
+    team: { total: 0, direct: 0, units: 0, underUnits: 0, newHires: 0 },
     directGroupProduction: {
       targetMinor: null, actualMinor: null, attainmentPct: null, missing: 0, gapMinor: null, overMinor: null, period: 'month',
     },
@@ -192,7 +194,7 @@ export const EMPTY = dashboard({
 export const SARI_UNIT = dashboard({
   head: { membershipId: 'mem-sari', name: 'Sari Wulandari', isReader: false },
   tiles: {
-    team: { total: 6, direct: 4, units: 1, underUnits: 1 },
+    team: { total: 6, direct: 4, units: 1, underUnits: 1, newHires: 0 },
     directGroupProduction: {
       targetMinor: rp(240), actualMinor: rp(131.2), attainmentPct: 55, missing: 1, gapMinor: rp(108.8), overMinor: 0, period: 'month',
     },
@@ -204,6 +206,36 @@ export const SARI_UNIT = dashboard({
     total: total({ goal: { targetMinor: rp(160), actualMinor: rp(65.6), attainmentPct: 41, missing: 1, gapMinor: rp(94.4), overMinor: 0 } }),
   },
   units: [{ ...WULAN_UNIT, head: { ...WULAN, depth: 1 }, members: [{ ...TONO, depth: 2 }] }],
+});
+
+/**
+ * **Yanti as the seed has her since P18.96-T5** (ADR-0172): rejoined weeks ago, no first sale yet — a *New hire*, in
+ * Sari's unit and in Agus's team, and in neither total's production nor *On pace to be active*. Her missing figure is
+ * no longer *missing*: the totals leave her out for the other reason, and say so.
+ */
+export const YANTI_NEW = { ...YANTI, newHireBeforeFirstSale: true };
+export const NEW_HIRE_VIEW = dashboard({
+  tiles: {
+    team: { total: 16, direct: 4, units: 3, underUnits: 9, newHires: 1 },
+    directGroupProduction: {
+      targetMinor: rp(1200), actualMinor: rp(1000), attainmentPct: 83, missing: 1, gapMinor: rp(200), overMinor: 0, period: 'month',
+    },
+    potentialActive: { count: 11, of: 15 },
+    potentialRecruits: { yourUnit: 1, aabs: 1 },
+  },
+  units: [
+    UNITS[0],
+    UNITS[1],
+    {
+      ...UNITS[2],
+      members: [BUDI, RINA, YANTI_NEW],
+      total: total({
+        goal: { targetMinor: rp(160), actualMinor: rp(131.2), attainmentPct: 82, missing: 0, gapMinor: rp(28.8), overMinor: 0 },
+        potentialActive: { count: 3, of: 5 },
+        newHires: 1,
+      }),
+    },
+  ],
 });
 
 export const AGUS_ME = makeMe({

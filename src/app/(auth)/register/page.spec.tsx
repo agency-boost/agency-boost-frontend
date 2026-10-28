@@ -5,9 +5,12 @@ import { renderWithSession, stubFetch } from '@test/harness';
 import { AUTH_PAGE } from '@/components/auth-page';
 import RegisterPage from './page';
 
+/** The page's query string: `?invite=…` for a leader's invite (P18.96-T3), nothing otherwise. */
+const query = { current: '' };
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/register',
+  useSearchParams: () => new URLSearchParams(query.current),
 }));
 
 /** The insurers the selector loads. Public, so no token is involved. */
@@ -301,5 +304,87 @@ describe('register', () => {
       'href',
       '/login',
     );
+  });
+
+  describe('on a leader’s invite (P18.96-T3 AC-4, ADR-0170 §3)', () => {
+    const TOKEN = 'kpm-1.secret';
+    const BANNER = {
+      leaderName: 'Agus Prasetyo', kpm: { code: '0417', branchName: 'BSD City Branch' }, companyId: 'co-2', companyName: 'Prudential',
+      agentCode: '80777', joinDate: '2026-10-27', fullName: 'Yusuf Hidayat', existingAccount: false, expiresAt: '2026-11-10T03:00:00.000Z',
+    };
+    afterEach(() => { query.current = ''; });
+
+    it('P18.96-T3 AC-4 shows the banner, the name filled in, and the insurer, the agent code and the join date read-only', async () => {
+      query.current = `invite=${TOKEN}`;
+      const { calls } = stubFetch({ '/companies': { body: INSURERS }, '/invites/': { body: BANNER } });
+      renderWithSession(<RegisterPage />, { me: null });
+      expect(await screen.findByText("You're joining Agus Prasetyo's team · KPM 0417")).toBeInTheDocument();
+      expect(calls.some((c) => c.url.endsWith(`/invites/${encodeURIComponent(TOKEN)}`))).toBe(true);
+      expect(screen.getByLabelText('Full name')).toHaveValue('Yusuf Hidayat');
+      expect(screen.getByLabelText('Full name')).not.toHaveAttribute('readonly');
+      expect(screen.getByLabelText('Agent code')).toHaveValue('80777');
+      expect(screen.getByLabelText('Agent code')).toHaveAttribute('readonly');
+      expect(screen.getByLabelText('Insurer')).toHaveValue('Prudential');
+      expect(screen.getByLabelText('Insurer')).toHaveAttribute('readonly');
+      expect(screen.getByLabelText('Join date')).toHaveValue('2026-10-27');
+      expect(screen.getByLabelText('Join date')).toHaveAttribute('readonly');
+      // Already holding an account goes to sign in, and back to the invite after.
+      expect(screen.getByRole('link', { name: 'Already have an account? Sign in' }))
+        .toHaveAttribute('href', `/login?next=${encodeURIComponent(`/join?invite=${encodeURIComponent(TOKEN)}`)}`);
+    });
+
+    it('P18.96-T3 AC-4 says nothing of the office being added separately: accepting the invite places them in it', async () => {
+      // Found walking a production build at 768px (2026-10-27): the line stood beside the banner and contradicted it.
+      query.current = `invite=${TOKEN}`;
+      stubFetch({ '/companies': { body: INSURERS }, '/invites/': { body: BANNER } });
+      renderWithSession(<RegisterPage />, { me: null });
+      await screen.findByText("You're joining Agus Prasetyo's team · KPM 0417");
+      expect(screen.queryByText(/added separately|just your login/)).not.toBeInTheDocument();
+      // The title keeps the line's gap at every size, so the banner does not start against it.
+      const title = screen.getByRole('heading', { level: 1, name: 'Create your account' });
+      expect(title).toHaveClass('mb-6');
+      expect(title).not.toHaveClass('max-md:mb-6');
+    });
+
+    it('P18.96-T3 AC-4 registers with the invite’s token, insurer and code, and says they join the leader’s team', async () => {
+      query.current = `invite=${TOKEN}`;
+      const { calls } = stubFetch({
+        '/companies': { body: INSURERS }, '/invites/': { body: BANNER },
+        '/auth/register': { status: 201, body: { status: 'verification_sent' } },
+      });
+      renderWithSession(<RegisterPage />, { me: null });
+      await screen.findByText("You're joining Agus Prasetyo's team · KPM 0417");
+      await userEvent.type(screen.getByLabelText('Email'), 'yusuf@new.test');
+      await userEvent.type(screen.getByLabelText('Password'), 'a long enough password');
+      await userEvent.type(screen.getByLabelText('Confirm password'), 'a long enough password');
+      await personal();
+      await userEvent.click(screen.getByRole('button', { name: 'Create account' }));
+      const register = calls.find((c) => c.url.includes('/auth/register'))!;
+      expect(JSON.parse(register.init.body as string)).toMatchObject({
+        fullName: 'Yusuf Hidayat', companyId: 'co-2', agentCode: '80777', inviteToken: TOKEN, email: 'yusuf@new.test',
+      });
+      expect(await screen.findByText("Once you have verified it and signed in, you are in Agus Prasetyo's team.")).toBeInTheDocument();
+    });
+
+    it('P18.96-T3 AC-4 a link that opens nothing says so plainly, and offers signing in or registering without it', async () => {
+      query.current = `invite=${TOKEN}`;
+      stubFetch({
+        '/companies': { body: INSURERS },
+        '/invites/': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'This invite has expired. Ask whoever sent it to send it again.', requestId: 'r' } } },
+      });
+      renderWithSession(<RegisterPage />, { me: null });
+      expect(await screen.findByText('This invite has expired. Ask whoever sent it to send it again.')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Create an account without an invite' })).toHaveAttribute('href', '/register');
+      expect(screen.queryByRole('button', { name: 'Create account' })).not.toBeInTheDocument();
+    });
+
+    it('P18.96-T3 AC-4 an invite for an account that exists sends them to sign in and accept', async () => {
+      query.current = `invite=${TOKEN}`;
+      stubFetch({ '/companies': { body: INSURERS }, '/invites/': { body: { ...BANNER, existingAccount: true } } });
+      renderWithSession(<RegisterPage />, { me: null });
+      expect(await screen.findByText('This invite is for an account that already exists. Sign in to accept it.')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Sign in to accept' }))
+        .toHaveAttribute('href', `/login?next=${encodeURIComponent(`/join?invite=${encodeURIComponent(TOKEN)}`)}`);
+    });
   });
 });

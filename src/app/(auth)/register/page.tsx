@@ -1,12 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
+import { inviteTokenOf, readInviteBanner, type InviteBanner } from '@/lib/invites';
+import { signInPathFrom } from '@/lib/return-path';
 import { listInsurers, type Insurer } from '@/lib/companies';
 import { GENDER_LABEL, WORK_STATUS_LABEL, type Gender, type WorkStatus } from '@/lib/personal';
 import { AUTH_PAGE } from '@/components/auth-page';
-import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import { DateField } from '@/components/ui/date-field';
+import { Button, ButtonLink, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
+import { Skeleton, SkeletonText } from '@/components/ui/skeleton';
 import { PasswordInput } from '@/components/ui/password-input';
 import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { cn } from '@/lib/cn';
@@ -36,7 +41,37 @@ const MIN_LENGTH = 10;
 const PERSONAL_FIELDS = ['dateOfBirth', 'companyJoinMonth', 'workStatus', 'gender'] as const;
 type PersonalField = (typeof PERSONAL_FIELDS)[number];
 
+/** Registration on a leader's invite (P18.96-T3 AC-4, ADR-0170 §3): the banner and the lines around it. Ours. */
+const INVITE_COPY = {
+  banner: (leader: string, kpm: string) => `You're joining ${leader}'s team · KPM ${kpm}`,
+  bannerLine: (branch: string, company: string) => `${branch} · ${company}. Your agent code and join date come with the invite.`,
+  joinDate: 'Join date',
+  existing: 'This invite is for an account that already exists. Sign in to accept it.',
+  signInToAccept: 'Sign in to accept',
+  withoutInvite: 'Create an account without an invite',
+  doneLine: (leader: string) => `Once you have verified it and signed in, you are in ${leader}'s team.`,
+  checking: 'Checking your invite…',
+} as const;
+
 export default function RegisterPage() {
+  return (
+    // `useSearchParams` needs a boundary: an invite's link carries its token in the query string.
+    <Suspense fallback={<main className={AUTH_PAGE}><Skeleton><SkeletonText lines={4} /></Skeleton></main>}>
+      <Register />
+    </Suspense>
+  );
+}
+
+/**
+ * **On a leader's invite** (`?invite=…`): the banner *"You're joining {leader}'s team · {KPM}"*, the insurer, the
+ * agent code and the join date filled in from the invite and read-only — the server takes the invite's whatever
+ * arrives — and the name filled in and the person's to correct. *Register KPM* and *Find Your Leader* never come:
+ * the account joins the leader's unit as it is made. A link that opens nothing says why, in the server's words.
+ */
+function Register() {
+  const token = inviteTokenOf(useSearchParams());
+  const [invite, setInvite] = useState<InviteBanner | null>(null);
+  const [inviteError, setInviteError] = useState<ApiError | null>(null);
   const [form, setForm] = useState({
     fullName: '', email: '', password: '', confirmPassword: '', companyId: '', agentCode: '',
     dateOfBirth: '', companyJoinMonth: '', workStatus: '' as WorkStatus | '', gender: '' as Gender | '',
@@ -45,6 +80,20 @@ export default function RegisterPage() {
   const [done, setDone] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    let live = true;
+    readInviteBanner(token)
+      .then((banner) => {
+        if (!live) return;
+        setInvite(banner);
+        // Filled in from the invite: the insurer and the code are held to it, the name is theirs to correct.
+        setForm((f) => ({ ...f, fullName: f.fullName || banner.fullName, companyId: banner.companyId, agentCode: banner.agentCode }));
+      })
+      .catch((err) => { if (live) setInviteError(toDisplayError(err)); });
+    return () => { live = false; };
+  }, [token]);
 
   useEffect(() => {
     let live = true;
@@ -102,7 +151,7 @@ export default function RegisterPage() {
       // global validation rejects an unknown one — so sending the whole form object would
       // turn a correctly filled form into a 400.
       const { confirmPassword: _confirm, ...body } = form;
-      await api('/auth/register', { method: 'POST', body });
+      await api('/auth/register', { method: 'POST', body: invite && token ? { ...body, inviteToken: token } : body });
       setDone(true);
     } catch (err) {
       setError(toDisplayError(err));
@@ -111,19 +160,58 @@ export default function RegisterPage() {
     }
   }
 
+  const signIn = token ? signInPathFrom({ pathname: '/join', search: `?invite=${encodeURIComponent(token)}` }) : '/login';
+
+  if (token && !invite) {
+    return (
+      <main className={AUTH_PAGE}>
+        <h1 className="mb-6 font-display text-3xl font-bold text-navy">Create your account</h1>
+        <Card>
+          {inviteError ? (
+            <div className="flex flex-col gap-3">
+              <ErrorBanner {...inviteError} />
+              <div className="flex flex-wrap gap-2">
+                <ButtonLink href="/login" variant="secondary">Sign in</ButtonLink>
+                <ButtonLink href="/register" variant="secondary">{INVITE_COPY.withoutInvite}</ButtonLink>
+              </div>
+            </div>
+          ) : (
+            <Skeleton label={INVITE_COPY.checking}><SkeletonText lines={4} /></Skeleton>
+          )}
+        </Card>
+      </main>
+    );
+  }
+
   return (
     <main className={AUTH_PAGE}>
       {/*
         * The line under the title is the client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 26): from 768px it
         * reads as before. On a phone the title keeps the line's gap below it, so the form does not start against it.
+        * **Never on an invite** (a production walk, 2026-10-27): accepting one places them in the leader's office, so
+        * the line would contradict the banner under it. The title keeps its gap at every size then.
         */}
-      <h1 className="font-display text-3xl font-bold text-navy max-md:mb-6">Create your account</h1>
-      <p className={cn('mb-6 mt-1 text-md text-muted', REMOVED_ON_PHONE)}>
-        Your office is added separately. This is just your login.
-      </p>
+      <h1 className={cn('font-display text-3xl font-bold text-navy', invite ? 'mb-6' : 'max-md:mb-6')}>Create your account</h1>
+      {!invite && (
+        <p className={cn('mb-6 mt-1 text-md text-muted', REMOVED_ON_PHONE)}>
+          Your office is added separately. This is just your login.
+        </p>
+      )}
+
+      {invite && (
+        <Card className="mb-4 border-l-4 border-l-amber" density="compact">
+          <p className="font-display text-lg font-bold text-navy">{INVITE_COPY.banner(invite.leaderName, invite.kpm.code)}</p>
+          <p className="mt-1 text-md text-muted">{INVITE_COPY.bannerLine(invite.kpm.branchName, invite.companyName)}</p>
+        </Card>
+      )}
 
       <Card>
-        {done ? (
+        {invite?.existingAccount ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-md text-navy">{INVITE_COPY.existing}</p>
+            <ButtonLink href={signIn} className="self-start">{INVITE_COPY.signInToAccept}</ButtonLink>
+          </div>
+        ) : done ? (
           <div>
             {/* The API answers the same way for an address that already exists, so this
                 screen must too — saying "already registered" would let anyone test
@@ -134,6 +222,7 @@ export default function RegisterPage() {
             <p className="mt-2 text-sm text-muted">
               Open it to finish setting up your account. The link lasts 24 hours and works once.
             </p>
+            {invite && <p className="mt-2 text-sm text-muted">{INVITE_COPY.doneLine(invite.leaderName)}</p>}
             <Link href="/login" className="mt-4 inline-block text-sm text-muted underline">
               Back to sign in
             </Link>
@@ -154,15 +243,15 @@ export default function RegisterPage() {
             </Field>
 
             <Field label="Date of birth" htmlFor="dateOfBirth" error={fieldError('dateOfBirth')}>
-              <TextInput
+              <DateField
                 id="dateOfBirth"
                 name="dateOfBirth"
-                type="date"
                 autoComplete="bday"
                 required
                 value={form.dateOfBirth}
-                onChange={set('dateOfBirth')}
+                onChange={(value) => set('dateOfBirth')({ target: { value } })}
                 invalid={refusedField === 'dateOfBirth'}
+                className="w-full"
               />
             </Field>
 
@@ -180,6 +269,9 @@ export default function RegisterPage() {
               htmlFor="companyId"
               hint="Whoever issued your agent code."
             >
+              {invite ? (
+                <TextInput id="companyId" name="companyId" value={invite.companyName} readOnly className="bg-base text-muted" />
+              ) : (
               <Select
                 id="companyId"
                 name="companyId"
@@ -197,6 +289,7 @@ export default function RegisterPage() {
                   </option>
                 ))}
               </Select>
+              )}
             </Field>
 
             <Field
@@ -213,8 +306,16 @@ export default function RegisterPage() {
                 autoComplete="off"
                 value={form.agentCode}
                 onChange={set('agentCode')}
+                readOnly={Boolean(invite)}
+                className={invite ? 'bg-base text-muted' : undefined}
               />
             </Field>
+
+            {invite && (
+              <Field label={INVITE_COPY.joinDate} htmlFor="joinDate">
+                <DateField id="joinDate" value={invite.joinDate} onChange={() => undefined} readOnly className="w-full" />
+              </Field>
+            )}
 
             <Field
               label={joinedLabel}
@@ -301,7 +402,7 @@ export default function RegisterPage() {
               {heldWhy && <p id="create-account-held" className="text-xs text-muted">{heldWhy}</p>}
             </div>
 
-            <Link href="/login" className="text-center text-sm text-muted underline">
+            <Link href={signIn} className="text-center text-sm text-muted underline">
               Already have an account? Sign in
             </Link>
           </form>

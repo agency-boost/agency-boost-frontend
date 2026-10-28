@@ -172,7 +172,7 @@ export function SkillCard({
         {skill.label}
       </h3>
       <div className="min-w-0 overflow-x-auto">
-        <table className="w-full min-w-[520px] table-fixed border-collapse">
+        <table className="relative w-full min-w-[520px] table-fixed border-collapse">
           <caption className="sr-only">{OWN_COPY.tableCaption(skill.label)}</caption>
           {/* `.training-table`'s columns (`:1786`), 0.4 · 1.3 · 2.2 · 1 · 1.2. */}
           <colgroup>

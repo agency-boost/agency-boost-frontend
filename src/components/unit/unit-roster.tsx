@@ -11,8 +11,8 @@ import {
 } from '@/lib/coaching';
 import { PROTOTYPE_COPY as CAMPAIGN_COPY } from '@/lib/campaigns';
 import {
-  firstName, goalBar, goalWords, missingWords, namesMissing, onPaceWords, OWN_COPY, PROTOTYPE_COPY, provenanceWords, recruitLine,
-  rowName, rowsOf, salesLine, STATUS_TOOLTIP, totalRecruitLine, touchesWords,
+  firstName, goalBar, goalWords, missingWords, namesMissing, namesNewHires, newHireWords, onPaceWords, OWN_COPY, PROTOTYPE_COPY,
+  provenanceWords, recruitLine, rowName, rowsOf, salesLine, STATUS_TOOLTIP, totalNote, totalRecruitLine, touchesWords,
   type GoalWords, type LeadsCounts, type UnitDashboardView, type UnitGroup, type UnitPeriod, type UnitRow,
   type UnitTotal,
 } from '@/lib/unit-dashboard';
@@ -192,6 +192,43 @@ function MaaMark() {
   );
 }
 
+/** *Personal*'s chip (`:7384`): the one tag style the roster has, which *New hire* wears too (UI-003). */
+const TAG = 'shrink-0 rounded-pill border border-hairline bg-base px-[7px] py-0.5 text-2xs font-bold uppercase tracking-wide text-muted';
+
+/**
+ * **A new hire before their first sale** (P18.96-T5 AC-3; ADR-0172 §3): *Personal*'s chip, saying *New hire*, and for a
+ * screen reader that there is no first sale yet — which is why the totals above leave the person out. The server
+ * decides who (`newHireBeforeFirstSale`), and the tag goes on the first sale's day.
+ */
+function NewHireTag() {
+  return (
+    <span className={TAG}>
+      {PROTOTYPE_COPY.newHire}
+      <span className="sr-only">{OWN_COPY.newHireMark}</span>
+    </span>
+  );
+}
+
+/**
+ * **The figure beside *On pace to be active* when the total leaves new hires out** (P18.96-T5 AC-4): the count and its
+ * `of` no longer cover every row below, so the total says who it left out, in the ⓘ the goal's figure already uses.
+ */
+function OnPace({ total, rows }: { total: UnitTotal; rows: readonly UnitRow[] }) {
+  const note = newHireWords(total.newHires, namesNewHires(rows));
+  return (
+    <span className="flex items-start gap-1">
+      <span className="text-sm font-semibold text-amber-ink">{onPaceWords(total.potentialActive)}</span>
+      {note && <TippedGlyph glyph="ⓘ" name={note} tip={note} align="fit" className="-my-1" />}
+    </span>
+  );
+}
+
+/** A total's goal mark: who holds no figure, and who has no first sale yet (ADR-0165 §1, ADR-0172 §2). */
+const goalNote = (total: UnitTotal, rows: readonly UnitRow[]) => totalNote(
+  missingWords(total.goal.missing, namesMissing(rows)),
+  newHireWords(total.newHires, namesNewHires(rows)),
+);
+
 /** `table.roster-table thead th` (`:1650`): small grey capitals. */
 const HEAD = 'bg-card px-3.5 py-[13px] text-xs font-semibold uppercase tracking-wide text-muted';
 
@@ -291,7 +328,7 @@ function TotalRow({
   names?: boolean;
 }) {
   const goal = goalWords(total.goal);
-  const missing = missingWords(total.goal.missing, namesMissing(rows));
+  const missing = goalNote(total, rows);
   return (
     <tr className="border-b border-hairline bg-navy/[0.045]">
       <th
@@ -316,9 +353,7 @@ function TotalRow({
       <td className={cn(CELL, 'py-2 pl-1.5')}><Touches touches={touchesWords(total.touches, period)} /></td>
       <td className={cn(CELL, 'py-2')}><span className="text-sm text-muted">—</span></td>
       <td className={cn(CELL, 'py-2')}>
-        <span className="text-sm font-semibold text-amber-ink">
-          {onPaceWords(total.potentialActive)}
-        </span>
+        <OnPace total={total} rows={rows} />
       </td>
       <td className={cn(CELL, 'py-2')} />
     </tr>
@@ -492,11 +527,8 @@ function PersonRow({
               <span className="min-w-[5.5rem] truncate text-[0.84375rem] font-semibold text-navy">{name}</span>
             )}
             {row.pacingToMaa && <MaaMark />}
-            {personal && (
-              <span className="shrink-0 rounded-pill border border-hairline bg-base px-[7px] py-0.5 text-2xs font-bold uppercase tracking-wide text-muted">
-                {PROTOTYPE_COPY.personal}
-              </span>
-            )}
+            {personal && <span className={TAG}>{PROTOTYPE_COPY.personal}</span>}
+            {row.newHireBeforeFirstSale && <NewHireTag />}
           </Indented>
         </th>
         <td className={CELL}>
@@ -682,7 +714,7 @@ function TotalCard({
   label, total, rows, level, period,
 }: { label: string; total: UnitTotal; rows: readonly UnitRow[]; level: number; period: UnitPeriod }) {
   const goal = goalWords(total.goal);
-  const missing = missingWords(total.goal.missing, namesMissing(rows));
+  const missing = goalNote(total, rows);
   return (
     <li
       className="border-b border-hairline bg-navy/[0.045] px-4 py-3 shadow-[inset_3px_0_0_var(--color-navy)]"
@@ -703,9 +735,7 @@ function TotalCard({
         </CardField>
         <CardField label="Activity"><Touches touches={touchesWords(total.touches, period)} /></CardField>
         <CardField label="Status">
-          <span className="text-sm font-semibold text-amber-ink">
-            {onPaceWords(total.potentialActive)}
-          </span>
+          <OnPace total={total} rows={rows} />
         </CardField>
       </dl>
     </li>
@@ -714,8 +744,8 @@ function TotalCard({
 
 /**
  * **A person as a card** (P18.95-T3 AC-1): the name **in full**, wrapping rather than cut (*Indah Permat…*, UI-030),
- * its ★, ✓ and *Personal* tag after it on the same wrapping line — the tag never over the goal, which has a line of
- * its own (UI-030) — then the status pill, *Goal progress* with its bar, and *Last 1:1*, each under its column's name.
+ * its ★, ✓, *Personal* and *New hire* tags after it on the same wrapping line — a tag never over the goal, which has a
+ * line of its own (UI-030) — then the status pill, *Goal progress* with its bar, and *Last 1:1*, each under its column's name.
  *
  * **⌄ opens the rest**, the table's own button: *Leads*, *Activity* and *Chasing MDRT*, then the detail's tiles,
  * each label above its value (`DetailTiles` `stacked`), nothing cut — *"≈ 4 policies needed at their avg case size
@@ -766,11 +796,8 @@ function PersonCard({
             <span className="min-w-0 break-words text-md font-semibold text-navy">{name}</span>
           )}
           {row.pacingToMaa && <MaaMark />}
-          {personal && (
-            <span className="shrink-0 rounded-pill border border-hairline bg-base px-[7px] py-0.5 text-2xs font-bold uppercase tracking-wide text-muted">
-              {PROTOTYPE_COPY.personal}
-            </span>
-          )}
+          {personal && <span className={TAG}>{PROTOTYPE_COPY.personal}</span>}
+          {row.newHireBeforeFirstSale && <NewHireTag />}
         </p>
         {/* The table's ⌄, in the card's corner: the outlined 28px box, a 44px square taking the tap (UI-029). */}
         <button

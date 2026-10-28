@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ADD_AGENT_COPY, AddAgentDialog } from '@/components/add-agent-form';
 import { PageHeader } from '@/components/app-shell';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, buttonClass, Card, ErrorBanner } from '@/components/ui/field';
@@ -13,7 +14,9 @@ import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { readActivityRatios, type ActivityRatios } from '@/lib/activity';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { useSession } from '@/lib/session';
+import { CONFIRMED, withDetail } from '@/lib/confirmations';
+import { askedFor, type AddAgentResult } from '@/lib/invites';
+import { useCan, useSession } from '@/lib/session';
 import { usePhone } from '@/lib/use-phone';
 import {
   lockedWords, OWN_COPY, productionToast, PROTOTYPE_COPY, readUnitDashboard, UNIT_PERIODS,
@@ -60,6 +63,8 @@ export function UnitDashboard({ forId, period }: { forId?: string; period: UnitP
   const [attempt, setAttempt] = useState(0);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [updating, setUpdating] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const mayInvite = useCan('member:invite');
 
   useEffect(() => {
     let live = true;
@@ -114,6 +119,28 @@ export function UnitDashboard({ forId, period }: { forId?: string; period: UnitP
 
   const title = forId ? (view ? `${view.head.name}’s Unit Dashboard` : null) : null;
   const canUpdate = !!view && view.production.canUpdate && !me?.impersonationReadOnly;
+  /*
+   * **+ Add agent** (P18.96-T3 AC-1, ADR-0170 §1): into the unit on screen — the reader's own, or for the Owner and an
+   * Admin any leader's, whose unit the form names. A leader opening a unit below their own is not offered it: their
+   * grant is their own unit, which the API holds them to.
+   */
+  const office = Boolean(me?.membership?.isKpmOwner || me?.membership?.isKpmAdmin);
+  const canAdd = !!view && mayInvite && !me?.impersonationReadOnly && (view.head.isReader || office);
+  const addLeader = view && !view.head.isReader ? { membershipId: view.head.membershipId, name: view.head.name } : null;
+  const addButton = canAdd ? (
+    <Button variant={canUpdate ? 'secondary' : 'primary'} className="h-auto px-4 py-[9px] text-base" onClick={() => setAdding(true)}>
+      {ADD_AGENT_COPY.open}
+    </Button>
+  ) : null;
+  const added = (result: AddAgentResult) => {
+    if (result.outcome === 'linked') {
+      show(withDetail(CONFIRMED.agentAdded, `${result.member.fullName} is in the unit now.`));
+      setAttempt((n) => n + 1);
+    }
+    if (result.outcome === 'transfer_requested') {
+      show(withDetail(CONFIRMED.transferRequested, `${askedFor(result.transfer)} moves when the office approves it.`));
+    }
+  };
 
   return (
     <div className="min-w-0">
@@ -129,7 +156,7 @@ export function UnitDashboard({ forId, period }: { forId?: string; period: UnitP
         </div>
       )}
       {!view && !error && <UnitSkeleton />}
-      {view?.empty && <NobodyYet />}
+      {view?.empty && <NobodyYet action={addButton} />}
       {view && !view.empty && (
         <>
           <UnitTiles view={view} period={shown} />
@@ -140,7 +167,10 @@ export function UnitDashboard({ forId, period }: { forId?: string; period: UnitP
             onToggle={toggle}
             readRatios={readRatios}
             phone={phone}
-            action={canUpdate && (view.production.locked ? (
+            action={(canUpdate || addButton) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {addButton}
+                {canUpdate && (view.production.locked ? (
               // Drawn and not usable: the month is locked, and the words say who reopens it (P15-T3). Its face is
               // the primary button's own classes, so the held button and the live one are the same amber.
               <TippedGlyph
@@ -155,7 +185,9 @@ export function UnitDashboard({ forId, period }: { forId?: string; period: UnitP
               <Button className="h-auto px-4 py-[9px] text-base" onClick={() => setUpdating(true)}>
                 {PROTOTYPE_COPY.updateProduction}
               </Button>
-            ))}
+                ))}
+              </div>
+            )}
           />
           {updating && (
             <UpdateProductionDialog
@@ -170,6 +202,9 @@ export function UnitDashboard({ forId, period }: { forId?: string; period: UnitP
             />
           )}
         </>
+      )}
+      {canAdd && view && (
+        <AddAgentDialog open={adding} today={view.today} leader={addLeader} onClose={() => setAdding(false)} onAdded={added} />
       )}
       <Toast toast={toast} />
     </div>
@@ -239,7 +274,7 @@ function UnitSkeleton() {
  * words, pointing to the reader's own screens by the names the sidebar gives them — *Group tree* is not
  * offered to somebody who leads nobody.
  */
-function NobodyYet() {
+function NobodyYet({ action }: { action?: React.ReactNode }) {
   return (
     <Card className="mt-5 p-0">
       <EmptyState
@@ -247,6 +282,8 @@ function NobodyYet() {
         action={(
           <div className="text-md text-muted">
             <p>{OWN_COPY.emptyLine}</p>
+            {/* P18.96-T3: a leader who leads nobody yet adds their first agent here — the roster's header is not drawn. */}
+            {action && <div className="mt-3 flex justify-center">{action}</div>}
             <p className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1">
               <Link href="/summary" className={cn('font-semibold text-navy underline-offset-2 hover:underline', TEXT_TAP)}>Personal summary</Link>
               <Link href="/activity/log" className={cn('font-semibold text-navy underline-offset-2 hover:underline', TEXT_TAP)}>Activity management</Link>

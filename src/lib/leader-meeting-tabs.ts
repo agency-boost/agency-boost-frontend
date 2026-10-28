@@ -46,7 +46,12 @@ export const TABS_COPY = {
   } satisfies Record<RowKey, string>,
   pending: 'pending data',
   none: '—',
-  note: 'Note: AA = Active Agent; 3M new agent % is the share of new agents producing at least one case in their join month or the following three months.',
+  /*
+   * P18.96-T6 AC-2 (ADR-0171 §2; parity I-474): rewritten to the row's one definition, `ACTIVATION_3M_PCT` — the
+   * prototype's *"producing at least one case in their join month or the following three months"* (`:2474`) was the
+   * retired `NEW_AGENT_3M_ACTIVE_PCT`. A meeting frozen before 27 October 2026 keeps the figure it froze.
+   */
+  note: 'Note: AA = Active Agent; 3M new agent % is the share of new agents with a first paid and issued case by day 90 of their join date, of those whose 90 days are over.',
   source: 'Source: Manpower, APE, average case size, producing agents, avg. monthly AA, FLC and case submission as tagged to this KPM.',
   sections: { preparation: 'Preparation', during: 'During', post: 'Post' } satisfies Record<AgendaSection, string>,
   pic: 'PIC:',

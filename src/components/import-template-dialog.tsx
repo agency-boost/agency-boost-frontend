@@ -131,8 +131,18 @@ export function ImportTemplateDialog({
       description="A copy of one of its templates becomes a new template of this company. Later changes on either side never reach the other."
       onClose={onClose}
       className="max-w-[30rem]"
+      footer={(
+        <div className="flex flex-wrap gap-2">
+          {!none && (
+            <Button type="submit" form={`${id}-form`} disabled={saving || !templateId}>
+              {saving ? 'Importing…' : 'Import template'}
+            </Button>
+          )}
+          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+        </div>
+      )}
     >
-      <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+      <form id={`${id}-form`} onSubmit={submit} className="flex flex-col gap-4" noValidate>
         {loadError && <ErrorBanner {...loadError} />}
         {templatesError && <ErrorBanner {...templatesError} />}
         {error && <ErrorBanner {...error} />}
@@ -177,14 +187,6 @@ export function ImportTemplateDialog({
             </Field>
           </>
         )}
-        <div className="flex flex-wrap gap-2">
-          {!none && (
-            <Button type="submit" disabled={saving || !templateId}>
-              {saving ? 'Importing…' : 'Import template'}
-            </Button>
-          )}
-          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
-        </div>
       </form>
     </Modal>
   );

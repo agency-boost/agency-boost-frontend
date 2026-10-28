@@ -7,6 +7,7 @@ import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
 import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { cn } from '@/lib/cn';
 import { usePhone } from '@/lib/use-phone';
+import { useScrollLock } from '@/lib/use-scroll-lock';
 
 /**
  * The layout every signed-in screen sits in: a fixed navy sidebar and a scrolling main
@@ -531,14 +532,13 @@ function PhoneMenu({
   const box = useRef<HTMLDivElement>(null);
   const closer = useRef<HTMLButtonElement>(null);
 
+  // The page behind holds still: the one lock every dialog takes, counted, so a dialog over the drawer nests.
+  useScrollLock(true);
+
   useEffect(() => {
     closer.current?.focus();
-    // The page behind holds still. On `body`, which the viewport takes its overflow from.
-    const before = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     const back = returnTo.current;
     return () => {
-      document.body.style.overflow = before;
       back?.focus();
     };
   }, [returnTo]);

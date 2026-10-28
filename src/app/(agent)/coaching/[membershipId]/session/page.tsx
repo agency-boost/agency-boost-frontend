@@ -1,10 +1,9 @@
 'use client';
 
-import { use } from 'react';
+import { Suspense } from 'react';
 import { useCoachee } from '@/components/coaching-person';
 import { SessionWorkspace } from '@/components/coaching-session';
-
-type Query = { session?: string | string[] };
+import { useQuery } from '@/lib/use-query';
 
 /**
  * A person's *Coaching Session* tab (`Overall.html:4167-4319`, P11-T8), where the roster's *Coaching
@@ -19,9 +18,18 @@ type Query = { session?: string | string[] };
  * `?session=` opens one session rather than the one the server would open on (P11-T10): the
  * correction the archive's *Edit again* started, beside a draft that would otherwise win.
  */
-export default function CoachingSessionTabPage({ searchParams }: { searchParams?: Promise<Query> }) {
+export default function CoachingSessionTabPage() {
+  return (
+    // `useSearchParams` needs a boundary (`lib/use-query.ts`). Nothing in its place: a prerender draws the shell's gate, never this.
+    <Suspense fallback={null}>
+      <SessionTab />
+    </Suspense>
+  );
+}
+
+function SessionTab() {
   const coachee = useCoachee();
-  const query = searchParams ? use(searchParams) : {};
+  const query = useQuery();
   const opening = typeof query.session === 'string' && query.session ? query.session : undefined;
   return <SessionWorkspace key={`${coachee.membershipId}:${opening ?? ''}`} coachee={coachee} opening={opening} />;
 }

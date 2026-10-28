@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -500,6 +500,79 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       expect(within(box).getByText("You're going")).toBeInTheDocument();
       expect(within(box).queryByRole('button', { name: 'Cancel RSVP' })).not.toBeInTheDocument();
       expect(within(box).queryByRole('button', { name: 'Join event' })).not.toBeInTheDocument();
+    });
+  });
+
+  /*
+   * **The findings' UI-043**: at 1000×620 the box, centred and taller than the window, had its top pushed off the
+   * screen with ✕ in it, and *Submit feedback* below the foot; `overflow-hidden` and no height cap meant nothing
+   * scrolled to either. jsdom lays nothing out, so these pin the classes that do; the walk measured them.
+   */
+  describe('a short window (P18.96-T1 AC-1)', () => {
+    afterEach(() => {
+      document.body.style.overflow = '';
+    });
+
+    it('P18.96-T1 AC-1 the box is capped at the dynamic viewport and scrolls inside itself, never pushed off the screen', async () => {
+      modal(PRULINK);
+      const box = await dialog('PRULink briefing');
+      // From 640px: at most the screen less its 1.25rem margins; below it, the whole screen, the same way.
+      expect(box).toHaveClass('sm:max-h-[calc(100dvh-2.5rem)]', 'h-[100dvh]', 'sm:h-auto', 'sm:max-w-[560px]');
+      expect(box).toHaveClass('overflow-y-auto', 'overscroll-contain');
+      expect(box).not.toHaveClass('overflow-hidden');
+      expect(box).not.toHaveClass('min-h-full');
+      // Nothing outside it scrolls: the box is what scrolls.
+      expect(box.parentElement).not.toHaveClass('overflow-y-auto');
+    });
+
+    it('P18.96-T1 AC-1 ✕ rides on the poster, held at the top; Submit feedback is held at the foot', async () => {
+      modal(PRULINK);
+      const box = await dialog('PRULink briefing');
+      const close = within(box).getByRole('button', { name: 'Close' });
+      const poster = close.parentElement!;
+      expect(poster).toHaveClass('sticky', 'top-0');
+      expect(poster.parentElement).toBe(box);
+
+      const submit = within(box).getByRole('button', { name: 'Submit feedback' });
+      const foot = submit.closest<HTMLElement>('[data-sticky-submit]')!;
+      expect(foot).toHaveClass('sticky', 'bottom-0', 'bg-card');
+      // Held against the whole body, not the form's own block (which draws no box, `contents`), so it is at the
+      // foot from the moment the dialog opens rather than only once the form is scrolled to.
+      const block = foot.parentElement!;
+      expect(block).toHaveAttribute('data-block', 'form');
+      expect(block).toHaveClass('contents');
+      expect(block.parentElement).toContainElement(screen.getByRole('heading', { level: 2, name: 'PRULink briefing' }));
+    });
+
+    it('P18.96-T1 AC-1 the 190px banner shrinks to the card’s 110px while the feedback form shows, and only then', async () => {
+      modal(PRULINK);
+      const withForm = await dialog('PRULink briefing');
+      const posterOf = (box: HTMLElement) => within(box).getByRole('button', { name: 'Close' }).parentElement!;
+      expect(posterOf(withForm)).toHaveClass('h-[110px]');
+      expect(posterOf(withForm)).not.toHaveClass('h-[190px]');
+      cleanup();
+
+      modal(KICKOFF);
+      expect(posterOf(await dialog('Kickoff 2026'))).toHaveClass('h-[190px]');
+    });
+
+    it('P18.96-T1 AC-1 the page behind does not scroll while it is open, and gets its scroll back when it closes', async () => {
+      document.body.style.overflow = 'auto';
+      modal(PRULINK);
+      await dialog('PRULink briefing');
+      expect(document.body.style.overflow).toBe('hidden');
+      cleanup();
+      expect(document.body.style.overflow).toBe('auto');
+    });
+
+    it('P18.96-T1 AC-1 Submit feedback still submits from the held foot, and a refusal shows beside it', async () => {
+      const { calls } = modal(PRULINK, { 'POST /events/ev-prulink/feedback': serverError });
+      const box = await dialog('PRULink briefing');
+      await userEvent.click(within(box).getByRole('radio', { name: '9' }));
+      await userEvent.click(within(box).getByRole('button', { name: 'Submit feedback' }));
+      expect(calls.some((c) => c.url.endsWith('/feedback'))).toBe(true);
+      const foot = within(box).getByRole('button', { name: 'Submit feedback' }).closest<HTMLElement>('[data-sticky-submit]')!;
+      expect(await within(foot).findByRole('alert')).toBeInTheDocument();
     });
   });
 

@@ -143,6 +143,12 @@ export interface UnitRow {
   status: RosterStatus;
   /** `PACING_TO_MAA`: the ✓. `null` without a target. */
   pacingToMaa: boolean | null;
+  /**
+   * ***New hire*** (ADR-0172 §2–3, P18.96-T5 AC-3): a new hire with no first sale by today — the server's
+   * `COUNTS_FOR_PRODUCTION`, never worked out here. The row carries the tag; every total above it leaves the person out
+   * of its production and its *On pace to be active*. `false` from the first sale's day.
+   */
+  newHireBeforeFirstSale: boolean;
   followUp: FollowUp | null;
   /**
    * *Chasing MDRT* (ADR-0122, P18.5-T7 AC-7): chasing `MDRT_QUALIFICATION`, not ended. `null` where the
@@ -183,6 +189,8 @@ export interface UnitTotal {
   leadsCounts: LeadsCounts;
   touches: CountAgainst;
   potentialActive: PotentialActive;
+  /** The new hires before a first sale whom `goal` and `potentialActive` leave out (ADR-0172 §2); named in their ⓘ. */
+  newHires: number;
 }
 
 /** A unit below the head: its head, their direct reports who lead nobody, then the units nested in it. */
@@ -199,6 +207,8 @@ export interface TeamTile {
   direct: number;
   units: number;
   underUnits: number;
+  /** Of `total`, the new hires before a first sale: in the team, and in neither production nor *on pace* (ADR-0172). */
+  newHires: number;
 }
 
 /** *Direct Group production*: every row's goal, paired as a unit's total is (ADR-0165 §1). */
@@ -339,6 +349,12 @@ export const PROTOTYPE_COPY = {
   yourUnitTotal: 'Your Unit — Total',
   /** A unit head's own row, apart from the unit's total (`:7384`). */
   personal: 'Personal',
+  /**
+   * **A new hire before their first sale** (P18.96-T5 AC-3; ADR-0172 §3; the client's report of 2026-10-27, UI-003:
+   * *"roster rows for NEW_HIRE without a first sale show a 'New hire' tag … reuse the existing tag/chip style from the
+   * roster (e.g. 'PERSONAL')"*). The client's word, in *Personal*'s chip.
+   */
+  newHire: 'New hire',
   noOneOnOne: 'No 1:1 yet',
   statusInfo: 'How is status decided?',
   /** The *Status* header's tooltip (`:3929-3935`), its list kept as lines. */
@@ -430,6 +446,8 @@ export const OWN_COPY = {
    * *Name* heading's ⓘ now, once (`TERMS.POTENTIAL_MAA`).
    */
   maaMark: 'Potential Monthly Active Agent',
+  /** What the *New hire* tag adds for a screen reader, which reads no chip's colour or place (P18.96-T5 AC-3). */
+  newHireMark: ', no first sale yet',
 } as const;
 
 /**
@@ -599,6 +617,24 @@ export function missingWords(missing: number, names: readonly string[]): string 
   return `${OWN_COPY.notUploaded} for ${who}, so not counted in this total.`;
 }
 
+/**
+ * **A total's mark when it leaves out new hires before their first sale** (P18.96-T5 AC-4; ADR-0172 §2; UI-003, *"Unit
+ * totals and the 'ⓘ' explanations match the new rule"*): *"No first sale yet for Yanti Kusuma, a new hire, so not
+ * counted in this total."* — by name where the rows below say who, as `missingWords` does. On the goal's mark beside
+ * `missingWords`' own sentence, and alone beside *On pace to be active*. `null` when nobody is left out.
+ */
+export function newHireWords(newHires: number, names: readonly string[]): string | null {
+  if (newHires <= 0) return null;
+  if (names.length !== newHires) return `No first sale yet for ${plural(newHires, 'new hire', 'new hires')}, so not counted in this total.`;
+  return `No first sale yet for ${names.join(', ')}, ${newHires === 1 ? 'a new hire' : 'new hires'}, so not counted in this total.`;
+}
+
+/** A total's marks, together: who holds no figure, then who has no first sale yet; `null` when neither applies. */
+export function totalNote(...notes: readonly (string | null)[]): string | null {
+  const said = notes.filter((n): n is string => n !== null);
+  return said.length === 0 ? null : said.join(' ');
+}
+
 /** The month the lock names, in the tooltip of the disabled *Update production*. */
 export const lockedWords = (month: string) =>
   `Production for ${formatMonth(month)} is locked. The Owner or Admin can reopen it.`;
@@ -620,9 +656,15 @@ export function everyRow(view: Pick<UnitDashboardView, 'yourUnit' | 'units'>): U
   return [...view.yourUnit.rows, ...view.units.flatMap(rowsOf)];
 }
 
-/** The names of the rows a total covers that hold no actual, for its mark. */
+/**
+ * The names of the rows a total covers that hold no actual, for its mark — **not a new hire before a first sale**, whom
+ * the total leaves out for that reason and names in `newHireWords` instead (ADR-0172 §2).
+ */
 export const namesMissing = (rows: readonly UnitRow[]) =>
-  rows.filter((r) => r.goal.actualMinor === null).map((r) => rowName(r));
+  rows.filter((r) => r.goal.actualMinor === null && !r.newHireBeforeFirstSale).map((r) => rowName(r));
+
+/** The names of the new hires before a first sale a total covers, whom it leaves out (P18.96-T5 AC-4). */
+export const namesNewHires = (rows: readonly UnitRow[]) => rows.filter((r) => r.newHireBeforeFirstSale).map((r) => rowName(r));
 
 /** One group of the dialog (`:7524-7530`): a label, and its rows with how far each is indented. */
 export interface DialogGroup {

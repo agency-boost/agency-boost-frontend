@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { RoleShell } from '@/components/role-shell';
 import { SessionList } from '@/components/session-list';
+import { DateField } from '@/components/ui/date-field';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { PasswordInput } from '@/components/ui/password-input';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
@@ -198,14 +199,14 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
               hint={lockedHint}
               error={fieldError('dateOfBirth')}
             >
-              <TextInput
+              <DateField
                 id="dateOfBirth"
-                type="date"
                 autoComplete="bday"
                 value={personal.dateOfBirth}
-                onChange={setOne('dateOfBirth')}
+                onChange={(value) => setOne('dateOfBirth')({ target: { value } })}
                 disabled={personalLocked}
                 invalid={refusedField === 'dateOfBirth'}
+                className="w-full"
               />
             </Field>
 

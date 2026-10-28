@@ -4,16 +4,18 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
-  ActivationSkeleton, AspectCard, AttributionMark, AutoBadge, ByHandBadge, DateField, GoToLink, ITEM_CHECKBOX, ITEM_ROW,
+  ActivationSkeleton, AspectCard, AttributionMark, AutoBadge, AutoSaveDateField, ByHandBadge, GoToLink, ITEM_CHECKBOX, ITEM_ROW,
   ProgressHeading, ProgressSummary, RowError, useWriteQueue,
 } from '@/components/activation-parts';
+import { DataItemRow } from '@/components/activation-data-item';
 import { Dialog } from '@/components/ui/dialog';
 import { Button, Card, ErrorBanner, TextInput } from '@/components/ui/field';
 import { InlineSaveField, InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Toast, useHostToast, useToast } from '@/components/ui/toast';
 import {
-  attributionOf, correctionOf, graduateMyActivation, isComplete, isManual, isTickedByHandLink, ITEM_NOTE_MAX, MY_COACHING_ACTIVATION_HREF, OWN_COPY,
-  PROTOTYPE_COPY, readMyActivation, saveMyItem, type ActivationItemProgress, type ActivationView, type MyItemInput,
+  attributionOf, correctionOf, graduateMyActivation, isComplete, isDataBacked, isManual, isTickedByHandLink, ITEM_NOTE_MAX,
+  MY_COACHING_ACTIVATION_HREF, OWN_COPY, PROTOTYPE_COPY, readMyActivation, readMyClosings, saveMyItem,
+  type ActivationItemProgress, type ActivationRecordInput, type ActivationView, type MyItemInput,
 } from '@/lib/activation';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
@@ -29,8 +31,9 @@ type ItemField = 'done' | 'note' | 'date';
  * P13-T4, T6, T7): their pinned checklist, ticked as they go.
  *
  * - **The header card**: *Your activation progress*, the *Start date* — read-only, since a leader
- *   corrects it and the hire does not (OD-118) — and *Mark activation complete →*, enabled at 100%
- *   (OD-28), asked in the product's dialog (F-72).
+ *   corrects it and the hire does not (OD-118) — and *Mark checklist complete* (the prototype's *Mark activation
+ *   complete →*, renamed by P18.96-T6 AC-5, ADR-0173 §4), enabled at 100% (OD-28) and saying why while it is not —
+ *   *"Unlocks when all 16 items are done"* — asked in the product's dialog (F-72).
  * - **The progress**: *Day*, *Completed*, the bar and the aspect table, all served (P13-T2 AC-5).
  * - **A manual row**: a checkbox, and the chevron *Show note and date* opening the hire's own *Note
  *   (optional)* and date, each saved as the prototype saves them, on change (T4 AC-3).
@@ -44,6 +47,10 @@ type ItemField = 'done' | 'note' | 'date';
  * AC-7). Writes go out one at a time, so answers land in the order they were asked and an earlier one
  * never overwrites a later one. **The percentage waits for the answer**: the server computes it, and a
  * screen that worked it out could disagree with the leader's (exit criterion 2).
+ *
+ * **Settled, and in place** (P18.96-T7 AC-1, AC-2; UI-007, UI-008): the figures are the skeleton until the one read
+ * answers, every link evaluated by the server first; after that an answer updates them where they are — every row keeps
+ * its node and the focus, nothing scrolls, and the session read again for the nav's check replaces no part of the page.
  *
  * **A read-only support session draws no write control** (T4 AC-9, the calendar's L-79): the boxes are
  * drawn disabled, the note and date read-only, and there is no button.
@@ -68,12 +75,13 @@ export function MyActivation() {
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [pending, setPending] = useState<Readonly<Record<string, MyItemInput>>>({});
+  const [pending, setPending] = useState<Readonly<Record<string, Omit<MyItemInput, 'record'>>>>({});
   const [failed, setFailed] = useState<Readonly<Record<string, string>>>({});
   const [resets, setResets] = useState<Readonly<Record<string, number>>>({});
   const asked = useRef<Record<string, number>>({});
   const [asking, setAsking] = useState(false);
   const [graduating, setGraduating] = useState(false);
+  const lockedId = useId();
   const [graduateError, setGraduateError] = useState<ApiError | null>(null);
   /*
    * The nav's amber check, as the session last read it (`me.activation.complete`). A write whose answer
@@ -100,7 +108,9 @@ export function MyActivation() {
   const write = useCallback((code: string, patch: MyItemInput): Promise<boolean> => {
     const ask = (asked.current[code] ?? 0) + 1;
     asked.current[code] = ask;
-    setPending((p) => ({ ...p, [code]: { ...p[code], ...patch } }));
+    // The record goes with the write, and never onto the row drawn meanwhile: it is not the item's record yet.
+    const { record: _sent, ...shown } = patch;
+    setPending((p) => ({ ...p, [code]: { ...p[code], ...shown } }));
     setFailed(({ [code]: _gone, ...rest }) => rest);
     return queue(async () => {
       try {
@@ -128,6 +138,11 @@ export function MyActivation() {
   const save = useCallback((code: string, patch: MyItemInput, field: ItemField) => {
     void track(`${code}\n${field}`, () => write(code, patch));
   }, [track, write]);
+
+  /** A data-backed item's write (P18.96-T4 AC-3): an untick, or the tick and its record together. */
+  const saveData = useCallback((code: string, done: boolean, record?: ActivationRecordInput) =>
+    track(`${code}\ndone`, () => write(code, record ? { done, record } : { done })), [track, write]);
+  const loadClosings = useCallback(async () => (await readMyClosings()).closings, []);
 
   const graduate = async () => {
     setAsking(false);
@@ -167,16 +182,21 @@ export function MyActivation() {
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3.5">
               <ProgressHeading>{PROTOTYPE_COPY.progressHeading}</ProgressHeading>
               <div className="flex flex-wrap items-end gap-2.5">
-                <StartDate view={view} reader={me?.membership?.membershipId} />
+                <JoinDate view={view} reader={me?.membership?.membershipId} />
                 {mayGraduate && (
-                  <Button
-                    variant="secondary"
-                    disabled={view.pct < 100 || graduating}
-                    onClick={() => setAsking(true)}
-                    className="h-auto px-4 py-[9px] text-base"
-                  >
-                    {PROTOTYPE_COPY.graduate}
-                  </Button>
+                  <div className="flex flex-col items-end">
+                    <Button
+                      variant="secondary"
+                      disabled={view.pct < 100 || graduating}
+                      aria-describedby={view.pct < 100 ? lockedId : undefined}
+                      onClick={() => setAsking(true)}
+                      className="h-auto px-4 py-[9px] text-base"
+                    >
+                      {PROTOTYPE_COPY.graduate}
+                    </Button>
+                    {/* P18.96-T6 AC-5 (ADR-0173 §4): while it waits, it says why — the checklist's own total, served. */}
+                    {view.pct < 100 && <p id={lockedId} className="mt-1 text-xs text-muted">{OWN_COPY.graduateLocked(view.total)}</p>}
+                  </div>
                 )}
               </div>
             </div>
@@ -186,7 +206,22 @@ export function MyActivation() {
 
           {view.aspects.map((aspect, i) => (
             <AspectCard key={aspect.code} n={i + 1} label={aspect.label}>
-              {aspect.items.map((item) => (
+              {aspect.items.map((item) => (isDataBacked(item) ? (
+                <DataItemRow
+                  key={item.code}
+                  item={{ ...item, ...pending[item.code] }}
+                  reader={me?.membership?.membershipId}
+                  writable={mayTick}
+                  audience="hire"
+                  hireId={view.hire.membershipId}
+                  today={view.today}
+                  startDate={view.startDate}
+                  loadClosings={loadClosings}
+                  onSave={(done, record) => saveData(item.code, done, record)}
+                  status={statusOf(`${item.code}\ndone`)}
+                  error={failed[item.code]}
+                />
+              ) : (
                 <MyItemRow
                   key={item.code}
                   item={{ ...item, ...pending[item.code] }}
@@ -197,7 +232,7 @@ export function MyActivation() {
                   error={failed[item.code]}
                   resetKey={resets[item.code] ?? 0}
                 />
-              ))}
+              )))}
             </AspectCard>
           ))}
 
@@ -221,15 +256,15 @@ export function MyActivation() {
 }
 
 /**
- * *Start date* (`:3283-3287`), **read-only for the hire** (OD-118): the prototype's input lets anybody
- * reset their own ninety days and hide an overdue, so the date is shown, not offered. When a leader moved
- * it, the marker beside it says who and when.
+ * *Join date* — the prototype's *Start date* (`:3283-3287`; P18.96-T2 AC-5, ADR-0169) — **read-only for the hire**
+ * (OD-118): the prototype's input lets anybody reset their own ninety days and hide an overdue, so the date is
+ * shown, not offered. When a leader moved it, the marker beside it says who and when.
  */
-function StartDate({ view, reader }: { view: ActivationView; reader: string | null | undefined }) {
+function JoinDate({ view, reader }: { view: ActivationView; reader: string | null | undefined }) {
   const corrected = correctionOf(view, reader);
   return (
     <dl className="flex items-center gap-2">
-      <dt className="whitespace-nowrap text-xs font-semibold text-navy">{PROTOTYPE_COPY.startDate}</dt>
+      <dt className="whitespace-nowrap text-xs font-semibold text-navy">{PROTOTYPE_COPY.joinDate}</dt>
       <dd className="flex h-[34px] items-center rounded-md border-[1.5px] border-hairline bg-base px-3 text-base text-navy">
         <time dateTime={view.startDate}>{formatShortDay(view.startDate, { year: true })}</time>
       </dd>
@@ -322,7 +357,7 @@ function MyItemRow({
           <NoteInput item={item} writable={writable} onSave={(patch) => onSave(patch, 'note')} resetKey={resetKey} />
         </InlineSaveField>
         <InlineSaveField status={status('date')} label={OWN_COPY.itemDateName(item.label)}>
-          <DateField
+          <AutoSaveDateField
             value={item.date}
             clearable
             readOnly={!writable}

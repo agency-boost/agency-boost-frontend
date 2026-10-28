@@ -32,6 +32,9 @@ import {
  * its tile is not drawn yet, because a tile that does nothing is worse than one that is
  * absent.
  */
+/** The line a reader who has a leader sees in place of the search (ADR-0170 §6), verbatim. */
+const CHANGING_LEADER = 'Changing leader goes through your office admin.';
+
 export default function FindLeaderPage() {
   const ladder = useLadder();
   const [state, setState] = useState<JoinState | null>(null);
@@ -52,16 +55,18 @@ export default function FindLeaderPage() {
   }, [refresh]);
 
   const registered = Boolean(state?.kpmId);
+  /** Somebody who already reports to a leader is not offered the search (P18.96-T3 AC-6, ADR-0170 §6). */
+  const hasLeader = Boolean(state?.leaderMembershipId);
 
   useEffect(() => {
-    if (!registered) return;
+    if (!registered || hasLeader) return;
     void searchLeaders(q || undefined)
       .then(setLeaders)
       .catch((err) => {
         setError(toDisplayError(err));
         setLeaders([]);
       });
-  }, [q, registered]);
+  }, [q, registered, hasLeader]);
 
   /**
    * *Send request*, and *Request sent ✓* once the request is in (P18.95-T1 AC-6, ADR-0167 §5; UI-008), whether
@@ -149,6 +154,15 @@ export default function FindLeaderPage() {
             </Card>
           )}
 
+          {hasLeader ? (
+            /*
+             * **Changing leader is the office's** (P18.96-T3 AC-6, ADR-0170 §6): the search stood here for a reader who
+             * already has a leader, and every request they sent was refused. One line in its place, the client's words.
+             */
+            <Card>
+              <p className="text-md text-navy">{CHANGING_LEADER}</p>
+            </Card>
+          ) : (
           <Card>
             {/*
               * The client's words at every size (P18.95-T7 AC-1, grey text rows 3 and 2): *Find a leader*, where it
@@ -231,6 +245,7 @@ export default function FindLeaderPage() {
               />
             )}
           </Card>
+          )}
 
           {state.pendingRequestTo && (
             <p className="mt-4 text-md text-muted">

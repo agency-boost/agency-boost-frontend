@@ -12,7 +12,7 @@ import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { displayName } from '@/lib/display-name';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { formatOfficeDay } from '@/lib/format';
+import { formatCalendarDay } from '@/lib/format';
 import { personalLines, type PersonalDetails } from '@/lib/personal';
 import {
   askLeaderLimitApproval, cancelLeaderLimitRequest, pendingFor, readLeaderLimitRequests, requestedChange,
@@ -230,9 +230,11 @@ export default function MemberPage({ params }: { params: Promise<{ membershipId:
             <Detail term="Agent code" detail={<code className="text-sm">{member.agentCode}</code>} />
             <Detail term="Role" detail={<RoleBadge role={member.role} short={false} />} />
             <Detail term="Reports to" detail={member.leaderName ?? 'Nobody — top of the tree'} />
+            {/* *Join date*, the one name for it (P18.96-T2 AC-5, ADR-0169 §7): the day their leader gave, an office
+                date — not `joinedAt`, the instant the system made them active. */}
             <Detail
-              term="Joined"
-              detail={member.joinedAt ? formatOfficeDay(member.joinedAt) : '—'}
+              term="Join date"
+              detail={member.joinDate ? formatCalendarDay(member.joinDate) : '—'}
             />
             {/* What the person records (ADR-0158, P18.8-T4 AC-6): the API serves it to the Owner and the
                 Admins on this read only, read-only here — the person's own to change, on their profile. */}

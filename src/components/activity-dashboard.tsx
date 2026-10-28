@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { Fragment, useEffect, useId, useState, type ReactNode } from 'react';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
-import { ErrorBanner, TextInput } from '@/components/ui/field';
+import { DateField } from '@/components/ui/date-field';
+import { ErrorBanner } from '@/components/ui/field';
 import { NumberBadge } from '@/components/ui/number-badge';
 import { Segmented } from '@/components/ui/segmented';
 import { SkeletonCards, SkeletonTable } from '@/components/ui/skeleton';
@@ -158,21 +159,19 @@ export function ActivityDashboardPanel({ subject }: { subject?: DashboardSubject
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               {range === 'CUSTOM' && custom ? (
                 <div className="flex items-center gap-2">
-                  <TextInput
-                    type="date"
+                  <DateField
                     aria-label="From"
                     value={custom.from}
                     max={today ?? undefined}
-                    onChange={(e) => setCustom({ ...custom, from: e.target.value })}
+                    onChange={(from) => setCustom({ ...custom, from })}
                     className="w-40"
                   />
                   <span className="text-sm text-muted">to</span>
-                  <TextInput
-                    type="date"
+                  <DateField
                     aria-label="To"
                     value={custom.to}
                     max={today ?? undefined}
-                    onChange={(e) => setCustom({ ...custom, to: e.target.value })}
+                    onChange={(to) => setCustom({ ...custom, to })}
                     className="w-40"
                   />
                 </div>

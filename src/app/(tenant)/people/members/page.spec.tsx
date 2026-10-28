@@ -1,8 +1,9 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
 import { makeMe, renderInLayout, stubFetch } from '@test/harness';
+import { dayInZone, OFFICE_TIME_ZONE } from '@/lib/format';
 import MembersPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -475,6 +476,12 @@ describe('members directory (P3-T1 AC-3)', () => {
       return stub;
     }
 
+    /** *Approve*, which opens the row's *Join date* (P18.96-T7 G1), and *Approve* again, which sends it. */
+    async function approve() {
+      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    }
+
     it('lists everybody registered but not yet in a unit, not only those who asked', async () => {
       // The bug this closes: the tab counted pending memberships and rendered open
       // requests. Somebody who registered and asked nobody was counted and never shown —
@@ -512,8 +519,46 @@ describe('members directory (P3-T1 AC-3)', () => {
       const { calls } = await openTab([asked], [request()], {
         '/join/requests/req-1/approve': { body: [] },
       });
-      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      await approve();
       expect(calls.find((c) => c.init.method === 'POST')!.url).toContain('/req-1/approve');
+    });
+
+    it('P18.96-T7 G1 Approve asks for the join date — the shared field, today by default — and sends it', async () => {
+      const today = dayInZone(OFFICE_TIME_ZONE, new Date());
+      const { calls } = await openTab([asked], [request()], {
+        '/join/requests/req-1/approve': { body: [] },
+      });
+      const putri = within(screen.getByRole('table')).getByRole('row', { name: /Putri/ });
+      await userEvent.click(within(putri).getByRole('button', { name: 'Approve' }));
+      // Nothing is sent yet: the first press opens the row's *Join date*.
+      expect(calls.filter((c) => c.init.method === 'POST')).toEqual([]);
+      const field = within(putri).getByLabelText('Join date');
+      expect(field).toHaveAttribute('type', 'date');
+      expect(field).toHaveValue(today);
+      expect(field).toHaveAttribute('max', today);
+      expect(within(putri).getByText('The day they joined. Today unless they joined earlier.')).toBeInTheDocument();
+
+      // An earlier day, as a leader corrects it: the face writes it the app's way, and the second press sends it.
+      fireEvent.change(field, { target: { value: '2026-09-01' } });
+      expect(field.nextElementSibling).toHaveTextContent('1 Sep 2026');
+      await userEvent.click(within(putri).getByRole('button', { name: 'Approve' }));
+      const post = calls.find((c) => c.init.method === 'POST')!;
+      expect(post.url).toContain('/join/requests/req-1/approve');
+      expect(JSON.parse(String(post.init.body))).toEqual({ joinDate: '2026-09-01' });
+    });
+
+    it('P18.96-T7 G1 a join date after today is refused before it is sent, and Cancel puts the row back', async () => {
+      const { calls } = await openTab([asked], [request()]);
+      const putri = within(screen.getByRole('table')).getByRole('row', { name: /Putri/ });
+      await userEvent.click(within(putri).getByRole('button', { name: 'Approve' }));
+      fireEvent.change(within(putri).getByLabelText('Join date'), { target: { value: '2999-01-01' } });
+      expect(within(putri).getByText(/^The join date cannot be after today, /)).toBeInTheDocument();
+      expect(within(putri).getByRole('button', { name: 'Approve' })).toBeDisabled();
+
+      await userEvent.click(within(putri).getByRole('button', { name: 'Cancel' }));
+      expect(within(putri).queryByLabelText('Join date')).not.toBeInTheDocument();
+      expect(within(putri).getByRole('button', { name: 'Decline' })).toBeInTheDocument();
+      expect(calls.filter((c) => c.init.method === 'POST')).toEqual([]);
     });
 
     it('has an empty state that says the office is clear', async () => {
@@ -535,7 +580,7 @@ describe('members directory (P3-T1 AC-3)', () => {
           },
         },
       });
-      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      await approve();
       expect(await screen.findByRole('alert')).toHaveTextContent('already approved');
     });
 
@@ -553,7 +598,7 @@ describe('members directory (P3-T1 AC-3)', () => {
           },
         },
       });
-      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      await approve();
       const alert = await screen.findByRole('alert');
       expect(alert).toHaveTextContent('This office has reached its limit of 3 leaders, so nobody else can be made an AB or an AAB.');
       expect(alert).not.toHaveTextContent('LEADER_LIMIT_REACHED');
@@ -580,7 +625,7 @@ describe('members directory (P3-T1 AC-3)', () => {
         '/members/leader-limit-requests': [{ body: [] }, { body: [waitingRow] }],
         'POST /members/mem-asked/leader-limit-request': { status: 201, body: waitingRow },
       });
-      await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+      await approve();
       const alert = await screen.findByRole('alert');
       await userEvent.click(within(alert).getByRole('button', { name: 'Ask AgencyBoost to approve' }));
       expect(await screen.findByText("Waiting for AgencyBoost's approval")).toBeInTheDocument();

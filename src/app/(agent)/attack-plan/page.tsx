@@ -1,12 +1,11 @@
 'use client';
 
-import { use } from 'react';
+import { Suspense } from 'react';
 import { AttackPlanScreen, type PlanAddress } from '@/components/attack-plan';
 import { Page } from '@/components/page';
 import { SalesToolsTabs } from '@/components/sales-tools-tabs';
 import { briefFromQuery, productFromQuery, PROTOTYPE_COPY } from '@/lib/product-catalog';
-
-type Query = { need?: string | string[]; age?: string | string[]; budget?: string | string[]; product?: string | string[] };
+import { useQuery } from '@/lib/use-query';
 
 /**
  * **Sales Attack Plan** (`/attack-plan`; `Overall.html:3786-3866`, title `:10415`; P14-T8).
@@ -19,8 +18,17 @@ type Query = { need?: string | string[]; age?: string | string[]; budget?: strin
  * **Under the tabs *Sales Attack Plan | Product Catalog*** (P18.8-T12, ADR-0161 §5): the sidebar's one *Sales
  * tools* entry opens here, and the strip reaches the catalog.
  */
-export default function AttackPlanPage({ searchParams }: { searchParams?: Promise<Query> }) {
-  const query = searchParams ? use(searchParams) : {};
+export default function AttackPlanPage() {
+  return (
+    // `useSearchParams` needs a boundary (`lib/use-query.ts`). Nothing in its place: a prerender draws the shell's gate, never this.
+    <Suspense fallback={null}>
+      <AttackPlan />
+    </Suspense>
+  );
+}
+
+function AttackPlan() {
+  const query = useQuery();
   const brief = briefFromQuery(query);
   const product = productFromQuery(query);
   const address: PlanAddress = brief

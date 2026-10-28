@@ -941,6 +941,16 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.queryByRole('dialog', { name: /Contact details/ })).not.toBeInTheDocument();
     });
 
+    it('P18.96-T1 AC-2: the table behind holds still while the details are open, and scrolls again once they close', async () => {
+      render({ '/leads': { body: page([lead()]) } });
+      const dialog = await openDetails();
+      expect(dialog).toHaveClass('overflow-y-auto', 'overscroll-contain');
+      expect(document.body.style.overflow).toBe('hidden');
+      await userEvent.keyboard('{Escape}');
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: /Lead details/ })).not.toBeInTheDocument());
+      expect(document.body.style.overflow).toBe('');
+    });
+
     it('P13.1-T4 AC-1: asks no lawful basis — the field and its words are gone', async () => {
       render({ '/leads': { body: page([lead()]) } });
       const dialog = await openDetails();
@@ -1557,30 +1567,28 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       expect(screen.getByLabelText('Lead name, row 1').className).toContain('border-transparent');
     });
 
-    it('P13.1-T4 AC-5: puts the calendar on the date’s left, hides the browser’s own, and opens the picker', async () => {
+    it('P13.1-T4 AC-5, P18.96-T2 AC-4: the shared date field, the calendar on the date’s left, and a click opens the picker', async () => {
       const showPicker = vi.fn();
       HTMLInputElement.prototype.showPicker = showPicker;
       render({ '/leads': { body: page([lead()]) } });
       const date = await screen.findByLabelText('Next action date, row 1');
 
-      const icon = date.previousElementSibling as HTMLElement;
-      expect(icon.tagName).toBe('BUTTON');
-      // A pointer's shortcut: out of the tab order and unannounced, so a row is not one stop longer.
-      expect(icon).toHaveAttribute('tabindex', '-1');
-      expect(icon).toHaveAttribute('aria-hidden', 'true');
-      expect(date.className).toContain('[&::-webkit-calendar-picker-indicator]:hidden');
-      expect(date.className).toContain('pl-6');
+      // The field is the control; the face beside it shows the date as the app writes it, the calendar first.
+      const face = date.nextElementSibling as HTMLElement;
+      expect(face).toHaveAttribute('aria-hidden', 'true');
+      expect(face.firstElementChild!.tagName.toLowerCase()).toBe('svg');
+      expect(face).toHaveTextContent('2 Okt 2026');
+      expect(face.textContent).not.toMatch(/\d{2}\/\d{2}\/\d{4}/);
 
-      await userEvent.click(icon);
+      await userEvent.click(date);
       expect(showPicker).toHaveBeenCalledTimes(1);
-      expect(date).toHaveFocus();
       delete (HTMLInputElement.prototype as { showPicker?: unknown }).showPicker;
     });
 
     it('P13.1-T4 AC-5: falls back to the box’s focus where there is no picker to show', async () => {
       const { calls } = render({ '/leads': { body: page([lead()]) } });
       const date = await screen.findByLabelText('Next action date, row 1');
-      await userEvent.click(date.previousElementSibling as HTMLElement);
+      await userEvent.click(date);
       // jsdom has no `showPicker`: the refusal is caught, and the date can be typed.
       expect(date).toHaveFocus();
       expect(writes(calls)).toHaveLength(0);
@@ -2741,9 +2749,11 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(remarks.tagName).toBe('TEXTAREA');
         expect(remarks).toHaveAttribute('rows', '1');
         expect(remarks).toHaveValue(LONG);
-        for (const label of ['Lead name', 'Type', 'Status', 'Next action date']) {
+        for (const label of ['Lead name', 'Type', 'Status']) {
           expect(inSheet.getByLabelText(label).className).toContain('max-md:min-h-11');
         }
+        // The date's 44px is its box's, which the field and its face fill (P18.96-T2's shared DateField).
+        expect(inSheet.getByLabelText('Next action date').parentElement!.className).toContain('max-md:min-h-11');
         expect(remarks.className).toContain('min-h-11');
         expect(inSheet.getByRole('button', { name: 'Close' }).className).toContain('max-md:min-h-11');
       });

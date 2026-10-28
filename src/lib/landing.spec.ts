@@ -110,6 +110,17 @@ describe('where signing in takes you', () => {
     expect(landingFor(makeMe({ membership: member() }))).toBe('/activity/log');
   });
 
+  it('P18.96-T3 AC-4 sends a new hire in their 90 days, leading nobody, to their activation — once over, their own day', () => {
+    const hire = member({ directCount: 0 });
+    expect(landingFor(makeMe({ membership: hire, activation: { open: true, complete: false } }))).toBe('/activation');
+    // All done, it waits only for Mark activation complete, and graduating lands them on their own day.
+    expect(landingFor(makeMe({ membership: hire, activation: { open: true, complete: true } }))).toBe('/activity/log');
+    expect(landingFor(makeMe({ membership: hire, activation: { open: false, complete: true } }))).toBe('/activity/log');
+    // A new hire who already leads somebody keeps the Unit Dashboard; the office's people keep the console.
+    expect(landingFor(makeMe({ membership: member({ directCount: 2 }), activation: { open: true, complete: false } }))).toBe('/unit/dashboard');
+    expect(landingFor(makeMe({ membership: member({ isKpmAdmin: true }), activation: { open: true, complete: false } }))).toBe(OFFICE_LANDING);
+  });
+
   it('lets a pending membership win over any role it carries', () => {
     // The order runs most specific first: several of these are true at once, and being
     // unapproved outranks being an AB.

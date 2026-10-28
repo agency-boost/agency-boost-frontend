@@ -143,7 +143,11 @@ function Chrome({
           done: me.activation.complete,
         } satisfies NavItem]
         : []),
-      ...(me?.newHires
+      /*
+       * P18.96-T3 AC-1 (ADR-0170 §1; UI-001): and to a leader who may add agents, so *+ Add agent* and *Review
+       * requests* are a tap away before their first hire — where the page itself is theirs (`new_hires:read_roster`).
+       */
+      ...(me?.newHires || (me?.permissions.includes('member:invite') && me.permissions.includes('new_hires:read_roster'))
         ? [{ label: 'New hires', href: '/new-hires', icon: 'userPlus', active: on('/new-hires') } satisfies NavItem]
         : []),
     ],

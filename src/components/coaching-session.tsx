@@ -10,6 +10,7 @@ import {
 import { useSessionHistoryPrefetch } from '@/components/coaching-person';
 import { LeadsTable } from '@/components/leads-table';
 import { SummaryCard } from '@/components/personal-summary';
+import { DateField } from '@/components/ui/date-field';
 import { Button, ErrorBanner, TextInput } from '@/components/ui/field';
 import { REMOVED_ON_PHONE, TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
@@ -639,14 +640,13 @@ function LastWeekCard({ session, draft, locked }: { session: CoachingSession; dr
               {locked ? (
                 <DateTag day={row.dueDate} />
               ) : (
-                <TextInput
-                  type="date"
-                  density="cell"
+                <DateField
+                  density="compact"
                   aria-label={`Date, ${item.text || `item ${i + 1}`}`}
-                  className="w-[8.5rem] border-hairline"
-                  value={row.dueDate ?? ''}
-                  onChange={(e) => {
-                    const dueDate = e.target.value || null;
+                  className="w-[9.5rem]"
+                  value={row.dueDate}
+                  onChange={(next) => {
+                    const dueDate = next || null;
                     draft.commit((d) => ({ ...d, lastWeek: d.lastWeek.map((r) => (r.itemId === item.itemId ? { ...r, dueDate } : r)) }), `lastWeek:${item.itemId}`);
                   }}
                 />
@@ -1088,13 +1088,13 @@ function NextActionsCard({
                 </>
               ) : (
                 <>
-                  <TextInput
-                    type="date"
+                  <DateField
+                    density="compact"
                     aria-label={`Date, action item ${i + 1}`}
-                    className="h-8 w-[118px] px-2"
-                    value={item.dueDate ?? ''}
-                    onChange={(e) => {
-                      const dueDate = e.target.value || null;
+                    className="w-[9.5rem]"
+                    value={item.dueDate}
+                    onChange={(next) => {
+                      const dueDate = next || null;
                       draft.commit((d) => ({ ...d, actions: d.actions.map((a) => (a.key === item.key ? { ...a, dueDate } : a)) }), `action:${item.key}`);
                     }}
                   />

@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { LeaderLimitNotice, LeaderLimitWaiting, isLeaderLimit } from '@/components/leader-limit-notice';
 import { Page } from '@/components/page';
+import { INBOX_COPY } from '@/components/request-inbox';
+import { TransferRequests } from '@/components/transfer-requests';
+import { DateField } from '@/components/ui/date-field';
 import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import {
@@ -17,8 +20,9 @@ import { daysAgoWords } from '@/lib/kpm-overview';
 import { CORE_LEADER_LABEL } from '@/lib/profile-line';
 import { displayName } from '@/lib/display-name';
 import { useDebounced } from '@/lib/use-debounced';
+import { useCan } from '@/lib/session';
 import { declineRequest, readInbox, approveRequest, type PendingRequest } from '@/lib/join';
-import { formatDateTime, formatOfficeDay } from '@/lib/format';
+import { dayInZone, formatDateTime, formatOfficeDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import {
   askLeaderLimitApproval, cancelLeaderLimitRequest, pendingFor, readLeaderLimitRequests, requestedChange,
   type LeaderLimitRequestRow,
@@ -138,6 +142,14 @@ export default function MembersPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [counts, setCounts] = useState<MemberPage['counts'] | null>(null);
   const [requests, setRequests] = useState<PendingRequest[] | null>(null);
+  /**
+   * P18.96-T7 G1 (ADR-0169; T3's rule on every approval): *Approve* asks for the join date — the request whose row has
+   * its *Join date* open, and the date, the office's today by default and never after it — as the request inbox does.
+   */
+  const officeToday = dayInZone(OFFICE_TIME_ZONE, new Date());
+  const [approving, setApproving] = useState<string | null>(null);
+  const [joinDate, setJoinDate] = useState(officeToday);
+  const lateDate = joinDate !== '' && joinDate > officeToday;
   const [error, setError] = useState<ApiError | null>(null);
   /**
    * ADR-0157: an approval the leader limit refused may be asked of AgencyBoost — `refusedFor` is whose — and the
@@ -146,6 +158,17 @@ export default function MembersPage() {
   const [refusedFor, setRefusedFor] = useState<string | null>(null);
   const [asks, setAsks] = useState<LeaderLimitRequestRow[] | null>(null);
   const ladder = useLadder();
+  /** P18.96-T3 AC-3: the office's transfer requests sit on the Pending tab, for whoever decides them. */
+  const mayDecideTransfers = useCan('member:transfer_approve');
+
+  /*
+   * **A notice opens its tab** (P18.96-T3): a transfer request's notice links to `?tab=pending`. Read once from the
+   * address on arrival, so a tab chosen afterwards is the reader's.
+   */
+  useEffect(() => {
+    const asked = new URLSearchParams(window.location.search).get('tab');
+    if (TABS.some((t) => t.key === asked)) setTab(asked as TabKey);
+  }, []);
 
   const load = useCallback(
     async (cursor?: string) => {
@@ -267,8 +290,9 @@ export default function MembersPage() {
       // The server answers with the queue as it now stands, so two admins deciding at
       // once see the truth rather than their own guess about it.
       setRequests(
-        action === 'approve' ? await approveRequest(requestId) : await declineRequest(requestId),
+        action === 'approve' ? await approveRequest(requestId, undefined, joinDate) : await declineRequest(requestId),
       );
+      setApproving(null);
       // The decided person leaves this population, so the list and its count move too.
       const waiting = await listMembers({ status: 'pending' });
       setPage(waiting.members);
@@ -525,11 +549,45 @@ export default function MembersPage() {
                           cancelling={busy}
                           onCancel={() => void cancelAsk(pendingFor(asks, m.membershipId)!.requestId)}
                         />
+                      ) : ask && approving === ask.requestId ? (
+                        // The first *Approve* opened the row's *Join date*; this one sends it (P18.96-T7 G1).
+                        <span className="flex flex-wrap items-end gap-2">
+                          <Field
+                            label={INBOX_COPY.joinDate}
+                            htmlFor={`join-${ask.requestId}`}
+                            hint={INBOX_COPY.joinDateHint}
+                            error={lateDate ? INBOX_COPY.lateDate(officeToday) : undefined}
+                            className="w-56"
+                          >
+                            <DateField
+                              id={`join-${ask.requestId}`}
+                              value={joinDate}
+                              max={officeToday}
+                              invalid={lateDate}
+                              onChange={setJoinDate}
+                              className="w-full"
+                            />
+                          </Field>
+                          <span className="flex flex-wrap gap-2">
+                            <Button
+                              disabled={busy || lateDate || !joinDate}
+                              onClick={() => void decide(ask.requestId, 'approve')}
+                            >
+                              {INBOX_COPY.approve}
+                            </Button>
+                            <Button variant="secondary" disabled={busy} onClick={() => setApproving(null)}>
+                              {INBOX_COPY.cancel}
+                            </Button>
+                          </span>
+                        </span>
                       ) : ask ? (
                         <span className="flex flex-wrap gap-2">
                           <Button
                             disabled={busy}
-                            onClick={() => void decide(ask.requestId, 'approve')}
+                            onClick={() => {
+                              setApproving(ask.requestId);
+                              setJoinDate(officeToday);
+                            }}
                           >
                             Approve
                           </Button>
@@ -552,6 +610,7 @@ export default function MembersPage() {
               })}
             </DataTable>
           )}
+          {mayDecideTransfers && <TransferRequests />}
         </>
       )}
 

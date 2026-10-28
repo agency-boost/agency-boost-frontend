@@ -749,7 +749,7 @@ function CommissionEditor({
           somebody reads as their pay is never one this product invents.
         </p>
       ) : (
-        <table className="border-collapse">
+        <table className="relative border-collapse">
           <caption className="sr-only">Commission rate</caption>
           <thead>
             <tr>

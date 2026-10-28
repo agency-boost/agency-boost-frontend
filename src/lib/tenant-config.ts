@@ -387,7 +387,8 @@ export function stageChange(now: ConfigChange[], change: ConfigChange): ConfigCh
 export interface ActivationLink {
   kind: string;
   label: string;
-  route: string;
+  /** `null` for a data-backed item's kind, whose way in is its own form, and a module not offered. */
+  route: string | null;
   completesWhen: string;
   /**
    * Whether an evaluator exists yet. Until it does, a leader ticks the item by hand.
@@ -397,13 +398,20 @@ export interface ActivationLink {
    * our schedule, not the reader's.
    */
   live: boolean;
+  /**
+   * The form a hand tick opens — `closing` or `one_on_one` — for a data-backed item's kind (P18.96-T4), `null` for every
+   * other link. Absent from a fixture written before it, which reads as `null`.
+   */
+  form?: 'closing' | 'one_on_one' | null;
 }
 
 export interface ActivationItem {
   code: string;
   label: string;
   displayOrder: number;
+  /** As stored: what a draft saves back — `null` for the three data-backed items, whose kind their code binds. */
   autoLink: string | null;
+  /** What completes the item, resolved — for the three data-backed items, their bound kind (P18.96-T7 G2). */
   link: ActivationLink | null;
 }
 

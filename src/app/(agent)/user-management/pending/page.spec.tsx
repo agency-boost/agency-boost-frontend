@@ -1,9 +1,19 @@
-import { screen, within } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import { makeMe, renderInLayout, stubFetch } from '@test/harness';
+import { dayInZone, OFFICE_TIME_ZONE } from '@/lib/format';
 import PendingPage from './page';
+
+/** The office's today, the join date approving defaults to (P18.96-T3 AC-5). */
+const TODAY = dayInZone(OFFICE_TIME_ZONE, new Date());
+
+/** *Approve* opens the row's join date, and *Approve* again sends it (P18.96-T3 AC-5, ADR-0170 §5). */
+async function approve() {
+  await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+}
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -132,10 +142,48 @@ describe('the approval inbox (P3-T5)', () => {
     });
     renderInLayout(AgentLayout, <PendingPage />, { me: AB });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await approve();
 
     const post = calls.find((c) => c.url.includes('/approve'))!;
-    expect(JSON.parse(post.init.body as string)).toEqual({});
+    expect(JSON.parse(post.init.body as string)).toEqual({ joinDate: TODAY });
+  });
+
+  it('P18.96-T3 AC-5 approving asks for the join date, today by default, and sends the one chosen; a day after today holds it', async () => {
+    const { calls } = stubFetch({
+      '/join/requests/routing': { body: [] },
+      '/join/requests/req-1/approve': { body: [] },
+      '/join/requests': { body: [request()] },
+    });
+    renderInLayout(AgentLayout, <PendingPage />, { me: AB });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    // Nothing is sent by the first press: it asks when they joined.
+    expect(calls.some((c) => c.url.includes('/approve'))).toBe(false);
+    const field = screen.getByLabelText('Join date');
+    expect(field).toHaveValue(TODAY);
+    expect(field).toHaveAttribute('max', TODAY);
+
+    fireEvent.change(field, { target: { value: '2999-01-01' } });
+    expect(await screen.findByText(/The join date cannot be after today/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+
+    fireEvent.change(field, { target: { value: '2026-01-05' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    const post = calls.find((c) => c.url.includes('/approve'))!;
+    expect(JSON.parse(post.init.body as string)).toEqual({ joinDate: '2026-01-05' });
+  });
+
+  it('P18.96-T3 AC-5 backs out of approving with Cancel, sending nothing', async () => {
+    const { calls } = stubFetch({
+      '/join/requests/routing': { body: [] },
+      '/join/requests': { body: [request()] },
+    });
+    renderInLayout(AgentLayout, <PendingPage />, { me: AB });
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByLabelText('Join date')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Decline' })).toBeInTheDocument();
+    expect(calls.some((c) => c.url.includes('/approve'))).toBe(false);
   });
 
   it('AC-2: approves into the unit that was chosen', async () => {
@@ -147,10 +195,10 @@ describe('the approval inbox (P3-T5)', () => {
     renderInLayout(AgentLayout, <PendingPage />, { me: AB });
 
     await userEvent.selectOptions(await screen.findByLabelText('Add to'), 'mem-aab');
-    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await approve();
 
     const post = calls.find((c) => c.url.includes('/approve'))!;
-    expect(JSON.parse(post.init.body as string)).toEqual({ routeToMembershipId: 'mem-aab' });
+    expect(JSON.parse(post.init.body as string)).toEqual({ routeToMembershipId: 'mem-aab', joinDate: TODAY });
   });
 
   it('takes the inbox the server returned, not its own guess at it', async () => {
@@ -163,7 +211,7 @@ describe('the approval inbox (P3-T5)', () => {
     });
     renderInLayout(AgentLayout, <PendingPage />, { me: AB });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await approve();
     expect(await screen.findByText('No pending requests right now.')).toBeInTheDocument();
   });
 
@@ -226,7 +274,7 @@ describe('the approval inbox (P3-T5)', () => {
     });
     renderInLayout(AgentLayout, <PendingPage />, { me: AB });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await approve();
 
     expect(await screen.findByRole('alert')).toHaveTextContent('already approved');
     expect(calls.filter((c) => c.url.endsWith('/join/requests')).length).toBeGreaterThan(1);
@@ -250,7 +298,7 @@ describe('the approval inbox (P3-T5)', () => {
     });
     renderInLayout(AgentLayout, <PendingPage />, { me: AB });
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await approve();
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(
@@ -305,7 +353,7 @@ describe('the approval inbox (P3-T5)', () => {
       });
       renderInLayout(AgentLayout, <PendingPage />, { me: ASKER });
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+      await approve();
       const alert = await screen.findByRole('alert');
       await userEvent.click(within(alert).getByRole('button', { name: 'Ask AgencyBoost to approve' }));
 

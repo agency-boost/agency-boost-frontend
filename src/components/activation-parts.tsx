@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Card, TextInput } from '@/components/ui/field';
+import { DateField } from '@/components/ui/date-field';
+import { Card } from '@/components/ui/field';
 import { KpiTile } from '@/components/ui/kpi-tile';
 import { NavIcon } from '@/components/ui/nav-icon';
 import { NumberBadge } from '@/components/ui/number-badge';
@@ -132,7 +133,7 @@ function AspectTable({ aspects, caption }: { aspects: readonly ActivationAspectP
   const HEAD = 'border-b border-hairline px-2.5 py-1 text-left text-2xs font-semibold uppercase tracking-wide text-muted';
   const CELL = 'border-b border-hairline px-2.5 py-1.5 text-sm font-medium text-navy';
   return (
-    <table className="w-full border-collapse">
+    <table className="relative w-full border-collapse">
       <caption className="sr-only">{caption}</caption>
       <thead>
         <tr>
@@ -255,14 +256,16 @@ export function useWriteQueue() {
 export const DATE_SETTLE_MS = 600;
 
 /**
- * A date written as the prototype writes its inputs, **on change, with no save button** (`:6662-6668`).
+ * A date written as the prototype writes its inputs, **on change, with no save button** (`:6662-6668`), through the
+ * shared {@link DateField} (P18.96-T2 AC-4): the date is shown as the app writes it, and the device's picker chooses
+ * it.
  *
- * A date can be typed a digit at a time, and every partial value but the last is a date nobody meant:
- * so a value is written once it is whole and `allowed`, after a short pause, and at once when the field
- * is left. Clearing it writes `null` when `clearable`. A write the server refuses puts the field back:
- * `value` is the last saved date, and the field returns to it whenever it changes or `resetKey` does.
+ * A date can still be typed a digit at a time where a browser lets the field take keys, and every partial value but
+ * the last is a date nobody meant: so a value is written once it is whole and `allowed`, after a short pause, and at
+ * once when the field is left. Clearing it writes `null` when `clearable`. A write the server refuses puts the field
+ * back: `value` is the last saved date, and the field returns to it whenever it changes or `resetKey` does.
  */
-export function DateField({
+export function AutoSaveDateField({
   id, value, onCommit, allowed = isWholeDate, clearable = false, invalidText, resetKey = 0, className, ...rest
 }: {
   id?: string;
@@ -307,22 +310,21 @@ export function DateField({
 
   return (
     <span className={cn('inline-flex flex-col', className)}>
-      <TextInput
+      <DateField
         {...rest}
         id={id}
-        type="date"
+        density="compact"
         value={draft}
         invalid={invalid}
         aria-describedby={invalid && invalidText ? errorId : rest['aria-describedby']}
-        onChange={(e) => {
-          const next = e.target.value;
+        onChange={(next) => {
           setDraft(next);
           setInvalid(false);
           if (timer.current) clearTimeout(timer.current);
           timer.current = setTimeout(() => commit(next), DATE_SETTLE_MS);
         }}
         onBlur={(e) => commit(e.target.value, true)}
-        className="h-[34px] w-[150px] text-base"
+        className="w-[150px]"
       />
       {invalid && invalidText && (
         <span id={errorId} role="alert" className="mt-1 text-xs font-semibold text-alert">{invalidText}</span>

@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
@@ -366,6 +366,21 @@ describe('/product-catalog/[productCode], the drawer (P14-T7)', () => {
       await userEvent.click(document.querySelector('[data-scrim]') as HTMLElement);
       expect(nav.replace).toHaveBeenCalledTimes(3);
       expect(nav.back).not.toHaveBeenCalled();
+    });
+
+    it('P18.96-T1 AC-2 the drawer is the dynamic viewport tall and scrolls inside, and the grid behind holds still', async () => {
+      document.body.style.overflow = 'auto';
+      try {
+        drawer('PRUMAPAN');
+        const box = await dialog();
+        expect(box).toHaveClass('h-[100dvh]', 'overflow-y-auto', 'overscroll-contain');
+        expect(box).not.toHaveClass('h-full');
+        expect(document.body.style.overflow).toBe('hidden');
+        cleanup();
+        expect(document.body.style.overflow).toBe('auto');
+      } finally {
+        document.body.style.overflow = '';
+      }
     });
 
     it('P14-T7 AC-4 closing a drawer the grid opened goes back, so Back and ✕ agree', async () => {

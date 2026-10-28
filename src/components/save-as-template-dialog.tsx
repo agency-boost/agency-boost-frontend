@@ -98,8 +98,16 @@ export function SaveAsTemplateDialog({
       description={`What KPM ${kpm.code}’s agents read now becomes a new template: its published settings, never unpublished edits or anything archived. No member, log or lead is copied.`}
       onClose={onClose}
       className="max-w-[30rem]"
+      footer={(
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" form={`${id}-form`} disabled={saving || companies === null}>
+            {saving ? 'Saving…' : 'Save template'}
+          </Button>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+        </div>
+      )}
     >
-      <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+      <form id={`${id}-form`} onSubmit={submit} className="flex flex-col gap-4" noValidate>
         {loadError && <ErrorBanner {...loadError} />}
         {error && <ErrorBanner {...error} />}
         <Field label="Name" htmlFor={`${id}-name`} error={nameError}>
@@ -123,12 +131,6 @@ export function SaveAsTemplateDialog({
             </Select>
           </Field>
         )}
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={saving || companies === null}>
-            {saving ? 'Saving…' : 'Save template'}
-          </Button>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
-        </div>
       </form>
     </Modal>
   );

@@ -99,6 +99,15 @@ export function landingFor(me: Me | null): string {
   // console's identity menu; signing in still brings them here.
   if (membership.isKpmOwner || membership.isKpmAdmin) return OFFICE_LANDING;
 
+  /*
+   * **A new hire in their 90 days, who leads nobody, starts on their activation** (P18.96-T3 AC-4, ADR-0170 §3): the
+   * checklist is what their first weeks are for, and somebody who joined on a leader's invite lands there after their
+   * first sign-in, as the client asked. Until it is all done: at 100% it waits only for *Mark activation complete*,
+   * which the nav's amber check points to, and graduating — which lands the reader where `/` would — must not send
+   * them back to it. A leader who is also a new hire keeps the Unit Dashboard.
+   */
+  if (me.activation?.open && !me.activation.complete && membership.directCount === 0) return '/activation';
+
   // Everyone else: leading people, by the graph and not the role, lands on the Unit Dashboard;
   // leading nobody, on their own day. The same function answers the console's *Open agent view*.
   return fieldLandingFor(membership);

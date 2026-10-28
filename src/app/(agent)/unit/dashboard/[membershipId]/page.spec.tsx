@@ -1,23 +1,25 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderInLayout, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
 import { AGUS_ME, RATIOS, SARI_UNIT } from '@test/unit-dashboard-fixtures';
 import AgentLayout from '../../../layout';
 import UnitBelowPage from './page';
 
-const nav = vi.hoisted(() => ({ replace: vi.fn() }));
+const nav = vi.hoisted(() => ({ replace: vi.fn(), search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: nav.replace }),
   usePathname: () => '/unit/dashboard/mem-sari',
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 function render(reply: StubReply | StubReply[] = { body: SARI_UNIT }, me = AGUS_ME, period?: string) {
   const stub = stubFetch({ 'GET /unit/dashboard': reply, '/activity/ratios': { body: RATIOS } });
-  renderWithSession(
-    <UnitBelowPage params={routeParams({ membershipId: 'mem-sari' })} searchParams={routeParams(period ? { period } : {})} />,
-    { me },
-  );
+  nav.search = new URLSearchParams(period ? { period } : {}).toString();
+  renderWithSession(<UnitBelowPage params={routeParams({ membershipId: 'mem-sari' })} />, { me });
   return stub;
 }
 
@@ -151,11 +153,7 @@ describe('a unit below the reader (P15-T4 AC-2)', () => {
       '/notifications': { body: { items: [], unread: 0 } },
       'GET /unit/dashboard': { body: SARI_UNIT },
     });
-    renderInLayout(
-      AgentLayout,
-      <UnitBelowPage params={routeParams({ membershipId: 'mem-sari' })} searchParams={routeParams({})} />,
-      { me: AGUS_ME },
-    );
+    renderInLayout(AgentLayout, <UnitBelowPage params={routeParams({ membershipId: 'mem-sari' })} />, { me: AGUS_ME });
     await screen.findByRole('table');
     const main = screen.getByRole('navigation', { name: 'Main' });
     expect(within(main).getByRole('link', { name: 'Unit dashboard' })).toHaveAttribute('aria-current', 'page');

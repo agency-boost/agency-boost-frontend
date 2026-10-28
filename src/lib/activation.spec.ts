@@ -2,15 +2,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
-import { activationView, item, RINA, SARI } from '@test/activation-fixtures';
+import { activationView, item, LINKS, RINA, SARI } from '@test/activation-fixtures';
 import {
-  ACTIVATION_NOTE_MAX, aspectTitle, attributionOf, correctionOf, correctStartDate, dayShown, earliestStart,
-  FIRST_CASE_CLOSED, graduateMyActivation, groupTitle, isComplete, isManual, isTickedByHandLink, isWholeDate, ITEM_NOTE_MAX, newHireHref, OWN_COPY,
-  PROTOTYPE_COPY, readMyActivation, readNewHire, readNewHires, saveActivationNote, saveHireItem, saveMyItem,
-  startDateAllowed, startDateRangeText,
+  ACTIVATION_3M_LABEL, ACTIVATION_NOTE_MAX, aspectTitle, attributionOf, correctionOf, correctStartDate, dayShown, earliestStart,
+  FIRST_CASE_CLOSED, graduateMyActivation, groupTitle, isComplete, isDataBacked, isManual, isTickedByHandLink, isWholeDate, ITEM_NOTE_MAX,
+  newHireHref, OWN_COPY, PROTOTYPE_COPY, readHireClosings, readMyActivation, readMyClosings, readNewHire, readNewHires, recordHref,
+  saveActivationNote, saveHireItem, saveMyItem, sourceLineOf, startDateAllowed, startDateRangeText, takesHandWrite,
 } from './activation';
 
-const LINK = { kind: 'feature:goals', label: 'Goal Settings', route: '/goals', completesWhen: 'x', live: true };
+const LINK = { kind: 'feature:goals', label: 'Goal Settings', route: '/goals', completesWhen: 'x', live: true, form: null };
 
 describe('the activation’s calls (P13, the fixed contract)', () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -45,6 +45,22 @@ describe('the activation’s calls (P13, the fixed contract)', () => {
     ]);
   });
 
+  it('P18.96-T4 AC-3 reads the closings and sends a data-backed item’s tick with its record, in one request', async () => {
+    const { calls } = stubFetch({
+      '/activation/me/closings': { body: { closings: [] } }, '/activation/me': { body: activationView() }, '/new-hires': { body: {} },
+    });
+    await readMyClosings();
+    await readHireClosings('mem/1');
+    await saveMyItem('FIRST_CASE_CLOSED', { done: true, record: { kind: 'closing', name: 'Ibu Ratna', date: '2026-09-03' } });
+    await saveHireItem('mem-1', 'WEEKLY_CHECK_IN', true, { kind: 'one_on_one', date: '2026-09-07', note: 'Check-in' });
+    expect(calls.map((c) => [c.init.method, c.url.replace('http://api.test/api/v1', ''), c.init.body])).toEqual([
+      ['GET', '/activation/me/closings', undefined],
+      ['GET', '/new-hires/mem%2F1/closings', undefined],
+      ['PUT', '/activation/me/items/FIRST_CASE_CLOSED', '{"done":true,"record":{"kind":"closing","name":"Ibu Ratna","date":"2026-09-03"}}'],
+      ['PUT', '/new-hires/mem-1/items/WEEKLY_CHECK_IN', '{"done":true,"record":{"kind":"one_on_one","date":"2026-09-07","note":"Check-in"}}'],
+    ]);
+  });
+
   it('pins the contract’s limits and the code the Active Agent column reads', () => {
     expect(ITEM_NOTE_MAX).toBe(500);
     expect(ACTIVATION_NOTE_MAX).toBe(1000);
@@ -76,11 +92,11 @@ describe('the small readings', () => {
   });
 
   it('names the roster’s cards: Direct Unit, or AAB: {name}', () => {
-    expect(groupTitle({ kind: 'direct', leader: null, hires: [] })).toBe('Direct Unit');
-    expect(groupTitle({ kind: 'aab', leader: SARI, hires: [] })).toBe('AAB: Sari Puspita');
+    expect(groupTitle({ kind: 'direct', leader: null })).toBe('Direct Unit');
+    expect(groupTitle({ kind: 'aab', leader: SARI })).toBe('AAB: Sari Puspita');
     // D-group's Fix: an AB under the reader names its rung.
-    expect(groupTitle({ kind: 'ab', leader: SARI, hires: [] })).toBe('AB: Sari Puspita');
-    expect(groupTitle({ kind: 'aab', leader: null, hires: [] })).toBe('Direct Unit');
+    expect(groupTitle({ kind: 'ab', leader: SARI })).toBe('AB: Sari Puspita');
+    expect(groupTitle({ kind: 'aab', leader: null })).toBe('Direct Unit');
     expect(newHireHref('mem 1')).toBe('/new-hires/mem%201');
   });
 
@@ -101,6 +117,55 @@ describe('the small readings', () => {
     expect(isTickedByHandLink(completed)).toBe(false);
     // Ticked by hand while the module was withdrawn: still a hand's, still untickable by hand.
     expect(isManual(item('A', 'a', { link: orphan, done: true, source: 'hire' }))).toBe(true);
+  });
+
+  describe('the data-backed items (P18.96-T4 AC-2 to AC-4)', () => {
+    const at = '2026-09-30T23:30:00.000Z';
+    const sale = (over = {}) => item('FIRST_CASE_CLOSED', 'Close first case independently', { link: LINKS['sales:first'], ...over });
+    const checkIn = (over = {}) => item('WEEKLY_CHECK_IN', 'Weekly 1-on-1 check-in (4 weeks)', { link: LINKS['coaching:weekly:4'], ...over });
+
+    it('P18.96-T4 AC-2 knows one by its link’s form, never by its code', () => {
+      expect(isDataBacked(sale())).toBe(true);
+      expect(isDataBacked(item('FIRST_CASE_CLOSED', 'x'))).toBe(false);
+      expect(isDataBacked(item('A', 'a', { link: LINK }))).toBe(false);
+      // Live, so never a manual row: its form is its way in.
+      expect(isManual(sale())).toBe(false);
+    });
+
+    it('P18.96-T4 AC-2 reads “Completed from Sales data · {date}” from its data, naming nobody', () => {
+      const done = sale({ done: true, doneAt: at, source: 'link', doneBy: RINA, record: { collection: 'leads', id: 'l1' } });
+      expect(sourceLineOf(done, 'mem-rina')).toBe('Completed from Sales data · 1 Okt 2026');
+      expect(attributionOf(done, 'mem-rina')).toBe('Completed from Sales data · 1 Okt 2026');
+      expect(sourceLineOf(checkIn({ done: true, doneAt: at, source: 'link', doneBy: SARI }), 'mem-rina'))
+        .toBe('Completed from Coaching sessions · 1 Okt 2026');
+      expect(sourceLineOf(sale(), 'mem-rina')).toBeNull();
+      expect(sourceLineOf(item('A', 'a', { done: true, source: 'hire', doneBy: RINA }), 'mem-rina')).toBeNull();
+    });
+
+    it('P18.96-T4 AC-4 reads “Ticked by {name}, waiting for data” for a hand tick not yet confirmed — you, for the reader', () => {
+      expect(sourceLineOf(checkIn({ done: true, doneAt: at, source: 'leader', doneBy: SARI, waiting: true }), 'mem-rina'))
+        .toBe('Ticked by Sari Puspita, waiting for data');
+      expect(sourceLineOf(sale({ done: true, doneAt: at, source: 'hire', doneBy: RINA, waiting: true }), 'mem-rina'))
+        .toBe('Ticked by you, waiting for data');
+    });
+
+    it('P18.96-T4 AC-2 links the record its reader has a page for: the hire’s Leads and sessions, a leader’s session archive', () => {
+      const session = checkIn({ done: true, source: 'link', record: { collection: 'coachingSessions', id: 's 1' } });
+      expect(recordHref(session, 'hire', 'mem-rina')).toBe('/coaching/me?session=s%201');
+      expect(recordHref(session, 'leader', 'mem-rina')).toBe('/coaching/mem-rina/archive/s%201');
+      const lead = sale({ done: true, source: 'link', record: { collection: 'leads', id: 'l1' } });
+      expect(recordHref(lead, 'hire', 'mem-rina')).toBe('/leads');
+      expect(recordHref(lead, 'leader', 'mem-rina')).toBeNull();
+      expect(recordHref(sale({ done: true, source: 'link', record: { collection: 'monthlyAgentData', id: 'm' } }), 'hire', 'x')).toBeNull();
+      expect(recordHref(sale(), 'hire', 'x')).toBeNull();
+    });
+
+    it('P18.96-T4 AC-3 takes a hand write until its data completed it', () => {
+      expect(takesHandWrite(sale())).toBe(true);
+      expect(takesHandWrite(sale({ done: true, source: 'hire', waiting: true }))).toBe(true);
+      expect(takesHandWrite(sale({ done: true, source: 'link' }))).toBe(false);
+      expect(takesHandWrite(item('A', 'a'))).toBe(false);
+    });
   });
 
   describe('attribution (OD-121, P13-T4 AC-5)', () => {
@@ -128,10 +193,17 @@ describe('the small readings', () => {
       expect(attributionOf(item('A', 'a', { done: true, doneAt: null, source: 'hire', doneBy: null }), 'mem-rina')).toBeNull();
     });
 
-    it('says who corrected a start date, or nothing when nobody did', () => {
+    it('P18.96-T2 AC-5 says who corrected a join date, or nothing when nobody did', () => {
       expect(correctionOf(activationView(), 'mem-rina')).toBeNull();
-      expect(correctionOf(activationView({ startCorrected: { by: SARI, at } }), 'mem-sari')).toBe('Start date corrected by you · 1 Okt 2026');
-      expect(correctionOf(activationView({ startCorrected: { by: SARI, at } }), 'mem-rina')).toBe('Start date corrected by Sari Puspita · 1 Okt 2026');
+      expect(correctionOf(activationView({ startCorrected: { by: SARI, at } }), 'mem-sari')).toBe('Join date corrected by you · 1 Okt 2026');
+      expect(correctionOf(activationView({ startCorrected: { by: SARI, at } }), 'mem-rina')).toBe('Join date corrected by Sari Puspita · 1 Okt 2026');
+    });
+
+    it('P18.96-T2 AC-5 one name for the one date: Join date, and its toast', () => {
+      expect(PROTOTYPE_COPY.joinDate).toBe('Join date');
+      expect(OWN_COPY.startSaved).toBe('Join date updated.');
+      expect(PROTOTYPE_COPY).not.toHaveProperty('startDate');
+      expect(PROTOTYPE_COPY).not.toHaveProperty('joined');
     });
   });
 
@@ -187,6 +259,13 @@ describe('the words (D-copy)', () => {
     }
   });
 
+  it('P18.96-T6 AC-5 the hire’s button reads Mark checklist complete, and its reason names the checklist’s own total', () => {
+    expect(PROTOTYPE_COPY.graduate).toBe('Mark checklist complete');
+    expect(OWN_COPY.graduateLocked(16)).toBe('Unlocks when all 16 items are done');
+    expect(OWN_COPY.graduatedTitle).toBe('Your 90-day checklist is complete.');
+    expect(ACTIVATION_3M_LABEL).toEqual({ in_progress: 'In progress', activated: 'Activated', not_activated: 'Not activated' });
+  });
+
   it('the prototype’s strings are its own, verbatim, with its straight apostrophes', () => {
     expect(PROTOTYPE_COPY.footer).toBe("Visible only to new agents, for their first 6 months. Tenured agents won't see this section.");
     expect(PROTOTYPE_COPY.rosterSubtitle).toBe("Track your new agents' 90-day activation progress.");
@@ -194,8 +273,9 @@ describe('the words (D-copy)', () => {
     expect(PROTOTYPE_COPY.noteExample).toBe("e.g. Great pace on prospecting — let's focus on booking your first joint field work this week.");
     expect(PROTOTYPE_COPY.noteSaved('Rina Wijaya')).toBe('Coaching note saved — visible to Rina Wijaya.');
     expect(PROTOTYPE_COPY.graduated).toBe('Marked as tenured agent — 90-Day Activation removed from menu.');
-    // OD-28 and D-copy: the confirm speaks to the hire, without the demo's sentence.
-    expect(PROTOTYPE_COPY.graduateQuestion).toBe('Mark your activation complete? The 90-Day Activation menu will be removed.');
+    // OD-28 and D-copy: the confirm speaks to the hire, without the demo's sentence. P18.96-T6 AC-5 (ADR-0173 §4): the
+    // checklist is what is complete, never *activation*, which is the 3M result.
+    expect(PROTOTYPE_COPY.graduateQuestion).toBe('Mark your checklist complete? The 90-Day Activation menu will be removed.');
     expect(PROTOTYPE_COPY.graduateQuestion).not.toMatch(/same as when a real agent/);
   });
 });

@@ -48,7 +48,19 @@ export function FeedbackDialog({ eventId, title, onClose }: { eventId: string; t
   const feedback = mayReadFeedback && <FeedbackSummarySection eventId={eventId} version={version} />;
 
   return (
-    <Modal open title={title} onClose={onClose} focusDialog className="max-w-[44rem]">
+    <Modal
+      open
+      title={title}
+      onClose={onClose}
+      focusDialog
+      className="max-w-[44rem]"
+      footer={(
+        // A way out a finger can find: Escape and the scrim close it too, and neither is visible. Held at the foot.
+        <div className="flex justify-end pt-1">
+          <Button variant="secondary" onClick={onClose}>{ADMIN_COPY.close}</Button>
+        </div>
+      )}
+    >
       {tabbed ? (
         <Segmented
           label={ADMIN_COPY.feedbackParts}
@@ -67,10 +79,6 @@ export function FeedbackDialog({ eventId, title, onClose }: { eventId: string; t
       ) : (
         rollCall || feedback
       )}
-      {/* A way out a finger can find: Escape and the scrim close it too, and neither is visible. */}
-      <div className="mt-5 flex justify-end">
-        <Button variant="secondary" onClick={onClose}>{ADMIN_COPY.close}</Button>
-      </div>
     </Modal>
   );
 }

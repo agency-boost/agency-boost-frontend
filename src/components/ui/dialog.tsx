@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useScrollLock } from '@/lib/use-scroll-lock';
 import { Button } from './field';
 
 /**
@@ -45,6 +46,9 @@ export function Dialog({
   const cancel = useRef<HTMLButtonElement>(null);
   const returnTo = useRef<Element | null>(null);
 
+  // The page behind holds still while the question is asked — over a drawer or a dialog too, counted.
+  useScrollLock(open);
+
   useEffect(() => {
     if (!open) return;
     returnTo.current = document.activeElement;
@@ -82,10 +86,11 @@ export function Dialog({
         aria-label={message}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={trap}
-        className="w-full max-w-[22.5rem] rounded-lg bg-card p-6 shadow-modal"
+        // Never taller than the screen (P18.96-T1 AC-2): a long question scrolls inside, and the two buttons stay.
+        className="flex max-h-[calc(100dvh-2.5rem)] w-full max-w-[22.5rem] flex-col rounded-lg bg-card p-6 shadow-modal"
       >
-        <p className="mb-4 text-md leading-relaxed text-navy">{message}</p>
-        <div className="flex justify-end gap-2.5">
+        <p className="mb-4 min-h-0 overflow-y-auto overscroll-contain text-md leading-relaxed text-navy">{message}</p>
+        <div className="flex shrink-0 justify-end gap-2.5">
           <Button ref={cancel} variant="secondary" onClick={onCancel}>
             {cancelLabel}
           </Button>

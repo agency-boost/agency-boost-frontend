@@ -1,8 +1,8 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
-import { makeMe, renderInLayout, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { makeMe, renderInLayout, renderWithSession, stubFetch, type StubReply } from '@test/harness';
 import {
   AAB_RUNG, AGUS, busy, DOWNLINE, entry, monthRead, peoplePage, person, RINA, SHELL_STUBS, trip, WEEK, weekRead,
 } from '@test/calendar-fixtures';
@@ -12,10 +12,15 @@ import { PHONE_QUERY } from '@/lib/use-phone';
 import AgentLayout from '../layout';
 import CalendarPage from './page';
 
+const nav = vi.hoisted(() => ({ search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/calendar',
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 /**
  * jsdom has no `PointerEvent`, so a pointer event would arrive without its `clientY` and its type.
@@ -47,11 +52,12 @@ const MONTH_READ = '/calendar/entries?view=month';
 /** The reader's own setting, *Hide my personal activities* (ADR-0110): off, as a new member's is. */
 const SETTINGS = '/calendar/settings';
 
-type Query = { view?: string; date?: string; entry?: string };
+type Query = { view?: string; date?: string; entry?: string; with?: string };
 
 function show(routes: Record<string, StubReply | StubReply[]> = {}, me = AGUS, query?: Query) {
   const stub = stubFetch({ [WEEK_READ]: { body: weekRead() }, [SETTINGS]: { body: { hideDetails: false } }, ...routes });
-  renderWithSession(<CalendarPage searchParams={query ? routeParams(query) : undefined} />, { me });
+  nav.search = new URLSearchParams(query).toString();
+  renderWithSession(<CalendarPage />, { me });
   return stub;
 }
 
@@ -172,6 +178,36 @@ describe('P12-T2 — my calendar, week view', () => {
       expect(calls(stub, WEEK_READ)).toHaveLength(1);
       await act(async () => { vi.advanceTimersByTime(60_000); });
       await waitFor(() => expect(calls(stub, WEEK_READ)).toHaveLength(2));
+    });
+  });
+
+  /*
+   * P18.96-T6 AC-4 (ADR-0173 §3): `/new-hires`' *Schedule 1:1* opens `/calendar?with={membershipId}` — the new-entry
+   * dialog as a 1:1 with them. The name comes from the reader's own downline; the address carries only the id.
+   */
+  describe('P18.96-T6 AC-4 a 1:1 asked for by the address', () => {
+    it('P18.96-T6 AC-4 opens New event as 1:1 coaching with them — titled, invited — on the office’s today', async () => {
+      const stub = show({ '/calendar/downline': { body: DOWNLINE } }, AGUS, { with: 'mem-indah' });
+      const dialog = await screen.findByRole('dialog', { name: 'New event' });
+      expect(within(dialog).getByRole('button', { name: '1:1 coaching' })).toHaveAttribute('aria-pressed', 'true');
+      expect(within(dialog).getByLabelText('Title')).toHaveValue('1:1 with Indah Permata');
+      expect(within(dialog).getByText('Indah Permata')).toBeInTheDocument();
+      expect(within(dialog).getByLabelText('Date')).toHaveValue('2026-09-28');
+      expect(calls(stub, '/calendar/downline')).toHaveLength(1);
+    });
+
+    it('P18.96-T6 AC-4 somebody not in the downline: the coaching entry with nobody invited and no name', async () => {
+      show({ '/calendar/downline': { body: DOWNLINE } }, AGUS, { with: 'mem-nobody' });
+      const dialog = await screen.findByRole('dialog', { name: 'New event' });
+      expect(within(dialog).getByRole('button', { name: '1:1 coaching' })).toHaveAttribute('aria-pressed', 'true');
+      expect(within(dialog).getByLabelText('Title')).toHaveValue('');
+    });
+
+    it('P18.96-T6 AC-4 a reader who may not create an entry is opened nothing, and nothing is read for it', async () => {
+      const stub = show({ '/calendar/downline': { body: DOWNLINE } }, { ...AGUS, permissions: ['calendar_entry:read'] }, { with: 'mem-indah' });
+      await grid();
+      expect(screen.queryByRole('dialog', { name: 'New event' })).not.toBeInTheDocument();
+      expect(calls(stub, '/calendar/downline')).toHaveLength(0);
     });
   });
 

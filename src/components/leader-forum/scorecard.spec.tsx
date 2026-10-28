@@ -107,7 +107,7 @@ describe('P18.1-T2 AC-4 Overview & Stats', () => {
     renderTab(Scorecard);
     const caption = screen.getByText(/^Note: AA/).closest('p')!;
     expect(caption.textContent).toBe(
-      'Note: AA = Active Agent; 3M new agent % is the share of new agents producing at least one case in their join month or the following three months.'
+      'Note: AA = Active Agent; 3M new agent % is the share of new agents with a first paid and issued case by day 90 of their join date, of those whose 90 days are over.'
       + 'Source: Manpower, APE, average case size, producing agents, avg. monthly AA, FLC and case submission as tagged to this KPM.',
     );
   });

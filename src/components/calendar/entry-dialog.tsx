@@ -2,6 +2,7 @@
 
 import { useId, useState, type FormEvent } from 'react';
 import { Modal } from '@/components/ui/modal';
+import { DateField } from '@/components/ui/date-field';
 import { Button, ErrorBanner, Field, Textarea, TextInput } from '@/components/ui/field';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
@@ -17,7 +18,11 @@ import { InviteField, type Picked } from './invite-field';
 
 /** What the entry dialog is opened for (`openEventModal`, `:708-773`). */
 export type EditorState =
-  | { mode: 'new'; slot: Slot }
+  /**
+   * `preset`: the new entry opened for somebody — `/new-hires`' *Schedule 1:1* (P18.96-T6 AC-4), a *1:1 coaching* entry
+   * titled with their name and them invited. Every field can still be changed.
+   */
+  | { mode: 'new'; slot: Slot; preset?: { type: EntryType; title: string; invitee: Picked | null } }
   | { mode: 'edit'; entry: CalendarEntry }
   /** *Block time* on a member the reader coaches (ADR-0098), from a compared pane. */
   | { mode: 'block'; slot: Slot; member: Picked };
@@ -30,6 +35,7 @@ function initial(state: EditorState): EntryForm {
   // *Block time* presets *1:1 coaching* and *"1:1 with {full name}"* — the full name where the
   // prototype has the first (`:748`), as L-65 settled for coaching. Both can be changed.
   if (state.mode === 'block') return blankForm(state.slot, 'coaching', `1:1 with ${state.member.name}`);
+  if (state.preset) return blankForm(state.slot, state.preset.type, state.preset.title);
   return blankForm(state.slot);
 }
 
@@ -59,7 +65,8 @@ export function EntryDialog({
 }) {
   const ids = useId();
   const [form, setForm] = useState<EntryForm>(() => initial(state));
-  const [invitees, setInvitees] = useState<Picked[]>(() => (state.mode === 'edit' ? pickedOf(state.entry, false) : []));
+  const [invitees, setInvitees] = useState<Picked[]>(() => (state.mode === 'edit' ? pickedOf(state.entry, false)
+    : state.mode === 'new' && state.preset?.invitee ? [state.preset.invitee] : []));
   // An edit's entry as last read: its version is what the save is pinned to, and its people are
   // whose calendars the save may take it off.
   const [base, setBase] = useState<CalendarEntry | null>(state.mode === 'edit' ? state.entry : null);
@@ -137,8 +144,20 @@ export function EntryDialog({
   const typeLabel = `${ids}-type`;
 
   return (
-    <Modal open title={title} description={description} onClose={onClose} className="max-w-[420px]">
-      <form onSubmit={save} noValidate className="flex flex-col gap-[13px]">
+    <Modal
+      open
+      title={title}
+      description={description}
+      onClose={onClose}
+      className="max-w-[420px]"
+      footer={(
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>{PROTOTYPE_COPY.cancel}</Button>
+          <Button type="submit" form={`${ids}-form`} disabled={busy}>{PROTOTYPE_COPY.saveEvent}</Button>
+        </div>
+      )}
+    >
+      <form id={`${ids}-form`} onSubmit={save} noValidate className="flex flex-col gap-[13px]">
         {state.mode === 'block' && (
           // The note, without the prototype's *" — they'll get a request to accept."* (ADR-0098): a block
           // is a placement, not a request.
@@ -194,16 +213,16 @@ export function EntryDialog({
         {travel ? (
           <div className="flex flex-wrap gap-2.5">
             <Field label={PROTOTYPE_COPY.departure} htmlFor={`${ids}-starts`} error={errors.startsOn} className="min-w-[8rem] flex-1">
-              <TextInput id={`${ids}-starts`} type="date" value={form.startsOn} invalid={!!errors.startsOn} onChange={(e) => set('startsOn', e.target.value)} />
+              <DateField id={`${ids}-starts`} value={form.startsOn} invalid={!!errors.startsOn} onChange={(v) => set('startsOn', v)} className="w-full" />
             </Field>
             <Field label={PROTOTYPE_COPY.return} htmlFor={`${ids}-ends`} error={errors.endsOn} className="min-w-[8rem] flex-1">
-              <TextInput id={`${ids}-ends`} type="date" value={form.endsOn} invalid={!!errors.endsOn} onChange={(e) => set('endsOn', e.target.value)} />
+              <DateField id={`${ids}-ends`} value={form.endsOn} invalid={!!errors.endsOn} onChange={(v) => set('endsOn', v)} className="w-full" />
             </Field>
           </div>
         ) : (
           <div className="flex flex-wrap gap-2.5">
             <Field label={PROTOTYPE_COPY.date} htmlFor={`${ids}-date`} error={errors.date} className="min-w-[8rem] flex-[1.4]">
-              <TextInput id={`${ids}-date`} type="date" value={form.date} invalid={!!errors.date} onChange={(e) => set('date', e.target.value)} />
+              <DateField id={`${ids}-date`} value={form.date} invalid={!!errors.date} onChange={(v) => set('date', v)} className="w-full" />
             </Field>
             <Field label={PROTOTYPE_COPY.start} htmlFor={`${ids}-start`} className="min-w-[6rem] flex-1">
               <TextInput id={`${ids}-start`} type="time" value={form.start} onChange={(e) => set('start', e.target.value)} />
@@ -227,11 +246,6 @@ export function EntryDialog({
 
         {notice && <p role="status" className="text-md font-semibold text-navy">{notice}</p>}
         {banner && <ErrorBanner {...banner} />}
-
-        <div className="mt-1.5 flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>{PROTOTYPE_COPY.cancel}</Button>
-          <Button type="submit" disabled={busy}>{PROTOTYPE_COPY.saveEvent}</Button>
-        </div>
       </form>
     </Modal>
   );

@@ -169,7 +169,8 @@ function FeedbackForm({ event, meta, onAnswer, onStale }: {
   };
 
   return (
-    <div data-block="form">
+    // `contents`: the block draws no box, so *Submit feedback* below is held against the whole modal body.
+    <div data-block="form" className="contents">
       <h3 id={ids.question} className="mb-1 text-md font-bold text-navy">{PROTOTYPE_COPY.formQuestion}</h3>
       <p className="mb-3.5 text-base text-muted">{PROTOTYPE_COPY.formHint}</p>
       <div role="radiogroup" aria-labelledby={ids.question} aria-describedby={ids.ends} className="mb-1.5 flex flex-wrap gap-[5px]">
@@ -215,8 +216,21 @@ function FeedbackForm({ event, meta, onAnswer, onStale }: {
         max={max}
         onChange={setImprove}
       />
-      {error && <div className="mb-3"><ErrorBanner {...error} /></div>}
-      <Button aria-disabled={busy || undefined} onClick={submit}>{PROTOTYPE_COPY.submitFeedback}</Button>
+      {/*
+        * **Held at the foot of the modal** while the form scrolls above it (P18.96-T1 AC-1; UI-043): sticky inside the
+        * modal's own scroll, across its padding, on the card's colour. Where it all fits it sits where it always did,
+        * 14px under the last field, and on a phone it clears the home indicator. A refusal stays beside it.
+        */}
+      <div
+        data-sticky-submit=""
+        className={cn(
+          'sticky bottom-0 z-10 -mx-5 -mb-[26px] -mt-3.5 bg-card px-5 pb-[max(26px,env(safe-area-inset-bottom))] pt-3.5',
+          'sm:-mx-[26px] sm:px-[26px]',
+        )}
+      >
+        {error && <div className="mb-3"><ErrorBanner {...error} /></div>}
+        <Button aria-disabled={busy || undefined} onClick={submit}>{PROTOTYPE_COPY.submitFeedback}</Button>
+      </div>
     </div>
   );
 }

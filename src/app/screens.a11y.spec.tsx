@@ -75,7 +75,10 @@ import NewHiresPage from './(agent)/new-hires/page';
 import NewHireDetailPage from './(agent)/new-hires/[membershipId]/page';
 import CoacheeActivationTab from './(agent)/coaching/[membershipId]/activation/page';
 import MyCoachingActivationPage from './(agent)/coaching/me/activation/page';
-import { activationView, completeView, leaderView, RINA_ME, ROSTER, SARI, SARI_ME } from '@test/activation-fixtures';
+import { activationView, completeView, leaderView, RINA_ME, ROSTER, SARI, SARI_ME, withWaitingCheckIn } from '@test/activation-fixtures';
+import {
+  invite, joinRequest, JOINING_PERMISSIONS, requestedTransfer, shared, TODAY as JOINING_TODAY, transfer,
+} from '@test/joining-fixtures';
 import ProductCatalogLayout from './(agent)/product-catalog/layout';
 import CampaignsLayout from './(agent)/campaigns/layout';
 import CampaignsPage from './(agent)/campaigns/page';
@@ -101,7 +104,8 @@ import {
   AGUS, busy, DOWNLINE, entry, monthRead, peoplePage, RINA, SHELL_STUBS, weekRead,
 } from '@test/calendar-fixtures';
 import {
-  AGUS_ME as UNIT_READER, dashboard as unitDashboard, EMPTY as UNIT_EMPTY, RATIOS as UNIT_RATIOS, SARI_UNIT,
+  AGUS_ME as UNIT_READER, dashboard as unitDashboard, EMPTY as UNIT_EMPTY, NEW_HIRE_VIEW as UNIT_NEW_HIRE, RATIOS as UNIT_RATIOS,
+  SARI_UNIT,
 } from '@test/unit-dashboard-fixtures';
 import RecruitmentLayout from './(agent)/recruitment/layout';
 import RecruitmentAttackPlanPage from './(agent)/recruitment/attack-plan/page';
@@ -140,13 +144,14 @@ import {
  * Where the screen is, for the one shell that reads it: the coaching person shell's archive (P11-T10),
  * and the address the archive's page reads its ids from (`useParams()`, F5 of P11's final walk).
  */
-const nav = vi.hoisted(() => ({ pathname: '/admin', params: {} as Record<string, string> }));
+const nav = vi.hoisted(() => ({ pathname: '/admin', params: {} as Record<string, string>, search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }),
   usePathname: () => nav.pathname,
   useParams: () => nav.params,
   // The Product Catalog reads its filters from the address (Phase 14, D-urls).
-  useSearchParams: () => new URLSearchParams(),
+  // And an invite's link its token (P18.96-T3): `?invite=…` on `/register` and `/join`.
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
 /**
@@ -246,6 +251,7 @@ describe('screens have no axe violations', () => {
     cleanup();
     vi.unstubAllGlobals();
     nav.pathname = '/admin';
+    nav.search = '';
   });
 
   it('login', async () => {
@@ -268,6 +274,26 @@ describe('screens have no axe violations', () => {
   it('register', async () => {
     renderWithSession(<RegisterPage />, { me: null });
     await expectClean('register');
+  });
+
+  it('register, on a leader’s invite: the banner, and the code and join date read-only (P18.96-T3 AC-4)', async () => {
+    nav.search = 'invite=kpm-1.secret';
+    try {
+      stubFetch({
+        '/companies': { body: [{ _id: 'co-2', name: 'Prudential' }] },
+        '/invites/': {
+          body: {
+            leaderName: 'Agus Prasetyo', kpm: { code: '0417', branchName: 'BSD City Branch' }, companyId: 'co-2', companyName: 'Prudential',
+            agentCode: '80777', joinDate: JOINING_TODAY, fullName: 'Yusuf Hidayat', existingAccount: false, expiresAt: '2026-11-10T03:00:00.000Z',
+          },
+        },
+      });
+      renderWithSession(<RegisterPage />, { me: null });
+      await screen.findByText("You're joining Agus Prasetyo's team · KPM 0417");
+      await expectClean('register (invite)');
+    } finally {
+      nav.search = '';
+    }
   });
 
   it('forgot password', async () => {
@@ -667,7 +693,7 @@ describe('screens have no axe violations', () => {
       '/kpm/org-levels': { body: [] },
       '/notifications': { body: { items: [], unread: 0 } },
     };
-    const page = () => <UnitDashboardPage searchParams={routeParams({})} />;
+    const page = () => <UnitDashboardPage />;
 
     it('filled: the tiles, every group and total, a unit nested two deep, every status and mark', async () => {
       // Row groups headed by `rowgroup` headers, each person their row's header, the ⌄ column named for a
@@ -676,6 +702,13 @@ describe('screens have no axe violations', () => {
       renderInLayout(AgentLayout, page(), { me: UNIT_READER });
       await screen.findByRole('table', { name: 'Your team’s roster' });
       await expectClean('unit/dashboard');
+    });
+
+    it('a new hire before a first sale: the New hire tag, and the ⓘ of the totals and tiles that leave her out (P18.96-T5)', async () => {
+      stubFetch({ ...shell, 'GET /unit/dashboard': { body: UNIT_NEW_HIRE } });
+      renderInLayout(AgentLayout, page(), { me: UNIT_READER });
+      await screen.findByRole('table', { name: 'Your team’s roster' });
+      await expectClean('unit/dashboard with a new hire');
     });
 
     it('expanded: two rows’ details open, with their ratios', async () => {
@@ -732,7 +765,7 @@ describe('screens have no axe violations', () => {
       stubFetch({ ...shell, 'GET /unit/dashboard': { body: SARI_UNIT } });
       renderInLayout(
         AgentLayout,
-        <UnitBelowPage params={routeParams({ membershipId: 'mem-sari' })} searchParams={routeParams({})} />,
+        <UnitBelowPage params={routeParams({ membershipId: 'mem-sari' })} />,
         { me: UNIT_READER },
       );
       await screen.findByRole('heading', { level: 1, name: 'Sari Wulandari’s Unit Dashboard' });
@@ -746,7 +779,7 @@ describe('screens have no axe violations', () => {
       });
       renderInLayout(
         AgentLayout,
-        <UnitBelowPage params={routeParams({ membershipId: 'mem-x' })} searchParams={routeParams({})} />,
+        <UnitBelowPage params={routeParams({ membershipId: 'mem-x' })} />,
         { me: UNIT_READER },
       );
       await screen.findByText('This isn’t a unit you can open.');
@@ -894,7 +927,7 @@ describe('screens have no axe violations', () => {
         },
         '/coaching/sessions/s-0924': { body: recordSession({ coachee: { membershipId: 'mem-ab', name: 'Jordan Pratama' }, coach: { membershipId: 'mem-w', name: 'Wilson Tanoto' }, reopenableUntil: null }) },
       });
-      renderInLayout(AgentLayout, <MyCoachingPage searchParams={routeParams({})} />, { me });
+      renderInLayout(AgentLayout, <MyCoachingPage />, { me });
       await screen.findByRole('region', { name: 'Coaching tips from Wilson' });
       await userEvent.click(screen.getByRole('button', { name: 'View past sessions' }));
       await userEvent.click(screen.getByRole('button', { name: 'View what it agreed' }));
@@ -903,7 +936,7 @@ describe('screens have no axe violations', () => {
 
     it('the reader’s own coaching, with no session yet (P11-T10)', async () => {
       stubFetch({ ...shell, '/coaching/me/sessions': { body: { sessions: [], ledFormerly: [] } } });
-      renderInLayout(AgentLayout, <MyCoachingPage searchParams={routeParams({})} />, { me: leader });
+      renderInLayout(AgentLayout, <MyCoachingPage />, { me: leader });
       await screen.findByText('No coaching sessions yet.');
       await expectClean('coaching/me (empty)');
     });
@@ -1838,6 +1871,26 @@ describe('screens have no axe violations', () => {
     await expectClean('people/members (removed)');
   });
 
+  it('the Pending tab’s transfer requests, populated (P18.96-T3 AC-3)', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+      },
+      permissions: ['member:read_profile', 'member:transfer_approve'],
+    });
+    stubFetch({
+      '/join/requests': { body: [] },
+      '/members/leader-limit-requests': { body: [] },
+      '/members': { body: { members: [], nextCursor: null, counts: { directory: 8, pending: 0, removed: 1 } } },
+      '/transfer-requests': { body: [transfer()] },
+    });
+    renderInLayout(TenantLayout, <MembersPage />, { me: owner });
+    await userEvent.click(await screen.findByRole('button', { name: /^Pending/ }));
+    await screen.findByRole('table', { name: 'Transfer requests, oldest first' });
+    await expectClean('people/members (transfer requests)');
+  });
+
   it('the Pending queue, populated', async () => {
     const owner = makeMe({
       membership: {
@@ -1872,6 +1925,10 @@ describe('screens have no axe violations', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Pending (1)' }));
     await screen.findByRole('table');
     await expectClean('people/members (pending)');
+    // P18.96-T7 G1: *Approve* opens the row's *Join date*, the shared field, before it sends.
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await screen.findByLabelText('Join date');
+    await expectClean('people/members (pending, the join date asked)');
   });
 
   it('the role change log, populated', async () => {
@@ -2562,11 +2619,37 @@ describe('screens have no axe violations', () => {
       await expectClean('activation');
     });
 
+    it('the hire’s page with Which case? open, a source line and a tick waiting for data (P18.96-T4)', async () => {
+      nav.pathname = '/activation';
+      stubFetch({
+        ...SHELL,
+        '/activation/me/closings': { body: { closings: [{ leadId: 'l-1', name: 'Ibu Ratna', date: '2026-09-20' }] } },
+        '/activation/me': { body: activationView({}, withWaitingCheckIn()) },
+      });
+      renderInLayout(AgentLayout, <ActivationPage />, { me: RINA_ME });
+      await screen.findByRole('heading', { level: 2, name: 'Your activation progress' });
+      const milestone = within(document.querySelector('[data-code="INDEPENDENT_AGENT_MILESTONE"]') as HTMLElement);
+      await userEvent.click(milestone.getByRole('checkbox'));
+      await userEvent.click(await milestone.findByRole('radio', { name: 'Log a new closing' }));
+      await screen.findByText('Ticked by Sari Puspita, waiting for data');
+      await expectClean('activation (which case)');
+    });
+
+    it('a hire’s detail with Log 1:1 open (P18.96-T4)', async () => {
+      nav.pathname = '/new-hires/mem-rina';
+      stubFetch({ ...SHELL, '/new-hires/mem-rina': { body: leaderView() } });
+      renderInLayout(AgentLayout, <NewHireDetailPage params={routeParams({ membershipId: 'mem-rina' })} />, { me: SARI_ME });
+      await screen.findByRole('heading', { level: 2, name: 'Activation progress' });
+      await userEvent.click(within(document.querySelector('[data-code="WEEKLY_CHECK_IN"]') as HTMLElement).getByRole('checkbox'));
+      await screen.findByRole('group', { name: 'Log 1:1' });
+      await expectClean('new-hire detail (log 1:1)');
+    });
+
     it('the hire’s page at 100%, with the graduation confirm open (P13-T7)', async () => {
       nav.pathname = '/activation';
       stubFetch({ ...SHELL, '/activation/me': { body: completeView() } });
       renderInLayout(AgentLayout, <ActivationPage />, { me: RINA_ME });
-      await userEvent.click(await screen.findByRole('button', { name: 'Mark activation complete →' }));
+      await userEvent.click(await screen.findByRole('button', { name: 'Mark checklist complete' }));
       await screen.findByRole('dialog');
       await expectClean('activation (confirm)');
     });
@@ -2579,12 +2662,27 @@ describe('screens have no axe violations', () => {
       await expectClean('activation (none)');
     });
 
-    it('the roster, populated: three groups, an overdue day and a closed first case (P13-T5)', async () => {
+    it('the roster, populated: the 3M activation % and its filter, three sections, an overdue checklist, a Left row (P18.96-T6)', async () => {
       nav.pathname = '/new-hires';
       stubFetch({ ...SHELL, '/new-hires': { body: ROSTER } });
-      renderInLayout(AgentLayout, <NewHiresPage />, { me: SARI_ME });
-      await screen.findByRole('region', { name: 'AAB: Arief Hidayat' });
+      // With *Schedule 1:1* and *Mark left* on the rows that need them.
+      renderInLayout(AgentLayout, <NewHiresPage />, {
+        me: { ...SARI_ME, permissions: [...SARI_ME.permissions, 'new_hire:mark_left', 'calendar_entry:create'] },
+      });
+      await screen.findByRole('region', { name: 'Not activated' });
+      await screen.findByRole('button', { name: 'Mark left — Lukman Hakim' });
       await expectClean('new-hires');
+    });
+
+    it('the roster’s Mark left confirmation open (P18.96-T6 AC-4)', async () => {
+      nav.pathname = '/new-hires';
+      stubFetch({ ...SHELL, '/new-hires': { body: ROSTER } });
+      renderInLayout(AgentLayout, <NewHiresPage />, {
+        me: { ...SARI_ME, permissions: [...SARI_ME.permissions, 'new_hire:mark_left', 'calendar_entry:create'] },
+      });
+      await userEvent.click(await screen.findByRole('button', { name: 'Mark left — Lukman Hakim' }));
+      await screen.findByRole('dialog');
+      await expectClean('new-hires (mark left)');
     });
 
     it('the roster on a phone: a card per hire, an overdue day (P18.95-T3 AC-4)', async () => {
@@ -2594,15 +2692,52 @@ describe('screens have no axe violations', () => {
       })));
       stubFetch({ ...SHELL, '/new-hires': { body: ROSTER } });
       renderInLayout(AgentLayout, <NewHiresPage />, { me: SARI_ME });
-      await screen.findByRole('list', { name: 'AAB: Arief Hidayat' });
+      await screen.findByRole('list', { name: 'Not activated' });
       await expectClean('new-hires (phone)');
+    });
+
+    it('the roster’s header and Waiting to join: + Add agent, Review requests, an invite and a transfer (P18.96-T3)', async () => {
+      nav.pathname = '/new-hires';
+      stubFetch({
+        ...SHELL,
+        '/new-hires': { body: ROSTER },
+        '/new-hires/invites': { body: { today: JOINING_TODAY, invites: [invite(), invite({ inviteId: 'inv-2', fullName: 'Rudi Hartono', status: 'expired' })] } },
+        '/new-hires/transfers': { body: [requestedTransfer()] },
+        '/join/requests': { body: [joinRequest()] },
+        '/join/requests/routing': { body: [] },
+      });
+      renderInLayout(AgentLayout, <NewHiresPage />, { me: { ...SARI_ME, permissions: [...SARI_ME.permissions, ...JOINING_PERMISSIONS] } });
+      await screen.findByRole('region', { name: 'Waiting to join' });
+      await screen.findByRole('button', { name: 'Review requests (1)' });
+      await expectClean('new-hires (waiting to join)');
+    });
+
+    it('+ Add agent, the form and its share step (P18.96-T3 AC-1, AC-2)', async () => {
+      nav.pathname = '/new-hires';
+      stubFetch({
+        ...SHELL,
+        '/new-hires': { body: ROSTER },
+        '/new-hires/invites': { body: { today: JOINING_TODAY, invites: [] } },
+        '/new-hires/transfers': { body: [] },
+        'POST /new-hires/agents': { body: { outcome: 'invited', ...shared() } },
+      });
+      renderInLayout(AgentLayout, <NewHiresPage />, { me: { ...SARI_ME, permissions: [...SARI_ME.permissions, 'member:invite'] } });
+      await userEvent.click(await screen.findByRole('button', { name: '+ Add agent' }));
+      await screen.findByRole('dialog', { name: 'Add agent' });
+      await expectClean('new-hires (add agent)');
+      await userEvent.type(screen.getByLabelText('Agent code'), '80777');
+      await userEvent.type(screen.getByLabelText('Name'), 'Yusuf Hidayat');
+      await userEvent.type(screen.getByLabelText('WhatsApp number'), '0812-8077-7001');
+      await userEvent.click(screen.getByRole('button', { name: 'Add agent' }));
+      await screen.findByRole('dialog', { name: 'Invite Yusuf Hidayat' });
+      await expectClean('new-hires (invite share)');
     });
 
     it('the roster with nobody on it (P13-T5)', async () => {
       nav.pathname = '/new-hires';
       stubFetch({ ...SHELL, '/new-hires': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-1' } } } });
       renderInLayout(AgentLayout, <NewHiresPage />, { me: SARI_ME });
-      await screen.findByText('No one you lead is in their 90-day activation right now.');
+      await screen.findByText('No one you lead joined as a new hire in the last 12 months.');
       await expectClean('new-hires (empty)');
     });
 
@@ -2802,7 +2937,11 @@ describe('screens have no axe violations', () => {
       '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
       '/kpm/org-levels': { body: [] },
     };
-    const query = (q: Record<string, string>) => Object.assign(Promise.resolve(q), { status: 'fulfilled', value: q });
+    /** The Sales Attack Plan at an address: its query is the address's (`useQuery`, `lib/use-query.ts`). */
+    const attackPlanAt = (q: Record<string, string>) => {
+      nav.search = new URLSearchParams(q).toString();
+      return <AttackPlanPage />;
+    };
 
     it('the Product Catalog, filled (P14-T7)', async () => {
       nav.pathname = '/product-catalog';
@@ -2862,7 +3001,7 @@ describe('screens have no axe violations', () => {
     it('the Sales Attack Plan’s brief, part chosen (P14-T8)', async () => {
       nav.pathname = '/attack-plan';
       stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } } });
-      renderInLayout(AgentLayout, <AttackPlanPage searchParams={query({})} />, { me: SALES_ME });
+      renderInLayout(AgentLayout, attackPlanAt({}), { me: SALES_ME });
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       await userEvent.click(within(screen.getByRole('group', { name: 'Primary need' })).getByRole('button', { name: 'Health' }));
       await expectClean('attack-plan (brief)');
@@ -2872,7 +3011,7 @@ describe('screens have no axe violations', () => {
       nav.pathname = '/attack-plan';
       const alternatives = ['A', 'B', 'C', 'D'].map((c) => ({ code: c, name: `Product ${c}` }));
       stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } }, 'GET /attack-plan': { body: salesPlan({ alternatives, moreCount: 3 }) } });
-      renderInLayout(AgentLayout, <AttackPlanPage searchParams={query({ need: 'health', age: '2', budget: '2' })} />, { me: SALES_ME });
+      renderInLayout(AgentLayout, attackPlanAt({ need: 'health', age: '2', budget: '2' }), { me: SALES_ME });
       await screen.findByRole('heading', { level: 2, name: 'PRUMapan' });
       await expectClean('attack-plan (plan)');
     });
@@ -2880,7 +3019,7 @@ describe('screens have no axe violations', () => {
     it('the Sales Attack Plan’s Check fit, with its note (P14-T8)', async () => {
       nav.pathname = '/attack-plan';
       stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } }, 'GET /attack-plan': { body: salesPlan({ verdict: 'check_fit', outside: ['age', 'budget'] }) } });
-      renderInLayout(AgentLayout, <AttackPlanPage searchParams={query({ need: 'retirement', age: '5', budget: '6' })} />, { me: SALES_ME });
+      renderInLayout(AgentLayout, attackPlanAt({ need: 'retirement', age: '5', budget: '6' }), { me: SALES_ME });
       await screen.findByText(/Outside the typical age band and budget band/);
       await expectClean('attack-plan (check fit)');
     });
@@ -2888,7 +3027,7 @@ describe('screens have no axe violations', () => {
     it('the catalog’s deep link to a run-off product (P14-T8 AC-6)', async () => {
       nav.pathname = '/attack-plan';
       stubFetch({ ...SHELL, 'GET /product-catalog': { body: { products: SHELF } }, 'GET /product-catalog/PRULINK_GENERASI_BARU_PGB': { body: PGB } });
-      renderInLayout(AgentLayout, <AttackPlanPage searchParams={query({ product: 'PRULINK_GENERASI_BARU_PGB' })} />, { me: SALES_ME });
+      renderInLayout(AgentLayout, attackPlanAt({ product: 'PRULINK_GENERASI_BARU_PGB' }), { me: SALES_ME });
       await screen.findByRole('heading', { level: 2, name: 'PRULink Generasi Baru (PGB)' });
       await expectClean('attack-plan (from catalog, run-off)');
     });
@@ -2899,10 +3038,11 @@ describe('screens have no axe violations', () => {
       '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
       '/kpm/org-levels': { body: [] },
     };
-    const query = (q: Record<string, string>) => Object.assign(Promise.resolve(q), { status: 'fulfilled', value: q });
-    const attackPlan = (q: Record<string, string>) => (
-      <RecruitmentLayout><RecruitmentAttackPlanPage searchParams={query(q)} /></RecruitmentLayout>
-    );
+    /** The page at an address: its query is the address's (`useQuery`, `lib/use-query.ts`). */
+    const attackPlan = (q: Record<string, string>) => {
+      nav.search = new URLSearchParams(q).toString();
+      return <RecruitmentLayout><RecruitmentAttackPlanPage /></RecruitmentLayout>;
+    };
 
     it('the brief, part chosen', async () => {
       nav.pathname = '/recruitment/attack-plan';
@@ -3595,6 +3735,14 @@ describe('screens have no axe violations', () => {
                       completesWhen: 'the hire has completed that training module', live: false,
                     },
                   },
+                  // P18.96-T7 G2: a data-backed item, bound by its code — *Auto*, and its select holding *From Sales data*.
+                  {
+                    code: 'FIRST_CASE_CLOSED', label: 'Close first case independently', displayOrder: 4, autoLink: null,
+                    link: {
+                      kind: 'sales:first', label: 'Sales data', route: null, live: true, form: 'closing',
+                      completesWhen: 'the hire has a first sale since joining: a sales lead paid and issued, or a policy in the production file',
+                    },
+                  },
                 ],
               }],
             },
@@ -3867,9 +4015,10 @@ describe('screens have no axe violations', () => {
 
   describe('KPM analytics (P18-T2 AC-10)', () => {
     // The layout wears the reader's own shell (`RoleShell`, P18.8-T5), so it is the layout a page renders in.
-    const analyticsPage = (period?: string) => (
-      <KpmAnalyticsPage searchParams={routeParams(period ? { period } : {})} />
-    );
+    const analyticsPage = (period?: string) => {
+      nav.search = new URLSearchParams(period ? { period } : {}).toString();
+      return <KpmAnalyticsPage />;
+    };
 
     it('filled: the comparison with an agency open, its people listed, every MOC state and badge, the chart', async () => {
       nav.pathname = '/kpm/analytics';
@@ -3925,9 +4074,10 @@ describe('screens have no axe violations', () => {
   });
 
   describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1 AC-10, P18.6-T2)', () => {
-    const compliancePage = (query: Record<string, string> = {}) => (
-      <KpmAnalyticsCompliancePage searchParams={routeParams(query)} />
-    );
+    const compliancePage = (query: Record<string, string> = {}) => {
+      nav.search = new URLSearchParams(query).toString();
+      return <KpmAnalyticsCompliancePage />;
+    };
     const openCompliance = async (body: unknown, query: Record<string, string> = {}) => {
       nav.pathname = '/kpm/analytics/compliance';
       stubFetch({

@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeMe, renderInLayout, stubFetch, type StubReply } from '@test/harness';
 import {
   ADMIN_ME, analyticsView, CORE_LEADER_ME, NO_AB, OWNER_ME, SHELL_STUBS,
 } from '@test/kpm-analytics-fixtures';
@@ -9,21 +9,22 @@ import KpmAnalyticsLayout from './layout';
 import KpmAnalyticsPage from './page';
 import { landingFor } from '@/lib/landing';
 
-const nav = vi.hoisted(() => ({ replace: vi.fn(), pathname: '/kpm/analytics' }));
+const nav = vi.hoisted(() => ({ replace: vi.fn(), pathname: '/kpm/analytics', search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: nav.replace }),
   usePathname: () => nav.pathname,
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 const ANALYTICS = 'GET /kpm/analytics';
 
 function open(reply: StubReply | StubReply[] = { body: analyticsView() }, { me = OWNER_ME, period }: { me?: typeof OWNER_ME; period?: string } = {}) {
   const stub = stubFetch({ ...SHELL_STUBS, [ANALYTICS]: reply });
-  renderInLayout(
-    KpmAnalyticsLayout,
-    <KpmAnalyticsPage searchParams={routeParams(period ? { period } : {})} />,
-    { me },
-  );
+  nav.search = new URLSearchParams(period ? { period } : {}).toString();
+  renderInLayout(KpmAnalyticsLayout, <KpmAnalyticsPage />, { me });
   return stub;
 }
 
@@ -411,7 +412,7 @@ describe('KPM analytics (P18-T2)', () => {
     it('shows a skeleton while the comparison is read', () => {
       stubFetch({ ...SHELL_STUBS, [ANALYTICS]: { body: analyticsView() } });
       vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
-      renderInLayout(KpmAnalyticsLayout, <KpmAnalyticsPage searchParams={routeParams({})} />, { me: OWNER_ME });
+      renderInLayout(KpmAnalyticsLayout, <KpmAnalyticsPage />, { me: OWNER_ME });
       expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Loading the unit comparison…');
     });
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react';
 import { cn } from '@/lib/cn';
+import { useScrollLock } from '@/lib/use-scroll-lock';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -23,6 +24,10 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  * **`placement="sheet"` is the same dialog anchored to the foot of the screen** (P18.95-T4, ADR-0167 §4):
  * the full width, its top corners rounded, at most 90% of the screen tall and scrolling inside, and clear
  * of the home indicator. A lead's edit sheet on a phone is the first; its manners are this one's.
+ *
+ * **Never taller than the screen, and its actions always in reach** (P18.96-T1 AC-2): at most the dynamic
+ * viewport's height less its margin, the content scrolling inside it under a title that stays at the top and a
+ * `footer` that stays at the foot; the page behind does not scroll while it is open (`useScrollLock`).
  */
 export function Modal({
   open,
@@ -34,6 +39,7 @@ export function Modal({
   eyebrow,
   placement = 'center',
   className,
+  footer,
   children,
 }: {
   open: boolean;
@@ -55,12 +61,20 @@ export function Modal({
   /** `center`, the default, over the middle of the page; `sheet`, rising from its foot. */
   placement?: 'center' | 'sheet';
   className?: string;
+  /**
+   * **The actions at its foot** — *Cancel* and *Save* — held at the bottom of the box while the content above
+   * them scrolls, so a long form never puts its *Save* out of reach. A form's submit button names its form
+   * (`form={id}`), since the foot is outside it.
+   */
+  footer?: ReactNode;
   children: ReactNode;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const returnTo = useRef<Element | null>(null);
   const titleId = useId();
   const descriptionId = useId();
+
+  useScrollLock(open);
 
   useEffect(() => {
     if (!open) return;
@@ -100,6 +114,8 @@ export function Modal({
   };
 
   const sheet = placement === 'sheet';
+  // The foot clears the home indicator on a phone that has one, and 1.5rem on one that does not.
+  const footPadding = sheet ? 'pb-[max(1.5rem,env(safe-area-inset-bottom))]' : 'pb-6';
 
   return (
     <div
@@ -119,19 +135,35 @@ export function Modal({
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={trap}
+        /*
+          * **The box scrolls, and its title and its foot do not** (P18.96-T1 AC-2): no padding above or below the
+          * box itself, so the sticky head and foot sit where they would sit anyway and only the content between
+          * them moves. The dynamic viewport (`dvh`), so a phone's browser bar coming and going never puts the
+          * foot under it; `overscroll-contain`, so reaching the end hands nothing on to the page.
+          */
         className={cn(
-          'w-full overflow-y-auto bg-card p-6 shadow-modal',
-          sheet
-            // The foot clears the home indicator on a phone that has one, and 1.5rem on one that does not.
-            ? 'max-h-[90dvh] rounded-t-lg pb-[max(1.5rem,env(safe-area-inset-bottom))]'
-            : 'max-h-[calc(100vh-2.5rem)] max-w-[26rem] rounded-lg',
+          'w-full overflow-y-auto overscroll-contain bg-card px-6 shadow-modal',
+          sheet ? 'max-h-[90dvh] rounded-t-lg' : 'max-h-[calc(100dvh-2.5rem)] max-w-[26rem] rounded-lg',
+          !footer && footPadding,
           className,
         )}
       >
-        {eyebrow}
-        <h2 id={titleId} className="font-display text-lg font-bold text-navy">{title}</h2>
-        {description && <p id={descriptionId} className="mt-1 text-md text-muted">{description}</p>}
-        <div className="mt-4">{children}</div>
+        {/*
+          * The 1rem under the title is split: half the head's own, so content scrolled under it stops short of the
+          * words, and half a margin, so content that reaches up into the gap as drawn (the MOC badge's `-mt-2`)
+          * is not covered by the head where it rests.
+          */}
+        <div data-modal-head="" className="sticky top-0 z-10 -mx-6 bg-card px-6 pb-2 pt-6">
+          {eyebrow}
+          <h2 id={titleId} className="font-display text-lg font-bold text-navy">{title}</h2>
+          {description && <p id={descriptionId} className="mt-1 text-md text-muted">{description}</p>}
+        </div>
+        <div className="mt-2">{children}</div>
+        {footer && (
+          <div data-modal-foot="" className={cn('sticky bottom-0 z-10 -mx-6 bg-card px-6 pt-4', footPadding)}>
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

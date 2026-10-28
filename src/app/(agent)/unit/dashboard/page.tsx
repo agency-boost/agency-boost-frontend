@@ -1,11 +1,10 @@
 'use client';
 
-import { use } from 'react';
+import { Suspense } from 'react';
 import { Page } from '@/components/page';
 import { UnitDashboard } from '@/components/unit/unit-dashboard';
 import { periodFrom, PROTOTYPE_COPY } from '@/lib/unit-dashboard';
-
-type Query = { period?: string | string[] };
+import { useQuery } from '@/lib/use-query';
 
 /**
  * The Unit Dashboard (`Overall.html:3888-3949`, `unit-dashboard.md`; P15-T2): a leader's roster — the
@@ -16,8 +15,17 @@ type Query = { period?: string | string[] };
  * nobody is answered an empty unit and meets the empty state, not a refusal (D-reach). The period is the
  * address's, `?period=7d|month|year`, *This month* when it names none.
  */
-export default function UnitDashboardPage({ searchParams }: { searchParams?: Promise<Query> }) {
-  const query = searchParams ? use(searchParams) : {};
+export default function UnitDashboardPage() {
+  return (
+    // `useSearchParams` needs a boundary (`lib/use-query.ts`). Nothing in its place: a prerender draws the shell's gate, never this.
+    <Suspense fallback={null}>
+      <Dashboard />
+    </Suspense>
+  );
+}
+
+function Dashboard() {
+  const query = useQuery();
   return (
     // The prototype's title, verbatim, and its empty sub-line (`Overall.html:10410`).
     <Page title={PROTOTYPE_COPY.title} permission="unit_dashboard:read">

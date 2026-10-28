@@ -816,6 +816,22 @@ describe('Dialog', () => {
     expect(onCancel).not.toHaveBeenCalled();
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  it('P18.96-T1 AC-2 is never taller than the screen: a long question scrolls, the two buttons stay, the page holds still', () => {
+    document.body.style.overflow = 'auto';
+    const { unmount } = render(<Host />);
+    const box = screen.getByRole('dialog');
+    // The dynamic viewport, so a phone's browser bar coming back never hides the buttons.
+    expect(box).toHaveClass('flex', 'flex-col', 'max-h-[calc(100dvh-2.5rem)]');
+    expect(box.className).not.toMatch(/\d+vh/);
+    const message = screen.getByText('Delete Rina Wijaya?');
+    expect(message).toHaveClass('min-h-0', 'overflow-y-auto', 'overscroll-contain');
+    expect(screen.getByRole('button', { name: 'Delete lead' }).parentElement).toHaveClass('shrink-0');
+    expect(document.body.style.overflow).toBe('hidden');
+    unmount();
+    expect(document.body.style.overflow).toBe('auto');
+    document.body.style.overflow = '';
+  });
 });
 
 describe('DataTable density and widths', () => {

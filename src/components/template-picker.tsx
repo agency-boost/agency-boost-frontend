@@ -251,8 +251,20 @@ function NameDialog({
   }
 
   return (
-    <Modal open={open} title={title} description={description} onClose={onClose} className="max-w-[30rem]">
-      <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+    <Modal
+      open={open}
+      title={title}
+      description={description}
+      onClose={onClose}
+      className="max-w-[30rem]"
+      footer={(
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" form={`${id}-form`} disabled={busy || saving}>{saving ? 'Saving…' : confirmLabel}</Button>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+        </div>
+      )}
+    >
+      <form id={`${id}-form`} onSubmit={submit} className="flex flex-col gap-4" noValidate>
         {error && <ErrorBanner {...error} />}
         <Field label="Name" htmlFor={`${id}-name`} error={nameError}>
           <TextInput
@@ -292,10 +304,6 @@ function NameDialog({
             ))}
           </fieldset>
         )}
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy || saving}>{saving ? 'Saving…' : confirmLabel}</Button>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
-        </div>
       </form>
     </Modal>
   );

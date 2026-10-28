@@ -96,7 +96,8 @@ const SEEDED = [
 }));
 
 /** The save status under the date (`SaveStatus`), whatever else on the page is a live region. */
-const saveStatus = () => screen.getByLabelText('Date').parentElement!.nextElementSibling!;
+/** The status under the date's `Field` — the field's own box, since P18.96-T2, sits inside the shared DateField. */
+const saveStatus = () => screen.getByLabelText('Date').closest('div')!.nextElementSibling!;
 
 /** The shell's toast region: the status region that is neither the save status nor a skeleton. */
 const toastText = () => screen.queryAllByRole('status').map((r) => r.textContent).join(' | ');
@@ -822,6 +823,8 @@ describe('Log activity (P6-T2)', () => {
 
       fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-03-10' } });
       await waitFor(() => expect(screen.getByLabelText('Date')).toHaveValue('2026-03-10'));
+      // P18.96-T2 AC-4: the shared field writes the day as the app does, never the browser's mm/dd/yyyy.
+      expect(screen.getByLabelText('Date').nextElementSibling).toHaveTextContent('10 Mar 2026');
       expect(saveStatus()).toHaveTextContent('Not yet saved');
     });
 
@@ -844,7 +847,7 @@ describe('Log activity (P6-T2)', () => {
       renderInLayout(AgentLayout, <LogActivityPage />, { me: AGENT });
       await screen.findByRole('heading', { name: 'Leads' });
 
-      const field = screen.getByLabelText('Date').parentElement!;
+      const field = screen.getByLabelText('Date').closest('div')!;
       expect(field.nextElementSibling).toBe(screen.getByRole('status'));
       expect(field.parentElement).toHaveClass('flex-col');
     });

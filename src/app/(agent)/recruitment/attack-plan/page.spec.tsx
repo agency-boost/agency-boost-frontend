@@ -12,21 +12,25 @@ import { SessionContext } from '@/lib/session';
 import RecruitmentLayout from '../layout';
 import RecruitmentAttackPlanPage from './page';
 
-const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }));
+const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: nav.push, replace: nav.replace, back: nav.back }),
   usePathname: () => '/recruitment/attack-plan',
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(nav.search),
   useParams: () => ({}),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 type Query = Record<string, string>;
 type Routes = Record<string, StubReply | StubReply[]>;
 
-/** The page at an address, as the App Router hands it its query: a settled thenable. */
-const searchParams = (query: Query) => Object.assign(Promise.resolve(query), { status: 'fulfilled', value: query });
-
-const page = (query: Query) => <RecruitmentLayout><RecruitmentAttackPlanPage searchParams={searchParams(query)} /></RecruitmentLayout>;
+/** The page at an address: the query is the address's, which the page reads with `useSearchParams`. */
+const page = (query: Query) => {
+  nav.search = new URLSearchParams(query).toString();
+  return <RecruitmentLayout><RecruitmentAttackPlanPage /></RecruitmentLayout>;
+};
 
 /** The bare read answers the vocabulary; a read with a brief, `plan()`. */
 const answer = ({ url }: { url: string }) => ({ body: url.includes('?') ? view(plan()) : view() });

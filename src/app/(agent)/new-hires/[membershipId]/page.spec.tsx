@@ -108,7 +108,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     expect(await within(row('CRM_SETUP')).findByText('Saved ✓')).toBeInTheDocument();
   });
 
-  it('P18.95-T1 AC-5: a corrected start date says Saved ✓ under the field, and a refused one offers the retry', async () => {
+  it('P18.95-T1 AC-5, P18.96-T2 AC-5: a corrected join date says Saved ✓ under the field, and a refused one offers the retry', async () => {
     const corrected = leaderView({ startDate: '2026-08-01', day: 64, startCorrected: { by: SARI, at: '2026-10-03T02:00:00.000Z' } });
     const { calls } = show({
       'PUT /new-hires/mem-rina/start-date': [
@@ -117,11 +117,11 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
       ],
     });
     await ready();
-    const field = screen.getByLabelText('Start date');
+    const field = screen.getByLabelText('Join date');
     fireEvent.change(field, { target: { value: '2026-08-01' } });
     fireEvent.blur(field);
 
-    await userEvent.click(await screen.findByRole('button', { name: "Couldn't save — retry: Start date" }));
+    await userEvent.click(await screen.findByRole('button', { name: "Couldn't save — retry: Join date" }));
 
     await waitFor(() => expect(writes(calls)).toEqual([
       ['PUT', '/new-hires/mem-rina/start-date', { startDate: '2026-08-01' }],
@@ -178,29 +178,31 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     expect(screen.queryByText('Activation status updated.')).not.toBeInTheDocument();
   });
 
-  it('P13-T5 AC-5 the start date is the leader’s to correct, within the bounds, written once it is whole', async () => {
+  it('P13-T5 AC-5, P18.96-T2 AC-3 AC-4 the join date is the leader’s to correct, in the shared field, within the bounds, written once it is whole', async () => {
     const corrected = leaderView({ startDate: '2026-08-01', day: 64, startCorrected: { by: SARI, at: '2026-10-03T02:00:00.000Z' } });
     const { calls } = show({ 'PUT /new-hires/mem-rina/start-date': { body: corrected } });
     await ready();
-    const field = screen.getByLabelText('Start date');
+    const field = screen.getByLabelText('Join date');
     expect(field).toHaveValue('2026-08-06');
     expect(field).toHaveAttribute('max', '2026-10-03');
     expect(field).toHaveAttribute('min', '2025-10-03');
+    // P18.96-T2 AC-4: the date as the app writes it, on the shared field's face — never the browser's mm/dd/yyyy.
+    expect(field.nextElementSibling).toHaveTextContent('6 Agu 2026');
 
     vi.useFakeTimers();
     fireEvent.change(field, { target: { value: '2026-08-01' } });
     await act(async () => { vi.advanceTimersByTime(DATE_SETTLE_MS); });
     vi.useRealTimers();
     await waitFor(() => expect(writes(calls)).toEqual([['PUT', '/new-hires/mem-rina/start-date', { startDate: '2026-08-01' }]]));
-    expect(await screen.findByText('Start date updated.')).toBeInTheDocument();
+    expect(await screen.findByText('Join date updated.')).toBeInTheDocument();
     expect(screen.getByText('Day').parentElement).toHaveTextContent('Day64/90');
-    expect(screen.getByRole('button', { name: 'Start date corrected by you · 3 Okt 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Join date corrected by you · 3 Okt 2026' })).toBeInTheDocument();
   });
 
   it('P13-T5 AC-5 a date after today, or more than a year back, is refused before it is sent', async () => {
     const { calls } = show();
     await ready();
-    const field = screen.getByLabelText('Start date');
+    const field = screen.getByLabelText('Join date');
     fireEvent.change(field, { target: { value: '2026-10-04' } });
     fireEvent.blur(field);
     expect(await screen.findByText('Choose a date from 3 Okt 2025 to today.')).toBeInTheDocument();
@@ -218,7 +220,7 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
       },
     });
     await ready();
-    const field = screen.getByLabelText('Start date');
+    const field = screen.getByLabelText('Join date');
     fireEvent.change(field, { target: { value: '2026-08-01' } });
     fireEvent.blur(field);
     expect(await screen.findByText('Not saved. That date is out of range.')).toBeInTheDocument();
@@ -288,8 +290,8 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     const { calls } = show({}, readOnlySession(SARI_ME));
     await ready();
     for (const box of screen.getAllByRole('checkbox')) expect(box).toBeDisabled();
-    expect(screen.queryByLabelText('Start date')).not.toBeInTheDocument();
-    expect(screen.getByText('Start date').nextElementSibling).toHaveTextContent('6 Agu 2026');
+    expect(screen.queryByLabelText('Join date')).not.toBeInTheDocument();
+    expect(screen.getByText('Join date').nextElementSibling).toHaveTextContent('6 Agu 2026');
     expect(screen.getByRole('textbox', { name: 'Coaching note' })).toHaveAttribute('readonly');
     expect(screen.queryByRole('button', { name: 'Save note' })).not.toBeInTheDocument();
     expect(writes(calls)).toEqual([]);
@@ -320,8 +322,8 @@ describe('/new-hires/[membershipId], one hire as a leader reads it (P13-T5, P13-
     // say the leader can still update it.
     expect(screen.queryByText('You can update their 90-Day Activation status, plus your coaching note.')).not.toBeInTheDocument();
     for (const box of screen.getAllByRole('checkbox')) expect(box).toBeDisabled();
-    expect(screen.queryByLabelText('Start date')).not.toBeInTheDocument();
-    expect(screen.getByText('Start date').nextElementSibling).toHaveTextContent('6 Agu 2026');
+    expect(screen.queryByLabelText('Join date')).not.toBeInTheDocument();
+    expect(screen.getByText('Join date').nextElementSibling).toHaveTextContent('6 Agu 2026');
     // The server refuses the note on a closed activation too (409 ACTIVATION_CLOSED), so it is not offered.
     expect(screen.getByRole('textbox', { name: 'Coaching note' })).toHaveAttribute('readonly');
     expect(screen.queryByRole('button', { name: 'Save note' })).not.toBeInTheDocument();

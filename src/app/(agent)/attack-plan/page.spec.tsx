@@ -10,25 +10,31 @@ import {
 import { SessionContext } from '@/lib/session';
 import AttackPlanPage from './page';
 
-const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn() }));
+const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: nav.push, replace: nav.replace, back: nav.back }),
   usePathname: () => '/attack-plan',
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(nav.search),
   useParams: () => ({}),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 type Query = Record<string, string>;
 type Routes = Record<string, StubReply | StubReply[]>;
 
-/** The page at an address, as the App Router hands it its query: a settled thenable. */
-const searchParams = (query: Query) => Object.assign(Promise.resolve(query), { status: 'fulfilled', value: query });
+/** The page at an address: the query is the address's, which the page reads with `useSearchParams`. */
+const at = (query: Query) => {
+  nav.search = new URLSearchParams(query).toString();
+  return <AttackPlanPage />;
+};
 
 function show(query: Query = {}, routes: Routes = {}, me = RINA_ME) {
   const stub = stubFetch({
     ...SHELL_STUBS, 'GET /attack-plan': { body: plan() }, 'GET /product-catalog': { body: { products: SHELF } }, ...routes,
   });
-  const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams(query)} />, { me });
+  const view = renderInLayout(AgentLayout, at(query), { me });
   return { ...stub, ...view };
 }
 
@@ -42,7 +48,7 @@ function navigate(view: ReturnType<typeof renderInLayout>, query: Query) {
   view.rerender(
     <SessionContext.Provider value={view.session}>
       <Suspense fallback={null}>
-        <AgentLayout><AttackPlanPage searchParams={searchParams(query)} /></AgentLayout>
+        <AgentLayout>{at(query)}</AgentLayout>
       </Suspense>
     </SessionContext.Provider>,
   );
@@ -298,7 +304,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       const stub = stubFetch({
         ...SHELL_STUBS, 'GET /attack-plan': { body: plan({ product: null, verdict: null, alternatives: [], shelfEmpty: true }) },
       });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams(BRIEF)} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at(BRIEF), { me: RINA_ME });
       await screen.findByText('There are no products on your shelf yet.');
       navigate(view, {});
       await waitFor(() => expect(screen.queryByLabelText('Customer brief')).not.toBeInTheDocument());
@@ -330,7 +336,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
 
     it('P14 exit review: Back from a plan this screen built goes back — the brief’s own entry, not a new one', async () => {
       stubFetch({ ...SHELL_STUBS, 'GET /attack-plan': { body: plan() }, 'GET /product-catalog': { body: { products: SHELF } } });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams({})} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at({}), { me: RINA_ME });
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Retirement income' }));
       await userEvent.click(within(group('Age band')).getByRole('button', { name: '25–34' }));
@@ -347,7 +353,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
 
     it('P14-T8 AC-3 back on the brief, it is as it was', async () => {
       stubFetch({ ...SHELL_STUBS, 'GET /attack-plan': { body: plan() }, 'GET /product-catalog': { body: { products: SHELF } } });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams(BRIEF)} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at(BRIEF), { me: RINA_ME });
       await result();
       navigate(view, {});
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
@@ -424,7 +430,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
         'GET /attack-plan': [{ body: plan() }, { body: plan({ product: product({ code: 'PRUANUGERAH', name: 'PRUAnugerah' }) }) }],
         'GET /product-catalog': { body: { products: SHELF } },
       });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams(BRIEF)} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at(BRIEF), { me: RINA_ME });
       await result();
       await userEvent.click(screen.getByRole('button', { name: 'PRUAnugerah' }));
       navigate(view, { ...BRIEF, product: 'PRUANUGERAH' });
@@ -438,7 +444,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       ['an error', serverError, 'Something went wrong.'],
     ] as const)('P14 exit review: after Build attack plan with no heading to land on, %s takes the focus', async (_name, reply, words) => {
       stubFetch({ ...SHELL_STUBS, 'GET /attack-plan': reply, 'GET /product-catalog': { body: { products: SHELF } } });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams({})} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at({}), { me: RINA_ME });
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Retirement income' }));
       await userEvent.click(within(group('Age band')).getByRole('button', { name: '25–34' }));
@@ -453,7 +459,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
 
     it('P14 exit review: after a switch to a product that is not found, the not-found state takes the focus', async () => {
       stubFetch({ ...SHELL_STUBS, 'GET /attack-plan': [{ body: plan() }, notFound], 'GET /product-catalog': { body: { products: SHELF } } });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams(BRIEF)} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at(BRIEF), { me: RINA_ME });
       await result();
       await userEvent.click(screen.getByRole('button', { name: 'PRUAnugerah' }));
       navigate(view, { ...BRIEF, product: 'PRUANUGERAH' });
@@ -464,7 +470,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
 
     it('P14-T8 AC-11 after Build attack plan the result’s heading takes the focus', async () => {
       stubFetch({ ...SHELL_STUBS, 'GET /attack-plan': { body: plan() }, 'GET /product-catalog': { body: { products: SHELF } } });
-      const view = renderInLayout(AgentLayout, <AttackPlanPage searchParams={searchParams({})} />, { me: RINA_ME });
+      const view = renderInLayout(AgentLayout, at({}), { me: RINA_ME });
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Retirement income' }));
       await userEvent.click(within(group('Age band')).getByRole('button', { name: '25–34' }));

@@ -1,17 +1,21 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import { NONE_CHASED, RINA_CHASING } from '@test/campaigns-fixtures';
 import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
 import CoachingPersonLayout from '../layout';
 import CoacheeSummaryTab from './page';
 
-const nav = vi.hoisted(() => ({ replace: vi.fn() }));
+const nav = vi.hoisted(() => ({ replace: vi.fn(), search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: nav.replace }),
   usePathname: () => '/coaching/mem-rina/summary',
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 const LEADER = makeMe({
   user: {
@@ -386,10 +390,11 @@ describe('a coachee’s Personal Summary tab — an earlier month or year (P18.8
       '/summary?for=mem-rina&month=2026-08': { body: AUGUST },
       '/activity/ratios': { body: RATIOS }, 'GET /campaigns/chasing': { body: RINA_CHASING },
     });
+    nav.search = new URLSearchParams(query).toString();
     renderInLayout(
       AgentLayout,
       <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}>
-        <CoacheeSummaryTab searchParams={routeParams(query)} />
+        <CoacheeSummaryTab />
       </CoachingPersonLayout>,
       { me: LEADER },
     );

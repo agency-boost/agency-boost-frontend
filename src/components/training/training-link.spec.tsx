@@ -27,6 +27,7 @@ const TRAINING_LINK: ActivationItemLink = {
   route: '/training/SALES/CLOSING_TECHNIQUES',
   completesWhen: 'the hire has completed that training module',
   live: true,
+  form: null,
 };
 
 /** Rina's checklist with item 9 bound to *Closing Techniques That Work*, as 0555's is (D-seed-link). */

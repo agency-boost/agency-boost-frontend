@@ -327,7 +327,7 @@ export function ActivityPanel({ name, week, error }: { name: string; week: Activ
         className="max-w-[40rem]"
       >
         <div className="overflow-x-auto rounded-lg border border-hairline">
-          <table className="w-full border-collapse text-left text-base">
+          <table className="relative w-full border-collapse text-left text-base">
             <caption className="sr-only">{`${name}, last 7 days`}</caption>
             <thead>
               <tr className="bg-navy/[0.04] text-2xs uppercase text-muted">

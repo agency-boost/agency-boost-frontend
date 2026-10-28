@@ -8,6 +8,7 @@ import { PRODUCT_DESCRIPTION_MAX } from './tenant-config';
 import { PDF_MAX_BYTES } from './recruitment-pitch';
 import { COMMISSION_MAX_YEARS } from './admin';
 import { INBOX_PAGE_SIZE, POPOVER_PAGE_SIZE } from './notifications';
+import { INVITE_NAME_MAX } from './invites';
 
 /**
  * P3.5-T11 AC-4. The frontend declares its own copy of every response shape, and until
@@ -107,6 +108,15 @@ const PAIRS: ReadonlyArray<[file: string, ours: string, theirs: string]> = [
   ['join.ts', 'PendingRequest', 'PendingRequestDto'],
   ['join.ts', 'UntaggedMember', 'UntaggedMemberDto'],
   ['join.ts', 'MyLeaderCode', 'MyLeaderCodeDto'],
+  // P18.96-T3 (ADR-0170): + Add agent, its invites, its transfers, and the banner an invite link opens.
+  ['invites.ts', 'InviteView', 'InviteDto'],
+  ['invites.ts', 'InviteList', 'InviteListDto'],
+  ['invites.ts', 'SharedInvite', 'SharedInviteDto'],
+  ['invites.ts', 'TransferView', 'TransferDto'],
+  // The P18.96 exit review, M3: whoever asked is answered what they typed, a shape of its own.
+  ['invites.ts', 'RequestedTransferView', 'RequestedTransferDto'],
+  ['invites.ts', 'InviteBanner', 'InviteBannerDto'],
+  ['invites.ts', 'PersonRef', 'TransferPersonDto'],
   ['notifications.ts', 'InboxItem', 'InboxItemDto'],
   // P12.1-T4: the pager reads `total`, `page` and `pageSize` straight off the page, and every row and
   // the badge read `readAt` and `unread` straight off a mark's answer.
@@ -328,6 +338,10 @@ describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
 
   it('P14 exit review: the commission editor stops adding years where the API stops taking them (ADR-0119)', () => {
     expect(doc.components.schemas.CommissionYearDto.properties?.year.maximum).toBe(COMMISSION_MAX_YEARS);
+  });
+
+  it('P18.96-T3 AC-1 + Add agent’s Name stops where the API stops taking it', () => {
+    expect(doc.components.schemas.AddAgentDto.properties?.fullName.maxLength).toBe(INVITE_NAME_MAX);
   });
 
   it('P11 exit review: the input limits a screen repeats are the ones the API validates', () => {
@@ -624,9 +638,22 @@ const ACTIVATION_PAIRS: ReadonlyArray<[file: string, ours: string, theirs: strin
   ['activation.ts', 'ActivationCorrection', 'ActivationStartCorrectedDto'],
   ['activation.ts', 'ActivationNote', 'ActivationNoteDto'],
   ['activation.ts', 'ActivationNoteSaved', 'ActivationNoteSavedDto'],
+  // P18.96-T4: the source line's record and the closings *Which case?* offers.
+  ['activation.ts', 'ActivationItemRecord', 'ActivationItemRecordDto'],
+  ['activation.ts', 'ActivationClosing', 'ActivationClosingDto'],
+  ['activation.ts', 'ActivationClosings', 'ActivationClosingsDto'],
   ['activation.ts', 'NewHiresRoster', 'NewHiresRosterDto'],
-  ['activation.ts', 'NewHireGroup', 'NewHireGroupDto'],
+  // P18.96-T6: the year of new hires by their 3M result, its figures, and *Mark left*'s answer.
   ['activation.ts', 'NewHireRow', 'NewHireRowDto'],
+  ['activation.ts', 'NewHireUnitRef', 'NewHireUnitRefDto'],
+  ['activation.ts', 'NewHireUnit', 'NewHireUnitDto'],
+  ['activation.ts', 'NewHireChecklist', 'NewHireChecklistDto'],
+  ['activation.ts', 'NewHiresSections', 'NewHiresSectionsDto'],
+  ['activation.ts', 'NewHiresWindow', 'NewHiresWindowDto'],
+  ['activation.ts', 'Activation3MShare', 'Activation3MShareDto'],
+  ['activation.ts', 'Activation3MMonth', 'Activation3MMonthDto'],
+  ['activation.ts', 'Activation3MFigures', 'Activation3MFiguresDto'],
+  ['activation.ts', 'NewHireMarkedLeft', 'NewHireMarkedLeftDto'],
   ['session.ts', 'MeActivation', 'MeActivationDto'],
 ];
 
@@ -659,7 +686,10 @@ describe('the activation’s types match the API document (P13)', () => {
   it('the hire’s tick sends only what TickOwnActivationItemDto takes, and a leader’s only `done`', () => {
     const own = new Set(propertiesOf('TickOwnActivationItemDto'));
     expect(declaredFields('activation.ts', 'MyItemInput').filter((f) => !own.has(f))).toEqual([]);
-    expect(propertiesOf('TickHireActivationItemDto')).toEqual(['done']);
+    // P18.96-T4 AC-3: a leader's tick of a data-backed item carries its record.
+    expect(propertiesOf('TickHireActivationItemDto')).toEqual(['done', 'record']);
+    expect(declaredFields('activation.ts', 'ActivationRecordInput').filter((f) => !new Set(propertiesOf('ActivationItemRecordInputDto')).has(f)))
+      .toEqual([]);
   });
 
   it('the limits the screens repeat are the ones the API validates (invariant §7)', () => {
@@ -672,7 +702,8 @@ describe('the activation’s types match the API document (P13)', () => {
   it('every path the activation calls exists in the document', () => {
     const paths = new Set(Object.keys(doc.paths).map((p) => p.replace('/api/v1', '')));
     const called = callsIn(readFileSync(join(__dirname, 'activation.ts'), 'utf8'));
-    expect(called.length).toBe(8);
+    // P18.96-T4: the two closings reads. P18.96-T6: *Mark left*.
+    expect(called.length).toBe(11);
     expect(called.filter((p) => !matches(p, paths))).toEqual([]);
   });
 });
@@ -807,6 +838,15 @@ describe('campaigns’ types match the API document (P18.5-T7 to T9)', () => {
   it('the Unit Dashboard’s row and view carry the chases and the MDRT header', () => {
     expect(propertiesOf('UnitRowDto')).toEqual(expect.arrayContaining(['chasingMdrt', 'campaigns']));
     expect(propertiesOf('UnitDashboardDto')).toContain('mdrt');
+  });
+
+  it('P18.96-T5 the Unit Dashboard’s row, totals and team carry who counts for production (ADR-0172)', () => {
+    // `UnitRow`'s body holds a `}` in a comment before its end, so only the document's side is read for it.
+    expect(propertiesOf('UnitRowDto')).toContain('newHireBeforeFirstSale');
+    expect(propertiesOf('UnitTotalDto')).toContain('newHires');
+    expect(declaredFields('unit-dashboard.ts', 'UnitTotal')).toContain('newHires');
+    expect(propertiesOf('TeamTileDto')).toContain('newHires');
+    expect(declaredFields('unit-dashboard.ts', 'TeamTile')).toContain('newHires');
   });
 
   it('CampaignDetail’s own fields are documented on CampaignDetailDto, and the card’s it extends', () => {

@@ -142,15 +142,26 @@ describe('find your leader (P3-T3)', () => {
     expect(calls.some((c) => c.init.method === 'DELETE')).toBe(true);
   });
 
-  it('shows a current leader as such, with nothing to press', async () => {
-    stubFetch({
-      '/join/me': { body: { ...REGISTERED, status: 'active', leaderName: 'Wilson Tanoto' } },
-      '/join/leaders': { body: [{ ...LEADERS[0], isCurrentLeader: true }, LEADERS[1]] },
+  it('P18.96-T3 AC-6 a reader with a leader sees who it is and one line in place of the search, which is never asked', async () => {
+    const { calls } = stubFetch({
+      '/join/me': { body: { ...REGISTERED, status: 'active', leaderMembershipId: 'mem-ab', leaderName: 'Wilson Tanoto' } },
     });
     renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
 
-    expect(await screen.findByText('Your leader')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Send request' })).toHaveLength(1);
+    expect(await screen.findByText('Changing leader goes through your office admin.')).toBeInTheDocument();
+    expect(screen.getByText('Currently reporting to')).toBeInTheDocument();
+    expect(screen.getByText('Wilson Tanoto')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Search by name')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Send request' })).not.toBeInTheDocument();
+    expect(calls.some((c) => c.url.includes('/join/leaders'))).toBe(false);
+  });
+
+  it('P18.96-T3 AC-6 a reader with no leader still searches, and the list is the server’s — never the reader’s own unit', async () => {
+    // The exclusion is the server's (`GET /join/leaders`); the screen draws what it is served.
+    stubFetch({ '/join/me': { body: REGISTERED }, '/join/leaders': { body: LEADERS } });
+    renderInLayout(AgentLayout, <FindLeaderPage />, { me: JOINER });
+    expect(await screen.findByLabelText('Search by name')).toBeInTheDocument();
+    expect(screen.queryByText('Changing leader goes through your office admin.')).not.toBeInTheDocument();
   });
 
   it('searches by name, at the server', async () => {

@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeMe, renderWithSession, stubFetch } from '@test/harness';
@@ -213,6 +213,17 @@ describe('the sidebar matches the prototype', () => {
       renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader(over) });
       expect(section()).toEqual([]);
       expect(screen.queryByText('New agent')).not.toBeInTheDocument();
+    });
+
+    it('P18.96-T3 AC-1 a leader who may add agents sees New hires before their first hire; one who may not, or whose page it is not, does not', () => {
+      renderWithSession(<AgentShell title="x">body</AgentShell>, {
+        me: reader({ permissions: ['member:invite', 'new_hires:read_roster'] }),
+      });
+      expect(section()).toEqual(['New agent', 'New hires']);
+      cleanup();
+      // The Owner's grant alone, standing on no rung: the page is not theirs, so the nav offers nothing.
+      renderWithSession(<AgentShell title="x">body</AgentShell>, { me: reader({ permissions: ['member:invite'] }) });
+      expect(section()).toEqual([]);
     });
 
     it('P13-T7 AC-5 both, in the prototype’s order', () => {

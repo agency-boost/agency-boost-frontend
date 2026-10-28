@@ -1,15 +1,19 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeMe, renderWithSession, stubFetch, type StubReply } from '@test/harness';
 import { detail, NONE_CHASED, RINA_CHASING, serverError, SPRINT } from '@test/campaigns-fixtures';
 import PersonalSummaryPage from './page';
 
-const nav = vi.hoisted(() => ({ replace: vi.fn() }));
+const nav = vi.hoisted(() => ({ replace: vi.fn(), search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: nav.replace }),
   usePathname: () => '/summary',
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 const AGENT = makeMe({ permissions: ['personal_summary:read'] });
 const M = 1_000_000 * 100;
@@ -943,7 +947,8 @@ describe('the Personal Summary — an earlier month or year (P18.8-T11)', () => 
   });
   const open = (routes: Record<string, StubReply | StubReply[]>, query: Record<string, string> = {}) => {
     const stub = stubFetch(routes);
-    renderWithSession(<PersonalSummaryPage searchParams={routeParams(query)} />, { me: AGENT });
+    nav.search = new URLSearchParams(query).toString();
+    renderWithSession(<PersonalSummaryPage />, { me: AGENT });
     return stub;
   };
   const summaryReads = (calls: { url: string }[]) =>

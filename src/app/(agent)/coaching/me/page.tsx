@@ -1,10 +1,9 @@
 'use client';
 
-import { use } from 'react';
+import { Suspense } from 'react';
 import { MyCoaching } from '@/components/coaching-record';
 import { Page } from '@/components/page';
-
-type Query = { session?: string | string[] };
+import { useQuery } from '@/lib/use-query';
 
 /**
  * The reader's own coaching (`/coaching/me`, `Overall.html:4384-4600`; ADR-0078, P11-T10): the
@@ -16,8 +15,17 @@ type Query = { session?: string | string[] };
  * (`:10407`). Gated as the roster is, by `coaching_session:read`; the API answers only what is the
  * reader's own whatever this decides.
  */
-export default function MyCoachingPage({ searchParams }: { searchParams?: Promise<Query> }) {
-  const query = searchParams ? use(searchParams) : {};
+export default function MyCoachingPage() {
+  return (
+    // `useSearchParams` needs a boundary (`lib/use-query.ts`). Nothing in its place: a prerender draws the shell's gate, never this.
+    <Suspense fallback={null}>
+      <MyCoachingNotes />
+    </Suspense>
+  );
+}
+
+function MyCoachingNotes() {
+  const query = useQuery();
   const selected = typeof query.session === 'string' && query.session ? query.session : undefined;
   return (
     <Page title="Coaching Session" permission="coaching_session:read">

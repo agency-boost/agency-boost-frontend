@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  COMPARE_MAX, entryDate, initialsOf, OWN_COPY, peopleOn, PROTOTYPE_COPY, readCalendar, readEntry, viewOf,
+  COMPARE_MAX, entryDate, initialsOf, OWN_COPY, peopleOn, PROTOTYPE_COPY, readCalendar, readDownline, readEntry, viewOf,
   type CalendarDisplay, type CalendarDownlinePerson, type CalendarEntry, type CalendarNow, type CalendarRead,
   type CalendarView,
 } from '@/lib/calendar';
@@ -95,11 +95,14 @@ export function CalendarScreen({
   initialView,
   initialDate,
   initialEntry,
+  initialWith,
 }: {
   /** The address's `view`, when it names one; without it, Week — and on a phone, the Agenda. */
   initialView?: CalendarView;
   initialDate?: string;
   initialEntry?: string;
+  /** The address's `with` (P18.96-T6 AC-4): open *New event* as a 1:1 with this member, once the week is read. */
+  initialWith?: string;
 }) {
   const { me } = useSession();
   const phone = usePhone();
@@ -242,6 +245,33 @@ export function CalendarScreen({
     if (shown) setDate(shown.today);
     scroll.reset();
   };
+
+  /*
+   * **A 1:1 asked for by the address** (P18.96-T6 AC-4; `/new-hires`' *Schedule 1:1*): once the reader's week is read —
+   * so the office's today is known — the new-entry dialog opens as *1:1 coaching*, *"1:1 with {full name}"*, them
+   * invited, the name from the reader's own downline. Somebody not in it opens the same entry with nobody invited and
+   * no name: the address carries an id, never a person's name. Once per address.
+   */
+  const askedFor = useRef(false);
+  useEffect(() => {
+    if (!initialWith || !may.create || !shown || askedFor.current) return undefined;
+    askedFor.current = true;
+    let live = true;
+    const slot = { date: shown.today, start: DEFAULT_START, end: DEFAULT_END };
+    readDownline()
+      .then((answer) => answer.people.find((p) => p.membershipId === initialWith) ?? null)
+      .catch(() => null)
+      .then((person) => {
+        if (!live) return;
+        open({
+          mode: 'new', slot,
+          preset: person
+            ? { type: 'coaching', title: OWN_COPY.oneOnOneWith(person.name), invitee: { membershipId: person.membershipId, name: person.name } }
+            : { type: 'coaching', title: '', invitee: null },
+        });
+      });
+    return () => { live = false; };
+  }, [initialWith, may.create, shown]);
 
   /** *+ New event*: the office's today when it is in view, else the first day shown (P12-T2 AC-4). */
   const newEvent = () => {

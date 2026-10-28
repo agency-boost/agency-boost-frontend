@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useCoachee } from '@/components/coaching-person';
 import { Page } from '@/components/page';
 import { SUMMARY_VIEWS, SummaryCards, type SummaryView } from '@/components/personal-summary';
@@ -12,6 +12,7 @@ import { readActivityRatios, type ActivityRatios } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { PRONOUN_FORMS, type Coachee } from '@/lib/coaching';
 import { readSummary, summaryPeriodFrom, type Summary, type SummaryPeriodQuery } from '@/lib/summary';
+import { useQuery } from '@/lib/use-query';
 
 /**
  * A coachee's *Personal Summary* tab (`Overall.html:3998-4162`, P11-T7 AC-4): the agent's own Summary,
@@ -38,11 +39,18 @@ import { readSummary, summaryPeriodFrom, type Summary, type SummaryPeriodQuery }
  * tab's own address — `/coaching/{id}/summary?month=2026-08` — read with `?for=` and the period together, and
  * audited as every read of the coachee's Summary is.
  */
-type Query = { month?: string | string[]; year?: string | string[] };
+export default function CoacheeSummaryTab() {
+  return (
+    // `useSearchParams` needs a boundary (`lib/use-query.ts`). Nothing in its place: a prerender draws the shell's gate, never this.
+    <Suspense fallback={null}>
+      <SummaryTab />
+    </Suspense>
+  );
+}
 
-export default function CoacheeSummaryTab({ searchParams }: { searchParams?: Promise<Query> }) {
+function SummaryTab() {
   const coachee = useCoachee();
-  const query = searchParams ? use(searchParams) : {};
+  const query = useQuery();
   return (
     <Page permission="personal_summary:read">
       <CoacheeSummary coachee={coachee} address={summaryPeriodFrom(query)} />

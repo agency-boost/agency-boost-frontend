@@ -29,7 +29,7 @@ export function PrintLayout({ meeting }: { meeting: MeetingView }) {
       <h3 className={h3}>{FORUM_COPY.tabs.overview}</h3>
       <Chips chips={scorecard.chips} />
       <div className="mb-2 overflow-hidden rounded-lg border border-hairline bg-card">
-        <table className="w-full border-collapse text-left text-base">
+        <table className="relative w-full border-collapse text-left text-base">
           <ScorecardHead periods={scorecard.periods} />
           <tbody>
             {scorecard.rows.map((row) => {
@@ -81,7 +81,7 @@ export function PrintLayout({ meeting }: { meeting: MeetingView }) {
 
       <h3 className={h3}>{FORUM_COPY.tabs.actions}</h3>
       <div className="overflow-hidden rounded-lg border border-hairline bg-card">
-        <table className="w-full border-collapse text-left text-base">
+        <table className="relative w-full border-collapse text-left text-base">
           <thead>
             <tr><TrackerHeaders /></tr>
           </thead>

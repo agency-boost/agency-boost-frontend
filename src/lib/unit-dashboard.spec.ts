@@ -5,8 +5,9 @@ import {
 } from '@test/unit-dashboard-fixtures';
 import {
   candidates, countWords, dialogGroups, everyRow, gapWords, goalBar, goalWords, inputsOf, lockedWords, missingWords,
-  OWN_COPY, periodFrom, prefill, productionChanges, productionToast, provenanceWords, readUnitDashboard, readerName,
-  recruitLine, regroup, rowName, salesLine, totalRecruitLine, touchesWords, updateUnitProduction,
+  namesMissing, namesNewHires, newHireWords, OWN_COPY, periodFrom, prefill, productionChanges, productionToast,
+  PROTOTYPE_COPY, provenanceWords, readUnitDashboard, readerName, recruitLine, regroup, rowName, salesLine, totalNote,
+  totalRecruitLine, touchesWords, updateUnitProduction,
 } from './unit-dashboard';
 
 describe('the Unit Dashboard’s client', () => {
@@ -184,6 +185,36 @@ describe('the words a row is drawn in', () => {
     expect(missingWords(1, ['Yanti Puspita'])).toBe('Not uploaded yet for Yanti Puspita, so not counted in this total.');
     expect(missingWords(2, ['Yanti Puspita'])).toBe('Not uploaded yet for 2 people, so not counted in this total.');
     expect(missingWords(1, [])).toBe('Not uploaded yet for 1 person, so not counted in this total.');
+  });
+
+  it('P18.96-T5 AC-4 names the new hires a total leaves out, by name where the rows say, else by count', () => {
+    expect(newHireWords(0, [])).toBeNull();
+    expect(newHireWords(1, ['Yanti Puspita'])).toBe('No first sale yet for Yanti Puspita, a new hire, so not counted in this total.');
+    expect(newHireWords(2, ['Yanti Puspita', 'Tono Saputra']))
+      .toBe('No first sale yet for Yanti Puspita, Tono Saputra, new hires, so not counted in this total.');
+    expect(newHireWords(2, ['Yanti Puspita'])).toBe('No first sale yet for 2 new hires, so not counted in this total.');
+    expect(newHireWords(1, [])).toBe('No first sale yet for 1 new hire, so not counted in this total.');
+  });
+
+  it('P18.96-T5 AC-4 a new hire before a first sale is named as one, never as missing, though their figure is not held', () => {
+    const yanti = { ...YANTI, newHireBeforeFirstSale: true };
+    expect(YANTI.goal.actualMinor).toBeNull();
+    expect(namesMissing([BUDI, YANTI])).toEqual(['Yanti Puspita']);
+    expect(namesMissing([BUDI, yanti])).toEqual([]);
+    expect(namesNewHires([BUDI, yanti, DIMAS])).toEqual(['Yanti Puspita']);
+    expect(namesNewHires([{ ...AGUS_ROW, newHireBeforeFirstSale: true }])).toEqual(['You (Agus)']);
+  });
+
+  it('P18.96-T5 AC-4 a total’s marks together, missing first; none when neither applies', () => {
+    expect(totalNote(null, null)).toBeNull();
+    expect(totalNote('A.', null)).toBe('A.');
+    expect(totalNote(null, 'B.')).toBe('B.');
+    expect(totalNote('A.', 'B.')).toBe('A. B.');
+  });
+
+  it('P18.96-T5 AC-3 the tag is the client’s word, and its screen-reader words say why', () => {
+    expect(PROTOTYPE_COPY.newHire).toBe('New hire');
+    expect(`${PROTOTYPE_COPY.newHire}${OWN_COPY.newHireMark}`).toBe('New hire, no first sale yet');
   });
 
   it('P15-T2 AC-2 counts candidates and the toast’s agents, singular at one', () => {

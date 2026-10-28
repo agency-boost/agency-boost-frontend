@@ -6,6 +6,7 @@ import { InlineSaveField, type InlineSaveStatusProps } from '@/components/ui/inl
 import type { ApiError } from '@/lib/api-client';
 import { formatDay } from '@/lib/format';
 import type { Lead } from '@/lib/leads';
+import { useScrollLock } from '@/lib/use-scroll-lock';
 
 /** What the table hands the dialog for the three text fields: its drafts, and its one-field write. */
 export interface DetailsEditor {
@@ -71,6 +72,9 @@ export function LeadDetailsDialog({
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const id = useId();
+
+  // The table behind holds still while it is open (P18.96-T1 AC-2).
+  useScrollLock(true);
 
   useEffect(() => {
     const returnTo = document.activeElement as HTMLElement | null;
@@ -142,7 +146,7 @@ export function LeadDetailsDialog({
         aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()}
         onKeyDown={trap}
-        className="flex max-h-full w-full max-w-md flex-col gap-4 overflow-y-auto rounded-lg bg-card p-6 shadow-modal"
+        className="flex max-h-full w-full max-w-md flex-col gap-4 overflow-y-auto overscroll-contain rounded-lg bg-card p-6 shadow-modal"
       >
         <h2 id={titleId} className="text-md font-bold text-navy">
           Lead details for {name}

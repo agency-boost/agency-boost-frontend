@@ -494,3 +494,99 @@ describe('Phase 13 exit review — the badge says whether a link works, never wh
     expect(within(rowOf('Learn insurance basics')).queryByText('Auto')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * **P18.96-T7 G2: the three data-backed items read as data-backed** (ADR-0171 §3). They store no link — their kind is
+ * bound by their code — and the settings read serves each its kind as `link`: *Auto*, and the select holding what it
+ * completes from, *From Sales data* or *From Coaching sessions*, and offering nothing else. Saved back as stored.
+ */
+describe('Settings › Activation checklist — the data-backed items (P18.96-T7 G2)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const dataLink = (kind: string, label: string, completesWhen: string, form: string) => ({
+    kind, label, route: null, completesWhen, live: true, form,
+  });
+  const FIRST_SALE = dataLink(
+    'sales:first', 'Sales data',
+    'the hire has a first sale since joining: a sales lead paid and issued, or a policy in the production file', 'closing',
+  );
+  const CHECK_IN = dataLink(
+    'coaching:weekly:4', 'Coaching sessions', '4 1:1s with the hire are recorded in coaching sessions since joining', 'one_on_one',
+  );
+  const MILESTONE = dataLink('sales:closings:3', 'Sales data', 'the hire has 3 sales leads paid and issued since joining', 'closing');
+  const WITH_DATA = {
+    ...CHECKLIST,
+    published: {
+      ...PUBLISHED,
+      aspects: [
+        ...PUBLISHED.aspects,
+        {
+          code: 'FIRST_SALE', label: '4. First Sale', displayOrder: 4,
+          items: [
+            item({ code: 'JOINT_FIELD_WORK', label: 'Joint Field Work with leader', displayOrder: 1 }),
+            item({ code: 'FIRST_CASE_CLOSED', label: 'Close first case independently', displayOrder: 2, link: FIRST_SALE }),
+          ],
+        },
+        {
+          code: 'ONGOING_HABITS', label: '5. Ongoing Habits', displayOrder: 5,
+          items: [
+            item({ code: 'WEEKLY_CHECK_IN', label: 'Weekly 1-on-1 check-in (4 weeks)', displayOrder: 1, link: CHECK_IN }),
+            item({
+              code: 'INDEPENDENT_AGENT_MILESTONE', label: 'Reach Independent Agent milestone (3 independent closings)',
+              displayOrder: 2, link: MILESTONE,
+            }),
+          ],
+        },
+      ],
+    },
+  };
+
+  it('P18.96-T7 G2 draws each as data-backed — Auto, and the select holding From Sales data or From Coaching sessions — and never No link (manual)', async () => {
+    render(OWNER, WITH_DATA);
+    await screen.findByText('4. First Sale');
+    for (const [label, words, completesWhen] of [
+      ['Close first case independently', 'From Sales data', FIRST_SALE.completesWhen],
+      ['Weekly 1-on-1 check-in (4 weeks)', 'From Coaching sessions', CHECK_IN.completesWhen],
+      ['Reach Independent Agent milestone (3 independent closings)', 'From Sales data', MILESTONE.completesWhen],
+    ] as const) {
+      const row = within(rowOf(label));
+      expect(row.getByRole('button', { name: `Auto — completes when ${completesWhen}` })).toBeInTheDocument();
+      const select = row.getByLabelText('Completes from');
+      // The one thing it completes from, and nothing to choose: not re-linked here.
+      expect(select).toBeDisabled();
+      expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual([words]);
+      expect(row.queryByText('No link (manual)')).not.toBeInTheDocument();
+    }
+    // A manual item beside them keeps the select as it was, and its badge-less row.
+    const manual = within(rowOf('Joint Field Work with leader'));
+    expect(manual.getByLabelText('Completes from')).toBeEnabled();
+    expect(manual.getByLabelText('Completes from')).toHaveValue('');
+    expect(manual.queryByText('Auto')).not.toBeInTheDocument();
+  });
+
+  it('P18.96-T7 G2 saves them back as stored — no link — when the draft is saved, their labels still the Owner’s to edit', async () => {
+    const { calls } = render(OWNER, WITH_DATA);
+    await screen.findByText('4. First Sale');
+    await userEvent.click(within(rowOf('Weekly 1-on-1 check-in (4 weeks)')).getByRole('button', { name: 'Edit' }));
+    const field = screen.getByLabelText('Item');
+    await userEvent.clear(field);
+    await userEvent.type(field, 'Weekly 1:1 with your leader');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+    const items = sent(calls, 'PUT').aspects.flatMap((a: { items: unknown[] }) => a.items);
+    expect(items).toEqual(expect.arrayContaining([
+      { code: 'FIRST_CASE_CLOSED', label: 'Close first case independently', autoLink: null },
+      { code: 'WEEKLY_CHECK_IN', label: 'Weekly 1:1 with your leader', autoLink: null },
+      { code: 'INDEPENDENT_AGENT_MILESTONE', label: 'Reach Independent Agent milestone (3 independent closings)', autoLink: null },
+    ]));
+  });
+
+  it('P18.96-T7 G2 a reader who may not edit sees the three as Auto, and no select at all', async () => {
+    render(READER, WITH_DATA);
+    await screen.findByText('4. First Sale');
+    const row = within(rowOf('Close first case independently'));
+    expect(row.getByRole('button', { name: `Auto — completes when ${FIRST_SALE.completesWhen}` })).toBeInTheDocument();
+    expect(row.queryByLabelText('Completes from')).not.toBeInTheDocument();
+  });
+});

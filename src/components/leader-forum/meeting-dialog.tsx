@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
+import { DateField } from '@/components/ui/date-field';
 import { Button, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
@@ -162,7 +163,22 @@ export function MeetingDialog({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title={meeting ? COPY.detailsTitle : COPY.newTitle}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={meeting ? COPY.detailsTitle : COPY.newTitle}
+      // The form's *Cancel* and its submit, held at the foot; the delete question keeps its own two buttons.
+      footer={asking && meeting ? undefined : (
+        <div className="flex flex-wrap justify-end gap-2.5">
+          <Button variant="secondary" onClick={onClose}>{COPY.cancel}</Button>
+          {editable && (
+            <Button type="submit" form={`${id}-form`} disabled={busy} aria-busy={busy || undefined}>
+              {meeting ? COPY.saveChanges : COPY.create}
+            </Button>
+          )}
+        </div>
+      )}
+    >
       {banner && <div className="mb-4"><ErrorBanner {...banner} /></div>}
       {conflict && <p role="alert" className="mb-4 text-sm font-semibold text-alert">{FORUM_COPY.conflict}</p>}
 
@@ -175,7 +191,7 @@ export function MeetingDialog({
           </div>
         </div>
       ) : (
-        <form onSubmit={(e) => void submit(e)} noValidate className="flex flex-col gap-4">
+        <form id={`${id}-form`} onSubmit={(e) => void submit(e)} noValidate className="flex flex-col gap-4">
           <Field label={COPY.title} htmlFor={`${id}-title`} error={titleError}>
             <TextInput
               id={`${id}-title`}
@@ -188,14 +204,14 @@ export function MeetingDialog({
             />
           </Field>
           <Field label={COPY.date} htmlFor={`${id}-date`} error={dateError}>
-            <TextInput
+            <DateField
               id={`${id}-date`}
-              type="date"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={setDate}
               required
               readOnly={!editable}
               invalid={Boolean(dateError)}
+              className="w-full"
             />
           </Field>
 
@@ -205,15 +221,6 @@ export function MeetingDialog({
             </div>
           )}
           {deleteError && <p role="alert" className="-mt-2 text-xs font-semibold text-alert">{deleteError}</p>}
-
-          <div className="flex flex-wrap justify-end gap-2.5">
-            <Button variant="secondary" onClick={onClose}>{COPY.cancel}</Button>
-            {editable && (
-              <Button type="submit" disabled={busy} aria-busy={busy || undefined}>
-                {meeting ? COPY.saveChanges : COPY.create}
-              </Button>
-            )}
-          </div>
         </form>
       )}
     </Modal>

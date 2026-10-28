@@ -10,6 +10,7 @@ import {
   audienceLine, cancelledToast, cancelRsvp, canJoin, dayOf, goingToast, isGoing, OWN_COPY, pastBlockOf, PROTOTYPE_COPY,
   readEvent, refusalOf, rsvpEvent, timeOf, type EventsMeta, type GuestEvent,
 } from '@/lib/events';
+import { useScrollLock } from '@/lib/use-scroll-lock';
 import { EventLocation, EventPosterFrame, EventStatePill, EventTagLabel } from './event-card';
 import { drawsPastBlock, PastEventBlock } from './event-feedback';
 import { useEventsHost } from './events-screen';
@@ -34,6 +35,12 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), texta
  * Its own states are Fills (L-01): a skeleton, an error with a retry, and the not-found state for an event
  * the reader is not invited to, an archived one, or none at all — one answer for all three, as the server
  * gives one (404).
+ *
+ * **Never taller than the screen** (P18.96-T1 AC-1; the client's findings, UI-043): from 640px the box is at most
+ * the dynamic viewport less its margins and scrolls inside itself, the poster with its ✕ held at the top and
+ * *Submit feedback* at the foot; below 640px it is the whole screen, `100dvh`, the same way. While the feedback
+ * form shows, the poster is the card's size, not the 190px banner. The page behind does not scroll while it is
+ * open. Where it fits, it is drawn as before.
  */
 export function EventModal({ id }: { id: string }) {
   const { meta, metaError, reload, close, toast, replace } = useEventsHost();
@@ -45,6 +52,9 @@ export function EventModal({ id }: { id: string }) {
   const [attempt, setAttempt] = useState(0);
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
+
+  // The list behind holds still while the event is open (P18.96-T1 AC-1).
+  useScrollLock(true);
 
   useEffect(() => {
     let live = true;
@@ -123,11 +133,13 @@ export function EventModal({ id }: { id: string }) {
 
   const failed = error ?? (event ? metaError : null);
   const ready = event && meta;
+  // The feedback form is the tall block: while it shows, the poster gives it the room (UI-043).
+  const form = Boolean(event && meta && event.ended && pastBlockOf(event) === 'form' && drawsPastBlock(event, meta));
 
   return (
     <>
       <div aria-hidden="true" className="fixed inset-0 z-40 bg-navy/35" onClick={close} data-scrim />
-      <div className="pointer-events-none fixed inset-0 z-50 flex items-start justify-center overflow-y-auto sm:items-center sm:p-5">
+      <div className="pointer-events-none fixed inset-0 z-50 flex items-start justify-center sm:items-center sm:p-5">
         <div
           ref={box}
           role="dialog"
@@ -136,9 +148,18 @@ export function EventModal({ id }: { id: string }) {
           aria-label={ready ? undefined : PROTOTYPE_COPY.title}
           tabIndex={-1}
           onKeyDown={keys}
-          className="pointer-events-auto relative min-h-full w-full overflow-hidden bg-card shadow-modal sm:min-h-0 sm:max-w-[560px] sm:rounded-lg"
+          /*
+            * **The box scrolls, never the page** (UI-043): the whole screen below 640px, and from 640px at most the
+            * dynamic viewport less the 1.25rem margins, so its top can no longer be centred off the screen. The
+            * poster and *Submit feedback* are sticky inside it; a field tabbed to stops clear of both.
+            */
+          className={cn(
+            'pointer-events-auto relative h-[100dvh] w-full overflow-y-auto overscroll-contain bg-card shadow-modal',
+            'sm:h-auto sm:max-h-[calc(100dvh-2.5rem)] sm:max-w-[560px] sm:rounded-lg',
+            form ? 'scroll-pb-24 scroll-pt-[126px]' : 'scroll-pt-[206px]',
+          )}
         >
-          <CloseButton onClose={close} onPoster={!!ready} />
+          {!ready && <CloseButton onClose={close} onPoster={false} />}
 
           {!ready && !missing && !failed && (
             <Skeleton label={OWN_COPY.loadingEvent}>
@@ -176,6 +197,8 @@ export function EventModal({ id }: { id: string }) {
             <EventDetail
               event={event}
               meta={meta}
+              form={form}
+              onClose={close}
               titleId={titleId}
               busy={busy}
               writeError={writeError}
@@ -191,9 +214,12 @@ export function EventModal({ id }: { id: string }) {
   );
 }
 
-function EventDetail({ event, meta, titleId, busy, writeError, onJoin, onCancel, onAnswer, onStale }: {
+function EventDetail({ event, meta, form, onClose, titleId, busy, writeError, onJoin, onCancel, onAnswer, onStale }: {
   event: GuestEvent;
   meta: EventsMeta;
+  /** The feedback form shows: the poster at the card's size. */
+  form: boolean;
+  onClose: () => void;
   titleId: string;
   busy: boolean;
   writeError: ApiError | null;
@@ -204,7 +230,17 @@ function EventDetail({ event, meta, titleId, busy, writeError, onJoin, onCancel,
 }) {
   return (
     <>
-      <EventPosterFrame event={event} past={false} className="h-[190px] text-[58px]" />
+      {/*
+        * The head: held at the top of the box as the rest scrolls, its ✕ with it (UI-043). 190px as drawn
+        * (`:2112`); while the form shows, the card's 110px and 36px glyph (`:2067-2068`), so the form has the room.
+        */}
+      <EventPosterFrame
+        event={event}
+        past={false}
+        className={cn('sticky top-0 z-10 shrink-0', form ? 'h-[110px] text-[36px]' : 'h-[190px] text-[58px]')}
+      >
+        <CloseButton onClose={onClose} onPoster />
+      </EventPosterFrame>
       <div className="px-5 pb-[26px] pt-[22px] sm:px-[26px]">
         <div className="mb-2"><EventTagLabel event={event} /></div>
         <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">{audienceLine(event.audience, meta.companyName)}</p>

@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { SUMMARY_VIEWS, SummaryCards, type SummaryView } from '@/components/personal-summary';
 import { SummaryPeriodSelect, useSummaryPeriod } from '@/components/summary-period';
@@ -12,6 +12,7 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { formatMonth } from '@/lib/format';
 import { printAs, restorePrintTitle } from '@/lib/print';
 import { readSummary, summaryPeriodFrom, type Summary } from '@/lib/summary';
+import { useQuery } from '@/lib/use-query';
 
 /**
  * The Personal Summary (P10-T4): your goal against what you produced, this month and this year, and
@@ -59,8 +60,6 @@ type View = SummaryView;
 
 const VIEWS = SUMMARY_VIEWS;
 
-type Query = { month?: string | string[]; year?: string | string[] };
-
 /**
  * *⬇ Download* (ADR-0068): the browser's print, as the prototype's handler is, under a title that says what
  * the page holds (`printAs`, shared with a coaching session's *⬇ Download as PDF*, ADR-0077).
@@ -69,9 +68,17 @@ type Query = { month?: string | string[]; year?: string | string[] };
 const downloadTitle = (summary: Summary, view: View) =>
   `Personal Summary – ${view === 'month' ? formatMonth(summary.month) : summary.year}`;
 
-export default function PersonalSummaryPage({ searchParams }: { searchParams?: Promise<Query> }) {
-  const query = searchParams ? use(searchParams) : {};
-  const { asked, view, chooseView, choose, key } = useSummaryPeriod(summaryPeriodFrom(query));
+export default function PersonalSummaryPage() {
+  return (
+    // `useSearchParams` needs a boundary (`lib/use-query.ts`). Nothing in its place: a prerender draws the shell's gate, never this.
+    <Suspense fallback={null}>
+      <PersonalSummary />
+    </Suspense>
+  );
+}
+
+function PersonalSummary() {
+  const { asked, view, chooseView, choose, key } = useSummaryPeriod(summaryPeriodFrom(useQuery()));
   /** The last Summary read, and the period it was read for. */
   const [held, setHeld] = useState<{ key: string; summary: Summary } | null>(null);
   const [error, setError] = useState<ApiError | null>(null);

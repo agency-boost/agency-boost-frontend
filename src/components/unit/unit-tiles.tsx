@@ -3,8 +3,8 @@ import { TermTip } from '@/components/ui/term-tip';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { formatPercent, formatRupiahCompact, formatRupiahCompactPair } from '@/lib/format';
 import {
-  agentsCount, candidates, everyRow, missingWords, namesMissing, OWN_COPY, PROTOTYPE_COPY,
-  type UnitDashboardView, type UnitPeriod,
+  agentsCount, candidates, everyRow, missingWords, namesMissing, namesNewHires, newHireWords, OWN_COPY, PROTOTYPE_COPY,
+  totalNote, type UnitDashboardView, type UnitPeriod,
 } from '@/lib/unit-dashboard';
 
 /**
@@ -20,7 +20,13 @@ import {
 export function UnitTiles({ view, period }: { view: UnitDashboardView; period: UnitPeriod }) {
   const { team, directGroupProduction: production, potentialActive, potentialRecruits } = view.tiles;
   const own = view.head.isReader;
-  const missing = missingWords(production.missing, namesMissing(everyRow(view)));
+  const rows = everyRow(view);
+  /*
+   * **The new hires before a first sale both figures leave out** (P18.96-T5 AC-4; ADR-0172 §2): in *Your team*, and named
+   * in the production's ⓘ beside who holds no figure, and in an ⓘ of *On pace*'s own — its `of` no longer every row.
+   */
+  const newHires = newHireWords(team.newHires, namesNewHires(rows));
+  const missing = totalNote(missingWords(production.missing, namesMissing(rows)), newHires);
 
   return (
     <div className="mb-3 mt-5 grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-4">
@@ -70,7 +76,10 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
       </Tile>
 
       <Tile label={PROTOTYPE_COPY.potentialActiveTile}>
-        <p className={HEADLINE}>{potentialActive.count} / {potentialActive.of} agents</p>
+        <span className="flex items-start gap-1">
+          <span className={HEADLINE}>{potentialActive.count} / {potentialActive.of} agents</span>
+          {newHires && <TippedGlyph glyph="ⓘ" name={newHires} tip={newHires} align="fit" className="-my-1" />}
+        </span>
       </Tile>
 
       <Tile label={PROTOTYPE_COPY.potentialRecruitsTile}>

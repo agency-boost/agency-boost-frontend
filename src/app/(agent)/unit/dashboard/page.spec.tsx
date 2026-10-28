@@ -1,9 +1,9 @@
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderInLayout, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { makeMe, renderInLayout, renderWithSession, stubFetch, type StubReply } from '@test/harness';
 import {
-  AGUS_ME, dashboard, EMPTY, goalCell, RATIOS, ratio, rp, total, unitRow, UNITS,
+  AGUS_ME, dashboard, EMPTY, goalCell, NEW_HIRE_VIEW, RATIOS, ratio, rp, total, unitRow, UNITS,
 } from '@test/unit-dashboard-fixtures';
 import { TERMS } from '@/lib/terms';
 import type { UnitDashboardView } from '@/lib/unit-dashboard';
@@ -11,11 +11,15 @@ import { PHONE_QUERY } from '@/lib/use-phone';
 import AgentLayout from '../../layout';
 import UnitDashboardPage from './page';
 
-const nav = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
+const nav = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn(), search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: nav.push, replace: nav.replace }),
   usePathname: () => '/unit/dashboard',
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 const SHELL = {
   '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
@@ -29,7 +33,8 @@ function render(
 ) {
   const reply = Array.isArray(view) || typeof view === 'function' || 'status' in view || 'body' in view ? view : { body: view };
   const stub = stubFetch({ 'GET /unit/dashboard': reply as StubReply, '/activity/ratios': { body: RATIOS }, ...routes });
-  renderWithSession(<UnitDashboardPage searchParams={routeParams(period ? { period } : {})} />, { me });
+  nav.search = new URLSearchParams(period ? { period } : {}).toString();
+  renderWithSession(<UnitDashboardPage />, { me });
   return stub;
 }
 
@@ -707,7 +712,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
   describe('the states the prototype lacks (AC-8)', () => {
     it('P15-T2 AC-8 waits in a skeleton shaped like the tiles and the table', async () => {
       stubFetch({ 'GET /unit/dashboard': { body: dashboard() } });
-      renderWithSession(<UnitDashboardPage searchParams={routeParams({})} />, { me: AGUS_ME });
+      renderWithSession(<UnitDashboardPage />, { me: AGUS_ME });
       expect(screen.getByText('Loading your team’s roster…').closest('[role="status"]')).toBeInTheDocument();
       await table();
       expect(screen.queryByText('Loading your team’s roster…')).not.toBeInTheDocument();
@@ -730,7 +735,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
     it('P15-T2 AC-8 shows somebody who leads nobody an empty unit in plain words, pointing to their own screens', async () => {
       const { container } = (() => {
         stubFetch({ 'GET /unit/dashboard': { body: EMPTY } });
-        return renderWithSession(<UnitDashboardPage searchParams={routeParams({})} />, { me: AGUS_ME });
+        return renderWithSession(<UnitDashboardPage />, { me: AGUS_ME });
       })();
       expect(await screen.findByText('Nobody is in your unit yet.')).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Personal summary' })).toHaveAttribute('href', '/summary');
@@ -791,7 +796,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
 
     it('P15-T2 AC-1 sits inside the agent shell, with Unit dashboard the current item', async () => {
       stubFetch({ ...SHELL, 'GET /unit/dashboard': { body: dashboard() } });
-      renderInLayout(AgentLayout, <UnitDashboardPage searchParams={routeParams({})} />, { me: AGUS_ME });
+      renderInLayout(AgentLayout, <UnitDashboardPage />, { me: AGUS_ME });
       await table();
       const main = screen.getByRole('navigation', { name: 'Main' });
       expect(within(main).getByRole('link', { name: 'Unit dashboard' })).toHaveAttribute('aria-current', 'page');
@@ -1328,6 +1333,91 @@ describe('P18.95-T3 — the roster as cards on a phone', () => {
     await table();
     expect(screen.queryByRole('list', { name: 'Your Unit' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /^View details for / })).toHaveLength(14);
+  });
+});
+
+/**
+ * **P18.96-T5 — who counts where** (ADR-0172; the client's report of 2026-10-27, UI-003). A new hire before their first
+ * sale is in the team, tagged *New hire* in *Personal*'s chip, and in neither total's production nor *On pace to be
+ * active* — which the totals' ⓘ say. The server decides who and sums the totals; the screen draws what it is sent.
+ */
+describe('P18.96-T5 — who counts where (ADR-0172)', () => {
+  const onPhone = () => vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    media: query, matches: query === PHONE_QUERY, addEventListener: () => {}, removeEventListener: () => {},
+  })));
+  const YANTI_LEFT_OUT = 'No first sale yet for Yanti Puspita, a new hire, so not counted in this total.';
+  /** The tag, by what a screen reader reads of it: its words and its sr-only reason, one element. */
+  const tagIn = (scope: HTMLElement) => within(scope).getByText((_, el) => el?.textContent === 'New hire, no first sale yet');
+
+  beforeEach(() => document.addEventListener('click', stayPut));
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.removeEventListener('click', stayPut);
+  });
+
+  it('P18.96-T5 AC-3 tags a new hire before a first sale New hire, in Personal’s chip, named for a screen reader', async () => {
+    render(NEW_HIRE_VIEW);
+    await table();
+    const tag = tagIn(rowOf('Yanti Puspita'));
+    expect(tag).toHaveTextContent(/^New hire, no first sale yet$/);
+    expect(within(tag).getByText(', no first sale yet')).toHaveClass('sr-only');
+    // *Personal*'s own classes: one tag style on the roster.
+    expect(tag.className).toBe(within(rowOf('Sari Wulandari')).getByText('Personal').className);
+    for (const name of ['Budi Santoso', 'Rina Wijaya', 'Dimas Pratama', 'Sari Wulandari']) {
+      expect({ name, tag: within(rowOf(name)).queryByText(/New hire/) }).toEqual({ name, tag: null });
+    }
+  });
+
+  it('P18.96-T5 AC-3 draws no tag from the first sale’s day: the server says so, and nobody is tagged', async () => {
+    render();
+    await table();
+    expect(screen.queryByText(/New hire/)).not.toBeInTheDocument();
+    // And no ⓘ about new hires on any total or tile.
+    expect(screen.queryByRole('button', { name: /No first sale yet/ })).not.toBeInTheDocument();
+  });
+
+  it('P18.96-T5 AC-4 a unit’s total says it leaves the new hire out, beside its goal and beside On pace', async () => {
+    render(NEW_HIRE_VIEW);
+    await table();
+    const sari = screen.getByRole('rowheader', { name: 'Sari Wulandari’s Unit — Total' }).closest('tr')!;
+    const cells = within(sari).getAllByRole('cell');
+    // The goal's ⓘ: Yanti is no longer *missing*, she is left out as a new hire.
+    expect(within(cells[0]).getByRole('button', { name: YANTI_LEFT_OUT })).toBeInTheDocument();
+    expect(within(cells[0]).queryByRole('button', { name: /Not uploaded yet/ })).not.toBeInTheDocument();
+    // On pace counts five of the six rows below, and says who it left out.
+    expect(cells[5]).toHaveTextContent(/^On pace to be active: 3\/5/);
+    expect(within(cells[5]).getByRole('button', { name: YANTI_LEFT_OUT })).toBeInTheDocument();
+    // A total with no new hire in it says nothing of them.
+    const yours = screen.getByRole('rowheader', { name: 'Your Unit — Total' }).closest('tr')!;
+    expect(within(yours).queryByRole('button', { name: /No first sale yet/ })).not.toBeInTheDocument();
+  });
+
+  it('P18.96-T5 AC-1, AC-4 the tiles: the team counts her; production and On pace say they leave her out', async () => {
+    render(NEW_HIRE_VIEW);
+    await table();
+    const team = screen.getByText('Your team').parentElement!;
+    expect(team).toHaveTextContent('16 agents');
+    const production = screen.getByText('Direct Group production').parentElement!;
+    expect(within(production).getByRole('button', {
+      name: `Not uploaded yet for Siti Rahma, so not counted in this total. ${YANTI_LEFT_OUT}`,
+    })).toBeInTheDocument();
+    const onPace = screen.getByText('On pace to be active (Group)').parentElement!;
+    expect(onPace).toHaveTextContent('11 / 15 agents');
+    expect(within(onPace).getByRole('button', { name: YANTI_LEFT_OUT })).toBeInTheDocument();
+  });
+
+  it('P18.96-T5 AC-3, AC-4 on a phone: the tag on her card’s name line, and the total card’s two ⓘ', async () => {
+    onPhone();
+    render(NEW_HIRE_VIEW);
+    await screen.findByRole('list', { name: 'Your Unit' });
+    const card = screen.getByRole('link', { name: 'Yanti Puspita' }).closest('li')!;
+    const tag = tagIn(card);
+    expect(tag.closest('p')).toContainElement(within(card).getByRole('link', { name: 'Yanti Puspita' }));
+    expect(tag.closest('dl')).toBeNull();
+    const sari = within(screen.getByRole('list', { name: 'Sari Wulandari’s Unit' })).getAllByRole('listitem')[0];
+    expect(sari).toHaveTextContent('On pace to be active: 3/5');
+    expect(within(sari).getAllByRole('button', { name: YANTI_LEFT_OUT })).toHaveLength(2);
+    expect(within(screen.getByRole('link', { name: 'Budi Santoso' }).closest('li')!).queryByText(/New hire/)).not.toBeInTheDocument();
   });
 });
 

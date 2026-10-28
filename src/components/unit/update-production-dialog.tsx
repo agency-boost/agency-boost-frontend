@@ -4,7 +4,6 @@ import { useRef, useState } from 'react';
 import { Button, ErrorBanner, TextInput } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
-import { cn } from '@/lib/cn';
 import {
   dialogGroups, everyRow, inputsOf, OWN_COPY, productionChanges, PROTOTYPE_COPY, regroup, rowName, updateUnitProduction,
   type ProductionCadence, type ProductionInputs, type UnitDashboardView,
@@ -86,6 +85,15 @@ export function UpdateProductionDialog({
       onClose={onClose}
       initialFocus={firstInput}
       className="relative max-w-[560px]"
+      footer={(
+        // `.bulk-modal-footer` (`:1638`): *Cancel* and *Save all*, at its end — held there as the table scrolls.
+        <div className="flex justify-end gap-2.5">
+          <Button variant="secondary" onClick={onClose}>{PROTOTYPE_COPY.cancel}</Button>
+          <Button onClick={() => void save()} disabled={saving}>
+            {saving ? OWN_COPY.saving : PROTOTYPE_COPY.saveAll}
+          </Button>
+        </div>
+      )}
       eyebrow={(
         // `.bulk-close` (`:4686`): ✕ at the header's end, named *Close*.
         <Button
@@ -99,7 +107,7 @@ export function UpdateProductionDialog({
       )}
     >
       <div className="-mx-6 max-h-[55vh] overflow-auto border-y border-hairline">
-        <table className="w-full min-w-[440px] border-collapse text-left">
+        <table className="relative w-full min-w-[440px] border-collapse text-left">
           <thead>
             <tr>
               {[PROTOTYPE_COPY.dialogName, PROTOTYPE_COPY.dialogMonth, PROTOTYPE_COPY.dialogYear].map((name) => (
@@ -162,14 +170,6 @@ export function UpdateProductionDialog({
       </div>
 
       {error && <div className="mt-4"><ErrorBanner {...error} /></div>}
-
-      {/* `.bulk-modal-footer` (`:1638`): *Cancel* and *Save all*, at its end. */}
-      <div className={cn('flex justify-end gap-2.5', 'mt-4')}>
-        <Button variant="secondary" onClick={onClose}>{PROTOTYPE_COPY.cancel}</Button>
-        <Button onClick={() => void save()} disabled={saving}>
-          {saving ? OWN_COPY.saving : PROTOTYPE_COPY.saveAll}
-        </Button>
-      </div>
     </Modal>
   );
 }

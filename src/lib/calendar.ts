@@ -264,6 +264,13 @@ const query = (params: Record<string, string | number | undefined>) => {
 export const readCalendar = (q: { view: CalendarView; date?: string; forId?: string }) =>
   api<CalendarRead>('/calendar/entries' + query({ view: q.view, date: q.date, for: q.forId }));
 
+/**
+ * **A 1:1 with somebody, on the calendar** (P18.96-T6 AC-4; ADR-0173 §3): the address `/new-hires`' *Schedule 1:1*
+ * opens — the calendar's new-entry dialog as a *1:1 coaching* entry with them invited. By membership id alone, so no
+ * name rides in the address: the calendar finds it in the reader's own downline (`GET /calendar/downline`).
+ */
+export const oneOnOneHref = (membershipId: string) => `/calendar?with=${encodeURIComponent(membershipId)}`;
+
 /** One entry the reader organises or is on, whatever their answer. 404 for anything else. */
 export const readEntry = (entryId: string) =>
   api<CalendarEntry>(`/calendar/entries/${encodeURIComponent(entryId)}`);
@@ -397,6 +404,8 @@ export const DOWNLINE_GROUP_LABEL: Record<DownlineGroup, string> = {
  * every one of them to that.
  */
 export const OWN_COPY = {
+  /** A 1:1 opened from `/new-hires` (P18.96-T6 AC-4): the title *Block time* gives one too, with the full name (L-65). */
+  oneOnOneWith: (name: string) => `1:1 with ${name}`,
   accept: 'Accept',
   decline: 'Decline',
   /** The toast after an answer: the dialog closes, so the change is said rather than marked. */

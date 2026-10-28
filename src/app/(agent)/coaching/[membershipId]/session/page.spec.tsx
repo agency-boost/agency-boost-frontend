@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
 import { act } from 'react';
@@ -8,10 +8,15 @@ import CoachingPersonLayout from '../layout';
 import CoachingSessionTabPage from './page';
 import { sessionTag } from '@/components/coaching-session';
 
+const nav = vi.hoisted(() => ({ search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => '/coaching/mem-rina/session',
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 const LEADER = makeMe({
   user: {
@@ -986,7 +991,7 @@ describe('the session workspace (P11-T8)', () => {
      * `show`, with chosen reads held until the test lets them go: what has gone out while they wait is
      * what was asked for in parallel. Each request is noted as it is made, before it is answered.
      */
-    const showHeld = (held: Record<string, Promise<void>>, routes: Record<string, StubReply | StubReply[]> = {}, searchParams?: Record<string, string>) => {
+    const showHeld = (held: Record<string, Promise<void>>, routes: Record<string, StubReply | StubReply[]> = {}, query: Record<string, string> = {}) => {
       const stub = stubFetch({
         '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: PIPELINES, version: 1 } },
         '/kpm/org-levels': { body: [] },
@@ -1009,10 +1014,11 @@ describe('the session workspace (P11-T8)', () => {
         if (wait) await wait;
         return answer(url, init);
       });
+      nav.search = new URLSearchParams(query).toString();
       const view = renderInLayout(
         AgentLayout,
         <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}>
-          <CoachingSessionTabPage searchParams={searchParams ? routeParams(searchParams) : undefined} />
+          <CoachingSessionTabPage />
         </CoachingPersonLayout>,
         { me: LEADER },
       );

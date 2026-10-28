@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
 import { ACTIVITY_TITLE, ActivityTabs } from '@/components/activity-tabs';
 import { SummaryStrip } from '@/components/summary-strip';
+import { DateField } from '@/components/ui/date-field';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { ConfigBadge } from '@/components/ui/config-badge';
@@ -213,12 +214,8 @@ export default function LogActivityPage() {
          */
         <div className="flex flex-col gap-1.5">
           <Field label="Date" htmlFor="activity-date" className="w-44">
-            <TextInput
-              id="activity-date"
-              type="date"
-              value={date}
-              onChange={(e) => goTo(e.target.value)}
-            />
+            {/* The shared date field (P18.96-T2 AC-4): the day as the app writes it, the device's picker to choose. */}
+            <DateField id="activity-date" value={date} onChange={goTo} />
           </Field>
           {!statusInBar && saveStatus}
         </div>

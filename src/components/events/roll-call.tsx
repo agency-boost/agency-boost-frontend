@@ -109,7 +109,7 @@ export function RollCallSection({ eventId, onSaved, tabbed = false }: {
       {view && view.people.length > 0 && (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[30rem] border-collapse">
+            <table className="relative w-full min-w-[30rem] border-collapse">
               <thead>
                 <tr>
                   <th scope="col" className={TH}>{ADMIN_COPY.name}</th>

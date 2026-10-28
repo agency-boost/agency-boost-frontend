@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeMe, renderInLayout, stubFetch, type StubReply } from '@test/harness';
 import { ADMIN_ME, CORE_LEADER_ME, OWNER_ME, SHELL_STUBS } from '@test/kpm-analytics-fixtures';
 import { TOWN_HALL_SUMMARY } from '@test/events-fixtures';
 import {
@@ -13,11 +13,15 @@ import type { ComplianceCategory, ComplianceView } from '@/lib/kpm-compliance';
 import KpmAnalyticsLayout from '../layout';
 import KpmAnalyticsCompliancePage from './page';
 
-const nav = vi.hoisted(() => ({ replace: vi.fn() }));
+const nav = vi.hoisted(() => ({ replace: vi.fn(), search: '' }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: nav.replace }),
   usePathname: () => '/kpm/analytics/compliance',
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
+
+/** The address's query (`useQuery`, `lib/use-query.ts`): each test names its own, and starts from none. */
+beforeEach(() => { nav.search = ''; });
 
 const READ = 'GET /kpm/analytics/compliance';
 const FEEDBACK = 'GET /kpm/settings/events/';
@@ -34,11 +38,8 @@ function open(
   { me = OWNER_ME, query = {} }: { me?: typeof OWNER_ME; query?: Record<string, string> } = {},
 ) {
   const stub = stubFetch({ ...SHELL_STUBS, [READ]: reply, [FEEDBACK]: { body: TOWN_HALL_SUMMARY } });
-  renderInLayout(
-    KpmAnalyticsLayout,
-    <KpmAnalyticsCompliancePage searchParams={routeParams(query)} />,
-    { me },
-  );
+  nav.search = new URLSearchParams(query).toString();
+  renderInLayout(KpmAnalyticsLayout, <KpmAnalyticsCompliancePage />, { me });
   return stub;
 }
 
@@ -479,7 +480,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     it('shows the tree in outline while it is read', () => {
       stubFetch({ ...SHELL_STUBS });
       vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
-      renderInLayout(KpmAnalyticsLayout, <KpmAnalyticsCompliancePage searchParams={routeParams({})} />, { me: OWNER_ME });
+      renderInLayout(KpmAnalyticsLayout, <KpmAnalyticsCompliancePage />, { me: OWNER_ME });
       expect(screen.getByRole('status')).toHaveTextContent('Loading each unit’s statuses…');
     });
 

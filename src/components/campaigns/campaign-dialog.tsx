@@ -7,6 +7,7 @@ import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { useCampaignDialogHost, toggleChase } from '@/components/campaigns/campaign-list';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { useScrollLock } from '@/lib/use-scroll-lock';
 import {
   figureWords, isReservedCode, OWN_COPY, progressWords, PROTOTYPE_COPY, readCampaign, showsChase,
   type CampaignCard, type CampaignDetail, type CampaignRequirement, type ProgressRow,
@@ -57,6 +58,9 @@ export function CampaignDialog({
   const [attempt, setAttempt] = useState(0);
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
+
+  // The page behind holds still while it is open (P18.96-T1 AC-2); the box scrolls, never past the screen.
+  useScrollLock(true);
 
   useEffect(() => {
     let live = true;
@@ -149,7 +153,7 @@ export function CampaignDialog({
         tabIndex={-1}
         onKeyDown={keys}
         onClick={(e) => e.stopPropagation()}
-        className="relative max-h-[calc(100vh-2rem)] w-[560px] max-w-full overflow-y-auto rounded-[14px] bg-card shadow-modal"
+        className="relative max-h-[calc(100dvh-2rem)] w-[560px] max-w-full overflow-y-auto overscroll-contain rounded-[14px] bg-card shadow-modal"
       >
         {campaign ? (
           <Poster campaign={campaign} size="dialog">{close}</Poster>

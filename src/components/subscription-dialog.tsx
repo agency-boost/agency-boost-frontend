@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
+import { DateField } from '@/components/ui/date-field';
 import { Button, ErrorBanner, Field, Switch, TextInput } from '@/components/ui/field';
 import { updateSubscription, type TenantRow } from '@/lib/admin';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
@@ -147,18 +148,24 @@ export function SubscriptionDialog({
       description={`KPM ${row.code} · ${row.branchName}`}
       onClose={onClose}
       className="max-w-[30rem]"
+      footer={(
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" form={`${id}-form`} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
+        </div>
+      )}
     >
-      <form onSubmit={save} className="flex flex-col gap-4" noValidate>
+      <form id={`${id}-form`} onSubmit={save} className="flex flex-col gap-4" noValidate>
         {error && <ErrorBanner {...error} />}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Start date" htmlFor={`${id}-start`} error={errorOf('startDate')}>
-            <TextInput
+            <DateField
               id={`${id}-start`}
-              type="date"
               value={draft.startDate}
               invalid={Boolean(errorOf('startDate'))}
-              onChange={(e) => set('startDate', e.target.value)}
+              onChange={(v) => set('startDate', v)}
+              className="w-full"
             />
           </Field>
           <Field
@@ -167,12 +174,12 @@ export function SubscriptionDialog({
             hint="The last day the office can be used."
             error={errorOf('endDate')}
           >
-            <TextInput
+            <DateField
               id={`${id}-end`}
-              type="date"
               value={draft.endDate}
               invalid={Boolean(errorOf('endDate'))}
-              onChange={(e) => set('endDate', e.target.value)}
+              onChange={(v) => set('endDate', v)}
+              className="w-full"
             />
           </Field>
         </div>
@@ -253,11 +260,6 @@ export function SubscriptionDialog({
                 : `This end date, ${formatCalendarDay(draft.endDate)}, has passed. Once you save, nobody in this office can use AgencyBoost until the date is moved or it is kept active.`}
             </p>
           )}
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
-          <Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
         </div>
       </form>
     </Modal>

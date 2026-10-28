@@ -3,24 +3,28 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivationSkeleton, AspectCard, AttributionMark, AutoBadge, ByHandBadge, DateField, ITEM_CHECKBOX, ITEM_ROW, ProgressHeading,
+  ActivationSkeleton, AspectCard, AttributionMark, AutoBadge, AutoSaveDateField, ByHandBadge, ITEM_CHECKBOX, ITEM_ROW, ProgressHeading,
   ProgressSummary, RowError, useWriteQueue,
 } from '@/components/activation-parts';
+import { DataItemRow } from '@/components/activation-data-item';
 import { PageHeader } from '@/components/app-shell';
-import { Button, Card, ErrorBanner, Textarea } from '@/components/ui/field';
+import { Dialog } from '@/components/ui/dialog';
+import { Button, Card, ErrorBanner, Select, Textarea } from '@/components/ui/field';
 import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Toast, useToast } from '@/components/ui/toast';
 import {
-  ACTIVATION_NOTE_MAX, attributionOf, correctionOf, correctStartDate, dayShown, earliestStart, groupTitle, isManual, isTickedByHandLink,
-  newHireHref, OWN_COPY, PROTOTYPE_COPY, readNewHire, readNewHires, saveActivationNote, saveHireItem,
-  startDateAllowed, startDateRangeText, type ActivationItemProgress, type ActivationView, type NewHireGroup,
-  type NewHiresRoster,
+  ACTIVATION_3M_LABEL, ACTIVATION_NOTE_MAX, attributionOf, correctionOf, correctStartDate, earliestStart, groupTitle, isDataBacked, isManual,
+  isTickedByHandLink, markHireLeft, newHireHref, OWN_COPY, PROTOTYPE_COPY, readHireClosings, readNewHire, readNewHires,
+  saveActivationNote, saveHireItem, startDateAllowed, startDateRangeText, type Activation3MFigures, type Activation3MShare,
+  type ActivationItemProgress, type ActivationRecordInput, type ActivationView, type NewHireRow, type NewHiresRoster,
+  type NewHiresSections,
 } from '@/lib/activation';
+import { oneOnOneHref } from '@/lib/calendar';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { formatOfficeDay, formatPercent, formatShortDay } from '@/lib/format';
+import { formatMonth, formatOfficeDay, formatPercent, formatShortDay } from '@/lib/format';
 import { useCan, useSession } from '@/lib/session';
 import { usePhone } from '@/lib/use-phone';
 
@@ -28,34 +32,50 @@ import { usePhone } from '@/lib/use-phone';
  * ── The roster ───────────────────────────────────────────────────────────────────────────────────
  */
 
+type SectionKey = keyof NewHiresSections;
+const SECTIONS: readonly { key: SectionKey; title: string }[] = [
+  { key: 'inProgress', title: OWN_COPY.sectionInProgress },
+  { key: 'activated', title: OWN_COPY.sectionActivated },
+  { key: 'notActivated', title: OWN_COPY.sectionNotActivated },
+];
+
 /**
- * **Your New Hires** (`/new-hires`, `Overall.html:3354-3361`, logic `:6698-6783`; P13-T5): every open
- * activation the reader reaches, a card per group — *Direct Unit*, then *AAB: {name}* for each AAB below
- * them (D-group) — each hire under their nearest AAB, by day, highest first. The server groups and
- * orders; this draws what it is served.
+ * **New Hires** (`/new-hires`; P13-T5, rebuilt by P18.96-T6 — ADR-0173; the client's report of 2026-10-27, R4, R5,
+ * UI-005): **a year of new hires by their 3M result.** At the top, the **3M activation %** of everybody listed with a
+ * **Join month** filter, and beside it each unit's — *Direct Unit* and each AAB's below the reader, D-group's grouping
+ * kept (parity I-471). Then the three sections, *In progress (day 1–90)* · *Activated* · *Not activated* — the ones who
+ * left among them, *Left {date}* (I-472). Every figure is the server's: the filter picks a month's served share and
+ * narrows the rows by their join date, and computes nothing (invariant §7).
  *
- * **Each hire's name is a link to their detail** (contradiction 10): the prototype's rows are table rows
- * with a click handler, which a keyboard cannot reach. **The table scrolls inside its card** on a tablet
- * (`.table-scroll`, `:6778`; AC-9), so the page never does.
- *
- * **Below 768px a card per hire instead** (P18.95-T3 AC-4, ADR-0167 §6; the client's UI review, UI-012: *Day* and
- * *Active Agent* off the screen to the right): the name, the bar and its percentage, and *Day 64 of 90*. Asked of
- * the window (`usePhone`), so a tablet and a desktop draw the table they drew (§12).
+ * **A row**: the name — a link to the hire's detail, but for one who left, whose detail is no longer the reader's — and
+ * under it their unit when the reader has more than one; the join date; the day of the 90 (*In progress*); the
+ * checklist's bar and percentage, red and bold when overdue, *No checklist* for a new hire with none (an AB or an AAB);
+ * the first sale or *—*; the result. **An overdue or not-activated row offers *Schedule 1:1* and *Mark left*** (AC-4,
+ * I-473): the calendar's new-entry dialog as a 1:1 with them, and a confirmation that records their leaving. **Below
+ * 768px a card per hire**, the same fields in words (P18.95-T3 AC-4, ADR-0167 §6).
  */
 export function NewHires() {
+  const { me } = useSession();
+  const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
+  const mayMarkLeft = useCan('new_hire:mark_left') && !readOnly;
+  const maySchedule = useCan('calendar_entry:create') && !readOnly;
   const [roster, setRoster] = useState<NewHiresRoster | null>(null);
   const [empty, setEmpty] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [month, setMonth] = useState<string>('all');
+  const [asking, setAsking] = useState<NewHireRow | null>(null);
+  const [refused, setRefused] = useState<string | null>(null);
+  const { toast, show } = useToast();
 
   useEffect(() => {
     let live = true;
     setError(null);
     readNewHires()
-      .then((next) => { if (live) setRoster(next); })
+      .then((next) => { if (live) { setRoster(next); setEmpty(false); } })
       .catch((err) => {
         if (!live) return;
-        // Nobody the reader reaches is in an open activation: the nav would not have offered the page.
+        // Nobody the reader leads joined as a new hire in the year: the nav would not have offered the page.
         if (err instanceof ApiRequestError && err.status === 404) setEmpty(true);
         else setError(toDisplayError(err));
       });
@@ -64,9 +84,28 @@ export function NewHires() {
 
   const phone = usePhone();
 
-  if (empty || (roster && roster.groups.every((g) => g.hires.length === 0))) {
+  const markLeft = async (row: NewHireRow) => {
+    setAsking(null);
+    setRefused(null);
+    try {
+      await markHireLeft(row.hire.membershipId);
+      show(OWN_COPY.markedLeft(row.hire.name));
+      setAttempt((n) => n + 1);
+    } catch (err) {
+      setRefused(OWN_COPY.markLeftFailed(toDisplayError(err).message));
+    }
+  };
+
+  if (empty) {
     return <Card><p className="text-center text-md text-muted">{OWN_COPY.rosterEmpty}</p></Card>;
   }
+
+  const inMonth = (row: NewHireRow) => month === 'all' || row.joinDate.startsWith(month);
+  const manyUnits = (roster?.units.length ?? 0) > 1;
+  const actions: RowActions = {
+    scheduleHref: maySchedule ? oneOnOneHref : null,
+    onMarkLeft: mayMarkLeft ? setAsking : null,
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -77,133 +116,242 @@ export function NewHires() {
         </div>
       )}
       {!roster && !error && <SkeletonCards count={2} label={OWN_COPY.loadingRoster} />}
-      {roster?.groups.filter((g) => g.hires.length > 0).map((group) => (
-        <GroupCard key={group.leader?.membershipId ?? 'direct'} group={group} phone={phone} />
+      {roster && <Activation3MCard roster={roster} month={month} onMonth={setMonth} />}
+      {refused && <p role="alert" className="text-sm font-semibold text-alert">{refused}</p>}
+      {roster && SECTIONS.map(({ key, title }) => (
+        <SectionCard
+          key={key}
+          section={key}
+          title={title}
+          rows={roster.sections[key].filter(inMonth)}
+          days={roster.days}
+          phone={phone}
+          showUnit={manyUnits}
+          actions={actions}
+        />
       ))}
+      <Dialog
+        open={asking !== null}
+        message={asking ? OWN_COPY.markLeftQuestion(asking.hire.name) : ''}
+        confirmLabel={OWN_COPY.markLeft}
+        cancelLabel={PROTOTYPE_COPY.cancel}
+        tone="danger"
+        onConfirm={() => { if (asking) void markLeft(asking); }}
+        onCancel={() => setAsking(null)}
+      />
+      <Toast toast={toast} />
     </div>
   );
 }
+
+/** A share's figure, `—` with its words for a screen reader while nobody is decided. */
+function ShareFigure({ pct, className }: { pct: number | null; className?: string }) {
+  if (pct === null) {
+    return (
+      <span className={className}>
+        <span aria-hidden="true">{OWN_COPY.noFigure}</span>
+        <span className="sr-only">{OWN_COPY.noFigureName}</span>
+      </span>
+    );
+  }
+  return <span className={className}>{formatPercent(pct)}</span>;
+}
+
+/** A unit's or the reader's figures, for the month chosen: the served month's share, or the whole year's. */
+const shareFor = (figures: Activation3MFigures, month: string): Activation3MShare =>
+  (month === 'all' ? figures.all : figures.byMonth.find((m) => m.month === month) ?? { activated: 0, notActivated: 0, inProgress: 0, pct: null });
+
+/**
+ * **The 3M activation %** (AC-2, AC-3; I-471): the reader's figure, its counts, the *Join month* filter — every join
+ * month the server lists, newest first, and *All* — and, where the reader has more than one unit, each unit's figure.
+ */
+function Activation3MCard({ roster, month, onMonth }: { roster: NewHiresRoster; month: string; onMonth: (m: string) => void }) {
+  const share = shareFor(roster.activation3M, month);
+  return (
+    <section aria-labelledby="activation-3m" className="rounded-lg border border-hairline bg-card px-6 py-[22px] max-md:px-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 id="activation-3m" className="font-display text-md font-bold text-navy">{OWN_COPY.activation3MHeading}</h2>
+          <ShareFigure pct={share.pct} className="mt-1 block font-display text-2xl font-bold text-navy" />
+          <p className="text-sm text-muted">{OWN_COPY.activation3MCounts(share.activated, share.notActivated, share.inProgress)}</p>
+        </div>
+        <label className="flex items-center gap-2 text-xs font-semibold text-navy">
+          {OWN_COPY.joinMonth}
+          <Select value={month} onChange={(e) => onMonth(e.target.value)} className="w-auto">
+            <option value="all">{OWN_COPY.allMonths}</option>
+            {roster.activation3M.byMonth.map((m) => <option key={m.month} value={m.month}>{formatMonth(m.month)}</option>)}
+          </Select>
+        </label>
+      </div>
+      {roster.units.length > 1 && (
+        <ul aria-label={OWN_COPY.byUnit} className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-hairline pt-3 text-sm text-navy">
+          {roster.units.map((unit) => (
+            <li key={unit.leader?.membershipId ?? 'direct'}>
+              <span className="text-muted">{groupTitle(unit)}</span>{' '}
+              <ShareFigure pct={shareFor(unit.activation3M, month).pct} className="font-semibold" />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** What a row may offer: the calendar's address for a 1:1 with them, and *Mark left* — each `null` when not the reader's. */
+interface RowActions {
+  scheduleHref: ((membershipId: string) => string) | null;
+  onMarkLeft: ((row: NewHireRow) => void) | null;
+}
+
+/** An overdue checklist, or not activated — and not gone: the rows that offer a 1:1 and *Mark left* (AC-4). */
+const needsAction = (row: NewHireRow) => row.leftOn === null && (row.activation3M === 'not_activated' || row.checklist?.overdue === true);
 
 /** `.newhire-table th` and `td` (`:1541-1545`). */
 const TH = 'border-b border-hairline px-3 py-[9px] text-left text-xs font-semibold uppercase tracking-wide text-muted';
 const TD = 'border-b border-hairline px-3 py-3.5 text-md font-medium text-navy';
 
-/** One group's card (`.newhire-group-card`, `:6775-6789`): its heading, and its table — on a phone, its cards. */
-function GroupCard({ group, phone }: { group: NewHireGroup; phone: boolean }) {
-  const title = groupTitle(group);
-  if (phone) return <GroupCards group={group} title={title} />;
+/** The name: a link to the detail, plain once they left — and their unit under it, where the reader has several. */
+function HireName({ row, showUnit, className }: { row: NewHireRow; showUnit: boolean; className?: string }) {
   return (
-    <section aria-label={title} className="rounded-lg border border-hairline bg-card px-6 py-[22px]">
-      <h2 className="mb-3 font-display text-md font-bold text-navy">{title}</h2>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[480px] table-fixed border-collapse">
-          <caption className="sr-only">{title}</caption>
-          <colgroup>
-            <col className="w-[24%]" />
-            <col className="w-[15%]" />
-            <col className="w-[29%]" />
-            <col className="w-[12%]" />
-            <col className="w-[20%]" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th scope="col" className={TH}>{PROTOTYPE_COPY.name}</th>
-              <th scope="col" className={TH}>{PROTOTYPE_COPY.joined}</th>
-              <th scope="col" className={TH}>{PROTOTYPE_COPY.progress}</th>
-              <th scope="col" className={cn(TH, 'text-center')}>{PROTOTYPE_COPY.day}</th>
-              <th scope="col" className={cn(TH, 'text-center')}>{PROTOTYPE_COPY.activeAgent}</th>
-            </tr>
-          </thead>
-          <tbody className="[&>tr:last-child>*]:border-b-0">
-            {group.hires.map((row) => {
-              const width = Math.min(100, Math.max(0, row.pct));
-              return (
-                <tr key={row.hire.membershipId} className="hover:bg-navy/[0.03]">
-                  <th scope="row" className={cn(TD, 'text-left')}>
-                    <Link href={newHireHref(row.hire.membershipId)} className="text-navy hover:underline">{row.hire.name}</Link>
-                  </th>
-                  <td className={TD}>
-                    <time dateTime={row.startDate}>{formatShortDay(row.startDate, { year: true })}</time>
-                  </td>
-                  <td className={TD}>
-                    <div className="flex items-center gap-[9px]">
-                      <div aria-hidden="true" className="h-1.5 w-[90px] shrink-0 overflow-hidden rounded-sm border border-hairline bg-base">
-                        <div className="h-full rounded-sm bg-gradient-to-r from-amber to-amber-dark" style={{ width: `${width}%` }} />
-                      </div>
-                      <span>{formatPercent(row.pct)}</span>
-                    </div>
-                  </td>
-                  <td className={cn(TD, 'text-center', row.overdue && 'font-bold text-alert')} data-overdue={row.overdue || undefined}>
-                    {dayShown(row.day, row.window)}
-                    <span className="font-normal text-muted"> /{row.window}</span>
-                    {/* The red and the bold say it to the eye; this says it to a screen reader. */}
-                    {row.overdue && <span className="sr-only">{OWN_COPY.overdue}</span>}
-                  </td>
-                  <td className={cn(TD, 'text-center')}>
-                    {row.firstCaseClosed ? (
-                      <span
-                        role="img"
-                        aria-label={PROTOTYPE_COPY.closedFirstCase}
-                        title={PROTOTYPE_COPY.closedFirstCase}
-                        className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full bg-success/[0.12] text-success"
-                      >
-                        <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.8">
-                          <path d="M5 13l4 4L19 7" />
-                        </svg>
-                      </span>
-                    ) : (
-                      <span className="text-sm text-muted">{PROTOTYPE_COPY.none}</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <>
+      {row.leftOn === null
+        ? <Link href={newHireHref(row.hire.membershipId)} className={cn('text-navy hover:underline', className)}>{row.hire.name}</Link>
+        : <span className={className}>{row.hire.name}</span>}
+      {showUnit && <span className="block text-xs font-normal text-muted">{groupTitle(row.unit)}</span>}
+    </>
   );
 }
 
-/**
- * **A group on a phone** (P18.95-T3 AC-4): the same card and heading, and a card per hire in the table's order — the
- * name (the link to their detail), the bar with its percentage, and ***Day 64 of 90***, the table's *Day* cell in
- * words: red and bold past the window, and *, overdue* said to a screen reader, as the cell does. *Joined* and
- * *Active Agent* are not drawn here, as the client asked (*"Name · progress bar · Day 64 of 90"*); both are on the
- * hire's own page, a tap away.
- */
-function GroupCards({ group, title }: { group: NewHireGroup; title: string }) {
+/** The checklist's bar and percentage, red and bold when overdue — said to a screen reader too — or *No checklist*. */
+function ChecklistCell({ checklist, fill = false }: { checklist: NewHireRow['checklist']; fill?: boolean }) {
+  if (!checklist) return <span className="text-sm text-muted">{OWN_COPY.noChecklist}</span>;
+  const width = Math.min(100, Math.max(0, checklist.pct));
   return (
-    <section aria-label={title} className="rounded-lg border border-hairline bg-card px-4 py-[18px]">
-      <h2 className="mb-1 font-display text-md font-bold text-navy">{title}</h2>
-      <ul role="list" aria-label={title}>
-        {group.hires.map((row) => {
-          const width = Math.min(100, Math.max(0, row.pct));
-          return (
+    <div className="flex items-center gap-[9px]" data-overdue={checklist.overdue || undefined}>
+      <div aria-hidden="true" className={cn('h-1.5 shrink-0 overflow-hidden rounded-sm border border-hairline bg-base', fill ? 'min-w-0 flex-1' : 'w-[90px]')}>
+        <div className="h-full rounded-sm bg-gradient-to-r from-amber to-amber-dark" style={{ width: `${width}%` }} />
+      </div>
+      <span className={cn('shrink-0', checklist.overdue && 'font-bold text-alert')}>
+        {formatPercent(checklist.pct)}
+        {checklist.overdue && <span className="sr-only">{OWN_COPY.overdue}</span>}
+      </span>
+    </div>
+  );
+}
+
+/** The result's words: the section's, and *Left {date}* for one who left. */
+function resultWords(row: NewHireRow): string {
+  const result = ACTIVATION_3M_LABEL[row.activation3M];
+  return row.leftOn ? `${result} · ${OWN_COPY.leftOn(formatShortDay(row.leftOn, { year: true }))}` : result;
+}
+
+/** *Schedule 1:1* and *Mark left*, on a row that needs them and to a reader who may. */
+function RowActionButtons({ row, actions }: { row: NewHireRow; actions: RowActions }) {
+  if (!needsAction(row) || (!actions.scheduleHref && !actions.onMarkLeft)) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {actions.scheduleHref && (
+        <Link
+          href={actions.scheduleHref(row.hire.membershipId)}
+          aria-label={OWN_COPY.scheduleOneOnOneName(row.hire.name)}
+          className={cn('text-sm font-semibold text-navy-soft underline-offset-2 hover:text-navy hover:underline', TEXT_TAP)}
+        >
+          {OWN_COPY.scheduleOneOnOne}
+        </Link>
+      )}
+      {actions.onMarkLeft && (
+        <Button
+          variant="inlineDanger"
+          aria-label={OWN_COPY.markLeftName(row.hire.name)}
+          onClick={() => actions.onMarkLeft!(row)}
+        >
+          {OWN_COPY.markLeft}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** One section's card (`.newhire-group-card`, `:6775-6789`): its heading, and its table — on a phone, its cards. */
+function SectionCard({
+  section, title, rows, days, phone, showUnit, actions,
+}: {
+  section: SectionKey;
+  title: string;
+  rows: NewHireRow[];
+  days: number;
+  phone: boolean;
+  showUnit: boolean;
+  actions: RowActions;
+}) {
+  const inProgress = section === 'inProgress';
+  const withActions = rows.some(needsAction) && (actions.scheduleHref !== null || actions.onMarkLeft !== null);
+  return (
+    <section aria-label={title} className={cn('rounded-lg border border-hairline bg-card', phone ? 'px-4 py-[18px]' : 'px-6 py-[22px]')}>
+      <h2 className="mb-3 font-display text-md font-bold text-navy">{title}</h2>
+      {rows.length === 0 && <p className="text-sm text-muted">{OWN_COPY.sectionEmpty}</p>}
+      {rows.length > 0 && phone && (
+        <ul role="list" aria-label={title}>
+          {rows.map((row) => (
             <li key={row.hire.membershipId} className="border-b border-hairline py-3 last:border-b-0">
-              <Link
-                href={newHireHref(row.hire.membershipId)}
-                className={cn('break-words text-md font-semibold text-navy hover:underline', TEXT_TAP)}
-              >
-                {row.hire.name}
-              </Link>
-              <div className="mt-1.5 flex items-center gap-[9px] text-md font-medium text-navy">
-                <div aria-hidden="true" className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-sm border border-hairline bg-base">
-                  <div className="h-full rounded-sm bg-gradient-to-r from-amber to-amber-dark" style={{ width: `${width}%` }} />
-                </div>
-                <span className="shrink-0">{formatPercent(row.pct)}</span>
-              </div>
-              <p
-                className={cn('mt-1.5 text-sm font-medium text-navy', row.overdue && 'font-bold text-alert')}
-                data-overdue={row.overdue || undefined}
-              >
-                {OWN_COPY.dayOf(dayShown(row.day, row.window), row.window)}
-                {row.overdue && <span className="sr-only">{OWN_COPY.overdue}</span>}
+              <HireName row={row} showUnit={showUnit} className={cn('break-words text-md font-semibold', TEXT_TAP)} />
+              <div className="mt-1.5 text-md font-medium text-navy"><ChecklistCell checklist={row.checklist} fill /></div>
+              <p className="mt-1.5 text-sm font-medium text-navy">
+                {inProgress
+                  ? OWN_COPY.dayOf(String(row.day), days)
+                  : resultWords(row)}
               </p>
+              <p className="text-sm text-muted">
+                {PROTOTYPE_COPY.joinDate} {formatShortDay(row.joinDate, { year: true })} · {OWN_COPY.firstSale}{' '}
+                {row.firstSaleDate ? formatShortDay(row.firstSaleDate, { year: true }) : PROTOTYPE_COPY.none}
+              </p>
+              <div className="mt-1"><RowActionButtons row={row} actions={actions} /></div>
             </li>
-          );
-        })}
-      </ul>
+          ))}
+        </ul>
+      )}
+      {rows.length > 0 && !phone && (
+        <div className="overflow-x-auto">
+          {/* `relative`, so the *Actions* header's `sr-only` name stays in this scroll box: without it the name widened
+              the page at 768px by 42px, 57px for the Owner (a production walk, 2026-10-27; `DataTable`'s own fix). */}
+          <table className="relative w-full min-w-[560px] border-collapse">
+            <caption className="sr-only">{title}</caption>
+            <thead>
+              <tr>
+                <th scope="col" className={TH}>{PROTOTYPE_COPY.name}</th>
+                <th scope="col" className={TH}>{PROTOTYPE_COPY.joinDate}</th>
+                {inProgress && <th scope="col" className={cn(TH, 'text-center')}>{PROTOTYPE_COPY.day}</th>}
+                <th scope="col" className={TH}>{OWN_COPY.checklist}</th>
+                <th scope="col" className={TH}>{OWN_COPY.firstSale}</th>
+                {!inProgress && <th scope="col" className={TH}>{OWN_COPY.result}</th>}
+                {withActions && <th scope="col" className={TH}><span className="sr-only">{OWN_COPY.actions}</span></th>}
+              </tr>
+            </thead>
+            <tbody className="[&>tr:last-child>*]:border-b-0">
+              {rows.map((row) => (
+                <tr key={row.hire.membershipId} className="hover:bg-navy/[0.03]">
+                  <th scope="row" className={cn(TD, 'text-left')}><HireName row={row} showUnit={showUnit} /></th>
+                  <td className={TD}><time dateTime={row.joinDate}>{formatShortDay(row.joinDate, { year: true })}</time></td>
+                  {inProgress && (
+                    <td className={cn(TD, 'text-center')}>
+                      {row.day}
+                      <span className="font-normal text-muted"> /{days}</span>
+                    </td>
+                  )}
+                  <td className={TD}><ChecklistCell checklist={row.checklist} /></td>
+                  <td className={TD}>
+                    {row.firstSaleDate
+                      ? <time dateTime={row.firstSaleDate}>{formatShortDay(row.firstSaleDate, { year: true })}</time>
+                      : <span className="text-muted">{PROTOTYPE_COPY.none}</span>}
+                  </td>
+                  {!inProgress && <td className={TD}>{resultWords(row)}</td>}
+                  {withActions && <td className={TD}><RowActionButtons row={row} actions={actions} /></td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }
@@ -229,11 +377,21 @@ function GroupCards({ group, title }: { group: NewHireGroup; title: string }) {
  *   `ACTIVATION_CLOSED`, the note's included): its boxes, its date and its note are drawn read-only, with
  *   no *Save note*, and one line under the heading says how it ended.
  * - **A read-only support session draws no write control** (T5 AC-8).
+ * - **No count before it is settled, and no jump after a tick** (P18.96-T7 AC-1, AC-2; UI-007, UI-008): the summary is
+ *   the skeleton until this hire's one read answers, its links evaluated; a tick changes the box at once and the
+ *   figures when its answer lands, **in place** — every row and card keeps its node, the focus stays on the box, and
+ *   nothing scrolls the page.
  */
 export function NewHireDetail({ membershipId }: { membershipId: string }) {
   const { me } = useSession();
   const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
   const mayTick = useCan('activation:update_manual_item') && !readOnly;
+  /*
+   * P18.96-T4 AC-3: a data-backed item is ticked with its record — a 1:1 logged as a coaching session, or the hire's
+   * closing — which only a leader who runs sessions and reads the hire's leads may write: an AB's or an AAB's. An Agent
+   * who leads reads the three as Auto. The server refuses the rest whatever this draws.
+   */
+  const mayRecord = useCan('coaching_session:create') && mayTick;
   const mayCorrect = useCan('activation:set_start_date') && !readOnly;
   const mayNote = useCan('activation_note:write') && !readOnly;
   const reader = me?.membership?.membershipId;
@@ -257,6 +415,15 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
 
   useEffect(() => {
     let live = true;
+    /*
+     * P18.96-T7 AC-1 (UI-007): **the counts and statuses are only ever this hire's read, settled** — the server evaluates
+     * every link, the data-backed ones included, before it answers (`ActivationProgressService.resolve`). Until that
+     * answer lands, the page is its skeleton: never the previous hire's figures under this one's name, and never a
+     * read that answered after a later one (`live`). A write's answer replaces them in place, with no skeleton (AC-2).
+     */
+    setView(null);
+    setPending((p) => (Object.keys(p).length === 0 ? p : {}));
+    setFailed((f) => (Object.keys(f).length === 0 ? f : {}));
     setError(null);
     setMissing(false);
     readNewHire(membershipId)
@@ -269,16 +436,19 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
     return () => { live = false; };
   }, [membershipId, attempt]);
 
-  /** A tick; `null` for a hire who has gone (404), where there is nothing left to retry. */
-  const tick = useCallback((code: string, done: boolean) => {
-    void track(`${code}\ndone`, () => {
+  /**
+   * A tick; `null` for a hire who has gone (404), where there is nothing left to retry. A data-backed item's carries its
+   * record (P18.96-T4 AC-3), sent with the tick in one request; the answer says whether it landed.
+   */
+  const tick = useCallback((code: string, done: boolean, record?: ActivationRecordInput) => {
+    return track(`${code}\ndone`, () => {
       const ask = (asked.current[code] ?? 0) + 1;
       asked.current[code] = ask;
       setPending((p) => ({ ...p, [code]: done }));
       setFailed(({ [code]: _gone, ...rest }) => rest);
       return queue(async () => {
         try {
-          setView(await saveHireItem(membershipId, code, done));
+          setView(await saveHireItem(membershipId, code, done, record));
           show(PROTOTYPE_COPY.statusUpdated);
           return true;
         } catch (err) {
@@ -292,6 +462,7 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
       });
     });
   }, [membershipId, queue, show, track]);
+  const loadClosings = useCallback(async () => (await readHireClosings(membershipId)).closings, [membershipId]);
 
   const correct = useCallback((startDate: string) => {
     void track('startDate', () => {
@@ -339,7 +510,7 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
           <Card density="compact">
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3.5">
               <ProgressHeading>{PROTOTYPE_COPY.detailHeading}</ProgressHeading>
-              <StartDateField
+              <JoinDateField
                 view={view}
                 reader={reader}
                 writable={mayCorrect && open}
@@ -354,17 +525,32 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
 
           {view.aspects.map((aspect, i) => (
             <AspectCard key={aspect.code} n={i + 1} label={aspect.label}>
-              {aspect.items.map((item) => (
+              {aspect.items.map((item) => (isDataBacked(item) ? (
+                <DataItemRow
+                  key={item.code}
+                  item={pending[item.code] === undefined ? item : { ...item, done: pending[item.code] }}
+                  reader={reader}
+                  writable={mayRecord && open}
+                  audience="leader"
+                  hireId={view.hire.membershipId}
+                  today={view.today}
+                  startDate={view.startDate}
+                  loadClosings={loadClosings}
+                  onSave={(done, record) => tick(item.code, done, record)}
+                  status={statusOf(`${item.code}\ndone`)}
+                  error={failed[item.code]}
+                />
+              ) : (
                 <HireItemRow
                   key={item.code}
                   item={pending[item.code] === undefined ? item : { ...item, done: pending[item.code] }}
                   reader={reader}
                   writable={mayTick && open}
-                  onTick={(done) => tick(item.code, done)}
+                  onTick={(done) => { void tick(item.code, done); }}
                   status={statusOf(`${item.code}\ndone`)}
                   error={failed[item.code]}
                 />
-              ))}
+              )))}
             </AspectCard>
           ))}
 
@@ -402,11 +588,12 @@ function BackToRoster() {
 }
 
 /**
- * *Start date*, which a leader may correct (OD-118): the date field the hire's page draws, here, written
- * on change and audited by the server, within the contract's bounds — not after the office's today and
- * no more than a year before it. Beside it, who last corrected it and when.
+ * *Join date* — the prototype's *Start date* (P18.96-T2 AC-5, ADR-0169) — which a leader may correct (OD-118): the
+ * shared date field, here, written on change and audited by the server, within the contract's bounds — not after
+ * the office's today and no more than a year before it. The server moves the membership's join date and the
+ * activation's start together. Beside it, who last corrected it and when.
  */
-function StartDateField({
+function JoinDateField({
   view, reader, writable, onCommit, status, error, resetKey,
 }: {
   view: ActivationView;
@@ -422,7 +609,7 @@ function StartDateField({
   if (!writable) {
     return (
       <dl className="flex items-center gap-2">
-        <dt className="whitespace-nowrap text-xs font-semibold text-navy">{PROTOTYPE_COPY.startDate}</dt>
+        <dt className="whitespace-nowrap text-xs font-semibold text-navy">{PROTOTYPE_COPY.joinDate}</dt>
         <dd className="flex h-[34px] items-center rounded-md border-[1.5px] border-hairline bg-base px-3 text-base text-navy">
           <time dateTime={view.startDate}>{formatShortDay(view.startDate, { year: true })}</time>
         </dd>
@@ -434,9 +621,9 @@ function StartDateField({
     <div className="flex flex-col items-end">
       <div className="flex items-center gap-2">
         <label htmlFor="activation-start-date" className="whitespace-nowrap text-xs font-semibold text-navy">
-          {PROTOTYPE_COPY.startDate}
+          {PROTOTYPE_COPY.joinDate}
         </label>
-        <DateField
+        <AutoSaveDateField
           id="activation-start-date"
           value={view.startDate}
           min={earliestStart(view.today)}
@@ -448,7 +635,7 @@ function StartDateField({
         />
         <AttributionMark words={corrected} />
       </div>
-      <InlineSaveStatus {...status} label={PROTOTYPE_COPY.startDate} className="mt-1" />
+      <InlineSaveStatus {...status} label={PROTOTYPE_COPY.joinDate} className="mt-1" />
       <RowError message={error ?? undefined} />
     </div>
   );
