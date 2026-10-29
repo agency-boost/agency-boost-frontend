@@ -115,7 +115,7 @@ describe('the Activity Dashboard (P10-T1)', () => {
     render();
 
     const headers = (await screen.findAllByRole('columnheader')).map((h) => h.textContent);
-    expect(headers.slice(0, 4)).toEqual(['Activity', 'Total', 'Sen28', 'Min27']);
+    expect(headers.slice(0, 4)).toEqual(['Activity', 'Total', 'Mon28', 'Sun27']);
   });
 
   it('AC-2: heads the last 30 days as weeks with their dates, and the two days left over', async () => {
@@ -130,7 +130,7 @@ describe('the Activity Dashboard (P10-T1)', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Last 30 days' }));
 
     expect(await screen.findByRole('columnheader', { name: 'Week 1 22 Sep–28 Sep' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Remaining 2 days 30 Agu–31 Agu' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Remaining 2 days 30 Aug–31 Aug' })).toBeInTheDocument();
     expect(dashboardCalls(calls).at(-1)!.url).toContain('range=ROLLING_30D');
   });
 
@@ -148,7 +148,7 @@ describe('the Activity Dashboard (P10-T1)', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Last 30 days' }));
 
     await screen.findByRole('columnheader', { name: 'Week 1 22 Sep–28 Sep' });
-    expect(screen.getByRole('status')).toHaveTextContent(/^30 days · 30 Agu – 28 Sep 2026$/);
+    expect(screen.getByRole('status')).toHaveTextContent(/^30 days · 30 Aug – 28 Sep 2026$/);
     expect(screen.queryByText(/corrected/)).toBeNull();
   });
 
@@ -415,7 +415,7 @@ describe('P18.95-T3 — the Activity Dashboard on a phone', () => {
     const terms = within(days).getAllByRole('term').map((t) => t.textContent);
     const counts = within(days).getAllByRole('definition').map((d) => d.textContent);
     expect(terms).toEqual(headings.map((h) => h!.replace(/^(\D+)(\d+)$/, '$1 $2')));
-    expect(terms.slice(0, 2)).toEqual(['Sen 28', 'Min 27']);
+    expect(terms.slice(0, 2)).toEqual(['Mon 28', 'Sun 27']);
     expect(counts).toEqual(tableCounts);
     expect(counts).toEqual(['2', '3', '1', '0', '0', '0', '0']);
     expect(within(days).getAllByRole('definition')[3]).toHaveClass('text-muted');
@@ -448,7 +448,7 @@ describe('P18.95-T3 — the Activity Dashboard on a phone', () => {
     await userEvent.click(all);
     const weeks = document.getElementById(all.getAttribute('aria-controls')!)!;
     expect(within(weeks).getAllByRole('term').map((t) => t.textContent)).toEqual([
-      'Week 122 Sep–28 Sep', 'Week 215 Sep–21 Sep', 'Week 38 Sep–14 Sep', 'Week 41 Sep–7 Sep', 'Remaining 2 days30 Agu–31 Agu',
+      'Week 122 Sep–28 Sep', 'Week 215 Sep–21 Sep', 'Week 38 Sep–14 Sep', 'Week 41 Sep–7 Sep', 'Remaining 2 days30 Aug–31 Aug',
     ]);
     expect(within(weeks).getAllByRole('definition').map((d) => d.textContent)).toEqual(['1', '2', '0', '0', '1']);
   });

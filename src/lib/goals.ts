@@ -1,5 +1,8 @@
 import { api } from '@/lib/api-client';
-import { capitalized, PRONOUN_FORMS, type Pronoun } from '@/lib/coaching';
+import { PRONOUN_FORMS, type Pronoun } from '@/lib/coaching';
+import { messagesIn } from '@/i18n/catalogue';
+import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { goalWordMessages, voiceOf } from '@/i18n/messages/goal-words';
 import { formatMonth, formatNumber } from '@/lib/format';
 
 /**
@@ -184,7 +187,8 @@ export function goalInputsOf(goal: Goal): GoalInputs {
 export { formatRupiah, formatRupiahCompact, MINOR_UNITS_PER_MAJOR, toMajor, toMinor } from '@/lib/format';
 
 /**
- * The same grouping, for what somebody is **typing**: `500000000` shows as `500.000.000`.
+ * The same grouping, for what somebody is **typing**: `500000000` shows as `500.000.000` — `500,000,000` in English
+ * (P18.98-T3 AC-3), the reader's `language` passed last, Indonesian when none is.
  *
  * The prototype's money fields are `type="text" inputmode="numeric"` carrying a grouped value
  * (`Overall.html:2874`), and its `parseNum` strips the dots back out. Ours were `type="number"`,
@@ -194,7 +198,7 @@ export { formatRupiah, formatRupiahCompact, MINOR_UNITS_PER_MAJOR, toMajor, toMi
  * No `Rp` here: the prefix is the field's own affix, and repeating it inside the value would put it
  * twice in the box.
  */
-export const groupDigits = (major: number) => formatNumber(major);
+export const groupDigits = (major: number, language: Language = DEFAULT_LANGUAGE) => formatNumber(major, {}, language);
 
 /**
  * What was typed, back to a number: everything that is not a digit goes.
@@ -202,6 +206,7 @@ export const groupDigits = (major: number) => formatNumber(major);
  * **Digits only, deliberately.** A grouping separator in `id-ID` is `.`, which is also a decimal
  * point in most of the world — so parsing `1.500` as a decimal would read one and a half rupiah
  * where fifteen hundred was meant. Rupiah has no subunit anybody types, so there is nothing to lose.
+ * So it reads **both languages' grouping** (P18.98-T3 AC-3): `1.500.000` and `1,500,000` are the same sum.
  */
 export const parseDigits = (typed: string) => Number(typed.replace(/\D/g, '')) || 0;
 
@@ -213,11 +218,17 @@ export const parseDigits = (typed: string) => Number(typed.replace(/\D/g, '')) |
  * month**, a half rounding up — *about 1 month*, *about 2 months*, *about 12 months* — and **below half a
  * month, *less than a month***, so December's last fortnight never reads *about 0 months*. The figure the plan
  * divides by is unchanged: the server's, to one decimal, and the *Months left this year* box still shows it.
+ *
+ * **In two languages** (P18.98-T4): the whole month is a figure, written in `figures` — Indonesian when none is
+ * passed — and the words are `words`' — English when none is, as the spec reads them (`goal-words.ts`: *sekitar 2
+ * bulan*, *kurang dari sebulan*). A screen passes `useFigureLanguage()` and `useLanguage()`.
  */
-export function monthsLeftInWords(months: number): string {
-  const whole = Math.round(months);
-  if (!Number.isFinite(months) || whole < 1) return 'less than a month';
-  return whole === 1 ? 'about 1 month' : `about ${whole} months`;
+export function monthsLeftInWords(
+  months: number, figures: Language = DEFAULT_LANGUAGE, words: Language = SOURCE_LANGUAGE,
+): string {
+  const rounded = Math.round(months);
+  const whole = Number.isFinite(months) && rounded >= 1 ? rounded : 0;
+  return messagesIn(goalWordMessages, words).monthsLeft({ whole, n: formatNumber(whole, {}, figures) });
 }
 
 /**
@@ -232,6 +243,11 @@ export function monthsLeftInWords(months: number): string {
  *
  * The revisions of a plan are still stored, every version and who saved it (ADR-0042); no screen
  * lists them since P10.1-T6 retired the history card and its route.
+ *
+ * **In two languages** (P18.98-T4): the month is a figure, written in `figures` (P18.98-T3, *As of Oct 2026* in
+ * English, Indonesian when none is passed); the words are `words`' (`goal-words.ts`), English when none is passed, so
+ * a screen not moved yet reads as it did. A screen passes `useFigureLanguage()` and `useLanguage()`. About a coachee,
+ * Indonesian says *-nya* whatever their pronoun, and no word names the office in either language.
  */
 export function producedFrom(
   source: {
@@ -243,27 +259,29 @@ export function producedFrom(
   span: 'month' | 'year',
   /** The coachee's pronoun, on a coaching tab; absent on the reader's own screen. */
   subject?: Pronoun,
+  /** The figures' language: the month is written in it (P18.98-T3), *As of Oct 2026*. */
+  figures: Language = DEFAULT_LANGUAGE,
+  /** The words' language (P18.98-T4), last: English when none is passed. */
+  words: Language = SOURCE_LANGUAGE,
 ): string {
-  if (source.provenance === 'self_reported') {
-    const whose = subject ? capitalized(PRONOUN_FORMS[subject].possessive) : 'Your';
-    return `${whose} own figure, entered in Goal Settings`;
-  }
+  const t = messagesIn(goalWordMessages, words).produced;
+  if (source.provenance === 'self_reported') return t.own({ who: voiceOf(subject ? PRONOUN_FORMS[subject] : undefined) });
   // **Who corrected it** (ADR-0121, F-156): since a leader's *Update production* writes corrections too,
   // *by your office* stopped being true of every one. The name when the payload carries it; *by hand*,
   // which is true whoever it was, when it does not.
   const by = source.provenance === 'corrected' ? (source.correctedBy?.name ?? null) : null;
-  const words = subject
-    ? (source.provenance === 'corrected' ? 'Corrected after the production upload' : 'From the production upload')
-    : (source.provenance === 'corrected' ? `Corrected by ${by ?? 'hand'}` : 'From your office’s upload');
-  const named = subject && by ? `, by ${by}` : '';
-  if (!source.month) return `${words}${named}`;
+  const said = subject
+    ? (source.provenance === 'corrected' ? t.theirCorrection : t.theirUpload)
+    : (source.provenance === 'corrected' ? t.corrected({ by }) : t.upload);
+  /** A coachee's correction names who made it, last; the reader's names them in its first words. */
+  const named = (text: string) => (subject && by ? t.by({ words: text, name: by }) : text);
+  if (!source.month) return named(said);
+  const month = formatMonth(source.month, figures);
   /*
    * **The client's words for the office's year to date** (P18.95-T7 AC-1, grey text row 18; ADR-0167 §7): *As of Okt
    * 2026*, at every size, where it read *"From your office’s upload, year to date as of Okt 2026"*. The reader's own,
    * from the upload: a correction still says who made it, and a coachee's still names the upload.
    */
-  if (span === 'year' && !subject && source.provenance === 'imported') return `As of ${formatMonth(source.month)}`;
-  return span === 'year'
-    ? `${words}, year to date as of ${formatMonth(source.month)}${named}`
-    : `${words}, ${formatMonth(source.month)}${named}`;
+  if (span === 'year' && !subject && source.provenance === 'imported') return t.asOf({ month });
+  return named(span === 'year' ? t.yearToDate({ words: said, month }) : t.ofMonth({ words: said, month }));
 }

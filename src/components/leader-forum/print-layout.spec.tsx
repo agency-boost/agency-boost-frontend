@@ -33,12 +33,12 @@ describe('P18.1-T3 AC-4, P18.97-T1 AC-18 the print layout (`:2662-2695`; the ref
     const [stats] = tables();
     expect(within(stats).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
       'Metrics', '⟵ Full Year & YTD View ⟶', '⟵ Monthly View ⟶',
-      "Full Year 2025(Jan-Des '25)", "YTD 2025(Jan-Sep '25)", "YTD 2026(Jan-Sep '26)", 'This Month, Last Year(Sep-25)',
-      'Last Month(Agu-26)', 'This Month(Sep-26)', 'Monthly Target',
+      "Full Year 2025(Jan-Dec '25)", "YTD 2025(Jan-Sep '25)", "YTD 2026(Jan-Sep '26)", 'This Month, Last Year(Sep-25)',
+      'Last Month(Aug-26)', 'This Month(Sep-26)', 'Monthly Target',
     ]);
     expect(within(stats).getByText('96 (3 @ unit)')).toBeInTheDocument();
     expect(within(stats).getByText('TBD')).toBeInTheDocument();
-    expect(within(stats).getByText('12,1')).toBeInTheDocument();
+    expect(within(stats).getByText('12.1')).toBeInTheDocument();
     expect(within(stats).getByText('Activation')).toBeInTheDocument();
     // Nothing scrolls on paper, and nothing has a minimum width to run off it.
     expect(stats.parentElement).not.toHaveClass('overflow-x-auto');
@@ -50,7 +50,7 @@ describe('P18.1-T3 AC-4, P18.97-T1 AC-18 the print layout (`:2662-2695`; the ref
     const [stats] = tables();
     expect(within(stats).getAllByText('Not tracked')).toHaveLength(16);
     expect(stats.querySelectorAll('td.bg-navy')).toHaveLength(0);
-    const ape = within(stats).getByRole('rowheader', { name: 'APE (Rp M)' }).parentElement!;
+    const ape = within(stats).getByRole('rowheader', { name: 'APE (IDR B)' }).parentElement!;
     expect(ape.children[2].className).toContain('border-l-alert');
     expect(ape.children[3].className).toContain('border-r-alert');
   });
@@ -58,7 +58,7 @@ describe('P18.1-T3 AC-4, P18.97-T1 AC-18 the print layout (`:2662-2695`; the ref
   it('P18.97-T1 AC-18 the footnotes and the (*) notes print, where the print’s † and its line were', () => {
     const { container } = draw();
     expect(screen.getByText(/^Annual Active Agents — members with APE/)).toBeInTheDocument();
-    expect(screen.getByText('(*) YTD 2026 covers Jan–Sep 2026 without Agu 2026, not uploaded')).toBeInTheDocument();
+    expect(screen.getByText('(*) YTD 2026 covers Jan–Sep 2026 without Aug 2026, not uploaded')).toBeInTheDocument();
     const [stats] = tables();
     expect(within(stats).getAllByText('*')).toHaveLength(4);
     expect(container.textContent).not.toContain('†');

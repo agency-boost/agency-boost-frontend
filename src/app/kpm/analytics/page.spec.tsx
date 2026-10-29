@@ -1,12 +1,17 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { atWidth, digestAt, makeMe, renderInLayout, stubFetch, wears, type StubReply } from '@test/harness';
+import {
+  atWidth, digestAt, makeMe, renderInIndonesian, renderInLayout, renderWithLanguage, resetLanguage, stubFetch, wears,
+  type StubReply,
+} from '@test/harness';
 import {
   ADMIN_ME, analyticsView, CORE_LEADER_ME, NO_AB, OWNER_ME, SHELL_STUBS,
 } from '@test/kpm-analytics-fixtures';
 import KpmAnalyticsLayout from './layout';
 import KpmAnalyticsPage from './page';
+import { englishOnly, englishShown } from '@test/english-left';
+import { kpmAnalyticsMessages } from '@/i18n/messages/kpm-analytics';
 import { landingFor } from '@/lib/landing';
 import { TERMS } from '@/lib/terms';
 
@@ -137,7 +142,7 @@ describe('KPM analytics (P18-T2)', () => {
     it('opens and closes an agency from its row, as the prototype’s row click does (:3417-3422)', async () => {
       open();
       await table();
-      await userEvent.click(within(rowOf('Hendra Wibowo')).getByText('Rp 1,3 M'));
+      await userEvent.click(within(rowOf('Hendra Wibowo')).getByText('IDR 1.3B'));
       expect(screen.getByRole('rowheader', { name: 'Ika Wirawan' })).toBeInTheDocument();
     });
 
@@ -170,12 +175,12 @@ describe('KPM analytics (P18-T2)', () => {
       open();
       await table();
       const row = rowOf('Hendra Wibowo');
-      expect(within(row).getByText('Rp 62 jt')).toBeInTheDocument();
-      expect(within(row).getByText(/^of Rp 150 jt target/)).toBeInTheDocument();
+      expect(within(row).getByText('IDR 62M')).toBeInTheDocument();
+      expect(within(row).getByText(/^of IDR 150M target/)).toBeInTheDocument();
       expect(within(row).getByText('41%')).toHaveClass('text-alert');
       expect(within(row).getByText('87%')).toHaveClass('text-success');
       // A table's money is compact too (ADR-0174 §4): no sum on the page is written to the rupiah.
-      expect(main().textContent).not.toMatch(/Rp \d{1,3}\.\d{3}\.\d{3}/);
+      expect(main().textContent).not.toMatch(/IDR \d{1,3},\d{3},\d{3}/);
     });
 
     it('colours the pill by the split the server sends, keeping no copy of its own (invariant §7)', async () => {
@@ -204,11 +209,11 @@ describe('KPM analytics (P18-T2)', () => {
       await table();
       const annual = total().querySelectorAll('td')[2] as HTMLElement;
       expect(within(annual).getByText('Current members only')).toBeInTheDocument();
-      expect(within(annual).getByText('Rp 5,8 M')).toBeInTheDocument();
+      expect(within(annual).getByText('IDR 5.8B')).toBeInTheDocument();
       // On the total alone: an agency's own row is its members by definition, and says nothing more.
       expect(within(rowOf('Hendra Wibowo')).queryByText('Current members only')).not.toBeInTheDocument();
       expect(screen.getByRole('button', {
-        name: 'Leaves out Rp 98 jt produced this year by members who have since left; the Overview’s year counts it.',
+        name: 'Leaves out IDR 98M produced this year by members who have since left; the Overview’s year counts it.',
       })).toBeInTheDocument();
     });
 
@@ -229,7 +234,7 @@ describe('KPM analytics (P18-T2)', () => {
       await table();
       const row = rowOf('Budi Santoso');
       expect(within(row).getAllByText('Not uploaded yet')).toHaveLength(2);
-      expect(within(row).getByText(/^of Rp 75 jt target$/)).toBeInTheDocument();
+      expect(within(row).getByText(/^of IDR 75M target$/)).toBeInTheDocument();
     });
 
     it('keeps the period in the address: choosing Previous month re-reads it and replaces the address', async () => {
@@ -284,7 +289,7 @@ describe('KPM analytics (P18-T2)', () => {
     open([{ body: { ...view, total: { ...view.total, leaversExcludedMinor: 12_500_000_00 } } }]);
     await table();
     expect(screen.getByRole('button', {
-      name: /^Leaves out Rp 12,5 jt produced this year by members who have since left; the Overview’s year counts it\.$/,
+      name: /^Leaves out IDR 12\.5M produced this year by members who have since left; the Overview’s year counts it\.$/,
     })).toBeInTheDocument();
   });
 
@@ -306,7 +311,7 @@ describe('KPM analytics (P18-T2)', () => {
       const rows = within(dialog).getAllByRole('listitem');
       expect(rows[0]).toHaveTextContent('Net APE');
       expect(rows[0]).toHaveTextContent('Jan – Sep 2026');
-      expect(rows[0]).toHaveTextContent('Rp 1,3 M / Rp 600 jt — Met');
+      expect(rows[0]).toHaveTextContent('IDR 1.3B / IDR 600M — Met');
       expect(rows[3]).toHaveTextContent('82% / 75% — Met');
       expect(rows[4]).toHaveTextContent('— OR — Direct AB (AB on AB)');
       expect(rows[4]).toHaveTextContent('1 / 5 — Gap');
@@ -398,13 +403,13 @@ describe('KPM analytics (P18-T2)', () => {
       expect(screen.getByText('Last 6 months, combined APE — whole group')).toBeInTheDocument();
       const months = within(screen.getByRole('list', { name: 'Monthly production' })).getAllByRole('listitem');
       expect(months.map((m) => m.textContent)).toEqual([
-        // A bar's label is compact (ADR-0167 §1), its month `id-ID`'s.
-        'Apr 2026: Rp 520 jtApr',
-        'Mei 2026: Rp 610 jtMei',
-        'Jun 2026: Rp 580 jtJun',
-        'Jul 2026: Rp 700 jtJul',
-        'Agu 2026: Not uploaded yetAgu',
-        'Sep 2026: Rp 800 jtSep',
+        // A bar's label is compact (ADR-0167 §1), its month and its sum in the reader's language (P18.98-T4).
+        'Apr 2026: IDR 520MApr',
+        'May 2026: IDR 610MMay',
+        'Jun 2026: IDR 580MJun',
+        'Jul 2026: IDR 700MJul',
+        'Aug 2026: Not uploaded yetAug',
+        'Sep 2026: IDR 800MSep',
       ]);
       // The gap has no bar with a height: an outline, never a zero-height bar.
       expect(months[4].querySelector('[style*="height"]')).toBeNull();
@@ -592,9 +597,13 @@ describe('P18.97-T7 AC-1 the comparison as cards on a phone (UI-034)', () => {
 
   it.each([768, 1280] as const)('P18.97-T7 AC-1 at %ipx draws the table it drew, to the byte', async (px) => {
     atWidth(px);
-    open();
+    stubFetch({ ...SHELL_STUBS, [ANALYTICS]: { body: analyticsView() } });
+    // As a reader who has chosen no language reads it while the switch is not live — English words, Indonesian figures
+    // (P18.98-T3) — which is the page as it was: since P18.98-T4 wired its figures, a spec's English is a chosen English.
+    renderWithLanguage(<KpmAnalyticsLayout><KpmAnalyticsPage /></KpmAnalyticsLayout>, { me: OWNER_ME }, { live: false });
     const comparison = (await table()).closest('.rounded-lg')!;
     expect(digestAt(comparison, px)).toBe(BEFORE_T7[px]);
+    resetLanguage();
   });
   const cardsOf = () => screen.findByRole('list', { name: 'Unit comparison' });
   /** The cards, the list's own: the total, then an agency each — the units opened inside an agency are its own. */
@@ -637,7 +646,7 @@ describe('P18.97-T7 AC-1 the comparison as cards on a phone (UI-034)', () => {
     expect(within(total).getByText('Current members only')).toBeInTheDocument();
     expect(within(cardOf(list, 'Hendra Wibowo')).queryByText('Current members only')).not.toBeInTheDocument();
     expect(within(total).getByRole('button', {
-      name: 'Leaves out Rp 98 jt produced this year by members who have since left; the Overview’s year counts it.',
+      name: 'Leaves out IDR 98M produced this year by members who have since left; the Overview’s year counts it.',
     })).toBeInTheDocument();
     // *Producing this month*, its share the server's (AC-9, AC-10): 58 served where 21 of 31 would be 68.
     expect(screen.getAllByText('Producing this month')).toHaveLength(5);
@@ -721,5 +730,151 @@ describe('P18.97-T7 AC-1 the comparison as cards on a phone (UI-034)', () => {
     await cardsOf();
     observer.disconnect();
     expect(drew).toBe(false);
+  });
+});
+
+/**
+ * **OD-235, clarified 2026-10-29**: the *Producing* cell writes its count over **the same members as its percent** — a
+ * past month's *4 / 5 · 80%*, never *4 / 3 · 80%* — the share's base served beside it (`activeOf`); the *Manpower*
+ * column stays today's.
+ */
+describe('OD-235 the Producing cell over the share’s own base', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** Hendra's agency in September: four producing of September's five — two have left since — and three today. */
+  const september = () => {
+    const view = analyticsView('previous_month');
+    const [hendra, ...rest] = view.agencies;
+    const row = { ...hendra, activeAgents: 4, activePct: 80, activeOf: 5, manpower: { aab: 0, agents: 2, total: 3 } };
+    return { ...view, agencies: [row, ...rest] };
+  };
+
+  it('OD-235 writes a past month’s count over that month’s members, 4 / 5 · 80%, and Manpower today’s three', async () => {
+    open({ body: september() }, { period: 'previous_month' });
+    await table();
+    const cells = [...rowOf('Hendra Wibowo').querySelectorAll('td')] as HTMLElement[];
+    expect(cells[0]).toHaveTextContent(/^3/);
+    expect(within(cells[4]).getByText('4 / 5')).toBeInTheDocument();
+    expect(within(cells[4]).getByText('80%')).toBeInTheDocument();
+    expect(rowOf('Hendra Wibowo')).not.toHaveTextContent('4 / 3');
+  });
+
+  it('OD-235 writes this month’s over today’s manpower, the base it is served', async () => {
+    open();
+    await table();
+    const cells = [...rowOf('Hendra Wibowo').querySelectorAll('td')] as HTMLElement[];
+    expect(within(cells[4]).getByText('21 / 31')).toBeInTheDocument();
+    expect(cells[0]).toHaveTextContent(/^31/);
+  });
+
+  it('OD-235 writes the same on a phone’s card: the count over its base under Producing last month', async () => {
+    atWidth(375);
+    open({ body: september() }, { period: 'previous_month' });
+    const list = await screen.findByRole('list', { name: 'Unit comparison' });
+    const hendra = [...list.children].find((li) => li.textContent?.includes('Hendra Wibowo')) as HTMLElement;
+    const field = [...hendra.querySelectorAll(':scope > dl > div')].find((d) => d.querySelector('dt')?.textContent === 'Producing last month')!;
+    expect(field).toHaveTextContent('4 / 580%');
+  });
+});
+
+/**
+ * **P18.98-T4 KPM Analytics in Indonesian** (`i18n/messages/kpm-analytics.ts`; ADR-0179): its words the approved
+ * glossary's, each KPI name, role and the jargon kept English (§A), a name and the server's sentences as sent, and its
+ * figures Indonesian. The ⓘ's *What is …?* lines are the shared glossary's terms (`lib/terms.ts`), not this module's.
+ */
+describe('P18.98-T4 KPM analytics in Indonesian', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /**
+   * The comparison as the API answers an Indonesian reader (P18.98-T5: its sentences in the request's language) — the
+   * one sentence of its own a closed screen shows, the MOC cell's *which input is missing*, in Indonesian.
+   */
+  const fromTheApi = () => {
+    const view = analyticsView();
+    return {
+      ...view,
+      agencies: view.agencies.map((a) => (a.moc?.status === 'unknown'
+        ? { ...a, moc: { ...a.moc, missing: 'Belum diunggah: Rolling Persistency — DU/DG.' } }
+        : a)),
+    };
+  };
+
+  const openInIndonesian = (body: unknown = fromTheApi()) => {
+    stubFetch({ ...SHELL_STUBS, [ANALYTICS]: { body } });
+    renderInIndonesian(<KpmAnalyticsLayout><KpmAnalyticsPage /></KpmAnalyticsLayout>, { me: OWNER_ME });
+  };
+
+  it('P18.98-T4 reads its title and tabs kept, and its own words in Indonesian', async () => {
+    openInIndonesian();
+    await screen.findByRole('table', { name: 'Unit comparison' });
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/^KPM Analytics$/);
+    expect(screen.getByText('Perbandingan unit, kualifikasi klub, dan tren')).toBeInTheDocument();
+    const tabs = within(screen.getByRole('navigation', { name: 'KPM Analytics' }));
+    expect(tabs.getByRole('link', { name: 'Overview' })).toBeInTheDocument();
+    expect(tabs.getByRole('link', { name: 'Compliance, Events, and Campaigns' })).toBeInTheDocument();
+    const period = screen.getByRole('combobox', { name: 'Periode' });
+    expect([...period.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Bulan ini', 'Bulan lalu']);
+    expect(screen.getByText('Semua 4 AB, tahun ini — benchmark antarrekan, selalu ditampilkan di tingkat grup')).toBeInTheDocument();
+  });
+
+  it('P18.98-T4 keeps every column’s KPI name English, and writes the rows’ words and figures in Indonesian', async () => {
+    openInIndonesian();
+    await screen.findByRole('table', { name: 'Unit comparison' });
+    // Each heading's own words, before its ⓘ (the shared glossary's *What is …?*).
+    expect(screen.getAllByRole('columnheader').map((th) => th.textContent!.split('ⓘ')[0])).toEqual([
+      'AB', 'Manpower', 'APE — This Month', 'APE — Annual', 'Coached (7d)', 'Producing this month', 'Total leads', 'MOC',
+    ]);
+    const totalRow = screen.getByRole('rowheader', { name: /^Total — semua 4 AB/ }).closest('tr') as HTMLElement;
+    expect(within(totalRow).getByText('Hanya anggota saat ini')).toBeInTheDocument();
+    expect(within(totalRow).getByText('ABs meeting MOC')).toBeInTheDocument();
+    expect(within(totalRow).getByText('Rp 5,8 M')).toBeInTheDocument();
+    const hendra = screen.getByRole('rowheader', { name: 'Hendra Wibowo' }).closest('tr') as HTMLElement;
+    expect(within(hendra).getByText('2 AAB · 28 Agents')).toBeInTheDocument();
+    expect(within(hendra).getByText('Rp 62 jt')).toBeInTheDocument();
+    expect(within(hendra).getByText(/^dari target Rp 150 jt/)).toBeInTheDocument();
+    expect(within(hendra).getByText('15 penjualan (9 potensial) · 8 rekrut (5 potensial)')).toBeInTheDocument();
+    expect(within(hendra).getByRole('button', { name: '31 orang di agensi Hendra Wibowo' })).toBeInTheDocument();
+    expect(within(hendra).getByRole('button', { name: 'Unit di agensi Hendra Wibowo' })).toBeInTheDocument();
+    expect(within(hendra).getByRole('button', { name: 'Syarat MOC terpenuhi untuk Hendra Wibowo' })).toBeInTheDocument();
+    expect(screen.getByRole('rowheader', { name: 'Wilson Tanoto (Anda)' })).toBeInTheDocument();
+    const budi = screen.getByRole('rowheader', { name: 'Budi Santoso' }).closest('tr') as HTMLElement;
+    expect(within(budi).getAllByText('Belum diunggah')).toHaveLength(2);
+    // *Monthly production* kept, its sub-line and a month with no file Indonesian.
+    expect(screen.getByRole('heading', { level: 2, name: 'Monthly production' })).toBeInTheDocument();
+    expect(screen.getByText('6 bulan terakhir, APE gabungan — seluruh grup')).toBeInTheDocument();
+    expect(within(screen.getByRole('list', { name: 'Monthly production' })).getAllByRole('listitem')[4])
+      .toHaveTextContent('Agu 2026: Belum diunggahAgu');
+    // The scan reads the screen at all, so a silent zero cannot pass.
+    expect(englishOnly(kpmAnalyticsMessages).length).toBeGreaterThan(15);
+    expect(document.body.textContent).toContain('Hanya anggota saat ini');
+    expect(englishShown(document.body, englishOnly(kpmAnalyticsMessages))).toEqual([]);
+  });
+
+  it('P18.98-T4 opens an agency’s units, the Direct row kept, and MOC’s dialog in Indonesian', async () => {
+    openInIndonesian();
+    await screen.findByRole('table', { name: 'Unit comparison' });
+    await userEvent.click(screen.getByRole('button', { name: 'Unit di agensi Hendra Wibowo' }));
+    expect(screen.getByRole('rowheader', { name: 'Hendra Wibowo (Direct)' })).toBeInTheDocument();
+    expect(screen.getByText('Lihat Hendra Wibowo di atas')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Syarat MOC terpenuhi untuk Hendra Wibowo' }));
+    const dialog = screen.getByRole('dialog', { name: 'Hendra Wibowo — Maintenance of Contract' });
+    expect(within(dialog).getByText('Syarat terpenuhi')).toBeInTheDocument();
+    const rows = within(dialog).getAllByRole('listitem');
+    expect(rows[0]).toHaveTextContent('Rp 1,3 M / Rp 600 jt — Terpenuhi');
+    expect(rows[4]).toHaveTextContent('1 / 5 — Gap');
+    expect(within(dialog).getByRole('button', { name: 'Tutup' })).toBeInTheDocument();
+  });
+
+  it('P18.98-T4 reads a team with no AB, and a phone’s cards, in Indonesian', async () => {
+    openInIndonesian(NO_AB);
+    expect(await screen.findByText('Belum ada AB untuk dibandingkan.')).toBeInTheDocument();
+    expect(screen.getByText('Setiap agensi AB mendapat satu baris di sini, berisi anggota dan angkanya.')).toBeInTheDocument();
+    vi.unstubAllGlobals();
+    document.body.innerHTML = '';
+    atWidth(375);
+    openInIndonesian();
+    const list = await screen.findByRole('list', { name: 'Unit comparison' });
+    expect([...list.children][0].querySelector('p')).toHaveTextContent('Total — semua 4 AB');
+    expect(englishShown(document.body, englishOnly(kpmAnalyticsMessages))).toEqual([]);
   });
 });

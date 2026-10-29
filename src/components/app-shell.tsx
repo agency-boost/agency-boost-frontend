@@ -1,10 +1,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { LanguageSwitch } from '@/components/language-switch';
 import { NotificationBell } from '@/components/notification-bell';
 import { SidebarUserMenu } from '@/components/sidebar-user-menu';
 import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
 import { REMOVED_ON_PHONE } from '@/components/ui/phone';
+import { kept } from '@/i18n/kept';
+import { useLanguageChoice, useMessages } from '@/i18n/language-provider';
+import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
 import { useMediaQuery } from '@/lib/use-media-query';
 import { usePhone } from '@/lib/use-phone';
@@ -74,11 +78,14 @@ function BrandMark() {
   );
 }
 
-/** The wordmark, and the amber line under it naming which app this is — the sidebar's and the phone's drawer's. */
+/**
+ * The wordmark, and the amber line under it naming which app this is — the sidebar's and the phone's drawer's.
+ * The product's name is kept English (§A.5); the shells' other words are `shellMessages` (P18.98-T1).
+ */
 function Wordmark({ brandTag, className }: { brandTag?: string; className?: string }) {
   return (
     <span className={cn('font-display text-lg font-extrabold leading-tight tracking-tight text-white', className)}>
-      AgencyBoost
+      {kept('AgencyBoost')}
       {brandTag && (
         <span className="block text-2xs font-semibold uppercase tracking-wide text-amber">
           {brandTag}
@@ -88,10 +95,9 @@ function Wordmark({ brandTag, className }: { brandTag?: string; className?: stri
   );
 }
 
-/** What the amber check says to a screen reader, after the item's own name (WCAG 2.5.3: the words on screen first). */
-const DONE_SUFFIX = ' — complete';
-
 function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: boolean }) {
+  /** What the amber check says to a screen reader, after the item's own name (WCAG 2.5.3: the words on screen first). */
+  const { doneSuffix } = useMessages(shellMessages);
   // No hover state. There is no `.nav a:hover` rule in any of the fifteen prototype
   // files — resting, active and disabled are the only three. A hover that lightens an
   // inactive item makes it read as nearly-active, which is exactly the confusion the
@@ -140,7 +146,7 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
           >
             <path d="M5 13l4 4L19 7" />
           </svg>
-          <span className="sr-only">{DONE_SUFFIX}</span>
+          <span className="sr-only">{doneSuffix}</span>
         </>
       )}
       {!rail && item.upcoming && (
@@ -162,7 +168,7 @@ function NavLink({ item, pill, rail }: { item: NavItem; pill: string; rail: bool
    * no role, and ARIA allows no name on an element with none (axe's `aria-prohibited-attr`).
    */
   const count = item.badge !== undefined && item.badge > 0 ? `, ${item.badge}` : '';
-  const railName = item.upcoming ? `${item.label} — ${pill}` : `${item.label}${count}${item.done ? DONE_SUFFIX : ''}`;
+  const railName = item.upcoming ? `${item.label} — ${pill}` : `${item.label}${count}${item.done ? doneSuffix : ''}`;
   const named = rail ? { 'aria-label': railName, title: railName } : {};
 
   if (item.upcoming) {
@@ -250,15 +256,47 @@ export function PageHeader({
 }) {
   const fromPage = useContext(SubtitleOnPhone);
   const onPhone = subtitleOnPhone ?? fromPage;
+  const withLanguage = usePageLanguageSwitch();
   return (
     <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 className="font-display text-3xl font-bold text-navy">{title}</h1>
         {subtitle && <p className={cn('mt-1 text-md text-muted', !onPhone && REMOVED_ON_PHONE)}>{subtitle}</p>}
       </div>
-      {actions}
+      {/* The switch at the header's top right, before the page's own actions (P18.98-T2 AC-3); nothing changes until it is live. */}
+      {withLanguage ? (
+        <div className="flex flex-wrap items-start gap-4">
+          <PageLanguageSwitch />
+          {actions}
+        </div>
+      ) : actions}
     </div>
   );
+}
+
+/**
+ * **Whether a page's header draws the *ID | EN* switch** (P18.98-T2 AC-3): a shell's page, from 768px — on a phone the
+ * switch is on the bar — once the switch is live. `AppShell` says the first two; `PageHeader` is always in a shell.
+ */
+const PageHeaderLanguage = createContext(false);
+
+/** Whether a page's own heading block should carry the switch: what `PageHeader` asks, and a page that draws its own. */
+export function usePageLanguageSwitch(): boolean {
+  const inShell = useContext(PageHeaderLanguage);
+  const { live } = useLanguageChoice();
+  return inShell && live;
+}
+
+/**
+ * **The *ID | EN* switch at a page header's top right** (P18.98-T2 AC-3), before the page's own actions: at the head of
+ * every shell's page from 768px, where the title is. Its 44px targets sit centred on the title's line (`-my-[5px]`),
+ * so the header is no taller for it. Hidden by its class below 768px as well, so a phone's first frame — before the
+ * width is read — never shows it twice. A page that draws its own heading block (*Billing*, a coachee's name) puts this
+ * in it; nothing at all outside a shell, or before the switch is live.
+ */
+export function PageLanguageSwitch({ className }: { className?: string }) {
+  if (!usePageLanguageSwitch()) return null;
+  return <LanguageSwitch tone="page" className={cn('max-md:hidden md:-my-[5px]', className)} />;
 }
 
 /**
@@ -358,6 +396,14 @@ function SidebarFoot({
   const bell = notifications && !(bar && account) ? <NotificationBell {...notifications} /> : null;
 
   /*
+   * **The *ID | EN* switch, on a phone's bar between the brand and the avatar** (P18.98-T2 AC-3; the client's
+   * *visible in the mobile header*, UI-041). Hidden by its class from 768px, as ☰ is shown by its own, so a phone's
+   * first frame already has it and nothing wider ever shows it: there the page header carries it (`PageHeader`).
+   * Nothing at all until the switch is live (`LANGUAGE_LIVE`).
+   */
+  const language = <LanguageSwitch tone="bar" className="md:hidden" />;
+
+  /*
    * **On a phone's bar it gives way; in the sidebar it holds.** Below 768px it sits beside the brand,
    * and `shrink-0` kept it at its contents' full width: the Super Admin's chip, *Platform Operator* over
    * *Superadmin*, beside *AgencyBoost SUPERADMIN*, ran 23px past a 360px screen and clipped the bell
@@ -373,6 +419,7 @@ function SidebarFoot({
         rail && 'md:flex-col md:gap-1.5',
       )}
     >
+      {language}
       {rail ? <>{bell}{chip}</> : <>{chip}{bell}</>}
     </div>
   );
@@ -550,6 +597,7 @@ function PhoneMenu({
 }) {
   const box = useRef<HTMLDivElement>(null);
   const closer = useRef<HTMLButtonElement>(null);
+  const t = useMessages(shellMessages);
 
   // The page behind holds still: the one lock every dialog takes, counted, so a dialog over the drawer nests.
   useScrollLock(true);
@@ -597,7 +645,7 @@ function PhoneMenu({
         id={DRAWER_ID}
         role="dialog"
         aria-modal="true"
-        aria-label="Menu"
+        aria-label={t.menu}
         onKeyDown={keys}
         onClick={closeOnLink}
         /*
@@ -614,13 +662,13 @@ function PhoneMenu({
             ref={closer}
             type="button"
             onClick={onClose}
-            aria-label="Close menu"
+            aria-label={t.closeMenu}
             className="-mr-2 ml-auto flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-white/[0.55] hover:bg-white/[0.06] hover:text-white"
           >
             <MenuGlyph close />
           </button>
         </div>
-        <nav id="sidebar-nav" aria-label="Main" className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5">
+        <nav id="sidebar-nav" aria-label={t.mainNav} className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5">
           {children}
         </nav>
         {foot}
@@ -634,7 +682,7 @@ export function AppShell({
   user,
   account,
   brandTag,
-  upcomingLabel = 'Upcoming',
+  upcomingLabel,
   notifications,
   title,
   subtitle,
@@ -648,7 +696,10 @@ export function AppShell({
    * `SUPERADMIN`. The agent app has none (`Overall.html:2619`).
    */
   brandTag?: string;
-  /** `Upcoming` in the KPM Owner app, `Soon` in Superadmin. The prototypes differ. */
+  /**
+   * `Upcoming` in the KPM Owner app, `Soon` in Superadmin. The prototypes differ. The shell's own *Upcoming* when
+   * absent; both are *Segera hadir* in ID mode (`shellMessages`, the glossary's §B.3).
+   */
   upcomingLabel?: string;
   /**
    * Wires the identity chip to the actions behind it. Omitted, the chip is a plain
@@ -681,6 +732,10 @@ export function AppShell({
   actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const t = useMessages(shellMessages);
+  const pill = upcomingLabel ?? t.upcoming;
+  /** Whether the *ID | EN* switch is drawn (P18.98-T2): on a phone's bar it needs the wordmark's room below 360px. */
+  const { live } = useLanguageChoice();
   /**
    * **Every group starts open, and each heading toggles its own** (P10.1-T3, client item 3).
    *
@@ -765,7 +820,7 @@ export function AppShell({
    */
   const phone = usePhone();
   const groups = (
-    <NavGroups sections={sections} rail={rail && !phone} closed={closed} onToggle={toggleGroup} pill={upcomingLabel} />
+    <NavGroups sections={sections} rail={rail && !phone} closed={closed} onToggle={toggleGroup} pill={pill} />
   );
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButton = useRef<HTMLButtonElement>(null);
@@ -811,7 +866,7 @@ export function AppShell({
           // Only on a phone: from 768px it is not shown, and an open drawer left waiting would spring open
           // the moment the window narrowed.
           onClick={() => { if (phone) setMenuOpen(true); }}
-          aria-label="Open menu"
+          aria-label={t.openMenu}
           aria-haspopup="dialog"
           aria-expanded={menuOpen && phone}
           aria-controls={DRAWER_ID}
@@ -827,8 +882,10 @@ export function AppShell({
         >
           <BrandMark />
           {/* The wordmark goes, the mark stays: it is the thing that says which product this
-              is, and 56px has room for exactly one of them. */}
-          <Wordmark brandTag={brandTag} className={rail ? 'md:hidden' : undefined} />
+              is, and 56px has room for exactly one of them. **And below 360px, once the language switch is on the
+              bar** (P18.98-T2): ☰, the mark, the switch and the avatar fill a 320px phone, so the wordmark is said
+              rather than drawn there — the page reflows instead of scrolling sideways (WCAG 1.4.10). */}
+          <Wordmark brandTag={brandTag} className={cn(rail && 'md:hidden', live && 'max-[359.98px]:sr-only') || undefined} />
 
           {/*
             * **Beside the mark, not above the nav.** It was its own row under the brand, which
@@ -842,8 +899,8 @@ export function AppShell({
               onClick={toggleRail}
               aria-expanded={!rail}
               aria-controls="sidebar-nav"
-              aria-label={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}
-              title={rail ? 'Expand the sidebar' : 'Collapse the sidebar'}
+              aria-label={rail ? t.expandSidebar : t.collapseSidebar}
+              title={rail ? t.expandSidebar : t.collapseSidebar}
               className={cn(
                 'hidden h-8 w-8 shrink-0 items-center justify-center rounded-md text-white/[0.55] hover:bg-white/[0.06] hover:text-white md:flex',
                 !rail && 'md:ml-auto',
@@ -869,7 +926,7 @@ export function AppShell({
 
         {/* Wider than a phone, the nav is the sidebar's. On a phone it is the drawer's (below). */}
         {!phone && (
-          <nav id="sidebar-nav" className="hidden min-h-0 flex-1 overflow-y-auto pr-0.5 md:block" aria-label="Main">
+          <nav id="sidebar-nav" className="hidden min-h-0 flex-1 overflow-y-auto pr-0.5 md:block" aria-label={t.mainNav}>
             {groups}
           </nav>
         )}
@@ -895,10 +952,13 @@ export function AppShell({
       )}
 
       <main className="min-w-0 flex-1 px-5 py-6 print:p-0 md:px-10 md:pb-14 md:pt-8">
-        {title !== undefined && (
-          <PageHeader title={title} subtitle={subtitle} actions={actions} />
-        )}
-        {children}
+        {/* Wider than a phone the page's header carries the language switch; on a phone the bar does (P18.98-T2). */}
+        <PageHeaderLanguage.Provider value={!phone}>
+          {title !== undefined && (
+            <PageHeader title={title} subtitle={subtitle} actions={actions} />
+          )}
+          {children}
+        </PageHeaderLanguage.Provider>
       </main>
     </div>
   );

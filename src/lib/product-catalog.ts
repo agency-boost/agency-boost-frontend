@@ -1,11 +1,23 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { kept } from '@/i18n/kept';
+import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { planMessages } from '@/i18n/messages/plan';
+import { productCatalogMessages } from '@/i18n/messages/product-catalog';
+import { salesAttackPlanMessages } from '@/i18n/messages/sales-attack-plan';
 import { api } from './api-client';
-import { formatPercent } from './format';
+import { formatPercent, formatRupiahCompact, toMinor } from './format';
 
 /**
  * **Sales tools** (`docs/02-specs/functional/sales-tools.md`, Phase 14): the shapes the field reads
  * answer, the calls that ask for them, and the words the two screens draw them with — the Product
  * Catalog (`/product-catalog`, its drawer at `/product-catalog/[productCode]`) and the Sales Attack Plan
  * (`/attack-plan`).
+ *
+ * **The words are the catalogue's** (P18.98-T4; ADR-0179 §4): `messages/product-catalog.ts`,
+ * `messages/sales-attack-plan.tsx` and the two plans' `messages/plan.ts`. A function here that writes words takes the
+ * reader's language last — English (`SOURCE_LANGUAGE`) when none is passed, so its spec reads as before; one that
+ * writes a figure takes the figures' language — Indonesian (`DEFAULT_LANGUAGE`) when none is passed; one that writes
+ * both takes `figures`, then `words`. A screen passes `useFigureLanguage()` and `useLanguage()`.
  *
  * **Every word an office writes reaches these screens already approved** (ADR-0037, ADR-0120): the
  * server answers the office's approved words field by field, else the company's, and nothing here could
@@ -140,43 +152,39 @@ export interface Choice<T extends string | number> {
   readonly label: string;
 }
 
-/**
- * The brief's chips, verbatim (`Overall.html:3801-3836`). Their values are the domain constants' — the
- * eight needs and the band numbers (`backend/src/domain/constants/product-catalog.ts`, `attack-plan.ts`)
- * — and `product-catalog.spec.ts` pins every value and label to that file.
- */
-export const NEED_CHOICES: readonly Choice<string>[] = [
-  { value: 'life-protection', label: 'Life protection' },
-  { value: 'health', label: 'Health' },
-  { value: 'ci', label: 'Critical illness' },
-  { value: 'accident', label: 'Accident-only' },
-  { value: 'education', label: 'Education' },
-  { value: 'investment', label: 'Investment' },
-  { value: 'retirement', label: 'Retirement income' },
-  { value: 'legacy', label: 'Legacy / inheritance' },
+/** A need's code: the domain constants' (`PRODUCT_NEED_LABELS`), the keys of the brief's words. */
+export type NeedCode = keyof typeof salesAttackPlanMessages.en.needs;
+
+/** The brief's eight needs, in the chips' order (`Overall.html:3803-3810`). */
+const NEED_CODES: readonly NeedCode[] = [
+  'life-protection', 'health', 'ci', 'accident', 'education', 'investment', 'retirement', 'legacy',
 ];
 
+const isNeed = (need: string | undefined): need is NeedCode => NEED_CODES.some((code) => code === need);
+
+/**
+ * **The brief's need chips, in the reader's `words`** (P18.98-T4; `Overall.html:3801-3810`): the domain constants'
+ * codes, each labelled from the catalogue (`messages/sales-attack-plan.tsx`). English when no language is passed.
+ */
+export const needChoices = (words: Language = SOURCE_LANGUAGE): Choice<string>[] => {
+  const t = messagesIn(salesAttackPlanMessages, words);
+  return NEED_CODES.map((value) => ({ value, label: t.needs[value] }));
+};
+
+/**
+ * The brief's need chips in English, the catalogue's source. Their values are the domain constants' — the eight needs
+ * and the band numbers (`backend/src/domain/constants/product-catalog.ts`, `attack-plan.ts`) — and
+ * `product-catalog.spec.ts` pins every value and English label to that file.
+ */
+export const NEED_CHOICES: readonly Choice<string>[] = needChoices();
+
+/** The age bands: figures under a thousand, written alike in both languages (`PRODUCT_AGE_BAND_LABELS`, pinned). */
 export const AGE_CHOICES: readonly Choice<number>[] = [
   { value: 1, label: '< 25' },
   { value: 2, label: '25–34' },
   { value: 3, label: '35–49' },
   { value: 4, label: '50–64' },
   { value: 5, label: '65+' },
-];
-
-/**
- * The monthly budget bands, **compact** as a chip's money is (ADR-0167 §1, parity I-394): the prototype's
- * *Rp500K–Rp2M* wrote a million *M*, which in Indonesian is *miliar* — a thousand times more. Keyed by `value`;
- * nothing matches on the words.
- */
-export const BUDGET_CHOICES: readonly Choice<number>[] = [
-  { value: 1, label: '< Rp 500 rb' },
-  { value: 2, label: 'Rp 500 rb–Rp 2 jt' },
-  { value: 3, label: 'Rp 2 jt–Rp 5 jt' },
-  { value: 4, label: 'Rp 5 jt–Rp 10 jt' },
-  { value: 5, label: 'Rp 10 jt–Rp 20 jt' },
-  { value: 6, label: '> Rp 20 jt' },
-  { value: 7, label: 'Lump-sum' },
 ];
 
 /**
@@ -187,39 +195,94 @@ export const BUDGET_CHOICES: readonly Choice<number>[] = [
  */
 export const LUMP_SUM_BUDGET = 7;
 
+/** The seven budget bands, numbered as the backend's `PRODUCT_BUDGET_BANDS`: six monthly, then the single payment. */
+const BUDGET_BANDS = [1, 2, 3, 4, 5, 6, LUMP_SUM_BUDGET] as const;
+
+/**
+ * **What each monthly band spans, in rupiah** — the sums its chip writes (P18.98-T4): a band below the first, between
+ * two, or above the last. Nothing matches on them: a band is its number, and the scorer is the server's. Written in
+ * Indonesian figures, the labels below are the backend's `PRODUCT_BUDGET_BAND_LABELS` to the character, and
+ * `product-catalog.spec.ts` pins them to that file, so a band cannot say one sum here and another on the server.
+ */
+const MONTHLY_BUDGET_SPANS: Readonly<Record<number, { readonly from?: number; readonly to?: number }>> = {
+  1: { to: 500_000 },
+  2: { from: 500_000, to: 2_000_000 },
+  3: { from: 2_000_000, to: 5_000_000 },
+  4: { from: 5_000_000, to: 10_000_000 },
+  5: { from: 10_000_000, to: 20_000_000 },
+  6: { from: 20_000_000 },
+};
+
+/**
+ * **A budget band as its chip and the brief's summary write it** — its sums **compact**, as a chip's money is (ADR-0167
+ * §1, ADR-0174 §4; parity I-394), in the reader's `figures` (P18.98-T3): *< Rp 500 rb*, *Rp 500 rb–Rp 2 jt* in Indonesian,
+ * *< IDR 500K*, *IDR 500K–IDR 2M* in English — the prototype's *Rp500K–Rp2M* wrote a million *M*, which in Indonesian is
+ * *miliar*. Band 7 is words, *Lump-sum*, in the reader's `words`. Indonesian figures and English words when none is
+ * passed: the backend's labels, as before. `undefined` for a band that does not exist.
+ */
+export function budgetLabel(
+  budget: number | undefined,
+  figures: Language = DEFAULT_LANGUAGE,
+  words: Language = SOURCE_LANGUAGE,
+): string | undefined {
+  if (budget === LUMP_SUM_BUDGET) return messagesIn(salesAttackPlanMessages, words).lumpSum;
+  const span = budget === undefined ? undefined : MONTHLY_BUDGET_SPANS[budget];
+  if (!span) return undefined;
+  const sum = (rupiah: number) => formatRupiahCompact(toMinor(rupiah), {}, figures);
+  if (span.from === undefined) return `< ${sum(span.to ?? 0)}`;
+  if (span.to === undefined) return `> ${sum(span.from)}`;
+  return `${sum(span.from)}–${sum(span.to)}`;
+}
+
+/** **The seven budget chips**, in the reader's figures and words (`budgetLabel`); keyed by `value`, and nothing matches on the words. */
+export const budgetChoices = (figures: Language = DEFAULT_LANGUAGE, words: Language = SOURCE_LANGUAGE): Choice<number>[] =>
+  BUDGET_BANDS.map((value) => ({ value, label: budgetLabel(value, figures, words) ?? String(value) }));
+
+/** The seven bands as the backend labels them — Indonesian figures, English words — which the spec pins. */
+export const BUDGET_CHOICES: readonly Choice<number>[] = budgetChoices();
+
 /** *Monthly premium budget*'s chips: the six monthly bands, 1 to 6. */
 export const MONTHLY_BUDGET_CHOICES: readonly Choice<number>[] = BUDGET_CHOICES.filter((c) => c.value !== LUMP_SUM_BUDGET);
 
 /** The option of its own after them: *Lump-sum*. */
 export const LUMP_SUM_CHOICES: readonly Choice<number>[] = BUDGET_CHOICES.filter((c) => c.value === LUMP_SUM_BUDGET);
 
-/** The catalog's category tabs after *All products*, in order (`Overall.html:10116-10122`). */
+/**
+ * The catalog's category tabs after *All products*, in order (`Overall.html:10116-10122`): §A.3's, kept English in both
+ * languages (`kept`), so one list serves every reader.
+ */
 export const CATEGORY_TABS: readonly Choice<string>[] = [
-  { value: 'life', label: 'Life' },
-  { value: 'health', label: 'Health' },
-  { value: 'ci', label: 'Critical illness' },
-  { value: 'education', label: 'Education' },
-  { value: 'investment', label: 'Investment-linked' },
+  { value: 'life', label: kept('Life') },
+  { value: 'health', label: kept('Health') },
+  { value: 'ci', label: kept('Critical illness') },
+  { value: 'education', label: kept('Education') },
+  { value: 'investment', label: kept('Investment-linked') },
 ];
 
+/** A product's channel in the reader's `words` (`:9534`): *Conventional*, *Syariah*; English when none is passed. */
+export const channelLabel = (channel: ProductChannel, words: Language = SOURCE_LANGUAGE): string =>
+  messagesIn(productCatalogMessages, words).channel[channel];
+
+/** The channels in English, the catalogue's source, which `product-catalog.spec.ts` pins to the backend's labels. */
 export const CHANNEL_LABELS: Readonly<Record<ProductChannel, string>> = {
-  conventional: 'Conventional',
-  syariah: 'Syariah',
+  conventional: channelLabel('conventional'),
+  syariah: channelLabel('syariah'),
 };
 
 const labelOf = <T extends string | number>(choices: readonly Choice<T>[], value: T | undefined) =>
   choices.find((c) => c.value === value)?.label;
 
-export const needLabel = (need: string | undefined) => labelOf(NEED_CHOICES, need);
+/** A need's chip, in the reader's `words`; `undefined` for a code that is not one of the eight. */
+export const needLabel = (need: string | undefined, words: Language = SOURCE_LANGUAGE): string | undefined =>
+  (isNeed(need) ? messagesIn(salesAttackPlanMessages, words).needs[need] : undefined);
 export const ageLabel = (age: number | undefined) => labelOf(AGE_CHOICES, age);
-export const budgetLabel = (budget: number | undefined) => labelOf(BUDGET_CHOICES, budget);
 
 /**
- * The result's tag: the shown product's own need, with its channel (`Overall.html:9682`). The prototype
- * falls back to the category when a need has no label; every need has one here.
+ * The result's tag: the shown product's own need, with its channel (`Overall.html:9682`), in the reader's `words`. The
+ * prototype falls back to the category when a need has no label — the server's, a kept term; every need has one here.
  */
-export const resultTag = (product: Pick<CatalogProduct, 'needs' | 'category' | 'channel'>) =>
-  `${needLabel(product.needs[0]) ?? product.category.label} · ${CHANNEL_LABELS[product.channel]}`;
+export const resultTag = (product: Pick<CatalogProduct, 'needs' | 'category' | 'channel'>, words: Language = SOURCE_LANGUAGE) =>
+  `${needLabel(product.needs[0], words) ?? product.category.label} · ${channelLabel(product.channel, words)}`;
 
 // ------------------------------------------------------------------------------------- addresses
 
@@ -308,127 +371,65 @@ export const drawerHref = (code: string, filters: CatalogFilters) =>
 /**
  * A commission rate as the drawer prints it: `0.4` is `40%`, `0.125` is `12,5%`, `0.0725` is `7,25%` — **the places
  * it was stored with and no more** (ADR-0174 §3: a figure stated as a rule keeps its places, and has no *,0*), so
- * the rate an agent reads is the rate stored. Two at most, the schedule's own (`toFixed(2)`).
+ * the rate an agent reads is the rate stored. Two at most, the schedule's own (`toFixed(2)`). In the reader's
+ * `figures` (P18.98-T3): *12.5%* in English; Indonesian when none is passed.
  */
-export const formatRate = (rate: number) => formatPercent(Number((rate * 100).toFixed(2)), { lossless: true });
+export const formatRate = (rate: number, figures: Language = DEFAULT_LANGUAGE) =>
+  formatPercent(Number((rate * 100).toFixed(2)), { lossless: true }, figures);
 
-/** `{n} product` or `{n} products` (`Overall.html:10170`). */
-export const productCount = (n: number) => `${n} product${n === 1 ? '' : 's'}`;
+/** `{n} product` or `{n} products` (`Overall.html:10170`), in the reader's `words`: *{n} produk* in Indonesian. */
+export const productCount = (n: number, words: Language = SOURCE_LANGUAGE) =>
+  messagesIn(productCatalogMessages, words).productCount({ n });
 
-/** The fit note's words (`Overall.html:9669-9675`): *age band*, *budget band*, or both joined by *and*. */
-export function fitNote(outside: readonly FitIssue[]): string {
-  const issues = outside.map((issue) => (issue === 'age' ? 'age band' : 'budget band'));
-  return `Outside the typical ${issues.join(' and ')} for this product — still workable, but check eligibility and premium sizing before quoting.`;
-}
+/**
+ * The fit note (`Overall.html:9669-9675`): the product is outside the brief's *age band*, *budget band*, or both joined by
+ * *and* — in the server's order, and the reader's `words`.
+ */
+export const fitNote = (outside: readonly FitIssue[], words: Language = SOURCE_LANGUAGE): string =>
+  messagesIn(salesAttackPlanMessages, words).fitNote({ outside });
 
-/** `"{n} more also match. …"` (`Overall.html:9699`). */
-export const moreLine = (n: number) => `${n} more also match. Open the Product Catalog to browse the full shelf.`;
+/** `"{n} more also match. …"` (`Overall.html:9699`), in the reader's `words`. */
+export const moreLine = (n: number, words: Language = SOURCE_LANGUAGE) => messagesIn(salesAttackPlanMessages, words).more({ n });
 
 /** Whether a product has an authored script: D-noscript keys the layout on `fullScript` alone. */
 export const hasScript = (script: CatalogScript) => script.fullScript.trim() !== '';
 
 /**
- * The two screens' words, verbatim (`Overall.html`; D-copy). *"Not uploaded by KPM yet."* keeps *KPM*, and
- * goes to the client with OD-39. **Two say *Tap* where the prototype says *click*** (P18.95-T9 AC-5; ADR-0167 §10,
- * the client's UI review UI-027): `catalogSubtitle` and `alsoMatches`.
+ * **The strings these screens write themselves, in English** (Fills; D-copy) — the catalogue's source
+ * (`messages/product-catalog.ts`, `messages/sales-attack-plan.tsx`, `messages/plan.ts`), for code with no reader to ask,
+ * as they read before P18.98-T4 moved every word of the two screens into the catalogue, where they are written once: the
+ * states the prototype has none of, the commission's not-set line, the accessible names. The screens read them with
+ * `useMessages`, in the reader's language. None uses *office*, *KPM*, *reports to*, *tagged to*, *untagged* or
+ * *unassigned* (ADR-0084's rule, as ADR-0096 applied it) — `product-catalog.spec.ts` checks the English, and
+ * `product-catalog-words.spec.ts` both languages.
  */
-export const PROTOTYPE_COPY = {
-  catalogTitle: 'Product Catalog',
-  catalogSubtitle:
-    'The full individual shelf — conventional and syariah. Tap any product for benefits, positioning, and its sales script.',
-  allProducts: 'All products',
-  all: 'All',
-  runOff: 'In run-off',
-  viewDetail: 'View detail →',
-  noFilterMatch: 'No products match this filter.',
-  close: '✕',
-  tabDetails: 'Details',
-  tabPlan: 'Attack Plan',
-  tabDocuments: 'Documents',
-  commissionRate: 'Commission rate',
-  year: 'Year',
-  rate: 'Rate',
-  benefits: 'Benefits',
-  standsOut: 'How it stands out',
-  bestFit: 'Best-fit customer',
-  openFullPlan: 'Open full Attack Plan page',
-  noActiveScript: 'No active sales script',
-  drawerRunOff: 'This product is in run-off — no active sales script. Use the Details tab for reference information only.',
-  drawerNoScript: 'No authored script yet for this product.',
-  openInPlan: 'Open in Sales Attack Plan page (add customer age & budget for a fit check) →',
-  openLink: 'Open link →',
-  notUploaded: 'Not uploaded by KPM yet.',
-  goodFitFor: 'Good fit for',
-  openingLine: 'Opening line',
-  leadWithBenefits: 'Lead with these benefits',
-  fullScript: 'Full script — how to narrate it',
-  pushBack: 'If they push back',
-  theySay: 'They say:',
-  youSay: 'You say:',
-  nextAction: 'Next action',
-  planTitle: 'Sales Attack Plan',
-  stepBrief: 'Customer brief',
-  stepPlan: 'Attack plan',
-  briefTitle: 'Who are we talking to?',
-  /**
-   * **One line where there were two** (P18.95-T7 AC-1, grey text row 10; ADR-0167 §7): the page's sub-line *"Tell us
-   * about the customer. Get the product, the pitch, and the objection response."* and this hint, *"Three questions.
-   * Enough to get a defensible recommendation, fast."*, became the client's one sentence at every size — here, beside
-   * the three questions it counts, as on Recruitment's brief.
-   */
-  briefHint: 'Answer 3 questions to get your pitch.',
-  primaryNeed: 'Primary need',
-  ageBand: 'Age band',
-  budget: 'Monthly premium budget',
-  pickAll: 'Pick a need, age band, and budget to continue.',
-  build: 'Build attack plan',
-  back: 'Back',
-  bannerLead: 'Opened from the ',
-  bannerStrong: 'Product Catalog',
-  bannerTail: ' — no customer profile set yet, so fit isn\'t checked.',
-  addProfile: 'Add age & budget',
-  needIs: 'Need: ',
-  ageIs: 'Age: ',
-  budgetIs: 'Budget: ',
-  goodFit: 'Good fit',
-  checkFit: 'Check fit',
-  fromCatalog: 'From catalog',
-  planRunOff:
-    'This product is in run-off and not actively issued to new applicants. No active sales script — shown for reference against existing policyholders only.',
-  planNoScriptNext: 'No authored script yet for this product — confirm details manually before proposing.',
-  alsoMatches: 'Also matches this need — tap to switch the plan above:',
-  noMatch: 'No active product matches this need. Try a different need in the brief.',
-} as const;
+const CATALOG = productCatalogMessages.en;
+const PLAN = salesAttackPlanMessages.en;
 
-/**
- * **The strings these screens write themselves** (Fills; D-copy): the states the prototype has none of,
- * and the commission's not-set line. None uses *office*, *KPM*, *reports to*, *tagged to*, *untagged* or
- * *unassigned* (ADR-0084's rule, as ADR-0096 applied it) — `product-catalog.spec.ts` checks.
- */
 export const OWN_COPY = {
-  loadingShelf: 'Loading products…',
-  loadingProduct: 'Loading this product…',
-  loadingPlan: 'Building your attack plan…',
-  tryAgain: 'Try again',
-  emptyShelf: 'There are no products on your shelf yet.',
-  emptyShelfHint: 'Products appear here once they are made available to you.',
-  notFound: 'This product isn\'t on your shelf.',
-  notFoundHint: 'It may have been withdrawn or switched off, or the address may be mistyped.',
-  backToCatalog: 'Back to Product Catalog',
-  commissionNotSet: 'Not set yet — the company has not given a rate for this product.',
+  loadingShelf: CATALOG.loadingShelf,
+  loadingProduct: CATALOG.drawer.loading,
+  loadingPlan: PLAN.loading,
+  tryAgain: CATALOG.tryAgain,
+  emptyShelf: CATALOG.emptyShelf,
+  emptyShelfHint: CATALOG.emptyShelfHint,
+  notFound: CATALOG.drawer.notFound,
+  notFoundHint: CATALOG.drawer.notFoundHint,
+  backToCatalog: CATALOG.drawer.backToCatalog,
+  commissionNotSet: CATALOG.drawer.commissionNotSet,
   /** A document's link, described by its slot (`{label} — opens in a new tab`). */
-  opensInNewTab: (label: string) => `${label} — opens in a new tab`,
-  documentFailed: 'Could not open this document.',
-  openingDocument: 'Opening…',
-  closeDrawer: 'Close',
-  categories: 'Category',
-  channels: 'Channel',
-  steps: 'Steps',
-  productTabs: 'Product details',
+  opensInNewTab: (label: string) => CATALOG.drawer.opensInNewTab({ label }),
+  documentFailed: CATALOG.drawer.documentFailed,
+  openingDocument: CATALOG.drawer.opening,
+  closeDrawer: CATALOG.drawer.close,
+  categories: CATALOG.categories,
+  channels: CATALOG.channels,
+  steps: planMessages.en.steps,
+  productTabs: CATALOG.drawer.tabs,
   /** The second budget group's name: *Lump-sum*, asked apart from the monthly bands (P18.95-T6 AC-3; UI-030). */
-  lumpSum: 'Or pay once',
+  lumpSum: PLAN.lumpSumGroup,
   /** The catalog's search (P18.95-T6 AC-4; UI-023): its name, its placeholder, and what a search that finds nothing says. */
-  searchName: 'Search products by name',
-  searchPlaceholder: 'Search products…',
-  noSearchMatch: (term: string) => `No products match “${term.trim()}”.`,
+  searchName: CATALOG.searchName,
+  searchPlaceholder: CATALOG.searchPlaceholder,
+  noSearchMatch: (term: string) => CATALOG.noSearchMatch({ term: term.trim() }),
 } as const;

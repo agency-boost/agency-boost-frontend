@@ -6,10 +6,12 @@ import { EmptyCard } from '@/components/training/training-catalog';
 import { SkillCards } from '@/components/training/training-parts';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { trainingMessages } from '@/i18n/messages/training';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { usePhone } from '@/lib/use-phone';
 import {
-  OWN_COPY, readCoacheeTraining, readTrainingProgress, type TrainingProgressView,
+  readCoacheeTraining, readTrainingProgress, type TrainingProgressView,
 } from '@/lib/training';
 
 /**
@@ -33,7 +35,8 @@ export function PersonTraining({ view, phone }: {
   /** Below 768px, a row per module (P18.95-T3 AC-5): asked by the tab before its read answers, so no table draws first. */
   phone?: boolean;
 }) {
-  if (view.categories.length === 0) return <EmptyCard title={OWN_COPY.noTraining} />;
+  const t = useMessages(trainingMessages);
+  if (view.categories.length === 0) return <EmptyCard title={t.noTraining} />;
   return (
     <div className="flex flex-col">
       {view.categories.map((category) => (
@@ -54,13 +57,13 @@ export function CoacheeTraining() {
   const coachee = useCoachee();
   const gone = useCoacheeNotFound();
   const read = useTrainingRead(() => readCoacheeTraining(coachee.membershipId), coachee.membershipId, gone);
-  return <ReadState read={read} label={OWN_COPY.loadingCatalog} />;
+  return <ReadState read={read} />;
 }
 
 /** The reader's own, on `/coaching/me/training` (T4 AC-3): the read their own `/training` makes. */
 export function MyTrainingRecord() {
   const read = useTrainingRead(readTrainingProgress, 'me');
-  return <ReadState read={read} label={OWN_COPY.loadingCatalog} />;
+  return <ReadState read={read} />;
 }
 
 function useTrainingRead(read: () => Promise<TrainingProgressView>, key: string, onNotFound?: () => void) {
@@ -88,19 +91,20 @@ function useTrainingRead(read: () => Promise<TrainingProgressView>, key: string,
   return { view, error, retry: () => setAttempt((n) => n + 1) };
 }
 
-function ReadState({ read, label }: { read: ReturnType<typeof useTrainingRead>; label: string }) {
+function ReadState({ read }: { read: ReturnType<typeof useTrainingRead> }) {
+  const t = useMessages(trainingMessages);
   const phone = usePhone();
   if (read.error) {
     return (
       <div>
         <ErrorBanner {...read.error} />
-        <Button variant="secondary" className="mt-3" onClick={read.retry}>{OWN_COPY.tryAgain}</Button>
+        <Button variant="secondary" className="mt-3" onClick={read.retry}>{t.tryAgain}</Button>
       </div>
     );
   }
   if (!read.view) {
     return (
-      <Skeleton label={label}>
+      <Skeleton label={t.loadingCatalog}>
         <SkeletonBar className="h-5 w-32" />
         <div className="mt-3 rounded-lg border border-hairline bg-card p-6">
           <SkeletonBar className="h-5 w-40" />

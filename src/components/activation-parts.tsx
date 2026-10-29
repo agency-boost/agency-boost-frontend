@@ -10,11 +10,14 @@ import { NumberBadge } from '@/components/ui/number-badge';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { activationMessages } from '@/i18n/messages/activation';
 import {
-  ASPECT_STATUS_LABEL, aspectTitle, dayShown, isWholeDate, OWN_COPY, PROTOTYPE_COPY,
+  aspectTitle, autoBadge, byHandBadge, dayShown, isWholeDate,
   type ActivationAspectProgress, type ActivationItemLink, type ActivationView, type AspectStatus,
 } from '@/lib/activation';
 import { cn } from '@/lib/cn';
+import { formatPercent } from '@/lib/format';
 
 /**
  * The parts the hire's page and the leader's detail share (`Overall.html:3270-3414`): the progress card
@@ -24,6 +27,9 @@ import { cn } from '@/lib/cn';
  *
  * **Every figure here is served** (P13-T2 AC-5): the day, the window, the counts, the percentage and
  * each aspect's verdict are the read's, printed, never worked out.
+ *
+ * **Their words are the catalogue's** (`i18n/messages/activation.ts`; P18.98-T4), in the reader's language, and the
+ * percentage is written in the figures' (`useFigureLanguage()`).
  */
 
 /** `.section-num` with the prototype's lightning bolt (`:3277-3279`, `:3371-3373`): the progress card's head. */
@@ -59,7 +65,7 @@ const ROW_TINT: Record<AspectStatus, string | undefined> = {
 };
 
 export function AspectStatusPill({ status }: { status: AspectStatus }) {
-  const label = ASPECT_STATUS_LABEL[status];
+  const label = useMessages(activationMessages).aspectStatus[status];
   return (
     <StatusPill
       // `watch` carries no words of its own; every tone here is given the prototype's.
@@ -85,21 +91,24 @@ export function ProgressSummary({
   label: string;
   markOverdue?: boolean;
 }) {
+  const t = useMessages(activationMessages);
+  const figures = useFigureLanguage();
   const complete = view.total > 0 && view.done === view.total;
   const overdue = markOverdue && view.overdue;
   const width = Math.min(100, Math.max(0, view.pct));
+  const pctComplete = t.pctComplete({ pct: formatPercent(view.pct, {}, figures) });
   return (
     <div className="grid gap-6 sm:grid-cols-[0.8fr_1.2fr]">
       <div className="flex flex-col gap-3 sm:pt-7">
         <KpiTile
-          label={PROTOTYPE_COPY.day}
+          label={t.day}
           value={dayShown(view.day, view.window)}
-          unit={<>/{view.window}{overdue && <span className="sr-only">{OWN_COPY.overdue}</span>}</>}
+          unit={<>/{view.window}{overdue && <span className="sr-only">{t.overdue}</span>}</>}
           variant={overdue ? 'overdue' : 'plain'}
           className="flex items-center justify-between px-4 py-3"
         />
         <KpiTile
-          label={PROTOTYPE_COPY.completed}
+          label={t.completed}
           value={view.done}
           unit={`/${view.total}`}
           variant={complete ? 'complete' : 'plain'}
@@ -112,12 +121,12 @@ export function ProgressSummary({
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={width}
-            aria-valuetext={PROTOTYPE_COPY.pctComplete(view.pct)}
+            aria-valuetext={pctComplete}
             className="h-2 overflow-hidden rounded-md border border-hairline bg-base"
           >
             <div className="h-full rounded-md bg-gradient-to-r from-amber to-amber-dark" style={{ width: `${width}%` }} />
           </div>
-          <p className="mt-1.5 text-xs font-bold text-navy">{PROTOTYPE_COPY.pctComplete(view.pct)}</p>
+          <p className="mt-1.5 text-xs font-bold text-navy">{pctComplete}</p>
         </div>
       </div>
       {/* Scrolls inside the card on the narrowest phone, so the page never does (T4 AC-8). */}
@@ -130,6 +139,7 @@ export function ProgressSummary({
 
 /** `.aspect-progress-table.compact` (`:3309-3316`, `:1506-1519`): *Aspect · Items · Status*. */
 function AspectTable({ aspects, caption }: { aspects: readonly ActivationAspectProgress[]; caption: string }) {
+  const t = useMessages(activationMessages);
   const HEAD = 'border-b border-hairline px-2.5 py-1 text-left text-2xs font-semibold uppercase tracking-wide text-muted';
   const CELL = 'border-b border-hairline px-2.5 py-1.5 text-sm font-medium text-navy';
   return (
@@ -137,9 +147,9 @@ function AspectTable({ aspects, caption }: { aspects: readonly ActivationAspectP
       <caption className="sr-only">{caption}</caption>
       <thead>
         <tr>
-          <th scope="col" className={HEAD}>{PROTOTYPE_COPY.aspect}</th>
-          <th scope="col" className={HEAD}>{PROTOTYPE_COPY.items}</th>
-          <th scope="col" className={HEAD}>{PROTOTYPE_COPY.status}</th>
+          <th scope="col" className={HEAD}>{t.aspect}</th>
+          <th scope="col" className={HEAD}>{t.items}</th>
+          <th scope="col" className={HEAD}>{t.status}</th>
         </tr>
       </thead>
       <tbody className="[&>tr:last-child>*]:border-b-0">
@@ -189,11 +199,12 @@ export function AttributionMark({ words }: { words: string | null }) {
  * `completesWhen` (T4 AC-4) — how the row says what it waits for without a line of its own (ADR-0031).
  */
 export function AutoBadge({ link }: { link: ActivationItemLink }) {
+  const words = autoBadge(link.completesWhen, useLanguage());
   return (
     <TippedGlyph
-      glyph={PROTOTYPE_COPY.auto}
-      name={OWN_COPY.autoName(link.completesWhen)}
-      tip={OWN_COPY.autoTip(link.completesWhen)}
+      glyph={words.glyph}
+      name={words.name}
+      tip={words.tip}
       align="fit"
       className="-my-1"
       face="h-auto w-auto rounded-pill bg-navy/[0.06] px-[7px] py-0.5 text-2xs font-bold uppercase tracking-wide text-muted hover:bg-navy/[0.1]"
@@ -204,14 +215,15 @@ export function AutoBadge({ link }: { link: ActivationItemLink }) {
 /**
  * *Ticked by hand* (D-orphan, P18.5-T3 AC-4): a linked item whose link does not complete it now — its training
  * module is not offered — so the hire or a leader ticks it. The office's Settings badge, its words and its
- * tooltip (`OWN_COPY.byHand*`), in this row's pill.
+ * tooltip (`byHandBadge`), in this row's pill.
  */
 export function ByHandBadge() {
+  const words = byHandBadge(useLanguage());
   return (
     <TippedGlyph
-      glyph={OWN_COPY.byHand}
-      name={OWN_COPY.byHandName}
-      tip={OWN_COPY.byHandTip}
+      glyph={words.glyph}
+      name={words.name}
+      tip={words.tip}
       align="fit"
       className="-my-1"
       face="h-auto w-auto whitespace-nowrap rounded-pill border border-hairline bg-base px-[7px] py-0.5 text-2xs font-bold uppercase tracking-wide text-muted hover:bg-base hover:text-navy"
@@ -221,6 +233,7 @@ export function ByHandBadge() {
 
 /** *"Go to {label} →"* (`:6584`), the prototype's `.reopen-btn` pill, as the link it is. */
 export function GoToLink({ link }: { link: ActivationItemLink }) {
+  const t = useMessages(activationMessages);
   // A module no longer offered has no page to open (D-orphan): the item keeps its words, and no link.
   if (!link.route) return null;
   return (
@@ -228,15 +241,16 @@ export function GoToLink({ link }: { link: ActivationItemLink }) {
       href={link.route}
       className="inline-flex items-center whitespace-nowrap rounded-pill border border-hairline px-[11px] py-[5px] text-sm font-semibold text-navy-soft hover:bg-navy-soft/[0.08]"
     >
-      {PROTOTYPE_COPY.goTo(link.label)}
+      {t.goTo({ label: link.label })}
     </Link>
   );
 }
 
 /** A row's write that failed: put back, and why (T4 AC-7). */
 export function RowError({ message }: { message: string | undefined }) {
+  const t = useMessages(activationMessages);
   if (!message) return null;
-  return <p role="alert" className="mt-1.5 text-xs font-semibold text-alert">{OWN_COPY.notSaved(message)}</p>;
+  return <p role="alert" className="mt-1.5 text-xs font-semibold text-alert">{t.notSaved({ why: message })}</p>;
 }
 
 /**

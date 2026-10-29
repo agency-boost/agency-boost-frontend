@@ -2,7 +2,9 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import TenantLayout from '@/app/(tenant)/layout';
-import { makeMe, renderInLayout, renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import { makeMe, renderInIndonesian, renderInLayout, renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import { englishOnly, englishShown } from '@test/english-left';
+import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
 import { EMPTY, NOBODY, NOT_LOGGED, noTeam, overviewView } from './overview-fixtures';
 import KpmOverviewPage from './page';
 
@@ -611,18 +613,20 @@ describe('KPM Overview (P18-T1)', () => {
       render();
       await loaded();
       const production = within(section('Production — this year'));
-      expect(production.getByText('Rp 8,4 M')).toBeInTheDocument();
-      expect(production.getByText('of Rp 12,5 M target')).toBeInTheDocument();
+      expect(production.getByText('IDR 8.4B')).toBeInTheDocument();
+      expect(production.getByText('of IDR 12.5B target')).toBeInTheDocument();
       expect(production.getAllByText('67%')[0].className).toContain('text-alert');
-      expect(section('Production — this year').textContent).not.toMatch(/\d(\.\d)?[BM]\b/);
+      // Never the prototype's bare *8.4B*: every sum through the formatter, its mark before it — a pair's second after
+      // its *IDR … /* (P18.98-T4: the English shapes).
+      expect(section('Production — this year').textContent!.replace(/(IDR|\/) \d+(\.\d)?[BMK]/g, '')).not.toMatch(/\d(\.\d)?[BM]\b/);
     });
 
     it('AC-7: the projection marker and its label, and the bar’s two ends', async () => {
       render();
       await loaded();
       const production = within(section('Production — this year'));
-      expect(production.getByText('Projected: Rp 11,9 M')).toBeInTheDocument();
-      expect(production.getByText('Target: Rp 12,5 M')).toBeInTheDocument();
+      expect(production.getByText('Projected: IDR 11.9B')).toBeInTheDocument();
+      expect(production.getByText('Target: IDR 12.5B')).toBeInTheDocument();
       expect(production.getByText('0')).toBeInTheDocument();
       const marker = section('Production — this year').querySelector('span.absolute.w-0\\.5[aria-hidden="true"]') as HTMLElement;
       expect(marker.style.left).toBe(`${(11900 / 12500) * 100}%`);
@@ -639,7 +643,7 @@ describe('KPM Overview (P18-T1)', () => {
       render();
       await loaded();
       expect(within(section('Production — this year')).getByRole('button', {
-        name: 'Not uploaded yet for Agu 2026, so not counted in this total. 3 members have no goal set, so the target leaves them out.',
+        name: 'Not uploaded yet for Aug 2026, so not counted in this total. 3 members have no goal set, so the target leaves them out.',
       })).toBeInTheDocument();
     });
 
@@ -651,10 +655,10 @@ describe('KPM Overview (P18-T1)', () => {
       expect(production.getByText('Tap a row to see the AABs inside that unit')).toBeInTheDocument();
       const rows = production.getAllByRole('button', { expanded: false }).filter((b) => b.closest('li'));
       expect(rows.map((r) => r.textContent)).toEqual([
-        '▸Hendra Wibowo AB41%Rp 620 jt / 1,5 M unit target',
-        '▸Budi Santoso AB60%Rp 540 jt / 900 jt unit target',
-        '▸Fajar Nugroho AB64%Rp 700 jt / 1,1 M unit target',
-        '▸Lina Chandra AB69%Rp 480 jt / 700 jt unit target',
+        '▸Hendra Wibowo AB41%IDR 620M / 1.5B unit target',
+        '▸Budi Santoso AB60%IDR 540M / 900M unit target',
+        '▸Fajar Nugroho AB64%IDR 700M / 1.1B unit target',
+        '▸Lina Chandra AB69%IDR 480M / 700M unit target',
       ]);
     });
 
@@ -668,8 +672,8 @@ describe('KPM Overview (P18-T1)', () => {
       const panel = document.getElementById(hendra.getAttribute('aria-controls')!)!;
       expect(panel).toBeVisible();
       expect(within(panel).getAllByRole('listitem').map((r) => r.textContent)).toEqual([
-        'Ika Wirawan AAB42%Rp 210 jt / 500 jt',
-        'Yoga Pratama AAB45%Rp 180 jt / 400 jt',
+        'Ika Wirawan AAB42%IDR 210M / 500M',
+        'Yoga Pratama AAB45%IDR 180M / 400M',
       ]);
 
       const lina = production.getByRole('button', { name: /^Lina Chandra/ });
@@ -684,7 +688,7 @@ describe('KPM Overview (P18-T1)', () => {
       expect(production.getByText(/^Showing 4 of 6 ABs/)).toBeInTheDocument();
       await userEvent.click(production.getByRole('button', { name: 'view full ranking →' }));
       const rudi = production.getByRole('button', { name: /^Rudi Hartono/ });
-      expect(rudi).toHaveTextContent('Not uploaded yet / Rp 600 jt unit target');
+      expect(rudi).toHaveTextContent('Not uploaded yet / IDR 600M unit target');
       expect(rudi).toHaveTextContent('—');
       expect(rudi.textContent).not.toMatch(/\b0(,0)?%/);
     });
@@ -696,7 +700,7 @@ describe('KPM Overview (P18-T1)', () => {
       expect(production.getAllByText('Not uploaded yet')[0]).toBeInTheDocument();
       expect(production.getByText('No goal set')).toBeInTheDocument();
       expect(production.queryByText(/Projected:/)).not.toBeInTheDocument();
-      expect(production.queryByText('Rp 0')).not.toBeInTheDocument();
+      expect(production.queryByText('IDR 0')).not.toBeInTheDocument();
       await userEvent.click(production.getByRole('button', { name: /^Hadi Gunawan/ }));
       expect(production.getByText('No AAB in this unit yet')).toBeInTheDocument();
       expect(production.getByRole('button', { name: /^Hadi Gunawan/ })).toHaveTextContent('Not uploaded yet · No goal set');
@@ -802,5 +806,80 @@ describe('KPM Overview (P18-T1)', () => {
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: OWNER });
       expect(await within(main()).findByRole('region', { name: 'Team composition' })).toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * **P18.98-T4 the KPM Overview in Indonesian** (`i18n/messages/kpm-overview.ts`; ADR-0179): the title, each section's
+ * and each card's name kept English (§A.4's Overview labels), every other word the approved glossary's, the office's
+ * line and every name as the office has them, and the figures Indonesian.
+ */
+describe('P18.98-T4 the KPM Overview in Indonesian', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function renderIndonesian(view = overviewView(), routes: Record<string, StubReply> = {}) {
+    const stub = stubFetch({ '/kpm/overview': { body: view }, ...routes });
+    renderInIndonesian(<KpmOverviewPage />, { me: OWNER });
+    return stub;
+  }
+
+  it('P18.98-T4 keeps the sections’ names and writes the cards’ words and figures in Indonesian', async () => {
+    renderIndonesian();
+    await loaded();
+    expect(screen.getByRole('heading', { level: 1, name: 'Overview' })).toBeInTheDocument();
+    for (const name of ['Team composition', 'Engagement', 'Coaching coverage', 'Recruitment pipeline', 'Production — this year']) {
+      expect(section(name)).toBeInTheDocument();
+    }
+    expect(within(section('Team composition')).getByText('+6 baru bulan ini')).toBeInTheDocument();
+    const engagement = within(section('Engagement'));
+    expect(engagement.getByText('Bulan ini · 7 hari terakhir')).toBeInTheDocument();
+    expect(engagement.getByText('Mencatat setidaknya satu aktivitas bulan ini')).toBeInTheDocument();
+    expect(engagement.getByText('Naik dari 138 bulan lalu', { exact: false })).toBeInTheDocument();
+    expect(engagement.getByText('sudah mencatat · 69 belum mencatat')).toBeInTheDocument();
+    expect(engagement.getByRole('button', { name: 'Lihat siapa yang belum mencatat →' })).toBeInTheDocument();
+    const production = within(section('Production — this year'));
+    expect(production.getByText('Rp 8,4 M')).toBeInTheDocument();
+    expect(production.getByText('dari target Rp 12,5 M')).toBeInTheDocument();
+    expect(production.getByText('Proyeksi: Rp 11,9 M')).toBeInTheDocument();
+    expect(production.getByText('Target: Rp 12,5 M')).toBeInTheDocument();
+    expect(production.getByRole('button', {
+      name: 'Belum diunggah untuk Agu 2026, jadi tidak dihitung dalam total ini. 3 anggota belum mengatur goal, jadi target tidak menghitung mereka.',
+    })).toBeInTheDocument();
+    expect(production.getByText('Ketuk baris untuk melihat AAB di dalam unit itu')).toBeInTheDocument();
+    expect(production.getByRole('button', { name: /^Hendra Wibowo/ })).toHaveTextContent('Rp 620 jt / 1,5 M target unit');
+    expect(production.getByText(/^Menampilkan 4 dari 6 AB/)).toBeInTheDocument();
+    expect(production.getByRole('button', { name: 'lihat peringkat lengkap →' })).toBeInTheDocument();
+    // The scan reads the screen at all, so a silent zero cannot pass.
+    expect(englishOnly(kpmOverviewMessages).length).toBeGreaterThan(20);
+    expect(document.body.textContent).toContain('Bulan ini · 7 hari terakhir');
+    expect(englishShown(document.body, englishOnly(kpmOverviewMessages))).toEqual([]);
+  });
+
+  it('P18.98-T4 writes the recruitment card, its pill and its Edit in Indonesian, the tiles’ names kept', async () => {
+    renderIndonesian();
+    await loaded();
+    const recruitment = within(section('Recruitment pipeline'));
+    for (const name of ['Expected to close', 'Target', 'Last month', 'Pipeline now']) expect(recruitment.getByText(name)).toBeInTheDocument();
+    expect(recruitment.getByRole('button', { name: 'Ubah target' })).toHaveTextContent('Ubah');
+    expect(recruitment.getByText(/^(Sesuai|Lebih \d+ dari|Kurang \d+ dari) target \(\d+ dari \d+\)$/)).toBeInTheDocument();
+  });
+
+  it('P18.98-T4 reveals who has not logged, in Indonesian, a name and its rung as the office has them', async () => {
+    renderIndonesian(overviewView(), { '/kpm/overview/not-logged': { body: NOT_LOGGED } });
+    await loaded();
+    await userEvent.click(screen.getByRole('button', { name: 'Lihat siapa yang belum mencatat →' }));
+    const list = await within(section('Engagement')).findAllByRole('listitem');
+    expect(list[0].textContent).toMatch(/(Belum pernah mencatat|Terakhir mencatat \d+ hari lalu)$/);
+    expect(within(section('Engagement')).getByRole('link', { name: /^\+ \d+ lainnya — daftar lengkap di layar People$/ })).toBeInTheDocument();
+  });
+
+  it('P18.98-T4 says an empty office in Indonesian: no file, no goal, no target, nobody to rank', async () => {
+    renderIndonesian(EMPTY);
+    await loaded();
+    const production = within(section('Production — this year'));
+    expect(production.getAllByText('Belum diunggah')[0]).toBeInTheDocument();
+    expect(production.getByText('Goal belum diatur')).toBeInTheDocument();
+    expect(within(section('Recruitment pipeline')).getByText('Target belum diatur')).toBeInTheDocument();
+    expect(englishShown(document.body, englishOnly(kpmOverviewMessages))).toEqual([]);
   });
 });

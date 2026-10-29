@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { parse, renderable, SRC } from '@test/copy-scan';
-import { stubFetch } from '@test/harness';
+import { InLanguage, stubFetch } from '@test/harness';
 import { OVERRIDE_COPY, OVERRIDE_REASON_MAX, type StandingOverride } from '@/lib/standing-override';
 import { AchievedCell, type AchievedCellData } from './standing-override';
 
@@ -22,7 +22,7 @@ const OVERRIDE: StandingOverride = {
   by: { membershipId: 'mem-owner', name: 'Wilson Tanoto' },
   at: '2026-10-09T18:30:00.000Z',
 };
-const MARKER = `Overridden by Wilson Tanoto on 10 Okt 2026: ${OVERRIDE.reason}`;
+const MARKER = `Overridden by Wilson Tanoto on 10 Oct 2026: ${OVERRIDE.reason}`;
 
 function renderCell(cell: AchievedCellData, { canOverride = true, onChanged = vi.fn() } = {}) {
   render(
@@ -362,7 +362,7 @@ describe('AchievedCell (P18.6-T2 AC-8)', () => {
     it('P18.6-T2 AC-8 an authored reason is drawn as text, never as markup', () => {
       const reason = '<b>bold</b> <img src=x onerror=alert(1)>';
       renderCell({ second: 'qualified', overridable: true, override: { ...OVERRIDE, reason } });
-      expect(screen.getByRole('button', { name: `Overridden by Wilson Tanoto on 10 Okt 2026: ${reason}` })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: `Overridden by Wilson Tanoto on 10 Oct 2026: ${reason}` })).toBeInTheDocument();
       expect(document.querySelector('b')).toBeNull();
       expect(document.querySelector('img')).toBeNull();
     });
@@ -407,5 +407,43 @@ describe('the override’s own copy (P18.6-T2)', () => {
       OVERRIDE_COPY.overriddenBy('Wilson Tanoto', '10 Okt 2026', 'checked'),
     ];
     expect(said.filter((text) => FORBIDDEN.test(text))).toEqual([]);
+  });
+});
+
+/**
+ * **P18.98-T4 the override in Indonesian** (`kpmComplianceMessages.override`): the pill, the control's name, the dialog,
+ * the marker and the toast in the approved glossary's words, the day Indonesian, and the campaign's title, the member's
+ * name and the reason as typed.
+ */
+describe('P18.98-T4 AchievedCell in Indonesian', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const renderInIndonesian = (cell: AchievedCellData) => render(
+    <InLanguage language="id">
+      <AchievedCell row={{ membershipId: 'mem-budi', name: 'Budi Santoso', cell }} campaign={CAMPAIGN} canOverride onChanged={vi.fn()} />
+    </InLanguage>,
+  );
+
+  it('P18.98-T4 names the control and the marker in Indonesian, the reason as typed', () => {
+    renderInIndonesian({ second: 'qualified', overridable: true, override: OVERRIDE });
+    expect(screen.getByRole('button', { name: 'Tercapai — Ubah hasil Budi Santoso untuk Persistency Push' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: `Diubah oleh Wilson Tanoto pada 10 Okt 2026: ${OVERRIDE.reason}` })).toBeInTheDocument();
+  });
+
+  it('P18.98-T4 opens the dialog in Indonesian and says so when the result is set', async () => {
+    stubFetch({
+      [`PUT ${PATH}`]: { body: { campaignCode: CAMPAIGN.code, membershipId: 'mem-budi', status: 'not_met', override: null } },
+    });
+    renderInIndonesian({ second: 'qualified', overridable: true, override: null });
+    await userEvent.click(screen.getByRole('button', { name: /Ubah hasil Budi Santoso untuk Persistency Push/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Ubah hasil Budi Santoso untuk Persistency Push' });
+    expect(dialog).toHaveTextContent('Hasil saat ini');
+    expect(within(dialog).getByRole('group', { name: 'Hasil baru' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('radio', { name: 'Tidak tercapai' })).toBeChecked();
+    expect(within(dialog).getByRole('radio', { name: 'Tercapai' })).toBeDisabled();
+    await userEvent.type(within(dialog).getByLabelText('Alasan'), 'Diperiksa ulang');
+    expect(within(dialog).getByRole('button', { name: 'Tutup' })).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Simpan' }));
+    expect(await screen.findByText('Hasil diubah')).toBeInTheDocument();
   });
 });

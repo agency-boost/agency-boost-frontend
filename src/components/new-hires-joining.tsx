@@ -1,14 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { ADD_AGENT_COPY, AddAgentDialog } from '@/components/add-agent-form';
+import { AddAgentDialog } from '@/components/add-agent-form';
 import { RequestInbox } from '@/components/request-inbox';
 import { WaitingToJoin } from '@/components/waiting-to-join';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
 import { Toast, useToast } from '@/components/ui/toast';
+import { useMessages } from '@/i18n/language-provider';
+import { addAgentMessages } from '@/i18n/messages/add-agent';
+import { newHiresMessages } from '@/i18n/messages/new-hires';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { CONFIRMED, withDetail } from '@/lib/confirmations';
+import { confirmationMessages } from '@/i18n/messages/confirmations';
+import { withDetail } from '@/lib/confirmations';
 import { dayInZone, OFFICE_TIME_ZONE } from '@/lib/format';
 import {
   askedFor, readInvites, readMyTransfers, type AddAgentResult, type InviteView, type RequestedTransferView,
@@ -16,16 +20,6 @@ import {
 import { readInbox } from '@/lib/join';
 import { useCan, useSession } from '@/lib/session';
 import { usePhone } from '@/lib/use-phone';
-
-/** The header's second button, and the inbox it opens (ADR-0170 §5). */
-export const JOINING_COPY = {
-  review: (n: number) => `Review requests (${n})`,
-  inboxTitle: 'Review requests',
-  inboxLine: 'Approve to add them to your unit, with the day they joined.',
-  close: 'Close',
-  linked: (name: string) => `${name} is in your unit now.`,
-  transfer: (name: string) => `${name} moves when the office approves it.`,
-} as const;
 
 /** What `/new-hires`'s header and *Waiting to join* share: one read of each, the dialogs' state, the toast. */
 export interface NewHiresJoiningState {
@@ -55,8 +49,14 @@ export interface NewHiresJoiningState {
  * (`member:invite`), *Review requests (n)* while join requests wait on one who decides them (`leader_request:read_inbox`),
  * and *Waiting to join* — the reader's invites and transfer requests. Each read only for a reader its grant names, so a
  * reader without one is asked nothing; each guarded by the API besides.
+ *
+ * Its words — the header's *Review requests (n)*, what *+ Add agent* did — are the catalogue's (`new-hires.ts`'
+ * `joining`, `add-agent.ts`; P18.98-T4); the confirmation before them is `lib/confirmations.ts`'.
  */
 export function useNewHiresJoining(): NewHiresJoiningState {
+  const t = useMessages(newHiresMessages).joining;
+  const add = useMessages(addAgentMessages);
+  const confirmed = useMessages(confirmationMessages);
   const { me } = useSession();
   const readOnly = !!me?.impersonationReadOnly;
   const mayAdd = useCan('member:invite') && !readOnly;
@@ -97,21 +97,21 @@ export function useNewHiresJoining(): NewHiresJoiningState {
 
   const onAdded = useCallback((result: AddAgentResult) => {
     if (result.outcome === 'linked') {
-      show(withDetail(CONFIRMED.agentAdded, JOINING_COPY.linked(result.member.fullName)));
+      show(withDetail(confirmed.agentAdded, t.linked({ name: result.member.fullName })));
       setRosterKey((n) => n + 1);
     }
     if (result.outcome === 'transfer_requested') {
-      show(withDetail(CONFIRMED.transferRequested, JOINING_COPY.transfer(askedFor(result.transfer))));
+      show(withDetail(confirmed.transferRequested, t.transfer({ name: askedFor(result.transfer) })));
     }
     void reload();
-  }, [reload, show]);
+  }, [reload, show, t, confirmed]);
 
   const actions = (mayAdd || (mayReview && requestCount > 0)) ? (
     <div className="flex flex-wrap gap-2">
       {mayReview && requestCount > 0 && (
-        <Button variant="secondary" onClick={() => setReviewing(true)}>{JOINING_COPY.review(requestCount)}</Button>
+        <Button variant="secondary" onClick={() => setReviewing(true)}>{t.review({ n: requestCount })}</Button>
       )}
-      {mayAdd && <Button onClick={() => setAdding(true)}>{ADD_AGENT_COPY.open}</Button>}
+      {mayAdd && <Button onClick={() => setAdding(true)}>{add.open}</Button>}
     </div>
   ) : null;
 
@@ -126,6 +126,7 @@ export function useNewHiresJoining(): NewHiresJoiningState {
 
 /** *Waiting to join*, the form, the inbox and the toast, under the header `useNewHiresJoining` drew. */
 export function NewHiresJoining(state: NewHiresJoiningState) {
+  const t = useMessages(newHiresMessages).joining;
   const phone = usePhone();
   return (
     <>
@@ -149,12 +150,12 @@ export function NewHiresJoining(state: NewHiresJoiningState) {
       )}
       <Modal
         open={state.reviewing}
-        title={JOINING_COPY.inboxTitle}
-        description={JOINING_COPY.inboxLine}
+        title={t.inboxTitle}
+        description={t.inboxLine}
         onClose={state.closeInbox}
         placement={phone ? 'sheet' : 'center'}
         className="max-w-[34rem]"
-        footer={<Button variant="secondary" onClick={state.closeInbox}>{JOINING_COPY.close}</Button>}
+        footer={<Button variant="secondary" onClick={state.closeInbox}>{t.close}</Button>}
       >
         <RequestInbox today={state.today} onCount={state.setRequestCount} />
       </Modal>

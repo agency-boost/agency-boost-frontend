@@ -1,9 +1,9 @@
 'use client';
 
+import { useMessages } from '@/i18n/language-provider';
+import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
 import { cn } from '@/lib/cn';
-import {
-  OWN_COPY, PROTOTYPE_COPY, type ComplianceCategory, type ComplianceChip,
-} from '@/lib/kpm-compliance';
+import type { ComplianceCategory, ComplianceChip } from '@/lib/kpm-compliance';
 
 /**
  * `.compliance-summary` (`KPM_Owner.html:3454-3478`, CSS `:98-102`, `:113-115`): the six chips in the
@@ -23,8 +23,9 @@ export function ComplianceSummary({
   active: ComplianceCategory;
   onChoose: (category: ComplianceCategory) => void;
 }) {
+  const t = useMessages(kpmComplianceMessages);
   return (
-    <div role="group" aria-label={OWN_COPY.chipsName} className="mb-4 flex flex-wrap gap-2.5">
+    <div role="group" aria-label={t.chipsName} className="mb-4 flex flex-wrap gap-2.5">
       {chips.map((chip) => {
         const on = chip.category === active;
         return (
@@ -33,7 +34,7 @@ export function ComplianceSummary({
             type="button"
             aria-pressed={on}
             onClick={() => onChoose(chip.category)}
-            title={chip.category === 'activity' ? PROTOTYPE_COPY.activityTooltip : undefined}
+            title={chip.category === 'activity' ? t.activityTooltip : undefined}
             className={cn(
               'min-w-[128px] rounded-[10px] border bg-card px-3.5 py-2.5 text-left transition-colors',
               on ? 'border-navy ring-1 ring-navy' : 'border-hairline hover:border-navy/30',
@@ -44,7 +45,7 @@ export function ComplianceSummary({
               {chip.of === 0 ? (
                 <>
                   <span aria-hidden="true">—</span>
-                  <span className="sr-only">{OWN_COPY.noRate}</span>
+                  <span className="sr-only">{t.noRate}</span>
                 </>
               ) : (
                 <>
@@ -54,7 +55,7 @@ export function ComplianceSummary({
                 </>
               )}
             </span>
-            <span className="mt-0.5 block text-sm text-muted">{PROTOTYPE_COPY.chips[chip.category]}</span>
+            <span className="mt-0.5 block text-sm text-muted">{t.chips[chip.category]}</span>
           </button>
         );
       })}

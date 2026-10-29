@@ -4,6 +4,8 @@ import { useEffect, useId, useState } from 'react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { SkeletonBar } from '@/components/ui/skeleton';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { dataUploadMessages } from '@/i18n/messages/data-upload';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatDayLong } from '@/lib/format';
@@ -11,7 +13,7 @@ import {
   readHistory, revertImport, type BatchView, type ImportResult, type MonthState,
 } from '@/lib/production';
 import { useCan } from '@/lib/session';
-import { monthLabel, plural } from './month-label';
+import { monthLabel } from './month-label';
 
 /**
  * **Every import of the month, and the way back from the latest** (P9-T4).
@@ -31,6 +33,8 @@ export function ImportHistory({
   generation: number;
   onReverted: (result: ImportResult) => void;
 }) {
+  const t = useMessages(dataUploadMessages);
+  const figures = useFigureLanguage();
   const allowed = useCan('data_upload:read_history');
   const canRevert = useCan('data_upload:revert_batch');
   const headingId = useId();
@@ -38,7 +42,7 @@ export function ImportHistory({
   const [error, setError] = useState<ApiError | null>(null);
   const [asking, setAsking] = useState<BatchView | null>(null);
   const [busy, setBusy] = useState(false);
-  const label = monthLabel(month);
+  const label = monthLabel(month, figures);
 
   useEffect(() => {
     if (!allowed) return undefined;
@@ -70,7 +74,7 @@ export function ImportHistory({
 
   return (
     <section aria-labelledby={headingId} className="mt-8">
-      <h2 id={headingId} className="mb-2 font-display text-md font-bold text-navy">Imports for {label}</h2>
+      <h2 id={headingId} className="mb-2 font-display text-md font-bold text-navy">{t.importsFor({ month: label })}</h2>
       {error && <div className="mb-2"><ErrorBanner {...error} /></div>}
 
       {batches === null && !error && (
@@ -81,7 +85,7 @@ export function ImportHistory({
       )}
 
       {batches?.length === 0 && (
-        <p className="text-sm text-muted">Nothing has been imported for {label} yet.</p>
+        <p className="text-sm text-muted">{t.nothingImported({ month: label })}</p>
       )}
 
       {batches && batches.length > 0 && (
@@ -91,17 +95,22 @@ export function ImportHistory({
               <div className="min-w-0">
                 <p className="break-all font-semibold text-navy">{b.filename}</p>
                 <p className="text-sm text-muted">
-                  Imported by {b.committedBy ?? 'somebody'}
-                  {b.committedAt ? ` on ${formatDayLong(b.committedAt)}` : ''}
-                  {' · '}{plural(b.writtenRowCount, 'agent')}, {plural(b.cellCount, 'figure')}
-                  {b.issueCount ? `, ${b.issueCount} not taken` : ''}
+                  {t.importedBy({
+                    by: b.committedBy,
+                    day: b.committedAt ? formatDayLong(b.committedAt, figures) : null,
+                    agents: b.writtenRowCount,
+                    figures: b.cellCount,
+                    notTaken: b.issueCount,
+                  })}
                 </p>
                 {b.status === 'reverted' && (
                   <p className="text-sm text-muted">
-                    Reverted by {b.revertedBy ?? 'somebody'}
-                    {b.revertedAt ? ` on ${formatDayLong(b.revertedAt)}` : ''}
-                    {' — '}{plural(b.restoredCellCount, 'figure')} put back
-                    {b.keptCellCount ? `, ${b.keptCellCount} kept because something changed them since` : ''}.
+                    {t.revertedBy({
+                      by: b.revertedBy,
+                      day: b.revertedAt ? formatDayLong(b.revertedAt, figures) : null,
+                      restored: b.restoredCellCount,
+                      kept: b.keptCellCount,
+                    })}
                   </p>
                 )}
               </div>
@@ -112,11 +121,11 @@ export function ImportHistory({
                     b.status === 'committed' ? 'bg-navy/[0.06] text-navy' : 'bg-hairline/60 text-muted',
                   )}
                 >
-                  {b.status === 'committed' ? 'Standing' : 'Reverted'}
+                  {b.status === 'committed' ? t.standing : t.revertedTag}
                 </span>
                 {b.canRevert && canRevert && (
                   <Button variant="inlineDanger" disabled={busy || state.locked} onClick={() => setAsking(b)}>
-                    Revert
+                    {t.revert}
                   </Button>
                 )}
               </div>
@@ -126,13 +135,14 @@ export function ImportHistory({
       )}
 
       {revertable && canRevert && state.locked && (
-        <p className="mt-2 text-sm text-muted">{label} is locked — reopen it to revert an import.</p>
+        <p className="mt-2 text-sm text-muted">{t.lockedRevert({ month: label })}</p>
       )}
 
       <Dialog
         open={asking !== null}
-        message={`Revert “${asking?.filename ?? ''}”? Every figure it wrote into ${label} goes back to what it was before — empty where it was empty.`}
-        confirmLabel="Revert import"
+        message={t.askRevert({ filename: asking?.filename ?? '', month: label })}
+        confirmLabel={t.revertImport}
+        cancelLabel={t.cancel}
         tone="danger"
         onConfirm={revert}
         onCancel={() => setAsking(null)}

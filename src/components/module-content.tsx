@@ -5,6 +5,9 @@ import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, Field, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
+import { trainingSettingsMessages } from '@/i18n/messages/training-settings';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { formatFileSize } from '@/lib/recruitment-pitch';
 import {
@@ -22,7 +25,8 @@ const ALLOWED = [
 ];
 const MAX_BYTES = 25 * 1024 * 1024;
 
-const sizeOf = formatFileSize;
+/** An address's start, shown as the field's example: the same in both languages, never words. */
+const ADDRESS_EXAMPLE = 'https://';
 
 /** A working copy that has not been saved is the office's, not the server's. */
 const copy = (content: ModuleContent): ModuleContent => ({
@@ -65,6 +69,12 @@ export function ModuleContentEditor({
   moduleCode: string;
   canWrite: boolean;
 }) {
+  const words = useMessages(trainingSettingsMessages);
+  const t = words.content;
+  const s = useMessages(settingsMessages);
+  // A file's size is a figure, in the reader's figures (P18.98-T3).
+  const figures = useFigureLanguage();
+  const sizeOf = (bytes: number) => formatFileSize(bytes, figures);
   const [server, setServer] = useState<ModuleContentView | null>(null);
   const [draft, setDraft] = useState<ModuleContent | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -91,8 +101,8 @@ export function ModuleContentEditor({
   if (error && server === null) {
     return (
       <EmptyState
-        title={`Could not read this module’s content. ${error.message}`}
-        action={<Button onClick={() => void load()}>Try again</Button>}
+        title={t.readFailed({ why: error.message })}
+        action={<Button onClick={() => void load()}>{t.tryAgain}</Button>}
       />
     );
   }
@@ -131,18 +141,11 @@ export function ModuleContentEditor({
     setSaved(false);
 
     if (file.size > MAX_BYTES) {
-      setError(refusal(
-        'ASSET_TOO_LARGE',
-        `Files must be 25 MB or smaller. “${file.name}” is ${sizeOf(file.size)}. `
-        + 'Something longer belongs under Links.',
-      ));
+      setError(refusal('ASSET_TOO_LARGE', t.tooLarge({ name: file.name, size: sizeOf(file.size) })));
       return;
     }
     if (!ALLOWED.includes(file.type)) {
-      setError(refusal(
-        'ASSET_TYPE_NOT_ALLOWED',
-        `“${file.name}” is not a kind of file this product accepts.`,
-      ));
+      setError(refusal('ASSET_TYPE_NOT_ALLOWED', t.notAccepted({ name: file.name })));
       return;
     }
 
@@ -206,20 +209,20 @@ export function ModuleContentEditor({
         <h2 className="font-display text-lg font-bold text-navy">{heading}</h2>
         <span className="ml-auto">
           <ConfigBadge tone={draft[section].length > 0 ? 'won' : 'open'}>
-            {draft[section].length} {draft[section].length === 1 ? 'item' : 'items'}
+            {s.items({ n: draft[section].length })}
           </ConfigBadge>
         </span>
       </div>
       <p className="px-4 pt-3 text-sm text-muted sm:px-5">{hint}</p>
 
       {draft[section].length === 0 ? (
-        <p className="px-4 py-3 text-md text-muted sm:px-5">Nothing here yet.</p>
+        <p className="px-4 py-3 text-md text-muted sm:px-5">{t.nothingHere}</p>
       ) : (
         <ul className="flex flex-col divide-y divide-hairline">
           {draft[section].map((item, index) => (
             <li key={item.storageKey} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
               <Field
-                label="Name"
+                label={s.name}
                 htmlFor={`${section}-${item.storageKey}`}
                 className="min-w-60 flex-1"
               >
@@ -231,10 +234,10 @@ export function ModuleContentEditor({
                 />
               </Field>
               <p className="text-sm text-muted">{sizeOf(item.bytes)}</p>
-              <Button variant="inline" onClick={() => void open(item.storageKey)}>Open</Button>
+              <Button variant="inline" onClick={() => void open(item.storageKey)}>{t.open}</Button>
               {canWrite && (
                 <Button variant="inlineDanger" disabled={busy} onClick={() => remove(section, index)}>
-                  Remove
+                  {s.remove}
                 </Button>
               )}
             </li>
@@ -248,7 +251,7 @@ export function ModuleContentEditor({
             ref={input}
             type="file"
             accept={accept}
-            aria-label={`Add to ${heading}`}
+            aria-label={t.addTo({ heading })}
             disabled={busy || uploading !== null}
             onChange={(e) => void choose(section, e.target.files?.[0])}
           />
@@ -263,10 +266,9 @@ export function ModuleContentEditor({
         {server.overridden ? (
           <>
             <p className="text-md text-navy">
-              <strong>This office has its own material for this module.</strong>{' '}
+              <strong>{t.ownMaterial}</strong>{' '}
               <span className="text-muted">
-                Your agents see what is below. Your company’s material is untouched, and no other
-                office of your company is affected.
+                {t.ownMaterialLine}
               </span>
             </p>
             {canWrite && (
@@ -274,21 +276,21 @@ export function ModuleContentEditor({
                 variant="secondary"
                 className="mt-3"
                 disabled={busy}
-                title={'Puts back your company’s '
-                  + `${server.companyContent.files.length + server.companyContent.videos.length} `
-                  + `file(s) and ${server.companyContent.links.length} link(s).`}
+                title={t.putsBack({
+                  files: server.companyContent.files.length + server.companyContent.videos.length,
+                  links: server.companyContent.links.length,
+                })}
                 onClick={() => void run(() => resetModuleContent(moduleCode))}
               >
-                Use my company’s material again
+                {t.useCompanyAgain}
               </Button>
             )}
           </>
         ) : (
           <p className="text-md text-navy">
-            <strong>This is your company’s material.</strong>{' '}
+            <strong>{t.companyMaterial}</strong>{' '}
             <span className="text-muted">
-              Every office of your company starts with it. The moment you add or remove something
-              here, this module becomes your office’s own — and you can always go back.
+              {t.companyMaterialLine}
             </span>
           </p>
         )}
@@ -300,40 +302,39 @@ export function ModuleContentEditor({
         </div>
       )}
       {uploading && (
-        <p role="status" className="text-md text-muted">Uploading {uploading}…</p>
+        <p role="status" className="text-md text-muted">{t.uploading({ name: uploading })}</p>
       )}
 
       {fileSection(
-        'files', 'Files',
-        'Up to 25 MB each. PDFs, images and spreadsheets.',
+        'files', t.files,
+        t.filesHint,
         fileInput,
         '.pdf,.png,.jpg,.jpeg,.webp,.csv,.xlsx',
       )}
       {fileSection(
-        'videos', 'Videos',
-        'Up to 25 MB each, mp4. Anything longer belongs under Links — a long video is a download '
-          + 'an agent on mobile data cannot afford.',
+        'videos', t.videos,
+        t.videosHint,
         videoInput,
         '.mp4',
       )}
 
       <Card className="p-0">
         <div className="flex flex-wrap items-baseline gap-2 border-b border-hairline px-4 py-3 sm:px-5">
-          <h2 className="font-display text-lg font-bold text-navy">Links</h2>
+          <h2 className="font-display text-lg font-bold text-navy">{t.links}</h2>
           <span className="ml-auto">
             <ConfigBadge tone={draft.links.length > 0 ? 'won' : 'open'}>
-              {draft.links.length} {draft.links.length === 1 ? 'link' : 'links'}
+              {t.linkCount({ n: draft.links.length })}
             </ConfigBadge>
           </span>
         </div>
 
         {draft.links.length === 0 ? (
-          <p className="px-4 py-3 text-md text-muted sm:px-5">Nothing here yet.</p>
+          <p className="px-4 py-3 text-md text-muted sm:px-5">{t.nothingHere}</p>
         ) : (
           <ul className="flex flex-col divide-y divide-hairline">
             {draft.links.map((item, index) => (
               <li key={item.url} className="flex flex-wrap items-center gap-3 px-4 py-3 sm:px-5">
-                <Field label="Link name" htmlFor={`link-${index}`} className="min-w-60 flex-1">
+                <Field label={t.linkName} htmlFor={`link-${index}`} className="min-w-60 flex-1">
                   <TextInput
                     id={`link-${index}`}
                     value={item.label}
@@ -347,11 +348,11 @@ export function ModuleContentEditor({
                   rel="noopener noreferrer"
                   className="text-md font-semibold text-navy underline"
                 >
-                  Open
+                  {t.open}
                 </a>
                 {canWrite && (
                   <Button variant="inlineDanger" disabled={busy} onClick={() => remove('links', index)}>
-                    Remove
+                    {s.remove}
                   </Button>
                 )}
               </li>
@@ -361,7 +362,7 @@ export function ModuleContentEditor({
 
         {canWrite && (
           <div className="flex flex-wrap items-start gap-3 px-4 pb-4 pt-3 sm:px-5">
-            <Field label="Link name" htmlFor="add-link-label" className="min-w-48 flex-1">
+            <Field label={t.linkName} htmlFor="add-link-label" className="min-w-48 flex-1">
               <TextInput
                 id="add-link-label"
                 value={link.label}
@@ -370,16 +371,16 @@ export function ModuleContentEditor({
               />
             </Field>
             <Field
-              label="Address"
+              label={t.address}
               htmlFor="add-link-url"
-              hint="Must start with https://"
+              hint={t.addressHint}
               className="min-w-60 flex-1"
             >
               <TextInput
                 id="add-link-url"
                 value={link.url}
                 disabled={busy}
-                placeholder="https://"
+                placeholder={ADDRESS_EXAMPLE}
                 onChange={(e) => setLink((now) => ({ ...now, url: e.target.value }))}
               />
             </Field>
@@ -393,7 +394,7 @@ export function ModuleContentEditor({
                 setLink({ label: '', url: '' });
               }}
             >
-              Add link
+              {t.addLink}
             </Button>
           </div>
         )}
@@ -405,24 +406,23 @@ export function ModuleContentEditor({
             disabled={busy || !dirty}
             onClick={() => void run(() => saveModuleContent(moduleCode, draft))}
           >
-            {busy ? 'Saving…' : 'Save content'}
+            {busy ? s.saving : t.saveContent}
           </Button>
           <Button
             variant="secondary"
             disabled={busy || !dirty}
             onClick={() => { setDraft(copy(server.content)); setSaved(false); }}
           >
-            Undo my edits
+            {t.undoEdits}
           </Button>
           {saved && !dirty && (
             <p role="status" className="text-md font-semibold text-success">
-              Saved to your office.
+              {words.module.savedToOffice}
             </p>
           )}
           {dirty && (
             <p className="text-md text-muted">
-              Not saved yet — a file you added is uploaded, but this module does not use it until
-              you save.
+              {t.notSavedYet}
             </p>
           )}
         </div>

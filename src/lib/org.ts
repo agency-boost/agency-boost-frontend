@@ -2,6 +2,9 @@
 
 import { api } from './api-client';
 import { rungShort } from '@/components/ui/role-badge';
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { orgMessages } from '@/i18n/messages/org';
 import type { OrgLevel } from './tenant-config-cache';
 import type { PersonalDetails } from './personal';
 
@@ -113,11 +116,8 @@ export const readMember = (membershipId: string) => api<Member>(`/members/${memb
 export const listReports = (membershipId: string) =>
   api<Member[]>(`/members/${membershipId}/reports`);
 
-export const MEMBER_STATUS_LABEL: Record<MemberStatus, string> = {
-  active: 'Active',
-  pending: 'Pending',
-  removed: 'Removed',
-};
+/** A member's status as its pill says it, English — the source; a screen reads the reader's (`orgMessages.status`). */
+export const MEMBER_STATUS_LABEL: Record<MemberStatus, string> = orgMessages.en.status;
 
 /** The people who report to you, and what you may do to each. */
 export interface TeamMember {
@@ -326,13 +326,13 @@ export function roleChangeExplanation(
    * *Associate Agency Builder* until then). The seeded one by default.
    */
   ladder?: OrgLevel[],
+  /** The reader's language (P18.98-T4; `useLanguage()`): English, the source, when given none. */
+  language: Language = SOURCE_LANGUAGE,
 ): string {
   const [f, t] = [from.toLowerCase(), to.toLowerCase()];
-  if (viewer === 'their-leader' && f === 'agent' && t === 'aab') {
-    return `${name} will change from ${rungShort(from, ladder)} to ${rungShort(to, ladder)}. They keep reporting to you, and can now recruit and manage their own direct agents.`;
-  }
-  if (viewer === 'their-leader' && f === 'aab' && t === 'agent') {
-    return `${name} will change from ${rungShort(from, ladder)} back to ${rungShort(to, ladder)}. They keep reporting to you, but will no longer manage their own direct agents.`;
-  }
-  return `${name} will change from ${rungShort(from, ladder)} to ${rungShort(to, ladder)}. Nobody moves — they keep reporting to whoever they report to now.`;
+  const words = messagesIn(orgMessages, language).roleChange;
+  const values = { name, from: rungShort(from, ladder), to: rungShort(to, ladder) };
+  if (viewer === 'their-leader' && f === 'agent' && t === 'aab') return words.promoted(values);
+  if (viewer === 'their-leader' && f === 'aab' && t === 'agent') return words.demoted(values);
+  return words.general(values);
 }

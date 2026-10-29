@@ -7,6 +7,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { RoleBadge, rungShort, useLadder } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { requestsMessages } from '@/i18n/messages/requests';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { formatCalendarDay, dayInZone, OFFICE_TIME_ZONE } from '@/lib/format';
 import {
@@ -19,20 +21,6 @@ import {
 import { useSession } from '@/lib/session';
 
 const SELF = '';
-
-/** The inbox's words: the prototype's list, and the join date approving now asks for (ADR-0170 §5). */
-export const INBOX_COPY = {
-  empty: 'No pending requests right now.',
-  loading: 'Loading requests…',
-  joinDate: 'Join date',
-  joinDateHint: 'The day they joined. Today unless they joined earlier.',
-  lateDate: (today: string) => `The join date cannot be after today, ${formatCalendarDay(today)}.`,
-  approve: 'Approve',
-  approving: 'Approving…',
-  decline: 'Decline',
-  declining: 'Declining…',
-  cancel: 'Cancel',
-} as const;
 
 /**
  * The sub-units on offer for one request: a destination must sit under the leader the request names, which is what
@@ -55,6 +43,11 @@ function unitsUnder(choices: RoutingChoice[], request: PendingRequest): RoutingC
  * limit refused may be asked of AgencyBoost (ADR-0157). `onCount` hears how many are waiting, each time it changes.
  */
 export function RequestInbox({ today, onCount }: { today?: string; onCount?: (n: number) => void }) {
+  // The inbox's words (`i18n/messages/requests.ts`): the prototype's list, and the join date approving asks for.
+  const words = useMessages(requestsMessages);
+  const copy = words.inbox;
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const id = useId();
   const { me } = useSession();
   const ladder = useLadder();
@@ -162,8 +155,8 @@ export function RequestInbox({ today, onCount }: { today?: string; onCount?: (n:
         )
         : <ErrorBanner {...error} />)}
 
-      {requests === null && <SkeletonCards count={2} label={INBOX_COPY.loading} className="mt-4" />}
-      {requests?.length === 0 && <EmptyState title={INBOX_COPY.empty} />}
+      {requests === null && <SkeletonCards count={2} label={copy.loading} className="mt-4" />}
+      {requests?.length === 0 && <EmptyState title={copy.empty} />}
 
       <ul className="mt-4 flex flex-col gap-3">
         {requests?.map((request) => (
@@ -179,7 +172,7 @@ export function RequestInbox({ today, onCount }: { today?: string; onCount?: (n:
                 </span>
                 <span className="block text-sm text-muted">{request.agentCode} · {request.email}</span>
                 {request.routedFromName && (
-                  <span className="mt-1 block text-sm text-navy">Sent to you by {request.routedFromName}.</span>
+                  <span className="mt-1 block text-sm text-navy">{copy.sentBy({ name: request.routedFromName })}</span>
                 )}
               </span>
             </div>
@@ -188,31 +181,27 @@ export function RequestInbox({ today, onCount }: { today?: string; onCount?: (n:
               // ADR-0157: letting them in waits for AgencyBoost; nothing about them changes meanwhile.
               <div className="mt-3">
                 <LeaderLimitWaiting
-                  what={requestedChange(pendingFor(asks, request.membershipId)!, (code) => rungShort(code, ladder))}
+                  what={requestedChange(pendingFor(asks, request.membershipId)!, (code) => rungShort(code, ladder), language)}
                   cancelling={busy === 'ask'}
                   onCancel={() => void cancelAsk(pendingFor(asks, request.membershipId)!.requestId)}
                 />
               </div>
             ) : declining === request.requestId ? (
               <div className="mt-3">
-                <Field
-                  label="Why?"
-                  htmlFor={`${id}-reason-${request.requestId}`}
-                  hint="Sent to them. Saying nothing leaves them guessing what to do instead."
-                >
+                <Field label={copy.why} htmlFor={`${id}-reason-${request.requestId}`} hint={copy.whyHint}>
                   <TextInput
                     id={`${id}-reason-${request.requestId}`}
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    placeholder="Not in my patch — try Sari"
+                    placeholder={copy.whyExample}
                   />
                 </Field>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Button variant="secondary" disabled={busy !== null} onClick={() => void decide(request, 'decline')}>
-                    {busy === request.requestId ? INBOX_COPY.declining : INBOX_COPY.decline}
+                    {busy === request.requestId ? copy.declining : copy.decline}
                   </Button>
                   <Button variant="secondary" disabled={busy !== null} onClick={() => { setDeclining(null); setReason(''); }}>
-                    {INBOX_COPY.cancel}
+                    {copy.cancel}
                   </Button>
                 </div>
               </div>
@@ -221,7 +210,7 @@ export function RequestInbox({ today, onCount }: { today?: string; onCount?: (n:
                 {/* Only for an agent, and only when there is somewhere to send them: an AB or AAB who asked is tagged
                     to the leader directly. Filtered to the leader *this row* names. */}
                 {request.role === 'agent' && unitsUnder(routing, request).length > 0 && (
-                  <Field label="Add to" htmlFor={`${id}-to-${request.requestId}`} className="w-56">
+                  <Field label={copy.addTo} htmlFor={`${id}-to-${request.requestId}`} className="w-56">
                     <Select
                       id={`${id}-to-${request.requestId}`}
                       value={destination[request.requestId] ?? SELF}
@@ -229,12 +218,12 @@ export function RequestInbox({ today, onCount }: { today?: string; onCount?: (n:
                     >
                       <option value={SELF}>
                         {request.leaderMembershipId === me?.membership?.membershipId
-                          ? 'My own unit'
-                          : `${request.leaderName}'s own unit`}
+                          ? copy.myUnit
+                          : copy.ownUnitOf({ name: request.leaderName })}
                       </option>
                       {unitsUnder(routing, request).map((choice) => (
                         <option key={choice.membershipId} value={choice.membershipId}>
-                          {choice.fullName}&apos;s unit ({choice.unitSize})
+                          {copy.unitOf({ name: choice.fullName, size: choice.unitSize })}
                         </option>
                       ))}
                     </Select>
@@ -242,10 +231,10 @@ export function RequestInbox({ today, onCount }: { today?: string; onCount?: (n:
                 )}
                 {approving === request.requestId && (
                   <Field
-                    label={INBOX_COPY.joinDate}
+                    label={words.joinDate}
                     htmlFor={`${id}-join-${request.requestId}`}
-                    hint={INBOX_COPY.joinDateHint}
-                    error={lateDate ? INBOX_COPY.lateDate(officeToday) : undefined}
+                    hint={words.joinDateHint}
+                    error={lateDate ? words.lateDate({ today: formatCalendarDay(officeToday, figures) }) : undefined}
                     className="w-56"
                   >
                     <DateField
@@ -270,11 +259,11 @@ export function RequestInbox({ today, onCount }: { today?: string; onCount?: (n:
                       }
                     }}
                   >
-                    {busy === request.requestId ? INBOX_COPY.approving : INBOX_COPY.approve}
+                    {busy === request.requestId ? copy.approving : copy.approve}
                   </Button>
                   {approving === request.requestId ? (
                     <Button variant="secondary" disabled={busy !== null} onClick={() => setApproving(null)}>
-                      {INBOX_COPY.cancel}
+                      {copy.cancel}
                     </Button>
                   ) : (
                     <Button
@@ -282,7 +271,7 @@ export function RequestInbox({ today, onCount }: { today?: string; onCount?: (n:
                       disabled={busy !== null}
                       onClick={() => { setDeclining(request.requestId); setApproving(null); }}
                     >
-                      {INBOX_COPY.decline}
+                      {copy.decline}
                     </Button>
                   )}
                 </div>

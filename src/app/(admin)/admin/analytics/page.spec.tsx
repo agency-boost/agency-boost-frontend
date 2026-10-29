@@ -6,7 +6,7 @@ import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AdminLayout from '@/app/(admin)/layout';
 import { makeMe, renderInLayout, stubFetch } from '@test/harness';
-import { parse, renderable, SRC } from '@test/copy-scan';
+import { catalogueTexts, parse, renderable, SRC } from '@test/copy-scan';
 import {
   officeState, PLATFORM_ANALYTICS_HEADINGS, rungWords, shareOf, signedInWords, tableRows,
   type PlatformAnalyticsView,
@@ -108,7 +108,7 @@ describe('Cross-platform analytics (P18-T8)', () => {
       const { table, calls } = await renderLoaded();
       expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
         'Code', 'Branch', 'Company', 'Status', 'Members', 'By rung',
-        'Joined in Okt 2026', 'Left in Okt 2026', 'Signed in within 7 days', 'Signed in within 30 days',
+        'Joined in Oct 2026', 'Left in Oct 2026', 'Signed in within 7 days', 'Signed in within 30 days',
       ]);
       expect(screen.getAllByRole('table')).toHaveLength(1);
       // One request, whatever the number of offices.
@@ -119,8 +119,8 @@ describe('Cross-platform analytics (P18-T8)', () => {
       const { table } = await renderLoaded();
       const row = within(table).getByRole('row', { name: /^0417/ });
       expect(cells(row)).toEqual([
-        '0417', 'BSD City Branch', 'Prudential', 'Active', '1.340', 'Agent 1.300 · AAB 28 · AB 12',
-        '14', '2', '1.072 (80%)', '1.206 (90%)',
+        '0417', 'BSD City Branch', 'Prudential', 'Active', '1,340', 'Agent 1,300 · AAB 28 · AB 12',
+        '14', '2', '1,072 (80%)', '1,206 (90%)',
       ]);
       expect(within(row).getByRole('link', { name: '0417' })).toHaveAttribute('href', '/admin/tenants/kpm-0417');
     });
@@ -145,13 +145,13 @@ describe('Cross-platform analytics (P18-T8)', () => {
       ]);
       const pru = body[2];
       expect(cells(pru)).toEqual([
-        'Prudential — Total (2 branches)', '1.360', 'Agent 1.316 · AAB 31 · AB 13', '14', '3', '1.072 (79%)', '1.210 (89%)',
+        'Prudential — Total (2 branches)', '1,360', 'Agent 1,316 · AAB 31 · AB 13', '14', '3', '1,072 (79%)', '1,210 (89%)',
       ]);
       expect(within(pru).getAllByRole('cell')[0]).toHaveAttribute('colspan', '4');
       const platform = body[5];
       expect(cells(platform)).toEqual([
-        'Platform — Total (2 companies, 3 branches)', '1.369',
-        'Agent 1.316 · AAB 31 · AB 13 · Financial Consultant 8 · Unit Manager 1', '15', '3', '1.072 (78%)', '1.210 (88%)',
+        'Platform — Total (2 companies, 3 branches)', '1,369',
+        'Agent 1,316 · AAB 31 · AB 13 · Financial Consultant 8 · Unit Manager 1', '15', '3', '1,072 (78%)', '1,210 (88%)',
       ]);
     });
 
@@ -174,10 +174,10 @@ describe('Cross-platform analytics (P18-T8)', () => {
   describe('AC-3: nothing on it names a member', () => {
     it('renders only the aggregates: every figure is a count, every label the office’s or a total’s', async () => {
       const { table } = await renderLoaded();
-      const COUNT = /^[\d.]+$/;
+      const COUNT = /^[\d.,]+$/;
       // A whole percent, never a ,0 (P18.97-T3 AC-1, ADR-0174 §1).
-      const SHARE = /^[\d.]+( \(\d+%\))?$/;
-      const RUNGS = /^(—|[^·]+ [\d.]+( · [^·]+ [\d.]+)*)$/;
+      const SHARE = /^[\d.,]+( \(\d+%\))?$/;
+      const RUNGS = /^(—|[^·]+ [\d.,]+( · [^·]+ [\d.,]+)*)$/;
       const labels = new Set([
         ...VIEW.offices.flatMap((o) => [o.code, o.branch, o.company.name, officeState(o.state).word]),
       ]);
@@ -325,10 +325,18 @@ describe('Cross-platform analytics (P18-T8)', () => {
     });
   });
 
+  /*
+   * P18.98-T6: the screen's words moved into the catalogue (`i18n/messages/admin-analytics.ts`), so the scan reads them
+   * there, in both languages, and the page and its lib, which now write none of their own (the catalogue's gate holds
+   * them to it). The rule is the one it was: none of OD-39's six words, no gendered pronoun, no phase, no permission
+   * code — and in Indonesian no *kantor* either.
+   */
   describe('copy scan: the screen’s own strings', () => {
     const MINE = ['app/(admin)/admin/analytics/page.tsx', 'lib/admin-analytics.ts'];
+    const AREA = 'i18n/messages/admin-analytics.ts';
     /** OD-39’s six words (D-copy), a gendered pronoun, a phase, or a permission code. */
     const FORBIDDEN = /\boffice\b|\bKPM\b|reports to|tagged to|untagged|unassigned|\b(he|she|him|her|his|hers)\b|\bphase\b|\b[a-z_]+:[a-z_]+\b/i;
+    const FORBIDDEN_ID = /\bKPM\b|\bkantor\b|\bfase\b|\b[a-z_]+:[a-z_]+\b/i;
 
     const strings = (file: string): string[] => {
       const sf = parse(file, readFileSync(join(SRC, file), 'utf8'));
@@ -342,15 +350,21 @@ describe('Cross-platform analytics (P18-T8)', () => {
       visit(sf);
       return found;
     };
+    const texts = catalogueTexts(AREA, readFileSync(join(SRC, AREA), 'utf8'));
 
     it('finds the strings, so a silent zero cannot pass', () => {
-      expect(MINE.flatMap(strings)).toEqual(expect.arrayContaining([
+      expect(texts.en.map((t) => t.text)).toEqual(expect.arrayContaining([
         'Adoption across every company on AgencyBoost', 'No branches on the platform yet.',
       ]));
+      expect(texts.id.map((t) => t.text)).toEqual(expect.arrayContaining(['Belum ada cabang di platform.']));
     });
 
     it('writes none of OD-39’s six words, no gendered pronoun, no phase and no permission code', () => {
-      const offenders = MINE.flatMap((f) => strings(f).filter((s) => FORBIDDEN.test(s)).map((s) => `${f}: ${s}`));
+      const offenders = [
+        ...MINE.flatMap((f) => strings(f).filter((s) => FORBIDDEN.test(s)).map((s) => `${f}: ${s}`)),
+        ...texts.en.filter((t) => FORBIDDEN.test(t.text)).map((t) => `${AREA} en:${t.line}: ${t.text}`),
+        ...texts.id.filter((t) => FORBIDDEN_ID.test(t.text)).map((t) => `${AREA} id:${t.line}: ${t.text}`),
+      ];
       expect(offenders).toEqual([]);
     });
   });

@@ -18,3 +18,10 @@ describe('teamLine', () => {
     expect(teamLine({ direct: 1, units: 0, underUnits: 0 })).toBe('1 direct · 0 under AABs');
   });
 });
+
+describe('P18.98-T4 teamLine in Indonesian', () => {
+  it('says the two parts in Indonesian, AAB kept, one form for one and many', () => {
+    expect(teamLine({ direct: 4, units: 3, underUnits: 5 }, 'id')).toBe('4 langsung · 8 di bawah AAB');
+    expect(teamLine({ direct: 1, units: 0, underUnits: 0 }, 'id')).toBe('1 langsung · 0 di bawah AAB');
+  });
+});

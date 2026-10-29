@@ -1586,7 +1586,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
       const face = date.nextElementSibling as HTMLElement;
       expect(face).toHaveAttribute('aria-hidden', 'true');
       expect(face.firstElementChild!.tagName.toLowerCase()).toBe('svg');
-      expect(face).toHaveTextContent('2 Okt 2026');
+      expect(face).toHaveTextContent('2 Oct 2026');
       expect(face.textContent).not.toMatch(/\d{2}\/\d{2}\/\d{4}/);
 
       await userEvent.click(date);
@@ -2705,7 +2705,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         expect(within(budi).getByText('Sales')).toBeInTheDocument();
         expect(within(budi).getByText('Follow-up')).toBeInTheDocument();
         expect(within(budi).getByText('Next action')).toBeInTheDocument();
-        expect(within(budi).getByText('2 Okt 2026 · Kopi jam 10')).toBeInTheDocument();
+        expect(within(budi).getByText('2 Oct 2026 · Kopi jam 10')).toBeInTheDocument();
         // In full, its words all there and nothing set to cut them.
         const remarks = within(budi).getByText(LONG);
         expect(remarks.className).toContain('whitespace-pre-wrap');
@@ -2821,7 +2821,7 @@ describe('Leads Management, back to the prototype (P10.1-T4)', () => {
         await waitFor(() => expect(lastBody(calls)).toEqual({ nextActionNote: 'Telepon Selasa', version: 2 }));
         const card = within(screen.getByRole('listitem'));
         await waitFor(() => expect(card.getByRole('status')).toHaveTextContent('Saved ✓'));
-        expect(card.getByText('2 Okt 2026 · Telepon Selasa')).toBeInTheDocument();
+        expect(card.getByText('2 Oct 2026 · Telepon Selasa')).toBeInTheDocument();
         expect(opener).toHaveFocus();
       });
 

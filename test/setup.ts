@@ -1,6 +1,7 @@
 import { configure } from '@testing-library/react';
 import { afterAll, afterEach } from 'vitest';
 import '@testing-library/jest-dom/vitest';
+import { LANGUAGE_COOKIE, LANGUAGE_PENDING } from '@/i18n/language';
 
 /*
  * **`findBy…` and `waitFor` get CI's room too**, as `vitest.config.mts` gives each test: on GitHub's runner a
@@ -33,6 +34,14 @@ afterEach(() => {
   if (window.location.hash) {
     window.history.replaceState(window.history.state, '', window.location.pathname);
   }
+  /*
+   * **The language a test chose stays with it** (P18.98-T2): the switch writes the `ab_lang` cookie and `<html lang>`,
+   * and jsdom keeps one `document` per spec file, so the next test would start in it — and a pre-paint read would take
+   * it up. Cleared after each, as the hash is.
+   */
+  document.cookie = `${LANGUAGE_COOKIE}=; Max-Age=0; Path=/`;
+  document.documentElement.lang = '';
+  document.documentElement.removeAttribute(LANGUAGE_PENDING);
 });
 
 /**

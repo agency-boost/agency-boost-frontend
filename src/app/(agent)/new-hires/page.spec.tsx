@@ -58,8 +58,8 @@ describe('/new-hires, a year of new hires by their 3M result (P13-T5, P18.96-T6)
     expect(rows.map((r) => within(r).getByRole('rowheader').textContent)).toEqual([
       'Novi LestariAAB: Arief Hidayat', 'Budi HartonoAAB: Sari Puspita', 'Rina WijayaAAB: Sari Puspita', 'Fikri RamadhanDirect Unit',
     ]);
-    expect(within(rows[0]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['4 Agu 2026', '85 /90', '56%', '23 Agu 2026']);
-    expect(within(rows[1]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['27 Agu 2026', '62 /90', '25%', '—']);
+    expect(within(rows[0]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['4 Aug 2026', '85 /90', '56%', '23 Aug 2026']);
+    expect(within(rows[1]).getAllByRole('cell').map((c) => c.textContent)).toEqual(['27 Aug 2026', '62 /90', '25%', '—']);
   });
 
   it('P18.96-T6 AC-3 a new hire with no checklist — an AAB placed as one — reads No checklist', async () => {
@@ -76,10 +76,10 @@ describe('/new-hires, a year of new hires by their 3M result (P13-T5, P18.96-T6)
       'Name', 'Join date', 'Checklist', 'First sale', 'Result', 'Actions',
     ]);
     const tari = not.getByRole('row', { name: /Tari Wulandari/ });
-    expect(within(tari).getAllByRole('cell')[3]).toHaveTextContent(/^Not activated · Left 21 Okt 2026$/);
+    expect(within(tari).getAllByRole('cell')[3]).toHaveTextContent(/^Not activated · Left 21 Oct 2026$/);
     expect(within(tari).queryByRole('link', { name: 'Tari Wulandari' })).not.toBeInTheDocument();
     expect(not.getByRole('link', { name: 'Lukman Hakim' })).toHaveAttribute('href', '/new-hires/mem-lukman');
-    expect(within(not.getByRole('row', { name: /Lukman Hakim/ })).getAllByRole('cell')[2]).toHaveTextContent(/^23 Okt 2026$/);
+    expect(within(not.getByRole('row', { name: /Lukman Hakim/ })).getAllByRole('cell')[2]).toHaveTextContent(/^23 Oct 2026$/);
     expect(within(screen.getByRole('region', { name: 'Activated' })).getByRole('row', { name: /Indah Permata/ }))
       .toHaveTextContent('Activated');
   });
@@ -109,7 +109,7 @@ describe('/new-hires, a year of new hires by their 3M result (P13-T5, P18.96-T6)
     show();
     const top = within(await screen.findByRole('region', { name: '3M activation %' }));
     const select = top.getByRole('combobox', { name: 'Join month' });
-    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['All', 'Sep 2026', 'Agu 2026', 'Jul 2026']);
+    expect(within(select).getAllByRole('option').map((o) => o.textContent)).toEqual(['All', 'Sep 2026', 'Aug 2026', 'Jul 2026']);
     await userEvent.selectOptions(select, '2026-07');
     expect(top.getByText('67%', { selector: 'span.block' })).toBeInTheDocument();
     expect(top.getByText('2 activated · 1 not activated · 0 in progress')).toBeInTheDocument();
@@ -251,12 +251,12 @@ describe('P18.95-T3, P18.96-T6 — /new-hires as cards on a phone', () => {
     await card(IN_PROGRESS);
     const budi = hireCard('Budi Hartono');
     expect(budi).toHaveTextContent('Day 62 of 90');
-    expect(budi).toHaveTextContent('Join date 27 Agu 2026 · First sale —');
+    expect(budi).toHaveTextContent('Join date 27 Aug 2026 · First sale —');
     expect(budi.querySelector('[aria-hidden="true"] > div')).toHaveStyle({ width: '25%' });
     const lukman = hireCard('Lukman Hakim');
     expect(lukman).toHaveTextContent('Not activated');
     expect(within(lukman).getByRole('link', { name: 'Schedule 1:1 with Lukman Hakim' })).toBeInTheDocument();
-    expect(hireCard('Tari Wulandari')).toHaveTextContent('Not activated · Left 21 Okt 2026');
+    expect(hireCard('Tari Wulandari')).toHaveTextContent('Not activated · Left 21 Oct 2026');
   });
 
   it('P18.95-T3 AC-4 makes each name a 44px link on a phone', async () => {

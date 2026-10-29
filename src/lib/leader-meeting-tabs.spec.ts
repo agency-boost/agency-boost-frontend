@@ -8,7 +8,7 @@ import {
   accessNoteText, asOfText, cellText, changeText, columnHeader, formatFigure, FOOTNOTES, ItemWrites,
   LEADER_MEETING_TARGET_RATE_DECIMALS, listed, moveTo,
   NET_APE_FOOTNOTE, nextStatus, noneWords, numberedFootnotes, oneDecimal, partialNotes, rateFromTyped, rateText, STATUS_TONE,
-  statsTitle, TABS_COPY, TABS_OWN_COPY, targetDraftText, targetText, withActionItem, withActionItems, withAgendaItem, withTarget,
+  rowName, statsTitle, TABS_COPY, TABS_OWN_COPY, targetDraftText, targetText, withActionItem, withActionItems, withAgendaItem, withTarget,
 } from './leader-meeting-tabs';
 
 describe('P18.97-T1 AC-15 the scorecard as written: the slide’s numbers, the served figure exact (ADR-0174)', () => {
@@ -410,10 +410,18 @@ describe('P18.1-T2 the tabs’ copy', () => {
   });
 
   it('P18.97-T1 AC-4 the reference slide’s words: its rows in its order, its groups; the prototype’s headers and statuses verbatim', () => {
-    expect(Object.values(TABS_COPY.rows)).toEqual([
+    // The names, each money row's unit written by the formatter in the reader's language (P18.98-T3 AC-1): ADR-0174's
+    // Indonesian units, and the slide's own English ones.
+    const keys = Object.keys(TABS_COPY.rows) as (keyof typeof TABS_COPY.rows)[];
+    expect(keys.map((key) => rowName(key, 'id'))).toEqual([
       'APE (Rp M)', 'Manpower', 'FLC (avg. monthly)', 'Annual Active Agents', '3M new agent %', 'Avg. monthly AA',
       'Case submission', 'Cases/producing agents', 'Avg. Case Size (Rp jt)',
     ]);
+    expect(keys.map((key) => rowName(key, 'en'))).toEqual([
+      'APE (IDR B)', 'Manpower', 'FLC (avg. monthly)', 'Annual Active Agents', '3M new agent %', 'Avg. monthly AA',
+      'Case submission', 'Cases/producing agents', 'Avg. Case Size (IDR M)',
+    ]);
+    expect(rowName('ape')).toBe('APE (Rp M)');
     expect(TABS_COPY.groups).toEqual({ year: 'Full Year & YTD View', month: 'Monthly View' });
     // The row stays *APE* until OD-231 is answered; *Producing agents* reads *Annual Active Agents* everywhere.
     expect(JSON.stringify(TABS_COPY)).not.toMatch(/Net APE|Producing agents|New AA/);

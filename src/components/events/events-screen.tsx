@@ -5,10 +5,12 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { eventsMessages } from '@/i18n/messages/events';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  canJoin, EVENT_FILTERS, goingToast, OWN_COPY, PROTOTYPE_COPY, readEvents, refusalOf, rsvpEvent, sections,
+  canJoin, EVENT_FILTERS, goingToast, readEvents, refusalOf, rsvpEvent, sections,
   type EventFilter, type EventsMeta, type GuestEvent, type GuestEventCan,
 } from '@/lib/events';
 import { EventCard } from './event-card';
@@ -59,6 +61,8 @@ export function useEventsHost(): EventsHost {
  * prototype's three empty rows for a section with nothing in it.
  */
 export function EventsScreen({ children }: { children?: ReactNode }) {
+  const t = useMessages(eventsMessages);
+  const language = useLanguage();
   const router = useRouter();
   const pathname = usePathname();
   const { toast, show } = useToast();
@@ -114,10 +118,10 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
     try {
       const next = await rsvpEvent(id);
       replace(next);
-      show(goingToast(next.title));
+      show(goingToast(next.title, language));
       setRefocus(id);
     } catch (err) {
-      setJoinError({ id, error: refusalOf(err) });
+      setJoinError({ id, error: refusalOf(err, language) });
       if (err instanceof ApiRequestError && err.status === 409) reload();
     } finally {
       setJoining(null);
@@ -144,7 +148,7 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
         {error && !events && (
           <div>
             <ErrorBanner {...error} />
-            <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+            <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
           </div>
         )}
         {!events && !error && <EventsSkeleton />}
@@ -174,8 +178,9 @@ export function EventsScreen({ children }: { children?: ReactNode }) {
 
 /** `#event-segmented` (`:3426-3430`, CSS `:2051-2056`): each button says whether it is the one on. */
 function FilterBar({ filter, onChange }: { filter: EventFilter; onChange: (f: EventFilter) => void }) {
+  const t = useMessages(eventsMessages);
   return (
-    <div role="group" aria-label={OWN_COPY.filterLabel} className="mb-[22px] inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
+    <div role="group" aria-label={t.filterLabel} className="mb-[22px] inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
       {EVENT_FILTERS.map((f) => (
         <button
           key={f}
@@ -187,7 +192,7 @@ function FilterBar({ filter, onChange }: { filter: EventFilter; onChange: (f: Ev
             filter === f ? 'bg-navy text-white' : 'text-muted hover:text-navy',
           )}
         >
-          {PROTOTYPE_COPY.filters[f]}
+          {t.filters[f]}
         </button>
       ))}
     </div>
@@ -210,14 +215,15 @@ function Sections({ events, companyName, filter, card }: {
   filter: EventFilter;
   card: CardActions;
 }) {
+  const t = useMessages(eventsMessages);
   const { going, upcoming, past } = sections(events);
   const showOpen = filter !== 'past';
   const showPast = filter !== 'upcoming';
   return (
     <>
-      {showOpen && <Section id="going" label={PROTOTYPE_COPY.sections.going} events={going} companyName={companyName} empty={PROTOTYPE_COPY.emptyGoing} card={card} />}
-      {showOpen && <Section id="upcoming" label={PROTOTYPE_COPY.sections.upcoming} events={upcoming} companyName={companyName} empty={PROTOTYPE_COPY.emptyUpcoming} card={card} />}
-      {showPast && <Section id="past" label={PROTOTYPE_COPY.sections.past} events={past} companyName={companyName} empty={PROTOTYPE_COPY.emptyPast} card={card} />}
+      {showOpen && <Section id="going" label={t.sections.going} events={going} companyName={companyName} empty={t.emptyGoing} card={card} />}
+      {showOpen && <Section id="upcoming" label={t.sections.upcoming} events={upcoming} companyName={companyName} empty={t.emptyUpcoming} card={card} />}
+      {showPast && <Section id="past" label={t.sections.past} events={past} companyName={companyName} empty={t.emptyPast} card={card} />}
     </>
   );
 }
@@ -259,8 +265,9 @@ function Section({ id, label, events, companyName, empty, card }: {
 
 /** Two sections of cards, shaped like the list that is coming. */
 export function EventsSkeleton() {
+  const t = useMessages(eventsMessages);
   return (
-    <Skeleton label={OWN_COPY.loadingList}>
+    <Skeleton label={t.loadingList}>
       {[0, 1].map((s) => (
         <div key={s} className="mb-8">
           <SkeletonBar className="mb-3 h-3 w-20" />

@@ -11,11 +11,11 @@ import {
 } from '@/lib/admin';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { TEMPLATE_NAME_MAX } from '@/lib/templates';
+import { useMessages } from '@/i18n/language-provider';
+import { adminTemplateMessages } from '@/i18n/messages/admin-template';
 
 /** How a new template starts (ADR-0115 §5): empty, the AgencyBoost defaults, or a copy of the one shown. */
 type NewFrom = 'empty' | 'defaults' | 'copy';
-
-const offices = (n: number) => (n === 1 ? '1 office' : `${n} offices`);
 
 /**
  * **The company's templates, at the head of its template screen** (ADR-0115 §3, §7; P13.2-T6 AC-6).
@@ -48,10 +48,12 @@ export function TemplatePicker({
   onChanged: (template: NamedTemplate, select: boolean) => void;
   disabled?: boolean;
 }) {
+  const words = useMessages(adminTemplateMessages);
+  const t = words.picker;
   const id = useId();
-  const selected = templates.find((t) => t.id === selectedId) ?? templates[0];
-  const active = templates.filter((t) => t.status === 'active');
-  const archived = templates.filter((t) => t.status === 'archived');
+  const selected = templates.find((row) => row.id === selectedId) ?? templates[0];
+  const active = templates.filter((row) => row.status === 'active');
+  const archived = templates.filter((row) => row.status === 'archived');
 
   const [dialog, setDialog] = useState<null | 'new' | 'import' | 'rename' | 'default' | 'archive'>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -77,53 +79,52 @@ export function TemplatePicker({
   return (
     <div className="flex flex-col items-end gap-2">
       <div className="flex flex-wrap items-end gap-3">
-        <Field label="Template" htmlFor={`${id}-pick`} className="min-w-[14rem]">
+        <Field label={t.template} htmlFor={`${id}-pick`} className="min-w-[14rem]">
           <Select
             id={`${id}-pick`}
             value={selected.id}
             disabled={disabled}
             onChange={(e) => onSelect(e.target.value)}
           >
-            {active.map((t) => (
-              <option key={t.id} value={t.id}>{t.isDefault ? `${t.name} · Default` : t.name}</option>
+            {active.map((row) => (
+              <option key={row.id} value={row.id}>{row.isDefault ? t.withDefault({ name: row.name }) : row.name}</option>
             ))}
             {archived.length > 0 && (
-              <optgroup label="Archived">
-                {archived.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              <optgroup label={t.archived}>
+                {archived.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
               </optgroup>
             )}
           </Select>
         </Field>
         <p className="pb-2.5 text-sm text-muted" aria-live="polite">
-          {selected.status === 'archived' ? 'Archived · ' : ''}
-          {offices(selected.officeCount)}
+          {t.offices({ n: selected.officeCount, archived: selected.status === 'archived' })}
         </p>
         <Button variant="secondary" disabled={disabled || busy} onClick={() => setDialog('new')}>
-          New template
+          {t.newTemplate}
         </Button>
         <Button variant="secondary" disabled={disabled || busy} onClick={() => setDialog('import')}>
-          Import from another company
+          {t.importTemplate}
         </Button>
         <ActionMenu
-          label={`Actions for ${selected.name}`}
+          label={t.actionsFor({ name: selected.name })}
           inert={disabled || busy}
           items={[
-            { label: 'Rename', onSelect: () => setDialog('rename') },
+            { label: t.rename, onSelect: () => setDialog('rename') },
             {
-              label: 'Make default',
+              label: t.makeDefault,
               disabled: selected.isDefault || selected.status === 'archived',
               reason: selected.isDefault
-                ? 'It is the default.'
-                : selected.status === 'archived' ? 'An archived template cannot be the default.' : undefined,
+                ? t.isDefault
+                : selected.status === 'archived' ? t.archivedNotDefault : undefined,
               onSelect: () => setDialog('default'),
             },
             {
-              label: 'Archive',
+              label: t.archive,
               tone: 'alert',
               disabled: selected.isDefault || selected.status === 'archived',
               reason: selected.isDefault
-                ? 'The default cannot be archived. Make another template the default first.'
-                : selected.status === 'archived' ? 'It is archived.' : undefined,
+                ? t.defaultNotArchived
+                : selected.status === 'archived' ? t.isArchived : undefined,
               onSelect: () => setDialog('archive'),
             },
           ]}
@@ -133,9 +134,9 @@ export function TemplatePicker({
 
       <NameDialog
         open={dialog === 'new'}
-        title="New template"
-        description="A new template of this company. It is not the default until you make it so."
-        confirmLabel="Create template"
+        title={t.newTitle}
+        description={t.newLead}
+        confirmLabel={t.create}
         withStart
         copyOf={selected.name}
         busy={busy}
@@ -155,9 +156,9 @@ export function TemplatePicker({
       />
       <NameDialog
         open={dialog === 'rename'}
-        title="Rename template"
+        title={t.renameTitle}
         description={selected.name}
-        confirmLabel="Save"
+        confirmLabel={words.save}
         initialName={selected.name}
         busy={busy}
         onClose={() => setDialog(null)}
@@ -166,17 +167,17 @@ export function TemplatePicker({
       />
       <Dialog
         open={dialog === 'default'}
-        message={`Make ${selected.name} the default? KPM requests approved from now on start from it, and `
-          + 'it is offered first when an office is created. Offices that already exist do not change.'}
-        confirmLabel="Make default"
+        message={t.makeDefaultQuestion({ name: selected.name })}
+        confirmLabel={t.makeDefault}
+        cancelLabel={words.cancel}
         onCancel={() => setDialog(null)}
         onConfirm={() => void act(() => updateTemplate(companyId, selected.id, { isDefault: true }), true)}
       />
       <Dialog
         open={dialog === 'archive'}
-        message={`Archive ${selected.name}? It stays readable, and offices made from it keep everything, `
-          + 'but it is no longer offered when an office is created.'}
-        confirmLabel="Archive template"
+        message={t.archiveQuestion({ name: selected.name })}
+        confirmLabel={t.archiveTemplate}
+        cancelLabel={words.cancel}
         tone="danger"
         onCancel={() => setDialog(null)}
         onConfirm={() => void act(() => archiveTemplate(companyId, selected.id), true)}
@@ -212,6 +213,8 @@ function NameDialog({
   onSubmit: (name: string, from?: NewFrom) => Promise<NamedTemplate>;
   onSaved: (saved: NamedTemplate) => void;
 }) {
+  const words = useMessages(adminTemplateMessages);
+  const t = words.picker;
   const id = useId();
   const [name, setName] = useState(initialName);
   const [from, setFrom] = useState<NewFrom>('empty');
@@ -233,7 +236,7 @@ function NameDialog({
     setNameError(undefined);
     setError(null);
     if (!name.trim()) {
-      setNameError('Give the template a name.');
+      setNameError(words.nameMissing);
       return;
     }
     setSaving(true);
@@ -259,14 +262,14 @@ function NameDialog({
       className="max-w-[30rem]"
       footer={(
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" form={`${id}-form`} disabled={busy || saving}>{saving ? 'Saving…' : confirmLabel}</Button>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button type="submit" form={`${id}-form`} disabled={busy || saving}>{saving ? words.saving : confirmLabel}</Button>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>{words.cancel}</Button>
         </div>
       )}
     >
       <form id={`${id}-form`} onSubmit={submit} className="flex flex-col gap-4" noValidate>
         {error && <ErrorBanner {...error} />}
-        <Field label="Name" htmlFor={`${id}-name`} error={nameError}>
+        <Field label={words.name} htmlFor={`${id}-name`} error={nameError}>
           <TextInput
             id={`${id}-name`}
             value={name}
@@ -277,14 +280,11 @@ function NameDialog({
         </Field>
         {withStart && (
           <fieldset className="flex flex-col gap-2">
-            <legend className="mb-1 text-sm font-semibold text-navy">Start with</legend>
+            <legend className="mb-1 text-sm font-semibold text-navy">{t.startWith}</legend>
             {([
-              ['empty', 'Empty', 'Nothing in any section. An office made from it starts with the three activity types the goal plan counts and AgencyBoost’s standard capability ladder, and nothing else.'],
-              ['defaults', 'AgencyBoost defaults', 'Every section as AgencyBoost ships it, each published as version 1.'],
-              ...(copyOf ? [[
-                'copy', `Copy of ${copyOf}`,
-                'Each section as it is published now, as version 1. Unpublished drafts are not copied, and later changes to either never reach the other.',
-              ] as const] : []),
+              ['empty', t.empty, t.emptyHint],
+              ['defaults', t.defaults, t.defaultsHint],
+              ...(copyOf ? [['copy', t.copyOf({ name: copyOf }), t.copyHint] as const] : []),
             ] as const).map(([value, label, hint]) => (
               <label key={value} className="flex items-start gap-2 text-md text-navy">
                 <input

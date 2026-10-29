@@ -2,6 +2,8 @@
 
 import { LeadsTable } from '@/components/leads-table';
 import { Page } from '@/components/page';
+import { useMessages } from '@/i18n/language-provider';
+import { leadsMessages } from '@/i18n/messages/leads';
 
 /**
  * Leads Management — `Overall.html:2787-2846`, back to the prototype (P10.1-T4).
@@ -21,10 +23,11 @@ import { Page } from '@/components/page';
  * that is what `GET /leads` answers for their grant (P7-T7). Nothing here narrows it.
  */
 export default function LeadsPage() {
+  const t = useMessages(leadsMessages);
   return (
     <Page
-      title="Leads Management"
-      subtitle="Track and follow up on your sales and recruitment leads."
+      title={t.title}
+      subtitle={t.subtitle}
       // The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 25): from 768px it reads as before.
       subtitleOnPhone={false}
       permission="lead:read"

@@ -14,10 +14,14 @@ import { InlineSaveStatus, useInlineSave } from '@/components/ui/inline-save-sta
 import { CONTROL_PHONE } from '@/components/ui/phone';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { SHOWN_FROM_DESKTOP } from '@/components/ui/tablet';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
+import { settingsProductsMessages } from '@/i18n/messages/settings-products';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { useCan } from '@/lib/session';
 import { useHashTab } from '@/lib/use-hash-tab';
+import { channelLabel } from '@/lib/product-catalog';
 import {
   approveScript, kpmProductDocumentUrl, listKpmProducts, listScriptReviews, readBranchInfo,
   readEffectiveScript, rejectScript, requestProductUpload, resetKpmProductDocument,
@@ -25,34 +29,23 @@ import {
   PRODUCT_DESCRIPTION_MAX, type KpmProductRow,
 } from '@/lib/tenant-config';
 
-/** The seven the override modal names, in its order (`KPM_Owner.html:1785-1791`). */
-const SCRIPT_FIELDS: { key: string; label: string; lines?: number; list?: true }[] = [
-  { key: 'goodFit', label: '0 · Good fit for', lines: 2 },
-  { key: 'opening', label: '1 · Opening line', lines: 2 },
-  { key: 'benefits', label: '2 · Lead with these benefits', lines: 5, list: true },
-  { key: 'fullScript', label: '3 · Full script — how to narrate it', lines: 5 },
-  { key: 'objectionTheySay', label: '4a · If they push back — they say', lines: 2 },
-  { key: 'objectionYouSay', label: '4b · If they push back — you say', lines: 3 },
-  { key: 'nextAction', label: '5 · Next action', lines: 2 },
-];
-
 /**
- * The prototype's own label, guidance folded into it (`KPM_Owner.html:1781`; parity L-20). The
- * field replaces the company's tagline wherever agents read one, once approved (OD-136).
+ * The seven the override modal names, in its order (`KPM_Owner.html:1785-1791`); each one's label is the catalogue's
+ * (`settingsProductsMessages.script`). *Short description (shown to agents)* is too — the prototype's own label, guidance
+ * folded into it (`KPM_Owner.html:1781`; parity L-20) — and the shelf's one grey sentence (P18.97-T4 AC-6).
  */
-const DESCRIPTION_LABEL = 'Short description (shown to agents)';
+const SCRIPT_FIELDS = [
+  { key: 'goodFit', lines: 2 },
+  { key: 'opening', lines: 2 },
+  { key: 'benefits', lines: 5, list: true },
+  { key: 'fullScript', lines: 5 },
+  { key: 'objectionTheySay', lines: 2 },
+  { key: 'objectionYouSay', lines: 3 },
+  { key: 'nextAction', lines: 2 },
+] as const;
 
-/**
- * **The shelf's one grey sentence, in the client's words** (P18.97-T4 AC-6, ADR-0176 §6; the grey-text table, UI-027):
- * the 50 words on whose catalog this is read as this, shown from 1024px and behind an ⓘ below it.
- */
-const SHELF_NOTE = 'Your changes apply to this office only.';
-
-const REVIEW: Record<string, { tone: 'won' | 'open'; text: string }> = {
-  pending: { tone: 'open', text: 'Waiting for your approval' },
-  approved: { tone: 'won', text: 'Approved' },
-  rejected: { tone: 'open', text: 'Sent back' },
-};
+/** A review's badge tone; its words are the catalogue's (`review`). */
+const REVIEW_TONE: Record<string, 'won' | 'open'> = { pending: 'open', approved: 'won', rejected: 'open' };
 
 const asText = (value: string | string[]) => (Array.isArray(value) ? value.join('\n') : value);
 
@@ -85,6 +78,7 @@ function DocumentUpload({
   disabled: boolean;
   onAttached: (row: KpmProductRow) => void;
 }) {
+  const t = useMessages(settingsProductsMessages);
   const upload = usePdfUpload<KpmProductRow>({
     sign: requestProductUpload,
     // The label is the file's own name, cut to the 200 characters the attach takes, so a long name that
@@ -98,13 +92,13 @@ function DocumentUpload({
     <>
       <Button
         variant="inline"
-        aria-label={hasFile ? `Replace ${label}` : `Upload ${label}`}
+        aria-label={hasFile ? t.replaceName({ label }) : t.uploadName({ label })}
         // Not `disabled`, which would drop the focus while the file is on its way.
         aria-disabled={blocked || undefined}
         className="aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
         onClick={() => { if (!blocked) upload.choose(); }}
       >
-        {hasFile ? 'Replace' : '+ Upload'}
+        {hasFile ? t.replace : t.upload}
       </Button>
       {upload.picker}
       {/* Under the row, whichever of its actions comes after: the row wraps it onto its own line. */}
@@ -127,11 +121,14 @@ function DocumentUpload({
  */
 /** The two halves of this screen: the shelf, and what is waiting on somebody (P5-T10). */
 const TABS = [
-  { label: 'Products', href: '#products' },
-  { label: 'Script approvals', href: '#approvals' },
+  { label: settingsProductsMessages.en.tabs.products, href: '#products' },
+  { label: settingsProductsMessages.en.tabs.approvals, href: '#approvals' },
 ];
 
 export default function KpmProductsPage() {
+  const t = useMessages(settingsProductsMessages);
+  const s = useMessages(settingsMessages);
+  const language = useLanguage();
   const canWrite = useCan('tenant_config:write');
   /** The screen's own read: without it the gate refuses, and nothing here asks the API for the drafts. */
   const canRead = useCan('product_settings:read');
@@ -157,7 +154,8 @@ export default function KpmProductsPage() {
    * `:1784`, `:2397`…). A second insurer's office would read another company's name on every row
    * of its own settings.
    */
-  const [company, setCompany] = useState('your company');
+  const [companyName, setCompany] = useState<string | null>(null);
+  const company = companyName ?? t.yourCompany;
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
@@ -242,7 +240,7 @@ export default function KpmProductsPage() {
     if (rows === null) return error ? null : <SkeletonCards count={4} />;
     if (rows.length === 0) {
       return (
-        <EmptyState title={`${company} has no products on its catalog yet.`} />
+        <EmptyState title={t.noProducts({ company })} />
       );
     }
 
@@ -251,18 +249,20 @@ export default function KpmProductsPage() {
     return (
       <div className="flex flex-col gap-4">
         <Card>
-          <p className={cn('text-md text-muted', SHOWN_FROM_DESKTOP)}>{SHELF_NOTE}</p>
+          <p className={cn('text-md text-muted', SHOWN_FROM_DESKTOP)}>{t.shelfNote}</p>
           {/*
             * Counted from what is actually sellable. The prototype's header reads "6 active" over
             * seven toggles, because it counts a list it no longer matches (P5-T5 AC-8). Below 1024px it is the card's
             * first line, and the sentence above it is the ⓘ after it (P18.97-T4 AC-6).
             */}
           <p className="text-sm text-muted lg:mt-2">
-            {rows.length} products · <strong>{selling}</strong> your agents can sell
-            {rows.some((p) => !p.sellable) && (
-              <> · {rows.filter((p) => !p.sellable).length} withdrawn by {company}</>
-            )}
-            <BelowDesktopTip text={SHELF_NOTE} className="ml-1" />
+            {t.shelfCount({
+              n: rows.length,
+              selling: <strong>{selling}</strong>,
+              withdrawn: rows.some((p) => !p.sellable) ? rows.filter((p) => !p.sellable).length : null,
+              company,
+            })}
+            <BelowDesktopTip text={t.shelfNote} className="ml-1" />
           </p>
         </Card>
 
@@ -283,7 +283,7 @@ export default function KpmProductsPage() {
                     </h2>
                     {product.displayName.overridden && (
                       <p className="mt-0.5 text-sm text-muted">
-                        {company} calls it {product.companyName}
+                        {t.callsIt({ company, name: product.companyName })}
                       </p>
                     )}
                     <p className="mt-1 flex flex-wrap items-center gap-2">
@@ -295,14 +295,14 @@ export default function KpmProductsPage() {
                         * both could not tell one shelf from the other.
                         */}
                       <ConfigBadge tone={product.channel === 'syariah' ? 'won' : 'open'}>
-                        {product.channel === 'syariah' ? 'Syariah' : 'Conventional'}
+                        {channelLabel(product.channel === 'syariah' ? 'syariah' : 'conventional', language)}
                       </ConfigBadge>
                       {!product.sellable && (
-                        <ConfigBadge tone="open">Withdrawn by {company}</ConfigBadge>
+                        <ConfigBadge tone="open">{t.withdrawnBy({ company })}</ConfigBadge>
                       )}
                       {product.reviewState !== 'none' && (
-                        <ConfigBadge tone={REVIEW[product.reviewState].tone}>
-                          {REVIEW[product.reviewState].text}
+                        <ConfigBadge tone={REVIEW_TONE[product.reviewState]}>
+                          {t.review[product.reviewState]}
                         </ConfigBadge>
                       )}
                       {/*
@@ -313,13 +313,13 @@ export default function KpmProductsPage() {
                       {product.reviewState === 'pending' && canApprove && (
                         <Button
                           variant="inline"
-                          aria-label={`Review ${product.displayName.value}`}
+                          aria-label={t.reviewName({ name: product.displayName.value })}
                           onClick={() => {
                             setReviewing(product.productId);
                             setTab('#approvals');
                           }}
                         >
-                          Review
+                          {t.reviewButton}
                         </Button>
                       )}
                     </p>
@@ -338,7 +338,7 @@ export default function KpmProductsPage() {
                       <>
                         <Switch
                           id={`sell-${product.productId}`}
-                          label="Agents sell it"
+                          label={t.agentsSellIt}
                           checked={product.active.value}
                           disabled={busy || !canWrite}
                           // A 44 × 44px target on a phone, the track as drawn (P18.97-T7 AC-6; UI-040).
@@ -350,7 +350,7 @@ export default function KpmProductsPage() {
                         />
                         <InlineSaveStatus
                           state={inline.stateOf(sellKey(product.productId))}
-                          label={`Agents sell it, ${product.displayName.value}`}
+                          label={t.agentsSellItFor({ name: product.displayName.value })}
                           onRetry={() => {
                             inline.retry(sellKey(product.productId));
                             document.getElementById(`sell-${product.productId}`)?.focus();
@@ -367,7 +367,7 @@ export default function KpmProductsPage() {
                         setDraft(next ? draftOf(product) : {});
                       }}
                     >
-                      {open === product.productId ? 'Close' : 'Customize'}
+                      {open === product.productId ? t.close : t.customize}
                     </Button>
                   </div>
                 </div>
@@ -396,21 +396,18 @@ export default function KpmProductsPage() {
       <div className="flex flex-col gap-4">
         <Card>
           <p className="text-md text-navy">
-            <strong>This is your office’s own check, not a review by anybody else.</strong>{' '}
+            <strong>{t.ownCheck}</strong>{' '}
             <span className="text-muted">
-              Nobody at {company} and nobody on the platform looks at these. What it gives you is
-              that no half-finished script reaches your agents, and that every script they read
-              carries a name and a time.
+              {t.ownCheckLine({ company })}
             </span>
           </p>
           <p className="mt-2 text-sm text-muted">
-            Until you approve one, your agents keep reading whatever they read today — the last
-            version your office approved, or {company}’s own words. Each row below says which.
+            {t.untilApproved({ company })}
           </p>
         </Card>
 
         {waiting.length === 0 && sentBack.length === 0 ? (
-          <EmptyState title="Nothing is waiting on you. A script comes here when somebody in your office rewrites one." />
+          <EmptyState title={t.nothingWaiting} />
         ) : (
           <ul className="flex flex-col gap-3">
             {[...waiting, ...sentBack].map((product) => (
@@ -423,31 +420,31 @@ export default function KpmProductsPage() {
                         {product.displayName.value}
                       </h2>
                       <p className="mt-1 flex flex-wrap items-center gap-2">
-                        <ConfigBadge tone={REVIEW[product.reviewState].tone}>
-                          {REVIEW[product.reviewState].text}
+                        <ConfigBadge tone={REVIEW_TONE[product.reviewState]}>
+                          {product.reviewState !== 'none' && t.review[product.reviewState]}
                         </ConfigBadge>
                       </p>
                       {product.rejectionReason && (
                         <p className="mt-1 text-sm text-muted">
-                          Sent back: {product.rejectionReason}
+                          {t.sentBack({ reason: product.rejectionReason })}
                         </p>
                       )}
                       <p className="mt-1 text-sm text-muted">
                         {served[product.productId]?.source === 'kpm'
-                          ? 'Your agents are reading an earlier version your office approved.'
-                          : `Your agents are reading ${company}’s words until this is approved.`}
+                          ? t.readingEarlier
+                          : t.readingCompany({ company })}
                       </p>
                       <ul className="mt-2 flex flex-col gap-1">
                         {/* Held with the script since OD-136, so it is decided with it. */}
                         {product.description?.overridden && (
                           <li className="text-md text-navy">
-                            <span className="text-sm font-semibold text-muted">{DESCRIPTION_LABEL}: </span>
+                            <span className="text-sm font-semibold text-muted">{t.description}: </span>
                             {product.description.value}
                           </li>
                         )}
                         {SCRIPT_FIELDS.filter((f) => product.script[f.key]?.overridden).map((f) => (
                           <li key={f.key} className="text-md text-navy">
-                            <span className="text-sm font-semibold text-muted">{f.label}: </span>
+                            <span className="text-sm font-semibold text-muted">{t.script[f.key]}: </span>
                             {asText(product.script[f.key].value)}
                           </li>
                         ))}
@@ -460,14 +457,14 @@ export default function KpmProductsPage() {
                           className={CONTROL_PHONE}
                           onClick={() => void decide(() => approveScript(product.productId))}
                         >
-                          Approve
+                          {t.approve}
                         </Button>
                         <Button
                           variant="inline"
                           disabled={busy}
                           onClick={() => { setSendingBack(product.productId); setReason(''); }}
                         >
-                          Send back
+                          {t.sendBack}
                         </Button>
                       </div>
                     )}
@@ -476,9 +473,9 @@ export default function KpmProductsPage() {
                   {sendingBack === product.productId && (
                     <div className="mt-3 border-t border-hairline pt-3">
                       <Field
-                        label="Why are you sending it back?"
+                        label={t.whySendBack}
                         htmlFor={`reason-${product.productId}`}
-                        hint="Required — somebody has to act on it, and “no” on its own is not something anybody can act on."
+                        hint={t.whySendBackHint}
                       >
                         <Textarea
                           id={`reason-${product.productId}`}
@@ -498,7 +495,7 @@ export default function KpmProductsPage() {
                             return next;
                           })}
                         >
-                          Send it back
+                          {t.sendItBack}
                         </Button>
                         <Button
                           variant="secondary"
@@ -506,7 +503,7 @@ export default function KpmProductsPage() {
                           className={CONTROL_PHONE}
                           onClick={() => setSendingBack(null)}
                         >
-                          Cancel
+                          {s.cancel}
                         </Button>
                       </div>
                     </div>
@@ -550,17 +547,17 @@ export default function KpmProductsPage() {
         <CodeField
           id={`code-product-code-${product.code}`}
           value={product.code}
-          reason={`Your company’s. Every office of ${company} uses the same one.`}
+          reason={t.codeReason({ company })}
           className="max-w-xs"
           inputClassName={CONTROL_PHONE}
         />
 
         <Field
-          label="What your office calls it"
+          label={t.officeName}
           htmlFor={`name-${product.productId}`}
           hint={product.displayName.overridden
-            ? `Yours. ${company} calls it ${product.companyName}.`
-            : `Following ${company}.`}
+            ? t.yoursCalls({ company, name: product.companyName })
+            : t.following({ company })}
           className="mt-3"
         >
           <TextInput
@@ -573,7 +570,7 @@ export default function KpmProductsPage() {
         </Field>
         {canWrite && (
           <div className="mt-2 flex flex-wrap gap-2">
-            <Button disabled={busy} className={CONTROL_PHONE} onClick={() => void save('displayName')}>Save the name</Button>
+            <Button disabled={busy} className={CONTROL_PHONE} onClick={() => void save('displayName')}>{t.saveName}</Button>
             {product.displayName.overridden && (
               <Button
                 variant="inline"
@@ -584,7 +581,7 @@ export default function KpmProductsPage() {
                   return row;
                 })}
               >
-                Use {company}’s name
+                {t.useCompanyName({ company })}
               </Button>
             )}
           </div>
@@ -597,9 +594,9 @@ export default function KpmProductsPage() {
           */}
         <div className="mt-3">
           <Field
-            label={DESCRIPTION_LABEL}
+            label={t.description}
             htmlFor={`description-${product.productId}`}
-            hint={product.description?.overridden ? 'Yours.' : `Following ${company}.`}
+            hint={product.description?.overridden ? t.yours : t.following({ company })}
           >
             <Textarea
               id={`description-${product.productId}`}
@@ -613,7 +610,7 @@ export default function KpmProductsPage() {
           {canWrite && (
             <div className="mt-2 flex flex-wrap gap-2">
               <Button variant="secondary" disabled={busy} className={CONTROL_PHONE} onClick={() => void save('description')}>
-                Save
+                {s.save}
               </Button>
               {product.description?.overridden && (
                 <Button
@@ -625,32 +622,31 @@ export default function KpmProductsPage() {
                     return row;
                   })}
                 >
-                  Use {company}’s
+                  {t.useCompanys({ company })}
                 </Button>
               )}
             </div>
           )}
         </div>
 
-        <h3 className="mt-5 font-display text-md font-bold text-navy">The attack plan</h3>
+        <h3 className="mt-5 font-display text-md font-bold text-navy">{t.attackPlan}</h3>
         <p className="text-sm text-muted">
-          Starts from {company}’s script — anything you change is saved for this office only, and
-          your agents keep reading the approved words until you approve the new ones.
+          {t.attackPlanLine({ company })}
         </p>
         {product.reviewState === 'rejected' && product.rejectionReason && (
           <p role="alert" className="mt-2 text-md text-navy">
-            <strong>Sent back:</strong> {product.rejectionReason}
+            <strong>{t.sentBackLabel}</strong> {product.rejectionReason}
           </p>
         )}
 
         {SCRIPT_FIELDS.map((f) => (
           <div key={f.key} className="mt-3">
             <Field
-              label={f.label}
+              label={t.script[f.key]}
               htmlFor={`${f.key}-${product.productId}`}
               hint={product.script[f.key]?.overridden
-                ? 'Yours.'
-                : `Following ${company}.`}
+                ? t.yours
+                : t.following({ company })}
             >
               <Textarea
                 id={`${f.key}-${product.productId}`}
@@ -663,7 +659,7 @@ export default function KpmProductsPage() {
             {canWrite && (
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button variant="secondary" disabled={busy} className={CONTROL_PHONE} onClick={() => void save(f.key)}>
-                  Save
+                  {s.save}
                 </Button>
                 {product.script[f.key]?.overridden && (
                   <Button
@@ -675,7 +671,7 @@ export default function KpmProductsPage() {
                       return row;
                     })}
                   >
-                    Use {company}’s
+                    {t.useCompanys({ company })}
                   </Button>
                 )}
               </div>
@@ -683,16 +679,16 @@ export default function KpmProductsPage() {
           </div>
         ))}
 
-        <h3 className="mt-5 font-display text-md font-bold text-navy">Documents</h3>
+        <h3 className="mt-5 font-display text-md font-bold text-navy">{t.documents}</h3>
         <ul className="mt-2 flex flex-col divide-y divide-hairline">
           {product.documents.map((doc) => (
             <li key={doc.slot} className="flex flex-wrap items-center gap-3 py-3">
               <div className="min-w-0 flex-1">
                 <p className="text-md text-navy">{doc.label}</p>
                 <p className="text-sm text-muted">
-                  {doc.source === 'kpm' && <>Uploaded by your office — {doc.filename}</>}
-                  {doc.source === 'company' && <>From {company}’s catalog</>}
-                  {doc.source === 'none' && <>Nobody has attached one yet.</>}
+                  {doc.source === 'kpm' && t.uploadedByOffice({ file: doc.filename ?? '' })}
+                  {doc.source === 'company' && t.fromCatalog({ company })}
+                  {doc.source === 'none' && t.noDocument}
                 </p>
               </div>
               {doc.storageKey && (
@@ -707,7 +703,7 @@ export default function KpmProductsPage() {
                     }
                   })()}
                 >
-                  Open
+                  {t.open}
                 </Button>
               )}
               {canWrite && product.sellable && product.active.value && (
@@ -730,7 +726,7 @@ export default function KpmProductsPage() {
                   onClick={() => void run(() =>
                     resetKpmProductDocument(product.productId, doc.slot))}
                 >
-                  Use {company}’s
+                  {t.useCompanys({ company })}
                 </Button>
               )}
             </li>
@@ -742,16 +738,16 @@ export default function KpmProductsPage() {
 
   return (
     <SettingsScreen
-      title="Products"
-      subtitle={`What your office sells from ${company}’s catalog, and the words you sell it with.`}
+      title={t.title}
+      subtitle={t.subtitle({ company })}
       /*
        * The office's drafts and review state live here (ADR-0037), so its read is the Owner's and the
        * Admin's alone — `product_settings:read`, not `tenant_config:read`, which every member holds
        * (the Phase 14 exit review). A field member reads the approved words on `/product-catalog`.
        */
       permission="product_settings:read"
-      tabs={TABS}
-      tabsLabel="Product sections"
+      tabs={TABS.map((tab, i) => ({ ...tab, label: [t.tabs.products, t.tabs.approvals][i] }))}
+      tabsLabel={t.tabsLabel}
       activeHref={tab}
       onSelectTab={setTab}
       error={rows === null ? error : null}

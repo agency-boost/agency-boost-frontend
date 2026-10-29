@@ -8,9 +8,11 @@ import { SummaryPeriodSelect, useSummaryPeriod } from '@/components/summary-peri
 import { ErrorBanner } from '@/components/ui/field';
 import { Segmented } from '@/components/ui/segmented';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { coachingMessages } from '@/i18n/messages/coaching';
 import { readActivityRatios, type ActivityRatios } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { PRONOUN_FORMS, type Coachee } from '@/lib/coaching';
+import type { Coachee } from '@/lib/coaching';
 import { readSummary, summaryPeriodFrom, type Summary, type SummaryPeriodQuery } from '@/lib/summary';
 import { useQuery } from '@/lib/use-query';
 
@@ -59,6 +61,7 @@ function SummaryTab() {
 }
 
 function CoacheeSummary({ coachee, address }: { coachee: Coachee; address: SummaryPeriodQuery }) {
+  const t = useMessages(coachingMessages).pages;
   const { asked, view, chooseView, choose, key } = useSummaryPeriod(address);
   /** The last Summary read: whose, for which period, and what it said. */
   const [held, setHeld] = useState<{ membershipId: string; key: string; summary: Summary } | null>(null);
@@ -92,7 +95,7 @@ function CoacheeSummary({ coachee, address }: { coachee: Coachee; address: Summa
   // The period's Summary of this person; another person's, or another period's, only holds the selects meanwhile.
   const frame = held?.membershipId === membershipId ? held.summary : null;
   const summary = frame && held?.key === key ? frame : null;
-  const waiting = <SkeletonCards count={2} label={`Putting ${PRONOUN_FORMS[pronoun].possessive} summary together…`} />;
+  const waiting = <SkeletonCards count={2} label={t.puttingTogether({ pronoun })} />;
 
   return (
     <div className="mx-auto max-w-[860px]">
@@ -100,7 +103,7 @@ function CoacheeSummary({ coachee, address }: { coachee: Coachee; address: Summa
       {!frame && !error && waiting}
       {frame && (
         <Segmented
-          label="Period"
+          label={t.period}
           tabs={SUMMARY_VIEWS}
           active={view}
           onSelect={(id) => chooseView(id as SummaryView)}

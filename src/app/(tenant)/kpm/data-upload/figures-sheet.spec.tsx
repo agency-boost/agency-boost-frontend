@@ -48,17 +48,22 @@ describe('P18.97-T7 AC-2 correctedWords: what the sheet did, in a sentence', () 
   });
 
   it('P18.97-T7 AC-2 says one figure in the panel’s own words', () => {
-    expect(correctedWords('Rina Wijaya', [result('ape', 'monthly', 150_000_000, 200_000_000)]))
+    expect(correctedWords('Rina Wijaya', [result('ape', 'monthly', 150_000_000, 200_000_000)], 'id'))
       .toBe('Corrected APE this month for Rina Wijaya: Rp 1.500.000 → Rp 2.000.000.');
   });
 
   it('P18.97-T7 AC-2 counts several and says each, in the order they were written', () => {
-    expect(correctedWords('Rina Wijaya', [result('policyCount', 'monthly', 2, 3), result('persistency', 'ytd', 86, null)]))
+    expect(correctedWords('Rina Wijaya', [result('policyCount', 'monthly', 2, 3), result('persistency', 'ytd', 86, null)], 'id'))
       .toBe('Corrected 2 figures for Rina Wijaya: # of policy this month 2 → 3; Rolling persistency year to date 86% → nothing reported.');
   });
 
   it('P18.97-T7 AC-2 says when nothing changed, as the panel does', () => {
-    expect(correctedWords('Rina Wijaya', [result('recruitment', 'ytd', 5, 5, false)]))
+    expect(correctedWords('Rina Wijaya', [result('recruitment', 'ytd', 5, 5, false)], 'id'))
       .toBe('Recruitment year to date for Rina Wijaya already reads 5 — nothing was changed.');
+  });
+
+  it('P18.98-T3 AC-4 writes the figures in full in the reader’s language: IDR 1,500,000 in English', () => {
+    expect(correctedWords('Rina Wijaya', [result('ape', 'monthly', 150_000_000, 200_000_000)], 'en'))
+      .toBe('Corrected APE this month for Rina Wijaya: IDR 1,500,000 → IDR 2,000,000.');
   });
 });

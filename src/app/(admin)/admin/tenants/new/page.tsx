@@ -7,6 +7,8 @@ import { Page } from '@/components/page';
 import {
   Button, ButtonLink, Card, ErrorBanner, Field, ReadOnlyField, Select, TextInput,
 } from '@/components/ui/field';
+import { useMessages } from '@/i18n/language-provider';
+import { adminOfficesMessages } from '@/i18n/messages/admin-offices';
 import {
   createTenant, insurersOf, isTemplateLibrary, listCompanies, listTemplates,
   type Company, type NamedTemplate, type StartFrom,
@@ -14,13 +16,6 @@ import {
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 
 const CODE = /^[A-Za-z0-9-]{2,16}$/;
-
-/** What each *Start from* choice gives the office, said under the field. */
-const START_HINT = {
-  template: 'Its settings are copied from this template’s published sections; a section it has not published starts empty, except Capability Mapping, which starts with AgencyBoost’s standard capability ladder.',
-  library: 'Its settings are copied from the Template library’s published sections, and every role they show must be on this company’s ladder. Changing the Template later changes nothing in this office.',
-  empty: 'Nothing but the three activity types the goal plan counts and AgencyBoost’s standard capability ladder. The Owner builds the rest.',
-} as const;
 
 /**
  * `template:<id>`, `library:<id>` or `empty`: one select's value for the three kinds of source. `library:` is
@@ -35,15 +30,16 @@ function startFromOf(value: string): StartFrom {
   return { kind: 'template', templateId: value.slice('template:'.length) };
 }
 
-/** The hint under *Start from* for one select value. */
-function hintOf(value: string): string {
-  if (value.startsWith('template:') || !value) return START_HINT.template;
-  if (value.startsWith('library:')) return START_HINT.library;
-  return START_HINT.empty;
+/** The hint under *Start from* for one select value: what each choice gives the office (the catalogue's words). */
+function hintOf(value: string): 'template' | 'library' | 'empty' {
+  if (value.startsWith('template:') || !value) return 'template';
+  if (value.startsWith('library:')) return 'library';
+  return 'empty';
 }
 
 export default function NewTenantPage() {
   const router = useRouter();
+  const { create: t, cancel } = useMessages(adminOfficesMessages);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [form, setForm] = useState({
     companyId: '',
@@ -163,22 +159,22 @@ export default function NewTenantPage() {
 
   return (
     <Page
-      title="New office"
-      subtitle="Its settings are copied from what it starts from; the office owns them afterwards."
+      title={t.title}
+      subtitle={t.subtitle}
     >
       <Card className="max-w-2xl">
         {insurers.length === 0 ? (
           <div>
-            <p className="text-md text-navy">There is no company to attach an office to.</p>
+            <p className="text-md text-navy">{t.noCompany}</p>
             <Link href="/admin/companies" className="mt-2 inline-block text-md text-navy underline">
-              Create a company first
+              {t.createCompany}
             </Link>
           </div>
         ) : (
           <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
             {error && <ErrorBanner {...error} />}
 
-            <Field label="Company" htmlFor="companyId">
+            <Field label={t.company} htmlFor="companyId">
               <Select id="companyId" required value={form.companyId} onChange={set('companyId')}>
                 {insurers.map((c) => (
                   <option key={c._id} value={c._id}>
@@ -190,10 +186,10 @@ export default function NewTenantPage() {
 
             <div className="flex flex-col gap-1">
               <Field
-                label="Start from"
+                label={t.startFrom}
                 htmlFor="startFrom"
-                hint={templatesError ? undefined : hintOf(chosen)}
-                error={templatesError ? `This company’s templates could not be read, so there is nothing to start from yet. ${templatesError.message}` : undefined}
+                hint={templatesError ? undefined : t.hint[hintOf(chosen)]}
+                error={templatesError ? t.templatesFailed({ message: templatesError.message }) : undefined}
               >
                 <Select
                   id="startFrom"
@@ -202,10 +198,10 @@ export default function NewTenantPage() {
                   invalid={Boolean(templatesError)}
                   onChange={(e) => setStartFrom(e.target.value)}
                 >
-                  {!chosen && <option value="">{templatesError ? 'Not loaded' : 'Loading…'}</option>}
-                  {templates?.map((t) => (
-                    <option key={t.id} value={`template:${t.id}`}>
-                      {t.isDefault ? `${t.name} · Default` : t.name}
+                  {!chosen && <option value="">{templatesError ? t.notLoaded : t.loading}</option>}
+                  {templates?.map((template) => (
+                    <option key={template.id} value={`template:${template.id}`}>
+                      {template.isDefault ? t.defaultTemplate({ name: template.name }) : template.name}
                     </option>
                   ))}
                   {templates !== null && library && libraryTemplate && (
@@ -213,35 +209,35 @@ export default function NewTenantPage() {
                       {`${library.name} · ${libraryTemplate.name}`}
                     </option>
                   )}
-                  {templates !== null && <option value="empty">Empty</option>}
+                  {templates !== null && <option value="empty">{t.empty}</option>}
                 </Select>
               </Field>
               {/* Outside the field, which links its hint and error to one control only. */}
               {templatesError && (
                 <Button variant="inline" className="self-start" onClick={() => setAttempt((n) => n + 1)}>
-                  Try again
+                  {t.tryAgain}
                 </Button>
               )}
             </div>
 
             <Field
-              label="Office code"
+              label={t.code}
               htmlFor="code"
-              hint="Unique within the company. Effectively permanent."
-              error={badCode ? '2–16 characters: letters, digits and hyphens.' : undefined}
+              hint={t.codeHint}
+              error={badCode ? t.codeError : undefined}
             >
               <TextInput id="code" required value={form.code} onChange={set('code')} invalid={badCode} />
             </Field>
 
-            <Field label="Branch name" htmlFor="branchName">
+            <Field label={t.branchName} htmlFor="branchName">
               <TextInput id="branchName" required minLength={2} value={form.branchName} onChange={set('branchName')} />
             </Field>
 
-            <Field label="Address" htmlFor="address" hint="Optional.">
+            <Field label={t.address} htmlFor="address" hint={t.optional}>
               <TextInput id="address" value={form.address} onChange={set('address')} />
             </Field>
 
-            <Field label="Contact phone" htmlFor="contactPhone" hint="Optional.">
+            <Field label={t.contactPhone} htmlFor="contactPhone" hint={t.optional}>
               <TextInput id="contactPhone" value={form.contactPhone} onChange={set('contactPhone')} />
             </Field>
 
@@ -250,17 +246,17 @@ export default function NewTenantPage() {
                 resolved to an Invalid DateTime for ever, with nothing raised at
                 creation (ADR-0016). */}
             <ReadOnlyField
-              label="Time zone"
+              label={t.timeZone}
               value="Asia/Jakarta"
-              reason="Every day boundary in this office — what counts as today, which week a figure falls in, when a month closes — is worked out in this zone, not in yours and not in the server's. v1 runs every office on Jakarta time."
+              reason={t.timeZoneReason}
             />
 
             <div className="flex gap-2">
               <Button type="submit" disabled={busy || badCode || !form.code || !form.branchName || !chosen}>
-                {busy ? 'Creating…' : 'Create office'}
+                {busy ? t.creating : t.submit}
               </Button>
               <ButtonLink href="/admin/tenants" variant="secondary">
-                Cancel
+                {cancel}
               </ButtonLink>
             </div>
           </form>

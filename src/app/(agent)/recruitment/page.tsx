@@ -3,7 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { Skeleton, SkeletonText } from '@/components/ui/skeleton';
-import { ATTACK_PLAN_HREF, OWN_COPY } from '@/lib/recruitment';
+import { useMessages } from '@/i18n/language-provider';
+import { recruitmentPlanMessages } from '@/i18n/messages/recruitment-plan';
+import { ATTACK_PLAN_HREF } from '@/lib/recruitment';
 
 /**
  * `/recruitment` hands off to `/recruitment/attack-plan`, the first tab (D-urls), as `/activity` hands
@@ -18,6 +20,7 @@ import { ATTACK_PLAN_HREF, OWN_COPY } from '@/lib/recruitment';
  * Neither a screen nor a placeholder: it renders no data and calls no endpoint.
  */
 export default function RecruitmentIndex() {
+  const t = useMessages(recruitmentPlanMessages);
   const router = useRouter();
 
   useEffect(() => {
@@ -25,7 +28,7 @@ export default function RecruitmentIndex() {
   }, [router]);
 
   return (
-    <Skeleton label={OWN_COPY.redirecting}>
+    <Skeleton label={t.redirecting}>
       <div className="rounded-lg border border-hairline bg-card p-4">
         <SkeletonText lines={5} />
       </div>

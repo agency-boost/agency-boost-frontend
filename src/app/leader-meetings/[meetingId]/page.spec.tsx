@@ -53,8 +53,8 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
 
     it('P18.1-T2 AC-3: the date is a button for whoever may move the meeting, named for what it does (ADR-0130 §4)', async () => {
       open();
-      const date = await screen.findByRole('button', { name: 'Change the date of Strategic Check-in — #14, 13 Okt 2026' });
-      expect(date).toHaveTextContent('13 Okt 2026');
+      const date = await screen.findByRole('button', { name: 'Change the date of Strategic Check-in — #14, 13 Oct 2026' });
+      expect(date).toHaveTextContent('13 Oct 2026');
     });
 
     it('P18.1-T2 AC-3, P18.97-T2 AC-3: Can edit these minutes — the Owner first, then the Admins, then the Core Leaders, "(You)" after the reader', async () => {
@@ -113,7 +113,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
       open(meetingView({ can: CORE_LEADER_CAN, editors: editors({ coreLeaders: [{ ...AGUS, isReader: true }, SARI, YOSEF] }) }), {}, CORE_LEADER_ME);
       await screen.findByRole('heading', { level: 2, name: 'Strategic Check-in — #14' });
       expect(head().queryByRole('button', { name: /Change the date/ })).not.toBeInTheDocument();
-      expect(head().getByText('13 Okt 2026 · Upcoming')).toBeInTheDocument();
+      expect(head().getByText('13 Oct 2026 · Upcoming')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'Manage tags →' })).not.toBeInTheDocument();
       for (const name of ['Share', 'Save as PDF', 'Save']) expect(head().getByRole('button', { name })).toBeInTheDocument();
       expect(screen.getByText('Agus Santoso (You) · AB')).toBeInTheDocument();
@@ -171,7 +171,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
       const patch = writes(calls).find((c) => c.init.method === 'PATCH')!;
       expect(JSON.parse(String(patch.init.body))).toEqual({ date: '2026-10-20', version: 3 });
-      expect(await head().findByRole('button', { name: /20 Okt 2026$/ })).toBeInTheDocument();
+      expect(await head().findByRole('button', { name: /20 Oct 2026$/ })).toBeInTheDocument();
     });
 
     it('P18.1-T2 AC-9: a move refused once the meeting has taken place says so under the date', async () => {
@@ -266,7 +266,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
       expect(field).toHaveAttribute('readonly');
       // 18:00 UTC on the 23rd is the 24th in Jakarta.
       expect(screen.getByRole('dialog')).toHaveAccessibleDescription(
-        "Anyone signed in to AgencyBoost at BSD City Branch can open this meeting's minutes with this link, read-only, until 24 Okt 2026.",
+        "Anyone signed in to AgencyBoost at BSD City Branch can open this meeting's minutes with this link, read-only, until 24 Oct 2026.",
       );
 
       await userEvent.click(dialog.getByRole('button', { name: 'Close' }));
@@ -323,7 +323,7 @@ describe('/leader-meetings/[meetingId] — a meeting (P18.1-T2, P18.1-T3)', () =
       print.mockImplementation(() => { titled = document.title; });
       act(() => { vi.advanceTimersByTime(400); });
       expect(print).toHaveBeenCalledTimes(1);
-      expect(titled).toBe('Strategic Check-in — #14 – 13 Okt 2026');
+      expect(titled).toBe('Strategic Check-in — #14 – 13 Oct 2026');
       expect(writes(calls)).toEqual([]);
     });
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { useFigureLanguage, useLanguage } from '@/i18n/language-provider';
 import { cn } from '@/lib/cn';
 import { formatMonth } from '@/lib/format';
 import { chartBars, shortMonth, type MonthlyProduction } from '@/lib/kpm-analytics';
@@ -20,7 +21,9 @@ import { chartBars, shortMonth, type MonthlyProduction } from '@/lib/kpm-analyti
  * are clipped by it.
  */
 export function MonthlyProductionChart({ monthly, labelledBy }: { monthly: readonly MonthlyProduction[]; labelledBy: string }) {
-  const bars = chartBars(monthly);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const bars = chartBars(monthly, language, figures);
   return (
     <div className="rounded-lg border border-hairline bg-card">
       <div className="relative overflow-x-auto p-5">
@@ -28,7 +31,7 @@ export function MonthlyProductionChart({ monthly, labelledBy }: { monthly: reado
           {bars.map((bar, i) => (
             <li key={bar.month} className="flex flex-1 flex-col items-center gap-1.5">
               <span className={cn('whitespace-nowrap text-2xs', bar.height === null ? 'italic text-muted' : 'font-semibold text-navy')}>
-                <span className="sr-only">{formatMonth(bar.month)}: </span>
+                <span className="sr-only">{formatMonth(bar.month, figures)}: </span>
                 {bar.value}
               </span>
               <span aria-hidden="true" className="flex h-[100px] w-full items-end">
@@ -42,7 +45,7 @@ export function MonthlyProductionChart({ monthly, labelledBy }: { monthly: reado
                   />
                 )}
               </span>
-              <span aria-hidden="true" className="text-xs text-muted">{shortMonth(bar.month)}</span>
+              <span aria-hidden="true" className="text-xs text-muted">{shortMonth(bar.month, figures)}</span>
             </li>
           ))}
         </ul>

@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { use, useEffect } from 'react';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { coachingMessages } from '@/i18n/messages/coaching';
 
 /**
  * `/coaching/{membershipId}` opens the person on their *Coaching Session* tab, as the prototype's
@@ -19,10 +21,11 @@ import { SkeletonCards } from '@/components/ui/skeleton';
 export default function CoachingPersonIndex({ params }: { params: Promise<{ membershipId: string }> }) {
   const { membershipId } = use(params);
   const router = useRouter();
+  const t = useMessages(coachingMessages).pages;
 
   useEffect(() => {
     router.replace(`/coaching/${encodeURIComponent(membershipId)}/session`);
   }, [router, membershipId]);
 
-  return <SkeletonCards count={2} label="Opening the coaching session…" />;
+  return <SkeletonCards count={2} label={t.opening} />;
 }

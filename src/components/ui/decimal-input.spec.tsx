@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { browserChose, InLanguage, resetLanguage } from '@test/harness';
+import { LanguageProvider } from '@/i18n/language-provider';
 import { DecimalInput } from './decimal-input';
 
 /** P18.95-T1 AC-3 (ADR-0167 §1): a decimal typed with a comma or a point. */
@@ -59,10 +61,86 @@ describe('DecimalInput', () => {
     expect(screen.getByRole('status')).toHaveTextContent('5.2');
   });
 
-  it('writes a value set from outside with a comma', async () => {
+  it('P18.98-T3 AC-3 writes a value set from outside in the reader’s mark: a point in English, the specs’ default', async () => {
     render(<Harness initial={3.1} />);
+    expect(screen.getByLabelText('Closing rate')).toHaveValue('3.1');
+    await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
+    expect(screen.getByLabelText('Closing rate')).toHaveValue('42.5');
+  });
+
+  it('P18.98-T3 AC-3 writes a value set from outside with a comma in Indonesian, as before', async () => {
+    render(<InLanguage language="id"><Harness initial={3.1} /></InLanguage>);
     expect(screen.getByLabelText('Closing rate')).toHaveValue('3,1');
     await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
     expect(screen.getByLabelText('Closing rate')).toHaveValue('42,5');
+  });
+
+  it.each(['id', 'en'] as const)('P18.98-T3 AC-3 reads a comma and a point alike in %s, keeping what was typed', async (language) => {
+    const onValue = vi.fn();
+    render(<InLanguage language={language}><Harness onValue={onValue} /></InLanguage>);
+    const field = screen.getByLabelText('Closing rate');
+    await userEvent.type(field, '17,6');
+    expect(field).toHaveValue('17,6');
+    expect(onValue).toHaveBeenLastCalledWith(17.6);
+    await userEvent.clear(field);
+    await userEvent.type(field, '17.6');
+    expect(field).toHaveValue('17.6');
+    expect(onValue).toHaveBeenLastCalledWith(17.6);
+  });
+});
+
+/**
+ * **P18.98-T3 figures: a value set from outside in the figures' mark** — the reader's chosen language, and Indonesian
+ * with no choice, whether or not the switch is live (`useFigureLanguage`). Until it is, a reader with no choice sees
+ * *3,1* in a field whose label is English, as before T3. Under the app's own provider.
+ */
+describe('P18.98-T3 figures DecimalInput', () => {
+  afterEach(() => resetLanguage());
+
+  function Rate() {
+    const [value, setValue] = useState<number | null>(3.1);
+    return (
+      <>
+        <label htmlFor="r">Closing rate</label>
+        <DecimalInput id="r" value={value} onValueChange={setValue} suffix="%" />
+        <button type="button" onClick={() => setValue(42.5)}>Reset</button>
+      </>
+    );
+  }
+
+  /**
+   * The field mounted once the page is up, as a screen's field mounts: behind the session, after the provider's first
+   * commit has read the browser's choice. The box keeps the text it was first written in (a change of language leaves
+   * it alone), so it is never mounted in the provider's own first frame.
+   */
+  function open(live: boolean) {
+    const { rerender } = render(<LanguageProvider live={live}>{null}</LanguageProvider>);
+    rerender(<LanguageProvider live={live}><Rate /></LanguageProvider>);
+    return screen.getByLabelText('Closing rate');
+  }
+
+  it('P18.98-T3 figures, unchosen and not live: 3,1 and 42,5 with a comma, under an English label', async () => {
+    const field = open(false);
+    expect(field).toHaveValue('3,1');
+    await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
+    expect(field).toHaveValue('42,5');
+  });
+
+  it('P18.98-T3 figures, chosen English by the browser, not live: 3.1 and 42.5 with a point', async () => {
+    browserChose('en');
+    const field = open(false);
+    expect(field).toHaveValue('3.1');
+    await userEvent.click(screen.getByRole('button', { name: 'Reset' }));
+    expect(field).toHaveValue('42.5');
+  });
+
+  it('P18.98-T3 figures, chosen Indonesian by the browser, not live: 3,1', () => {
+    browserChose('id');
+    expect(open(false)).toHaveValue('3,1');
+  });
+
+  it('P18.98-T3 figures, live and unchosen: 3,1, in a screen whose language is Indonesian', () => {
+    expect(open(true)).toHaveValue('3,1');
+    expect(document.documentElement.lang).toBe('id');
   });
 });

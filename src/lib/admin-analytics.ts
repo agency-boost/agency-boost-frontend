@@ -1,3 +1,6 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { DEFAULT_LANGUAGE, LANGUAGES, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { adminAnalyticsMessages } from '@/i18n/messages/admin-analytics';
 import { api } from './api-client';
 import { formatMonth, formatNumber, formatPercent, percentOf } from './format';
 import { tenantStatusTone, tenantStatusWord, type TenantRow } from './admin';
@@ -76,9 +79,10 @@ export const readPlatformAnalytics = () => api<PlatformAnalyticsView>('/admin/an
 
 /**
  * A count as the console writes one: `1.340` — `id-ID`'s grouping since ADR-0167 §1, where the Platform
- * Overview's tiles wrote `1,340` (`Superadmin.html:313`). One grouping for every number on every screen.
+ * Overview's tiles wrote `1,340` (`Superadmin.html:313`). One grouping for every number on every screen; `1,340` in
+ * English figures (P18.98-T3), the figures' `language` passed last.
  */
-export const formatCount = (n: number) => formatNumber(n);
+export const formatCount = (n: number, language: Language = DEFAULT_LANGUAGE) => formatNumber(n, {}, language);
 
 /**
  * The share of `of` that `part` is, a whole percent rounded half up in integers (`percentOf`, the server's `rateOver`
@@ -90,9 +94,11 @@ export function shareOf(part: number, of: number): number | null {
 }
 
 /** *Signed in within …*: the count, and what share of the row's members it is (*"12 (80%)"*), whole (ADR-0174 §1). */
-export function signedInWords(signedIn: number, members: number): string {
+export function signedInWords(signedIn: number, members: number, figures: Language = DEFAULT_LANGUAGE): string {
   const pct = shareOf(signedIn, members);
-  return pct === null ? formatCount(signedIn) : `${formatCount(signedIn)} (${formatPercent(pct)})`;
+  return pct === null
+    ? formatCount(signedIn, figures)
+    : `${formatCount(signedIn, figures)} (${formatPercent(pct, {}, figures)})`;
 }
 
 /**
@@ -101,10 +107,10 @@ export function signedInWords(signedIn: number, members: number): string {
  * a ladder: a column per rung would be blank for every company without it, and its heading would be one
  * company's word for a rung another names differently.
  */
-export function rungWords(byRung: readonly AdoptionRung[]): string {
+export function rungWords(byRung: readonly AdoptionRung[], figures: Language = DEFAULT_LANGUAGE): string {
   // A no-break space inside each pair, so a narrow cell wraps between rungs and never between a
   // rung's label and its count.
-  return byRung.length === 0 ? '—' : byRung.map((r) => `${r.label}\u00a0${formatCount(r.count)}`).join(' · ');
+  return byRung.length === 0 ? '—' : byRung.map((r) => `${r.label}\u00a0${formatCount(r.count, figures)}`).join(' · ');
 }
 
 /**
@@ -121,47 +127,72 @@ const STATE_PARTS: Record<string, Pick<TenantRow, 'status' | 'subscriptionState'
 
 /**
  * An office's state, **as *All KPMs* shows it** (T8 AC-2): the word and the pill's tone. Accepts the
- * state's code or the word itself, since either names the same thing; anything else is printed as it
- * came, in the neutral tone, rather than read as a state it is not.
+ * state's code or the word itself, in either language, since either names the same thing; anything else is
+ * printed as it came, in the neutral tone, rather than read as a state it is not. The word in the reader's
+ * `language` (P18.98-T6), English, the source, when given none.
  */
-export function officeState(state: string): { word: string; tone: ReturnType<typeof tenantStatusTone> } {
-  const parts = STATE_PARTS[state] ?? Object.values(STATE_PARTS).find((p) => tenantStatusWord(p) === state);
-  return parts ? { word: tenantStatusWord(parts), tone: tenantStatusTone(parts) } : { word: state, tone: 'neutral' };
+export function officeState(
+  state: string,
+  language: Language = SOURCE_LANGUAGE,
+): { word: string; tone: ReturnType<typeof tenantStatusTone> } {
+  const parts = STATE_PARTS[state]
+    ?? Object.values(STATE_PARTS).find((p) => LANGUAGES.some((l) => tenantStatusWord(p, l) === state));
+  return parts ? { word: tenantStatusWord(parts, language), tone: tenantStatusTone(parts) } : { word: state, tone: 'neutral' };
 }
 
-const plural = (n: number, one: string, many: string) => `${formatCount(n)} ${n === 1 ? one : many}`;
-
 /**
- * Every string the screen writes. The title is the nav item's, verbatim (`Superadmin.html:204`); the
- * rest are ours, and use none of OD-39's six words (D-copy): the table's rows are *branches*, which is
- * what *All KPMs*' *Branch* column calls them.
+ * Every string the screen writes, in English — the catalogue's source (`i18n/messages/admin-analytics.ts`, P18.98-T6).
+ * The title is the nav item's, verbatim (`Superadmin.html:204`); the rest are ours, and use none of OD-39's six words
+ * (D-copy): the table's rows are *branches*, which is what *All KPMs*' *Branch* column calls them.
  */
-export const PLATFORM_ANALYTICS_COPY = {
-  title: 'Cross-platform analytics',
-  subtitle: 'Adoption across every company on AgencyBoost',
-  caption: 'Adoption by branch and company',
-  empty: 'No branches on the platform yet.',
-  tryAgain: 'Try again',
-  companyTotal: (name: string, branches: number) => `${name} — Total (${plural(branches, 'branch', 'branches')})`,
-  platformTotal: (companies: number, branches: number) =>
-    `Platform — Total (${plural(companies, 'company', 'companies')}, ${plural(branches, 'branch', 'branches')})`,
-} as const;
+export const PLATFORM_ANALYTICS_COPY = adminAnalyticsMessages.en;
 
-/** The table's headings, in order: *All KPMs*' first four, verbatim, then the figures. */
-export const PLATFORM_ANALYTICS_HEADINGS = [
-  'Code', 'Branch', 'Company', 'Status', 'Members', 'By rung',
-  'Joined this month', 'Left this month', 'Signed in within 7 days', 'Signed in within 30 days',
-] as const;
+/** The table's headings, in order: *All KPMs*' first four, verbatim, then the figures — in the reader's `language`. */
+export function analyticsHeadings(language: Language = SOURCE_LANGUAGE): readonly string[] {
+  const h = messagesIn(adminAnalyticsMessages, language).headings;
+  return [h.code, h.branch, h.company, h.status, h.members, h.byRung, h.joined, h.left, h.signedIn7d, h.signedIn30d];
+}
+
+/** The table's headings in English, the catalogue's source. */
+export const PLATFORM_ANALYTICS_HEADINGS: readonly string[] = analyticsHeadings();
 
 /**
  * The headings once the read says which month *this month* is: *"Joined in October 2026"* (data honesty —
- * a reader on the first of a month should not have to guess which month the two columns count).
+ * a reader on the first of a month should not have to guess which month the two columns count). The month in the
+ * figures' language, the words in the words' (P18.98-T6).
  */
-export function platformHeadings(month: string | null): readonly string[] {
-  if (!month) return PLATFORM_ANALYTICS_HEADINGS;
-  const name = formatMonth(month);
-  return PLATFORM_ANALYTICS_HEADINGS.map((h) =>
-    (h === 'Joined this month' ? `Joined in ${name}` : h === 'Left this month' ? `Left in ${name}` : h));
+export function platformHeadings(
+  month: string | null,
+  figures: Language = DEFAULT_LANGUAGE,
+  language: Language = SOURCE_LANGUAGE,
+): readonly string[] {
+  const headings = analyticsHeadings(language);
+  if (!month) return headings;
+  const t = messagesIn(adminAnalyticsMessages, language);
+  const name = formatMonth(month, figures);
+  return headings.map((h, i) => (i === 6 ? t.joinedIn({ month: name }) : i === 7 ? t.leftIn({ month: name }) : h));
+}
+
+/** A company's total row's label: *Prudential — Total (2 branches)*, the count in the figures' language. */
+export function companyTotalWords(
+  name: string,
+  branches: number,
+  figures: Language = DEFAULT_LANGUAGE,
+  language: Language = SOURCE_LANGUAGE,
+): string {
+  return messagesIn(adminAnalyticsMessages, language).companyTotal({ name, n: branches, branches: formatCount(branches, figures) });
+}
+
+/** The platform's total row's label: *Platform — Total (2 companies, 3 branches)*. */
+export function platformTotalWords(
+  companies: number,
+  branches: number,
+  figures: Language = DEFAULT_LANGUAGE,
+  language: Language = SOURCE_LANGUAGE,
+): string {
+  return messagesIn(adminAnalyticsMessages, language).platformTotal({
+    c: companies, companies: formatCount(companies, figures), b: branches, branches: formatCount(branches, figures),
+  });
 }
 
 /**

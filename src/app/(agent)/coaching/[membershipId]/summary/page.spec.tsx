@@ -178,7 +178,7 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
     show(summary());
     const goal = await card('Goal vs. actual (APE)');
 
-    expect(within(goal).getByText('Rp 30 jt')).toBeInTheDocument();
+    expect(within(goal).getByText('IDR 30M')).toBeInTheDocument();
     // Never the prototype's input (`#producedInput-cs`, contradiction #7).
     expect(within(goal).queryByRole('textbox')).not.toBeInTheDocument();
     const marker = within(goal).getByRole('button', { name: 'From the production upload, Sep 2026' });
@@ -218,7 +218,7 @@ describe('a coachee’s Personal Summary tab (P11-T7 AC-4)', () => {
 
     const pulse = await card('Activity pulse');
     expect(pulse).toHaveTextContent('Last 30 days');
-    expect(await within(pulse).findByText('18,0%')).toBeInTheDocument();
+    expect(await within(pulse).findByText('18.0%')).toBeInTheDocument();
     expect(within(pulse).getByText('Selling success rate')).toBeInTheDocument();
     expect(within(pulse).queryByText('Upcoming')).not.toBeInTheDocument();
   });
@@ -406,14 +406,14 @@ describe('a coachee’s Personal Summary tab — an earlier month or year (P18.8
     open();
     const select = await screen.findByRole('combobox', { name: 'Month' });
     expect(within(select).getAllByRole('option').map((o) => o.textContent))
-      .toEqual(['Sep 2026', 'Agu 2026', 'Jul 2026', 'Jun 2026']);
+      .toEqual(['Sep 2026', 'Aug 2026', 'Jul 2026', 'Jun 2026']);
     await userEvent.click(screen.getByRole('tab', { name: 'Yearly' }));
     expect(within(screen.getByRole('combobox', { name: 'Year' })).getAllByRole('option').map((o) => o.textContent)).toEqual(['2026']);
   });
 
   it('P18.8-T11 AC-2 reads her August with for and the month together, the month in this tab’s own address', async () => {
     const { calls } = open();
-    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Month' }), 'Agu 2026');
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Month' }), 'Aug 2026');
 
     expect(nav.replace).toHaveBeenCalledWith('/coaching/mem-rina/summary?month=2026-08', { scroll: false });
     await waitFor(() => expect(reads(calls)).toEqual(['?for=mem-rina', '?for=mem-rina&month=2026-08']));
@@ -425,10 +425,10 @@ describe('a coachee’s Personal Summary tab — an earlier month or year (P18.8
     const { calls } = open({ month: '2026-08' });
     const goal = await card('Goal vs. actual (APE)');
 
-    expect(within(goal).getByText('Agu 2026')).toBeInTheDocument();
+    expect(within(goal).getByText('Aug 2026')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'The gap' })).not.toBeInTheDocument();
     expect(screen.queryByText(/current pace/)).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('Agu 2026');
+    expect(screen.getByRole('combobox', { name: 'Month' })).toHaveDisplayValue('Aug 2026');
     expect(reads(calls)).toEqual(['?for=mem-rina&month=2026-08']);
   });
 });

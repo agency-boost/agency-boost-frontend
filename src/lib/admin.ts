@@ -1,5 +1,8 @@
 'use client';
 
+import { messagesIn } from '@/i18n/catalogue';
+import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { officeSubscriptionMessages } from '@/i18n/messages/office-subscription';
 import { api } from './api-client';
 import { formatCalendarDay } from './format';
 
@@ -331,22 +334,29 @@ export const startImpersonation = (
 export const endImpersonation = () =>
   api<{ status: string }>('/admin/impersonate/end', { method: 'POST' });
 
-/** Tenant status is a lifecycle, not a health signal — so it gets its own labels. */
-export const TENANT_STATUS_LABEL: Record<TenantStatus, string> = {
-  active: 'Active',
-  suspended: 'Suspended',
-  archived: 'Archived',
-};
+/**
+ * Tenant status is a lifecycle, not a health signal — so it gets its own labels. The catalogue's English
+ * (`i18n/messages/office-subscription.ts`); a screen reads its reader's with `tenantStatusLabels(language)`.
+ */
+export const TENANT_STATUS_LABEL: Readonly<Record<TenantStatus, string>> = officeSubscriptionMessages.en.status;
+
+/** The three lifecycle words in the reader's `language` (P18.98-T6), English, the source, when given none. */
+export const tenantStatusLabels = (language: Language = SOURCE_LANGUAGE): Readonly<Record<TenantStatus, string>> =>
+  messagesIn(officeSubscriptionMessages, language).status;
 
 /**
  * **What the Status column reads** (ADR-0112 §2, P13.2-T3 AC-7): *Ended* or *Ended — kept active* in
  * place of *Active* when the subscription's end has passed. A suspended or archived office keeps its own
- * word, which says more: its members meet that refusal first.
+ * word, which says more: its members meet that refusal first. In the reader's `language` (P18.98-T6).
  */
-export function tenantStatusWord(row: Pick<TenantRow, 'status' | 'subscriptionState'>): string {
-  if (row.status === 'active' && row.subscriptionState === 'ended') return 'Ended';
-  if (row.status === 'active' && row.subscriptionState === 'ended_kept_active') return 'Ended — kept active';
-  return TENANT_STATUS_LABEL[row.status];
+export function tenantStatusWord(
+  row: Pick<TenantRow, 'status' | 'subscriptionState'>,
+  language: Language = SOURCE_LANGUAGE,
+): string {
+  const t = messagesIn(officeSubscriptionMessages, language);
+  if (row.status === 'active' && row.subscriptionState === 'ended') return t.ended;
+  if (row.status === 'active' && row.subscriptionState === 'ended_kept_active') return t.endedKeptActive;
+  return t.status[row.status];
 }
 
 /** The pill's tone for the same: an office its members cannot use reads as alert. */
@@ -363,15 +373,21 @@ export function tenantStatusTone(
 
 /**
  * The subscription in one line, for the detail page's *Lifecycle* card (P13.2-T3 AC-8): *No end date*,
- * *Active until January 5, 2027*, *Ended September 25, 2026*, or *Ended October 2, 2026 — kept active*.
+ * *Active until 5 Jan 2027*, *Ended 25 Sep 2026*, or *Ended 2 Oct 2026 — kept active*. The date in the
+ * figures' language, the words in the words' (P18.98-T6): Indonesian figures and English words when given neither.
  */
-export function subscriptionLine(row: Pick<TenantRow, 'subscription' | 'subscriptionState'>): string {
+export function subscriptionLine(
+  row: Pick<TenantRow, 'subscription' | 'subscriptionState'>,
+  figures: Language = DEFAULT_LANGUAGE,
+  language: Language = SOURCE_LANGUAGE,
+): string {
+  const t = messagesIn(officeSubscriptionMessages, language);
   const end = row.subscription?.endDate;
-  if (!end || row.subscriptionState === 'none') return 'No end date';
-  const day = formatCalendarDay(end);
-  if (row.subscriptionState === 'ended') return `Ended ${day}`;
-  if (row.subscriptionState === 'ended_kept_active') return `Ended ${day} — kept active`;
-  return `Active until ${day}`;
+  if (!end || row.subscriptionState === 'none') return t.noEndDate;
+  const day = formatCalendarDay(end, figures);
+  if (row.subscriptionState === 'ended') return t.endedOn({ day });
+  if (row.subscriptionState === 'ended_kept_active') return t.endedOnKeptActive({ day });
+  return t.activeUntil({ day });
 }
 
 /** *Leaders* (ADR-0112 §2): `"{used} / {max}"`, or the count alone when the office has no limit. */
@@ -389,13 +405,14 @@ export function leadersOver(row: Pick<TenantRow, 'leadersUsed' | 'subscription'>
   return max === null ? 0 : Math.max(0, row.leadersUsed - max);
 }
 
-/** The *Leaders* cell in words, for a screen reader: *13 leaders of a limit of 10, 3 over*. */
-export function leadersSaid(row: Pick<TenantRow, 'leadersUsed' | 'subscription'>): string {
-  const max = row.subscription?.maxLeaders ?? null;
-  const used = `${row.leadersUsed} ${row.leadersUsed === 1 ? 'leader' : 'leaders'}`;
-  if (max === null) return `${used}, no limit`;
-  const over = leadersOver(row);
-  return `${used} of a limit of ${max}${over > 0 ? `, ${over} over` : ''}`;
+/** The *Leaders* cell in words, for a screen reader: *13 leaders of a limit of 10, 3 over* — in the reader's `language`. */
+export function leadersSaid(
+  row: Pick<TenantRow, 'leadersUsed' | 'subscription'>,
+  language: Language = SOURCE_LANGUAGE,
+): string {
+  return messagesIn(officeSubscriptionMessages, language).leadersSaid({
+    used: row.leadersUsed, max: row.subscription?.maxLeaders ?? null, over: leadersOver(row),
+  });
 }
 
 /** Filling a new office from a spreadsheet (P3.6-T4). */

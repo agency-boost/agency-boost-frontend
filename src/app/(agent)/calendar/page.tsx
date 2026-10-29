@@ -3,7 +3,9 @@
 import { Suspense } from 'react';
 import { CalendarScreen } from '@/components/calendar/calendar-screen';
 import { Page } from '@/components/page';
-import { PROTOTYPE_COPY, readableDate } from '@/lib/calendar';
+import { useMessages } from '@/i18n/language-provider';
+import { calendarMessages } from '@/i18n/messages/calendar';
+import { readableDate } from '@/lib/calendar';
 import { useQuery } from '@/lib/use-query';
 
 const one = (value: string | string[] | undefined) => (typeof value === 'string' && value ? value : undefined);
@@ -42,8 +44,9 @@ function Calendar() {
   const date = readableDate(one(query.date));
   const entry = one(query.entry);
   const withId = one(query.with);
+  const t = useMessages(calendarMessages);
   return (
-    <Page title={PROTOTYPE_COPY.calendar} permission="calendar_entry:read">
+    <Page title={t.title} permission="calendar_entry:read">
       <CalendarScreen
         key={`${view ?? ''}|${date ?? ''}|${entry ?? ''}|${withId ?? ''}`}
         initialView={view}

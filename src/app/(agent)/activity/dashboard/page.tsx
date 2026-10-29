@@ -3,6 +3,8 @@
 import { ActivityDashboardPanel } from '@/components/activity-dashboard';
 import { ACTIVITY_TITLE, ActivityTabs } from '@/components/activity-tabs';
 import { Page } from '@/components/page';
+import { useMessages } from '@/i18n/language-provider';
+import { activityMessages } from '@/i18n/messages/activity';
 
 /**
  * The Activity Dashboard (P10-T1): your own days over a range, types down and time across
@@ -12,8 +14,9 @@ import { Page } from '@/components/page';
  * (P13.1-T9). Here it is the reader's own, under the screen's title and the activity tabs.
  */
 export default function ActivityDashboardPage() {
+  const t = useMessages(activityMessages);
   return (
-    <Page title={ACTIVITY_TITLE} subtitle="Your own activity, day by day.">
+    <Page title={ACTIVITY_TITLE} subtitle={t.dashboard.subtitle}>
       <ActivityTabs />
       <ActivityDashboardPanel />
     </Page>

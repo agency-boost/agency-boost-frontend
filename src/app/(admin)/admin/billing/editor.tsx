@@ -2,10 +2,13 @@
 
 import { useEffect, useId } from 'react';
 import { Button, Select, TextInput } from '@/components/ui/field';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { billingMessages } from '@/i18n/messages/billing';
 import {
-  BILLING_COPY as COPY, BILLING_OWN_COPY as OWN, maskAmount, money, perLeaderDiscount, saveWords, tierLabel,
+  maskAmount, money, perLeaderDiscount, saveWordsIn, tierLabel,
   type BillingPeriod, type BillingTier, type CalculatorInput, type DiscountType, type Pricing,
 } from '@/lib/billing';
+import { moneyPrefix } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
 /**
@@ -24,11 +27,14 @@ export function TierCards({
   current: BillingTier;
   onTalkToUs: () => void;
 }) {
+  const COPY = useMessages(billingMessages).prototype;
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   return (
     <ul className="mb-8 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
       {tiers.map((tier) => {
         const isCurrent = tier.code === current.code;
-        const range = <span className="text-sm font-bold uppercase tracking-[0.03em] text-navy">{tierLabel(tier)}{COPY.leadersSuffix}</span>;
+        const range = <span className="text-sm font-bold uppercase tracking-[0.03em] text-navy">{COPY.tierLeaders({ range: tierLabel(tier) })}</span>;
         const flag = isCurrent && (
           <span className={cn('text-2xs font-bold uppercase tracking-[0.04em]', AMBER_TEXT)}>{COPY.yourTier}</span>
         );
@@ -53,13 +59,13 @@ export function TierCards({
               </>
             ) : (
               <>
-                <s className="text-sm text-muted">{money(tier.standardMinor)}{COPY.perMonth}</s>
+                <s className="text-sm text-muted">{money(tier.standardMinor, figures)}{COPY.perMonth}</s>
                 <span className="font-display text-2xl font-bold text-navy">
-                  {money(tier.sixMonthMinor)}
+                  {money(tier.sixMonthMinor, figures)}
                   <span className="font-body text-xs font-medium text-muted">{COPY.perLeaderMonth}</span>
                 </span>
                 <span className="self-start rounded-pill bg-success/10 px-[9px] py-[3px] text-xs font-bold text-success">
-                  {saveWords(tier)}
+                  {saveWordsIn(tier, figures, language)}
                 </span>
               </>
             )}
@@ -96,6 +102,9 @@ export function Estimate({
   /** Bumped by the page to move the focus to the discount field, once the disclosure is open. */
   focusDiscount: number;
 }) {
+  const { prototype: COPY, own: OWN } = useMessages(billingMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const id = useId();
   const ids = {
     heading: `${id}-heading`, leaders: `${id}-leaders`, period: `${id}-period`,
@@ -150,34 +159,36 @@ export function Estimate({
 
       {tier.customPricing ? (
         <p className={cn('mt-2.5 text-sm font-semibold', AMBER_TEXT)}>
-          {pricing.leaders}{COPY.leadersSuffix} falls in the {tierLabel(tier)} tier — shown as &quot;custom pricing&quot; publicly, real rate calculated below for your own quoting.
+          {COPY.fallsInCustom({ n: pricing.leaders, range: tierLabel(tier) })}
         </p>
       ) : (
         <p className="mt-2.5 text-sm text-muted">
-          <b className="text-navy">{pricing.leaders}</b> leader{pricing.leaders === 1 ? '' : 's'} falls in the <b className="text-navy">{tierLabel(tier)}</b> tier.
+          {COPY.fallsIn({
+            n: pricing.leaders, range: tierLabel(tier), bold: (words) => <b className="text-navy">{words}</b>,
+          })}
         </p>
       )}
 
       <dl className="mt-[18px] border-y border-hairline py-4">
         <Row label={COPY.standardRow}>
-          <s className="text-lg font-medium text-muted">{money(pricing.standardMinor)}</s>
+          <s className="text-lg font-medium text-muted">{money(pricing.standardMinor, figures)}</s>
         </Row>
         <Row label={COPY.offerRow}>
           {furtherDiscount
-            ? <s className={cn('font-display text-lg font-medium', AMBER_TEXT)}>{money(pricing.offerMinor)}</s>
-            : <span className={cn('font-display text-lg font-bold', AMBER_TEXT)}>{money(pricing.offerMinor)}</span>}
+            ? <s className={cn('font-display text-lg font-medium', AMBER_TEXT)}>{money(pricing.offerMinor, figures)}</s>
+            : <span className={cn('font-display text-lg font-bold', AMBER_TEXT)}>{money(pricing.offerMinor, figures)}</span>}
         </Row>
         {/* Shown only when the final rate is below the six-month rate: always on Annual (`:510-511`). */}
         {furtherDiscount && (
           <Row label={COPY.offerAfterRow}>
-            <span className={cn('font-display text-lg font-bold', AMBER_TEXT)}>{money(pricing.finalMinor)}</span>
+            <span className={cn('font-display text-lg font-bold', AMBER_TEXT)}>{money(pricing.finalMinor, figures)}</span>
           </Row>
         )}
         <Row label={COPY.monthlyRow}>
-          <span className="text-lg font-semibold text-navy">{money(pricing.monthlyTotalMinor)}</span>
+          <span className="text-lg font-semibold text-navy">{money(pricing.monthlyTotalMinor, figures)}</span>
         </Row>
         <Row label={input.period === 'annual' ? COPY.annualTotal : COPY.sixMonthTotal} hero>
-          <span className={cn('font-display text-3xl font-bold', AMBER_TEXT)}>{money(pricing.periodTotalMinor)}</span>
+          <span className={cn('font-display text-3xl font-bold', AMBER_TEXT)}>{money(pricing.periodTotalMinor, figures)}</span>
         </Row>
       </dl>
 
@@ -188,7 +199,7 @@ export function Estimate({
             {input.period === 'annual' ? COPY.annualDiscountOn : COPY.annualDiscount}
           </span>
           {input.period === 'annual'
-            ? <span className="whitespace-nowrap text-md font-semibold text-success">{perLeaderDiscount(pricing.annualDiscountMinor)}</span>
+            ? <span className="whitespace-nowrap text-md font-semibold text-success">{perLeaderDiscount(pricing.annualDiscountMinor, figures, language)}</span>
             : <span className="text-md font-medium text-muted">{OWN.notApplied}</span>}
         </div>
 
@@ -211,7 +222,7 @@ export function Estimate({
                 invalid={pricing.discountError !== null}
                 aria-describedby={pricing.discountError ? ids.discountError : undefined}
                 onChange={(e) => set({
-                  discount: input.discountType === 'flat' ? maskAmount(e.target.value) : e.target.value,
+                  discount: input.discountType === 'flat' ? maskAmount(e.target.value, figures) : e.target.value,
                 })}
                 className="w-[7.5rem] bg-base text-lg"
               />
@@ -222,8 +233,8 @@ export function Estimate({
                 onChange={(e) => set({ discountType: e.target.value as DiscountType, discount: '0' })}
                 className="w-[9.375rem] bg-base text-lg"
               >
-                <option value="percent">{COPY.percentOption}</option>
-                <option value="flat">{COPY.flatOption}</option>
+                <option value="percent">%</option>
+                <option value="flat">{COPY.flatOption({ mark: moneyPrefix(figures) })}</option>
               </Select>
             </div>
           </div>

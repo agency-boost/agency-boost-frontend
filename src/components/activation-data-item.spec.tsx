@@ -61,8 +61,8 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
       done: true, doneAt: '2026-10-01T03:00:00.000Z', source: 'link', doneBy: SARI, record: { collection: 'coachingSessions', id: 's-4' },
     });
     hirePage({}, activationView({}, items));
-    const own = within(await screen.findByText('Completed from Coaching sessions · 1 Okt 2026').then(() => row('WEEKLY_CHECK_IN')));
-    expect(own.getByRole('link', { name: 'Completed from Coaching sessions · 1 Okt 2026' })).toHaveAttribute('href', '/coaching/me?session=s-4');
+    const own = within(await screen.findByText('Completed from Coaching sessions · 1 Oct 2026').then(() => row('WEEKLY_CHECK_IN')));
+    expect(own.getByRole('link', { name: 'Completed from Coaching sessions · 1 Oct 2026' })).toHaveAttribute('href', '/coaching/me?session=s-4');
   });
 
   it('P18.96-T4 AC-2 a leader’s detail links a session to its archive, and draws a lead’s source line with no link', async () => {
@@ -71,7 +71,7 @@ describe('the data-backed checklist items (P18.96-T4)', () => {
     }).map((list) => list.map((it) => ({ ...it, note: null, date: null })));
     leaderPage({}, { ...leaderView(), aspects: activationView({}, items).aspects });
     await screen.findByRole('heading', { level: 2, name: 'Activation progress' });
-    expect(within(row('WEEKLY_CHECK_IN')).getByRole('link', { name: 'Completed from Coaching sessions · 1 Okt 2026' }))
+    expect(within(row('WEEKLY_CHECK_IN')).getByRole('link', { name: 'Completed from Coaching sessions · 1 Oct 2026' }))
       .toHaveAttribute('href', '/coaching/mem-rina/archive/s-4');
     const first = within(row('FIRST_CASE_CLOSED'));
     expect(first.getByText('Completed from Sales data · 20 Sep 2026')).toBeInTheDocument();

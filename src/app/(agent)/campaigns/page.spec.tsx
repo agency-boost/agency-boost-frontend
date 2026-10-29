@@ -181,7 +181,7 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       expect(within(card).getByText('1 Okt – 31 Des 2026')).toBeInTheDocument();
       expect(within(card).getByText('Push for APE this quarter — top 10 unit-wide win a trip.')).toBeInTheDocument();
       expect(card).toHaveTextContent('🏆Top 10 unit-wide: 3D2N Bali trip · All qualifiers: Rp 5.000.000 cash bonus');
-      expect(card).toHaveTextContent('Needs: Rp 500 jt APE + 1 new hire');
+      expect(card).toHaveTextContent('Needs: IDR 500M APE + 1 new hire');
       expect(card).not.toHaveTextContent('Requirements:');
     });
 
@@ -190,9 +190,9 @@ describe('/campaigns, the list (P18.5-T7)', () => {
       list({ 'GET /campaigns': { body: { campaigns: [sixteen, PROMO_AGENT], can: { chase: true } } } });
       await listReady();
       // *APE*'s first appearance on the list carries its ⓘ (P18.95-T9 AC-3): its name and bubble sit after the word.
-      expect(cardOf('Sixteen')).toHaveTextContent(/Needs: Rp 16 jt APE ⓘWhat is APE\?.+ \+ 3 new hires/);
+      expect(cardOf('Sixteen')).toHaveTextContent(/Needs: IDR 16M APE ⓘWhat is APE\?.+ \+ 3 new hires/);
       await userEvent.click(screen.getByRole('tab', { name: 'Structural' }));
-      expect(cardOf('Promotion: Agent → AAB')).toHaveTextContent(/Needs: Rp 1,2 M APE ⓘWhat is APE\?.+ \+ 3 new active agents/);
+      expect(cardOf('Promotion: Agent → AAB')).toHaveTextContent(/Needs: IDR 1.2B APE ⓘWhat is APE\?.+ \+ 3 new active agents/);
     });
 
     it('P18.5-T7 AC-3 Promotion path over a promotion’s title, and nowhere else', async () => {
@@ -419,7 +419,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     expect(within(requirements).getByRole('heading', { level: 3 })).toHaveTextContent('RequirementsOkt – Des 2026');
     const rows = within(requirements).getAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
-      'APE achievedRp 620 jt of Rp 500 jt ✓, met',
+      'APE achievedIDR 620M of IDR 500M ✓, met',
       'New Hire1Not uploaded yet',
     ]);
     expect(within(rows[0]).getByText('✓')).toHaveAttribute('aria-hidden', 'true');
@@ -443,7 +443,7 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     });
     const rows = within(await dialog()).getAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
-      'APE achievedRp 320 jt of Rp 500 jt',
+      'APE achievedIDR 320M of IDR 500M',
       'Old metric3Not measured yet',
     ]);
   });
@@ -464,14 +464,14 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
       },
     });
     const rows = within(await dialog()).getAllByRole('listitem');
-    expect(rows.map((r) => r.textContent)).toEqual(['Selling success rate0,15Nothing logged yet']);
+    expect(rows.map((r) => r.textContent)).toEqual(['Selling success rate0.15Nothing logged yet']);
     expect(rows[0]).not.toHaveTextContent('Not uploaded yet');
   });
 
   it('P18.5-T8 AC-6 an upcoming campaign’s rows are their targets alone, as drawn', async () => {
     dialogAt('APE_CHALLENGE_NEXT', { 'GET /campaigns/APE_CHALLENGE_NEXT': { body: detail({ ...CHALLENGE, progress: null }) } });
     const box = await dialog('Q1 APE Challenge');
-    expect(within(box).getAllByRole('listitem').map((r) => r.textContent)).toEqual(['APE achievedRp 300 jt']);
+    expect(within(box).getAllByRole('listitem').map((r) => r.textContent)).toEqual(['APE achievedIDR 300M']);
     expect(within(box).getByRole('heading', { level: 3 })).toHaveTextContent(/^Requirements$/);
   });
 
@@ -575,8 +575,8 @@ describe('/campaigns/[campaignCode], the dialog (P18.5-T7 AC-4, P18.5-T8 AC-6)',
     });
     const rows = within(await dialog()).getAllByRole('listitem');
     expect(rows.map((r) => r.textContent)).toEqual([
-      'APE achievedRp 620 jt of Rp 500 jt ✓, met',
-      'APE achievedRp 620 jt of Rp 1 M',
+      'APE achievedIDR 620M of IDR 500M ✓, met',
+      'APE achievedIDR 620M of IDR 1B',
     ]);
   });
 
@@ -636,13 +636,13 @@ describe('P18.97-T7 a ratio requirement on the agents’ cards and dialog', () =
     list({ ...config('percent'), 'GET /campaigns': { body: { ...LIST, campaigns: [RECRUIT] } } });
     await listReady();
     await waitFor(() => expect(cardOf('Recruitment Drive')).toHaveTextContent('Needs: Recruitment success rate 30%'));
-    expect(cardOf('Recruitment Drive')).not.toHaveTextContent('0,30');
+    expect(cardOf('Recruitment Drive')).not.toHaveTextContent('0.30');
   });
 
   it('P18.97-T7 keeps a ratio the office writes as a number a number: 0,30', async () => {
     list({ ...config('decimal'), 'GET /campaigns': { body: { ...LIST, campaigns: [RECRUIT] } } });
     await listReady();
-    expect(cardOf('Recruitment Drive')).toHaveTextContent('Needs: Recruitment success rate 0,30');
+    expect(cardOf('Recruitment Drive')).toHaveTextContent('Needs: Recruitment success rate 0.30');
   });
 
   it('P18.97-T7 writes the dialog’s row in the same unit: the figure to its tenth, of the target as typed', async () => {
@@ -661,6 +661,6 @@ describe('P18.97-T7 a ratio requirement on the agents’ cards and dialog', () =
     });
     const box = await dialog('Recruitment Drive');
     await waitFor(() => expect(within(box).getAllByRole('listitem').map((r) => r.textContent))
-      .toEqual(['Recruitment success rate28,6% of 30%']));
+      .toEqual(['Recruitment success rate28.6% of 30%']));
   });
 });

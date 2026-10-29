@@ -65,7 +65,7 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
     renderWithSession(<ActivityRatioPage />, { me: AGENT });
 
     expect(await screen.findByText(/Calculated on the/)).toHaveTextContent(
-      'Calculated on the last 30 days of activity · 30 Agu – 28 Sep 2026.',
+      'Calculated on the last 30 days of activity · 30 Aug – 28 Sep 2026.',
     );
     expect(screen.queryByText(/placeholders/)).not.toBeInTheDocument();
     expect(calls.find((c) => c.url.includes('/activity/ratios'))!.url).toMatch(/\/activity\/ratios$/);
@@ -83,14 +83,14 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
     renderWithSession(<ActivityRatioPage />, { me: AGENT });
 
     const ssr = await card('Selling success rate');
-    expect(ssr).toHaveTextContent('9,1%');
+    expect(ssr).toHaveTextContent('9.1%');
     expect(ssr).toHaveTextContent('Benchmark: 30%');
     expect(within(ssr).getByText('Below benchmark')).toBeInTheDocument();
     expect(within(ssr).getByText('Selling')).toBeInTheDocument();
 
     const lpa = await card('Leads per activity');
-    expect(lpa).toHaveTextContent('1,38');
-    expect(lpa).toHaveTextContent('Benchmark: 1,00');
+    expect(lpa).toHaveTextContent('1.38');
+    expect(lpa).toHaveTextContent('Benchmark: 1.00');
     expect(within(lpa).getByText('On track')).toBeInTheDocument();
   });
 
@@ -136,7 +136,7 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
     renderWithSession(<ActivityRatioPage />, { me: AGENT });
 
     const mpa = await card('Set appointment to meeting');
-    expect(mpa).toHaveTextContent('60,0%');
+    expect(mpa).toHaveTextContent('60.0%');
     expect(mpa).toHaveTextContent('Benchmark: 50%');
     expect(within(mpa).getByText('On track')).toBeInTheDocument();
     expect(screen.queryByText(/Meeting per approach/)).not.toBeInTheDocument();
@@ -157,7 +157,7 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
     const scale = await card('Selling vs Recruitment');
     expect(scale).toHaveTextContent('More Selling');
     expect(scale).toHaveTextContent('More Recruitment');
-    expect(scale).toHaveTextContent('40,0% Selling · 60,0% Recruitment · On track');
+    expect(scale).toHaveTextContent('40.0% Selling · 60.0% Recruitment · On track');
     expect(scale).toHaveTextContent('On track while each side is between 35% and 65%.');
     // 60% of the way from Selling's end: past the middle, toward Recruitment.
     expect(within(scale).getByTestId('balance-marker').style.left).toBe('60%');
@@ -172,14 +172,14 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
     const { mock } = stubFetch({ '/activity/ratios': { body: view([balance({ value: 24.4, share: 62.2 })]) } });
     const { unmount } = renderWithSession(<ActivityRatioPage />, { me: AGENT });
     const leaning = await card('Selling vs Recruitment');
-    expect(leaning).toHaveTextContent('62,2% Selling · 37,8% Recruitment · On track');
+    expect(leaning).toHaveTextContent('62.2% Selling · 37.8% Recruitment · On track');
     expect(within(leaning).getByTestId('balance-marker').style.left).toBe('37.8%');
     unmount();
     mock.mockClear();
 
     stubFetch({ '/activity/ratios': { body: view([balance({ value: 0.4975, share: 50.25, status: 'success' })]) } });
     renderWithSession(<ActivityRatioPage />, { me: AGENT });
-    expect(await card('Selling vs Recruitment')).toHaveTextContent('50,3% Selling · 49,7% Recruitment · On track');
+    expect(await card('Selling vs Recruitment')).toHaveTextContent('50.3% Selling · 49.7% Recruitment · On track');
   });
 
   /* **Was P13.1-T6 AC-3**: nothing on either side read *Not enough data yet.* with no marker; now it is not drawn. */
@@ -202,8 +202,8 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
     renderWithSession(<ActivityRatioPage />, { me: AGENT });
     // Off the band it says what to do (P18.95-T5 AC-6), where it said *Below benchmark*.
     expect(await card('Selling vs Recruitment'))
-      .toHaveTextContent('65,2% Selling · 34,8% Recruitment · Too much selling — aim for 35%–65%');
-    expect(await card('Leads per activity')).toHaveTextContent('0,296');
+      .toHaveTextContent('65.2% Selling · 34.8% Recruitment · Too much selling — aim for 35%–65%');
+    expect(await card('Leads per activity')).toHaveTextContent('0.296');
   });
 
   it('P18.97-T3 AC-2: a miss whose tenth lands on its benchmark takes the extra place — 29,96% beside 30%', async () => {
@@ -211,9 +211,9 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
     stubFetch({ '/activity/ratios': { body: view([rate({ value: 0.2996, status: 'alert' })]) } });
     renderWithSession(<ActivityRatioPage />, { me: AGENT });
     const ssr = await card('Selling success rate');
-    expect(ssr).toHaveTextContent('29,96%');
+    expect(ssr).toHaveTextContent('29.96%');
     expect(ssr).toHaveTextContent('Benchmark: 30%');
-    expect(ssr).not.toHaveTextContent('30,0%');
+    expect(ssr).not.toHaveTextContent('30.0%');
     expect(within(ssr).getByText('Below benchmark')).toBeInTheDocument();
   });
 
@@ -225,13 +225,13 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
     const { unmount } = renderWithSession(<ActivityRatioPage />, { me: AGENT });
     const own = await card('Prospecting vs Selling');
     expect(own).toHaveTextContent('More Leads Generation');
-    expect(own).toHaveTextContent('75,0% Leads Generation · 25,0% Selling · Too much leads generation — aim for 35%–65%');
+    expect(own).toHaveTextContent('75.0% Leads Generation · 25.0% Selling · Too much leads generation — aim for 35%–65%');
     unmount();
     mock.mockClear();
 
     stubFetch({ '/activity/ratios': { body: view([balance({ sides: { numerator: 'Selling', denominator: null } })]) } });
     renderWithSession(<ActivityRatioPage />, { me: AGENT });
-    expect(await card('Selling vs Recruitment')).toHaveTextContent('62,2% Selling · 37,8% Side B · On track');
+    expect(await card('Selling vs Recruitment')).toHaveTextContent('62.2% Selling · 37.8% Side B · On track');
   });
 
   describe('P18.95-T5 AC-6: the balance reads what to do (the client’s UI review, UI-030)', () => {
@@ -239,7 +239,7 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
       stubFetch({ '/activity/ratios': { body: view([balance({ value: 34, share: 67, status: 'alert' })]) } });
       renderWithSession(<ActivityRatioPage />, { me: AGENT });
       const scale = await card('Selling vs Recruitment');
-      expect(scale).toHaveTextContent('67,0% Selling · 33,0% Recruitment · Too much selling — aim for 35%–65%');
+      expect(scale).toHaveTextContent('67.0% Selling · 33.0% Recruitment · Too much selling — aim for 35%–65%');
       expect(scale).not.toHaveTextContent('Below benchmark');
     });
 
@@ -247,7 +247,7 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
       stubFetch({ '/activity/ratios': { body: view([balance({ value: -50, share: 25, status: 'alert' })]) } });
       renderWithSession(<ActivityRatioPage />, { me: AGENT });
       expect(await card('Selling vs Recruitment'))
-        .toHaveTextContent('25,0% Selling · 75,0% Recruitment · Too much recruitment — aim for 35%–65%');
+        .toHaveTextContent('25.0% Selling · 75.0% Recruitment · Too much recruitment — aim for 35%–65%');
     });
 
     it('P18.95-T5 AC-6: aims for the office’s own band — ±20 points is 40–60, never a literal 35–65', async () => {
@@ -262,7 +262,7 @@ describe('Activity Ratios (P10-T2, P10-T3)', () => {
       stubFetch({ '/activity/ratios': { body: view([balance({ value: -20, share: 40, status: 'success' })]) } });
       renderWithSession(<ActivityRatioPage />, { me: AGENT });
       const scale = await card('Selling vs Recruitment');
-      expect(scale).toHaveTextContent('40,0% Selling · 60,0% Recruitment · On track');
+      expect(scale).toHaveTextContent('40.0% Selling · 60.0% Recruitment · On track');
       expect(scale).not.toHaveTextContent('Too much');
     });
   });

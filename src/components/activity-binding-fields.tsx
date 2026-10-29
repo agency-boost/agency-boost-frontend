@@ -1,6 +1,8 @@
 'use client';
 
 import { Button, Select } from '@/components/ui/field';
+import { useMessages } from '@/i18n/language-provider';
+import { activityBindingMessages } from '@/i18n/messages/activity-binding';
 import {
   BINDING_ROLE_LABEL, BINDING_ROLES, rolesByCode, type ActivityBinding, type BindableType, type BindingRole,
 } from '@/lib/activity-binding';
@@ -27,11 +29,12 @@ export function ActivityBindingFields({
   disabled?: boolean;
   idPrefix: string;
 }) {
+  const t = useMessages(activityBindingMessages);
   const byCode = new Map(types.map((type) => [type.code, type]));
   const taken = rolesByCode(value);
   const name = (code: string) => {
     const type = byCode.get(code);
-    return type ? `${type.label}${type.status === 'archived' ? ' (archived)' : ''}` : code;
+    return type ? t.typeName({ label: type.label, archived: type.status === 'archived' }) : code;
   };
   const set = (role: BindingRole, codes: string[]) => onChange({ ...value, [role]: codes });
 
@@ -44,8 +47,8 @@ export function ActivityBindingFields({
         return (
           <fieldset key={role} className="flex flex-col gap-1.5">
             <legend className="text-sm font-semibold text-navy">{BINDING_ROLE_LABEL[role]}</legend>
-            <ul className="flex flex-wrap gap-1.5" aria-label={`${BINDING_ROLE_LABEL[role]} counts`}>
-              {codes.length === 0 && <li className="text-sm text-alert">Counts nothing yet.</li>}
+            <ul className="flex flex-wrap gap-1.5" aria-label={t.roleCounts({ role: BINDING_ROLE_LABEL[role] })}>
+              {codes.length === 0 && <li className="text-sm text-alert">{t.countsNothing}</li>}
               {codes.map((code) => (
                 <li
                   key={code}
@@ -57,8 +60,8 @@ export function ActivityBindingFields({
                     tone="alert"
                     className="h-6 w-6"
                     disabled={disabled}
-                    aria-label={`Remove ${name(code)} from ${BINDING_ROLE_LABEL[role]}`}
-                    title={`Remove from ${BINDING_ROLE_LABEL[role]}`}
+                    aria-label={t.removeFrom({ name: name(code), role: BINDING_ROLE_LABEL[role] })}
+                    title={t.removeFromRole({ role: BINDING_ROLE_LABEL[role] })}
                     onClick={() => set(role, codes.filter((c) => c !== code))}
                   >
                     ×
@@ -66,7 +69,7 @@ export function ActivityBindingFields({
                 </li>
               ))}
             </ul>
-            <label htmlFor={selectId} className="sr-only">{`Add an activity to ${BINDING_ROLE_LABEL[role]}`}</label>
+            <label htmlFor={selectId} className="sr-only">{t.addTo({ role: BINDING_ROLE_LABEL[role] })}</label>
             <Select
               id={selectId}
               className="max-w-xs"
@@ -76,7 +79,7 @@ export function ActivityBindingFields({
                 if (e.target.value) set(role, [...codes, e.target.value]);
               }}
             >
-              <option value="">Add an activity…</option>
+              <option value="">{t.addPrompt}</option>
               {offered.map((type) => (
                 <option key={type.code} value={type.code}>{name(type.code)}</option>
               ))}

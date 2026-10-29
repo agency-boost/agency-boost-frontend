@@ -3,11 +3,11 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { forumMessages } from '@/i18n/messages/forum';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { joinInFlight } from '@/lib/in-flight';
-import {
-  FORUM_COPY, readMeeting, readSharedMeeting, type MeetingView,
-} from '@/lib/leader-meetings';
+import { readMeeting, readSharedMeeting, type MeetingView } from '@/lib/leader-meetings';
 import { printAs, restorePrintTitle } from '@/lib/print';
 import { formatShortDay } from '@/lib/format';
 import { signInPathFrom, type SessionEnd } from '@/lib/return-path';
@@ -103,6 +103,8 @@ function MeetingBody({
   reread: () => Promise<void>;
   onGone: () => void;
 }) {
+  const t = useMessages(forumMessages);
+  const language = useFigureLanguage();
   const writer = useMeetingWriter();
   const router = useRouter();
   const [tab, setTab] = useState<MeetingTab>('overview');
@@ -121,11 +123,11 @@ function MeetingBody({
    * names the meeting and its day so the file is saved as that (ADR-0077's precedent). It writes nothing.
    */
   function print() {
-    writer.announce(FORUM_COPY.preparingPdf);
+    writer.announce(t.preparingPdf);
     if (printTimer.current) clearTimeout(printTimer.current);
     printTimer.current = setTimeout(() => {
       printTimer.current = null;
-      printAs(`${meeting.title} – ${formatShortDay(meeting.date, { year: true })}`);
+      printAs(`${meeting.title} – ${formatShortDay(meeting.date, { year: true }, language)}`);
     }, PRINT_DELAY_MS);
   }
 
@@ -144,7 +146,7 @@ function MeetingBody({
           href="/leader-meetings"
           className="mb-4 inline-flex items-center gap-1.5 text-base font-semibold text-navy-soft underline-offset-2 hover:underline print:hidden"
         >
-          {FORUM_COPY.back}
+          {t.back}
         </Link>
       )}
       <MeetingHead

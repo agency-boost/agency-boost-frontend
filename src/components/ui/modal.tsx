@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/cn';
 import { useScrollLock } from '@/lib/use-scroll-lock';
 
@@ -28,7 +29,19 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
  * **Never taller than the screen, and its actions always in reach** (P18.96-T1 AC-2): at most the dynamic
  * viewport's height less its margin, the content scrolling inside it under a title that stays at the top and a
  * `footer` that stays at the foot; the page behind does not scroll while it is open (`useScrollLock`).
+ *
+ * **Drawn at the end of the page, not where it is opened** (P18.98-T4, 2026-10-29): through a portal into `<body>`, so its
+ * `h2` never lands inside the page's outline — between a compliance tree's `h4`s it broke axe's *heading-order* in both
+ * languages. React's tree is unchanged: its context, its events and a footer's `form={id}` reach it as before.
  */
+/**
+ * **Whether a node is inside an open `Modal`.** A modal is drawn at the end of `<body>`, so a popover that opened one
+ * and closes on a click or a focus outside itself asks this as well: the modal is its own, over it, not outside it.
+ */
+export function inModal(node: EventTarget | null): boolean {
+  return node instanceof Element && node.closest('[data-modal-root]') !== null;
+}
+
 export function Modal({
   open,
   title,
@@ -117,8 +130,9 @@ export function Modal({
   // The foot clears the home indicator on a phone that has one, and 1.5rem on one that does not.
   const footPadding = sheet ? 'pb-[max(1.5rem,env(safe-area-inset-bottom))]' : 'pb-6';
 
-  return (
+  return createPortal(
     <div
+      data-modal-root=""
       data-placement={placement}
       className={cn(
         'fixed inset-0 z-50 flex justify-center bg-navy/35',
@@ -165,6 +179,7 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext } from 'react';
+import type { Language } from '@/i18n/language';
 import type { Gender, WorkStatus } from './personal';
 
 export type HierarchyRole = 'ab' | 'aab' | 'agent';
@@ -23,6 +24,14 @@ export interface Me {
     gender?: Gender | null;
     companyJoinMonth?: string | null;
     workStatus?: WorkStatus | null;
+    /*
+     * **The account's language** (ADR-0179 §2, P18.98-T2): `locale` is the one in force — the account's choice, or
+     * `id` for one that has made none — and `localeChosen` says which. At sign-in a chosen one wins over the browser's
+     * cookie and rewrites it; an account with none keeps the browser's language and saves nothing (`LanguageProvider`,
+     * `follow`). The API always sends both; optional so a fixture that is about something else need not.
+     */
+    locale?: Language;
+    localeChosen?: boolean;
   };
   membership: {
     membershipId: string;

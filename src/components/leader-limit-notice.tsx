@@ -1,5 +1,9 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/field';
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { leaderLimitMessages } from '@/i18n/messages/leader-limit';
 import type { ApiError } from '@/lib/api-client';
 import { canRequestApproval } from '@/lib/leader-limit-requests';
 
@@ -25,30 +29,23 @@ export function leaderLimitWords(
   error: Pick<ApiError, 'details'> & Partial<Pick<ApiError, 'code'>>,
   audience: 'office' | 'platform',
   action: LeaderLimitAction,
+  /** The reader's language (P18.98-T4; `useLanguage()`): English, the source, when given none. */
+  language: Language = SOURCE_LANGUAGE,
 ): { said: string; platformAdvice: boolean } {
-  const max = Number((error.details as { maxLeaders?: number } | undefined)?.maxLeaders);
-  const limit = Number.isFinite(max)
-    ? `This office has reached its limit of ${max} ${max === 1 ? 'leader' : 'leaders'}`
-    : 'This office has reached its leader limit';
-  const what = action === 'owner'
-    ? ', so its new Owner cannot be added as an AB.'
-    : action === 'roster'
-      ? ', so the ABs and AABs in this file cannot be added.'
-      : ', so nobody else can be made an AB or an AAB.';
-  const counted = ` Leaders are ABs and AABs together, the Owner included.`;
+  const read = Number((error.details as { maxLeaders?: number } | undefined)?.maxLeaders);
+  const max = Number.isFinite(read) ? read : null;
+  const { refused } = messagesIn(leaderLimitMessages, language);
   if (audience === 'platform') {
-    return { said: `${limit}${what}${counted}`, platformAdvice: true };
+    return { said: refused({ max, action, next: 'platform' }), platformAdvice: true };
   }
   /*
    * ADR-0157: a role change or an approval past the limit may wait for AgencyBoost instead (`canRequest`), and a
    * roster row never can — its words say the way through that asks: import them as Agents, then promote them.
    */
   const next = action === 'roster'
-    ? ' Import them as Agents, then promote them on their page: past the limit, that asks AgencyBoost to approve it.'
-    : canRequestApproval({ code: 'LEADER_LIMIT_REACHED', details: error.details })
-      ? ' Ask AgencyBoost to approve this one past the limit, or to raise it.'
-      : ' AgencyBoost can raise it.';
-  return { said: `${limit}${what}${counted}${next}`, platformAdvice: false };
+    ? 'roster'
+    : canRequestApproval({ code: 'LEADER_LIMIT_REACHED', details: error.details }) ? 'ask' : 'raise';
+  return { said: refused({ max, action, next }), platformAdvice: false };
 }
 
 export function LeaderLimitNotice({
@@ -68,7 +65,8 @@ export function LeaderLimitNotice({
   onAsk?: () => void;
   asking?: boolean;
 }) {
-  const { said, platformAdvice } = leaderLimitWords(error, audience, action);
+  const t = useMessages(leaderLimitMessages);
+  const { said, platformAdvice } = leaderLimitWords(error, audience, action, useLanguage());
   const askable = Boolean(onAsk) && audience === 'office'
     && canRequestApproval({ code: 'LEADER_LIMIT_REACHED', details: error.details });
   return (
@@ -76,14 +74,16 @@ export function LeaderLimitNotice({
       <p className="text-md font-semibold text-alert">{said}</p>
       {askable && (
         <Button variant="secondary" className="mt-2" disabled={asking} onClick={onAsk}>
-          {asking ? 'Asking…' : 'Ask AgencyBoost to approve'}
+          {asking ? t.asking : t.ask}
         </Button>
       )}
       {platformAdvice && (
         <p className="mt-1 text-md text-navy">
-          Raise it with <strong>Edit subscription</strong> on the{' '}
-          <Link href="/admin/tenants" className="underline">offices list</Link>
-          {action === 'roster' ? ' first, or import them as Agents.' : ' first, then try again.'}
+          {t.platformAdvice({
+            strong: (words) => <strong>{words}</strong>,
+            link: (words) => <Link href="/admin/tenants" className="underline">{words}</Link>,
+            roster: action === 'roster',
+          })}
         </p>
       )}
     </div>
@@ -105,15 +105,16 @@ export function LeaderLimitWaiting({
   onCancel?: () => void;
   cancelling?: boolean;
 }) {
+  const t = useMessages(leaderLimitMessages);
   return (
     <div role="status" className="flex flex-wrap items-center gap-3 rounded-md border border-hairline bg-base p-3">
       <span className="min-w-0 flex-1">
-        <span className="block text-md font-semibold text-navy">Waiting for AgencyBoost&apos;s approval</span>
+        <span className="block text-md font-semibold text-navy">{t.waiting}</span>
         <span className="block text-sm text-muted">{what}</span>
       </span>
       {onCancel && (
         <Button variant="secondary" disabled={cancelling} onClick={onCancel}>
-          {cancelling ? 'Cancelling…' : 'Cancel request'}
+          {cancelling ? t.cancelling : t.cancelRequest}
         </Button>
       )}
     </div>

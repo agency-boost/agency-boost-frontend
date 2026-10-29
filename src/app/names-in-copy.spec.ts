@@ -14,15 +14,17 @@ import { parse, renderable, sourceFiles, SRC, startOf } from '@test/copy-scan';
  * - **AC-1.** A role is called by its rung's name from the ladder (`rungShort`, `shortOfRung`: *AB*, *AAB*,
  *   *Agent* on the default ladder). The long forms are a second name for the same rung, so no string the app
  *   writes holds one. **One file may:** `lib/terms.ts`, whose ⓘ for *AAB* says what the letters stand for — the
- *   one place an acronym is spelled out, as the glossary's *Gloss* column does. Test fixtures are data a company
+ *   one place an acronym is spelled out, as the glossary's *Gloss* column does — and since P18.98-T4 its words are the
+ *   catalogue's, `i18n/messages/terms.ts`, once in each language. Test fixtures are data a company
  *   could have typed, and are not the app's words.
- * - **AC-5.** An instruction says *Tap*: no rendered string tells a reader to click.
+ * - **AC-5.** An instruction says *Tap*: no rendered string tells a reader to click — in either language, now that
+ *   the catalogue's messages are in the scan (P18.98-T1 AC-6): the Indonesian *klik* is the same instruction.
  */
 const LONG_NAMES = /\bAssociate AB\b|\bAssociate Agency Builders?\b|\bAgency Builders?\b/;
-const CLICK = /\bclick(?:s|ed|ing)?\b(?=\s+\S)|\bclick(?:s|ed|ing)?\b[.,:;!?]/i;
+const CLICK = /\bclick(?:s|ed|ing)?\b(?=\s+\S)|\bclick(?:s|ed|ing)?\b[.,:;!?]|\bklik\b/i;
 
 /** Where the long form is the definition itself, and test data a company could have written. */
-const MAY_SPELL_OUT = new Set(['lib/terms.ts']);
+const MAY_SPELL_OUT = new Set(['i18n/messages/terms.ts']);
 const isFixture = (file: string) => /fixtures?\.tsx?$/.test(file);
 
 /** Every rendered string in `source` that `pattern` matches, as `line: text`. */
@@ -65,6 +67,7 @@ describe('the names scan itself', () => {
     ['an instruction', '<p>Click any number to correct it</p>'],
     ['one in the middle of a sentence', "const s = 'No tips yet — click + above to add one.';"],
     ['one at a sentence’s end', "const s = 'Select a row and click.';"],
+    ['an Indonesian message (P18.98-T1 AC-6)', "const id = { hint: 'Klik angka mana pun untuk mengoreksinya' };"],
   ])('P18.95-T9 AC-5 catches %s', (_, code) => {
     expect(mentions('x.tsx', `export const X = () => { ${code} };`, CLICK)).toHaveLength(1);
   });
@@ -95,7 +98,9 @@ describe('the app’s own words', () => {
   });
 
   it('P18.95-T9 AC-1 lets the one definition spell AAB out, and nothing else', () => {
-    expect(mentions('lib/terms.ts', readFileSync(join(SRC, 'lib/terms.ts'), 'utf8'), LONG_NAMES)).toHaveLength(1);
+    // Once in English and once in Indonesian (P18.98-T4: the tips moved into the catalogue).
+    const path = 'i18n/messages/terms.ts';
+    expect(mentions(path, readFileSync(join(SRC, path), 'utf8'), LONG_NAMES)).toHaveLength(2);
   });
 
   it('P18.95-T9 AC-5 tells nobody to click: instructions say Tap', () => {

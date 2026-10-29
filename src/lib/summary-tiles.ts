@@ -1,3 +1,6 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { summaryTileMessages } from '@/i18n/messages/summary-tiles';
 import type { ApiError } from './api-client';
 import type { TermKey } from './terms';
 import { suggestCode } from './config-code';
@@ -183,10 +186,8 @@ export interface TileChange extends SummaryGroup {
 /** What typing a tile name does: every category it changes, or why it is refused. */
 export type TilePlan = { changes: TileChange[] } | { refused: string };
 
-/** Said when a section with a tile of its own is given another name for it. */
-export const OWN_TILE_REFUSED =
-  'A section with a tile of its own shows its own name. Rename the section to change it, or type the '
-  + 'tile name of another section to count them together.';
+/** Said when a section with a tile of its own is given another name for it — in English, the catalogue's source. */
+export const OWN_TILE_REFUSED = summaryTileMessages.en.ownTile;
 
 /**
  * A code no group and **no section** holds: suggested from the name, then the section's own, then
@@ -222,11 +223,14 @@ function freeCode(name: string, fallback: string, held: ReadonlySet<string>): st
  * **Leaving a tile of two leaves a tile of one**, which then carries neither field — the other section
  * is changed too. Archived sections count throughout: they still render history, and the server
  * compares labels across all of an office's sections (`CONFIG_SUMMARY_GROUP_LABEL_MISMATCH`).
+ *
+ * A refusal is said in the reader's `language` (P18.98-T4; `messages/summary-tiles.ts`), English when none is passed.
  */
 export function planSummaryTile(
   typed: string,
   self: TileMember,
   categories: readonly TileMember[],
+  language: Language = SOURCE_LANGUAGE,
 ): TilePlan {
   const name = typed.trim();
   const same = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
@@ -265,7 +269,7 @@ export function planSummaryTile(
       changes: [self, ...mates].map((c) => ({ code: c.code, summaryGroupCode: current, summaryGroupLabel: name })),
     };
   }
-  return { refused: OWN_TILE_REFUSED };
+  return { refused: messagesIn(summaryTileMessages, language).ownTile };
 }
 
 /**
@@ -273,26 +277,19 @@ export function planSummaryTile(
  *
  * `CONFIG_SUMMARY_GROUP_LABEL_MISMATCH` carries the tile's labels in `details`; its message carries
  * the batch's op prefix and the tile's code, which the screens never show.
- * `CONFIG_SUMMARY_GROUP_CODE_TAKEN` names the code, because the reader typed it as a section's.
+ * `CONFIG_SUMMARY_GROUP_CODE_TAKEN` names the code, because the reader typed it as a section's. Said in the reader's
+ * `language` (P18.98-T4), English when none is passed.
  */
-export function tileRefusal(error: ApiError): ApiError | null {
+export function tileRefusal(error: ApiError, language: Language = SOURCE_LANGUAGE): ApiError | null {
+  const t = messagesIn(summaryTileMessages, language);
   if (error.code === 'CONFIG_SUMMARY_GROUP_CODE_TAKEN') {
     const code = String(error.details?.summaryGroupCode ?? '');
     const label = String(error.details?.label ?? '');
-    return {
-      ...error,
-      message: `${code} is already the code of the summary tile “${label}”. Give the section another code.`,
-    };
+    return { ...error, message: t.codeTaken({ code, label }) };
   }
   if (error.code !== 'CONFIG_SUMMARY_GROUP_LABEL_MISMATCH') return null;
   const labels = (error.details?.labels as string[] | undefined) ?? [];
-  const named = labels.length > 1
-    ? `${labels.slice(0, -1).map((l) => `“${l}”`).join(', ')} and “${labels.at(-1)}”`
-    : 'two names';
-  return {
-    ...error,
-    message: `One summary tile, two names: ${named}. Give every section in it the same tile name.`,
-  };
+  return { ...error, message: t.twoNames({ labels }) };
 }
 
 /** What the field shows for a section: its group's label, or empty for a tile of its own. */

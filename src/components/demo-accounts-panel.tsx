@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { DEMO_ACCOUNTS, DEMO_GROUPS, showDemoAccounts, type DemoAccount } from '@/lib/demo-accounts';
+import { useMessages } from '@/i18n/language-provider';
+import { authMessages } from '@/i18n/messages/auth';
 
 /**
  * The seeded accounts, on the sign-in screen, in development and staging only.
@@ -12,6 +14,10 @@ import { DEMO_ACCOUNTS, DEMO_GROUPS, showDemoAccounts, type DemoAccount } from '
  *
  * Grouped by office, and collapsed by default — there are fifteen of them, and an
  * unrolled list of fifteen pushes the actual sign-in form off a laptop screen.
+ *
+ * **Its own words are the catalogue's** (`messages/auth.tsx`, `demo`; P18.98-T4); **the accounts are not** — each one's
+ * role, where it lands and its group stay in `lib/demo-accounts.ts`, folded out of every other build with the credentials
+ * (ADR-0041): an area ships everywhere, so nothing of the seed goes into one. They read as the seed writes them.
  */
 export function DemoAccountsPanel({
   onChoose,
@@ -21,6 +27,7 @@ export function DemoAccountsPanel({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const t = useMessages(authMessages).demo;
 
   if (!showDemoAccounts()) return null;
 
@@ -30,11 +37,10 @@ export function DemoAccountsPanel({
       className="mt-4 rounded-lg border border-dashed border-hairline bg-card p-4"
     >
       <h2 id="demo-accounts-heading" className="text-md font-semibold text-navy">
-        Development accounts
+        {t.heading}
       </h2>
       <p className="mt-0.5 text-sm text-muted">
-        Seeded by <code className="text-xs">pnpm seed:demo</code>. Choosing one fills the form and
-        signs in. This panel appears in development and staging only.
+        {t.line({ code: (words) => <code className="text-xs">{words}</code> })}
       </p>
 
       <button
@@ -44,7 +50,7 @@ export function DemoAccountsPanel({
         onClick={() => setOpen((wasOpen) => !wasOpen)}
         className="mt-3 text-md font-semibold text-navy underline"
       >
-        {open ? 'Hide' : `Show all ${DEMO_ACCOUNTS.length} accounts`}
+        {open ? t.hide : t.showAll({ n: DEMO_ACCOUNTS.length })}
       </button>
 
       {open && (

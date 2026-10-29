@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { campaignChasingMessages } from '@/i18n/messages/campaign-chasing';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  OWN_COPY, PROTOTYPE_COPY, readChasing, rowSubline, type ChasedCampaign,
+  readChasing, rowSubline, type ChasedCampaign,
 } from '@/lib/campaigns';
 import { CampaignDialog } from './campaign-dialog';
 import { chaseToast } from './campaign-list';
@@ -34,6 +36,8 @@ export function ChasingCampaigns({ forMembershipId }: { forMembershipId?: string
   const [attempt, setAttempt] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
   const { toast, show } = useToast();
+  const t = useMessages(campaignChasingMessages);
+  const language = useLanguage();
 
   const load = useCallback(() => {
     let live = true;
@@ -49,13 +53,13 @@ export function ChasingCampaigns({ forMembershipId }: { forMembershipId?: string
     return (
       <div>
         <ErrorBanner {...error} />
-        <Button variant="secondary" className="mt-3 print:hidden" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+        <Button variant="secondary" className="mt-3 print:hidden" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
       </div>
     );
   }
   if (!list) {
     return (
-      <Skeleton label={OWN_COPY.loadingChasing}>
+      <Skeleton label={t.loading}>
         {[0, 1].map((i) => <SkeletonBar key={i} className="mb-3 h-8 w-full" />)}
       </Skeleton>
     );
@@ -63,7 +67,7 @@ export function ChasingCampaigns({ forMembershipId }: { forMembershipId?: string
 
   if (forMembershipId) {
     return list.length === 0 ? (
-      <p className="text-[0.78125rem] text-muted">{PROTOTYPE_COPY.notChasingAny}</p>
+      <p className="text-[0.78125rem] text-muted">{t.notChasingAny}</p>
     ) : (
       <ChaseChips campaigns={list} />
     );
@@ -72,7 +76,7 @@ export function ChasingCampaigns({ forMembershipId }: { forMembershipId?: string
   return (
     <>
       {list.length === 0 ? (
-        <p className="text-[0.78125rem] text-muted">{PROTOTYPE_COPY.noneChased}</p>
+        <p className="text-[0.78125rem] text-muted">{t.noneChased}</p>
       ) : (
         <ul>
           {list.map((c) => (
@@ -91,7 +95,7 @@ export function ChasingCampaigns({ forMembershipId }: { forMembershipId?: string
                 </span>
                 {/* Amber-ink, where the prototype's amber-dark cue is 2.99:1 on white (row 44). */}
                 <span data-open-campaign className="shrink-0 whitespace-nowrap text-sm font-semibold text-amber-ink print:hidden">
-                  {PROTOTYPE_COPY.view}
+                  {t.view}
                 </span>
               </button>
             </li>
@@ -103,7 +107,7 @@ export function ChasingCampaigns({ forMembershipId }: { forMembershipId?: string
           code={open}
           onClose={() => setOpen(null)}
           onChased={(card) => {
-            show(chaseToast(card));
+            show(chaseToast(card, language));
             load();
           }}
         />

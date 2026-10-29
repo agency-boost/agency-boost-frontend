@@ -177,7 +177,7 @@ describe('a past session’s archive (P11-T10)', () => {
       show();
       await screen.findByText('Confirm submission paperwork with Bp. Andi');
 
-      expect(headerLine()).toHaveTextContent('Session — Kamis, 24 Sep 2026 Finalized');
+      expect(headerLine()).toHaveTextContent('Session — Thursday, 24 Sep 2026 Finalized');
       expect(screen.getByText('Coached by Agus Santoso')).toBeInTheDocument();
 
       const lastWeek = await card("Last week's action items");
@@ -194,7 +194,7 @@ describe('a past session’s archive (P11-T10)', () => {
 
       const next = await card('Next action items');
       expect(next).toHaveTextContent('26 SepLeads · Desi PratamaCollect the signed SPAJ.');
-      expect(next).toHaveTextContent('11 OktShadow Sari on one presentation');
+      expect(next).toHaveTextContent('11 OctShadow Sari on one presentation');
       // A record: nothing to add, remove, start or finalize.
       for (const name of ['Add tip', 'Add action', 'Start coaching session', 'Finalize this session', '+ Add lead']) {
         expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
@@ -205,17 +205,17 @@ describe('a past session’s archive (P11-T10)', () => {
       const { calls } = show();
 
       const goal = await card('Goal');
-      expect(goal).toHaveTextContent('Rp 65,6 jt / Rp 80 jt');
+      expect(goal).toHaveTextContent('IDR 65.6M / IDR 80M');
       expect(goal).toHaveTextContent('82%');
-      expect(goal).toHaveTextContent('Rp 14,4 jt remaining this month.');
-      expect(goal).toHaveTextContent('Rp 620 jt / Rp 960 jt');
+      expect(goal).toHaveTextContent('IDR 14.4M remaining this month.');
+      expect(goal).toHaveTextContent('IDR 620M / IDR 960M');
       expect(within(goal).queryByRole('button')).not.toBeInTheDocument();
 
       const ratios = await card('Ratios');
       expect(within(ratios).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-        'Selling success rate18,0%Benchmark: 15%',
+        'Selling success rate18.0%Benchmark: 15%',
         // The snapshot keeps the sides as the live read named them that day, and reads as two shares (P13.1-T6 AC-7).
-        'Sales vs. Recruitment70,0% Sales · 30,0% RecruitmentBenchmark: 35%–65% each side',
+        'Sales vs. Recruitment70.0% Sales · 30.0% RecruitmentBenchmark: 35%–65% each side',
       ]);
 
       const week = await card(/^Activity/);
@@ -364,7 +364,7 @@ describe('a past session’s archive (P11-T10)', () => {
       show({ 'GET /coaching/coachees/mem-rina': { body: { ...RINA, today: '2026-10-05' } } });
       const edit = await screen.findByRole('button', { name: 'Edit again' });
       expect(edit).toHaveAttribute('aria-disabled', 'true');
-      expect(edit).toHaveAccessibleDescription('This session could be reopened until 1 Okt 2026.');
+      expect(edit).toHaveAccessibleDescription('This session could be reopened until 1 Oct 2026.');
       await userEvent.click(edit);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
@@ -396,20 +396,20 @@ describe('a past session’s archive (P11-T10)', () => {
       expect([...paper.querySelectorAll('h1, h2, p')].map((el) => el.textContent)).toEqual([
         'Coaching Session — Rina Wijaya',
         // The day it was held, never today's; the reader led it, so the paper does not name them.
-        'Kamis, 24 Sep 2026  ·  Finalized',
+        'Thursday, 24 Sep 2026  ·  Finalized',
         "Last week's action items",
         '[x] Confirm submission paperwork with Bp. Andi',
         '[ ] Follow up with Alvin Sanjaya',
         'Goal',
         // Compact, as every figure is but a price and the file's own (P18.97-T3 AC-3, ADR-0174 §4).
-        'This month: Rp 65,6 jt / Rp 80 jt',
-        'This year: Not uploaded yet / Rp 960 jt',
+        'This month: IDR 65.6M / IDR 80M',
+        'This year: Not uploaded yet / IDR 960M',
         'Coaching tips',
         '1. Confirm the next meeting before you leave the current one.',
         'Next action items — from leads',
         '1. 26 Sep — Collect the signed SPAJ. (Leads: Desi Pratama)',
         'Next action items — other',
-        '1. 1 Okt — Shadow Sari on one presentation',
+        '1. 1 Oct — Shadow Sari on one presentation',
         '2. Undated',
       ]);
 
@@ -434,7 +434,7 @@ describe('a past session’s archive (P11-T10)', () => {
       const paper = document.querySelector('[data-print-view]')!;
       expect([...paper.querySelectorAll('h1, h2, p')].map((el) => el.textContent)).toEqual([
         'Coaching Session — Rina Wijaya',
-        'Kamis, 24 Sep 2026  ·  Coached by Wulan Sari  ·  Finalized',
+        'Thursday, 24 Sep 2026  ·  Coached by Wulan Sari  ·  Finalized',
         'Goal',
         'No goal set',
         'Coaching tips',
@@ -462,8 +462,8 @@ describe('a past session’s archive (P11-T10)', () => {
       const next = await card('Next action items');
       const lists = within(next).getAllByRole('list');
       expect(within(lists[lists.length - 1]).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-        '11 OktShadow Sari on one presentation',
-        '27 OktCall the new referral',
+        '11 OctShadow Sari on one presentation',
+        '27 OctCall the new referral',
         '3—Undated',
       ]);
 
@@ -471,8 +471,8 @@ describe('a past session’s archive (P11-T10)', () => {
       await waitFor(() => expect(document.querySelector('[data-print-view]')).not.toBeNull());
       const lines = [...document.querySelector('[data-print-view]')!.querySelectorAll('h2, p')].map((el) => el.textContent);
       expect(lines.slice(lines.indexOf('Next action items — other') + 1)).toEqual([
-        '1. 1 Okt — Shadow Sari on one presentation',
-        '2. 7 Okt — Call the new referral',
+        '1. 1 Oct — Shadow Sari on one presentation',
+        '2. 7 Oct — Call the new referral',
         '3. Undated',
       ]);
     });
@@ -504,7 +504,7 @@ describe('a past session’s archive (P11-T10)', () => {
       const paper = document.querySelector('[data-print-view]')!;
       const lines = [...paper.querySelectorAll('h2, p')].map((el) => el.textContent);
       expect(lines[lines.indexOf('Goal') + 1]).toBe('No goal set');
-      expect(paper.textContent).not.toMatch(/This month|This year|Not uploaded yet|Rp 0/);
+      expect(paper.textContent).not.toMatch(/This month|This year|Not uploaded yet|IDR 0/);
     });
 
     it('P11 final walk F3 lets the date line wrap on narrow paper, keeping the prototype’s spacing', async () => {
@@ -517,7 +517,7 @@ describe('a past session’s archive (P11-T10)', () => {
       await waitFor(() => expect(document.querySelector('[data-print-view]')).not.toBeNull());
 
       const dateLine = document.querySelector('[data-print-view] h1')!.nextElementSibling!;
-      expect(dateLine).toHaveTextContent('Kamis, 24 Sep 2026  ·  Coached by Wulan Sari  ·  Finalized', { normalizeWhitespace: false });
+      expect(dateLine).toHaveTextContent('Thursday, 24 Sep 2026  ·  Coached by Wulan Sari  ·  Finalized', { normalizeWhitespace: false });
       // `pre-wrap` keeps the two spaces each side of the dot and breaks the line where it must; `pre` never did.
       expect(dateLine).toHaveClass('whitespace-pre-wrap');
       expect(dateLine).not.toHaveClass('whitespace-pre');
@@ -551,7 +551,7 @@ describe('a past session’s archive (P11-T10)', () => {
       expect(screen.queryByRole('navigation', { name: 'Coaching' })).not.toBeInTheDocument();
       expect(screen.queryByRole('group', { name: 'View' })).not.toBeInTheDocument();
       expect(screen.queryByText('This person isn’t someone you coach.')).not.toBeInTheDocument();
-      expect(await card('Goal')).toHaveTextContent('Rp 65,6 jt / Rp 80 jt');
+      expect(await card('Goal')).toHaveTextContent('IDR 65.6M / IDR 80M');
       expect(screen.queryByRole('button', { name: 'Edit again' })).not.toBeInTheDocument();
 
       await userEvent.click(screen.getByRole('button', { name: 'Download as PDF' }));

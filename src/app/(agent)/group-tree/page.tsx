@@ -6,6 +6,8 @@ import { Page } from '@/components/page';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Card, ErrorBanner } from '@/components/ui/field';
 import { SkeletonTree } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { groupTreeMessages } from '@/i18n/messages/group-tree';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readOrgTree, type OrgTree as OrgTreeData } from '@/lib/org';
 import { useSession } from '@/lib/session';
@@ -41,6 +43,7 @@ export default function GroupTreePage() {
   const [tree, setTree] = useState<OrgTreeData | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const { me } = useSession();
+  const t = useMessages(groupTreeMessages);
   const phone = usePhone();
   const membership = me?.membership ?? null;
   // A member on the agent rung who leads somebody reads their unit (ADR-0087) but coaches nobody: their
@@ -58,20 +61,16 @@ export default function GroupTreePage() {
   // The title is the nav item's words (P18.95-T9 AC-2, UI-027): the prototype's *Group Overview* sat under a nav item
   // reading *Group tree*. *Tap*, not *Click* (AC-5).
   return (
-    <Page
-      title="Group Tree"
-      subtitle="Your leader, you, and your full downline, laid out by layer. Tap anyone to open their Unit Dashboard."
-      permission="org_tree:read"
-    >
+    <Page title={t.title} subtitle={t.subtitle} permission="org_tree:read">
       {error && <ErrorBanner {...error} />}
 
       <Card>
         {tree === null && !error && (
-          <SkeletonTree label="Loading your unit…" />
+          <SkeletonTree label={t.loading} />
         )}
 
         {tree && tree.nodes.length <= 1 && (
-          <EmptyState title="Nobody reports to you yet. Once you add agents to your unit they appear here, with everyone below them." />
+          <EmptyState title={t.empty} />
         )}
 
         {tree && tree.nodes.length > 1 && <OrgTree tree={tree} personHref={personHref} asList={phone} />}

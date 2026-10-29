@@ -153,14 +153,15 @@ describe('PitchCard, an optional document', () => {
 describe('PitchCard, a file’s size (P18.97-T5 AC-4)', () => {
   it('P18.97-T5 AC-4 a file under 1 KB reads “< 1 KB”, never 1 KB (UI-029; I-521)', () => {
     render(<PitchCard slot={slot({ slot: 'faq', title: 'FAQ', state: 'uploaded', checklist: [], version: 1, file: { name: 'faq.pdf', bytes: 642, uploadedOn: '2026-10-01' } })} audience="agent" />);
-    expect(screen.getByText('< 1 KB · updated 1 Okt 2026')).toBeInTheDocument();
+    // The size and the day in the spec's language since P18.98-T4 wired them (the harness's English is a chosen English).
+    expect(screen.getByText('< 1 KB · updated 1 Oct 2026')).toBeInTheDocument();
   });
 
   it('P18.97-T5 AC-4 a kilobyte and more reads in KB, a megabyte and more in MB', () => {
     const { rerender } = render(<PitchCard slot={slot({ slot: 'faq', title: 'FAQ', state: 'uploaded', checklist: [], version: 1, file: { name: 'faq.pdf', bytes: 1024, uploadedOn: '2026-10-01' } })} audience="agent" />);
-    expect(screen.getByText('1 KB · updated 1 Okt 2026')).toBeInTheDocument();
+    expect(screen.getByText('1 KB · updated 1 Oct 2026')).toBeInTheDocument();
     rerender(<PitchCard slot={slot({ slot: 'faq', title: 'FAQ', state: 'uploaded', checklist: [], version: 1, file: FILE })} audience="agent" />);
-    expect(screen.getByText('1,0 MB · updated 1 Okt 2026')).toBeInTheDocument();
+    expect(screen.getByText('1.0 MB · updated 1 Oct 2026')).toBeInTheDocument();
   });
 });
 

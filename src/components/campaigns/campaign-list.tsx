@@ -8,12 +8,15 @@ import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { TermText, TermTip } from '@/components/ui/term-tip';
 import { Toast, useToast } from '@/components/ui/toast';
+import type { Language } from '@/i18n/language';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { campaignsMessages } from '@/i18n/messages/campaigns';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { CONTENT_TERM_KEYS, firstMentions, type TermKey } from '@/lib/terms';
 import {
-  campaignHref, chasedToast, chaseCampaign, OWN_COPY, PROTOTYPE_COPY, ratioUnitsOf, readCampaigns, requirementsLine,
-  SEASONAL_FILTERS, seasonalSections, showsChase, structuralSections, unchaseCampaign, unchasedToast,
+  campaignHref, chasedToast, chaseCampaign, ratioUnitsOf, readCampaigns, requirementsLine,
+  seasonalFilters, seasonalSections, showsChase, structuralSections, unchaseCampaign, unchasedToast,
   type CampaignCard, type CampaignList as CampaignListView, type CampaignSection, type RatioUnits, type SeasonalFilter,
 } from '@/lib/campaigns';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
@@ -39,15 +42,12 @@ export function useCampaignDialogHost(): CampaignDialogHost {
 export const toggleChase = (card: Pick<CampaignCard, 'code' | 'chasing'>) =>
   (card.chasing ? unchaseCampaign(card.code) : chaseCampaign(card.code));
 
-/** The toast a chase answer says (`:8144`), from what the server answered, not from what was asked. */
-export const chaseToast = (card: Pick<CampaignCard, 'title' | 'chasing'>) =>
-  (card.chasing ? chasedToast(card.title) : unchasedToast(card.title));
+/** The toast a chase answer says (`:8144`), from what the server answered, not from what was asked — in `language`. */
+export const chaseToast = (card: Pick<CampaignCard, 'title' | 'chasing'>, language?: Language) =>
+  (card.chasing ? chasedToast(card.title, language) : unchasedToast(card.title, language));
 
 type CampaignType = 'seasonal' | 'structural';
-const TYPES: readonly { id: CampaignType; label: string }[] = [
-  { id: 'seasonal', label: PROTOTYPE_COPY.seasonal },
-  { id: 'structural', label: PROTOTYPE_COPY.structural },
-];
+const TYPES: readonly CampaignType[] = ['seasonal', 'structural'];
 
 /**
  * **Campaigns** (`/campaigns`, and its dialog at `/campaigns/[campaignCode]`; `Overall.html:3664-3702`, CSS
@@ -69,6 +69,9 @@ const TYPES: readonly { id: CampaignType; label: string }[] = [
  * read-only support session reads what its member reads and draws no chase (roles §3.13; the server's `can`).
  */
 export function CampaignList({ children }: { children?: ReactNode }) {
+  const t = useMessages(campaignsMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const router = useRouter();
   const pathname = usePathname();
   const [list, setList] = useState<CampaignListView | null>(null);
@@ -112,7 +115,7 @@ export function CampaignList({ children }: { children?: ReactNode }) {
     try {
       const next = await toggleChase(card);
       replace(next);
-      show(chaseToast(next));
+      show(chaseToast(next, language));
     } catch (err) {
       setChaseError({ code: card.code, error: toDisplayError(err) });
       // Ended or closed to the rung since it was read: read the list again, so the card says so.
@@ -140,15 +143,15 @@ export function CampaignList({ children }: { children?: ReactNode }) {
     close,
     chased: (card) => {
       replace(card);
-      show(chaseToast(card));
+      show(chaseToast(card, language));
     },
-  }), [close, replace, show]);
+  }), [close, replace, show, language]);
 
   const dialogOpen = pathname !== '/campaigns';
   const sections = list
-    ? (type === 'seasonal' ? seasonalSections(list.campaigns, filter) : structuralSections(list.campaigns))
+    ? (type === 'seasonal' ? seasonalSections(list.campaigns, filter, language) : structuralSections(list.campaigns, language))
     : [];
-  const terms = cardTerms(sections, ratioUnits);
+  const terms = cardTerms(sections, ratioUnits, language, figures);
 
   return (
     <DialogHost.Provider value={host}>
@@ -158,7 +161,7 @@ export function CampaignList({ children }: { children?: ReactNode }) {
           {error && (
             <div>
               <ErrorBanner {...error} />
-              <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+              <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
             </div>
           )}
           {!list && !error && <CampaignsSkeleton />}
@@ -195,30 +198,31 @@ export function CampaignList({ children }: { children?: ReactNode }) {
 function TypeTabs({
   active, onSelect, children,
 }: { active: CampaignType; onSelect: (type: CampaignType) => void; children: ReactNode }) {
+  const t = useMessages(campaignsMessages);
   const group = useId();
   const refs = useRef<Partial<Record<CampaignType, HTMLButtonElement | null>>>({});
   const go = (to: number) => {
-    const next = TYPES[(to + TYPES.length) % TYPES.length].id;
+    const next = TYPES[(to + TYPES.length) % TYPES.length];
     onSelect(next);
     refs.current[next]?.focus();
   };
   return (
     <>
       <div className="mb-[18px] border-b-[1.5px] border-hairline">
-        <div role="tablist" aria-label={OWN_COPY.types} className="-mb-[1.5px] flex gap-[26px]">
+        <div role="tablist" aria-label={t.types} className="-mb-[1.5px] flex gap-[26px]">
           {TYPES.map((tab, i) => {
-            const on = tab.id === active;
+            const on = tab === active;
             return (
               <button
-                key={tab.id}
-                ref={(el) => { refs.current[tab.id] = el; }}
+                key={tab}
+                ref={(el) => { refs.current[tab] = el; }}
                 type="button"
                 role="tab"
-                id={`${group}-${tab.id}`}
+                id={`${group}-${tab}`}
                 aria-selected={on}
                 aria-controls={`${group}-panel`}
                 tabIndex={on ? 0 : -1}
-                onClick={() => onSelect(tab.id)}
+                onClick={() => onSelect(tab)}
                 onKeyDown={(e) => {
                   if (e.key === 'ArrowRight') go(i + 1);
                   else if (e.key === 'ArrowLeft') go(i - 1);
@@ -232,7 +236,7 @@ function TypeTabs({
                   on ? 'border-amber text-navy' : 'border-transparent text-muted hover:text-navy',
                 )}
               >
-                {tab.label}
+                {t[tab]}
               </button>
             );
           })}
@@ -247,9 +251,11 @@ function TypeTabs({
 
 /** *All · Running · Upcoming · Ended* (`#seasonal-segmented`, `:3674-3679`; `.segmented`, `:1871-1876`). */
 function StatusFilter({ active, onSelect }: { active: SeasonalFilter; onSelect: (f: SeasonalFilter) => void }) {
+  const t = useMessages(campaignsMessages);
+  const language = useLanguage();
   return (
-    <div role="group" aria-label={OWN_COPY.statusFilter} className="mb-[22px] inline-flex max-w-full flex-wrap rounded-[9px] border border-hairline bg-card p-[3px]">
-      {SEASONAL_FILTERS.map((f) => (
+    <div role="group" aria-label={t.statusFilter} className="mb-[22px] inline-flex max-w-full flex-wrap rounded-[9px] border border-hairline bg-card p-[3px]">
+      {seasonalFilters(language).map((f) => (
         <button
           key={f.id}
           type="button"
@@ -303,6 +309,9 @@ function Card({
   /** How the office writes each ratio, so a requirement on one reads in that unit (P18.97-T7). */
   ratioUnits?: RatioUnits;
 }) {
+  const t = useMessages(campaignsMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const titleId = useId();
   const [titleTerms = [], blurbTerms = [], rewardTerms = [], needsTerms = []] = terms;
   const title = <h3 id={titleId} className="text-[0.90625rem] font-bold leading-snug text-navy">{card.title}</h3>;
@@ -339,8 +348,8 @@ function Card({
         )}
         {card.requirements.length > 0 && (
           <p className="mb-[9px] text-[0.78125rem] leading-normal text-navy">
-            <span className="font-bold text-muted">{OWN_COPY.needs}</span>{' '}
-            <TermText text={requirementsLine(card.requirements, ratioUnits)} terms={needsTerms} />
+            <span className="font-bold text-muted">{t.needs}</span>{' '}
+            <TermText text={requirementsLine(card.requirements, ratioUnits, language, figures)} terms={needsTerms} />
           </p>
         )}
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -353,7 +362,7 @@ function Card({
             data-open-campaign
             className="h-auto rounded-[7px] border-[1.5px] border-navy px-3.5 py-2 text-base"
           >
-            {PROTOTYPE_COPY.viewDetails}
+            {t.viewDetails}
           </Button>
         </div>
         {error && <div className="mt-2.5"><ErrorBanner {...error} /></div>}
@@ -367,10 +376,13 @@ function Card({
  * cards in the order they are drawn, each card's title, blurb, prize and *Needs:* line in reading order. A term the
  * list names on twelve cards gets one ⓘ, on the first.
  */
-function cardTerms(sections: readonly CampaignSection[], ratioUnits?: RatioUnits): Map<string, TermKey[][]> {
+function cardTerms(
+  sections: readonly CampaignSection[], ratioUnits: RatioUnits | undefined, language: Language, figures: Language,
+): Map<string, TermKey[][]> {
   const cards = sections.flatMap((section) => section.items);
   const texts = cards.flatMap((card) => [
-    card.title, card.blurb, card.reward, card.requirements.length > 0 ? requirementsLine(card.requirements, ratioUnits) : null,
+    card.title, card.blurb, card.reward,
+    card.requirements.length > 0 ? requirementsLine(card.requirements, ratioUnits, language, figures) : null,
   ]);
   const found = firstMentions(texts, CONTENT_TERM_KEYS);
   return new Map(cards.map((card, i) => [card.code, found.slice(i * 4, i * 4 + 4)]));
@@ -378,8 +390,9 @@ function cardTerms(sections: readonly CampaignSection[], ratioUnits?: RatioUnits
 
 /** Two sections of cards, shaped like the list that is coming. */
 export function CampaignsSkeleton() {
+  const t = useMessages(campaignsMessages);
   return (
-    <Skeleton label={OWN_COPY.loading}>
+    <Skeleton label={t.loading}>
       <SkeletonBar className="mb-[22px] h-9 w-72 max-w-full" />
       {[0, 1].map((s) => (
         <div key={s} className="mb-8">

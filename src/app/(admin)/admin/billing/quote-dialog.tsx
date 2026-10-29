@@ -3,8 +3,10 @@
 import { useId, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Button, Field, TextInput } from '@/components/ui/field';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { billingMessages } from '@/i18n/messages/billing';
 import {
-  BILLING_COPY as COPY, maskDate, parseDmy, planEnd, toDmy, validateQuote,
+  maskDate, parseDmy, planEnd, toDmy, validateQuote,
   type BillingPeriod, type QuoteDetails, type QuoteErrors,
 } from '@/lib/billing';
 
@@ -35,6 +37,8 @@ export function QuoteDialog({
   onGenerate: (details: QuoteDetails) => void;
 }) {
   const id = useId();
+  const COPY = useMessages(billingMessages).prototype;
+  const language = useLanguage();
   const [start, setStart] = useState(dates.start);
   const [end, setEnd] = useState(dates.end);
   const [endEdited, setEndEdited] = useState(false);
@@ -50,7 +54,7 @@ export function QuoteDialog({
 
   const generate = () => {
     const details = { ...names, start, end };
-    const found = validateQuote(details);
+    const found = validateQuote(details, language);
     setErrors(found);
     const first = (['kpm', 'pic', 'sales', 'start', 'end'] as const).find((name) => found[name]);
     if (first) {

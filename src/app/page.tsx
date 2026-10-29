@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { useMessages } from '@/i18n/language-provider';
+import { shellMessages } from '@/i18n/messages/shell';
 import { landingFor } from '@/lib/landing';
 import { signInPathFrom } from '@/lib/return-path';
 import { useSession } from '@/lib/session';
@@ -18,6 +20,7 @@ import { PageSkeleton } from '@/components/ui/skeleton';
 export default function Home() {
   const { me, loading, signedOut, expired } = useSession();
   const router = useRouter();
+  const t = useMessages(shellMessages);
 
   useEffect(() => {
     if (loading) return;
@@ -28,5 +31,6 @@ export default function Home() {
 
   // Always a hand-off. Rendering content here as well would mean two screens claiming to
   // be home, and which one you saw would depend on how fast the redirect ran.
-  return <PageSkeleton label="Taking you to your work…" />;
+  // Nothing in it is words to paint in the wrong language (`sessionWait`, P18.98-T2): it is never held back for one.
+  return <PageSkeleton label={t.takingYouToYourWork} sessionWait />;
 }

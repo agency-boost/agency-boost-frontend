@@ -4,10 +4,12 @@ import Link from 'next/link';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { initialsOf } from '@/lib/calendar';
 import {
-  lastLoggedWords, moreWords, OWN_COPY, PROTOTYPE_COPY, readNotLogged, rungShort, SILENT_SHOWN, trendWords,
+  lastLoggedWords, moreWords, readNotLogged, rungShort, SILENT_SHOWN, trendWords,
   type NotLoggedList, type OverviewEngagement,
 } from '@/lib/kpm-overview';
 import { Bar, OverviewCard, PctPill, useTone } from './parts';
@@ -25,13 +27,16 @@ import { Bar, OverviewCard, PctPill, useTone } from './parts';
  * opened and never before: each name on it is an audited read of that member's activity (D-audit).
  */
 export function Engagement({ engagement }: { engagement: OverviewEngagement }) {
+  const t = useMessages(kpmOverviewMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const tone = useTone();
   const { loggedThisMonth: month, loggedThisWeek: week } = engagement;
-  const trend = trendWords(month.count, month.lastMonthToDate);
+  const trend = trendWords(month.count, month.lastMonthToDate, language, figures);
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <EngageCard title={PROTOTYPE_COPY.loggedMonthTitle} desc={PROTOTYPE_COPY.loggedMonthDesc}>
+      <EngageCard title={t.loggedMonthTitle} desc={t.loggedMonthDesc}>
         <Figure big={month.count} of={`/ ${month.of}`} pct={month.pct} />
         {month.pct !== null && (
           // `.bar-fill.success` at the prototype's 76% (`:975`); its plain fill is amber (`:473`).
@@ -51,8 +56,8 @@ export function Engagement({ engagement }: { engagement: OverviewEngagement }) {
         )}
       </EngageCard>
 
-      <EngageCard title={PROTOTYPE_COPY.weekTitle} desc={PROTOTYPE_COPY.weekDesc}>
-        <Figure big={week.logged} of={`logged · ${week.notLogged} not logged`} pct={week.pct} />
+      <EngageCard title={t.weekTitle} desc={t.weekDesc}>
+        <Figure big={week.logged} of={t.loggedNotLogged({ notLogged: week.notLogged })} pct={week.pct} />
         {week.pct !== null && <Bar pct={week.pct} fill="bg-amber" className="mb-2" />}
         {/* Nobody to name, nothing to reveal: the figure beside it already says *0 not logged*. */}
         {week.notLogged > 0 && <NotLoggedReveal />}
@@ -93,6 +98,7 @@ function Figure({ big, of, pct }: { big: number; of: string; pct: number | null 
  * link.
  */
 function NotLoggedReveal() {
+  const t = useMessages(kpmOverviewMessages);
   const [open, setOpen] = useState(false);
   const [list, setList] = useState<NotLoggedList | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -129,17 +135,17 @@ function NotLoggedReveal() {
         // `.reveal-link` (`:477`) is amber-dark, which fails contrast as small text; amber-ink clears it.
         className="mt-3 inline-block text-base font-semibold text-amber-ink underline-offset-2 hover:underline"
       >
-        {PROTOTYPE_COPY.reveal}
+        {t.reveal}
       </button>
       <div id={panelId} hidden={!open} className="mt-2.5 border-t border-hairline pt-2.5">
         {open && error && (
           <div>
             <ErrorBanner {...error} />
-            <Button variant="secondary" className="mt-2" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+            <Button variant="secondary" className="mt-2" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
           </div>
         )}
         {open && !list && !error && (
-          <Skeleton label={OWN_COPY.loadingList}>
+          <Skeleton label={t.loadingList}>
             {[0, 1, 2].map((i) => (
               <div key={i} className="flex items-center justify-between gap-3 py-1.5">
                 <SkeletonBar className="h-3.5 w-1/2" />
@@ -155,9 +161,11 @@ function NotLoggedReveal() {
 }
 
 function SilentList({ list }: { list: NotLoggedList }) {
+  const t = useMessages(kpmOverviewMessages);
+  const language = useLanguage();
   const shown = list.members.slice(0, SILENT_SHOWN);
   const more = list.total - shown.length;
-  if (list.total === 0 || shown.length === 0) return <p className="py-1.5 text-base text-muted">{OWN_COPY.everybodyLogged}</p>;
+  if (list.total === 0 || shown.length === 0) return <p className="py-1.5 text-base text-muted">{t.everybodyLogged}</p>;
   return (
     <>
       <ul>
@@ -173,14 +181,14 @@ function SilentList({ list }: { list: NotLoggedList }) {
               </span>
               <span className="min-w-0">{member.name} — {rungShort(member.rung)}</span>
             </span>
-            <span className="text-xs text-muted">{lastLoggedWords(member.daysSince)}</span>
+            <span className="text-xs text-muted">{lastLoggedWords(member.daysSince, language)}</span>
           </li>
         ))}
       </ul>
       {more > 0 && (
         <p className="pt-1 text-sm">
           <Link href="/people/members" className="text-muted underline underline-offset-2 hover:text-navy">
-            {moreWords(more)}
+            {moreWords(more, language)}
           </Link>
         </p>
       )}

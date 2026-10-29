@@ -8,14 +8,21 @@ import {
 } from '@/components/ui/field';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { kept } from '@/i18n/kept';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import type { Language } from '@/i18n/language';
+import type { MessagesOf } from '@/i18n/catalogue';
+import { ratioWordMessages } from '@/i18n/messages/ratio-words';
+import { settingsMessages } from '@/i18n/messages/settings';
+import { ratioBenchmarksMessages } from '@/i18n/messages/settings-ratio-benchmarks';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
 import {
-  benchmarkFromInput, benchmarkToInput, DISPLAY_UNIT_LABEL, formatBenchmark, reexpress, unitFor,
+  benchmarkFromInput, benchmarkToInput, displayUnitLabels, formatBenchmark, reexpress, unitFor,
   type RatioDisplayUnit,
 } from '@/lib/ratio-format';
 import { balanceSideNames, formatBalanceBand } from '@/lib/ratio-balance';
-import { projectStaged, unstageRow, STAGED_LABEL } from '@/lib/staged-projection';
+import { projectStaged, unstageRow } from '@/lib/staged-projection';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import {
   applyConfigChanges,
@@ -72,26 +79,29 @@ function Chip({ code, label }: { code: string; label: string | null }) {
   );
 }
 
-/** The two kinds a ratio can be, as the Add-a-ratio form offers them (P13.1-T6). */
-const RATIO_KINDS: readonly (readonly [RatioComparison, string])[] = [
-  ['gte', 'Ratio (A ÷ B)'],
-  ['band', 'Balance (A vs B)'],
+type ScreenWords = MessagesOf<typeof ratioBenchmarksMessages.en>;
+type RatioWords = MessagesOf<typeof ratioWordMessages.en>;
+
+/** The two kinds a ratio can be, as the Add-a-ratio form offers them (P13.1-T6), in the reader's words. */
+const ratioKinds = (t: ScreenWords): readonly (readonly [RatioComparison, string])[] => [
+  ['gte', t.kindRatio],
+  ['band', t.kindBalance],
 ];
 
 /** What a formula's two code lists are headed: a division's *Counts* and *Out of*, a balance's two sides. */
-const sideHeadings = (comparison: RatioComparison) => (comparison === 'band'
-  ? ([['Side A', 'numerator'], ['Side B', 'denominator']] as const)
-  : ([['Counts', 'numerator'], ['Out of', 'denominator']] as const));
+const sideHeadings = (comparison: RatioComparison, t: ScreenWords, w: RatioWords) => (comparison === 'band'
+  ? ([[w.sideA, 'numerator'], [w.sideB, 'denominator']] as const)
+  : ([[t.counts, 'numerator'], [t.outOf, 'denominator']] as const));
 
 /**
  * A balance benchmark's hint, live: the points typed, read as the shares they allow — *each side
- * between 35% and 65%* for 30 — because that is how agents now read the band (P13.1-T6).
+ * between 35% and 65%* for 30 — because that is how agents now read the band (P13.1-T6). The band's edges are written
+ * in the reader's `figures`, the sentence in their words.
  */
-function bandHint(typed: string): string {
+function bandHint(typed: string, t: ScreenWords, figures: Language): string {
   const points = benchmarkFromInput(typed, 'points');
-  if (Number.isNaN(points) || points < 0) return 'Percentage points either side of an even split.';
-  const { low, high } = formatBalanceBand(points);
-  return `Percentage points either side of an even split: each side between ${low} and ${high}.`;
+  if (Number.isNaN(points) || points < 0) return t.bandHintEmpty;
+  return t.bandHint(formatBalanceBand(points, figures));
 }
 
 /**
@@ -117,11 +127,14 @@ function sectionOf(taxonomy: readonly ActivityCategoryRow[], codes: readonly str
 function BalanceFormula({
   ratio, taxonomy, labelFor,
 }: { ratio: RatioRow; taxonomy: readonly ActivityCategoryRow[]; labelFor: (code: string) => string | null }) {
+  const t = useMessages(ratioBenchmarksMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const names = balanceSideNames({
     numerator: sectionOf(taxonomy, ratio.numerator),
     denominator: sectionOf(taxonomy, ratio.denominator),
-  });
-  const band = formatBalanceBand(ratio.benchmark);
+  }, language);
+  const band = formatBalanceBand(ratio.benchmark, figures);
   return (
     <div className="mt-3 flex flex-col gap-2">
       {([['first', names.first, ratio.numerator], ['second', names.second, ratio.denominator]] as const)
@@ -131,15 +144,19 @@ function BalanceFormula({
             {codes.map((code) => <Chip key={code} code={code} label={labelFor(code)} />)}
           </div>
         ))}
-      <p className="text-sm text-muted">
-        Agents see each side’s share of the two — on track while each side is between{' '}
-        {band.low} and {band.high}.
-      </p>
+      <p className="text-sm text-muted">{t.balanceRead(band)}</p>
     </div>
   );
 }
 
 export default function RatioBenchmarksPage() {
+  const t = useMessages(ratioBenchmarksMessages);
+  const s = useMessages(settingsMessages);
+  const w = useMessages(ratioWordMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  /** What each unit is called where it is chosen, its example figure in the reader's figures. */
+  const units = displayUnitLabels(language, figures);
   const canWrite = useCan('tenant_config:write');
   const [ratios, setRatios] = useState<RatioRow[] | null>(null);
   const [taxonomy, setTaxonomy] = useState<ActivityCategoryRow[]>([]);
@@ -261,15 +278,15 @@ export default function RatioBenchmarksPage() {
    */
   const appliesTo = (codes: string[]) =>
     (codes.length === 0
-      ? 'Everyone'
+      ? s.everyone
       : codes
         .map((c) => ladder.find((l) => l.code === c)?.label ?? c)
         .join(' · '));
 
   return (
     <SettingsScreen
-      title="Ratio benchmarks"
-      subtitle="What each ratio counts, and what counts as on track."
+      title={kept('Ratio benchmarks')}
+      subtitle={t.subtitle}
       permission="tenant_config:read"
       tabs={ACTIVITY_SETTINGS_TABS}
       error={error}
@@ -294,7 +311,7 @@ export default function RatioBenchmarksPage() {
       toolbar={{
         /* The prototype's own hint, and the window is the one thing the cards cannot say:
            every ratio here is computed over the last 30 days, fixed (ADR-0022). */
-        hint: 'Calculated on the last 30 days of activity.',
+        hint: t.window,
         actions: (
           <>
             <label className="flex items-center gap-2 text-md text-navy">
@@ -303,7 +320,7 @@ export default function RatioBenchmarksPage() {
                 checked={showArchived}
                 onChange={(e) => setShowArchived(e.target.checked)}
               />
-              Show archived
+              {s.showArchived}
             </label>
           </>
         ),
@@ -312,26 +329,25 @@ export default function RatioBenchmarksPage() {
 
       <div className="mb-4">
         <Button variant="secondary" onClick={() => setShowPublished((v) => !v)}>
-          {showPublished ? 'Hide what agents see' : 'See what agents see now'}
+          {showPublished ? t.hidePublished : t.showPublished}
         </Button>
         {showPublished && (
           <Card className="mt-2">
-            <h2 className="font-display text-lg font-bold text-navy">What agents see now</h2>
+            <h2 className="font-display text-lg font-bold text-navy">{t.publishedTitle}</h2>
             <p className="mt-1 text-sm text-muted">
-              The published copy. It changes only when you press <strong>Publish to
-              agents</strong> — not when you save.
+              {t.publishedLead({ publish: <strong>{s.publish.publishToAgents}</strong> })}
             </p>
             {publishedRatios.length === 0 ? (
-              <p className="mt-3 text-md text-muted">Nothing is published for this office yet.</p>
+              <p className="mt-3 text-md text-muted">{t.nothingPublished}</p>
             ) : (
               <ul className="mt-3 flex flex-col gap-1">
                 {publishedRatios.map((r) => (
                   <li key={r.id} className="text-md text-navy">
                     {r.label}
                     <span className="text-muted">
-                      {r.comparison === 'band' ? ' — on track within ' : ' — on track at or above '}
+                      {r.comparison === 'band' ? t.publishedWithin : t.publishedAtOrAbove}
                     </span>
-                    <strong>{formatBenchmark(r.benchmark, unitFor(r))}</strong>
+                    <strong>{formatBenchmark(r.benchmark, unitFor(r), figures, language)}</strong>
                   </li>
                 ))}
               </ul>
@@ -363,12 +379,8 @@ export default function RatioBenchmarksPage() {
                 });
               }}
             >
-              <h2 className="font-display text-lg font-bold text-navy">Add a ratio</h2>
-              <p className="text-sm text-muted">
-                Yours entirely — count whatever this office needs to watch. It will not
-                appear in any comparison with other offices, because nothing outside this
-                office knows what it measures.
-              </p>
+              <h2 className="font-display text-lg font-bold text-navy">{t.addRatio}</h2>
+              <p className="text-sm text-muted">{t.addLead}</p>
 
               {/* The kind first, by name (P13.1-T6). It was the *Rule* select at the foot of
                   the form, its balance option worded *"Within the benchmark either side of an
@@ -376,9 +388,9 @@ export default function RatioBenchmarksPage() {
                   *Selling vs Recruitment*. Two radios, because both kinds have to be seen to
                   be chosen between; everything below follows the one chosen. */}
               <fieldset>
-                <legend className="text-sm font-semibold text-navy">Kind</legend>
+                <legend className="text-sm font-semibold text-navy">{t.kind}</legend>
                 <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1">
-                  {RATIO_KINDS.map(([kind, label]) => (
+                  {ratioKinds(t).map(([kind, label]) => (
                     <label key={kind} className="flex items-center gap-1.5 text-md text-navy">
                       <input
                         type="radio"
@@ -394,14 +406,14 @@ export default function RatioBenchmarksPage() {
               </fieldset>
 
               <div className="flex flex-wrap gap-3">
-                <Field label="Code" htmlFor="new-ratio-code" hint="Never changes once saved.">
+                <Field label={s.code} htmlFor="new-ratio-code" hint={t.codeHint}>
                   <TextInput
                     id="new-ratio-code"
                     value={form.code}
                     onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase() }))}
                   />
                 </Field>
-                <Field label="Name" htmlFor="new-ratio-label">
+                <Field label={s.name} htmlFor="new-ratio-label">
                   <TextInput
                     id="new-ratio-label"
                     value={form.label}
@@ -414,7 +426,7 @@ export default function RatioBenchmarksPage() {
                   code lists and never a typed expression — the prototype's `6 / (4+5)`
                   rebinds itself the moment somebody reorders the activity types. A balance
                   is not a division, so its lists are its two sides, not *Counts* and *Out of*. */}
-              {sideHeadings(form.comparison).map(([heading, side]) => (
+              {sideHeadings(form.comparison, t, w).map(([heading, side]) => (
                 <fieldset key={side}>
                   <legend className="text-sm font-semibold text-navy">{heading}</legend>
                   <ul className="mt-1 flex flex-wrap gap-3">
@@ -444,12 +456,12 @@ export default function RatioBenchmarksPage() {
                     is ±percentage points, not a floor, and labelling it as a floor is a
                     data-entry defect rather than a wording one. */}
                 <Field
-                  label={form.comparison === 'band' ? 'Within, either side' : 'On track at or above'}
+                  label={form.comparison === 'band' ? t.withinEitherSide : t.atOrAbove}
                   htmlFor="new-ratio-benchmark"
                   hint={form.comparison === 'band'
-                    ? bandHint(form.benchmark)
+                    ? bandHint(form.benchmark, t, figures)
                     : form.displayUnit === 'percent'
-                      ? 'As a percentage — type 15 for 15%.'
+                      ? t.asPercentage
                       : undefined}
                   className="min-w-40"
                 >
@@ -467,7 +479,7 @@ export default function RatioBenchmarksPage() {
                     other way to be written. Switching re-expresses what was typed, so 0.3
                     becomes 30 as a percentage rather than turning into 0.3%. */}
                 {form.comparison === 'gte' && (
-                  <Field label="Shown as" htmlFor="new-ratio-unit" className="min-w-48">
+                  <Field label={t.shownAs} htmlFor="new-ratio-unit" className="min-w-48">
                     <Select
                       id="new-ratio-unit"
                       value={form.displayUnit}
@@ -476,12 +488,12 @@ export default function RatioBenchmarksPage() {
                         setForm((f) => ({
                           ...f,
                           displayUnit: next,
-                          benchmark: reexpress(f.benchmark, f.displayUnit, next),
+                          benchmark: reexpress(f.benchmark, f.displayUnit, next, figures),
                         }));
                       }}
                     >
-                      <option value="percent">{DISPLAY_UNIT_LABEL.percent}</option>
-                      <option value="decimal">{DISPLAY_UNIT_LABEL.decimal}</option>
+                      <option value="percent">{units.percent}</option>
+                      <option value="decimal">{units.decimal}</option>
                     </Select>
                   </Field>
                 )}
@@ -497,16 +509,16 @@ export default function RatioBenchmarksPage() {
                         form.benchmark, form.comparison === 'band' ? 'points' : form.displayUnit,
                       ))}
                   >
-                    Add the ratio
+                    {t.addTheRatio}
                   </Button>
                   <Button variant="secondary" onClick={() => { setAdding(false); setForm(blank); }}>
-                    Cancel
+                    {s.cancel}
                   </Button>
                 </FieldRow.Actions>
               </FieldRow>
             </form>
           ) : (
-            <Button variant="secondary" onClick={() => setAdding(true)}>Add a ratio</Button>
+            <Button variant="secondary" onClick={() => setAdding(true)}>{t.addRatio}</Button>
           )}
         </Card>
       )}
@@ -522,11 +534,11 @@ export default function RatioBenchmarksPage() {
             */}
           {visible.length === 0 && (
             <EmptyState
-              title={showArchived || ratios.length === 0 ? 'No ratios yet' : 'Every ratio is archived'}
+              title={showArchived || ratios.length === 0 ? t.noRatios : t.allArchived}
               variant={showArchived || ratios.length === 0 ? 'empty' : 'filtered'}
               action={canWrite && !showArchived && ratios.length > 0 ? (
                 <Button variant="secondary" onClick={() => setShowArchived(true)}>
-                  Show archived
+                  {s.showArchived}
                 </Button>
               ) : undefined}
             />
@@ -537,7 +549,7 @@ export default function RatioBenchmarksPage() {
                 <h2 className="font-display text-lg font-bold text-navy">
                   {ratio.label}
                   {ratio.status === 'archived' && (
-                    <span className="ml-2 text-sm font-normal text-muted">archived</span>
+                    <span className="ml-2 text-sm font-normal text-muted">{s.archivedLine}</span>
                   )}
                 </h2>
                 {/* One cell, so the heading stays hard left however many of these show. */}
@@ -545,7 +557,7 @@ export default function RatioBenchmarksPage() {
                   {mark && (
                     <>
                       <span className="rounded-full bg-amber/20 px-2 py-0.5 text-sm text-navy">
-                        {STAGED_LABEL[mark]}
+                        {s.staged.mark[mark]}
                       </span>
                       {/* Undo belongs on the row, not only in the bar: the bar discards
                           every staged change at once, which is not what a reader who
@@ -555,7 +567,7 @@ export default function RatioBenchmarksPage() {
                         className="text-sm font-semibold text-navy underline"
                         onClick={() => setStaged((now) => unstageRow(now, 'ratio', ratio.id))}
                       >
-                        Undo
+                        {s.undo}
                       </button>
                     </>
                   )}
@@ -563,13 +575,7 @@ export default function RatioBenchmarksPage() {
               </div>
 
               <p className="mt-1 text-sm text-muted">
-                {ratio.origin === 'platform'
-                  ? 'Provisioned with your company’s standard. Everything on it is yours to '
-                    + 'change, the formula included — and if you change what it counts, this '
-                    + 'card says so.'
-                  : 'Your office’s own — the name, what it counts, the benchmark and who '
-                    + 'it applies to are all yours. It is compared with nobody outside this '
-                    + 'office, which is what makes that safe.'}
+                {ratio.origin === 'platform' ? t.fromStandard : t.ownRatio}
               </p>
 
               {/*
@@ -581,14 +587,12 @@ export default function RatioBenchmarksPage() {
               {ratio.divergesFromStandard
                 && ratio.standardNumerator && ratio.standardDenominator && (
                 <p className="mt-3 rounded-md border border-amber bg-amber/10 p-3 text-sm text-navy">
-                  <strong>This is not your company’s standard any more.</strong>{' '}
+                  <strong>{t.notStandard}</strong>{' '}
                   <span className="text-muted">
-                    It was set up as{' '}
-                    {ratio.standardNumerator.map((c) => labelFor(c) ?? c).join(' + ')}
-                    {' ÷ '}
-                    {ratio.standardDenominator.map((c) => labelFor(c) ?? c).join(' + ')}.
-                    Your office is measured by what is below. A comparison with other offices
-                    still uses the standard, so the two figures can differ.
+                    {t.setUpAs({
+                      numerator: ratio.standardNumerator.map((c) => labelFor(c) ?? c).join(' + '),
+                      denominator: ratio.standardDenominator.map((c) => labelFor(c) ?? c).join(' + '),
+                    })}
                   </span>
                 </p>
               )}
@@ -631,7 +635,7 @@ export default function RatioBenchmarksPage() {
                 {scoping === ratio.id ? (
                   <>
                     <fieldset className="min-w-0">
-                      <legend className="text-sm font-semibold text-navy">Applies to</legend>
+                      <legend className="text-sm font-semibold text-navy">{s.appliesTo}</legend>
                       {/* Checkboxes, not a multi-select: every rung is visible at once, and
                           the empty state — nothing ticked — is the one that means everyone,
                           which a collapsed control would hide. */}
@@ -651,10 +655,7 @@ export default function RatioBenchmarksPage() {
                           </li>
                         ))}
                       </ul>
-                      <p className="mt-1 text-sm text-muted">
-                        Tick none to ask everyone. Anybody on a rung you leave unticked will
-                        not see this ratio at all.
-                      </p>
+                      <p className="mt-1 text-sm text-muted">{t.scopeHint}</p>
                     </fieldset>
                     <Button
                       disabled={busy}
@@ -668,14 +669,15 @@ export default function RatioBenchmarksPage() {
                         setScoping(null);
                       }}
                     >
-                      Save
+                      {s.save}
                     </Button>
-                    <Button variant="secondary" onClick={() => setScoping(null)}>Cancel</Button>
+                    <Button variant="secondary" onClick={() => setScoping(null)}>{s.cancel}</Button>
                   </>
                 ) : (
                   <>
                     <p className="text-md text-navy">
-                      <span className="text-muted">Applies to </span>
+                      {/* The label, then who: a label and its value, in that order in both languages. */}
+                      <span className="text-muted">{s.appliesTo}{' '}</span>
                       <strong>{appliesTo(ratio.appliesToOrgLevelCodes)}</strong>
                     </p>
                     {canWrite && (
@@ -686,7 +688,7 @@ export default function RatioBenchmarksPage() {
                           setRungs(ratio.appliesToOrgLevelCodes);
                         }}
                       >
-                        Change who it applies to
+                        {s.changeWhoItAppliesTo}
                       </Button>
                     )}
                   </>
@@ -702,7 +704,7 @@ export default function RatioBenchmarksPage() {
                             sum — so its two sides are *Side A* and *Side B*, as the Add-a-ratio
                             form calls them, rather than a numerator and a denominator. Not the
                             card's section names: ticking a box here can change them. */}
-                        {sideHeadings(ratio.comparison)
+                        {sideHeadings(ratio.comparison, t, w)
                           .map(([heading, side]) => (
                             <fieldset key={side} className="min-w-0 flex-1">
                               <legend className="text-sm font-semibold text-navy">{heading}</legend>
@@ -736,7 +738,7 @@ export default function RatioBenchmarksPage() {
                         field a reader would try first. An office may rename a platform
                         ratio as well: the code is the identity, the label is what their
                         people call it (invariant §4). */}
-                    <Field label="Name" htmlFor={`label-${ratio.id}`} className="min-w-60 flex-1">
+                    <Field label={s.name} htmlFor={`label-${ratio.id}`} className="min-w-60 flex-1">
                       <TextInput
                         id={`label-${ratio.id}`}
                         value={draftLabel}
@@ -744,13 +746,13 @@ export default function RatioBenchmarksPage() {
                       />
                     </Field>
                     <Field
-                      label="Benchmark"
+                      label={kept('Benchmark')}
                       htmlFor={`benchmark-${ratio.id}`}
                       hint={ratio.comparison === 'band'
-                        ? bandHint(draft)
+                        ? bandHint(draft, t, figures)
                         : draftUnit === 'percent'
-                          ? 'On track at or above this, as a percentage — 15 means 15%.'
-                          : 'On track at or above this.'}
+                          ? t.percentHint
+                          : t.atOrAboveHint}
                       className="min-w-40"
                     >
                       <TextInput
@@ -764,18 +766,18 @@ export default function RatioBenchmarksPage() {
                     {/* On a platform ratio too: how a number is written is presentation,
                         not formula, so ADR-0021 has nothing to say about it. */}
                     {ratio.comparison === 'gte' && (
-                      <Field label="Shown as" htmlFor={`unit-${ratio.id}`} className="min-w-48">
+                      <Field label={t.shownAs} htmlFor={`unit-${ratio.id}`} className="min-w-48">
                         <Select
                           id={`unit-${ratio.id}`}
                           value={draftUnit}
                           onChange={(e) => {
                             const next = e.target.value as RatioDisplayUnit;
-                            setDraft((d) => reexpress(d, draftUnit, next));
+                            setDraft((d) => reexpress(d, draftUnit, next, figures));
                             setDraftUnit(next);
                           }}
                         >
-                          <option value="percent">{DISPLAY_UNIT_LABEL.percent}</option>
-                          <option value="decimal">{DISPLAY_UNIT_LABEL.decimal}</option>
+                          <option value="percent">{units.percent}</option>
+                          <option value="decimal">{units.decimal}</option>
                         </Select>
                       </Field>
                     )}
@@ -803,17 +805,17 @@ export default function RatioBenchmarksPage() {
                         setEditing(null);
                       }}
                     >
-                      Save
+                      {s.save}
                     </Button>
-                    <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                    <Button variant="secondary" onClick={() => setEditing(null)}>{s.cancel}</Button>
                   </>
                 ) : (
                   <>
                     <p className="text-md text-navy">
                       <span className="text-muted">
-                        {ratio.comparison === 'band' ? 'On track within ' : 'On track at or above '}
+                        {ratio.comparison === 'band' ? t.onTrackWithin : t.onTrackAtOrAbove}
                       </span>
-                      <strong>{formatBenchmark(ratio.benchmark, unitFor(ratio))}</strong>
+                      <strong>{formatBenchmark(ratio.benchmark, unitFor(ratio), figures, language)}</strong>
                     </p>
                     {canWrite && (
                       <>
@@ -821,7 +823,7 @@ export default function RatioBenchmarksPage() {
                           variant="inline"
                           onClick={() => {
                             setEditing(ratio.id);
-                            setDraft(benchmarkToInput(ratio.benchmark, unitFor(ratio)));
+                            setDraft(benchmarkToInput(ratio.benchmark, unitFor(ratio), figures));
                             setDraftUnit(unitFor(ratio));
                             setDraftLabel(ratio.label);
                             setSides({
@@ -830,7 +832,7 @@ export default function RatioBenchmarksPage() {
                             });
                           }}
                         >
-                          Edit
+                          {s.edit}
                         </Button>
                         {ratio.status === 'active' ? (
                           <Button
@@ -838,7 +840,7 @@ export default function RatioBenchmarksPage() {
                             disabled={busy}
                             onClick={() => void run(() => archiveRatio(ratio.id))}
                           >
-                            Archive
+                            {s.archive}
                           </Button>
                         ) : (
                           <Button
@@ -846,7 +848,7 @@ export default function RatioBenchmarksPage() {
                             disabled={busy}
                             onClick={() => void run(() => restoreRatio(ratio.id))}
                           >
-                            Restore
+                            {s.restore}
                           </Button>
                         )}
                       </>

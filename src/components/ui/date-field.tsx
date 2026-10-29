@@ -1,6 +1,8 @@
 'use client';
 
 import { useRef } from 'react';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
 import { cn } from '@/lib/cn';
 import { formatCalendarDay } from '@/lib/format';
 import { NavIcon } from './nav-icon';
@@ -8,8 +10,11 @@ import { NavIcon } from './nav-icon';
 /** A date the face may print: four digits of year from 1000 on, as a browser's field sends a whole one. */
 const WHOLE_DATE = /^[1-9]\d{3}-\d{2}-\d{2}$/;
 
-/** What an empty field says, in the face's place of a date (P18.96-T2; parity I-455). */
-export const DATE_FIELD_EMPTY = 'Choose a date';
+/**
+ * What an empty field says, in the face's place of a date (P18.96-T2; parity I-455): the catalogue's English, which the
+ * field writes in the reader's language (`uiMessages.chooseDate`, P18.98-T4).
+ */
+export const DATE_FIELD_EMPTY = uiMessages.en.chooseDate;
 
 /**
  * How much room the field takes — `TextInput`'s two densities, and the activation's 34px row control.
@@ -89,9 +94,13 @@ export function DateField({
   ...input
 }: DateFieldProps) {
   const ref = useRef<HTMLInputElement>(null);
+  // The face in the figures' language, *5 Okt 2026* or *5 Oct 2026* — Indonesian for a reader with no choice
+  // (P18.98-T3, `useFigureLanguage`); the value stays ISO.
+  const language = useFigureLanguage();
+  const t = useMessages(uiMessages);
   // A year still being typed digit by digit (`0002-08-01`) is not a date yet: the face waits for a whole one.
-  const shown = value && WHOLE_DATE.test(value) ? formatCalendarDay(value) : '';
-  const empty = emptyText ?? (density === 'cell' ? '' : DATE_FIELD_EMPTY);
+  const shown = value && WHOLE_DATE.test(value) ? formatCalendarDay(value, language) : '';
+  const empty = emptyText ?? (density === 'cell' ? '' : t.chooseDate);
   const inert = Boolean(disabled || readOnly);
 
   /** The device's picker. A browser without `showPicker`, or one refusing it here, keeps the focus in the field. */

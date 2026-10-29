@@ -3,10 +3,12 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { TAP_HEIGHT } from '@/components/ui/phone';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { eventsMessages } from '@/i18n/messages/events';
 import type { ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  audienceLine, joinName, OWN_COPY, pillOf, PROTOTYPE_COPY, tagOf, whenLine, type EventPill, type GuestEvent,
+  audienceLine, joinName, pillOf, tagOf, whenLine, type EventPill, type GuestEvent,
 } from '@/lib/events';
 
 /**
@@ -14,13 +16,14 @@ import {
  * pill's state a second time (*Not Joined* over *Not joined*; UI-024), and the pill is the card's one status.
  */
 export function EventTagLabel({ event }: { event: GuestEvent }) {
+  const t = useMessages(eventsMessages);
   const tag = tagOf(event);
   return (
     <span
       data-tag={tag}
       className="inline-block rounded-pill bg-navy/[0.06] px-[9px] py-[3px] text-2xs font-bold uppercase tracking-wide text-navy"
     >
-      {PROTOTYPE_COPY.tags[tag]}
+      {t.tags[tag]}
     </span>
   );
 }
@@ -64,17 +67,19 @@ const PILL_TONE: Record<EventPill, { tone: string; dot: string | null }> = {
 };
 
 export function EventStatePill({ pill, label }: { pill: EventPill; label?: string }) {
+  const t = useMessages(eventsMessages);
   const { tone, dot } = PILL_TONE[pill];
   return (
     <span data-pill={pill} className={cn('inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-sm font-semibold', tone)}>
       {dot && <span aria-hidden="true" className={cn('h-1.5 w-1.5 rounded-full', dot)} />}
-      {label ?? PROTOTYPE_COPY.pills[pill]}
+      {label ?? t.pills[pill]}
     </span>
   );
 }
 
 /** *"{location} ↗"*, a link out when the event has an address (`:8493-8498`), plain words when it has none. */
 export function EventLocation({ event }: { event: GuestEvent }) {
+  const t = useMessages(eventsMessages);
   if (!event.locationUrl) return <>{event.location}</>;
   return (
     <a
@@ -85,7 +90,7 @@ export function EventLocation({ event }: { event: GuestEvent }) {
       className="rounded-sm font-semibold text-navy-soft underline underline-offset-2 hover:text-amber-ink"
     >
       {event.location} <span aria-hidden="true">↗</span>
-      <span className="sr-only"> ({OWN_COPY.opensInNewTab})</span>
+      <span className="sr-only"> ({t.opensInNewTab})</span>
     </a>
   );
 }
@@ -123,6 +128,9 @@ export function EventCard({ event, companyName, canJoin, busy, error, onOpen, on
   onOpen: (id: string) => void;
   onJoin: (id: string) => void;
 }) {
+  const t = useMessages(eventsMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const past = event.ended;
   return (
     <div
@@ -137,12 +145,12 @@ export function EventCard({ event, companyName, canJoin, busy, error, onOpen, on
         <div className="mb-1 flex items-start gap-2.5">
           <EventPosterFrame event={event} past={past} className="h-8 w-8 shrink-0 overflow-hidden rounded-md text-xl" />
           <div className="min-w-0">
-            <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">{audienceLine(event.audience, companyName)}</p>
+            <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">{audienceLine(event.audience, companyName, language)}</p>
             <h3 className="break-words text-md font-bold leading-snug text-navy">{event.title}</h3>
           </div>
         </div>
         <p className="mb-2 text-sm text-muted">
-          {whenLine(event)}
+          {whenLine(event, figures)}
           <br />
           <EventLocation event={event} />
         </p>
@@ -154,13 +162,13 @@ export function EventCard({ event, companyName, canJoin, busy, error, onOpen, on
               <Button
                 data-join-event={event.id}
                 // *Join Kickoff 2026* to a screen reader, so a list of them is told apart; the visible word leads it.
-                aria-label={joinName(event.title)}
+                aria-label={joinName(event.title, language)}
                 aria-disabled={busy || undefined}
                 // 44px tall on a phone (P18.95-T1 AC-10), 32px from 768px as the foot's other controls.
                 className={cn('h-8 px-3.5 text-base', TAP_HEIGHT)}
                 onClick={(e) => { e.stopPropagation(); onJoin(event.id); }}
               >
-                {OWN_COPY.join}
+                {t.join}
               </Button>
             )}
             <Button
@@ -169,7 +177,7 @@ export function EventCard({ event, companyName, canJoin, busy, error, onOpen, on
               className="h-8 px-3.5 text-base"
               onClick={(e) => { e.stopPropagation(); onOpen(event.id); }}
             >
-              {PROTOTYPE_COPY.viewEvent}
+              {t.viewEvent}
             </Button>
           </span>
         </div>

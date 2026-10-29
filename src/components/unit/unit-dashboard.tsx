@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ADD_AGENT_COPY, AddAgentDialog } from '@/components/add-agent-form';
+import { AddAgentDialog } from '@/components/add-agent-form';
 import { PageHeader } from '@/components/app-shell';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, buttonClass, Card, ErrorBanner } from '@/components/ui/field';
@@ -11,15 +11,20 @@ import { TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { addAgentMessages } from '@/i18n/messages/add-agent';
+import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 import { readActivityRatios, type ActivityRatios } from '@/lib/activity';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import { kept } from '@/i18n/kept';
 import { cn } from '@/lib/cn';
-import { CONFIRMED, withDetail } from '@/lib/confirmations';
+import { confirmationMessages } from '@/i18n/messages/confirmations';
+import { withDetail } from '@/lib/confirmations';
 import { askedFor, type AddAgentResult } from '@/lib/invites';
 import { useCan, useSession } from '@/lib/session';
 import { usePhone } from '@/lib/use-phone';
 import {
-  lockedWords, OWN_COPY, productionToast, PROTOTYPE_COPY, readUnitDashboard, UNIT_PERIODS,
+  lockedWords, productionToast, readUnitDashboard, unitPeriods,
   type UnitDashboardView, type UnitPeriod, type UnitRow,
 } from '@/lib/unit-dashboard';
 import { UnitRoster } from './unit-roster';
@@ -42,11 +47,19 @@ import { UpdateProductionDialog } from './update-production-dialog';
  * The states the prototype lacks are Fills (L-01): a skeleton shaped like the tiles and the table, an
  * error with a retry, and the empty unit of somebody who leads nobody, which says so in plain words and
  * points to their own screens.
+ *
+ * **Its words are the catalogue's** (`messages/unit-dashboard.ts`, P18.98-T4), in the reader's language; every figure
+ * is written in `useFigureLanguage()`'s.
  */
 export function UnitDashboard({ forId, period }: { forId?: string; period: UnitPeriod }) {
   const router = useRouter();
   const pathname = usePathname();
   const { me } = useSession();
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const t = useMessages(unitDashboardMessages);
+  const addAgent = useMessages(addAgentMessages);
+  const confirmed = useMessages(confirmationMessages);
   const { toast, show } = useToast();
   /** Below 768px the roster is a card per person (P18.95-T3 AC-1), asked before the read answers, so no table draws first. */
   const phone = usePhone();
@@ -117,7 +130,7 @@ export function UnitDashboard({ forId, period }: { forId?: string; period: UnitP
 
   if (missing) return <UnitNotFound />;
 
-  const title = forId ? (view ? `${view.head.name}’s Unit Dashboard` : null) : null;
+  const title = forId ? (view ? t.titleOf({ name: view.head.name }) : null) : null;
   const canUpdate = !!view && view.production.canUpdate && !me?.impersonationReadOnly;
   /*
    * **+ Add agent** (P18.96-T3 AC-1, ADR-0170 §1): into the unit on screen — the reader's own, or for the Owner and an
@@ -129,30 +142,30 @@ export function UnitDashboard({ forId, period }: { forId?: string; period: UnitP
   const addLeader = view && !view.head.isReader ? { membershipId: view.head.membershipId, name: view.head.name } : null;
   const addButton = canAdd ? (
     <Button variant={canUpdate ? 'secondary' : 'primary'} className="h-auto px-4 py-[9px] text-base" onClick={() => setAdding(true)}>
-      {ADD_AGENT_COPY.open}
+      {addAgent.open}
     </Button>
   ) : null;
   const added = (result: AddAgentResult) => {
     if (result.outcome === 'linked') {
-      show(withDetail(CONFIRMED.agentAdded, `${result.member.fullName} is in the unit now.`));
+      show(withDetail(confirmed.agentAdded, t.addedDetail({ name: result.member.fullName })));
       setAttempt((n) => n + 1);
     }
     if (result.outcome === 'transfer_requested') {
-      show(withDetail(CONFIRMED.transferRequested, `${askedFor(result.transfer)} moves when the office approves it.`));
+      show(withDetail(confirmed.transferRequested, t.transferDetail({ name: askedFor(result.transfer) })));
     }
   };
 
   return (
     <div className="min-w-0">
       {title && <PageHeader title={title} />}
-      {forId && !view && error && <PageHeader title={PROTOTYPE_COPY.title} />}
+      {forId && !view && error && <PageHeader title={t.prototype.title} />}
 
       {!(view?.empty) && <PeriodSwitch period={shown} onChoose={choose} />}
 
       {error && (
         <div className="mt-5">
           <ErrorBanner {...error} />
-          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.own.tryAgain}</Button>
         </div>
       )}
       {!view && !error && <UnitSkeleton />}
@@ -174,16 +187,16 @@ export function UnitDashboard({ forId, period }: { forId?: string; period: UnitP
               // Drawn and not usable: the month is locked, and the words say who reopens it (P15-T3). Its face is
               // the primary button's own classes, so the held button and the live one are the same amber.
               <TippedGlyph
-                glyph={PROTOTYPE_COPY.updateProduction}
-                name={PROTOTYPE_COPY.updateProduction}
-                tip={lockedWords(view.production.month)}
+                glyph={t.prototype.updateProduction}
+                name={t.prototype.updateProduction}
+                tip={lockedWords(view.production.month, language, figures)}
                 unavailable
                 align="fit"
                 face={buttonClass('primary', 'h-auto w-auto px-4 py-[9px] text-base')}
               />
             ) : (
               <Button className="h-auto px-4 py-[9px] text-base" onClick={() => setUpdating(true)}>
-                {PROTOTYPE_COPY.updateProduction}
+                {t.prototype.updateProduction}
               </Button>
                 ))}
               </div>
@@ -196,7 +209,7 @@ export function UnitDashboard({ forId, period }: { forId?: string; period: UnitP
               onStale={() => setAttempt((n) => n + 1)}
               onSaved={(updated) => {
                 setUpdating(false);
-                show(productionToast(updated));
+                show(productionToast(updated, language));
                 if (updated > 0) setAttempt((n) => n + 1);
               }}
             />
@@ -219,10 +232,12 @@ const periodOf = (key: string) => key.slice(key.indexOf('|') + 1) as UnitPeriod;
  * change what the page reads.
  */
 function PeriodSwitch({ period, onChoose }: { period: UnitPeriod; onChoose: (period: UnitPeriod) => void }) {
+  const language = useLanguage();
+  const t = useMessages(unitDashboardMessages);
   return (
     <div className="mb-1.5 flex flex-wrap items-start justify-end gap-4">
-      <div role="group" aria-label="Period" className="inline-flex flex-wrap rounded-[9px] border border-hairline bg-card p-[3px]">
-        {UNIT_PERIODS.map(({ id, label }) => (
+      <div role="group" aria-label={t.period} className="inline-flex flex-wrap rounded-[9px] border border-hairline bg-card p-[3px]">
+        {unitPeriods(language).map(({ id, label }) => (
           <button
             key={id}
             type="button"
@@ -243,8 +258,9 @@ function PeriodSwitch({ period, onChoose }: { period: UnitPeriod; onChoose: (per
 
 /** The tiles and the table, in outline, while the roster is read. */
 function UnitSkeleton() {
+  const t = useMessages(unitDashboardMessages).own;
   return (
-    <Skeleton label={OWN_COPY.loading}>
+    <Skeleton label={t.loading}>
       <div className="mb-3 mt-5 grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-4">
         {[0, 1, 2, 3].map((i) => (
           <div key={i} className="min-h-[126px] rounded-lg border border-hairline bg-card px-[18px] py-4">
@@ -275,18 +291,19 @@ function UnitSkeleton() {
  * offered to somebody who leads nobody.
  */
 function NobodyYet({ action }: { action?: React.ReactNode }) {
+  const t = useMessages(unitDashboardMessages).own;
   return (
     <Card className="mt-5 p-0">
       <EmptyState
-        title={OWN_COPY.emptyTitle}
+        title={t.emptyTitle}
         action={(
           <div className="text-md text-muted">
-            <p>{OWN_COPY.emptyLine}</p>
+            <p>{t.emptyLine}</p>
             {/* P18.96-T3: a leader who leads nobody yet adds their first agent here — the roster's header is not drawn. */}
             {action && <div className="mt-3 flex justify-center">{action}</div>}
             <p className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1">
-              <Link href="/summary" className={cn('font-semibold text-navy underline-offset-2 hover:underline', TEXT_TAP)}>Personal summary</Link>
-              <Link href="/activity/log" className={cn('font-semibold text-navy underline-offset-2 hover:underline', TEXT_TAP)}>Activity management</Link>
+              <Link href="/summary" className={cn('font-semibold text-navy underline-offset-2 hover:underline', TEXT_TAP)}>{kept('Personal summary')}</Link>
+              <Link href="/activity/log" className={cn('font-semibold text-navy underline-offset-2 hover:underline', TEXT_TAP)}>{kept('Activity management')}</Link>
             </p>
           </div>
         )}
@@ -301,15 +318,16 @@ function NobodyYet({ action }: { action?: React.ReactNode }) {
  * exists. Ours to word (L-01).
  */
 function UnitNotFound() {
+  const t = useMessages(unitDashboardMessages);
   return (
     <div className="min-w-0">
-      <PageHeader title={PROTOTYPE_COPY.title} />
+      <PageHeader title={t.prototype.title} />
       <Card>
-        <h2 className="font-display text-lg font-bold text-navy">{OWN_COPY.notFoundTitle}</h2>
-        <p className="mt-1 text-md text-muted">{OWN_COPY.notFoundLine}</p>
+        <h2 className="font-display text-lg font-bold text-navy">{t.own.notFoundTitle}</h2>
+        <p className="mt-1 text-md text-muted">{t.own.notFoundLine}</p>
         <p className="mt-3">
           <Link href="/unit/dashboard" className={cn('text-md font-semibold text-navy underline-offset-2 hover:underline', TEXT_TAP)}>
-            {OWN_COPY.backToYours}
+            {t.own.backToYours}
           </Link>
         </p>
       </Card>

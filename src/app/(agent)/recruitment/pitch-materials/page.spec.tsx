@@ -148,7 +148,8 @@ describe('Recruitment › Pitch Materials (P17-T6)', () => {
     render();
     await screen.findByRole('article', { name: 'FAQ' });
     expect(within(card('Opportunity Overview')).getByText('Opportunity_Overview_v3.pdf')).toBeInTheDocument();
-    expect(within(card('Opportunity Overview')).getByText('2,4 MB · updated 12 Sep 2026')).toBeInTheDocument();
+    // The size in the spec's language since P18.98-T4 wired the pitch cards (the harness's English is a chosen English).
+    expect(within(card('Opportunity Overview')).getByText('2.4 MB · updated 12 Sep 2026')).toBeInTheDocument();
     expect(within(card('FAQ')).getByText('Not uploaded yet')).toBeInTheDocument();
     expect(card('FAQ').className).toContain('border-dashed');
   });

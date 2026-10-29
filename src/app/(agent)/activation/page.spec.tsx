@@ -55,7 +55,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     await ready();
     const term = screen.getByText('Join date');
     expect(term.tagName).toBe('DT');
-    expect(term.nextElementSibling).toHaveTextContent('6 Agu 2026');
+    expect(term.nextElementSibling).toHaveTextContent('6 Aug 2026');
     expect(screen.queryByLabelText('Join date')).not.toBeInTheDocument();
     // The prototype's *Start date* is gone: one name for the one date.
     expect(screen.queryByText('Start date')).not.toBeInTheDocument();
@@ -151,7 +151,7 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
     expect(box).toBeChecked();
     await screen.findByText('38% complete');
     expect(box).toBeChecked();
-    expect(within(row('CRM_SETUP')).getByRole('button', { name: 'Ticked by you · 3 Okt 2026' })).toBeInTheDocument();
+    expect(within(row('CRM_SETUP')).getByRole('button', { name: 'Ticked by you · 3 Oct 2026' })).toBeInTheDocument();
     expect(writes(calls)).toEqual([['PUT', '/activation/me/items/CRM_SETUP', { done: true }]]);
   });
 
@@ -344,10 +344,10 @@ describe('/activation, the hire’s own 90-Day Activation (P13-T4)', () => {
   it('P13-T4 AC-5 every done row says who ticked it and when, or which link completed it', async () => {
     show();
     await ready();
-    expect(within(row('INSURANCE_BASICS')).getByRole('button', { name: 'Ticked by you · 10 Agu 2026' })).toBeInTheDocument();
-    expect(within(row('CAREER_MINDSET')).getByRole('button', { name: 'Ticked by Sari Puspita · 12 Agu 2026' })).toBeInTheDocument();
-    expect(within(row('GOAL_SETTING')).getByRole('button', { name: 'Completed from Goal Settings by you · 15 Agu 2026' })).toBeInTheDocument();
-    expect(within(row('ADD_PROSPECTS')).getByRole('button', { name: 'Completed from Leads Management by Sari Puspita · 16 Agu 2026' })).toBeInTheDocument();
+    expect(within(row('INSURANCE_BASICS')).getByRole('button', { name: 'Ticked by you · 10 Aug 2026' })).toBeInTheDocument();
+    expect(within(row('CAREER_MINDSET')).getByRole('button', { name: 'Ticked by Sari Puspita · 12 Aug 2026' })).toBeInTheDocument();
+    expect(within(row('GOAL_SETTING')).getByRole('button', { name: 'Completed from Goal Settings by you · 15 Aug 2026' })).toBeInTheDocument();
+    expect(within(row('ADD_PROSPECTS')).getByRole('button', { name: 'Completed from Leads Management by Sari Puspita · 16 Aug 2026' })).toBeInTheDocument();
     // An item not done carries none.
     expect(within(row('CRM_SETUP')).queryByText('ⓘ')).not.toBeInTheDocument();
   });

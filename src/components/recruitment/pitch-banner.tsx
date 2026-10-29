@@ -1,5 +1,9 @@
+'use client';
+
+import { useMessages } from '@/i18n/language-provider';
+import { recruitmentPitchMessages } from '@/i18n/messages/recruitment-pitch';
 import { cn } from '@/lib/cn';
-import { PITCH_COPY, PITCH_OWN_COPY, type PitchSummary } from '@/lib/recruitment-pitch';
+import { pitchRing, type PitchSummary } from '@/lib/recruitment-pitch';
 
 /**
  * The completion banner (`Recruitment_Section.html:364-370`, `:797-820`), drawn the same on the
@@ -12,10 +16,11 @@ import { PITCH_COPY, PITCH_OWN_COPY, type PitchSummary } from '@/lib/recruitment
  * figure is hidden from assistive technology rather than read out as *"two slash four"*.
  */
 export function PitchBanner({ summary }: { summary: PitchSummary }) {
+  const t = useMessages(recruitmentPitchMessages);
   const complete = summary.done === summary.total;
   const parts = [
-    ...(summary.missing > 0 ? [PITCH_COPY.notUploaded(summary.missing)] : []),
-    ...(summary.unconfirmed > 0 ? [PITCH_COPY.notConfirmed(summary.unconfirmed)] : []),
+    ...(summary.missing > 0 ? [t.missingCount({ n: summary.missing })] : []),
+    ...(summary.unconfirmed > 0 ? [t.needsChecking({ n: summary.unconfirmed })] : []),
   ];
 
   return (
@@ -28,22 +33,20 @@ export function PitchBanner({ summary }: { summary: PitchSummary }) {
     >
       <div
         role="img"
-        aria-label={PITCH_OWN_COPY.ringName(summary.done, summary.total)}
+        aria-label={t.ringName({ done: summary.done, total: summary.total })}
         className={cn(
           'flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-base font-bold',
           complete ? 'bg-success/[0.12] text-success' : 'bg-alert/10 text-alert',
         )}
       >
-        <span aria-hidden="true">{PITCH_COPY.ring(summary.done, summary.total)}</span>
+        <span aria-hidden="true">{pitchRing(summary.done, summary.total)}</span>
       </div>
       <div className="min-w-0">
         <p className="m-0 mb-0.5 text-md font-bold text-navy">
-          {complete ? PITCH_COPY.completeTitle : PITCH_COPY.incompleteTitle}
+          {complete ? t.completeTitle : t.incompleteTitle}
         </p>
         <p className="m-0 text-base text-muted">
-          {complete
-            ? PITCH_COPY.completeLine(summary.total)
-            : PITCH_COPY.incompleteLine(parts)}
+          {complete ? t.completeLine({ total: summary.total }) : t.incompleteLine({ parts })}
         </p>
       </div>
     </div>

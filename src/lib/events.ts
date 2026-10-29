@@ -1,5 +1,9 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { eventsMessages } from '@/i18n/messages/events';
 import { api, toDisplayError, type ApiError } from './api-client';
-import { CONFIRMED, withDetail } from './confirmations';
+import { confirmationMessages } from '@/i18n/messages/confirmations';
+import { withDetail } from './confirmations';
 import { formatClock, formatDayClock, formatShortDay } from './format';
 
 /**
@@ -215,117 +219,113 @@ export function pastBlockOf(event: GuestEvent): PastBlock {
 
 /**
  * *"20 Sep 2026, 18.00"* (`:8534`, where the prototype wrote *Sep 20, 2026 · 6:00 PM*), in the office's calendar and
- * clock as the server resolved them — one date and time, written as every screen writes one (ADR-0167 §1).
+ * clock as the server resolved them — one date and time, written as every screen writes one (ADR-0167 §1). In
+ * `figures`, the reader's figures (`useFigureLanguage()`; P18.98-T4): Indonesian when none is passed, as before.
  */
-export const whenLine = (event: Pick<GuestEvent, 'startsOn' | 'startTime'>) => formatDayClock(event.startsOn, event.startTime);
+export const whenLine = (event: Pick<GuestEvent, 'startsOn' | 'startTime'>, figures?: Language) =>
+  formatDayClock(event.startsOn, event.startTime, figures);
 
 /** The modal's date alone, bolded before its time (`:8643`). */
-export const dayOf = (event: Pick<GuestEvent, 'startsOn'>) => formatShortDay(event.startsOn, { year: true });
+export const dayOf = (event: Pick<GuestEvent, 'startsOn'>, figures?: Language) =>
+  formatShortDay(event.startsOn, { year: true }, figures);
 
 /** The modal's time alone (`:8643`). */
-export const timeOf = (event: Pick<GuestEvent, 'startTime'>) => formatClock(event.startTime);
+export const timeOf = (event: Pick<GuestEvent, 'startTime'>, figures?: Language) => formatClock(event.startTime, figures);
 
 /*
  * ── The words ───────────────────────────────────────────────────────────────────────────────────
+ *
+ * **In the catalogue** (`i18n/messages/events.ts`; P18.98-T4): a screen reads the reader's language,
+ * `useMessages(eventsMessages)`; a function here takes the words' language last, English when none is passed, and
+ * its caller passes `useLanguage()`. The objects below are the catalogue's English in the shapes this module has
+ * always handed its spec.
  */
 
+/** The events' words in a language. */
+export const eventWordsIn = (language: Language = SOURCE_LANGUAGE) => messagesIn(eventsMessages, language);
+
+const EN = eventWordsIn(SOURCE_LANGUAGE);
+
 /**
- * **The prototype's words, verbatim** (`Overall.html`). Three carry *KPM* — the title, its sub-line and
- * the audience line's issuer — and go to the client with OD-39, as every such string has since ADR-0084.
- * The prototype's ASCII apostrophes are kept as written.
+ * **The prototype's words, verbatim** (`Overall.html`), in English, the catalogue's source. Three carry *KPM* — the
+ * title, its sub-line and the audience line's issuer — and go to the client with OD-39, as every such string has
+ * since ADR-0084. The title is `:10413`'s *KPM Events*, **the nav item's words since P18.95-T9 AC-2** (ADR-0167 §10,
+ * OD-205): the nav reads *Event list* (`:2664`).
  */
 export const PROTOTYPE_COPY = {
-  /**
-   * `:10413`'s *KPM Events*, **the nav item's words since P18.95-T9 AC-2** (ADR-0167 §10, OD-205; UI-027, *menu
-   * labels = page titles*): the nav reads *Event list* (`:2664`).
-   */
-  title: 'Event List',
-  sub: 'Browse upcoming and past events from your KPM — join, and share feedback once they wrap up.',
-  /** `:3426-3430`. */
-  filters: { all: 'All', upcoming: 'Upcoming', past: 'Past' } as Record<EventFilter, string>,
-  /** `:3432-3445`. */
-  sections: { going: 'Going', upcoming: 'Upcoming', past: 'Past' },
-  /** `:8562-8570`. */
-  emptyGoing: "You haven't joined any upcoming events yet.",
-  emptyUpcoming: 'No upcoming events right now.',
-  emptyPast: 'No past events yet.',
-  /** `:8502-8510`. */
-  tags: { going: 'Going', notJoined: 'Not Joined', past: 'Past' } as Record<EventTag, string>,
-  /** `:8514-8524`. */
-  pills: {
-    going: 'Going', notJoined: 'Not joined', didntJoin: "Didn't join", feedbackSent: 'Feedback sent', feedbackPending: 'Feedback pending',
-  } as Record<EventPill, string>,
-  /** `:8538`. */
-  viewEvent: 'View event',
-  /** `:8637`. */
+  title: EN.title,
+  sub: EN.sub,
+  filters: EN.filters as Record<EventFilter, string>,
+  sections: EN.sections,
+  emptyGoing: EN.emptyGoing,
+  emptyUpcoming: EN.emptyUpcoming,
+  emptyPast: EN.emptyPast,
+  tags: EN.tags as Record<EventTag, string>,
+  pills: EN.pills as Record<EventPill, string>,
+  viewEvent: EN.viewEvent,
+  /** `:8637`: a mark, in no language. */
   close: '✕',
-  /** `:8617-8618`. */
-  youreGoing: "You're going",
-  cancelRsvp: 'Cancel RSVP',
-  joinEvent: 'Join event',
-  /** `:8656-8673`. */
-  formQuestion: 'How likely are you to recommend this event to your colleagues?',
-  formHint: 'This is the last step for this event — your feedback helps shape future ones.',
-  scaleLow: 'Not at all likely',
-  scaleHigh: 'Extremely likely',
-  why: 'Why?',
-  optional: '(optional)',
-  whyPlaceholder: 'What stood out, good or bad?',
-  improve: 'How can we improve?',
-  improvePlaceholder: 'Any suggestions for next time?',
-  submitFeedback: 'Submit feedback',
-  /** `:8677-8688`. */
-  didntJoinTitle: "You didn't join this event",
-  didntJoinSub: "Feedback is only collected from agents who attended, so there's nothing to fill out here.",
-  claim: 'I actually attended this event',
-  /** `:8690-8700`. */
-  thanksTitle: 'Thanks for your feedback',
-  /** `:8718-8764`. */
-  feedbackSubmitted: 'Feedback submitted — thank you!',
-  claimed: 'Marked as attended — you can now leave feedback',
+  youreGoing: EN.youreGoing,
+  cancelRsvp: EN.cancelRsvp,
+  joinEvent: EN.joinEvent,
+  formQuestion: EN.formQuestion,
+  formHint: EN.formHint,
+  why: EN.why,
+  optional: EN.optional,
+  whyPlaceholder: EN.whyPlaceholder,
+  improve: EN.improve,
+  improvePlaceholder: EN.improvePlaceholder,
+  submitFeedback: EN.submitFeedback,
+  didntJoinTitle: EN.didntJoinTitle,
+  didntJoinSub: EN.didntJoinSub,
+  claim: EN.claim,
+  thanksTitle: EN.thanksTitle,
+  feedbackSubmitted: EN.feedbackSubmitted,
+  claimed: EN.claimed,
 } as const;
 
 /**
  * *"Joined ✓ — you're going to {title}"*: the client's *Joined ✓* (P18.95-T1 AC-6, ADR-0167 §5; UI-008), then the
- * prototype's *"You're going to {title}"* (`:8718`), so the toast still says which event.
+ * prototype's *"You're going to {title}"* (`:8718`), so the toast still says which event — both in `language`, *Joined ✓*
+ * the shared confirmation's (`i18n/messages/confirmations.ts`).
  */
-export const goingToast = (title: string) => withDetail(CONFIRMED.joined, `you're going to ${title}`);
+export const goingToast = (title: string, language: Language = SOURCE_LANGUAGE) =>
+  withDetail(messagesIn(confirmationMessages, language).joined, eventWordsIn(language).goingDetail({ title }));
 /** The card's *Join*, named with its event for a screen reader: *"Join Kickoff 2026"* (P18.95-T10 AC-1). */
-export const joinName = (title: string) => `${OWN_COPY.join} ${title}`;
+export const joinName = (title: string, language: Language = SOURCE_LANGUAGE) => eventWordsIn(language).joinName({ title });
 /** *"RSVP cancelled for {title}"* (`:8728`). */
-export const cancelledToast = (title: string) => `RSVP cancelled for ${title}`;
+export const cancelledToast = (title: string, language: Language = SOURCE_LANGUAGE) =>
+  eventWordsIn(language).cancelled({ title });
 
 /*
  * The scale's words carry the scale's numbers, and the numbers are served (`limits.nps`): *"0 — Not at all
  * likely"*, *"10 — Extremely likely"* (`:8661-8664`), *"Pick a score from 0–10 first"* (`:8755`), *"You scored
  * this event {n}/10"* (`:8696`). Composed here so no `10` is written down twice (invariant §7).
  */
-export const scaleLowLine = (nps: NpsConstants) => `${nps.scaleMin} — ${PROTOTYPE_COPY.scaleLow}`;
-export const scaleHighLine = (nps: NpsConstants) => `${nps.scaleMax} — ${PROTOTYPE_COPY.scaleHigh}`;
-export const pickScoreToast = (nps: NpsConstants) => `Pick a score from ${nps.scaleMin}–${nps.scaleMax} first`;
+export const scaleLowLine = (nps: NpsConstants, language: Language = SOURCE_LANGUAGE) =>
+  eventWordsIn(language).scaleLow({ min: String(nps.scaleMin) });
+export const scaleHighLine = (nps: NpsConstants, language: Language = SOURCE_LANGUAGE) =>
+  eventWordsIn(language).scaleHigh({ max: String(nps.scaleMax) });
+export const pickScoreToast = (nps: NpsConstants, language: Language = SOURCE_LANGUAGE) =>
+  eventWordsIn(language).pickScore({ min: String(nps.scaleMin), max: String(nps.scaleMax) });
 /** The scale's scores in order, `0` to `10`. */
 export const scaleOf = (nps: NpsConstants) =>
   Array.from({ length: nps.scaleMax - nps.scaleMin + 1 }, (_, i) => nps.scaleMin + i);
 
-/** *"You scored this event {n}/10 — "{why}""*, the why only when there is one (`:8696`). */
-export const scoredLine = (feedback: Pick<GuestFeedback, 'score' | 'why'>, nps: NpsConstants) =>
-  `You scored this event ${feedback.score}/${nps.scaleMax}${feedback.why ? ` — "${feedback.why}"` : ''}`;
+/** *"You scored this event {n}/10 — "{why}""*, the why only when there is one (`:8696`), as the member typed it. */
+export const scoredLine = (feedback: Pick<GuestFeedback, 'score' | 'why'>, nps: NpsConstants, language: Language = SOURCE_LANGUAGE) =>
+  eventWordsIn(language).scored({ score: String(feedback.score), max: String(nps.scaleMax), why: feedback.why });
 
 /**
  * The audience line (`:8532`): *"{issuer} | {scope}"* in the prototype's words (`events-and-campaigns.md`
  * §3) — *"Prudential Event | All agents"*, *"KPM | Leaders only"* — composed from the two structured fields
- * (F-44 amended), so it can never say something the audience is not.
+ * (F-44 amended), so it can never say something the audience is not. The company's name is as stored, and
+ * *{company} Event* the same in both languages (the glossary's §C5); the scope is in `language`.
  */
-const ISSUER_WORDS: Record<Exclude<EventIssuer, 'company'>, string> = { kpm: 'KPM', group: 'Group event' };
-const SCOPE_WORDS: Record<EventScope, string> = {
-  all_agents: 'All agents',
-  select_agents: 'Select agents',
-  leaders: 'Leaders only',
-  select_leaders: 'Select leaders',
-};
-export function audienceLine(audience: GuestEventAudience, companyName: string): string {
-  const issuer = audience.issuer === 'company' ? `${companyName} Event`.trim() : ISSUER_WORDS[audience.issuer];
-  return `${issuer} | ${SCOPE_WORDS[audience.scope]}`;
+export function audienceLine(audience: GuestEventAudience, companyName: string, language: Language = SOURCE_LANGUAGE): string {
+  const t = eventWordsIn(language);
+  const issuer = audience.issuer === 'company' ? t.companyEvent({ company: companyName }).trim() : t.issuers[audience.issuer];
+  return t.audience({ issuer, scope: t.scopes[audience.scope] });
 }
 
 /**
@@ -333,33 +333,30 @@ export function audienceLine(audience: GuestEventAudience, companyName: string):
  * not-found state. None of OD-39's six words, no phase, no internal id (`components/events/copy.spec.ts`).
  */
 export const OWN_COPY = {
-  filterLabel: 'Show events',
-  closeModal: 'Close',
-  loadingList: 'Loading events…',
-  loadingEvent: 'Loading the event…',
-  tryAgain: 'Try again',
-  notFound: 'This event isn’t one you can open.',
-  notFoundHint: 'It may have been archived, or it isn’t one you were invited to.',
-  backToEvents: 'Back to events',
-  opensInNewTab: 'opens in a new tab',
+  filterLabel: EN.filterLabel,
+  closeModal: EN.closeModal,
+  loadingList: EN.loadingList,
+  loadingEvent: EN.loadingEvent,
+  tryAgain: EN.tryAgain,
+  notFound: EN.notFound,
+  notFoundHint: EN.notFoundHint,
+  backToEvents: EN.backToEvents,
+  opensInNewTab: EN.opensInNewTab,
   /**
    * The card's *Join* — the client's word (P18.95-T10 AC-1; UI-024, ADR-0167), where the prototype's card had no
    * control but *View event*. Its accessible name adds the event's title, so a list of them is told apart.
    */
-  join: 'Join',
+  join: EN.join,
 } as const;
 
 /**
  * **A refusal the screen can meet, in the spec's words** (`functional/events.md`, *The module's own strings*):
- * the event ended while the modal was open, or has not ended yet by the server's clock. Any other refusal is
- * the server's own line. The code and the request id stay in the banner either way.
+ * the event ended while the modal was open, or has not ended yet by the server's clock — in `language`. Any other
+ * refusal is the server's own line, in the reader's language already (P18.98-T5). The code and the request id stay
+ * in the banner either way.
  */
-const REFUSAL_WORDS: Readonly<Record<string, string>> = {
-  EVENT_RSVP_CLOSED: 'This event has already ended.',
-  EVENT_NOT_ENDED: 'This event hasn’t ended yet.',
-};
-export function refusalOf(err: unknown): ApiError {
+export function refusalOf(err: unknown, language: Language = SOURCE_LANGUAGE): ApiError {
   const shown = toDisplayError(err);
-  const words = REFUSAL_WORDS[shown.code];
+  const words = (eventWordsIn(language).refusals as Readonly<Record<string, string>>)[shown.code];
   return words ? { ...shown, message: words } : shown;
 }

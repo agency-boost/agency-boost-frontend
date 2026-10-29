@@ -2,12 +2,14 @@
 
 import { useEffect } from 'react';
 import { SubtitleOnPhone } from '@/components/app-shell';
-import { INBOX_EMPTY, NotificationList } from '@/components/notification-list';
+import { NotificationList } from '@/components/notification-list';
 import { RoleShell } from '@/components/role-shell';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { Pager } from '@/components/ui/pager';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { notificationMessages } from '@/i18n/messages/notifications';
 import { INBOX_PAGE_SIZE } from '@/lib/notifications';
 import { useSession } from '@/lib/session';
 import { useCanMark, useInbox } from '@/lib/use-inbox';
@@ -49,6 +51,7 @@ import { useCanMark, useInbox } from '@/lib/use-inbox';
  * review, N2): no *Mark all read*, no toggle, and a row opens without reading itself (`useCanMark`).
  */
 export default function NotificationsPage() {
+  const t = useMessages(notificationMessages);
   const { me, loading } = useSession();
   const signedIn = !loading && me !== null;
   const canMark = useCanMark();
@@ -66,13 +69,13 @@ export default function NotificationsPage() {
     // the header, so the page says it through the context rather than a prop.
     <SubtitleOnPhone.Provider value={false}>
       <RoleShell
-        title="Notifications"
-        subtitle="What has happened that you should know about."
+        title={t.title}
+        subtitle={t.subtitle}
         permission="notification:read_inbox"
         actions={
           canMark && inbox && inbox.unread > 0 ? (
             <Button variant="secondary" onClick={() => void list.readAll()}>
-              Mark all read
+              {t.markAllRead}
             </Button>
           ) : undefined
         }
@@ -81,13 +84,13 @@ export default function NotificationsPage() {
           <div className="mb-4">
             <ErrorBanner {...error} />
             {inbox === null && (
-              <Button variant="secondary" className="mt-3" onClick={() => void load(1)}>Try again</Button>
+              <Button variant="secondary" className="mt-3" onClick={() => void load(1)}>{t.tryAgain}</Button>
             )}
           </div>
         )}
 
         {inbox === null && !error && (
-          <Skeleton label="Loading your inbox…">
+          <Skeleton label={t.loading}>
             <div className="space-y-4 rounded-lg border border-hairline bg-card p-4">
               {Array.from({ length: 6 }, (_, i) => (
                 <div key={i}>
@@ -101,7 +104,7 @@ export default function NotificationsPage() {
 
         {inbox && inbox.items.length === 0 && (
           <Card>
-            <EmptyState title={INBOX_EMPTY} />
+            <EmptyState title={t.empty} />
           </Card>
         )}
 
@@ -111,7 +114,7 @@ export default function NotificationsPage() {
               <NotificationList items={inbox.items} setRead={canMark ? list.setRead : undefined} />
             </Card>
             <Pager
-              label="Notification pages"
+              label={t.pages}
               page={inbox.page}
               pages={pages}
               onPage={(page) => void load(page)}

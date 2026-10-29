@@ -1,6 +1,10 @@
+'use client';
+
 import Link from 'next/link';
 import { useId } from 'react';
 import { NavIcon, type NavIconName } from '@/components/ui/nav-icon';
+import { useMessages } from '@/i18n/language-provider';
+import { pageFrameMessages } from '@/i18n/messages/page-frame';
 import { cn } from '@/lib/cn';
 
 /** One onward link from a sign: where to go, meanwhile, for something that works today. */
@@ -17,14 +21,13 @@ export interface ElsewhereLink {
  * would otherwise take the heading's face, and the pill is one shape wherever it sits.
  */
 function UpcomingPill({ id }: { id?: string }) {
+  const t = useMessages(pageFrameMessages).upcoming;
   return (
     <span id={id} className="inline-flex whitespace-nowrap rounded-pill bg-navy/[0.06] px-2 py-0.5 font-body text-2xs font-bold uppercase tracking-wide text-muted">
-      Upcoming
+      {t.pill}
     </span>
   );
 }
-
-const NOTHING_SHOWN = 'Nothing is shown here yet — not an empty version of it, and not a sample.';
 
 /**
  * A route that exists so people land somewhere sensible before the screen behind it is built.
@@ -60,6 +63,7 @@ export function ComingInPhase({
   elsewhere: readonly ElsewhereLink[];
 }) {
   const id = useId();
+  const t = useMessages(pageFrameMessages).upcoming;
   return (
     <div className="flex flex-col gap-4">
       <section aria-labelledby={`${id}-state ${id}`} className="rounded-lg border border-dashed border-hairline bg-card p-6">
@@ -67,12 +71,12 @@ export function ComingInPhase({
           <UpcomingPill id={`${id}-state`} />
         </p>
         <h2 id={id} className="mt-2 font-display text-lg font-bold text-navy">{what}</h2>
-        <p className="mt-2 text-md text-muted">{NOTHING_SHOWN}</p>
+        <p className="mt-2 text-md text-muted">{t.nothingShown}</p>
       </section>
 
       {elsewhere.length > 0 && (
         <div className="rounded-lg border border-hairline bg-card p-6">
-          <h2 className="font-display text-lg font-bold text-navy">What you can do now</h2>
+          <h2 className="font-display text-lg font-bold text-navy">{t.whatYouCanDo}</h2>
           <ul className="mt-3 flex flex-col gap-3">
             {elsewhere.map((link) => (
               <li key={link.href}>

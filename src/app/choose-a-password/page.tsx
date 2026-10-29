@@ -6,6 +6,8 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
 import { useSession } from '@/lib/session';
 import { useSignOut } from '@/lib/use-sign-out';
+import { useMessages } from '@/i18n/language-provider';
+import { authMessages } from '@/i18n/messages/auth';
 
 const MIN_LENGTH = 10;
 
@@ -27,6 +29,9 @@ export default function ChooseAPasswordPage() {
   const [form, setForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const all = useMessages(authMessages);
+  const t = all.choose;
+  const rules = all.password;
 
   const tooShort = form.newPassword.length > 0 && form.newPassword.length < MIN_LENGTH;
   const padded = /^\s|\s$/.test(form.newPassword);
@@ -62,26 +67,21 @@ export default function ChooseAPasswordPage() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5 py-10">
-      <h1 className="font-display text-3xl font-bold text-navy">Choose your own password</h1>
-      <p className="mb-6 mt-1 text-md text-muted">
-        The password you signed in with was generated for you and passed on by your office, so
-        somebody else has seen it. Nothing else in AgencyBoost opens until you replace it.
-      </p>
+      <h1 className="font-display text-3xl font-bold text-navy">{t.title}</h1>
+      <p className="mb-6 mt-1 text-md text-muted">{t.line}</p>
 
       <Card>
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
           {error && <ErrorBanner {...error} />}
 
           {me?.user.email && (
-            <p className="text-sm text-muted">
-              Signed in as <strong>{me.user.email}</strong>.
-            </p>
+            <p className="text-sm text-muted">{t.signedInAs({ email: <strong>{me.user.email}</strong> })}</p>
           )}
 
           <Field
-            label="The password you were sent"
+            label={t.current}
             htmlFor="currentPassword"
-            hint="The one your office sent you."
+            hint={t.currentHint}
           >
             <PasswordInput
               id="currentPassword"
@@ -93,16 +93,16 @@ export default function ChooseAPasswordPage() {
           </Field>
 
           <Field
-            label="Your new password"
+            label={t.newPassword}
             htmlFor="newPassword"
-            hint={`At least ${MIN_LENGTH} characters. Length beats symbols.`}
+            hint={rules.hint({ n: MIN_LENGTH })}
             error={
               tooShort
-                ? `Use at least ${MIN_LENGTH} characters.`
+                ? rules.tooShort({ n: MIN_LENGTH })
                 : padded
-                  ? 'Do not begin or end with a space.'
+                  ? rules.padded
                   : unchanged
-                    ? 'Choose something different from the one you were sent.'
+                    ? t.unchanged
                     : undefined
             }
           >
@@ -117,9 +117,9 @@ export default function ChooseAPasswordPage() {
           </Field>
 
           <Field
-            label="Confirm your new password"
+            label={t.confirm}
             htmlFor="confirmPassword"
-            error={mismatch ? 'The two passwords do not match.' : undefined}
+            error={mismatch ? rules.mismatch : undefined}
           >
             <PasswordInput
               id="confirmPassword"
@@ -138,12 +138,10 @@ export default function ChooseAPasswordPage() {
               || !form.currentPassword || !form.newPassword || !form.confirmPassword
             }
           >
-            {busy ? 'Saving…' : 'Save and sign in again'}
+            {busy ? rules.saving : t.save}
           </Button>
 
-          <p className="text-sm text-muted">
-            You will be signed out everywhere and asked to sign in with the new one.
-          </p>
+          <p className="text-sm text-muted">{t.afterLine}</p>
         </form>
       </Card>
     </main>

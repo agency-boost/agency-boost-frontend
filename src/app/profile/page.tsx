@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { LanguageField } from '@/components/language-field';
 import { RoleShell } from '@/components/role-shell';
 import { SessionList } from '@/components/session-list';
 import { DateField } from '@/components/ui/date-field';
@@ -8,7 +9,10 @@ import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/component
 import { PasswordInput } from '@/components/ui/password-input';
 import { api, toDisplayError, type ApiError } from '@/lib/api-client';
 import { heldBecause } from '@/lib/disabled-reason';
-import { GENDER_LABEL, WORK_STATUS_LABEL, type Gender, type WorkStatus } from '@/lib/personal';
+import { genderLabels, workStatusLabels, type Gender, type WorkStatus } from '@/lib/personal';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { accountMessages } from '@/i18n/messages/account';
+import { personalMessages } from '@/i18n/messages/personal';
 import { useSession, type Me } from '@/lib/session';
 import { useSignOut } from '@/lib/use-sign-out';
 
@@ -30,20 +34,18 @@ export default function ProfilePage() {
   return <Profile />;
 }
 
-const PRONOUNS: { value: Me['user']['pronoun']; label: string }[] = [
-  { value: 'she', label: 'she / her' },
-  { value: 'he', label: 'he / him' },
-  { value: 'they', label: 'they / them' },
-];
+/** The pronoun's three choices, in this order; each one's words are the catalogue's (`accountMessages.details.pronouns`). */
+const PRONOUNS: Me['user']['pronoun'][] = ['she', 'he', 'they'];
 
 function Profile() {
   const { me, reload } = useSession();
   // The same hook the sidebar menu uses, so the two cannot end a session differently.
   const { signOut, busy } = useSignOut();
+  const t = useMessages(accountMessages);
 
   return (
     <RoleShell
-      title="Your account"
+      title={t.title}
       subtitle={me?.user.email}
       // Everybody may read their own account, and the matrix says so at `own` in all six
       // columns. Naming it here overrides the chrome's own gate, which is about the
@@ -51,7 +53,7 @@ function Profile() {
       permission="profile:read_self"
       actions={
         <Button variant="secondary" disabled={busy} onClick={() => void signOut()}>
-          {busy ? 'Signing out…' : 'Sign out'}
+          {busy ? t.signingOut : t.signOut}
         </Button>
       }
     >
@@ -83,6 +85,12 @@ function personalOf(me: Me | null): Personal {
 
 function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
   const { me } = useSession();
+  // The personal details' labels in the reader's language (`lib/personal.ts`, P18.98-T4).
+  const language = useLanguage();
+  const genders = genderLabels(language);
+  const workStatuses = workStatusLabels(language);
+  const t = useMessages(accountMessages).details;
+  const { notRecorded } = useMessages(personalMessages);
   const [fullName, setFullName] = useState('');
   const [preferredName, setPreferredName] = useState('');
   const [pronoun, setPronoun] = useState<Me['user']['pronoun']>('they');
@@ -98,7 +106,7 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
    */
   const recordsPersonal = me?.user.platformRole !== 'super_admin';
   const personalLocked = Boolean(me?.isImpersonating);
-  const lockedHint = personalLocked ? 'Only they can change this, not a support session.' : undefined;
+  const lockedHint = personalLocked ? t.locked : undefined;
 
   useEffect(() => {
     if (!me) return;
@@ -142,16 +150,16 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
 
   return (
     <Card>
-      <h2 className="font-display text-lg font-bold text-navy">Your details</h2>
+      <h2 className="font-display text-lg font-bold text-navy">{t.heading}</h2>
       <form onSubmit={submit} className="mt-3 flex flex-col gap-4" noValidate>
         {error && !refusedField && <ErrorBanner {...error} />}
         {saved && (
           <p role="status" className="text-md font-semibold text-success">
-            Saved.
+            {t.saved}
           </p>
         )}
 
-        <Field label="Full name" htmlFor="fullName" hint={lockedHint}>
+        <Field label={t.fullName} htmlFor="fullName" hint={lockedHint}>
           <TextInput
             id="fullName"
             required
@@ -161,7 +169,7 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
           />
         </Field>
 
-        <Field label="Preferred name" htmlFor="preferredName" hint={lockedHint ?? 'What colleagues call you day to day.'}>
+        <Field label={t.preferredName} htmlFor="preferredName" hint={lockedHint ?? t.preferredNameHint}>
           <TextInput
             id="preferredName"
             value={preferredName}
@@ -171,9 +179,9 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
         </Field>
 
         <Field
-          label="Pronoun"
+          label={t.pronoun}
           htmlFor="pronoun"
-          hint={lockedHint ?? 'Yours to set. It appears in the commitment sentence your leader reads back to you in coaching.'}
+          hint={lockedHint ?? t.pronounHint}
           // The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 27); a support session's reason still shows.
           hintOnPhone={lockedHint !== undefined}
         >
@@ -184,17 +192,23 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
             disabled={personalLocked}
           >
             {PRONOUNS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
+              <option key={p} value={p}>
+                {t.pronouns[p]}
               </option>
             ))}
           </Select>
         </Field>
 
+        {/*
+          * *Language* (P18.98-T2 AC-4): saves itself, as the header's switch does, so *Save* below is not for it. Shown
+          * and not offered in a support session, as the rest of the card is. Nothing until the switch is live.
+          */}
+        <LanguageField disabled={personalLocked} hint={lockedHint} />
+
         {recordsPersonal && (
           <>
             <Field
-              label="Date of birth"
+              label={t.dateOfBirth}
               htmlFor="dateOfBirth"
               hint={lockedHint}
               error={fieldError('dateOfBirth')}
@@ -210,25 +224,25 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
               />
             </Field>
 
-            <Field label="Gender" htmlFor="gender" hint={lockedHint} error={fieldError('gender')}>
+            <Field label={t.gender} htmlFor="gender" hint={lockedHint} error={fieldError('gender')}>
               <Select id="gender" value={personal.gender} onChange={setOne('gender')} disabled={personalLocked}>
-                {!personal.gender && <option value="">Not recorded</option>}
-                {(Object.keys(GENDER_LABEL) as Gender[]).map((g) => (
-                  <option key={g} value={g}>{GENDER_LABEL[g]}</option>
+                {!personal.gender && <option value="">{notRecorded}</option>}
+                {(Object.keys(genders) as Gender[]).map((g) => (
+                  <option key={g} value={g}>{genders[g]}</option>
                 ))}
               </Select>
             </Field>
 
             <Field
-              label="Joined your insurer"
+              label={t.joined}
               htmlFor="companyJoinMonth"
-              hint={lockedHint ?? 'The month and year you joined them.'}
+              hint={lockedHint ?? t.joinedHint}
               error={fieldError('companyJoinMonth')}
             >
               <TextInput
                 id="companyJoinMonth"
                 type="month"
-                placeholder="YYYY-MM"
+                placeholder={t.monthShape}
                 value={personal.companyJoinMonth}
                 onChange={setOne('companyJoinMonth')}
                 disabled={personalLocked}
@@ -236,11 +250,11 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
               />
             </Field>
 
-            <Field label="Status" htmlFor="workStatus" hint={lockedHint} error={fieldError('workStatus')}>
+            <Field label={t.status} htmlFor="workStatus" hint={lockedHint} error={fieldError('workStatus')}>
               <Select id="workStatus" value={personal.workStatus} onChange={setOne('workStatus')} disabled={personalLocked}>
-                {!personal.workStatus && <option value="">Not recorded</option>}
-                {(Object.keys(WORK_STATUS_LABEL) as WorkStatus[]).map((w) => (
-                  <option key={w} value={w}>{WORK_STATUS_LABEL[w]}</option>
+                {!personal.workStatus && <option value="">{notRecorded}</option>}
+                {(Object.keys(workStatuses) as WorkStatus[]).map((w) => (
+                  <option key={w} value={w}>{workStatuses[w]}</option>
                 ))}
               </Select>
             </Field>
@@ -250,7 +264,7 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
         {/* Nothing here is a support session's to save (ADR-0162 §4), so it is not offered one. */}
         {!personalLocked && (
           <Button type="submit" disabled={busy || !fullName.trim()}>
-            {busy ? 'Saving…' : 'Save'}
+            {busy ? t.saving : t.save}
           </Button>
         )}
       </form>
@@ -259,12 +273,14 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
 }
 
 function PasswordForm() {
+  const language = useLanguage();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [done, setDone] = useState(false);
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const t = useMessages(accountMessages).password;
 
   // Only once they have started the second box — an empty field has not disagreed yet.
   const mismatch = confirmNewPassword.length > 0 && confirmNewPassword !== newPassword;
@@ -275,16 +291,16 @@ function PasswordForm() {
    */
   const tooShort = newPassword.length > 0 && newPassword.length < 10;
   const missing = [
-    [!currentPassword, 'Current password'],
-    [!newPassword, 'New password'],
-    [!confirmNewPassword, 'Confirm new password'],
+    [!currentPassword, t.current],
+    [!newPassword, t.newPassword],
+    [!confirmNewPassword, t.confirm],
   ].filter(([empty]) => empty).map(([, label]) => label as string);
   const held = !currentPassword || newPassword.length < 10 || mismatch || !confirmNewPassword;
   const heldWhy = held && !busy
     ? heldBecause({
       missing,
-      fix: tooShort ? 'The new password needs at least 10 characters.' : mismatch ? 'Fix the passwords above.' : null,
-    })
+      fix: tooShort ? t.tooShort({ n: 10 }) : mismatch ? t.fix : null,
+    }, language)
     : null;
 
   async function submit(event: React.FormEvent) {
@@ -311,19 +327,17 @@ function PasswordForm() {
 
   return (
     <Card>
-      <h2 className="font-display text-lg font-bold text-navy">Password</h2>
-      <p className="mt-1 text-md text-muted">
-        Changing it signs out your other sessions. This one stays open.
-      </p>
+      <h2 className="font-display text-lg font-bold text-navy">{t.heading}</h2>
+      <p className="mt-1 text-md text-muted">{t.line}</p>
       <form onSubmit={submit} className="mt-3 flex flex-col gap-4" noValidate>
         {error && <ErrorBanner {...error} />}
         {done && (
           <p role="status" className="text-md font-semibold text-success">
-            Password changed. Your other sessions were signed out.
+            {t.changed}
           </p>
         )}
 
-        <Field label="Current password" htmlFor="currentPassword">
+        <Field label={t.current} htmlFor="currentPassword">
           <PasswordInput
             id="currentPassword"
             autoComplete="current-password"
@@ -333,7 +347,7 @@ function PasswordForm() {
           />
         </Field>
 
-        <Field label="New password" htmlFor="newPassword" hint="At least 10 characters. Length beats symbols.">
+        <Field label={t.newPassword} htmlFor="newPassword" hint={t.hint({ n: 10 })}>
           <PasswordInput
             id="newPassword"
             autoComplete="new-password"
@@ -345,9 +359,9 @@ function PasswordForm() {
         </Field>
 
         <Field
-          label="Confirm new password"
+          label={t.confirm}
           htmlFor="confirmNewPassword"
-          error={mismatch ? 'The two passwords do not match.' : undefined}
+          error={mismatch ? t.mismatch : undefined}
         >
           <PasswordInput
             id="confirmNewPassword"
@@ -361,7 +375,7 @@ function PasswordForm() {
 
         <div className="flex flex-col gap-1">
           <Button type="submit" disabled={busy || held} aria-describedby={heldWhy ? 'change-password-held' : undefined}>
-            {busy ? 'Changing…' : 'Change password'}
+            {busy ? t.changing : t.change}
           </Button>
           {heldWhy && <p id="change-password-held" className="text-xs text-muted">{heldWhy}</p>}
         </div>

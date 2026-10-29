@@ -2,11 +2,18 @@
 
 import { usePathname } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
-import { INBOX_EMPTY, NotificationList } from '@/components/notification-list';
+import { NotificationList } from '@/components/notification-list';
+import { inModal } from '@/components/ui/modal';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
 import { TAP_TARGET } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { messagesIn } from '@/i18n/catalogue';
+import { kept } from '@/i18n/kept';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { notificationMessages } from '@/i18n/messages/notifications';
+import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
 import { POPOVER_PAGE_SIZE } from '@/lib/notifications';
 import { useCanMark, useInbox } from '@/lib/use-inbox';
@@ -57,6 +64,9 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
   const canMark = useCanMark();
   const list = useInbox(POPOVER_PAGE_SIZE, { listen: open });
   const { inbox, error, load } = list;
+  const t = useMessages(shellMessages);
+  const language = useLanguage();
+  const inboxWords = useMessages(notificationMessages);
 
   // Read each time it opens (T2 AC-2), and take the focus in with it (AC-4).
   useEffect(() => {
@@ -73,7 +83,8 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
       trigger.current?.focus();
     }
     function onPointerDown(event: MouseEvent) {
-      if (!wrapper.current?.contains(event.target as Node)) setOpen(false);
+      // A row's modal is drawn at the end of the page (`Modal`'s portal), and is the popover's own.
+      if (!wrapper.current?.contains(event.target as Node) && !inModal(event.target)) setOpen(false);
     }
     // Capture, so a click that also does something else still closes the popover first.
     document.addEventListener('keydown', onKeyDown);
@@ -87,7 +98,7 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
   /** Tab past its last control closes it, rather than leaving it open over a page the focus is on. */
   function onBlur(event: React.FocusEvent) {
     const next = event.relatedTarget as Node | null;
-    if (next && !wrapper.current?.contains(next)) setOpen(false);
+    if (next && !wrapper.current?.contains(next) && !inModal(next)) setOpen(false);
   }
 
   /** The button goes once nothing is unread; the focus stays in the popover rather than on nothing. */
@@ -106,7 +117,7 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={panelId}
-        aria-label={withUnread('Notifications', unread)}
+        aria-label={withUnread(kept('Notifications'), unread, language)}
         onClick={() => setOpen((was) => !was)}
         className={cn(
           // 44 × 44 on a phone (P18.95-T1 AC-10); 36 × 36 from 768 px, as before.
@@ -143,9 +154,10 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
           )}
         >
           <div className="flex items-center justify-between gap-3 border-b border-hairline px-4 py-3">
-            <h2 id={headingId} className="font-display text-lg font-bold text-navy">Notifications</h2>
+            {/* The inbox's own title, kept English (§A.2). */}
+            <h2 id={headingId} className="font-display text-lg font-bold text-navy">{kept('Notifications')}</h2>
             {canMark && inbox && inbox.unread > 0 && (
-              <Button variant="inline" onClick={markAllRead}>Mark all read</Button>
+              <Button variant="inline" onClick={markAllRead}>{t.markAllRead}</Button>
             )}
           </div>
 
@@ -154,12 +166,12 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
               <div className="p-1.5">
                 <ErrorBanner {...error} />
                 {inbox === null && (
-                  <Button variant="secondary" className="mt-2" onClick={() => void load(1)}>Try again</Button>
+                  <Button variant="secondary" className="mt-2" onClick={() => void load(1)}>{t.tryAgain}</Button>
                 )}
               </div>
             )}
             {inbox === null && !error && (
-              <Skeleton label="Loading your notifications…">
+              <Skeleton label={t.loadingNotifications}>
                 <div className="space-y-3 p-2.5">
                   {Array.from({ length: 3 }, (_, i) => (
                     <div key={i}>
@@ -170,7 +182,7 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
                 </div>
               </Skeleton>
             )}
-            {inbox && inbox.items.length === 0 && <EmptyState title={INBOX_EMPTY} className="py-8" />}
+            {inbox && inbox.items.length === 0 && <EmptyState title={inboxWords.empty} className="py-8" />}
             {inbox && inbox.items.length > 0 && (
               <NotificationList
                 items={inbox.items}
@@ -182,7 +194,7 @@ export function NotificationBell({ href, unread }: { href: string; unread: numbe
 
           <div className="border-t border-hairline p-2">
             <ButtonLink href={href} variant="secondary" className="w-full" onClick={() => setOpen(false)}>
-              See all notifications
+              {t.seeAllNotifications}
             </ButtonLink>
           </div>
         </div>
@@ -199,9 +211,12 @@ export function unreadBadgeText(unread: number): string {
   return unread > 9 ? '9+' : String(unread);
 }
 
-/** A control's name with the count in it, *Notifications, 3 unread*; the name alone at none. */
-export function withUnread(name: string, unread: number): string {
-  return unread > 0 ? `${name}, ${unread} unread` : name;
+/**
+ * A control's name with the count in it, *Notifications, 3 unread*; the name alone at none. In the reader's
+ * `language` (`shellMessages`' `withUnread`): *Notifications, 3 belum dibaca* in ID mode.
+ */
+export function withUnread(name: string, unread: number, language: Language = SOURCE_LANGUAGE): string {
+  return messagesIn(shellMessages, language).withUnread({ name, unread });
 }
 
 /**

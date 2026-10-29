@@ -4,13 +4,16 @@ import { useId, useState, type FormEvent } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { DateField } from '@/components/ui/date-field';
 import { Button, ErrorBanner, Field, Textarea, TextInput } from '@/components/ui/field';
+import type { Language } from '@/i18n/language';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { calendarMessages } from '@/i18n/messages/calendar';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  createEntry, ENTRY_TYPES, initialsOf, INVITEES_MAX, OWN_COPY, placeBlock, PROTOTYPE_COPY, readEntry, TYPE_LABEL, updateEntry,
+  calendarWordsIn, createEntry, ENTRY_TYPES, initialsOf, INVITEES_MAX, placeBlock, readEntry, updateEntry,
   type CalendarEntry, type EntryType,
 } from '@/lib/calendar';
 import {
-  blankForm, formFromEntry, toInput, validateForm, violationsToErrors, type EntryForm, type FormErrors, type Slot,
+  blankForm, formFromEntry, formWords, toInput, validateForm, violationsToErrors, type EntryForm, type FormErrors, type Slot,
 } from '@/lib/calendar-form';
 import { cn } from '@/lib/cn';
 import { Avatar } from './calendar-parts';
@@ -30,11 +33,12 @@ export type EditorState =
 const pickedOf = (entry: CalendarEntry, placed: boolean): Picked[] =>
   entry.invitees.filter((i) => i.placed === placed).map(({ membershipId, name }) => ({ membershipId, name }));
 
-function initial(state: EditorState): EntryForm {
+function initial(state: EditorState, language: Language): EntryForm {
   if (state.mode === 'edit') return formFromEntry(state.entry);
   // *Block time* presets *1:1 coaching* and *"1:1 with {full name}"* — the full name where the
-  // prototype has the first (`:748`), as L-65 settled for coaching. Both can be changed.
-  if (state.mode === 'block') return blankForm(state.slot, 'coaching', `1:1 with ${state.member.name}`);
+  // prototype has the first (`:748`), as L-65 settled for coaching. Both can be changed. Written once, in the
+  // writer's words, into a field they then save as typed.
+  if (state.mode === 'block') return blankForm(state.slot, 'coaching', calendarWordsIn(language).oneOnOneWith({ name: state.member.name }));
   if (state.preset) return blankForm(state.slot, state.preset.type, state.preset.title);
   return blankForm(state.slot);
 }
@@ -63,8 +67,12 @@ export function EntryDialog({
   /** The entry saved, and in an edit the entry as last read before it: who was on it then. */
   onSaved: (entry: CalendarEntry, before: CalendarEntry | null) => void;
 }) {
+  const t = useMessages(calendarMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const words = formWords(language, figures);
   const ids = useId();
-  const [form, setForm] = useState<EntryForm>(() => initial(state));
+  const [form, setForm] = useState<EntryForm>(() => initial(state, language));
   const [invitees, setInvitees] = useState<Picked[]>(() => (state.mode === 'edit' ? pickedOf(state.entry, false)
     : state.mode === 'new' && state.preset?.invitee ? [state.preset.invitee] : []));
   // An edit's entry as last read: its version is what the save is pinned to, and its people are
@@ -82,16 +90,16 @@ export function EntryDialog({
   const set = <K extends keyof EntryForm>(key: K, value: EntryForm[K]) => setForm((f) => ({ ...f, [key]: value }));
   const travel = form.type === 'travel';
 
-  const title = state.mode === 'edit' ? PROTOTYPE_COPY.editTitle
-    : state.mode === 'block' ? PROTOTYPE_COPY.blockTitle(state.member.name)
-      : PROTOTYPE_COPY.newTitle;
-  const description = state.mode === 'edit' ? PROTOTYPE_COPY.editSub
-    : state.mode === 'block' ? PROTOTYPE_COPY.blockSub
-      : PROTOTYPE_COPY.newSub;
+  const title = state.mode === 'edit' ? t.editTitle
+    : state.mode === 'block' ? t.blockTitle({ name: state.member.name })
+      : t.newTitle;
+  const description = state.mode === 'edit' ? t.editSub
+    : state.mode === 'block' ? t.blockSub
+      : t.newSub;
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    const problems = validateForm(form, invitees.length);
+    const problems = validateForm(form, invitees.length, words);
     setErrors(problems);
     setBanner(null);
     setNotice(null);
@@ -121,13 +129,13 @@ export function EntryDialog({
         setForm(formFromEntry(fresh));
         setInvitees(pickedOf(fresh, false));
         setBase(fresh);
-        setNotice(OWN_COPY.conflict);
+        setNotice(t.conflict);
       } catch (again) {
         setBanner(toDisplayError(again));
       }
       return;
     }
-    const placed = error.code === 'VALIDATION_FAILED' ? violationsToErrors(error.details) : null;
+    const placed = error.code === 'VALIDATION_FAILED' ? violationsToErrors(error.details, words) : null;
     if (placed) {
       setErrors(placed);
       return;
@@ -135,7 +143,7 @@ export function EntryDialog({
     const gone = error.details?.inviteeIds;
     if (error.code === 'NOT_FOUND' && Array.isArray(gone) && gone.length > 0) {
       setRefused(new Set(gone.map(String)));
-      setNotice(OWN_COPY.notInvitable);
+      setNotice(t.notInvitable);
       return;
     }
     setBanner(error);
@@ -152,8 +160,8 @@ export function EntryDialog({
       className="max-w-[420px]"
       footer={(
         <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>{PROTOTYPE_COPY.cancel}</Button>
-          <Button type="submit" form={`${ids}-form`} disabled={busy}>{PROTOTYPE_COPY.saveEvent}</Button>
+          <Button variant="secondary" onClick={onClose}>{t.cancel}</Button>
+          <Button type="submit" form={`${ids}-form`} disabled={busy}>{t.saveEvent}</Button>
         </div>
       )}
     >
@@ -164,13 +172,13 @@ export function EntryDialog({
           <div className="flex items-center gap-2 rounded-[9px] border border-hairline bg-base px-[11px] py-[9px] text-sm text-navy">
             <Avatar initials={initialsOf(state.member.name)} className="h-[22px] w-[22px]" />
             <span>
-              {PROTOTYPE_COPY.inviting} <strong>{state.member.name}</strong> {PROTOTYPE_COPY.toThisSlot}
+              {t.inviting({ name: <strong>{state.member.name}</strong> })}
             </span>
           </div>
         )}
 
         <div className="flex flex-col gap-1">
-          <p id={typeLabel} className="text-sm font-semibold text-navy">{PROTOTYPE_COPY.type}</p>
+          <p id={typeLabel} className="text-sm font-semibold text-navy">{t.type}</p>
           <div role="group" aria-labelledby={typeLabel} className="flex flex-wrap gap-1.5">
             {ENTRY_TYPES.map((type) => (
               <TypeButton key={type} type={type} on={form.type === type} onPick={() => set('type', type)} />
@@ -178,12 +186,12 @@ export function EntryDialog({
           </div>
         </div>
 
-        <Field label={PROTOTYPE_COPY.title} htmlFor={`${ids}-title`} error={errors.title}>
+        <Field label={t.fieldTitle} htmlFor={`${ids}-title`} error={errors.title}>
           <TextInput
             id={`${ids}-title`}
             value={form.title}
             invalid={!!errors.title}
-            placeholder={PROTOTYPE_COPY.titlePlaceholder}
+            placeholder={t.titlePlaceholder}
             onChange={(e) => set('title', e.target.value)}
           />
         </Field>
@@ -198,7 +206,7 @@ export function EntryDialog({
             if (invitees.some((p) => p.membershipId === person.membershipId)) return;
             // At most fifty (P12-T4 AC-1): the fifty-first is not added, and the field says why.
             if (invitees.length >= INVITEES_MAX) {
-              setErrors((current) => ({ ...current, invitees: OWN_COPY.tooManyInvitees }));
+              setErrors((current) => ({ ...current, invitees: words.tooManyInvitees }));
               return;
             }
             setInvitees([...invitees, person]);
@@ -212,34 +220,34 @@ export function EntryDialog({
 
         {travel ? (
           <div className="flex flex-wrap gap-2.5">
-            <Field label={PROTOTYPE_COPY.departure} htmlFor={`${ids}-starts`} error={errors.startsOn} className="min-w-[8rem] flex-1">
+            <Field label={t.departure} htmlFor={`${ids}-starts`} error={errors.startsOn} className="min-w-[8rem] flex-1">
               <DateField id={`${ids}-starts`} value={form.startsOn} invalid={!!errors.startsOn} onChange={(v) => set('startsOn', v)} className="w-full" />
             </Field>
-            <Field label={PROTOTYPE_COPY.return} htmlFor={`${ids}-ends`} error={errors.endsOn} className="min-w-[8rem] flex-1">
+            <Field label={t.return} htmlFor={`${ids}-ends`} error={errors.endsOn} className="min-w-[8rem] flex-1">
               <DateField id={`${ids}-ends`} value={form.endsOn} invalid={!!errors.endsOn} onChange={(v) => set('endsOn', v)} className="w-full" />
             </Field>
           </div>
         ) : (
           <div className="flex flex-wrap gap-2.5">
-            <Field label={PROTOTYPE_COPY.date} htmlFor={`${ids}-date`} error={errors.date} className="min-w-[8rem] flex-[1.4]">
+            <Field label={t.date} htmlFor={`${ids}-date`} error={errors.date} className="min-w-[8rem] flex-[1.4]">
               <DateField id={`${ids}-date`} value={form.date} invalid={!!errors.date} onChange={(v) => set('date', v)} className="w-full" />
             </Field>
-            <Field label={PROTOTYPE_COPY.start} htmlFor={`${ids}-start`} className="min-w-[6rem] flex-1">
+            <Field label={t.start} htmlFor={`${ids}-start`} className="min-w-[6rem] flex-1">
               <TextInput id={`${ids}-start`} type="time" value={form.start} onChange={(e) => set('start', e.target.value)} />
             </Field>
-            <Field label={PROTOTYPE_COPY.end} htmlFor={`${ids}-end`} error={errors.end} className="min-w-[6rem] flex-1">
+            <Field label={t.end} htmlFor={`${ids}-end`} error={errors.end} className="min-w-[6rem] flex-1">
               <TextInput id={`${ids}-end`} type="time" value={form.end} invalid={!!errors.end} onChange={(e) => set('end', e.target.value)} />
             </Field>
           </div>
         )}
 
-        <Field label={PROTOTYPE_COPY.notesLabel} htmlFor={`${ids}-notes`} error={errors.notes}>
+        <Field label={t.notesLabel} htmlFor={`${ids}-notes`} error={errors.notes}>
           <Textarea
             id={`${ids}-notes`}
             rows={2}
             value={form.notes}
             invalid={!!errors.notes}
-            placeholder={PROTOTYPE_COPY.notesPlaceholder}
+            placeholder={t.notesPlaceholder}
             onChange={(e) => set('notes', e.target.value)}
           />
         </Field>
@@ -253,6 +261,7 @@ export function EntryDialog({
 
 /** One of the five (`:367-376`): navy when chosen, teal for a chosen *Travel* (`:193-194`). */
 function TypeButton({ type, on, onPick }: { type: EntryType; on: boolean; onPick: () => void }) {
+  const t = useMessages(calendarMessages);
   return (
     <button
       type="button"
@@ -265,7 +274,7 @@ function TypeButton({ type, on, onPick }: { type: EntryType; on: boolean; onPick
           : 'border-hairline bg-card text-muted hover:text-navy',
       )}
     >
-      {TYPE_LABEL[type]}
+      {t.types[type]}
     </button>
   );
 }

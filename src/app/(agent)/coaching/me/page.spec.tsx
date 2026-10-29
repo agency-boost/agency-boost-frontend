@@ -140,7 +140,7 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
     const tips = await card('Coaching tips from Wilson');
     expect(tips).toHaveTextContent('Delegate more of the AAB check-ins to free up prospecting time.');
     expect(screen.getByText((_, el) => el?.tagName === 'P' && /^Session — /.test(el.textContent ?? '')))
-      .toHaveTextContent('Session — Kamis, 24 Sep 2026 Finalized');
+      .toHaveTextContent('Session — Thursday, 24 Sep 2026 Finalized');
     expect(screen.getByText('Coached by Wilson Tanoto', { selector: 'p' })).toBeInTheDocument();
 
     const lastWeek = await card("Last week's action items");
@@ -149,9 +149,9 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
     expect(within(lastWeek).getByRole('checkbox', { name: 'Review Q3 recruitment pitch with Dimas' })).toBeDisabled();
 
     const goal = await card('Goal');
-    expect(goal).toHaveTextContent('Rp 108 jt / Rp 100 jt');
-    expect(goal).toHaveTextContent('Rp 850 jt / Rp 1,2 M');
-    expect(await card('Ratios')).toHaveTextContent('Selling success rate20,0%');
+    expect(goal).toHaveTextContent('IDR 108M / IDR 100M');
+    expect(goal).toHaveTextContent('IDR 850M / IDR 1.2B');
+    expect(await card('Ratios')).toHaveTextContent('Selling success rate20.0%');
     expect(await card('Next action items')).toHaveTextContent('26 SepLeads · Hendra WibowoSend proposal');
 
     // Read-only: nothing to start, finalize, reopen or edit, and no Leads or Activity card.
@@ -161,7 +161,7 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
     expect(screen.queryByRole('region', { name: 'Leads' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: /^Activity/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
-    expect(screen.getByText('✓ Finalized Kamis, 24 Sep 2026')).toBeInTheDocument();
+    expect(screen.getByText('✓ Finalized Thursday, 24 Sep 2026')).toBeInTheDocument();
     // Its own record: no note is asked for, and nothing about anybody's figures as they are now.
     expect(calls.some((c) => /leader-notes|profile|\/summary|\/activity\/|\/leads|\/goals\//.test(c.url))).toBe(false);
   });
@@ -220,7 +220,7 @@ describe('/coaching/me, the reader’s own coaching (P11-T10 AC-4)', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Download as PDF' }));
     await waitFor(() => expect(print).toHaveBeenCalledTimes(1));
     expect(calls.some((c) => c.url.endsWith('/coaching/sessions/s-0924/print'))).toBe(true);
-    expect(document.querySelector('[data-print-view] p')).toHaveTextContent('Kamis, 24 Sep 2026 · Coached by Wilson Tanoto · Finalized');
+    expect(document.querySelector('[data-print-view] p')).toHaveTextContent('Thursday, 24 Sep 2026 · Coached by Wilson Tanoto · Finalized');
   });
 
   it('P11-T10 AC-4 offers a leader the way back to the roster, and an Agent, who leads nobody, none', async () => {
@@ -282,8 +282,8 @@ describe('/coaching/me, the sessions the reader led with somebody they no longer
     const lists = within(list).getAllByRole('list');
     expect(lists).toHaveLength(2);
     expect(within(lists[1]).getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
-      ['20 Agu 2026 — Bayu Pratama · 2 action items · 1 completedView →', '/coaching/mem-bayu/archive/s-led-1'],
-      ['13 Agu 2026 — Bayu Pratama · 1 action item · 0 completedView →', '/coaching/mem-bayu/archive/s-led-2'],
+      ['20 Aug 2026 — Bayu Pratama · 2 action items · 1 completedView →', '/coaching/mem-bayu/archive/s-led-1'],
+      ['13 Aug 2026 — Bayu Pratama · 1 action item · 0 completedView →', '/coaching/mem-bayu/archive/s-led-2'],
     ]);
     expect(list.textContent).not.toMatch(SIX_WORDS);
   });
@@ -293,6 +293,6 @@ describe('/coaching/me, the sessions the reader led with somebody they no longer
     expect(await screen.findByText('No coaching sessions yet.')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'View past sessions' }));
     expect(screen.getByRole('heading', { name: 'Sessions you led' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /20 Agu 2026 — Bayu Pratama/ })).toHaveAttribute('href', '/coaching/mem-bayu/archive/s-led-1');
+    expect(screen.getByRole('link', { name: /20 Aug 2026 — Bayu Pratama/ })).toHaveAttribute('href', '/coaching/mem-bayu/archive/s-led-1');
   });
 });

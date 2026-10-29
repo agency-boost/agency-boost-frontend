@@ -132,7 +132,7 @@ describe('a coachee’s Activity tab (P13.1-T9)', () => {
 
     expect(within(table).getByText('Follow up calon agen')).toBeInTheDocument();
     expect((await within(table).findAllByRole('columnheader')).map((h) => h.textContent).slice(0, 4))
-      .toEqual(['Activity', 'Total', 'Sen28', 'Min27']);
+      .toEqual(['Activity', 'Total', 'Mon28', 'Sun27']);
     // A section moved out of her sections says so in her words, not the reader's.
     expect(within(table).getByText('No longer in her sections')).toBeInTheDocument();
     expect(screen.queryByText(/your sections/)).toBeNull();

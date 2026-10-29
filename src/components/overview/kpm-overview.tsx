@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/app-shell';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { officeLine, OWN_COPY, PROTOTYPE_COPY, readKpmOverview, type KpmOverviewView } from '@/lib/kpm-overview';
+import { officeLine, readKpmOverview, type KpmOverviewView } from '@/lib/kpm-overview';
 import { CoachingCoverage } from './coaching-coverage';
 import { Composition } from './composition';
 import { Engagement } from './engagement';
@@ -22,8 +24,12 @@ import { Recruitment } from './recruitment';
  *
  * The states the prototype lacks are Fills (L-01): the five sections in outline while the read is on its
  * way, an error with a retry, and each section's own words where it has nothing to draw.
+ *
+ * **Its words are the reader's** (P18.98-T4; `kpmOverviewMessages`): the title, the sections' and the cards' names kept
+ * English, the rest the approved glossary's; its figures the figures' language (`useFigureLanguage()`).
  */
 export function KpmOverview() {
+  const t = useMessages(kpmOverviewMessages);
   const [view, setView] = useState<KpmOverviewView | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   /** A retry: the same read, again. */
@@ -41,30 +47,30 @@ export function KpmOverview() {
   return (
     <div className="min-w-0">
       {/* The sub-line is the office's, so it arrives with the read (`:932-933`). */}
-      <PageHeader title={PROTOTYPE_COPY.title} subtitle={view ? officeLine(view.office) : undefined} />
+      <PageHeader title={t.title} subtitle={view ? officeLine(view.office) : undefined} />
 
       {error && (
         <div>
           <ErrorBanner {...error} />
-          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
         </div>
       )}
       {!view && !error && <OverviewSkeleton />}
       {view && (
         <SplitContext.Provider value={view.thresholds.statusSplitPct}>
-          <Section title={PROTOTYPE_COPY.composition}>
+          <Section title={t.composition}>
             <Composition composition={view.composition} />
           </Section>
-          <Section title={PROTOTYPE_COPY.engagement} sub={PROTOTYPE_COPY.engagementSub}>
+          <Section title={t.engagement} sub={t.engagementSub}>
             <Engagement engagement={view.engagement} />
           </Section>
-          <Section title={PROTOTYPE_COPY.coaching}>
+          <Section title={t.coaching}>
             <CoachingCoverage coaching={view.coaching} />
           </Section>
-          <Section title={PROTOTYPE_COPY.recruitment}>
+          <Section title={t.recruitment}>
             <Recruitment recruitment={view.recruitment} month={view.month} />
           </Section>
-          <Section title={PROTOTYPE_COPY.production}>
+          <Section title={t.production}>
             <Production production={view.production} />
           </Section>
         </SplitContext.Provider>
@@ -78,8 +84,9 @@ export function KpmOverview() {
  * live region, so a screen reader hears one sentence for the wait rather than five.
  */
 function OverviewSkeleton() {
+  const t = useMessages(kpmOverviewMessages);
   return (
-    <Skeleton label={OWN_COPY.loading}>
+    <Skeleton label={t.loading}>
       {/* Team composition: four tiles. */}
       <SkeletonBar className="mb-3.5 h-4 w-40" />
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">

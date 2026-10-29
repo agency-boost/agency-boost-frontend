@@ -1,3 +1,6 @@
+import { kept } from '@/i18n/kept';
+import { DEFAULT_LANGUAGE, type Language } from '@/i18n/language';
+import { recruitmentPitchMessages } from '@/i18n/messages/recruitment-pitch';
 import { api } from './api-client';
 import { formatNumber } from './format';
 import type { SignedUpload } from './tenant-config';
@@ -113,78 +116,68 @@ export const UNDER_A_KILOBYTE = '< 1 KB';
  * rather than `0,0 MB`; and **a file under 1 KB as `< 1 KB`** (ADR-0177 §4, P18.97-T5 AC-4; parity I-521), where it
  * read `1 KB` — the seed's one-page demonstration PDFs, which looked like placeholders. The size is the one storage
  * reported, which the server serves; nothing here rounds it up. The one size formatter: the training modules'
- * files use it too.
+ * files use it too. In the reader's `language` (P18.98-T4): `2.4 MB` in English, Indonesian when none is passed; *MB*
+ * and *KB* are the same in both.
  */
-export function formatFileSize(bytes: number): string {
-  if (bytes >= KILOBYTE * KILOBYTE) return `${formatNumber(bytes / KILOBYTE / KILOBYTE, { decimals: 1 })} MB`;
+export function formatFileSize(bytes: number, language: Language = DEFAULT_LANGUAGE): string {
+  if (bytes >= KILOBYTE * KILOBYTE) return `${formatNumber(bytes / KILOBYTE / KILOBYTE, { decimals: 1 }, language)} MB`;
   if (bytes < KILOBYTE) return UNDER_A_KILOBYTE;
-  return `${formatNumber(Math.round(bytes / KILOBYTE))} KB`;
+  return `${formatNumber(Math.round(bytes / KILOBYTE), {}, language)} KB`;
 }
 
-/** The pitch's words, verbatim (`Recruitment_Section.html:681-818`; D-copy) but where a dated line says otherwise. */
+/** The ring's figure, *2/4*: done over the required total, the server's counts, the same in both languages. */
+export const pitchRing = (done: number, total: number) => `${done}/${total}`;
+
+/** The pitch's words in English: the catalogue's source (`messages/recruitment-pitch.ts`), which a screen reads in the
+ * reader's language with `useMessages(recruitmentPitchMessages)` (P18.98-T4). */
+const EN = recruitmentPitchMessages.en;
+
+/**
+ * **The pitch's words, in English** (`Recruitment_Section.html:681-818`; D-copy) — for code with no reader to ask, as
+ * the screens' words were before P18.98-T4 moved them into the catalogue, where they are written once. *Uploaded ·
+ * needs confirmation* is the client's (UI-029; ADR-0177 §1, P18.97-T5 AC-1; parity I-519), *Optional* the tag on
+ * *Company Profile* and *Agency Profile* (UI-042; ADR-0177 §2; I-520), *Not uploaded yet* and the incomplete line the
+ * client's at every size (P18.95-T7 AC-1, grey text rows 11 and 12).
+ */
 export const PITCH_COPY = {
-  settingsTitle: 'Recruitment pitch',
-  missing: 'Missing',
-  complete: 'Complete',
-  uploaded: 'Uploaded',
-  /**
-   * **A file whose checklist is not finished** (`partial`), on both pages and for every reader — the client's words
-   * (UI-029; ADR-0177 §1, P18.97-T5 AC-1; parity I-519), where the office read *"{n}/{m} confirmed"* (`:688`) and
-   * agents *Uploaded* (`:696`). The checklist's own boxes still show which items are ticked.
-   */
-  needsConfirmation: 'Uploaded · needs confirmation',
-  /** The tag on an optional document — *Company Profile*, *Agency Profile* (UI-042; ADR-0177 §2; parity I-520). */
-  optional: 'Optional',
-  /**
-   * The client's words at every size (P18.95-T7 AC-1, grey text row 12; ADR-0167 §7) — under a required card's
-   * *Missing*, and on an empty optional card, which never reads *Missing* (ADR-0177 §2).
-   */
-  noFile: 'Not uploaded yet',
-  updated: (size: string, day: string) => `${size} · updated ${day}`,
-  fileIcon: 'PDF',
-  checklist: 'Confirm this PDF actually includes',
-  viewPdf: 'View PDF',
-  replace: 'Replace',
-  uploadPdf: 'Upload PDF',
-  ring: (done: number, total: number) => `${done}/${total}`,
-  completeTitle: 'Recruitment Pitch is complete',
-  completeLine: (total: number) =>
-    `All ${total} documents are uploaded and fully confirmed — ready to show or send to a candidate.`,
-  incompleteTitle: 'Recruitment Pitch is incomplete',
-  /**
-   * **The incomplete banner's line, in the client's words at every size** (P18.95-T7 AC-1, grey text row 11; ADR-0167
-   * §7): *"2 missing, 1 needs checking."*, where it read *"2 not uploaded, 1 uploaded but not fully confirmed — not
-   * yet ready to rely on for candidates."* The counts are the server's, as before.
-   */
-  notUploaded: (n: number) => `${n} missing`,
-  notConfirmed: (n: number) => `${n} needs checking`,
+  settingsTitle: kept('Recruitment pitch'),
+  missing: EN.missing,
+  complete: EN.complete,
+  uploaded: EN.uploaded,
+  needsConfirmation: EN.needsConfirmation,
+  optional: EN.optional,
+  noFile: EN.noFile,
+  updated: (size: string, day: string) => EN.updated({ size, day }),
+  fileIcon: EN.fileIcon,
+  checklist: EN.checklist,
+  viewPdf: EN.viewPdf,
+  replace: EN.replace,
+  uploadPdf: EN.uploadPdf,
+  ring: pitchRing,
+  completeTitle: EN.completeTitle,
+  completeLine: (total: number) => EN.completeLine({ total }),
+  incompleteTitle: EN.incompleteTitle,
+  notUploaded: (n: number) => EN.missingCount({ n }),
+  notConfirmed: (n: number) => EN.needsChecking({ n }),
   /** The two counts as one sentence: *2 missing, 1 needs checking.* — either alone where the other is none. */
-  incompleteLine: (parts: readonly string[]) => `${parts.join(', ')}.`,
+  incompleteLine: (parts: readonly string[]) => EN.incompleteLine({ parts }),
 } as const;
 
 /**
- * The words this module writes itself (D-copy): the Fills, the refusals, the accessible names. None
+ * The words this module writes itself (D-copy), in English: the Fills, the refusals, the accessible names. None
  * of OD-39's six words, no phase, no permission code.
  */
 export const PITCH_OWN_COPY = {
-  loading: 'Loading the pitch documents…',
-  readFailed: 'Could not read the pitch documents.',
-  tryAgain: 'Try again',
-  /** The ring's name: the figure alone says nothing to somebody who cannot see the ring. */
-  ringName: (done: number, total: number) => `${done} of ${total} documents complete`,
-  viewName: (title: string) => `${PITCH_COPY.viewPdf}, ${title} — opens in a new tab`,
-  uploadName: (title: string) => `${PITCH_COPY.uploadPdf}, ${title}`,
-  replaceName: (title: string) => `${PITCH_COPY.replace}, ${title}`,
-  opening: 'Opening…',
-  linkFailed: 'Could not open this PDF.',
-  tickFailed: 'Could not save that tick.',
-  /** A tick refused with `409`: the file it was made against has been replaced since. */
-  replacedSince:
-    'This PDF was replaced while the page was open, so its ticks were cleared. Check the new file, then tick again.',
-  /**
-   * Said to assistive technology alone when a file is attached (`sr-only`): the new name and the
-   * cleared boxes show at once on screen, and are silent to somebody who cannot see them change.
-   */
-  attached: (name: string, cleared: boolean) =>
-    `“${name}” attached.${cleared ? ' Its ticks are cleared.' : ''}`,
+  loading: EN.loading,
+  readFailed: EN.readFailed,
+  tryAgain: EN.tryAgain,
+  ringName: (done: number, total: number) => EN.ringName({ done, total }),
+  viewName: (title: string) => EN.viewName({ title }),
+  uploadName: (title: string) => EN.uploadName({ title }),
+  replaceName: (title: string) => EN.replaceName({ title }),
+  opening: EN.opening,
+  linkFailed: EN.linkFailed,
+  tickFailed: EN.tickFailed,
+  replacedSince: EN.replacedSince,
+  attached: (name: string, cleared: boolean) => EN.attached({ name, cleared }),
 } as const;

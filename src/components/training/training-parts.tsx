@@ -4,10 +4,12 @@ import { Card } from '@/components/ui/field';
 import { NumberBadge } from '@/components/ui/number-badge';
 import { TEXT_TAP } from '@/components/ui/phone';
 import { StatusPill } from '@/components/ui/status-pill';
+import { useMessages } from '@/i18n/language-provider';
+import { trainingMessages } from '@/i18n/messages/training';
 import { cn } from '@/lib/cn';
 import { usePhone } from '@/lib/use-phone';
 import {
-  FORMAT_LABEL, OWN_COPY, PROTOTYPE_COPY, STATUS_LABEL, trainingModuleHref,
+  trainingModuleHref,
   type TrainingItemKind, type TrainingSkillProgress, type TrainingStatus,
 } from '@/lib/training';
 
@@ -28,6 +30,9 @@ import {
  * the module page's, a tap away. On the learner's list and on a person's *Training* tab alike, so the two cannot
  * draw one module two ways (P18.5-T4 AC-4).
  */
+
+/** A module with no material: the *Format* cell's dash, drawn — its name is the catalogue's (`noFormatName`). */
+const NO_FORMAT = '—';
 
 /** The prototype's three glyphs (`FORMAT_META`, `:7652-7656`), drawn in the chip and on the tile. */
 export function FormatIcon({ kind, size = 13 }: { kind: TrainingItemKind; size?: number }) {
@@ -61,11 +66,12 @@ export function FormatIcon({ kind, size = 13 }: { kind: TrainingItemKind; size?:
  * content shows *—*.
  */
 export function FormatChips({ formats }: { formats: readonly TrainingItemKind[] }) {
+  const t = useMessages(trainingMessages);
   if (formats.length === 0) {
     return (
       <span className="text-muted">
-        <span aria-hidden="true">{OWN_COPY.noFormat}</span>
-        <span className="sr-only">{OWN_COPY.noFormatName}</span>
+        <span aria-hidden="true">{NO_FORMAT}</span>
+        <span className="sr-only">{t.noFormatName}</span>
       </span>
     );
   }
@@ -74,7 +80,7 @@ export function FormatChips({ formats }: { formats: readonly TrainingItemKind[] 
       {formats.map((kind) => (
         <span key={kind} className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy-soft">
           <FormatIcon kind={kind} />
-          {FORMAT_LABEL[kind]}
+          {t.format[kind]}
         </span>
       ))}
     </span>
@@ -87,7 +93,7 @@ export function FormatChips({ formats }: { formats: readonly TrainingItemKind[] 
  * contrast floor (I-116). The word is always drawn: the colour is never the only cue.
  */
 export function TrainingStatusPill({ status }: { status: TrainingStatus }) {
-  const label = STATUS_LABEL[status];
+  const label = useMessages(trainingMessages).status[status];
   const pill = 'whitespace-nowrap px-2.5 py-1 text-xs font-semibold normal-case tracking-normal';
   if (status === 'in_progress') return <StatusPill status="watch" label={label} className={pill} />;
   return <StatusPill status={status === 'done' ? 'success' : 'neutral'} label={label} className={pill} />;
@@ -124,6 +130,7 @@ export function SkillCard({
   /** Below 768px: a row per module, its name and its status (P18.95-T3 AC-5). */
   phone?: boolean;
 }) {
+  const t = useMessages(trainingMessages);
   const HEAD = 'border-b border-hairline px-2 pb-2.5 text-left text-2xs font-bold uppercase tracking-wide text-muted first:pl-0 last:pr-0';
   const CELL = 'border-b border-hairline px-2 py-3 align-middle text-base font-medium text-navy first:pl-0 last:pr-0';
   const rows = [
@@ -141,7 +148,7 @@ export function SkillCard({
     return (
       <Card>
         {heading}
-        <ul role="list" aria-label={OWN_COPY.tableCaption(skill.label)}>
+        <ul role="list" aria-label={t.tableCaption({ skill: skill.label })}>
           {rows.map((row) => (
             <li
               key={`${row.archived ? 'archived' : 'offered'}-${row.code}`}
@@ -157,7 +164,7 @@ export function SkillCard({
               </span>
               <span className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                 <TrainingStatusPill status={row.status} />
-                {row.archived && <span className="text-xs font-semibold text-muted">{OWN_COPY.archived}</span>}
+                {row.archived && <span className="text-xs font-semibold text-muted">{t.archived}</span>}
               </span>
             </li>
           ))}
@@ -173,7 +180,7 @@ export function SkillCard({
       </h3>
       <div className="min-w-0 overflow-x-auto">
         <table className="relative w-full min-w-[520px] table-fixed border-collapse">
-          <caption className="sr-only">{OWN_COPY.tableCaption(skill.label)}</caption>
+          <caption className="sr-only">{t.tableCaption({ skill: skill.label })}</caption>
           {/* `.training-table`'s columns (`:1786`), 0.4 · 1.3 · 2.2 · 1 · 1.2. */}
           <colgroup>
             <col className="w-[7%]" />
@@ -184,11 +191,11 @@ export function SkillCard({
           </colgroup>
           <thead>
             <tr>
-              <th scope="col" className={HEAD}>{PROTOTYPE_COPY.columns.no}</th>
-              <th scope="col" className={HEAD}>{PROTOTYPE_COPY.columns.skill}</th>
-              <th scope="col" className={HEAD}>{PROTOTYPE_COPY.columns.module}</th>
-              <th scope="col" className={HEAD}>{PROTOTYPE_COPY.columns.format}</th>
-              <th scope="col" className={HEAD}>{PROTOTYPE_COPY.columns.status}</th>
+              <th scope="col" className={HEAD}>{t.columns.no}</th>
+              <th scope="col" className={HEAD}>{t.columns.skill}</th>
+              <th scope="col" className={HEAD}>{t.columns.module}</th>
+              <th scope="col" className={HEAD}>{t.columns.format}</th>
+              <th scope="col" className={HEAD}>{t.columns.status}</th>
             </tr>
           </thead>
           <tbody className="[&>tr:last-child>*]:border-b-0">
@@ -207,7 +214,7 @@ export function SkillCard({
                 <td className={CELL}>
                   <span className="flex flex-wrap items-center gap-1.5">
                     <TrainingStatusPill status={row.status} />
-                    {row.archived && <span className="text-xs font-semibold text-muted">{OWN_COPY.archived}</span>}
+                    {row.archived && <span className="text-xs font-semibold text-muted">{t.archived}</span>}
                   </span>
                 </td>
               </tr>

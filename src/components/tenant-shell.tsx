@@ -6,6 +6,9 @@ import { type NavIconName } from '@/components/ui/nav-icon';
 import { RequireSession } from '@/components/require-session';
 import { ToastHost } from '@/components/ui/toast';
 import { shortOfRung, useLadder } from '@/components/ui/role-badge';
+import { kept } from '@/i18n/kept';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { shellMessages } from '@/i18n/messages/shell';
 import { viewSwitchFor } from '@/lib/landing';
 import { displayName } from '@/lib/display-name';
 import { profileLine } from '@/lib/profile-line';
@@ -20,6 +23,9 @@ import { useSignOut } from '@/lib/use-sign-out';
  * The nav mirrors the prototype's grouping (`KPM_Owner.html:2039`), and keeps routes
  * that do not exist yet visible as *Upcoming* rather than hiding them, so the roadmap is
  * legible instead of being a surprise.
+ *
+ * Every heading and item is kept English in both languages (`kept`, the glossary's §A.1); the chip's words and the
+ * pill are the reader's (`shellMessages`, P18.98-T1).
  */
 const SECTIONS: readonly {
   label: string | null;
@@ -40,39 +46,39 @@ const SECTIONS: readonly {
   {
     label: null,
     items: [
-      { label: 'Overview', href: '/kpm/overview', icon: 'gauge' },
+      { label: kept('Overview'), href: '/kpm/overview', icon: 'gauge' },
     ],
     divider: true,
   },
   {
-    label: 'Reporting',
+    label: kept('Reporting'),
     items: [
       // Live since P18-T2: the unit comparison, MOC, the clubs and the monthly chart. Its *Compliance,
       // Events, and Campaigns* tab is a sign until those three are built; *Advanced analytics* stays
       // *Upcoming*, as the prototype draws it with nothing behind it (`KPM_Owner.html:882`, parity D-01).
-      { label: 'KPM analytics', href: '/kpm/analytics', icon: 'chart' },
-      { label: 'Data upload', href: '/kpm/data-upload', icon: 'upload' },
-      { label: 'Advanced analytics', href: '/kpm/advanced-analytics', icon: 'chartUp', upcoming: true },
+      { label: kept('KPM analytics'), href: '/kpm/analytics', icon: 'chart' },
+      { label: kept('Data upload'), href: '/kpm/data-upload', icon: 'upload' },
+      { label: kept('Advanced analytics'), href: '/kpm/advanced-analytics', icon: 'chartUp', upcoming: true },
     ],
     divider: true,
   },
   {
-    label: 'Leader Meetings',
+    label: kept('Leader Meetings'),
     // Live since P18.1-T2 (`KPM_Owner.html:887-890`, no pill). A Core Leader reaches it from the field shell's own
     // *Core leader* group since P18.8-T5 (ADR-0159 §3), and by a shared link as anybody does.
-    items: [{ label: 'Strategic Leader Forum', href: '/leader-meetings', icon: 'megaphone' }],
+    items: [{ label: kept('Strategic Leader Forum'), href: '/leader-meetings', icon: 'megaphone' }],
     divider: true,
   },
   {
-    label: 'Settings',
+    label: kept('Settings'),
     // Ten items, in the prototype's order. Ratio benchmarks is deliberately absent:
     // the prototype has it as a sub-tab of Activity types (`KPM_Owner.html:1330`), not
     // as a sidebar destination.
     items: [
-      { label: 'Activity types', href: '/kpm/settings/activity-types', icon: 'activity' },
-      { label: 'Lead statuses', href: '/kpm/settings/lead-statuses', icon: 'funnel' },
-      { label: 'Activation checklist', href: '/kpm/settings/activation-checklist', icon: 'clipboard' },
-      { label: 'Training', href: '/kpm/settings/training', icon: 'graduation' },
+      { label: kept('Activity types'), href: '/kpm/settings/activity-types', icon: 'activity' },
+      { label: kept('Lead statuses'), href: '/kpm/settings/lead-statuses', icon: 'funnel' },
+      { label: kept('Activation checklist'), href: '/kpm/settings/activation-checklist', icon: 'clipboard' },
+      { label: kept('Training'), href: '/kpm/settings/training', icon: 'graduation' },
       /*
        * After Training, with the other two screens about one person's development: the first
        * ninety days, what they learn, how far they have come. Events, Campaigns and Products
@@ -81,30 +87,30 @@ const SECTIONS: readonly {
        * The prototype's own order (`KPM_Owner.html:896-903`) is untouched; this only chooses
        * where the one screen it has no counterpart for goes.
        */
-      { label: 'Capability Mapping', href: '/kpm/settings/capability-mapping', icon: 'ladder' },
-      { label: 'Events', href: '/kpm/settings/events', icon: 'calendar' },
-      { label: 'Campaigns', href: '/kpm/settings/campaigns', icon: 'trophy' },
-      { label: 'Products', href: '/kpm/settings/products', icon: 'box' },
+      { label: kept('Capability Mapping'), href: '/kpm/settings/capability-mapping', icon: 'ladder' },
+      { label: kept('Events'), href: '/kpm/settings/events', icon: 'calendar' },
+      { label: kept('Campaigns'), href: '/kpm/settings/campaigns', icon: 'trophy' },
+      { label: kept('Products'), href: '/kpm/settings/products', icon: 'box' },
       /*
        * The recruitment section file's *Viewing as KPM* view (P17-T5, D-settings): after Products, the
        * other set of documents the office keeps for its agents to show. The prototype has no settings
        * item for it — its toggle is a demo device the permissions replace (route registry, H-22).
        */
-      { label: 'Recruitment pitch', href: '/kpm/settings/recruitment-pitch', icon: 'chat' },
+      { label: kept('Recruitment pitch'), href: '/kpm/settings/recruitment-pitch', icon: 'chat' },
       // The Admin's as well as the Owner's since ADR-0027, like every page under Settings.
-      { label: 'Branch info', href: '/kpm/settings/branch-info', icon: 'sliders' },
+      { label: kept('Branch info'), href: '/kpm/settings/branch-info', icon: 'sliders' },
     ],
     divider: true,
   },
   {
-    label: 'People',
+    label: kept('People'),
     items: [
-      { label: 'All members', href: '/people/members', icon: 'users' },
+      { label: kept('All members'), href: '/people/members', icon: 'users' },
       // Owner and Admin both hold `kpm:import_roster` (P3.6-T4); a leader does not,
       // and there is no tenant shell for one anyway.
-      { label: 'Import people', href: '/people/import', icon: 'userPlus' },
-      { label: 'Org tree', href: '/people/org-tree', icon: 'tree' },
-      { label: 'Manage KPM admins', href: '/people/admins', icon: 'shield', ownerOnly: true },
+      { label: kept('Import people'), href: '/people/import', icon: 'userPlus' },
+      { label: kept('Org tree'), href: '/people/org-tree', icon: 'tree' },
+      { label: kept('Manage KPM admins'), href: '/people/admins', icon: 'shield', ownerOnly: true },
     ],
   },
 ];
@@ -155,6 +161,8 @@ function TenantChrome({
   const unread = useUnreadCount();
   const { signOut, busy } = useSignOut();
   const pathname = usePathname();
+  const t = useMessages(shellMessages);
+  const language = useLanguage();
 
   // An Owner-reserved screen is hidden from an Admin entirely, rather than shown and then
   // refused (`roles-and-permissions.md` §1.6) — since ADR-0027 that is Manage KPM admins
@@ -184,10 +192,11 @@ function TenantChrome({
     ? shortOfRung(rung)
     : (membership?.hierarchyRole ?? '').toUpperCase();
 
+  // The office's roles, kept English (§A.5).
   const capacity = membership?.isKpmOwner
-    ? 'KPM Owner'
+    ? kept('KPM Owner')
     : membership?.isKpmAdmin
-      ? 'KPM Admin'
+      ? kept('KPM Admin')
       : membership
         ? shortRung
         : '';
@@ -196,7 +205,7 @@ function TenantChrome({
     <AppShell
       sections={sections}
       user={{
-        name: (me && displayName(me.user)) || 'Signed in',
+        name: (me && displayName(me.user)) || t.signedIn,
         // The profile line (ADR-0159 §5, P18.8-T6 AC-2): *KPM Owner* or *KPM Admin* · Core Leader · the groups · the office.
         role: profileLine(capacity, membership),
         initials: me?.user.initials ?? '??',
@@ -204,7 +213,7 @@ function TenantChrome({
         // The first of the phone's menu details (P18.95-T12 AC-3): the name in full, where the chip greets by the preferred one.
         fullName: me?.user.fullName,
       }}
-      brandTag="KPM OWNER"
+      brandTag={kept('KPM OWNER')}
       account={{
         href: '/profile',
         onSignOut: () => void signOut(),
@@ -212,7 +221,7 @@ function TenantChrome({
         // *Open agent view* (ADR-0114): an Owner or an Admin to their field landing, the screen a member
         // of their rung would have signed in to. No nav item: `KPM_Owner.html`'s nav has none of the
         // field's, and the chip's panel is a control that already exists (ADR-0062 §2).
-        viewSwitch: viewSwitchFor(me, 'office') ?? undefined,
+        viewSwitch: viewSwitchFor(me, 'office', language) ?? undefined,
       }}
       notifications={{ href: '/notifications', unread }}
       title={title}

@@ -4,6 +4,9 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { UnreadBadge, unreadBadgeText, withUnread } from '@/components/notification-bell';
 import { TAP_HEIGHT } from '@/components/ui/phone';
+import { kept } from '@/i18n/kept';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { shellMessages } from '@/i18n/messages/shell';
 import { cn } from '@/lib/cn';
 
 /** What Tab can land on inside the panel. An upcoming nav item is an `<a>` with no href, and is not. */
@@ -104,6 +107,8 @@ export function SidebarUserMenu({
   const container = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
+  const t = useMessages(shellMessages);
+  const language = useLanguage();
 
   useEffect(() => {
     if (!open) return;
@@ -177,7 +182,7 @@ export function SidebarUserMenu({
           type="button"
           aria-expanded={open}
           aria-controls={panelId}
-          aria-label={withUnread(notices ? 'Account and notifications' : 'Account', unread)}
+          aria-label={withUnread(notices ? t.accountAndNotifications : t.account, unread, language)}
           onClick={() => setOpen((wasOpen) => !wasOpen)}
           className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-md hover:bg-white/[0.06]"
         >
@@ -270,12 +275,12 @@ export function SidebarUserMenu({
               */
             <Link
               href={notices.href}
-              // The bell's name, its word first (WCAG 2.5.3): *Notifications, 3 unread*.
-              aria-label={withUnread('Notifications', unread)}
+              // The bell's name, its word first (WCAG 2.5.3): *Notifications, 3 unread*. The inbox's title, kept (§A.2).
+              aria-label={withUnread(kept('Notifications'), unread, language)}
               className={cn(row, 'gap-2')}
               onClick={() => setOpen(false)}
             >
-              Notifications
+              {kept('Notifications')}
               {unread > 0 && (
                 <span
                   aria-hidden
@@ -292,7 +297,7 @@ export function SidebarUserMenu({
             </Link>
           )}
           <Link href={accountHref} className={row} onClick={() => setOpen(false)}>
-            Your account
+            {t.yourAccount}
           </Link>
           <button
             type="button"
@@ -300,7 +305,7 @@ export function SidebarUserMenu({
             disabled={signingOut}
             className={cn(row, 'disabled:opacity-50')}
           >
-            {signingOut ? 'Signing out…' : 'Sign out'}
+            {signingOut ? t.signingOut : t.signOut}
           </button>
         </div>
       )}

@@ -1,7 +1,8 @@
 import { render } from '@testing-library/react';
 import { createElement, useState, type ReactNode } from 'react';
 import { vi } from 'vitest';
-import { stubFetch, type StubReply, type StubResponse } from './harness';
+import { stubFetch, withLanguage, type StubReply, type StubResponse } from './harness';
+import type { Language } from '@/i18n/language';
 import { MeetingWriterProvider } from '@/components/leader-forum/meeting-writer';
 import {
   readMeeting, type ActionItem, type AgendaItem, type MeetingView, type Scorecard, type ScorecardCell,
@@ -275,16 +276,23 @@ export function renderTab(
   Tab: (props: { meeting: MeetingView }) => ReactNode,
   meeting: MeetingView = makeMeetingView(),
   routes: Record<string, StubReply | StubReply[]> = {},
+  /**
+   * The reader's language (P18.98-T3): one a spec asks for (`InLanguage`, words and figures), or `{ live }`, the app's
+   * own provider, where nothing is chosen but what the browser chose (`browserChose`) — not live, English words and
+   * Indonesian figures. English, every spec's default, when none is given.
+   */
+  language?: Language | { live: boolean },
 ) {
   const stub = stubFetch(routes);
   let current = meeting;
-  const result = render(createElement(MeetingHost, {
+  const host = createElement(MeetingHost, {
     initial: meeting,
     draw: (m: MeetingView) => createElement(Tab, { meeting: m }),
     onMeeting: (m: MeetingView) => {
       current = m;
     },
-  }));
+  });
+  const result = render(withLanguage(host, language));
   return { ...result, ...stub, held: () => current };
 }
 

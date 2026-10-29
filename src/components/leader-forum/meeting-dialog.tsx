@@ -4,14 +4,18 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { DateField } from '@/components/ui/date-field';
 import { Button, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
+import { useMessages } from '@/i18n/language-provider';
+import { forumMessages } from '@/i18n/messages/forum';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  createMeeting, deleteMeeting, deleteQuestion, FORUM_COPY, rescheduleMeeting,
-  type ForumLimits, type MeetingCard, type MeetingView,
+  createMeeting, deleteMeeting, rescheduleMeeting, type ForumLimits, type MeetingCard, type MeetingView,
 } from '@/lib/leader-meetings';
 
-const COPY = FORUM_COPY.dialog;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A refusal under a field, held by name so it reads in the language the screen is in now. */
+type TitleError = 'needTitle';
+type DateError = 'needDate' | 'completed';
 
 /**
  * **The meeting dialog** (OD-145, ADR-0130; parity I-254): the product's dialog (F-72), the forum's one added
@@ -47,13 +51,15 @@ export function MeetingDialog({
   onChanged?: () => Promise<void>;
   onDeleted?: () => void;
 }) {
+  const t = useMessages(forumMessages);
+  const copy = t.dialog;
   const id = useId();
   const keep = useRef<HTMLButtonElement>(null);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState('');
-  const [titleError, setTitleError] = useState<string | undefined>();
-  const [dateError, setDateError] = useState<string | undefined>();
-  const [deleteError, setDeleteError] = useState<string | undefined>();
+  const [titleError, setTitleError] = useState<TitleError | undefined>();
+  const [dateError, setDateError] = useState<DateError | undefined>();
+  const [deleteError, setDeleteError] = useState<'hasMinutes' | undefined>();
   const [conflict, setConflict] = useState(false);
   const [banner, setBanner] = useState<ApiError | null>(null);
   const [asking, setAsking] = useState(false);
@@ -95,20 +101,20 @@ export function MeetingDialog({
       return;
     }
     if (error.code === 'LEADER_MEETING_COMPLETED') {
-      setDateError(COPY.completed);
+      setDateError('completed');
       return;
     }
     if (error.code === 'LEADER_MEETING_HAS_MINUTES') {
       setAsking(false);
-      setDeleteError(COPY.hasMinutes);
+      setDeleteError('hasMinutes');
       return;
     }
     if (error.code === 'VALIDATION_FAILED' && where === 'form') {
       const violations = (error.details?.violations as string[] | undefined) ?? [];
       const onTitle = violations.some((v) => v.startsWith('title'));
       const onDate = violations.some((v) => v.startsWith('date'));
-      if (onTitle) setTitleError(COPY.needTitle);
-      if (onDate) setDateError(COPY.needDate);
+      if (onTitle) setTitleError('needTitle');
+      if (onDate) setDateError('needDate');
       if (onTitle || onDate) return;
     }
     setBanner(error);
@@ -120,8 +126,8 @@ export function MeetingDialog({
     const trimmed = title.trim();
     const titleBad = trimmed.length === 0;
     const dateBad = !DATE.test(date);
-    setTitleError(titleBad ? COPY.needTitle : undefined);
-    setDateError(dateBad ? COPY.needDate : undefined);
+    setTitleError(titleBad ? 'needTitle' : undefined);
+    setDateError(dateBad ? 'needDate' : undefined);
     setBanner(null);
     setConflict(false);
     if (titleBad || dateBad) return;
@@ -166,33 +172,33 @@ export function MeetingDialog({
     <Modal
       open={open}
       onClose={onClose}
-      title={meeting ? COPY.detailsTitle : COPY.newTitle}
+      title={meeting ? copy.detailsTitle : copy.newTitle}
       // The form's *Cancel* and its submit, held at the foot; the delete question keeps its own two buttons.
       footer={asking && meeting ? undefined : (
         <div className="flex flex-wrap justify-end gap-2.5">
-          <Button variant="secondary" onClick={onClose}>{COPY.cancel}</Button>
+          <Button variant="secondary" onClick={onClose}>{copy.cancel}</Button>
           {editable && (
             <Button type="submit" form={`${id}-form`} disabled={busy} aria-busy={busy || undefined}>
-              {meeting ? COPY.saveChanges : COPY.create}
+              {meeting ? copy.saveChanges : copy.create}
             </Button>
           )}
         </div>
       )}
     >
       {banner && <div className="mb-4"><ErrorBanner {...banner} /></div>}
-      {conflict && <p role="alert" className="mb-4 text-sm font-semibold text-alert">{FORUM_COPY.conflict}</p>}
+      {conflict && <p role="alert" className="mb-4 text-sm font-semibold text-alert">{t.conflict}</p>}
 
       {asking && meeting ? (
         <div>
-          <p className="text-md leading-relaxed text-navy">{deleteQuestion(meeting.title)}</p>
+          <p className="text-md leading-relaxed text-navy">{t.deleteQuestion({ title: meeting.title })}</p>
           <div className="mt-5 flex flex-wrap justify-end gap-2.5">
-            <Button ref={keep} variant="secondary" onClick={() => setAsking(false)} disabled={busy}>{COPY.keep}</Button>
-            <Button variant="danger" onClick={() => void remove()} disabled={busy}>{COPY.confirmDelete}</Button>
+            <Button ref={keep} variant="secondary" onClick={() => setAsking(false)} disabled={busy}>{copy.keep}</Button>
+            <Button variant="danger" onClick={() => void remove()} disabled={busy}>{copy.confirmDelete}</Button>
           </div>
         </div>
       ) : (
         <form id={`${id}-form`} onSubmit={(e) => void submit(e)} noValidate className="flex flex-col gap-4">
-          <Field label={COPY.title} htmlFor={`${id}-title`} error={titleError}>
+          <Field label={copy.title} htmlFor={`${id}-title`} error={titleError && copy[titleError]}>
             <TextInput
               id={`${id}-title`}
               value={title}
@@ -203,7 +209,7 @@ export function MeetingDialog({
               invalid={Boolean(titleError)}
             />
           </Field>
-          <Field label={COPY.date} htmlFor={`${id}-date`} error={dateError}>
+          <Field label={copy.date} htmlFor={`${id}-date`} error={dateError && copy[dateError]}>
             <DateField
               id={`${id}-date`}
               value={date}
@@ -217,10 +223,10 @@ export function MeetingDialog({
 
           {canDelete && (
             <div>
-              <Button variant="inlineDanger" onClick={() => setAsking(true)} disabled={busy}>{COPY.delete}</Button>
+              <Button variant="inlineDanger" onClick={() => setAsking(true)} disabled={busy}>{copy.delete}</Button>
             </div>
           )}
-          {deleteError && <p role="alert" className="-mt-2 text-xs font-semibold text-alert">{deleteError}</p>}
+          {deleteError && <p role="alert" className="-mt-2 text-xs font-semibold text-alert">{copy[deleteError]}</p>}
         </form>
       )}
     </Modal>

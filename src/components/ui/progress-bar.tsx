@@ -1,3 +1,7 @@
+'use client';
+
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
 import { cn } from '@/lib/cn';
 import { formatPercent, percentOf } from '@/lib/format';
 import type { Status } from './status-pill';
@@ -23,6 +27,8 @@ export function ProgressBar({
   showLabel?: boolean;
   className?: string;
 }) {
+  const language = useFigureLanguage();
+  const t = useMessages(uiMessages).progress;
   const hasTarget = target > 0;
   const pct = hasTarget ? percentOf(value, target) : null;
   const width = pct === null ? 0 : Math.min(100, Math.max(0, pct));
@@ -41,13 +47,13 @@ export function ProgressBar({
         aria-valuenow={pct ?? undefined}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={hasTarget ? `${value} of ${target}` : 'No target set'}
+        aria-label={hasTarget ? t.of({ value: String(value), target: String(target) }) : t.noTarget}
       >
         <div className={cn('h-full rounded-pill transition-all', fill[status])} style={{ width: `${width}%` }} />
       </div>
       {showLabel && (
         <p className="mt-1 text-xs text-muted">
-          {pct === null ? 'No target set' : formatPercent(pct)}
+          {pct === null ? t.noTarget : formatPercent(pct, {}, language)}
         </p>
       )}
     </div>

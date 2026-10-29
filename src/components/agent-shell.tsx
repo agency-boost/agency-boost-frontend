@@ -5,6 +5,9 @@ import { AppShell, type NavItem, type NavSection } from '@/components/app-shell'
 import { RequireSession } from '@/components/require-session';
 import { ToastHost } from '@/components/ui/toast';
 import { shortOfRung, useLadder } from '@/components/ui/role-badge';
+import { kept } from '@/i18n/kept';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { shellMessages } from '@/i18n/messages/shell';
 import { viewSwitchFor } from '@/lib/landing';
 import { displayName } from '@/lib/display-name';
 import { profileLine } from '@/lib/profile-line';
@@ -90,6 +93,9 @@ function Chrome({
   const unread = useUnreadCount();
   const { signOut, busy } = useSignOut();
   const pathname = usePathname();
+  // The nav's words are kept English (`kept`, the glossary's §A.1); the chip's and the pill's are the reader's.
+  const t = useMessages(shellMessages);
+  const language = useLanguage();
 
   const on = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
@@ -107,23 +113,23 @@ function Chrome({
   const leadsSomeone = (membership?.directCount ?? 0) > 0;
 
   const unitTools: NavSection = {
-    label: 'Unit tools',
+    label: kept('Unit tools'),
     divider: true,
     items: [
       // Live since the Unit Dashboard was built (P15-T2 AC-1; it was *Upcoming* from P10.1-T2 while
       // the page was a sign), and where a leader lands (`landing.ts`, P15-T4 AC-4). Current on the
       // reader's own unit and on every unit below them, `/unit/dashboard/{membershipId}`: one screen
       // over another head. Nothing under `/coaching` matches it, nor it `/coaching`.
-      { label: 'Unit dashboard', href: '/unit/dashboard', icon: 'gauge', active: on('/unit/dashboard') },
+      { label: kept('Unit dashboard'), href: '/unit/dashboard', icon: 'gauge', active: on('/unit/dashboard') },
       // Live since the roster was built (P11-T6 AC-7). Every route under it is coaching — the reader's
       // own notes and each person they coach — so the item stays current on all of them, as the
       // prototype's returns to the roster from any of them (`Overall.html:10596`). A drill from the
       // Unit Dashboard into a person's coaching tabs lands here, and this item is the current one.
-      { label: 'Coaching session', href: '/coaching', icon: 'chat', active: on('/coaching') },
+      { label: kept('Coaching session'), href: '/coaching', icon: 'chat', active: on('/coaching') },
     ],
   };
 
-  const groupTree: NavItem = { label: 'Group tree', href: '/group-tree', icon: 'tree', active: on('/group-tree') };
+  const groupTree: NavItem = { label: kept('Group tree'), href: '/group-tree', icon: 'tree', active: on('/group-tree') };
 
   /*
    * *New agent* (`Overall.html:2638-2647`) shows exactly what the reader has (P13-T7 AC-5), from the
@@ -134,12 +140,12 @@ function Chrome({
    * would not offer it to — the nav decides what is offered, never what is allowed.
    */
   const newAgent: NavSection = {
-    label: 'New agent',
+    label: kept('New agent'),
     divider: true,
     items: [
       ...(me?.activation?.open
         ? [{
-          label: 'Your 90-day activation', href: '/activation', icon: 'clipboard', active: on('/activation'),
+          label: kept('Your 90-day activation'), href: '/activation', icon: 'clipboard', active: on('/activation'),
           done: me.activation.complete,
         } satisfies NavItem]
         : []),
@@ -148,7 +154,7 @@ function Chrome({
        * requests* are a tap away before their first hire — where the page itself is theirs (`new_hires:read_roster`).
        */
       ...(me?.newHires || (me?.permissions.includes('member:invite') && me.permissions.includes('new_hires:read_roster'))
-        ? [{ label: 'New hires', href: '/new-hires', icon: 'userPlus', active: on('/new-hires') } satisfies NavItem]
+        ? [{ label: kept('New hires'), href: '/new-hires', icon: 'userPlus', active: on('/new-hires') } satisfies NavItem]
         : []),
     ],
   };
@@ -163,12 +169,12 @@ function Chrome({
    */
   const coreLeader = membership?.isCoreLeader === true;
   const coreLeaderSection: NavSection = {
-    label: 'Core leader',
+    label: kept('Core leader'),
     divider: true,
     items: [
-      { label: 'Strategic Leader Forum', href: '/leader-meetings', icon: 'megaphone', active: on('/leader-meetings') },
-      { label: 'KPM analytics', href: '/kpm/analytics', icon: 'chart', active: on('/kpm/analytics') },
-      { label: 'Advanced analytics', href: '/kpm/advanced-analytics', icon: 'chartUp', upcoming: true },
+      { label: kept('Strategic Leader Forum'), href: '/leader-meetings', icon: 'megaphone', active: on('/leader-meetings') },
+      { label: kept('KPM analytics'), href: '/kpm/analytics', icon: 'chart', active: on('/kpm/analytics') },
+      { label: kept('Advanced analytics'), href: '/kpm/advanced-analytics', icon: 'chartUp', upcoming: true },
     ],
   };
 
@@ -182,41 +188,41 @@ function Chrome({
    */
   const sections: readonly NavSection[] = [
     {
-      label: 'Personal tools',
+      label: kept('Personal tools'),
       divider: true,
       items: [
         // Notifications is **not** here. It is the bell beside the identity chip at the foot
         // of the sidebar — a glance rather than a place to work (client feedback,
         // 2026-09-24).
-        { label: 'Activity management', href: '/activity/log', active: on('/activity'), icon: 'activity' },
-        { label: 'Leads management', href: '/leads', active: on('/leads'), icon: 'funnel' },
-        { label: 'Goal settings', href: '/goals', active: on('/goals'), icon: 'target' },
-        { label: 'Personal summary', href: '/summary', active: on('/summary'), icon: 'user' },
+        { label: kept('Activity management'), href: '/activity/log', active: on('/activity'), icon: 'activity' },
+        { label: kept('Leads management'), href: '/leads', active: on('/leads'), icon: 'funnel' },
+        { label: kept('Goal settings'), href: '/goals', active: on('/goals'), icon: 'target' },
+        { label: kept('Personal summary'), href: '/summary', active: on('/summary'), icon: 'user' },
         // The fifth, after *Personal summary*, in `Overall.html`'s sentence case: the section file draws it
         // in a *Daily tools* group of its own (`Calendar_Section.html:254-260`), which is shell residue
         // (`prototype-sources.md`, *The rule*). Every field role has a calendar (roles §4.2), so it
         // follows no graph. Its glyph is not *Event list*'s (P12-T2 AC-1).
-        { label: 'Calendar', href: '/calendar', active: on('/calendar'), icon: 'schedule' },
+        { label: kept('Calendar'), href: '/calendar', active: on('/calendar'), icon: 'schedule' },
       ],
     },
     ...(leadsSomeone ? [unitTools] : []),
     ...(newAgent.items.length > 0 ? [newAgent] : []),
     {
-      label: 'Training',
+      label: kept('Training'),
       divider: true,
       // Live for every field rung, and the Owner and the Admin in their field view (P18.5-T1 AC-9): the
       // prototype gates it for nobody (`Overall.html:2651`). Current on the list and every module's page.
-      items: [{ label: 'Training modules', href: '/training', icon: 'graduation', active: on('/training') }],
+      items: [{ label: kept('Training modules'), href: '/training', icon: 'graduation', active: on('/training') }],
     },
     {
-      label: 'Sales tools',
+      label: kept('Sales tools'),
       items: [
         // Live for every field role (Phase 14; roles §4.2): the prototype gates neither (`Overall.html:2656-2657`).
         // **One entry since P18.8-T12** (ADR-0161 §5, the client's request of 2026-10-26): *Sales Attack Plan* opens the
         // plan, and the tabs over both pages reach the catalog. It stays current on either address, the catalog's
         // drawer `/product-catalog/{code}` included.
         {
-          label: 'Sales Attack Plan', href: '/attack-plan', icon: 'compass',
+          label: kept('Sales Attack Plan'), href: '/attack-plan', icon: 'compass',
           active: on('/attack-plan') || on('/product-catalog'),
         },
       ],
@@ -230,31 +236,31 @@ function Chrome({
        * and the Admin's in their field view, so it follows no graph. It opens the first tab and stays
        * current on both (`/recruitment/*`). Its glyph, *People*, is no other item's here.
        */
-      label: 'Recruitment tools',
+      label: kept('Recruitment tools'),
       divider: true,
-      items: [{ label: 'Recruitment', href: '/recruitment/attack-plan', icon: 'users', active: on('/recruitment') }],
+      items: [{ label: kept('Recruitment'), href: '/recruitment/attack-plan', icon: 'users', active: on('/recruitment') }],
     },
     {
-      label: 'KPM',
+      label: kept('KPM'),
       divider: true,
       // Live for every field role (P18.5-T5 AC-4; I-150): the prototype gates it on nothing (`Overall.html:2662-2665`).
       // Current over an event's modal too, `/events/{eventId}`.
-      items: [{ label: 'Event list', href: '/events', icon: 'calendar', active: on('/events') }],
+      items: [{ label: kept('Event list'), href: '/events', icon: 'calendar', active: on('/events') }],
     },
     {
-      label: 'Campaign',
+      label: kept('Campaign'),
       // Live for every field role (P18.5-T7; roles §4.2): the prototype gates it on nothing (`Overall.html:2667-2670`).
       // Current over a campaign's dialog too, `/campaigns/{code}`.
-      items: [{ label: 'Campaign list', href: '/campaigns', icon: 'trophy', active: on('/campaigns') }],
+      items: [{ label: kept('Campaign list'), href: '/campaigns', icon: 'trophy', active: on('/campaigns') }],
       divider: true,
     },
     ...(coreLeader ? [coreLeaderSection] : []),
     {
-      label: 'Admin',
+      label: kept('Admin'),
       items: [
         ...(leadsSomeone ? [groupTree] : []),
         {
-          label: 'User management',
+          label: kept('User management'),
           icon: 'userPlus',
           href: '/user-management/kpm',
           active: on('/user-management'),
@@ -284,23 +290,23 @@ function Chrome({
     <AppShell
       sections={sections}
       user={{
-        name: (me && displayName(me.user)) || 'Signed in',
+        name: (me && displayName(me.user)) || t.signedIn,
         // The profile line (ADR-0159 §5, P18.8-T6 AC-2): the rung · Core Leader · the groups · the office.
-        role: membership ? profileLine(shortRung, membership) : 'No office yet',
+        role: membership ? profileLine(shortRung, membership) : t.noOfficeYet,
         initials: me?.user.initials ?? '??',
         email: me?.user.email,
         // The first of the phone's menu details (P18.95-T12 AC-3): the name in full, where the chip greets by the preferred one.
         fullName: me?.user.fullName,
       }}
       // *Advanced analytics* under *Core leader* is the one item here with no screen yet: *Soon*, as the client wrote it.
-      upcomingLabel="Soon"
+      upcomingLabel={t.soon}
       account={{
         href: '/profile',
         onSignOut: () => void signOut(),
         signingOut: busy,
         // *Open Owner view* or *Open Admin view* (ADR-0114): back to the office console, for an Owner or an
         // Admin who opened their field view. A field member has one view, and is offered nothing.
-        viewSwitch: viewSwitchFor(me, 'field') ?? undefined,
+        viewSwitch: viewSwitchFor(me, 'field', language) ?? undefined,
       }}
       notifications={{ href: '/notifications', unread }}
       title={title}

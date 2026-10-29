@@ -9,6 +9,7 @@ import { PDF_MAX_BYTES } from './recruitment-pitch';
 import { COMMISSION_MAX_YEARS } from './admin';
 import { INBOX_PAGE_SIZE, POPOVER_PAGE_SIZE } from './notifications';
 import { INVITE_NAME_MAX } from './invites';
+import { DEFAULT_LANGUAGE, LANGUAGE_LIVE, LANGUAGES } from '@/i18n/language';
 
 /**
  * P3.5-T11 AC-4. The frontend declares its own copy of every response shape, and until
@@ -371,6 +372,71 @@ describe('the frontend types match the API document (P3.5-T11 AC-4)', () => {
   });
 });
 
+
+/**
+ * **P18.98-T1 AC-1: the two languages and the default are the backend's** (ADR-0179 §1, invariant §7). Read out of
+ * its constants module, as `format.spec.ts` reads the office's timezone, because no route documents them yet:
+ * P18.98-T2's `GET /auth/me` answers `user.locale`, and from then the document's values for it are held here as well.
+ */
+describe('the languages are the backend’s (P18.98-T1 AC-1)', () => {
+  const backend = readFileSync(
+    join(__dirname, '..', '..', '..', 'backend', 'src', 'domain', 'constants', 'language.ts'), 'utf8',
+  );
+
+  it('LANGUAGES is the backend’s list, in its order', () => {
+    const declared = /export const LANGUAGES = \[([^\]]*)\] as const;/.exec(backend);
+    expect(declared).not.toBeNull();
+    expect([...declared![1].matchAll(/'([^']+)'/g)].map((m) => m[1])).toEqual([...LANGUAGES]);
+  });
+
+  it('DEFAULT_LANGUAGE is the backend’s: Bahasa Indonesia', () => {
+    expect(/export const DEFAULT_LANGUAGE: Language = '([^']+)';/.exec(backend)?.[1]).toBe(DEFAULT_LANGUAGE);
+  });
+
+  /*
+   * **The two flip together** (ADR-0179's dated note of 2026-10-29). The backend's `language.spec.ts` reads this half
+   * only where the superproject puts the frontend beside it, which the backend's own CI does not; this suite always has
+   * the backend beside it, so here is where a flip in one repository and not the other fails.
+   */
+  it('P18.98-T5 AC-1 LANGUAGE_LIVE is the backend’s: both live, or neither', () => {
+    const declared = /export const LANGUAGE_LIVE: boolean = (true|false);/.exec(backend);
+    expect(declared).not.toBeNull();
+    expect(declared![1]).toBe(String(LANGUAGE_LIVE));
+  });
+});
+
+/**
+ * **P18.98-T2 AC-1: the account's language, as the document holds it** — from here the two languages are a route's
+ * values as well as a module's, and held to both (invariant §7).
+ */
+describe('the account’s language matches the API document (P18.98-T2 AC-1)', () => {
+  const user = doc.components.schemas.MeUserDto;
+
+  it('GET /auth/me answers user.locale — one of the two, never null — and localeChosen, always', () => {
+    expect(user.properties?.locale?.enum).toEqual([...LANGUAGES]);
+    expect(user.properties?.locale?.nullable).toBeFalsy();
+    expect(user.properties?.localeChosen?.type).toBe('boolean');
+    expect(user.required).toEqual(expect.arrayContaining(['locale', 'localeChosen']));
+  });
+
+  it('Me.user declares both as the document names them', () => {
+    const session = readFileSync(join(__dirname, 'session.ts'), 'utf8');
+    expect(session).toMatch(/^\s{4}locale\?: Language;$/m);
+    expect(session).toMatch(/^\s{4}localeChosen\?: boolean;$/m);
+  });
+
+  it('PATCH /auth/me takes locale, one of the two', () => {
+    expect(doc.components.schemas.UpdateProfileDto.properties?.locale?.enum).toEqual([...LANGUAGES]);
+  });
+
+  it('the switch and Your account save through a path the document has', () => {
+    const paths = new Set(Object.keys(doc.paths).map((p) => p.replace('/api/v1', '')));
+    const called = callsIn(readFileSync(join(__dirname, '..', 'i18n', 'choose-language.ts'), 'utf8'));
+    expect(called).toEqual(['/auth/me']);
+    expect(called.filter((p) => !matches(p, paths))).toEqual([]);
+    expect(doc.paths['/api/v1/auth/me'].patch).toBeDefined();
+  });
+});
 
 /**
  * P12.1: the inbox's shapes, held to their **shape** as the calendar's are (below): a field we read as

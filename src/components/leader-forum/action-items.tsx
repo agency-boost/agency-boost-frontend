@@ -4,9 +4,11 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { useMeetingWriter } from '@/components/leader-forum/meeting-writer';
 import { AutoGrowTextarea } from '@/components/ui/auto-grow-textarea';
 import { Button } from '@/components/ui/field';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { forumMinutesMessages } from '@/i18n/messages/forum-minutes';
 import { cn } from '@/lib/cn';
 import {
-  accessNoteText, ItemWrites, moveTo, nextStatus, runWrite, STATUS_TONE, TABS_COPY, TABS_OWN_COPY, useDraft,
+  accessNoteText, ItemWrites, moveTo, nextStatus, runWrite, STATUS_TONE, useDraft,
   usePending, withActionItem, withActionItems, type Outcome, type TrackerColumn,
 } from '@/lib/leader-meeting-tabs';
 import {
@@ -24,6 +26,8 @@ import {
  * keys moving its row — the order written whole. Anybody else reads the six columns, with no control drawn.
  */
 export function ActionItems({ meeting }: { meeting: MeetingView }) {
+  const t = useMessages(forumMinutesMessages);
+  const words = useLanguage();
   const writer = useMeetingWriter();
   const writes = useRef(new ItemWrites());
   const statuses = usePending<ActionStatus>();
@@ -75,7 +79,7 @@ export function ActionItems({ meeting }: { meeting: MeetingView }) {
   const cycle = (item: ActionItem) => {
     const next = nextStatus(statuses.of(item.id) ?? item.status);
     statuses.begin(item.id, next);
-    void save(item, { status: next }, item.version, TABS_COPY.statusUpdated).finally(() => statuses.end(item.id));
+    void save(item, { status: next }, item.version, t.statusUpdated).finally(() => statuses.end(item.id));
   };
 
   const remove = (item: ActionItem, index: number) => {
@@ -84,7 +88,7 @@ export function ActionItems({ meeting }: { meeting: MeetingView }) {
     void runWrite(writer, async () => {
       await writes.current.run(item.id, item.version, (version) => removeActionItem(meeting.id, item.id, version));
       return true as const;
-    }, { done: TABS_COPY.rowRemoved }).then((outcome) => {
+    }, { done: t.rowRemoved }).then((outcome) => {
       removing.current.delete(item.id);
       if (outcome.kind !== 'landed') return;
       writer.update((m) => withActionItems(m, m.actionItems.filter((a) => a.id !== item.id)));
@@ -109,7 +113,7 @@ export function ActionItems({ meeting }: { meeting: MeetingView }) {
     orders.begin('order', next);
     if (keyboard) setFocusOn({ id: ids[from], on: 'handle' });
     void writer
-      .run(() => writes.current.run('order', 0, () => reorderActionItems(meeting.id, next)), { done: TABS_COPY.reordered })
+      .run(() => writes.current.run('order', 0, () => reorderActionItems(meeting.id, next)), { done: t.reordered })
       .then((answer) => {
         if (answer !== undefined) writer.update((m) => withActionItems(m, answer));
       })
@@ -122,8 +126,8 @@ export function ActionItems({ meeting }: { meeting: MeetingView }) {
     <div>
       {/* `.actions-toolbar` (`:2837`): the label, upper-cased as `.lm-section-label` sets it, and the hint. */}
       <div className="mb-3.5 flex items-center justify-between gap-3">
-        <p className="text-sm font-bold uppercase tracking-[0.05em] text-muted">{TABS_COPY.tracker}</p>
-        {editing && <span className="text-sm text-muted">{TABS_COPY.dragHint}</span>}
+        <p className="text-sm font-bold uppercase tracking-[0.05em] text-muted">{t.tracker}</p>
+        {editing && <span className="text-sm text-muted">{t.dragHint}</span>}
       </div>
       <div className="overflow-hidden rounded-lg border border-hairline bg-card">
         {/* The table keeps its shape and scrolls inside its card on a phone; the page never does. */}
@@ -181,13 +185,13 @@ export function ActionItems({ meeting }: { meeting: MeetingView }) {
             onClick={add}
             className="block w-full border-t border-hairline px-3.5 py-3 text-left text-base font-semibold text-navy-soft hover:bg-navy/[0.02]"
           >
-            {TABS_COPY.addAction}
+            {t.addAction}
           </button>
         )}
       </div>
       {/* `.access-note` (`:722`, `:2842`): who may edit now (F-188). */}
       <p className="mt-4 flex items-center gap-2 rounded-md bg-navy/[0.04] px-3.5 py-2 text-sm text-muted">
-        {accessNoteText(meeting.accessNote)}
+        {accessNoteText(meeting.accessNote, words)}
       </p>
     </div>
   );
@@ -205,7 +209,7 @@ export const TD = 'border-b border-hairline px-3 py-2.5 align-top text-navy';
 
 /** The six named headers (`:2838`), the print's too. */
 export function TrackerHeaders() {
-  const h = TABS_COPY.headers;
+  const h = useMessages(forumMinutesMessages).headers;
   return (
     <>
       {[h.initiative, h.metric, h.action, h.pic, h.status, h.remarks].map((name) => (
@@ -219,14 +223,6 @@ export function TrackerHeaders() {
 export const pillClass = (status: ActionStatus) =>
   cn('inline-flex items-center gap-1.5 whitespace-nowrap rounded-pill px-2 py-1 text-sm font-semibold', STATUS_TONE[status]);
 
-/** The column a cell is named by: *"Key initiative, row 2"*. */
-const COLUMN_NAME: Record<TrackerColumn, string> = {
-  initiative: TABS_COPY.headers.initiative,
-  metric: TABS_COPY.headers.metric,
-  action: TABS_COPY.headers.action,
-  pic: TABS_COPY.headers.pic,
-  remarks: TABS_COPY.headers.remarks,
-};
 
 function Row({
   meeting, item, n, status, editing, dragging, over, rowRef, onSave, onCycle, onRemove, onKeyMove, onDragStart,
@@ -250,7 +246,8 @@ function Row({
   onDragOver: () => void;
   onDrop: () => void;
 }) {
-  const label = TABS_COPY.statuses[status];
+  const t = useMessages(forumMinutesMessages);
+  const label = t.statuses[status];
   if (!editing) {
     return (
       <tr className="[&:last-child>td]:border-b-0">
@@ -288,7 +285,7 @@ function Row({
           type="button"
           draggable
           data-focus="handle"
-          aria-label={TABS_OWN_COPY.handleName(n, item.initiative)}
+          aria-label={t.handleName({ n, initiative: item.initiative })}
           onDragStart={(e) => {
             const tr = e.currentTarget.closest('tr');
             if (tr && e.dataTransfer?.setDragImage) e.dataTransfer.setDragImage(tr, 12, 12);
@@ -315,7 +312,7 @@ function Row({
       <td className={cell}>
         <button
           type="button"
-          aria-label={TABS_OWN_COPY.statusName(label, TABS_COPY.statuses[nextStatus(status)])}
+          aria-label={t.statusName({ status: label, next: t.statuses[nextStatus(status)] })}
           onClick={onCycle}
           className={cn(pillClass(status), 'mt-0.5 cursor-pointer')}
         >
@@ -330,7 +327,7 @@ function Row({
           variant="icon"
           tone="alert"
           data-focus="remove"
-          aria-label={TABS_OWN_COPY.removeName(n)}
+          aria-label={t.removeName({ n })}
           onClick={onRemove}
         >
           <span aria-hidden="true">×</span>
@@ -349,10 +346,12 @@ function Cell({
   n: number;
   onSave: (column: TrackerColumn, value: string, read: number) => Promise<Outcome<ActionItem>>;
 }) {
+  const t = useMessages(forumMinutesMessages);
   const draft = useDraft(item[column], item.version);
   return (
     <AutoGrowTextarea
-      aria-label={TABS_OWN_COPY.cellName(COLUMN_NAME[column], n)}
+      // The column a cell is named by: *"Key initiative, row 2"*.
+      aria-label={t.cellName({ column: t.headers[column], n })}
       value={draft.value}
       maxLength={column === 'pic' ? meeting.limits.picMax : meeting.limits.textMax}
       onFocus={draft.focus}

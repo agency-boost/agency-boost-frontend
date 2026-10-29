@@ -14,11 +14,13 @@ import { StepPills } from '@/components/plan/step-pills';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { ACTION_BAR_PHONE, ACTION_BAR_ROOM_PHONE, TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { planMessages } from '@/i18n/messages/plan';
+import { recruitmentPlanMessages } from '@/i18n/messages/recruitment-plan';
 import { cn } from '@/lib/cn';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  ATTACK_PLAN_HREF, briefQuery, codesOf, completeBrief, labels, OWN_COPY, PITCH_MATERIALS_HREF, planHref,
-  PROTOTYPE_COPY, readRecruitmentPlan,
+  ATTACK_PLAN_HREF, briefQuery, codesOf, completeBrief, labels, PITCH_MATERIALS_HREF, planHref, readRecruitmentPlan,
   type BriefCodes, type Choice, type RecruitmentAttackPlanView, type RecruitmentPlan, type RecruitmentVocabulary,
 } from '@/lib/recruitment';
 
@@ -65,8 +67,14 @@ const options = (choices: readonly Choice[]) => choices.map((c) => ({ value: c.c
  * **On a phone** (ADR-0167; P18.95-T6 AC-1, UI-015) the chips are two to a row and *Build recruitment plan* sits
  * in a bar fixed to the bottom of the screen, with room left under the brief for it; 768px and wider, as drawn.
  * The chips' words are the server's, the client's shorter ones since 2026-10-26 (AC-2).
+ *
+ * **Our words are the catalogue's** (P18.98-T4; ADR-0179 §4): `messages/recruitment-plan.ts` and the two plans'
+ * `messages/plan.ts`, in the reader's language. **The playbook's are the company's**, shown as typed in both (ADR-0179
+ * §5): the chips, the profile, the openings, the push-backs, the next action.
  */
 export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress }) {
+  const t = useMessages(recruitmentPlanMessages);
+  const p = useMessages(planMessages);
   const router = useRouter();
   const planKey = address.kind === 'plan' ? briefQuery(address.brief) : null;
   const fromAddress = address.kind === 'plan' ? address.brief : null;
@@ -147,29 +155,29 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
     briefRegion.current?.focus();
   }, [onPlan, known]);
 
-  const steps = [PROTOTYPE_COPY.stepBrief, PROTOTYPE_COPY.stepPlan];
+  const steps = [t.stepBrief, t.stepPlan];
 
   // `onPlan` holds only for a plan's address; the second test says so to the compiler.
   if (!onPlan || address.kind !== 'plan') {
     return (
       <div>
-        <StepPills label={OWN_COPY.steps} steps={steps} current={0} />
+        <StepPills label={p.steps} steps={steps} current={0} />
         {!known && !briefError && <BriefSkeleton />}
         {briefError && <Retry error={briefError} onRetry={() => setBriefAttempt((n) => n + 1)} />}
         {known && !known.hasPlaybook && <NoPlaybook />}
         {known?.hasPlaybook && (
           <div className={ACTION_BAR_ROOM_PHONE}>
             <div ref={briefRegion} tabIndex={-1}>
-            <BriefCard title={PROTOTYPE_COPY.briefTitle} hint={PROTOTYPE_COPY.briefHint}>
-              <ChoiceGroup label={PROTOTYPE_COPY.candidateType} options={options(known.vocabulary.types)} value={type} onChange={setType} />
+            <BriefCard title={p.briefTitle} hint={p.briefHint}>
+              <ChoiceGroup label={t.candidateType} options={options(known.vocabulary.types)} value={type} onChange={setType} />
               <MultiChoiceGroup
-                label={PROTOTYPE_COPY.motivation}
+                label={t.motivation}
                 options={options(known.vocabulary.motivations)}
                 value={motivations}
                 onChange={setMotivations}
               />
               <MultiChoiceGroup
-                label={PROTOTYPE_COPY.hesitation}
+                label={t.hesitation}
                 options={options(known.vocabulary.hesitations)}
                 value={hesitations}
                 onChange={setHesitations}
@@ -180,7 +188,7 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
             {/* On a phone, in a bar fixed to the bottom of the screen, still the bar's full width. */}
             <div className={ACTION_BAR_PHONE}>
               <Button disabled={!brief} onClick={build} className="h-auto w-full px-[22px] py-3.5 text-lg">
-                {PROTOTYPE_COPY.build}
+                {t.build}
               </Button>
             </div>
           </div>
@@ -191,14 +199,14 @@ export function RecruitmentPlanScreen({ address }: { address: RecruitmentAddress
 
   return (
     <div>
-      <StepPills label={OWN_COPY.steps} steps={steps} current={1} />
+      <StepPills label={p.steps} steps={steps} current={1} />
       <button
         type="button"
         onClick={backToBrief}
         className={cn('mb-4 inline-flex items-center gap-1 rounded-sm text-base font-semibold text-amber-ink hover:underline', TAP_HEIGHT)}
       >
         <span aria-hidden="true">←</span>
-        {PROTOTYPE_COPY.back}
+        {p.back}
       </button>
       <PlanResult
         brief={address.brief}
@@ -276,42 +284,44 @@ function PlanResult({ brief, planKey, focusResult, onView, onRefused }: {
 
 /** The summary and the plan's card (`:342-350`, `:586-619`), every word as the read answered it. */
 function Plan({ plan, headingRef }: { plan: RecruitmentPlan; headingRef: React.Ref<HTMLHeadingElement> }) {
+  const t = useMessages(recruitmentPlanMessages);
+  const p = useMessages(planMessages);
   return (
     <>
       <BriefSummary
-        label={PROTOTYPE_COPY.stepBrief}
+        label={t.stepBrief}
         items={[
-          { label: PROTOTYPE_COPY.typeIs, value: plan.profile.label },
-          { label: PROTOTYPE_COPY.motivationIs, value: labels(plan.brief.motivations) },
-          { label: PROTOTYPE_COPY.hesitationIs, value: labels(plan.brief.hesitations) },
+          { label: t.typeIs, value: plan.profile.label },
+          { label: t.motivationIs, value: labels(plan.brief.motivations) },
+          { label: t.hesitationIs, value: labels(plan.brief.hesitations) },
         ]}
       />
       <article className="mb-4 overflow-hidden rounded-lg border border-hairline bg-card">
         <ResultHead
-          tag={PROTOTYPE_COPY.profileTag}
+          tag={t.profileTag}
           title={plan.profile.label}
           tagline={plan.profile.tagline}
-          pill={{ label: PROTOTYPE_COPY.planReady, tone: 'success' }}
+          pill={{ label: t.planReady, tone: 'success' }}
           headingRef={headingRef}
         />
         <div className="px-5 pb-[22px] pt-1.5 sm:px-6">
-          <ScriptBlock n={0} label={PROTOTYPE_COPY.goodFitFor} lead>
+          <ScriptBlock n={0} label={p.goodFitFor} lead>
             <ScriptText>{plan.profile.goodFitFor}</ScriptText>
           </ScriptBlock>
-          <ScriptBlock n={1} label={plan.openings.length > 1 ? PROTOTYPE_COPY.openingLines : PROTOTYPE_COPY.openingLine}>
+          <ScriptBlock n={1} label={plan.openings.length > 1 ? p.openingLines : p.openingLine}>
             <OpeningLines lines={plan.openings.map((o) => ({ key: o.motivation.code, tag: o.motivation.label, text: o.text }))} />
           </ScriptBlock>
-          <ScriptBlock n={2} label={PROTOTYPE_COPY.leadWithBenefits}>
+          <ScriptBlock n={2} label={p.leadWithBenefits}>
             <BulletList items={plan.profile.benefits} />
           </ScriptBlock>
-          <ScriptBlock n={3} label={PROTOTYPE_COPY.pushBack}>
+          <ScriptBlock n={3} label={p.pushBack}>
             <PushBackStack
-              theySayLabel={PROTOTYPE_COPY.theySay}
-              youSayLabel={PROTOTYPE_COPY.youSay}
+              theySayLabel={p.theySay}
+              youSayLabel={p.youSay}
               items={plan.objections.map((o) => ({ key: o.hesitation.code, theySay: o.theySay, youSay: o.youSay }))}
             />
           </ScriptBlock>
-          <ScriptBlock n={4} label={PROTOTYPE_COPY.nextAction}>
+          <ScriptBlock n={4} label={p.nextAction}>
             <NextAction>{plan.nextAction}</NextAction>
           </ScriptBlock>
         </div>
@@ -325,30 +335,33 @@ function Plan({ plan, headingRef }: { plan: RecruitmentPlan; headingRef: React.R
  * plan from. Said plainly, and pointing to *Pitch Materials*, which does not depend on the playbook.
  */
 function NoPlaybook() {
+  const t = useMessages(recruitmentPlanMessages);
   return (
     <div className="rounded-lg border border-hairline bg-card px-6 py-[22px]" data-state="no-playbook">
-      <p className="m-0 text-md font-semibold text-navy">{OWN_COPY.noPlaybook}</p>
-      <p className="m-0 mt-1 text-base text-muted">{OWN_COPY.noPlaybookHint}</p>
+      <p className="m-0 text-md font-semibold text-navy">{t.noPlaybook}</p>
+      <p className="m-0 mt-1 text-base text-muted">{t.noPlaybookHint}</p>
       <Link href={PITCH_MATERIALS_HREF} className={cn('mt-2 inline-block rounded-sm text-base font-semibold text-amber-ink hover:underline', TEXT_TAP)}>
-        {OWN_COPY.toPitchMaterials}
+        {t.toPitchMaterials}
       </Link>
     </div>
   );
 }
 
 function Retry({ error, onRetry }: { error: ApiError; onRetry: () => void }) {
+  const t = useMessages(recruitmentPlanMessages);
   return (
     <>
       <ErrorBanner {...error} />
-      <Button variant="secondary" className="mt-3" onClick={onRetry}>{OWN_COPY.tryAgain}</Button>
+      <Button variant="secondary" className="mt-3" onClick={onRetry}>{t.tryAgain}</Button>
     </>
   );
 }
 
 /** The brief's card, shaped like the three questions that are coming. */
 function BriefSkeleton() {
+  const t = useMessages(recruitmentPlanMessages);
   return (
-    <Skeleton label={OWN_COPY.loadingBrief}>
+    <Skeleton label={t.loadingBrief}>
       <div className="mb-5 rounded-lg border border-hairline bg-card px-6 py-[22px]">
         <SkeletonBar className="h-5 w-56" />
         <SkeletonBar className="mt-2 w-2/3" />
@@ -367,8 +380,9 @@ function BriefSkeleton() {
 
 /** The summary's strip and the plan's card, while the plan is read. */
 function PlanSkeleton() {
+  const t = useMessages(recruitmentPlanMessages);
   return (
-    <Skeleton label={OWN_COPY.loadingPlan}>
+    <Skeleton label={t.loadingPlan}>
       <div className="mb-5 rounded-lg border border-hairline bg-card px-5 py-3.5">
         <SkeletonBar className="w-2/3" />
       </div>

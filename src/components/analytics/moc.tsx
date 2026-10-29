@@ -2,10 +2,10 @@
 
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/field';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { kpmAnalyticsMessages } from '@/i18n/messages/kpm-analytics';
 import { cn } from '@/lib/cn';
-import {
-  criterionValue, criterionVerdict, mocButtonName, OWN_COPY, periodWords, PROTOTYPE_COPY, type Moc,
-} from '@/lib/kpm-analytics';
+import { criterionValue, criterionVerdict, mocButtonName, periodWords, type Moc } from '@/lib/kpm-analytics';
 
 /** Which leader's MOC the dialog shows. */
 export interface MocOpen {
@@ -32,13 +32,15 @@ export function MocCell({
   /** Beside its paint — on a phone's card, the 44px square that takes the tap (P18.97-T7 AC-1). */
   className?: string;
 }) {
+  const t = useMessages(kpmAnalyticsMessages);
+  const language = useLanguage();
   if (!moc) return <span className="text-md text-muted">—</span>;
-  const label = mocButtonName(moc, name);
+  const label = mocButtonName(moc, name, language);
   return (
     <button
       type="button"
       aria-label={label}
-      title={moc.status === 'unknown' ? (moc.missing ?? OWN_COPY.notUploaded) : label}
+      title={moc.status === 'unknown' ? (moc.missing ?? t.notUploaded) : label}
       onClick={() => onOpen({ name, moc })}
       className={cn(
         'inline-flex h-[26px] w-[26px] items-center justify-center rounded-full text-md font-bold',
@@ -63,17 +65,21 @@ export function MocCell({
  * an input not uploaded the badge gives way to the server's sentence saying which, and that criterion
  * reads *Not uploaded yet* rather than *Gap*.
  *
- * `Modal`, so Escape, the backdrop and *Close* shut it and the focus goes back to the leader's button.
+ * `Modal`, so Escape, the backdrop and *Close* shut it and the focus goes back to the leader's button. Its words are the
+ * reader's; each criterion's label and the path are the company's rules and the server's sentences, shown as sent.
  */
 export function MocDialog({ open, onClose }: { open: MocOpen | null; onClose: () => void }) {
+  const t = useMessages(kpmAnalyticsMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   if (!open) return null;
   const { name, moc } = open;
   const unknown = moc.status === 'unknown';
   return (
     <Modal
       open
-      title={PROTOTYPE_COPY.mocDialog(name)}
-      description={unknown ? (moc.missing ?? OWN_COPY.notUploaded) : undefined}
+      title={t.mocDialog({ name })}
+      description={unknown ? (moc.missing ?? t.notUploaded) : undefined}
       onClose={onClose}
       focusDialog
       className="max-w-[440px]"
@@ -86,7 +92,7 @@ export function MocDialog({ open, onClose }: { open: MocOpen | null; onClose: ()
             moc.status === 'met' ? 'bg-success/10 text-success' : 'bg-alert/10 text-alert',
           )}
         >
-          {moc.status === 'met' ? PROTOTYPE_COPY.requirementsMet : PROTOTYPE_COPY.notYetMet}
+          {moc.status === 'met' ? t.requirementsMet : t.notYetMet}
         </span>
       )}
       <ul className="mt-2">
@@ -98,12 +104,12 @@ export function MocDialog({ open, onClose }: { open: MocOpen | null; onClose: ()
           >
             <span className="min-w-0">
               <span className="block font-semibold text-navy">{criterion.label}</span>
-              {criterion.period && <span className="block text-xs text-muted">{periodWords(criterion.period)}</span>}
+              {criterion.period && <span className="block text-xs text-muted">{periodWords(criterion.period, figures)}</span>}
             </span>
             <span className="shrink-0 text-right text-sm text-muted">
-              <strong className="font-bold text-navy">{criterionValue(criterion.code, criterion.current)}</strong>
+              <strong className="font-bold text-navy">{criterionValue(criterion.code, criterion.current, figures)}</strong>
               {' / '}
-              {criterionValue(criterion.code, criterion.required)}
+              {criterionValue(criterion.code, criterion.required, figures)}
               {' — '}
               <span
                 className={cn(
@@ -112,7 +118,7 @@ export function MocDialog({ open, onClose }: { open: MocOpen | null; onClose: ()
                   criterion.met === false && 'text-alert',
                 )}
               >
-                {criterionVerdict(criterion.met)}
+                {criterionVerdict(criterion.met, language)}
               </span>
             </span>
           </li>
@@ -121,7 +127,7 @@ export function MocDialog({ open, onClose }: { open: MocOpen | null; onClose: ()
       {/* `.ratio-equation-note` (`:258`): the path the leader met it by, or what is still needed. */}
       {moc.path && <p className="mt-2.5 text-sm leading-snug text-muted">{moc.path}</p>}
       <div className="mt-4 flex justify-end">
-        <Button variant="secondary" onClick={onClose}>{OWN_COPY.close}</Button>
+        <Button variant="secondary" onClick={onClose}>{t.close}</Button>
       </div>
     </Modal>
   );

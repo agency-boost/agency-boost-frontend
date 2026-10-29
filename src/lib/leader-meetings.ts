@@ -1,6 +1,9 @@
 import { shortOfRung } from '@/components/ui/role-badge';
+import { messagesIn } from '@/i18n/catalogue';
+import { kept } from '@/i18n/kept';
+import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { forumMessages } from '@/i18n/messages/forum';
 import { api } from './api-client';
-import { CONFIRMED } from './confirmations';
 import { formatMonthName } from './format';
 
 /**
@@ -296,101 +299,44 @@ export interface MeetingWriter {
 /*
  * ── The words ───────────────────────────────────────────────────────────────────────────────────
  *
- * The prototype's verbatim (`:2004`, `:2030`, `:2603-2620`, `:2710-2745`, `:2749-2764`), and the module's
- * own as `functional/leader-forum.md` *The module's own strings* has them. None of the module's own uses the
- * words that spec keeps out of the reader's sight (D-copy), and none names a phase; `leader-meetings.spec.ts`
- * scans them.
+ * The forum's words are the catalogue's (P18.98-T4): `i18n/messages/forum.ts`, English the source, Indonesian the
+ * approved glossary's. A screen reads them with `useMessages(forumMessages)`; each function here that writes words takes
+ * the reader's language last (`useLanguage()`), English — the source, what its spec reads — when given none. None of the
+ * module's own uses the words that spec keeps out of the reader's sight (D-copy), in either language, and none names a
+ * phase; `leader-meetings.spec.ts` scans them.
  */
-export const FORUM_COPY = {
-  title: 'Strategic Leader Forum',
-  /**
-   * The page's one subtitle. The list's own line (`:2004`, *"Biweekly strategic check-ins … updated together."*) is gone
-   * at every size (P18.97-T2 AC-1; the client's grey-text row for UI-015, ADR-0176 §11): it said this again.
-   */
-  sub: 'Biweekly check-ins with your core leaders — agenda, notes, and action items',
-  filters: { all: 'All', upcoming: 'Upcoming', past: 'Past' },
-  newMeeting: '+ New meeting',
-  open: 'Open',
-  allClear: 'All clear',
-  noMatch: 'No meetings match this filter.',
-  noMeetings: 'No meetings yet.',
-  loadingList: 'Loading meetings…',
-  loadingMeeting: 'Loading the meeting…',
-  back: '← Back to all meetings',
-  cadence: 'Recommended: every 2 weeks · 60–90 mins',
-  share: 'Share',
-  savePdf: 'Save as PDF',
-  save: 'Save',
-  /** *Can edit this MOM* (`:2723`) in the client's words (P18.97-T2 AC-3, ADR-0176 §3): *MOM* was unexplained (UI-015). */
-  canEdit: 'Can edit these minutes',
-  manageTags: 'Manage tags →',
-  you: '(You)',
-  tabs: { overview: 'Overview & Stats', agenda: 'Agenda', actions: 'Action Items' },
-  saved: 'Saved',
-  allSaved: 'All changes saved',
-  conflict: 'Someone else changed this while you were editing. It now shows what they saved.',
-  failed: "Couldn't save that change. It's still here — try again.",
-  preparingPdf: 'Preparing PDF — use your browser’s print dialog to save',
-  dialog: {
-    newTitle: 'New meeting',
-    detailsTitle: 'Meeting details',
-    title: 'Title',
-    date: 'Date',
-    create: 'Create meeting',
-    saveChanges: 'Save changes',
-    cancel: 'Cancel',
-    delete: 'Delete meeting',
-    confirmDelete: 'Delete',
-    keep: 'Keep it',
-    needTitle: 'Give the meeting a title.',
-    needDate: 'Pick a date.',
-    completed: 'This meeting has already taken place, so its date stays.',
-    hasMinutes: "Something has been written in this meeting, so it can't be deleted.",
-  },
-  shareDialog: {
-    /** *Share this MOM* (`:2737`), as *Can edit these minutes* (P18.97-T2 AC-3). */
-    title: 'Share these minutes',
-    copy: 'Copy link',
-    /** The copy controls' one wording since 2026-10-26 (P18.95-T1 AC-6, ADR-0167 §5); `:2764` said *Link copied to clipboard*. */
-    copied: CONFIRMED.linkCopied,
-    stop: 'Stop sharing',
-    stopped: 'Sharing stopped',
-    failed: "Couldn't make a link. Try again.",
-    close: 'Close',
-  },
-  notFound: {
-    title: "This meeting can't be found.",
-    body: "It may have been deleted, or it isn't one you can open.",
-  },
-  linkNotFound: {
-    title: "This link doesn't open anything.",
-    body: 'It may have expired or been stopped. Ask whoever shared it for a new one.',
-  },
-  /** The not-found state's way on, for a reader with no list to go back to: where they land when they sign in. */
-  home: 'Go to your home page',
-} as const;
+
+/** The forum's name, kept English in both languages (§A.1, §A.5): the page's title, the nav item's. */
+export const FORUM_TITLE = kept('Strategic Leader Forum');
+
+/** **The source's words, English**, as the specs read them: a screen reads the reader's (`useMessages(forumMessages)`). */
+export const FORUM_COPY = { title: FORUM_TITLE, ...forumMessages.en };
 
 /** *Strategic Check-in — #15*: a new meeting's title, one past the highest number on the list (ADR-0130 §2). */
-export const defaultMeetingTitle = (meetings: Pick<MeetingCard, 'number'>[]) =>
-  `Strategic Check-in — #${meetings.reduce((top, m) => Math.max(top, m.number), 0) + 1}`;
+export const defaultMeetingTitle = (meetings: Pick<MeetingCard, 'number'>[], language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(forumMessages, language).defaultTitle({ n: meetings.reduce((top, m) => Math.max(top, m.number), 0) + 1 });
 
-export const stateLabel = (state: MeetingState) => (state === 'completed' ? 'Completed' : 'Upcoming');
+export const stateLabel = (state: MeetingState, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(forumMessages, language).state[state];
 
 /** *"3 core leaders tagged"*, singular for one (F-186). */
-export const coreLeadersTagged = (n: number) => `${n} core leader${n === 1 ? '' : 's'} tagged`;
+export const coreLeadersTagged = (n: number, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(forumMessages, language).coreLeadersTagged({ n });
 
 /** The words after the count in *"4 open items"*, *"1 open item"* (`:2606`); 0 is *All clear*, drawn apart. */
-export const openItemsNoun = (n: number) => (n === 1 ? 'open item' : 'open items');
+export const openItemsNoun = (n: number, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(forumMessages, language).openItems({ n });
 
 /** The date's button in the head (ADR-0130 §4). */
-export const changeDateLabel = (title: string) => `Change the date of ${title}`;
+export const changeDateLabel = (title: string, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(forumMessages, language).changeDate({ title });
 
-export const deleteQuestion = (title: string) =>
-  `Delete “${title}”? Nothing has been written in it yet, and it can't be brought back.`;
+export const deleteQuestion = (title: string, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(forumMessages, language).deleteQuestion({ title });
 
-/** The share dialog's hint (I-256), in the answered words of OD-146. */
-export const shareHint = (branch: string, until: string) =>
-  `Anyone signed in to AgencyBoost at ${branch} can open this meeting's minutes with this link, read-only, until ${until}.`;
+/** The share dialog's hint (I-256), in the answered words of OD-146; `until` the day, written in the figures' language. */
+export const shareHint = (branch: string, until: string, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(forumMessages, language).shareHint({ branch, until });
 
 /** A shared link's address: the page that opens it read-only. */
 export const sharedAddress = (origin: string, token: string) =>
@@ -432,12 +378,15 @@ export const filterMeetings = (meetings: MeetingCard[], filter: MeetingFilter): 
 /** A rung as the forum draws it: the code when it reads as one (*AB*, *AAB*), the label otherwise (*Agent*). */
 export const rungShort = (rung: ForumPerson['rung']) => shortOfRung(rung);
 
-/** The card's date block: the month's three letters over the day (`:2597`) — *Okt* over *13*, `id-ID` (ADR-0167 §1). */
-export function dateBlock(date: string): { month: string; day: string } {
+/**
+ * The card's date block: the month's three letters over the day (`:2597`) — *Okt* over *13*, `id-ID` (ADR-0167 §1);
+ * *Oct* in English (P18.98-T3).
+ */
+export function dateBlock(date: string, language: Language = DEFAULT_LANGUAGE): { month: string; day: string } {
   const [y, m, d] = date.split('-').map(Number);
   if (!y || !m || !d) return { month: '', day: '' };
   return {
-    month: formatMonthName(date),
+    month: formatMonthName(date, language),
     day: String(d),
   };
 }

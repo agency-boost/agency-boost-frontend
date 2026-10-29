@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { StatusPill, statusFor, STATUS_LABEL } from './status-pill';
 import { Stepper } from './stepper';
+import { InLanguage } from '@test/harness';
 import { ProgressBar } from './progress-bar';
 import { EmptyState } from './empty-state';
 import { RoleBadge, RUNG_SHORT_CODE_MAX_LENGTH, rungLabel, rungShort, SEEDED_LADDER, shortOfRung } from './role-badge';
@@ -916,6 +917,15 @@ describe('ProgressBar', () => {
   it('can hide its label', () => {
     render(<ProgressBar value={50} target={100} showLabel={false} />);
     expect(screen.queryByText('50%')).not.toBeInTheDocument();
+  });
+
+  it('P18.98-T3 AC-2 writes the one share it rounds in the reader’s marks: 1,250% in English, 1.250% in Indonesian', () => {
+    render(<ProgressBar value={2_500} target={200} />);
+    render(<InLanguage language="id"><ProgressBar value={2_500} target={200} /></InLanguage>);
+    expect(screen.getByText('1,250%')).toBeInTheDocument();
+    expect(screen.getByText('1.250%')).toBeInTheDocument();
+    // The same figure, rounded once: the bar's value is a number in no language.
+    for (const bar of screen.getAllByRole('progressbar')) expect(bar).toHaveAttribute('aria-valuenow', '1250');
   });
 });
 

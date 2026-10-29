@@ -158,7 +158,7 @@ describe('a coachee’s Goal Setting tab (P11-T7 AC-5)', () => {
     document.body.innerHTML = '';
 
     show({ body: goal({ achieved: { minor: 120_000_000_00, provenance: 'corrected', month: '2026-08' } }) });
-    expect(await screen.findByRole('button', { name: 'Corrected after the production upload, year to date as of Agu 2026' }))
+    expect(await screen.findByRole('button', { name: 'Corrected after the production upload, year to date as of Aug 2026' }))
       .toBeInTheDocument();
     expect(screen.getByRole('main').textContent).not.toMatch(SIX_WORDS);
   });

@@ -5,11 +5,14 @@ import { PdfUploadNotice, usePdfUpload } from '@/components/recruitment/pdf-uplo
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { InlineSaveStatus, useInlineSave, type InlineSaveOutcome } from '@/components/ui/inline-save-status';
+import type { MessagesOf } from '@/i18n/catalogue';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { recruitmentPitchMessages } from '@/i18n/messages/recruitment-pitch';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatShortDay } from '@/lib/format';
 import {
-  attachPitchDocument, formatFileSize, PITCH_COPY, PITCH_OWN_COPY, pitchDocumentUrl,
+  attachPitchDocument, formatFileSize, pitchDocumentUrl,
   requestPitchUpload, setPitchConfirmation, type PitchSlot,
 } from '@/lib/recruitment-pitch';
 
@@ -47,13 +50,15 @@ const BADGE: Record<Tone, { pill: string; dot: string }> = {
  *   prototype's agent view draws it (`:696`).
  * - **A file on a slot with no checklist** (`uploaded`): *Uploaded*, to everybody.
  */
-function badgeOf(slot: PitchSlot, audience: PitchAudience): { tone: Tone; label: string } | null {
+function badgeOf(
+  slot: PitchSlot, audience: PitchAudience, t: MessagesOf<typeof recruitmentPitchMessages.en>,
+): { tone: Tone; label: string } | null {
   if (!slot.file || slot.state === 'missing') {
-    return slot.required ? { tone: 'alert', label: PITCH_COPY.missing } : null;
+    return slot.required ? { tone: 'alert', label: t.missing } : null;
   }
-  if (slot.state === 'partial') return { tone: 'review', label: PITCH_COPY.needsConfirmation };
-  if (slot.state === 'complete' && audience === 'office') return { tone: 'success', label: PITCH_COPY.complete };
-  return { tone: 'success', label: PITCH_COPY.uploaded };
+  if (slot.state === 'partial') return { tone: 'review', label: t.needsConfirmation };
+  if (slot.state === 'complete' && audience === 'office') return { tone: 'success', label: t.complete };
+  return { tone: 'success', label: t.uploaded };
 }
 
 /**
@@ -122,6 +127,8 @@ export function PitchCard({
   /** A tick was refused because the file was replaced since: every slot is read again. */
   onStale?: () => void;
 }) {
+  const t = useMessages(recruitmentPitchMessages);
+  const figures = useFigureLanguage();
   const titleId = useId();
   const boxId = useId();
   const [opening, setOpening] = useState(false);
@@ -131,7 +138,7 @@ export function PitchCard({
 
   const office = audience === 'office';
   const writes = office && canWrite;
-  const badge = badgeOf(slot, audience);
+  const badge = badgeOf(slot, audience, t);
   const missing = !slot.file;
   // The dashed edge says the slot is empty; red only where that is a gap in the pitch (a required document).
   const edge = !missing ? 'border-hairline' : slot.required ? 'border-dashed border-alert/35' : 'border-dashed border-hairline';
@@ -141,7 +148,7 @@ export function PitchCard({
     attach: (storageKey) => attachPitchDocument(slot.slot, storageKey),
     onAttached: (next: PitchSlot) => {
       setNotice(null);
-      setSaid(PITCH_OWN_COPY.attached(next.file?.name ?? '', slot.checklist.some((i) => i.ticked)));
+      setSaid(t.attached({ name: next.file?.name ?? '', cleared: slot.checklist.some((i) => i.ticked) }));
       onChanged?.(next);
     },
   });
@@ -217,7 +224,7 @@ export function PitchCard({
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
           <h2 id={titleId} className="m-0 text-lg font-bold text-navy">{slot.title}</h2>
-          {!slot.required && <ConfigBadge tone="navy">{PITCH_COPY.optional}</ConfigBadge>}
+          {!slot.required && <ConfigBadge tone="navy">{t.optional}</ConfigBadge>}
         </div>
         {badge && <PitchBadge tone={badge.tone} label={badge.label} />}
       </div>
@@ -228,23 +235,26 @@ export function PitchCard({
             aria-hidden="true"
             className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md bg-alert/10 text-xs font-extrabold text-alert"
           >
-            {PITCH_COPY.fileIcon}
+            {t.fileIcon}
           </span>
           <div className="min-w-0">
             <p className="m-0 break-all text-base font-semibold text-navy">{slot.file.name}</p>
             <p className="m-0 text-sm text-muted">
-              {PITCH_COPY.updated(formatFileSize(slot.file.bytes), formatShortDay(slot.file.uploadedOn, { year: true }))}
+              {t.updated({
+                size: formatFileSize(slot.file.bytes, figures),
+                day: formatShortDay(slot.file.uploadedOn, { year: true }, figures),
+              })}
             </p>
           </div>
         </div>
       ) : (
-        <p className="m-0 text-base italic text-muted">{PITCH_COPY.noFile}</p>
+        <p className="m-0 text-base italic text-muted">{t.noFile}</p>
       )}
 
       {office && slot.file && slot.checklist.length > 0 && (
         <fieldset className="m-0 min-w-0 border-0 p-0 pt-1">
           <legend className="mb-2.5 p-0 text-xs font-bold uppercase tracking-wide text-muted">
-            {PITCH_COPY.checklist}
+            {t.checklist}
           </legend>
           {slot.checklist.map((item) => {
             const id = `${boxId}-${item.code}`;
@@ -314,26 +324,24 @@ export function PitchCard({
         <div className="mt-auto flex flex-wrap items-center gap-2.5">
           {slot.file && (
             <Button
-              aria-label={PITCH_OWN_COPY.viewName(slot.title)}
+              aria-label={t.viewName({ title: slot.title })}
               aria-disabled={opening || undefined}
               className="aria-disabled:opacity-60"
               onClick={() => void open()}
             >
-              {opening ? PITCH_OWN_COPY.opening : PITCH_COPY.viewPdf}
+              {opening ? t.opening : t.viewPdf}
             </Button>
           )}
           {writes && (
             <Button
               variant={slot.file ? 'secondary' : 'primary'}
-              aria-label={slot.file
-                ? PITCH_OWN_COPY.replaceName(slot.title)
-                : PITCH_OWN_COPY.uploadName(slot.title)}
+              aria-label={slot.file ? t.replaceName({ title: slot.title }) : t.uploadName({ title: slot.title })}
               // Not `disabled`, which would drop the focus while the file is on its way.
               aria-disabled={upload.busy || undefined}
               className="aria-disabled:cursor-not-allowed aria-disabled:opacity-40"
               onClick={() => { if (!upload.busy) upload.choose(); }}
             >
-              {slot.file ? PITCH_COPY.replace : PITCH_COPY.uploadPdf}
+              {slot.file ? t.replace : t.uploadPdf}
             </Button>
           )}
           {writes && upload.picker}
@@ -343,12 +351,12 @@ export function PitchCard({
       <PdfUploadNotice state={upload} className="flex flex-col gap-2" />
 
       {notice?.kind === 'stale' && (
-        <p role="alert" className="m-0 text-base font-semibold text-alert">{PITCH_OWN_COPY.replacedSince}</p>
+        <p role="alert" className="m-0 text-base font-semibold text-alert">{t.replacedSince}</p>
       )}
       {(notice?.kind === 'link' || notice?.kind === 'tick') && (
         <div className="flex flex-col gap-1.5">
           <p className="m-0 text-base text-alert">
-            {notice.kind === 'link' ? PITCH_OWN_COPY.linkFailed : PITCH_OWN_COPY.tickFailed}
+            {notice.kind === 'link' ? t.linkFailed : t.tickFailed}
           </p>
           <ErrorBanner {...notice.error} />
         </div>

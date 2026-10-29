@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import { useId } from 'react';
 import { buttonClass } from '@/components/ui/field';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { forumMessages } from '@/i18n/messages/forum';
 import { cn } from '@/lib/cn';
 import { formatShortDay } from '@/lib/format';
 import {
-  coreLeadersTagged, dateBlock, FORUM_COPY, initialsOf, openItemsNoun, rungShort, stateLabel, taggedLeaders,
+  coreLeadersTagged, dateBlock, initialsOf, openItemsNoun, rungShort, stateLabel, taggedLeaders,
   type ForumPerson, type MeetingCard,
 } from '@/lib/leader-meetings';
 
@@ -19,10 +21,13 @@ import {
  * the right-hand side wraps under the title instead of pushing the card wider (flow doc §2.10).
  */
 export function MeetingCardRow({ meeting }: { meeting: MeetingCard }) {
+  const t = useMessages(forumMessages);
+  const words = useLanguage();
+  const language = useFigureLanguage();
   const titleId = useId();
   const lineId = useId();
   const past = meeting.state === 'completed';
-  const block = dateBlock(meeting.date);
+  const block = dateBlock(meeting.date, language);
   const open = meeting.openItems;
   return (
     <li>
@@ -53,15 +58,15 @@ export function MeetingCardRow({ meeting }: { meeting: MeetingCard }) {
         <div className="min-w-0 flex-1 basis-48">
           <h2 id={titleId} className="mb-[3px] break-words text-md font-bold text-navy">{meeting.title}</h2>
           <p id={lineId} className="text-sm text-muted">
-            {formatShortDay(meeting.date, { year: true })} · {stateLabel(meeting.state)} · {coreLeadersTagged(meeting.editors.coreLeaderCount)}
+            {formatShortDay(meeting.date, { year: true }, language)} · {stateLabel(meeting.state, words)} · {coreLeadersTagged(meeting.editors.coreLeaderCount, words)}
           </p>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-[14px]">
           <AvatarStack people={taggedLeaders(meeting.editors)} />
           <p className="whitespace-nowrap text-sm text-muted">
             {open === 0
-              ? <strong className="text-success">{FORUM_COPY.allClear}</strong>
-              : <><strong className="text-alert">{open}</strong> {openItemsNoun(open)}</>}
+              ? <strong className="text-success">{t.allClear}</strong>
+              : <><strong className="text-alert">{open}</strong> {openItemsNoun(open, words)}</>}
           </p>
           {/* The visible cue, `.lm-btn-secondary.lm-btn-sm` (`:606`, `:610`): navy outline, small — the card is the link. */}
           <span
@@ -71,7 +76,7 @@ export function MeetingCardRow({ meeting }: { meeting: MeetingCard }) {
               'h-auto rounded-[7px] border-[1.5px] border-navy bg-transparent px-[13px] py-[7px] text-sm group-hover:bg-navy/5',
             )}
           >
-            {FORUM_COPY.open}
+            {t.open}
           </span>
         </div>
       </Link>

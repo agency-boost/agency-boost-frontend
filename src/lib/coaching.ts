@@ -1,5 +1,8 @@
 import type { SubPeriodTarget } from './activity';
 import { shortOfRung } from '@/components/ui/role-badge';
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { coachingMessages, ENGLISH_PRONOUNS } from '@/i18n/messages/coaching';
 import { api } from './api-client';
 import { joinInFlight } from './in-flight';
 import type { RatioDisplayUnit } from './ratio-format';
@@ -10,7 +13,14 @@ import type { RatioDisplayUnit } from './ratio-format';
  * computed in the office's day. This file names the shapes and turns them into the prototype's words;
  * it does no date arithmetic, because a day counted in the browser's zone is the defect invariant §9
  * exists to prevent.
+ *
+ * **Its words are the catalogue's** (`i18n/messages/coaching.ts`, P18.98-T4): each function that writes one takes the
+ * reader's `language` last — English, the source, when passed none, which its spec reads — and its caller passes
+ * `useLanguage()`. A figure inside a sentence is written by the caller, in the figures' language, and handed in.
  */
+
+/** The module's words in a language. */
+const wordsIn = (language: Language) => messagesIn(coachingMessages, language);
 
 /** `GOAL_PACE_STATUS`, with ADR-0080's state for a member who has no target this month. */
 export type RosterStatus = 'on_track' | 'watch_closely' | 'needs_attention' | 'no_goal_set';
@@ -75,22 +85,22 @@ export interface Roster {
 /** The reader's roster. A reader who coaches nobody gets an empty one, not an error. Not paginated. */
 export const readRoster = () => api<Roster>('/coaching/coachees');
 
-/** The pill's words, verbatim (`Overall.html:10624`), and ADR-0080's *No goal set*. */
-export const ROSTER_STATUS_LABEL: Record<RosterStatus, string> = {
-  on_track: 'On track',
-  watch_closely: 'Watch closely',
-  needs_attention: 'Needs attention',
-  no_goal_set: 'No goal set',
-};
+/** The pill's words, verbatim (`Overall.html:10624`), and ADR-0080's *No goal set*: the catalogue's English. */
+export const ROSTER_STATUS_LABEL: Record<RosterStatus, string> = wordsIn(SOURCE_LANGUAGE).status;
+
+/** A status's pill in the reader's `language` (P18.98-T4): *On track*, *Sesuai target*. */
+export const rosterStatusLabel = (status: RosterStatus, language: Language = SOURCE_LANGUAGE): string =>
+  wordsIn(language).status[status];
 
 /**
  * *Last 1:1*, as the prototype words it (`Overall.html:10619-10623`): *No 1:1 yet*, *Today*, or
- * *{n} day ago* / *{n} days ago*, singular at one.
+ * *{n} day ago* / *{n} days ago*, singular at one — in the reader's `language`, English when passed none.
  */
-export function lastOneOnOneText(last: LastOneOnOne | null): string {
-  if (last === null) return 'No 1:1 yet';
-  if (last.days === 0) return 'Today';
-  return `${last.days} day${last.days === 1 ? '' : 's'} ago`;
+export function lastOneOnOneText(last: LastOneOnOne | null, language: Language = SOURCE_LANGUAGE): string {
+  const t = wordsIn(language).last;
+  if (last === null) return t.none;
+  if (last.days === 0) return t.today;
+  return t.daysAgo({ days: last.days });
 }
 
 /**
@@ -99,9 +109,9 @@ export function lastOneOnOneText(last: LastOneOnOne | null): string {
  * phone that text wrapped onto a line of its own, *, overdue* with its stray comma. Said in words, the colour is no
  * longer the only cue. *No 1:1 yet* says it already.
  */
-export function lastOneOnOneLine(last: LastOneOnOne | null): string {
-  const text = lastOneOnOneText(last);
-  return last !== null && last.overdue ? `${text} · overdue` : text;
+export function lastOneOnOneLine(last: LastOneOnOne | null, language: Language = SOURCE_LANGUAGE): string {
+  const text = lastOneOnOneText(last, language);
+  return last !== null && last.overdue ? wordsIn(language).last.overdue({ text }) : text;
 }
 
 /**
@@ -187,11 +197,14 @@ export function coachingTabOf(pathname: string | null, membershipId: string): Co
  * in their own leader's unit, said in the prototype's word for it (ADR-0084: none of *office*, *KPM*,
  * *reports to*, *tagged to*, *untagged*, *unassigned*).
  */
-export function coacheeUnitLine(coachee: Pick<Coachee, 'rung' | 'direct' | 'leader'>): string {
+export function coacheeUnitLine(
+  coachee: Pick<Coachee, 'rung' | 'direct' | 'leader'>, language: Language = SOURCE_LANGUAGE,
+): string {
   // The rung by its badge's name, *AAB · Direct unit* (P18.95-T9 AC-1, ADR-0167 §10).
   const rung = shortOfRung(coachee.rung);
-  if (coachee.direct) return `${rung} · Direct unit`;
-  if (coachee.leader) return `${rung} · ${coachee.leader.name}’s unit`;
+  const t = wordsIn(language).unitLine;
+  if (coachee.direct) return t.direct({ rung });
+  if (coachee.leader) return t.leaders({ rung, leader: coachee.leader.name });
   return rung;
 }
 
@@ -238,11 +251,11 @@ export interface PronounForms {
   hasShort: string;
 }
 
-export const PRONOUN_FORMS: Record<Pronoun, PronounForms> = {
-  she: { subject: 'she', object: 'her', possessive: 'her', have: 'has', s: 's', isShort: 'she’s', hasShort: 'she’s' },
-  he: { subject: 'he', object: 'him', possessive: 'his', have: 'has', s: 's', isShort: 'he’s', hasShort: 'he’s' },
-  they: { subject: 'they', object: 'them', possessive: 'their', have: 'have', s: '', isShort: 'they’re', hasShort: 'they’ve' },
-};
+/**
+ * **English's** forms, the catalogue's (`ENGLISH_PRONOUNS`, `i18n/messages/coaching.ts`): a sentence about somebody is a
+ * message, and in Indonesian a person is *dia* whatever their pronoun (§B.0 rule 8), so only English needs them.
+ */
+export const PRONOUN_FORMS: Record<Pronoun, PronounForms> = ENGLISH_PRONOUNS;
 
 /** A sentence's first word: *she* → *She*. */
 export const capitalized = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
@@ -637,16 +650,30 @@ export interface SessionPrint {
 export const readSessionPrint = (sessionId: string) =>
   api<SessionPrint>(`/coaching/sessions/${encodeURIComponent(sessionId)}/print`);
 
-/** The print's goal line: *This month: {produced} / {target}*, in the one money formatter (F-02). */
-export function printGoalLine(label: 'This month' | 'This year', period: PrintPeriod, money: (minor: number) => string): string {
-  const actual = period.actualMinor === null ? 'Not uploaded yet' : money(period.actualMinor);
-  const target = period.targetMinor === null ? '—' : money(period.targetMinor);
-  return `${label}: ${actual} / ${target}`;
+/**
+ * The print's goal line: *This month: {produced} / {target}*, in the one money formatter (F-02) — its figures in
+ * `money`'s language, its words in `language`'s.
+ */
+export function printGoalLine(
+  span: 'month' | 'year', period: PrintPeriod, money: (minor: number) => string, language: Language = SOURCE_LANGUAGE,
+): string {
+  return wordsIn(language).print.goalLine({
+    period: span,
+    actual: period.actualMinor === null ? null : money(period.actualMinor),
+    target: period.targetMinor === null ? '—' : money(period.targetMinor),
+  });
 }
 
+/** A lead's next action: its note, or *Follow up with {name}* where it has none (`Overall.html:11054-11059`). */
+export const leadActionText = (action: { text: string | null; leadName: string }, language: Language = SOURCE_LANGUAGE) =>
+  action.text || wordsIn(language).followUpWith({ name: action.leadName });
+
 /** *{i}. {Oct 3} — {note} (Leads: {name})* (`Overall.html:11178`). */
-export const printLeadActionLine = (i: number, action: PrintLeadAction, day: (d: string) => string) =>
-  `${i + 1}. ${day(action.dueDate)} — ${action.text || `Follow up with ${action.leadName}`} (Leads: ${action.leadName})`;
+export const printLeadActionLine = (
+  i: number, action: PrintLeadAction, day: (d: string) => string, language: Language = SOURCE_LANGUAGE,
+) => wordsIn(language).print.leadLine({
+  n: i + 1, day: day(action.dueDate), text: leadActionText(action, language), lead: action.leadName,
+});
 
 /** *{i}. {Oct 7} — {text}*, with no date part when it has none (`Overall.html:11182`). */
 export const printActionLine = (i: number, item: PrintActionItem, day: (d: string) => string) =>
@@ -683,11 +710,10 @@ export const myCoachingHref = (sessionId?: string) =>
 /** A first name, for *Coaching tips from Wilson* (`Overall.html:4532`). */
 export const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? '';
 
-const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
 /** A history row's summary, as the prototype words it: *3 action items · 1 completed* (`Overall.html:10688`). */
-export const pastSessionSummary = (session: Pick<PastSession, 'actionItemCount' | 'completedCount'>) =>
-  `${count(session.actionItemCount, 'action item', 'action items')} · ${session.completedCount} completed`;
+export const pastSessionSummary = (
+  session: Pick<PastSession, 'actionItemCount' | 'completedCount'>, language: Language = SOURCE_LANGUAGE,
+) => wordsIn(language).pastSummary({ items: session.actionItemCount, completed: session.completedCount });
 
 /** `COACHING_SESSION_INCOMPLETE`'s `details.rule`: the first of the prototype's five checks that failed. */
 export type FinalizeRule =
@@ -698,16 +724,20 @@ export type FinalizeRule =
  * server named — never parsed out of its message. `null` for a rule this screen does not know, which
  * then shows the server's own words.
  */
-export function finalizeRefusal(details: Record<string, unknown> | undefined): string | null {
+export function finalizeRefusal(
+  details: Record<string, unknown> | undefined, language: Language = SOURCE_LANGUAGE,
+): string | null {
+  const t = wordsIn(language).refusal;
   switch (details?.rule) {
-    case 'NO_ACTION_ITEM': return 'Add at least one action item before finalizing.';
-    case 'EMPTY_TIP': return 'Fill in or remove the empty coaching tip before finalizing.';
-    case 'EMPTY_ACTION_ITEM': return 'Fill in or remove the empty action item before finalizing.';
-    case 'UNDATED_ACTION_ITEM': return 'Every action item needs a date before finalizing.';
-    case 'LEAD_THIS_MONTH_UNDATED': {
-      const name = typeof details.leadName === 'string' && details.leadName ? details.leadName : 'A lead';
-      return `${name} is tagged "this month" but has no next action date set — add one before finalizing.`;
-    }
+    case 'NO_ACTION_ITEM':
+    case 'EMPTY_TIP':
+    case 'EMPTY_ACTION_ITEM':
+    case 'UNDATED_ACTION_ITEM':
+      return t[details.rule];
+    case 'LEAD_THIS_MONTH_UNDATED':
+      return t.LEAD_THIS_MONTH_UNDATED({
+        name: typeof details.leadName === 'string' && details.leadName ? details.leadName : null,
+      });
     default: return null;
   }
 }
@@ -889,14 +919,17 @@ export function stageMilestones(
  * {first stage}* below the first — the most junior active stage by `stageOrder`, never by where it is
  * drawn. The stage is the server's.
  */
-export function capabilityTag(catalog: CapabilityProfileCatalog, stageCode: string | null): string | null {
+export function capabilityTag(
+  catalog: CapabilityProfileCatalog, stageCode: string | null, language: Language = SOURCE_LANGUAGE,
+): string | null {
+  const t = wordsIn(language).capability;
   if (stageCode !== null) {
     const current = catalog.stages.find((s) => s.code === stageCode);
-    return current ? `Current: ${current.label}` : null;
+    return current ? t.current({ stage: current.label }) : null;
   }
   const active = catalog.stages.filter((s) => s.status === 'active');
   const first = [...(active.length ? active : catalog.stages)].sort((a, b) => a.stageOrder - b.stageOrder)[0];
-  return first ? `Not yet at ${first.label}` : null;
+  return first ? t.notYet({ stage: first.label }) : null;
 }
 
 /** The *Skill tracker*'s sections as drawn: the active ones, and an archived one only where an item of it is ticked. */
@@ -915,11 +948,13 @@ export function gridItems(grid: CapabilityGridRow, ticked: ReadonlySet<string>):
  * coachee's pronoun; `null` when it applies. *Developing downline leader* needs somebody below them who
  * leads somebody; any other section that requires a downline, anybody below them at all.
  */
-export function gridNotApplicable(grid: CapabilityGridRow, downline: CoacheeDownline, pronoun: Pronoun): string | null {
+export function gridNotApplicable(
+  grid: CapabilityGridRow, downline: CoacheeDownline, pronoun: Pronoun, language: Language = SOURCE_LANGUAGE,
+): string | null {
   if (!grid.requiresDownline) return null;
-  const f = PRONOUN_FORMS[pronoun];
+  const t = wordsIn(language).notApplicable;
   if (grid.code === 'DEVELOPING_DOWNLINE_LEADER') {
-    return downline.leaders > 0 ? null : `Not applicable — ${f.subject} ${f.have} no downline leaders yet.`;
+    return downline.leaders > 0 ? null : t.leaders({ pronoun });
   }
-  return downline.members > 0 ? null : `Not applicable — ${f.subject} ${f.have} no agents under ${f.object} yet.`;
+  return downline.members > 0 ? null : t.agents({ pronoun });
 }

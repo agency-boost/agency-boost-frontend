@@ -67,9 +67,10 @@ describe('admin overview', () => {
     // `KPMs` is a tile label, a section in the sidebar and a figure on the company card,
     // so it appears more than once by design.
     expect(screen.getAllByText('KPMs').length).toBeGreaterThan(1);
-    // Grouped — `1.340`, not `1340`: `id-ID`'s dot since ADR-0167 §1, where the prototype wrote `1,340`. It appears on the tile
+    // Grouped — `1.340`, not `1340`: `id-ID`'s dot since ADR-0167 §1, where the prototype wrote `1,340`; `1,340` in the
+    // English figures a spec reads (P18.98-T6, the console's figures wired; the Indonesian spec reads `1.340`). It appears on the tile
     // and again on the company card, which is why this counts rather than picks.
-    expect(screen.getAllByText('1.340').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1,340').length).toBeGreaterThan(0);
     expect(screen.queryByText('1340')).toBeNull();
   });
 

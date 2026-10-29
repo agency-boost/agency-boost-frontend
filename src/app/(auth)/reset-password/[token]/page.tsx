@@ -6,6 +6,9 @@ import { use, useState } from 'react';
 import { api, toDisplayError } from '@/lib/api-client';
 import { Button, Card, ErrorBanner, Field } from '@/components/ui/field';
 import { PasswordInput } from '@/components/ui/password-input';
+import { PublicTitle } from '@/components/public-title';
+import { useMessages } from '@/i18n/language-provider';
+import { authMessages } from '@/i18n/messages/auth';
 
 const MIN_LENGTH = 10;
 
@@ -16,6 +19,9 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const all = useMessages(authMessages);
+  const t = all.reset;
+  const rules = all.password;
 
   const mismatch = confirm.length > 0 && password !== confirm;
   const tooShort = password.length > 0 && password.length < MIN_LENGTH;
@@ -37,21 +43,20 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-5">
-      <h1 className="font-display text-3xl font-bold text-navy">Choose a new password</h1>
-      <p className="mb-6 mt-1 text-md text-muted">
-        This signs you out everywhere else — a reset is what you do when you think someone
-        else has your password.
-      </p>
+      <PublicTitle>
+        <h1 className="font-display text-3xl font-bold text-navy">{t.title}</h1>
+      </PublicTitle>
+      <p className="mb-6 mt-1 text-md text-muted">{t.line}</p>
 
       <Card>
         <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
           {error && <ErrorBanner {...error} />}
 
           <Field
-            label="New password"
+            label={t.newPassword}
             htmlFor="password"
-            hint={`At least ${MIN_LENGTH} characters. Length beats symbols.`}
-            error={tooShort ? `Use at least ${MIN_LENGTH} characters.` : undefined}
+            hint={rules.hint({ n: MIN_LENGTH })}
+            error={tooShort ? rules.tooShort({ n: MIN_LENGTH }) : undefined}
           >
             <PasswordInput
               id="password"
@@ -64,9 +69,9 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
           </Field>
 
           <Field
-            label="Confirm password"
+            label={t.confirmPassword}
             htmlFor="confirm"
-            error={mismatch ? 'The two passwords do not match.' : undefined}
+            error={mismatch ? rules.mismatch : undefined}
           >
             <PasswordInput
               id="confirm"
@@ -79,7 +84,7 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
           </Field>
 
           <Button type="submit" disabled={busy || mismatch || tooShort || !password}>
-            {busy ? 'Saving…' : 'Set new password'}
+            {busy ? rules.saving : t.set}
           </Button>
         </form>
       </Card>
@@ -87,11 +92,7 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
           This screen offered no link at all until 2026-09-06 — the error said what went
           wrong and the only way on was the browser's back button. */}
       <p className="mt-4 text-center text-sm text-muted">
-        Link expired?{' '}
-        <Link href="/forgot-password" className="underline">
-          Ask for another
-        </Link>
-        .
+        {t.expired({ link: (words) => <Link href="/forgot-password" className="underline">{words}</Link> })}
       </p>
     </main>
   );

@@ -2,8 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState, use } from 'react';
-import { ProductsTab } from '@/components/products-tab';
-import { RecruitmentPlaybookTab } from '@/components/recruitment-playbook-tab';
+import dynamic from 'next/dynamic';
 import { SettingsScreen } from '@/components/settings-screen';
 import { listMetrics, type MetricDefinition } from '@/lib/tenant-config';
 import {
@@ -23,17 +22,36 @@ import {
   type CompanyTemplate, type NamedTemplate, type TemplateKind,
 } from '@/lib/admin';
 import { TemplatePicker } from '@/components/template-picker';
+import { kept } from '@/i18n/kept';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { adminTemplateMessages } from '@/i18n/messages/admin-template';
+import { checklistMessages } from '@/i18n/messages/settings-checklist';
+import { settingsMessages } from '@/i18n/messages/settings';
+
+/*
+ * **The Products and Recruitment tabs load when they are opened** (P18.98-T6, the bundle, 2026-10-29). Each reads and
+ * writes its own data and draws four card skeletons until it has it, so the skeleton below is the one it would draw
+ * first anyway: nothing on the screen changes. Bundled with the page, their words in both languages took this route to
+ * 210 kB, past the 200 kB budget, for two tabs most visits never open.
+ */
+const ProductsTab = dynamic(
+  () => import('@/components/products-tab').then((m) => m.ProductsTab),
+  { loading: () => <SkeletonCards count={4} /> },
+);
+const RecruitmentPlaybookTab = dynamic(
+  () => import('@/components/recruitment-playbook-tab').then((m) => m.RecruitmentPlaybookTab),
+  { loading: () => <SkeletonCards count={4} /> },
+);
 
 /**
  * **The tabs every template shares** (ADR-0115 §3, §7): carrier rules, products and the recruitment
  * playbook are the company's, read live by its offices (ADR-0026, ADR-0033, ADR-0125), one per company
- * whichever template is shown. Said in a tooltip on the tab, the smallest form that says it (ADR-0062 §2).
+ * whichever template is shown. Said in a tooltip on the tab, the smallest form that says it (ADR-0062 §2);
+ * its words are `admin-template.tsx`'s `shared`.
  */
-const SHARED_HINT: Record<string, string> = {
-  campaigns: 'Campaigns are the company’s, shared by every template.',
-  products: 'Products are the company’s, shared by every template.',
-  recruitment: 'The recruitment playbook is the company’s, shared by every template.',
-};
+const SHARED_GROUPS = ['campaigns', 'products', 'recruitment'] as const;
+const isShared = (group: string): group is (typeof SHARED_GROUPS)[number] =>
+  (SHARED_GROUPS as readonly string[]).includes(group);
 
 /**
  * Each item of the Owner's Settings group, as ADR-0018 lays them out — one row per **leaf**.
@@ -54,9 +72,9 @@ const TABS: {
   key: string;
   /** The top row this leaf belongs to. */
   group: string;
-  /** The top row's label. Written once per group; the first leaf's copy is the one read. */
+  /** The top row's label, §A.3's kept term. Written once per group; the first leaf's copy is the one read. */
   groupLabel: string;
-  /** The subtab's own label. Only drawn when its group has more than one leaf. */
+  /** The subtab's own label, §A.3's kept term. Only drawn when its group has more than one leaf. */
   label: string;
   kind: TemplateKind | null;
   /** Set when several leaves share one `kind` and differ only in what they draw. */
@@ -67,19 +85,19 @@ const TABS: {
    * ADR-0018's own table says so, and it mirrors the Owner's Settings group, where the
    * benchmarks live inside the Activity types screen (`KPM_Owner.html:1329-1330`).
    */
-  { key: 'activity', group: 'activity', groupLabel: 'Activity types', label: 'Activity types', kind: 'activity_taxonomy' },
-  { key: 'ratios', group: 'activity', groupLabel: 'Activity types', label: 'Ratio benchmarks', kind: 'ratio_set' },
+  { key: 'activity', group: 'activity', groupLabel: kept('Activity types'), label: kept('Activity types'), kind: 'activity_taxonomy' },
+  { key: 'ratios', group: 'activity', groupLabel: kept('Activity types'), label: kept('Ratio benchmarks'), kind: 'ratio_set' },
 
   // The Owner's own screen splits the two ladders this way, and a Super Admin filling a
   // template should be looking at what an Owner will see.
-  { key: 'leads-sales', group: 'leads', groupLabel: 'Lead statuses', label: 'Sales', kind: 'lead_pipeline', section: 'sales' },
-  { key: 'leads-recruitment', group: 'leads', groupLabel: 'Lead statuses', label: 'Recruitment', kind: 'lead_pipeline', section: 'recruitment' },
+  { key: 'leads-sales', group: 'leads', groupLabel: kept('Lead statuses'), label: kept('Sales'), kind: 'lead_pipeline', section: 'sales' },
+  { key: 'leads-recruitment', group: 'leads', groupLabel: kept('Lead statuses'), label: kept('Recruitment'), kind: 'lead_pipeline', section: 'recruitment' },
 
-  { key: 'activation', group: 'activation', groupLabel: 'Activation checklist', label: 'Activation checklist', kind: 'activation_checklist' },
+  { key: 'activation', group: 'activation', groupLabel: kept('Activation checklist'), label: kept('Activation checklist'), kind: 'activation_checklist' },
 
-  { key: 'training-categories', group: 'training', groupLabel: 'Training', label: 'Categories', kind: 'training_taxonomy', section: 'categories' },
-  { key: 'training-skills', group: 'training', groupLabel: 'Training', label: 'Skills', kind: 'training_taxonomy', section: 'skills' },
-  { key: 'training-modules', group: 'training', groupLabel: 'Training', label: 'Modules', kind: 'training_taxonomy', section: 'modules' },
+  { key: 'training-categories', group: 'training', groupLabel: kept('Training'), label: kept('Categories'), kind: 'training_taxonomy', section: 'categories' },
+  { key: 'training-skills', group: 'training', groupLabel: kept('Training'), label: kept('Skills'), kind: 'training_taxonomy', section: 'skills' },
+  { key: 'training-modules', group: 'training', groupLabel: kept('Training'), label: kept('Modules'), kind: 'training_taxonomy', section: 'modules' },
 
   /*
    * Same position as the Owner's sidebar. ADR-0018 makes this screen a mirror of that group,
@@ -91,10 +109,10 @@ const TABS: {
    * (`Overall.html:4349`) — which is what the Owner's screen says too, so nobody has to learn
    * that one screen is the other under a different name (parity L-23).
    */
-  { key: 'capability-ladder', group: 'capability', groupLabel: 'Capability Mapping', label: 'Ladder', kind: 'capability_ladder', section: 'ladder' },
-  { key: 'capability-skills', group: 'capability', groupLabel: 'Capability Mapping', label: 'Skills', kind: 'capability_ladder', section: 'skills' },
+  { key: 'capability-ladder', group: 'capability', groupLabel: kept('Capability Mapping'), label: kept('Ladder'), kind: 'capability_ladder', section: 'ladder' },
+  { key: 'capability-skills', group: 'capability', groupLabel: kept('Capability Mapping'), label: kept('Skills'), kind: 'capability_ladder', section: 'skills' },
 
-  { key: 'events', group: 'events', groupLabel: 'Events', label: 'Events', kind: 'event_types' },
+  { key: 'events', group: 'events', groupLabel: kept('Events'), label: kept('Events'), kind: 'event_types' },
 
   /*
    * **The Owner's *Campaigns* tab has no counterpart here, and that is not an omission.**
@@ -103,14 +121,14 @@ const TABS: {
    * copied into an office (ADR-0034). The subtabs are therefore the Owner's two *headings*
    * rather than their two tabs. Authoring a company's own campaigns is Phase 12.
    */
-  { key: 'campaign-tiers', group: 'campaigns', groupLabel: 'Campaigns', label: 'Production club tiers', kind: 'campaign_kinds', section: 'production_club' },
-  { key: 'campaign-moc', group: 'campaigns', groupLabel: 'Campaigns', label: 'Maintenance of Contract', kind: 'campaign_kinds', section: 'moc' },
+  { key: 'campaign-tiers', group: 'campaigns', groupLabel: kept('Campaigns'), label: kept('Production club tiers'), kind: 'campaign_kinds', section: 'production_club' },
+  { key: 'campaign-moc', group: 'campaigns', groupLabel: kept('Campaigns'), label: kept('Maintenance of Contract'), kind: 'campaign_kinds', section: 'moc' },
   // `QUALIFICATION_RULE_KINDS` has three members and the Owner's screen surfaces two. A rule
   // of this kind is storable, publishable and provisioned like the others; leaving it out of
   // the row would make the only screen that can author it unreachable.
-  { key: 'campaign-promotion', group: 'campaigns', groupLabel: 'Campaigns', label: 'Promotion paths', kind: 'campaign_kinds', section: 'promotion_path' },
+  { key: 'campaign-promotion', group: 'campaigns', groupLabel: kept('Campaigns'), label: kept('Promotion paths'), kind: 'campaign_kinds', section: 'promotion_path' },
 
-  { key: 'products', group: 'products', groupLabel: 'Products', label: 'Products', kind: null },
+  { key: 'products', group: 'products', groupLabel: kept('Products'), label: kept('Products'), kind: null },
 
   /*
    * **The company's recruitment playbook** (P17-T8, OD-88 → 5, ADR-0125): *Products*' kind of tab —
@@ -118,7 +136,7 @@ const TABS: {
    * Not under *Lead statuses › Recruitment*, which is a preset ladder copied into an office; this is
    * the words a plan is built from.
    */
-  { key: 'recruitment', group: 'recruitment', groupLabel: 'Recruitment', label: 'Recruitment', kind: null },
+  { key: 'recruitment', group: 'recruitment', groupLabel: kept('Recruitment'), label: kept('Recruitment'), kind: null },
 ];
 
 /**
@@ -142,6 +160,10 @@ export default function CompanyTemplatePage({
   params: Promise<{ companyId: string }>;
 }) {
   const { companyId } = use(params);
+  const t = useMessages(adminTemplateMessages);
+  const settings = useMessages(settingsMessages);
+  const checklist = useMessages(checklistMessages);
+  const language = useLanguage();
   /*
    * **The tab stands in the address bar**, so a refresh lands where the reader was and a
    * pasted link opens the tab it was copied from. It used to be `useState(TABS[0])`, which
@@ -161,7 +183,7 @@ export default function CompanyTemplatePage({
    */
   const [templates, setTemplates] = useState<NamedTemplate[] | null>(null);
   const [templateId, setTemplateId] = useState<string | null>(null);
-  const shown = templates?.find((t) => t.id === templateId) ?? null;
+  const shown = templates?.find((row) => row.id === templateId) ?? null;
 
   /** One entry per Owner Settings **item** — the top row, first leaf wins. */
   const GROUPS = TABS.filter((x, i) => TABS.findIndex((y) => y.group === x.group) === i);
@@ -225,7 +247,7 @@ export default function CompanyTemplatePage({
     setTemplateId(nextId);
   };
   const pickTemplate = (nextId: string) => {
-    const next = templates?.find((t) => t.id === nextId);
+    const next = templates?.find((row) => row.id === nextId);
     if (next) openTemplate(nextId, next.name);
   };
 
@@ -233,7 +255,7 @@ export default function CompanyTemplatePage({
     void listTemplates(companyId)
       .then((rows) => {
         setTemplates(rows);
-        setTemplateId((was) => (rows.some((t) => t.id === was) ? was : (rows.find((t) => t.isDefault) ?? rows[0])?.id ?? null));
+        setTemplateId((was) => (rows.some((row) => row.id === was) ? was : (rows.find((row) => row.isDefault) ?? rows[0])?.id ?? null));
       })
       .catch((err) => setError(toDisplayError(err)));
   }, [companyId]);
@@ -245,7 +267,7 @@ export default function CompanyTemplatePage({
    */
   const templateChanged = (saved: NamedTemplate, select: boolean) => {
     void listTemplates(companyId).then(setTemplates).catch(() => {
-      setTemplates((list) => (list ? [...list.filter((t) => t.id !== saved.id), saved] : [saved]));
+      setTemplates((list) => (list ? [...list.filter((row) => row.id !== saved.id), saved] : [saved]));
     });
     if (select) openTemplate(saved.id, saved.name);
   };
@@ -352,7 +374,7 @@ export default function CompanyTemplatePage({
       setDirty(false);
     } catch (err) {
       const shown = toDisplayError(err);
-      setError(tileRefusal(shown) ?? shown);
+      setError(tileRefusal(shown, language) ?? shown);
     } finally {
       setBusy(false);
     }
@@ -368,13 +390,13 @@ export default function CompanyTemplatePage({
 
   return (
     <SettingsScreen
-      title="Company template"
-      subtitle="What every new office of this company starts life with."
+      title={t.title}
+      subtitle={t.subtitle}
       permission="company_template:read"
       actions={(
         <div className="flex flex-col items-end gap-3">
           <Link href="/admin/companies" className="text-md font-semibold text-navy underline">
-            Back to companies
+            {t.backToCompanies}
           </Link>
           {templates && templateId && (
             <TemplatePicker
@@ -395,8 +417,10 @@ export default function CompanyTemplatePage({
        * than anywhere: the group is *Activity types* and so is the first of its halves, so
        * the same word sat in two identically-underlined rows.
        */
-      tabsLabel="Template sections"
-      tabs={GROUPS.map((g) => ({ label: g.groupLabel, href: `#${g.group}`, hint: SHARED_HINT[g.group] }))}
+      tabsLabel={t.sections}
+      tabs={GROUPS.map((g) => ({
+        label: g.groupLabel, href: `#${g.group}`, hint: isShared(g.group) ? t.shared[g.group] : undefined,
+      }))}
       activeHref={`#${tab.group}`}
       /*
        * Unsaved edits are named before they are lost.
@@ -411,7 +435,7 @@ export default function CompanyTemplatePage({
       subtabs={siblings.length > 1
         ? siblings.map((x) => ({ label: x.label, href: `#${x.key}` }))
         : undefined}
-      subtabsLabel={`${tab.groupLabel} sections`}
+      subtabsLabel={settings.sections({ title: tab.groupLabel })}
       activeSubtab={`#${tab.key}`}
       onSelectSubtab={(href) => go(TABS.find((x) => `#${x.key}` === href) ?? tab)}
       error={error}
@@ -419,10 +443,8 @@ export default function CompanyTemplatePage({
       {pendingTab && (
         <div role="alert" className="mb-4 rounded-md border border-amber bg-card p-4">
           <p className="text-md text-navy">
-            <strong>You have edits here that are not saved.</strong>{' '}
-            <span className="text-muted">
-              Opening {pendingTab.label} discards them — a draft lives on one tab at a time.
-            </span>
+            <strong>{t.pending.unsaved}</strong>{' '}
+            <span className="text-muted">{t.pending.discards({ label: pendingTab.label })}</span>
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button
@@ -433,9 +455,9 @@ export default function CompanyTemplatePage({
                 next.go();
               }}
             >
-              Discard and open {pendingTab.label}
+              {t.pending.discardAndOpen({ label: pendingTab.label })}
             </Button>
-            <Button onClick={() => setPendingTab(null)}>Stay here</Button>
+            <Button onClick={() => setPendingTab(null)}>{t.pending.stay}</Button>
           </div>
         </div>
       )}
@@ -463,25 +485,15 @@ export default function CompanyTemplatePage({
                  * none of a kind it never published — the three cascade activity types excepted, and the
                  * capability ladder, which is the platform's where a template has none (ADR-0116).
                  */
-                current.kind === 'campaign_kinds' ? (
-                  <>Nothing is published yet. Publishing applies these rules to every office of the company.</>
-                ) : current.kind === 'capability_ladder' ? (
-                  <>
-                    Nothing is published yet, so an office made from {shown.name} starts with
-                    AgencyBoost&rsquo;s standard capability ladder.
-                  </>
-                ) : (
-                  <>Nothing is published yet, so an office made from {shown.name} starts with none of it.</>
-                )
-              ) : (
-                <>
-                  New offices made from {current.kind === 'campaign_kinds' ? 'any template' : shown.name} start
-                  from <strong>version {current.template.publishedVersion}</strong>.
-                  {current.template.status === 'draft' && (
-                    <> You have unpublished changes, which will become version {current.template.version}.</>
-                  )}
-                </>
-              )}
+                current.kind === 'campaign_kinds' ? t.publish.nothingRules
+                  : current.kind === 'capability_ladder' ? t.publish.nothingLadder({ name: shown.name })
+                    : t.publish.nothingNone({ name: shown.name })
+              ) : t.publish.published({
+                // The carrier rules are the company's, whichever template is shown (ADR-0115 §7).
+                name: current.kind === 'campaign_kinds' ? null : shown.name,
+                version: <strong>{t.publish.version({ n: current.template.publishedVersion })}</strong>,
+                draft: current.template.status === 'draft' ? current.template.version : null,
+              })}
             </p>
             {/*
               * Two sentences, because they are two different facts (P5-T12). "Running
@@ -492,35 +504,22 @@ export default function CompanyTemplatePage({
               */}
             {(current.template.officesBehind > 0 || current.template.officesUnrecorded > 0) && (
               <p className="mt-2 text-md text-muted">
-                {current.template.officesBehind > 0 && (
-                  <>
-                    {current.template.officesBehind}{' '}
-                    {current.template.officesBehind === 1 ? 'office is' : 'offices are'} running
-                    something older.{' '}
-                  </>
-                )}
-                {current.template.officesUnrecorded > 0 && (
-                  <>
-                    {current.template.officesUnrecorded}{' '}
-                    {current.template.officesUnrecorded === 1
-                      ? 'office was created before the version of this template it started from '
-                        + 'was recorded, so whether it is current is not known.'
-                      : 'offices were created before the version of this template they started '
-                        + 'from was recorded, so whether they are current is not known.'}{' '}
-                  </>
-                )}
-                Publishing does not change them — an office owns its own copy from the day it is
-                created.
+                {[
+                  current.template.officesBehind > 0 ? t.publish.behind({ n: current.template.officesBehind }) : null,
+                  current.template.officesUnrecorded > 0
+                    ? t.publish.unrecorded({ n: current.template.officesUnrecorded }) : null,
+                  t.publish.unchanged,
+                ].filter(Boolean).join(' ')}
               </p>
             )}
 
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <Button
                 disabled={busy || !dirty || (shown.status === 'archived' && current.kind !== 'campaign_kinds')}
-                title={shown.status === 'archived' ? 'An archived template is kept as it is.' : undefined}
+                title={shown.status === 'archived' ? t.publish.archivedKept : undefined}
                 onClick={() => void run(() => saveTemplateDraft(companyId, tab.kind!, current.payload, templateId))}
               >
-                {busy ? 'Saving…' : 'Save draft'}
+                {busy ? settings.saving : checklist.saveDraft}
               </Button>
               {/* Kept as it is when archived, as Save draft is — but for the company's own campaign kinds. */}
               <Button
@@ -528,11 +527,11 @@ export default function CompanyTemplatePage({
                 disabled={busy || dirty || current.template.status !== 'draft'
                   || (shown.status === 'archived' && current.kind !== 'campaign_kinds')}
                 title={shown.status === 'archived' && current.kind !== 'campaign_kinds'
-                  ? 'An archived template is kept as it is.'
-                  : dirty ? 'Save the draft first.' : undefined}
+                  ? t.publish.archivedKept
+                  : dirty ? checklist.saveDraftFirst : undefined}
                 onClick={() => void run(() => publishTemplate(companyId, tab.kind!, templateId))}
               >
-                Publish version {current.template.version}
+                {checklist.publishVersion({ n: current.template.version })}
               </Button>
             </div>
           </Card>
@@ -625,10 +624,7 @@ export default function CompanyTemplatePage({
               default:
                 return (
                   <Card>
-                    <p className="text-md text-navy">
-                      This preset has no editor yet. It is stored and copied into new
-                      offices exactly as it is.
-                    </p>
+                    <p className="text-md text-navy">{t.noEditor}</p>
                   </Card>
                 );
             }

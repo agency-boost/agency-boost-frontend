@@ -51,7 +51,7 @@ describe('+ Add agent, the one form (P18.96-T3 AC-1)', () => {
     fireEvent.blur(screen.getByLabelText('WhatsApp number'));
     expect(await screen.findByText('Enter a WhatsApp number, like 0812-3456-7890.')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('Join date'), { target: { value: '2026-10-28' } });
-    expect(screen.getByText(/^The join date cannot be after today, 27 Okt 2026\.$/)).toBeInTheDocument();
+    expect(screen.getByText(/^The join date cannot be after today, 27 Oct 2026\.$/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add agent' })).toBeDisabled();
   });
 

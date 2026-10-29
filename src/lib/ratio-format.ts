@@ -14,26 +14,47 @@
  * The decimal places live here and nowhere else: the backend holds the unit and never
  * formats, so this is not a second copy of anything (invariant §7).
  *
+ * **In the reader's language since P18.98-T3** (ADR-0174 §6, ADR-0179 §6): every function that writes a figure takes
+ * the `language` last — Indonesian when a caller passes none — and writes the same figure in each, `29,6%` and
+ * `29.6%`, `0,30` and `0.30`. **The words beside a figure** (*points*, *A number*) are the catalogue's since P18.98-T4
+ * (`messages/ratio-words.ts`): a function that writes one takes the words' language after the figures' — `words`,
+ * English when none is passed, so a screen not moved yet reads as it did — and its caller passes `useLanguage()` and
+ * `useFigureLanguage()`.
+ *
  * **Input is typed the way it is shown.** An Owner reads `15%` and types `15`, not `0.15`;
  * the conversion back is {@link benchmarkFromInput}, which takes a comma or a point (`parseDecimal`).
  * Anything else would be a field whose value means something different from the number beside it.
  */
 
-import { formatNumber, formatPercent, parseDecimal } from '@/lib/format';
+import { messagesIn } from '@/i18n/catalogue';
+import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { ratioWordMessages } from '@/i18n/messages/ratio-words';
+import { formatDecimalInput, formatNumber, formatPercent, parseDecimal } from '@/lib/format';
 
 export type RatioDisplayUnit = 'percent' | 'decimal' | 'points';
 
-/** What each unit is called where an Owner chooses one. */
-export const DISPLAY_UNIT_LABEL: Record<Exclude<RatioDisplayUnit, 'points'>, string> = {
-  percent: 'A percentage — 15%',
-  decimal: 'A number — 0,30',
-};
+/**
+ * **What each unit is called where an Owner chooses one**, with an example figure in it — *A percentage — 15%*, *A
+ * number — 0,30* — in the reader's `words` and its figure in the `figures` language (P18.98-T4).
+ */
+export function displayUnitLabels(
+  words: Language = SOURCE_LANGUAGE, figures: Language = DEFAULT_LANGUAGE,
+): Record<Exclude<RatioDisplayUnit, 'points'>, string> {
+  const t = messagesIn(ratioWordMessages, words).unit;
+  return {
+    percent: t.percent({ example: formatPercent(15, {}, figures) }),
+    decimal: t.decimal({ example: formatNumber(0.3, { decimals: 2 }, figures) }),
+  };
+}
+
+/** What each unit is called where an Owner chooses one, in English with Indonesian figures — a screen not moved yet. */
+export const DISPLAY_UNIT_LABEL: Record<Exclude<RatioDisplayUnit, 'points'>, string> = displayUnitLabels();
 
 /** The unit's mark beside an input, or `null` for a plain number. */
 export const DISPLAY_UNIT_SUFFIX: Record<RatioDisplayUnit, string | null> = {
   percent: '%',
   decimal: null,
-  points: 'points either side',
+  points: ratioWordMessages.en.pointsEitherSide,
 };
 
 /**
@@ -50,42 +71,51 @@ export function unitFor(ratio: { displayUnit?: RatioDisplayUnit | null; comparis
   return ratio.displayUnit && ratio.displayUnit !== 'points' ? ratio.displayUnit : 'decimal';
 }
 
-/** At most `places` decimals, and none when whole: what an input holds, before its point becomes a comma. */
-const trimmed = (value: number, places: number) => String(Number(value.toFixed(places)));
+/** At most `places` decimals, and none when whole: what an input holds, before it is written in the reader's marks. */
+const trimmed = (value: number, places: number) => Number(value.toFixed(places));
 
 /**
  * `30%`, `15,5%`, `0,30`, `±30 points` — **a benchmark reads as typed** (ADR-0174 §2): a percentage keeps the
  * places it was set with and no more (`lossless`, so `30%`, never `30,0%`), as the field beside it is typed; a
  * number to two places, as `metrics-and-definitions.md` states for each ratio. Points are whole where they are
- * whole — the balance band is `±30`, and `±30.0 points` would claim a precision nobody set.
+ * whole — the balance band is `±30`, and `±30.0 points` would claim a precision nobody set. *Points* is a word, in
+ * `words`' language (English when none is passed).
  */
-export function formatBenchmark(value: number, unit: RatioDisplayUnit): string {
-  if (unit === 'percent') return formatPercent(value * 100, { lossless: true });
-  if (unit === 'points') return `±${formatNumber(value, { maxDecimals: 1 })} points`;
-  return formatNumber(value, { decimals: 2 });
+export function formatBenchmark(
+  value: number, unit: RatioDisplayUnit, language: Language = DEFAULT_LANGUAGE, words: Language = SOURCE_LANGUAGE,
+): string {
+  if (unit === 'percent') return formatPercent(value * 100, { lossless: true }, language);
+  if (unit === 'points') {
+    return messagesIn(ratioWordMessages, words).band({ value: formatNumber(value, { maxDecimals: 1 }, language) });
+  }
+  return formatNumber(value, { decimals: 2 }, language);
 }
 
 /** The places a computed ratio keeps: a percentage its tenth (ADR-0174 §2), a number its two (`0,38`). */
 const RATIO_PLACES: Record<Exclude<RatioDisplayUnit, 'points'>, number> = { percent: 1, decimal: 2 };
 
-/** A ratio's figure to `places`, in its unit: `29,6%`, `0,38`. */
-const ratioText = (value: number, unit: Exclude<RatioDisplayUnit, 'points'>, places: number) =>
-  (unit === 'percent' ? formatPercent(value * 100, { decimals: places }) : formatNumber(value, { decimals: places }));
+/** A ratio's figure to `places`, in its unit: `29,6%`, `0,38` — `29.6%`, `0.38` in English. */
+const ratioText = (value: number, unit: Exclude<RatioDisplayUnit, 'points'>, places: number, language: Language) =>
+  (unit === 'percent'
+    ? formatPercent(value * 100, { decimals: places }, language)
+    : formatNumber(value, { decimals: places }, language));
 
 /**
  * A computed ratio (P10-T2): **a percentage to its tenth** — `9,1%`, `29,6%`, `30,0%` — because it is read
  * against its benchmark and the tenth can change its status (ADR-0174 §2, the one percentage that keeps a
  * decimal); a number to two places, `0,38`; and the balance's lean as whole points — `24 points`, without a sign,
  * since the sentence around it says which way. `null` is *not enough data* and is written `–`, the prototype's own
- * (`Overall.html:5330`): never `0`.
+ * (`Overall.html:5330`): never `0`. *Points* is a word, in `words`' language (English when none is passed).
  */
-export function formatRatioValue(value: number | null, unit: RatioDisplayUnit): string {
+export function formatRatioValue(
+  value: number | null, unit: RatioDisplayUnit, language: Language = DEFAULT_LANGUAGE, words: Language = SOURCE_LANGUAGE,
+): string {
   if (value === null) return '–';
   if (unit === 'points') {
     const points = Math.round(Math.abs(value));
-    return `${points} ${points === 1 ? 'point' : 'points'}`;
+    return messagesIn(ratioWordMessages, words).lean({ value: String(points), one: points === 1 });
   }
-  return ratioText(value, unit, RATIO_PLACES[unit]);
+  return ratioText(value, unit, RATIO_PLACES[unit], language);
 }
 
 /**
@@ -100,36 +130,49 @@ export function formatRatioValue(value: number | null, unit: RatioDisplayUnit): 
  * **Read back from what is written**, not from the value: the figure on the screen is what must not reach the
  * benchmark, so it is parsed as printed and compared with the benchmark as a number — `30,0%` against `30%` is a
  * tie, which a comparison of the two texts would miss (ADR-0174 writes them differently on purpose).
+ *
+ * **The same places in both languages** (P18.98-T3 AC-2): the figure is read back as Indonesian writes it, whatever the
+ * reader's language, so an English reader never gets a place more or fewer than an Indonesian one — the language
+ * changes the characters, never the figure. *Points* is a word, in `words`' language (English when none is passed).
  */
 export function formatRatioForStatus(
-  value: number | null, unit: RatioDisplayUnit, benchmark: number, status: 'success' | 'alert' | 'neutral',
+  value: number | null,
+  unit: RatioDisplayUnit,
+  benchmark: number,
+  status: 'success' | 'alert' | 'neutral',
+  language: Language = DEFAULT_LANGUAGE,
+  words: Language = SOURCE_LANGUAGE,
 ): string {
-  const text = formatRatioValue(value, unit);
+  const text = formatRatioValue(value, unit, language, words);
   if (value === null || status !== 'alert') return text;
   if (unit === 'points') {
     const lean = Math.abs(value);
-    return Math.round(lean) <= benchmark ? `${formatNumber(lean, { decimals: 1 })} points` : text;
+    return Math.round(lean) <= benchmark
+      ? messagesIn(ratioWordMessages, words).leanExact({ value: formatNumber(lean, { decimals: 1 }, language) })
+      : text;
   }
-  const shown = parseDecimal(text.replace('%', ''));
+  // Read back in `id-ID`, where a comma is the decimal and a point groups: the same figure as `text`'s.
+  const shown = parseDecimal(formatRatioValue(value, unit, 'id').replace('%', ''));
   // The benchmark in the figure's own unit, rid of a product's binary noise (`0.57 × 100` is `56.99999999999999`).
   const mark = Number((unit === 'percent' ? benchmark * 100 : benchmark).toFixed(8));
   if (shown < mark) return text;
-  return ratioText(value, unit, RATIO_PLACES[unit] + 1);
+  return ratioText(value, unit, RATIO_PLACES[unit] + 1, language);
 }
 
 /**
  * What goes in the input for a stored value: `15` for 0.15 shown as a percentage, `0,3` for 0.3 as a
- * number — a comma, as the figure beside it is written (ADR-0167 §1).
+ * number — a comma, as the figure beside it is written (ADR-0167 §1); `0.3` in English (P18.98-T3 AC-3).
  */
-export function benchmarkToInput(value: number, unit: RatioDisplayUnit): string {
+export function benchmarkToInput(value: number, unit: RatioDisplayUnit, language: Language = DEFAULT_LANGUAGE): string {
   // Rounded before printing so 0.155 × 100 reads `15,5`, not `15,500000000000002`.
-  return (unit === 'percent' ? trimmed(value * 100, 4) : trimmed(value, 6)).replace('.', ',');
+  return formatDecimalInput(unit === 'percent' ? trimmed(value * 100, 4) : trimmed(value, 6), language);
 }
 
 /**
  * The stored value for what was typed, or `NaN` when it is not a number.
  *
- * **A comma or a point** (ADR-0167 §1, AC-3): `15,5` and `15.5` are both fifteen and a half percent. A
+ * **A comma or a point, in either language** (ADR-0167 §1, AC-3; P18.98-T3 AC-3): `15,5` and `15.5` are both fifteen
+ * and a half percent. A
  * benchmark is a small value — a percentage, a ratio near 1, points under 100 — so a single point is a
  * decimal, never a thousands separator: `1.250` is 1,25 (`parseDecimal` states the rule).
  *
@@ -148,7 +191,9 @@ export function benchmarkFromInput(text: string, unit: RatioDisplayUnit): number
  * Switching `0,3` from a number to a percentage must read `30`, not reinterpret `0,3` as
  * 0,3%. The stored value is what the reader meant; only its spelling changes.
  */
-export function reexpress(text: string, from: RatioDisplayUnit, to: RatioDisplayUnit): string {
+export function reexpress(
+  text: string, from: RatioDisplayUnit, to: RatioDisplayUnit, language: Language = DEFAULT_LANGUAGE,
+): string {
   const stored = benchmarkFromInput(text, from);
-  return Number.isNaN(stored) ? text : benchmarkToInput(stored, to);
+  return Number.isNaN(stored) ? text : benchmarkToInput(stored, to, language);
 }

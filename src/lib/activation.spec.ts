@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
 import { activationView, item, LINKS, RINA, SARI } from '@test/activation-fixtures';
 import {
-  ACTIVATION_3M_LABEL, ACTIVATION_NOTE_MAX, aspectTitle, attributionOf, correctionOf, correctStartDate, dayShown, earliestStart,
+  ACTIVATION_3M_LABEL, ACTIVATION_NOTE_MAX, aspectTitle, attributionOf, autoBadge, byHandBadge, correctionOf, correctStartDate,
+  dayShown, earliestStart, fromDataWords,
   FIRST_CASE_CLOSED, graduateMyActivation, groupTitle, isComplete, isDataBacked, isManual, isTickedByHandLink, isWholeDate, ITEM_NOTE_MAX,
   newHireHref, OWN_COPY, PROTOTYPE_COPY, readHireClosings, readMyActivation, readMyClosings, readNewHire, readNewHires, recordHref,
   saveActivationNote, saveHireItem, saveMyItem, sourceLineOf, startDateAllowed, startDateRangeText, takesHandWrite,
@@ -287,5 +288,84 @@ describe('FIRST_CASE_CLOSED (invariant §7, Phase 13’s docs audit)', () => {
     );
     const declared = /export const ACTIVATION_FIRST_CASE_CODE = '([^']+)';/.exec(constants);
     expect(declared?.[1]).toBe(FIRST_CASE_CLOSED);
+  });
+});
+
+/**
+ * **P18.98-T4: the module's words in both languages** (new hires and activation; `i18n/messages/activation.ts`,
+ * `new-hires.ts`). A function that writes words takes the words' language, and one that writes a day the figures' too;
+ * given neither it writes English words and an Indonesian day, as every caller of this module did before (the cases
+ * above). The copy objects stay English, the catalogue's source.
+ */
+describe('P18.98-T4 the activation’s words in Indonesian', () => {
+  const at = '2026-09-30T23:30:00.000Z';
+  const sale = (over = {}) => item('FIRST_CASE_CLOSED', 'Close first case independently', { link: LINKS['sales:first'], ...over });
+
+  it('names a unit: Direct Unit and the rungs kept, in both languages', () => {
+    for (const language of ['en', 'id'] as const) {
+      expect(groupTitle({ kind: 'direct', leader: null }, language)).toBe('Direct Unit');
+      expect(groupTitle({ kind: 'aab', leader: SARI }, language)).toBe('AAB: Sari Puspita');
+      expect(groupTitle({ kind: 'ab', leader: SARI }, language)).toBe('AB: Sari Puspita');
+    }
+  });
+
+  it('says who ticked an item and when, the reader as Anda, its day in the figures’ language', () => {
+    const mine = item('A', 'a', { done: true, doneAt: at, source: 'hire', doneBy: RINA });
+    expect(attributionOf(mine, 'mem-rina', 'id', 'id')).toBe('Dicentang oleh Anda · 1 Okt 2026');
+    expect(attributionOf(mine, 'mem-rina', 'en', 'en')).toBe('Ticked by you · 1 Oct 2026');
+    // Words and figures apart: English words beside an Indonesian day, as a reader with no choice reads them.
+    expect(attributionOf(mine, 'mem-rina', 'en', 'id')).toBe('Ticked by you · 1 Okt 2026');
+    const linked = item('A', 'a', { link: { ...LINKS['feature:goals'] }, done: true, doneAt: at, source: 'link', doneBy: SARI });
+    expect(attributionOf(linked, 'mem-rina', 'id', 'id')).toBe('Diselesaikan dari Goal Settings oleh Sari Puspita · 1 Okt 2026');
+    expect(attributionOf({ ...linked, doneBy: null }, 'mem-rina', 'id', 'id')).toBe('Diselesaikan dari Goal Settings · 1 Okt 2026');
+    expect(attributionOf({ ...linked, link: null }, 'mem-rina', 'id', 'id')).toBe('Selesai otomatis · 1 Okt 2026');
+  });
+
+  it('writes a data-backed item’s source line and its wait in Indonesian, the data’s label as the server sends it', () => {
+    expect(sourceLineOf(sale({ done: true, doneAt: at, source: 'link', doneBy: RINA }), 'mem-rina', 'id', 'id'))
+      .toBe('Diselesaikan dari Sales data · 1 Okt 2026');
+    expect(sourceLineOf(sale({ done: true, doneAt: at, source: 'leader', doneBy: SARI, waiting: true }), 'mem-rina', 'id', 'id'))
+      .toBe('Dicentang oleh Sari Puspita, menunggu data');
+    expect(sourceLineOf(sale({ done: true, doneAt: at, source: 'hire', doneBy: RINA, waiting: true }), 'mem-rina', 'id', 'id'))
+      .toBe('Dicentang oleh Anda, menunggu data');
+  });
+
+  it('says who corrected a join date, and the bound’s sentence, in Indonesian', () => {
+    expect(correctionOf(activationView({ startCorrected: { by: SARI, at } }), 'mem-rina', 'id', 'id'))
+      .toBe('Tanggal bergabung dikoreksi oleh Sari Puspita · 1 Okt 2026');
+    expect(correctionOf(activationView({ startCorrected: { by: SARI, at } }), 'mem-sari', 'id', 'id'))
+      .toBe('Tanggal bergabung dikoreksi oleh Anda · 1 Okt 2026');
+    expect(startDateRangeText('2026-10-03', 'id', 'id')).toBe('Pilih tanggal dari 3 Okt 2025 sampai hari ini.');
+    expect(startDateRangeText('2026-10-03', 'en', 'en')).toBe('Choose a date from 3 Oct 2025 to today.');
+  });
+
+  it('writes the link badges and From {data} in each language: whether, never when, in both', () => {
+    expect(autoBadge('the hire has saved any goal since joining')).toEqual({
+      glyph: 'Auto',
+      name: 'Auto — completes when the hire has saved any goal since joining',
+      tip: 'Completes when the hire has saved any goal since joining.',
+    });
+    expect(autoBadge('the hire has saved any goal since joining', 'id')).toEqual({
+      glyph: 'Otomatis',
+      name: 'Otomatis — selesai saat the hire has saved any goal since joining',
+      tip: 'Selesai saat the hire has saved any goal since joining.',
+    });
+    expect(byHandBadge()).toEqual({ glyph: OWN_COPY.byHand, name: OWN_COPY.byHandName, tip: OWN_COPY.byHandTip });
+    const hand = byHandBadge('id');
+    expect(hand.glyph).toBe('Dicentang manual');
+    expect(hand.name.startsWith(hand.glyph)).toBe(true);
+    // *Whether*, never when (P13-T3 AC-1, parity I-80): no *fase*, *hingga*, *belum*, *segera* or number.
+    for (const text of Object.values(hand)) expect(text).not.toMatch(/fase|hingga|\bbelum\b|segera|\d/i);
+    expect(fromDataWords('Sales data')).toBe('From Sales data');
+    expect(fromDataWords('Sales data', 'id')).toBe('Dari Sales data');
+  });
+
+  it('keeps the copy objects English, the catalogue’s source, in the shapes they always had', () => {
+    expect(PROTOTYPE_COPY.title).toBe('Your 90-Day Activation');
+    expect(PROTOTYPE_COPY.pctComplete(31)).toBe('31% complete');
+    expect(PROTOTYPE_COPY.goTo('Goal Settings')).toBe('Go to Goal Settings →');
+    expect(OWN_COPY.completedFrom('Goal Settings', null, '1 Okt 2026')).toBe('Completed from Goal Settings · 1 Okt 2026');
+    expect(OWN_COPY.leftOn('21 Okt 2026')).toBe('Left 21 Okt 2026');
+    expect(OWN_COPY.closingOption('Ibu Ratna', '20 Sep 2026')).toBe('Ibu Ratna · 20 Sep 2026');
   });
 });

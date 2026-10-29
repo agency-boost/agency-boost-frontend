@@ -9,9 +9,11 @@ import { InviteQr } from '@/components/ui/invite-qr';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
 import { REMOVED_ON_PHONE } from '@/components/ui/phone';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { userManagementMessages } from '@/i18n/messages/user-management';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { CONFIRMED } from '@/lib/confirmations';
+import { confirmationMessages } from '@/i18n/messages/confirmations';
 import { useDebounced } from '@/lib/use-debounced';
 import { useSession } from '@/lib/session';
 import { RoleBadge, classOfRung, rungShort, useLadder } from '@/components/ui/role-badge';
@@ -55,9 +57,17 @@ import {
  *
  * Anyone who uses it joins **with no approval**. That is what the sentence under the
  * panel says, and it is the whole reason the code is worth guarding.
+ *
+ * Its words are the catalogue's (`user-management.ts`; P18.98-T4); a role change's sentence is `lib/org.ts`'
+ * (`roleChangeExplanation`) and the leader limit's `leader-limit.tsx`', each handed the reader's language. *REMOVE*, the
+ * word the server checks, is the same in both languages; names, agent codes, the leader code and its link are shown
+ * as stored.
  */
 
 export default function AddAgentsPage() {
+  const t = useMessages(userManagementMessages).add;
+  const confirmed = useMessages(confirmationMessages);
+  const language = useLanguage();
   const { me } = useSession();
   const canManageTeam =
     me?.permissions.includes('member:change_role') ||
@@ -237,7 +247,7 @@ export default function AddAgentsPage() {
   return (
     <Page
       title={USER_MANAGEMENT_TITLE}
-      subtitle="Invite new people or tag existing agents to your team."
+      subtitle={t.subtitle}
       // Hiding the tab is not gating the screen: the URL is typeable, and until now an
       // Agent who typed it got the whole thing, with only the API refusing the calls
       // behind it. `route-registry.md` has listed this route as AB · AAB since Phase 3.
@@ -257,9 +267,9 @@ export default function AddAgentsPage() {
         : <ErrorBanner {...error} />)}
 
       <Card className="mb-4">
-        <h2 className="font-display text-lg font-bold text-navy">Invite someone</h2>
+        <h2 className="font-display text-lg font-bold text-navy">{t.inviteTitle}</h2>
         {/* The client's words at every size (P18.95-T7 AC-1, grey text row 4). */}
-        <p className="mt-1 text-md text-muted">Share this so new agents join your team.</p>
+        <p className="mt-1 text-md text-muted">{t.inviteLine}</p>
         {/* `User_Management_Section.html:444-455`: a wrapping row of co-equal artefacts,
             the link box growing and the code box holding its width — not an even grid.
             The section file supersedes `Overall.html` for this module, and its version
@@ -268,22 +278,22 @@ export default function AddAgentsPage() {
           <div className="mt-3 flex flex-wrap items-stretch gap-3.5">
             <div className="min-w-[260px] flex-1">
               <CopyableValue
-                label="Invite link"
+                label={t.inviteLink}
                 value={code.url}
-                action="Copy link"
+                action={t.copyLink}
                 border="dashed"
-                copied={CONFIRMED.linkCopied}
+                copied={confirmed.linkCopied}
               />
             </div>
             <div className="min-w-[170px]">
-              <CopyableValue label="Leader code" value={code.code} mono action="Copy code" copied={CONFIRMED.codeCopied} />
+              <CopyableValue label={t.leaderCode} value={code.code} mono action={t.copyCode} copied={confirmed.codeCopied} />
             </div>
             {/* The third artefact (`:454`). The prototype's is a static tile; ours draws
                 the real code, which is the whole point of offering one. */}
             <InviteQr url={code.url} />
           </div>
         ) : (
-          <Skeleton label="Loading your leader code…" className="mt-3">
+          <Skeleton label={t.loadingCode} className="mt-3">
             {/* The flex row goes inside: `Skeleton` puts its children in an aria-hidden
                 wrapper, so layout classes on the outer element would arrange that wrapper
                 and the sr-only label rather than the bars. */}
@@ -297,31 +307,27 @@ export default function AddAgentsPage() {
       </Card>
 
       <Card className="mt-6">
-        <h2 className="font-display text-lg font-bold text-navy">Find someone already here</h2>
+        <h2 className="font-display text-lg font-bold text-navy">{t.findTitle}</h2>
         {/* The client's words at every size (P18.95-T7 AC-1, grey text row 5). */}
-        <p className="mt-1 text-md text-muted">Agents without a leader. Tap Add to join your unit.</p>
+        <p className="mt-1 text-md text-muted">{t.findLine}</p>
 
-        <Field label="Search by name" htmlFor="untagged-search" className="mt-3">
+        <Field label={t.searchByName} htmlFor="untagged-search" className="mt-3">
           <TextInput
             id="untagged-search"
-            placeholder="Name"
+            placeholder={t.nameExample}
             value={pool}
             onChange={(e) => setPool(e.target.value)}
           />
         </Field>
 
         {untagged === null && (
-          <SkeletonPeople count={3} label="Searching untagged agents…" className="mt-3" />
+          <SkeletonPeople count={3} label={t.searching} className="mt-3" />
         )}
 
         {untagged?.length === 0 && (
           <EmptyState
             variant={pool ? 'filtered' : 'empty'}
-            title={
-              pool
-                ? 'No untagged agents match that search.'
-                : 'Everybody in this office already reports to somebody.'
-            }
+            title={pool ? t.noMatch : t.everybodyReports}
           />
         )}
 
@@ -337,7 +343,7 @@ export default function AddAgentsPage() {
               <span className="min-w-0 flex-1">
                 <span className="block text-md font-semibold text-navy">{member.fullName}</span>
                 <span className="block text-sm text-muted">
-                  {member.agentCode} · reports to nobody
+                  {member.agentCode} · {t.reportsToNobody}
                 </span>
               </span>
 
@@ -345,7 +351,7 @@ export default function AddAgentsPage() {
                 // ADR-0157: letting this pending leader in waits for AgencyBoost.
                 <div className="basis-full">
                   <LeaderLimitWaiting
-                    what={requestedChange(pendingFor(asks, member.membershipId)!, (code) => rungShort(code, ladder))}
+                    what={requestedChange(pendingFor(asks, member.membershipId)!, (code) => rungShort(code, ladder), language)}
                     cancelling={busy === 'ask'}
                     onCancel={() => void cancelAsk(pendingFor(asks, member.membershipId)!.requestId)}
                   />
@@ -354,16 +360,16 @@ export default function AddAgentsPage() {
                 // Inline, as the prototype does it — a modal for one row is heavier than
                 // the decision.
                 <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-md text-navy">Add them to your unit?</span>
+                  <span className="text-md text-navy">{t.addThem}</span>
                   <Button
                     variant="secondary"
                     disabled={busy !== null}
                     onClick={() => setConfirming(null)}
                   >
-                    Cancel
+                    {t.cancel}
                   </Button>
                   <Button disabled={busy !== null} onClick={() => void add(member.membershipId)}>
-                    {busy === member.membershipId ? 'Adding…' : 'Confirm'}
+                    {busy === member.membershipId ? t.adding : t.confirm}
                   </Button>
                 </span>
               ) : (
@@ -372,7 +378,7 @@ export default function AddAgentsPage() {
                   disabled={busy !== null}
                   onClick={() => setConfirming(member.membershipId)}
                 >
-                  Add to my unit
+                  {t.addToMyUnit}
                 </Button>
               )}
             </li>
@@ -388,18 +394,15 @@ export default function AddAgentsPage() {
           for, so the permission is the honest gate. */}
       {canManageTeam && (
       <Card className="mt-6">
-        <h2 className="font-display text-lg font-bold text-navy">Your team</h2>
+        <h2 className="font-display text-lg font-bold text-navy">{t.teamTitle}</h2>
         {/* The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 6): its words stay from 768px. */}
-        <p className={cn('mt-1 text-md text-muted', REMOVED_ON_PHONE)}>
-          People who report to you. Only somebody&apos;s direct leader can change their role, and
-          changing it moves nobody — they keep reporting to you either way.
-        </p>
+        <p className={cn('mt-1 text-md text-muted', REMOVED_ON_PHONE)}>{t.teamLine}</p>
 
         {team === null && (
-          <SkeletonPeople count={3} label="Loading your unit…" className="mt-3" />
+          <SkeletonPeople count={3} label={t.loadingUnit} className="mt-3" />
         )}
 
-        {team?.length === 0 && <EmptyState title="Nobody reports to you yet." />}
+        {team?.length === 0 && <EmptyState title={t.nobodyReports} />}
 
         <ul className="mt-3 flex flex-col gap-2">
           {team?.map((member) => (
@@ -414,15 +417,13 @@ export default function AddAgentsPage() {
                 <span className="block text-md font-semibold text-navy">{member.fullName}</span>
                 <span className="block text-sm text-muted">
                   {member.agentCode} ·{' '}
-                  {member.directCount > 0
-                    ? `leads ${member.directCount}`
-                    : 'reports to you'}
+                  {member.directCount > 0 ? t.leadsCount({ n: member.directCount }) : t.reportsToYou}
                 </span>
               </span>
 
               {member.canChangeRole ? (
                 <Field
-                  label="Role"
+                  label={t.role}
                   htmlFor={`role-${member.membershipId}`}
                   className="w-52"
                 >
@@ -451,7 +452,7 @@ export default function AddAgentsPage() {
               {pendingFor(asks, member.membershipId) && (
                 <div className="basis-full">
                   <LeaderLimitWaiting
-                    what={requestedChange(pendingFor(asks, member.membershipId)!, (code) => rungShort(code, ladder))}
+                    what={requestedChange(pendingFor(asks, member.membershipId)!, (code) => rungShort(code, ladder), language)}
                     cancelling={busy === 'ask'}
                     onCancel={() => void cancelAsk(pendingFor(asks, member.membershipId)!.requestId)}
                   />
@@ -460,7 +461,7 @@ export default function AddAgentsPage() {
 
               <Button
                 variant="danger"
-                aria-label={`Remove ${member.fullName}`}
+                aria-label={t.removeName({ name: member.fullName })}
                 disabled={busy !== null}
                 onClick={() => {
                   setProposal(null);
@@ -470,7 +471,7 @@ export default function AddAgentsPage() {
                   setDisposition('reassign');
                 }}
               >
-                Remove
+                {t.remove}
               </Button>
             </li>
           ))}
@@ -478,9 +479,7 @@ export default function AddAgentsPage() {
 
         {proposal && (
           <div className="mt-4 rounded-md border border-amber bg-base p-4">
-            <h3 className="font-display text-md font-bold text-navy">
-              Change {proposal.member.fullName}&apos;s role?
-            </h3>
+            <h3 className="font-display text-md font-bold text-navy">{t.changeRoleTitle({ name: proposal.member.fullName })}</h3>
             <p className="mt-1 text-md text-navy">
               {roleChangeExplanation(
                 proposal.member.fullName,
@@ -489,26 +488,27 @@ export default function AddAgentsPage() {
                 // A leader's own team: the prototype's wording is true here.
                 'their-leader',
                 ladder,
+                language,
               )}
             </p>
 
             <Field
-              label="Why?"
+              label={t.why}
               htmlFor="role-reason"
-              hint="Kept in the role change log, which is the only place this can be read back."
+              hint={t.roleWhyHint}
               className="mt-3"
             >
               <TextInput
                 id="role-reason"
                 value={roleReason}
                 onChange={(e) => setRoleReason(e.target.value)}
-                placeholder="Ready to bring on their own agents"
+                placeholder={t.roleWhyExample}
               />
             </Field>
 
             <div className="mt-3 flex flex-wrap gap-2">
               <Button disabled={busy !== null} onClick={() => void applyRole()}>
-                {busy === 'role' ? 'Changing…' : 'Confirm change'}
+                {busy === 'role' ? t.changing : t.confirmChange}
               </Button>
               <Button
                 variant="secondary"
@@ -518,7 +518,7 @@ export default function AddAgentsPage() {
                   setRoleReason('');
                 }}
               >
-                Cancel
+                {t.cancel}
               </Button>
             </div>
           </div>
@@ -526,29 +526,16 @@ export default function AddAgentsPage() {
 
         {removing && (
           <div className="mt-4 rounded-md border border-alert bg-base p-4">
-            <h3 className="font-display text-md font-bold text-navy">
-              Remove {removing.fullName}?
-            </h3>
-            <p className="mt-1 text-md text-navy">
-              This removes them from your team immediately. They&apos;ll need to search and request
-              a new leader if they want to rejoin under you or someone else.
-            </p>
-            <p className="mt-1 text-sm text-muted">
-              Nothing is deleted. Their record and everything they logged stays with the office, on
-              the Removed list.
-            </p>
+            <h3 className="font-display text-md font-bold text-navy">{t.removeTitle({ name: removing.fullName })}</h3>
+            <p className="mt-1 text-md text-navy">{t.removeLine}</p>
+            <p className="mt-1 text-sm text-muted">{t.removeNote}</p>
 
             {removing.directCount > 0 && (
               <fieldset className="mt-3 rounded-md border border-hairline p-3">
                 <legend className="px-1 text-sm font-semibold text-navy">
-                  {removing.directCount === 1
-                    ? '1 person reports to them'
-                    : `${removing.directCount} people report to them`}
+                  {t.reportsToThem({ n: removing.directCount })}
                 </legend>
-                <p className="text-sm text-muted">
-                  Say where they go. Removing a leader without deciding this would leave them
-                  reporting to somebody who has left.
-                </p>
+                <p className="text-sm text-muted">{t.sayWhere}</p>
                 <label className="mt-2 flex items-center gap-2 text-md text-navy">
                   <input
                     type="radio"
@@ -557,7 +544,7 @@ export default function AddAgentsPage() {
                     checked={disposition === 'reassign'}
                     onChange={() => setDisposition('reassign')}
                   />
-                  Move them to my unit
+                  {t.moveToMyUnit}
                 </label>
                 <label className="mt-1 flex items-center gap-2 text-md text-navy">
                   <input
@@ -567,27 +554,27 @@ export default function AddAgentsPage() {
                     checked={disposition === 'orphan'}
                     onChange={() => setDisposition('orphan')}
                   />
-                  Leave them unassigned, for another leader to pick up
+                  {t.leaveUnassigned}
                 </label>
               </fieldset>
             )}
 
             <Field
-              label="Why?"
+              label={t.why}
               htmlFor="remove-reason"
-              hint="Kept on their record, and sent to them."
+              hint={t.removeWhyHint}
               className="mt-3"
             >
               <TextInput
                 id="remove-reason"
                 value={removeReason}
                 onChange={(e) => setRemoveReason(e.target.value)}
-                placeholder="Left the industry"
+                placeholder={t.removeWhyExample}
               />
             </Field>
 
             <Field
-              label={`Type ${REMOVAL_CONFIRMATION} to confirm`}
+              label={t.typeToConfirm({ word: REMOVAL_CONFIRMATION })}
               htmlFor="remove-confirm"
               className="mt-3"
             >
@@ -595,7 +582,7 @@ export default function AddAgentsPage() {
                 id="remove-confirm"
                 value={removeWord}
                 autoComplete="off"
-                placeholder={`Type ${REMOVAL_CONFIRMATION}`}
+                placeholder={t.typeWord({ word: REMOVAL_CONFIRMATION })}
                 onChange={(e) => setRemoveWord(e.target.value)}
               />
             </Field>
@@ -606,10 +593,10 @@ export default function AddAgentsPage() {
                 disabled={busy !== null || !isRemovalConfirmed(removeWord)}
                 onClick={() => void applyRemoval()}
               >
-                {busy === 'remove' ? 'Removing…' : 'Remove from team'}
+                {busy === 'remove' ? t.removing : t.removeFromTeam}
               </Button>
               <Button variant="secondary" disabled={busy !== null} onClick={closeRemoval}>
-                Cancel
+                {t.cancel}
               </Button>
             </div>
           </div>

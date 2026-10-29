@@ -1,3 +1,5 @@
+import { planMessages } from '@/i18n/messages/plan';
+import { recruitmentPlanMessages } from '@/i18n/messages/recruitment-plan';
 import { api } from './api-client';
 
 /**
@@ -15,6 +17,10 @@ import { api } from './api-client';
  *
  * Each interface is spelled out with named nested types, so `contract.spec.ts` can read its fields against
  * `backend/openapi.json`: it reads an interface's body up to the first `}`.
+ *
+ * **The words are the catalogue's** (P18.98-T4; ADR-0179 §4): `messages/recruitment-plan.ts` and the two plans'
+ * `messages/plan.ts`. **The chips' labels and the plan's words are the company's playbook**, shown as typed in both
+ * languages (ADR-0179 §5): the server answers them, and nothing here translates them.
  */
 
 /** One chip: a code and its label, verbatim (`:305-330`). */
@@ -166,52 +172,61 @@ export const readRecruitmentPlan = (brief: BriefCodes | null) =>
 
 // ------------------------------------------------------------------------------------------ words
 
+/**
+ * **The words, in English** — the catalogue's source (`messages/recruitment-plan.ts`, and the two plans' shared
+ * `messages/plan.ts`), for code with no reader to ask, in the shapes they had before P18.98-T4 moved every word of the
+ * section into the catalogue, where they are written once. The screens read them with `useMessages`, in the reader's
+ * language.
+ */
+const EN = recruitmentPlanMessages.en;
+const PLAN = planMessages.en;
+
 /** `Recruitment_Section.html`'s strings, verbatim (D-copy). */
 export const PROTOTYPE_COPY = {
-  title: 'Recruitment',
-  subtitle: 'Build the pitch on the fly, or pull the ready-made materials to show a candidate.',
-  tabAttackPlan: 'Attack Plan',
-  tabPitchMaterials: 'Pitch Materials',
-  stepBrief: 'Candidate brief',
-  stepPlan: 'Recruitment plan',
-  briefTitle: 'Who are we talking to?',
+  title: EN.title,
+  subtitle: EN.subtitle,
+  tabAttackPlan: EN.tabAttackPlan,
+  tabPitchMaterials: EN.tabPitchMaterials,
+  stepBrief: EN.stepBrief,
+  stepPlan: EN.stepPlan,
+  briefTitle: PLAN.briefTitle,
   /** The client's words at every size (P18.95-T7 AC-1, grey text row 9; ADR-0167 §7), as `/attack-plan`'s hint. */
-  briefHint: 'Answer 3 questions to get your pitch.',
-  candidateType: 'Candidate type',
-  motivation: 'What\'s driving them',
-  hesitation: 'Their biggest hesitation',
-  build: 'Build recruitment plan',
+  briefHint: PLAN.briefHint,
+  candidateType: EN.candidateType,
+  motivation: EN.motivation,
+  hesitation: EN.hesitation,
+  build: EN.build,
   /** `← Back` (`:342`): the arrow is drawn beside it, hidden from a screen reader. */
-  back: 'Back',
-  typeIs: 'Type: ',
-  motivationIs: 'Motivation: ',
-  hesitationIs: 'Hesitation: ',
-  profileTag: 'Candidate profile',
-  planReady: 'Plan ready',
-  goodFitFor: 'Good fit for',
-  openingLine: 'Opening line',
-  openingLines: 'Opening lines',
-  leadWithBenefits: 'Lead with these benefits',
-  pushBack: 'If they push back',
-  theySay: 'They say:',
-  youSay: 'You say:',
-  nextAction: 'Next action',
+  back: PLAN.back,
+  typeIs: EN.typeIs,
+  motivationIs: EN.motivationIs,
+  hesitationIs: EN.hesitationIs,
+  profileTag: EN.profileTag,
+  planReady: EN.planReady,
+  goodFitFor: PLAN.goodFitFor,
+  openingLine: PLAN.openingLine,
+  openingLines: PLAN.openingLines,
+  leadWithBenefits: PLAN.leadWithBenefits,
+  pushBack: PLAN.pushBack,
+  theySay: PLAN.theySay,
+  youSay: PLAN.youSay,
+  nextAction: PLAN.nextAction,
 } as const;
 
 /**
  * **The strings this screen writes itself** (Fills; D-copy): the states the prototype has none of, and the
  * names a screen reader hears. None uses *office*, *KPM*, *reports to*, *tagged to*, *untagged* or
- * *unassigned* (ADR-0084's rule) — `recruitment.spec.ts` checks — and none names a phase.
+ * *unassigned* (ADR-0084's rule) — `recruitment.spec.ts` checks the English, `recruitment-words.spec.ts` both
+ * languages — and none names a phase.
  */
 export const OWN_COPY = {
-  tabs: 'Recruitment',
-  steps: 'Steps',
-  loadingBrief: 'Loading the candidate brief…',
-  loadingPlan: 'Building your recruitment plan…',
-  tryAgain: 'Try again',
-  noPlaybook: 'No recruitment plan can be built yet.',
-  noPlaybookHint:
-    'The opening lines, benefits and answers to objections a plan is made from haven\'t been written for your company yet. You can still show a candidate the ready-made documents in Pitch Materials.',
-  toPitchMaterials: 'Go to Pitch Materials',
-  redirecting: 'Taking you to Attack Plan…',
+  tabs: EN.tabs,
+  steps: PLAN.steps,
+  loadingBrief: EN.loadingBrief,
+  loadingPlan: EN.loadingPlan,
+  tryAgain: EN.tryAgain,
+  noPlaybook: EN.noPlaybook,
+  noPlaybookHint: EN.noPlaybookHint,
+  toPitchMaterials: EN.toPitchMaterials,
+  redirecting: EN.redirecting,
 } as const;

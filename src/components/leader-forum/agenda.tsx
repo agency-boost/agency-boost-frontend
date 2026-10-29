@@ -4,9 +4,11 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { useMeetingWriter } from '@/components/leader-forum/meeting-writer';
 import { AutoGrowTextarea } from '@/components/ui/auto-grow-textarea';
 import { TextInput } from '@/components/ui/field';
+import { useMessages } from '@/i18n/language-provider';
+import { forumMinutesMessages } from '@/i18n/messages/forum-minutes';
 import { cn } from '@/lib/cn';
 import {
-  ItemWrites, runWrite, TABS_COPY, TABS_OWN_COPY, useDraft, usePending, withAgendaItem, type Outcome,
+  ItemWrites, NONE, runWrite, useDraft, usePending, withAgendaItem, type Outcome,
 } from '@/lib/leader-meeting-tabs';
 import {
   addAgendaItem, AGENDA_SECTIONS, saveAgendaItem, type AgendaItem, type AgendaItemSaved, type AgendaSection,
@@ -24,6 +26,7 @@ import {
  * with no control drawn.
  */
 export function Agenda({ meeting }: { meeting: MeetingView }) {
+  const t = useMessages(forumMinutesMessages);
   const writer = useMeetingWriter();
   const writes = useRef(new ItemWrites());
   const latest = useRef(meeting);
@@ -100,7 +103,7 @@ export function Agenda({ meeting }: { meeting: MeetingView }) {
     <div className="grid grid-cols-1 items-start gap-4 min-[900px]:grid-cols-[1fr_1.6fr_1fr]">
       {AGENDA_SECTIONS.map((section) => (
         <section key={section} className="rounded-lg border border-hairline bg-card px-4 pb-3 pt-4">
-          <h3 className="mb-3 text-md font-extrabold text-navy">{TABS_COPY.sections[section]}</h3>
+          <h3 className="mb-3 text-md font-extrabold text-navy">{t.sections[section]}</h3>
           {meeting.agenda[section].map((item, i) => (
             <Item
               key={item.id}
@@ -129,7 +132,7 @@ export function Agenda({ meeting }: { meeting: MeetingView }) {
               onClick={() => add(section)}
               className="py-1 text-sm font-semibold text-navy-soft hover:underline"
             >
-              {TABS_COPY.addItem}
+              {t.addItem}
             </button>
           )}
         </section>
@@ -154,7 +157,8 @@ function Item({
   /** The item's row: its text found by it, and whether the focus was inside it when it goes. */
   itemRef: (el: HTMLElement | null) => void;
 }) {
-  const sectionName = TABS_COPY.sections[section];
+  const t = useMessages(forumMinutesMessages);
+  const sectionName = t.sections[section];
   const boxed = section === 'during';
   const struck = boxed && done;
   const text = useDraft(item.text, item.version);
@@ -165,12 +169,12 @@ function Item({
       <div className="mb-3 flex items-start gap-2">
         <div className="flex-1">
           <div className={cn('text-base leading-[1.4] text-navy', struck && 'text-muted line-through')}>
-            {struck && <span className="sr-only">{`${TABS_OWN_COPY.done}. `}</span>}
+            {struck && <span className="sr-only">{`${t.done}. `}</span>}
             {item.text}
           </div>
           <div className="mt-0.5 text-xs text-muted">
-            {TABS_COPY.pic}{' '}
-            <span className="font-semibold text-navy-soft">{item.pic || '—'}</span>
+            {t.pic}:{' '}
+            <span className="font-semibold text-navy-soft">{item.pic || NONE}</span>
           </div>
         </div>
       </div>
@@ -196,7 +200,7 @@ function Item({
       )}
       <div className="min-w-0 flex-1">
         <AutoGrowTextarea
-          aria-label={TABS_OWN_COPY.agendaText(sectionName, n)}
+          aria-label={t.agendaText({ section: sectionName, n })}
           value={text.value}
           maxLength={meeting.limits.textMax}
           onFocus={text.focus}
@@ -205,13 +209,13 @@ function Item({
           className={cn('leading-[1.4]', struck && 'text-muted line-through')}
         />
         <div className="mt-0.5 flex items-baseline gap-1 text-xs text-muted">
-          <span aria-hidden="true">{TABS_COPY.pic}</span>
+          <span aria-hidden="true">{t.pic}:</span>
           <TextInput
             density="cell"
-            aria-label={TABS_OWN_COPY.agendaPic(sectionName, n)}
+            aria-label={t.agendaPic({ section: sectionName, n })}
             // P18.97-T2 AC-5 (I-500; the client's UI-015, every PIC *—*): an empty PIC prompts its editor, and saves
             // nothing — a placeholder is no value. Anybody else reads *—*, above.
-            placeholder={TABS_OWN_COPY.addPic}
+            placeholder={t.addPic}
             value={pic.value}
             maxLength={meeting.limits.picMax}
             onFocus={pic.focus}

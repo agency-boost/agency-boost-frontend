@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { TextInput } from '@/components/ui/field';
-import { parseDecimal } from '@/lib/format';
+import { useFigureLanguage } from '@/i18n/language-provider';
+import { formatDecimalInput, parseDecimal } from '@/lib/format';
 
 /**
  * **A field that takes a decimal, typed with a comma or a point** (ADR-0167 §1, P18.95-T1 AC-3; parity I-395).
@@ -13,7 +14,10 @@ import { parseDecimal } from '@/lib/format';
  * that makes it *3,5*) and reporting the number it reads (`parseDecimal`): `null` for an empty box, nothing at all
  * while the text is not a number yet.
  *
- * A value set from outside — a reload, a reset — replaces the text, written with a comma.
+ * A value set from outside — a reload, a reset — replaces the text, written in the reader's mark: a comma in
+ * Indonesian, a point in English (P18.98-T3 AC-3, `formatDecimalInput`), the figures' language (`useFigureLanguage`:
+ * Indonesian for a reader with no choice). **Either mark is read in either language** (`parseDecimal`), and what the
+ * reader typed stays as typed when the language changes.
  */
 export function DecimalInput({
   value, onValueChange, ...props
@@ -21,11 +25,14 @@ export function DecimalInput({
   value: number | null;
   onValueChange: (value: number | null) => void;
 }) {
-  const [typed, setTyped] = useState(() => written(value));
+  const language = useFigureLanguage();
+  const [typed, setTyped] = useState(() => formatDecimalInput(value, language));
 
   // Follow a value that changed underneath the box, and leave one the box itself produced alone.
   useEffect(() => {
-    setTyped((current) => (sameValue(current, value) ? current : written(value)));
+    setTyped((current) => (sameValue(current, value) ? current : formatDecimalInput(value, language)));
+    // Only a new value rewrites the box: a change of language leaves what was typed alone.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   return (
@@ -45,11 +52,6 @@ export function DecimalInput({
       }}
     />
   );
-}
-
-/** A number as the box shows it: `3,5`, with no grouping — the values a decimal field takes are small. */
-function written(value: number | null): string {
-  return value === null || !Number.isFinite(value) ? '' : String(value).replace('.', ',');
 }
 
 function sameValue(typed: string, value: number | null): boolean {

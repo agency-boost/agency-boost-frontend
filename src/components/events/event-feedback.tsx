@@ -2,10 +2,12 @@
 
 import { useId, useState } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { eventsMessages } from '@/i18n/messages/events';
 import { ApiRequestError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  claimAttendance, pastBlockOf, pickScoreToast, PROTOTYPE_COPY, refusalOf, scaleHighLine, scaleLowLine, scaleOf, scoredLine,
+  claimAttendance, pastBlockOf, pickScoreToast, refusalOf, scaleHighLine, scaleLowLine, scaleOf, scoredLine,
   submitFeedback, type EventsMeta, type GuestEvent,
 } from '@/lib/events';
 import { useEventsHost } from './events-screen';
@@ -44,6 +46,7 @@ export function PastEventBlock({ event, meta, onAnswer, onStale }: {
 
 /** Runs one write, keeping its refusal beside the control that made it. */
 function useWrite(onStale: () => void) {
+  const language = useLanguage();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const run = async (call: () => Promise<void>) => {
@@ -53,7 +56,7 @@ function useWrite(onStale: () => void) {
     try {
       await call();
     } catch (err) {
-      setError(refusalOf(err));
+      setError(refusalOf(err, language));
       if (err instanceof ApiRequestError && err.status === 409) onStale();
     } finally {
       setBusy(false);
@@ -87,11 +90,13 @@ function Notice({ icon, tone, title, children }: {
 
 /** *Thanks for your feedback* (`:8690-8700`): the score kept, and the reader's *why* — as text. */
 function Thanks({ event, meta }: { event: GuestEvent; meta: EventsMeta }) {
+  const t = useMessages(eventsMessages);
+  const language = useLanguage();
   const feedback = event.me.feedback!;
   return (
     <div data-block="thanks">
-      <Notice icon="✅" tone="success" title={PROTOTYPE_COPY.thanksTitle}>
-        <p className="break-words text-base text-muted">{scoredLine(feedback, meta.limits.nps)}</p>
+      <Notice icon="✅" tone="success" title={t.thanksTitle}>
+        <p className="break-words text-base text-muted">{scoredLine(feedback, meta.limits.nps, language)}</p>
       </Notice>
     </div>
   );
@@ -107,21 +112,22 @@ function DidntJoin({ event, meta, onAnswer, onStale }: {
   onAnswer: (next: GuestEvent, message: string) => void;
   onStale: () => void;
 }) {
+  const t = useMessages(eventsMessages);
   const { busy, error, run } = useWrite(onStale);
   return (
     <div data-block="didnt-join">
-      <Notice icon="ℹ️" tone="navy" title={PROTOTYPE_COPY.didntJoinTitle}>
-        <p className="text-base text-muted">{PROTOTYPE_COPY.didntJoinSub}</p>
+      <Notice icon="ℹ️" tone="navy" title={t.didntJoinTitle}>
+        <p className="text-base text-muted">{t.didntJoinSub}</p>
         {meta.can.claim && (
           <Button
             variant="secondary"
             className="mt-2.5 h-8 px-3.5 text-base"
             aria-disabled={busy || undefined}
             onClick={() => void run(async () => {
-              onAnswer(await claimAttendance(event.id), PROTOTYPE_COPY.claimed);
+              onAnswer(await claimAttendance(event.id), t.claimed);
             })}
           >
-            {PROTOTYPE_COPY.claim}
+            {t.claim}
           </Button>
         )}
       </Notice>
@@ -145,6 +151,8 @@ function FeedbackForm({ event, meta, onAnswer, onStale }: {
   onStale: () => void;
 }) {
   const { toast } = useEventsHost();
+  const t = useMessages(eventsMessages);
+  const language = useLanguage();
   const { busy, error, run } = useWrite(onStale);
   const [score, setScore] = useState<number | null>(null);
   const [why, setWhy] = useState('');
@@ -155,7 +163,7 @@ function FeedbackForm({ event, meta, onAnswer, onStale }: {
 
   const submit = () => {
     if (score === null) {
-      toast(pickScoreToast(nps));
+      toast(pickScoreToast(nps, language));
       return;
     }
     void run(async () => {
@@ -164,15 +172,15 @@ function FeedbackForm({ event, meta, onAnswer, onStale }: {
         ...(why.trim() ? { why } : {}),
         ...(improve.trim() ? { improve } : {}),
       });
-      onAnswer(next, PROTOTYPE_COPY.feedbackSubmitted);
+      onAnswer(next, t.feedbackSubmitted);
     });
   };
 
   return (
     // `contents`: the block draws no box, so *Submit feedback* below is held against the whole modal body.
     <div data-block="form" className="contents">
-      <h3 id={ids.question} className="mb-1 text-md font-bold text-navy">{PROTOTYPE_COPY.formQuestion}</h3>
-      <p className="mb-3.5 text-base text-muted">{PROTOTYPE_COPY.formHint}</p>
+      <h3 id={ids.question} className="mb-1 text-md font-bold text-navy">{t.formQuestion}</h3>
+      <p className="mb-3.5 text-base text-muted">{t.formHint}</p>
       <div role="radiogroup" aria-labelledby={ids.question} aria-describedby={ids.ends} className="mb-1.5 flex flex-wrap gap-[5px]">
         {scaleOf(nps).map((n) => (
           <label key={n} className="relative">
@@ -197,21 +205,21 @@ function FeedbackForm({ event, meta, onAnswer, onStale }: {
         ))}
       </div>
       <p id={ids.ends} className="mb-[18px] flex justify-between gap-3 text-xs text-muted">
-        <span>{scaleLowLine(nps)}</span>
-        <span className="text-right">{scaleHighLine(nps)}</span>
+        <span>{scaleLowLine(nps, language)}</span>
+        <span className="text-right">{scaleHighLine(nps, language)}</span>
       </p>
       <FeedbackField
         id={ids.why}
-        label={PROTOTYPE_COPY.why}
-        placeholder={PROTOTYPE_COPY.whyPlaceholder}
+        label={t.why}
+        placeholder={t.whyPlaceholder}
         value={why}
         max={max}
         onChange={setWhy}
       />
       <FeedbackField
         id={ids.improve}
-        label={PROTOTYPE_COPY.improve}
-        placeholder={PROTOTYPE_COPY.improvePlaceholder}
+        label={t.improve}
+        placeholder={t.improvePlaceholder}
         value={improve}
         max={max}
         onChange={setImprove}
@@ -229,7 +237,7 @@ function FeedbackForm({ event, meta, onAnswer, onStale }: {
         )}
       >
         {error && <div className="mb-3"><ErrorBanner {...error} /></div>}
-        <Button aria-disabled={busy || undefined} onClick={submit}>{PROTOTYPE_COPY.submitFeedback}</Button>
+        <Button aria-disabled={busy || undefined} onClick={submit}>{t.submitFeedback}</Button>
       </div>
     </div>
   );
@@ -244,10 +252,11 @@ function FeedbackField({ id, label, placeholder, value, max, onChange }: {
   max: number;
   onChange: (value: string) => void;
 }) {
+  const t = useMessages(eventsMessages);
   return (
     <div className="mb-3.5">
       <label htmlFor={id} className="mb-1.5 block text-base font-semibold text-navy">
-        {label} <span className="font-normal italic text-muted">{PROTOTYPE_COPY.optional}</span>
+        {label} <span className="font-normal italic text-muted">{t.optional}</span>
       </label>
       <textarea
         id={id}

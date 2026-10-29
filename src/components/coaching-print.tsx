@@ -4,6 +4,10 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { byDueDate } from '@/components/coaching-parts';
 import { Button, ErrorBanner } from '@/components/ui/field';
+import { kept } from '@/i18n/kept';
+import { DEFAULT_LANGUAGE, type Language } from '@/i18n/language';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { coachingSessionMessages } from '@/i18n/messages/coaching-session';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
@@ -37,6 +41,9 @@ import { useCan } from '@/lib/session';
  * the paper (`globals.css`, `[data-print-view]`). While the print window is open the document is titled
  * for the coachee and the day, so the PDF is saved as *Coaching Session – Rina Wijaya – October 2, 2026*.
  * It leaves the page once the window closes.
+ *
+ * **Its words are the catalogue's** (`messages/coaching-session.tsx`, P18.98-T4) in the reader's language, the paper's
+ * as the screen's; its figures in `useFigureLanguage()`'s. *Coaching Session*, its title, is kept in both (§A.2).
  */
 export function DownloadPdfButton({
   sessionId, showCoach, className,
@@ -46,14 +53,18 @@ export function DownloadPdfButton({
   showCoach: boolean;
   className?: string;
 }) {
+  const figures = useFigureLanguage();
+  const t = useMessages(coachingSessionMessages).print;
   const canExport = useCan('coaching_session:export_pdf');
   const [print, setPrint] = useState<SessionPrint | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  // Printed once it is on the page, and taken off it once the window closes.
+  // Printed once it is on the page, and taken off it once the window closes. Its title in the language it was asked
+  // for in: a change of language while the browser's window is open prints nothing again.
   useEffect(() => {
-    if (print) printAs(printTitle(print), () => setPrint(null));
+    if (print) printAs(printTitle(print, figures), () => setPrint(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [print]);
 
   if (!canExport) return null;
@@ -74,7 +85,7 @@ export function DownloadPdfButton({
     <>
       <Button onClick={() => void download()} disabled={busy} className={cn('gap-1', className)}>
         {/* The prototype's glyph before its label, out of the accessible name, as the Summary's *⬇ Download*. */}
-        <span aria-hidden="true">⬇</span>Download as PDF
+        <span aria-hidden="true">⬇</span>{t.download}
       </Button>
       {error && <div className="basis-full text-left"><ErrorBanner {...error} /></div>}
       {print && createPortal(<SessionPrintView print={print} showCoach={showCoach} />, document.body)}
@@ -82,69 +93,82 @@ export function DownloadPdfButton({
   );
 }
 
-/** What the PDF is saved as: the page's title, the coachee and the day it was held. */
-export const printTitle = (print: Pick<SessionPrint, 'coachee' | 'date'>) =>
-  `Coaching Session – ${print.coachee.name} – ${formatCalendarDay(print.date)}`;
+/**
+ * What the PDF is saved as: the page's title — kept in both languages (§A.2) — the coachee, and the day it was held in
+ * the figures' language.
+ */
+export const printTitle = (print: Pick<SessionPrint, 'coachee' | 'date'>, figures: Language = DEFAULT_LANGUAGE) =>
+  `${kept('Coaching Session')} – ${print.coachee.name} – ${formatCalendarDay(print.date, figures)}`;
+
+/** A last-week item's box on paper, ticked or not, as the prototype's export draws it (`Overall.html:11160`): no words. */
+const TICKED = '[x] ';
+const UNTICKED = '[ ] ';
 
 /**
  * The paper (`Overall.html:11145-11187`). Headings in the AA amber where the prototype's are its
  * amber-dark, which clears no contrast floor at that size (a Fix, `tokens.md`).
  */
 export function SessionPrintView({ print, showCoach }: { print: SessionPrint; showCoach: boolean }) {
-  const meta = [formatCalendarDayLong(print.date), ...(showCoach ? [`Coached by ${print.coach.name}`] : []), 'Finalized'];
+  const figures = useFigureLanguage();
+  const language = useLanguage();
+  const { agreement, goal, print: t } = useMessages(coachingSessionMessages);
+  // The paper's figures in the reader's language, as the screen beside it writes them (P18.98-T3).
+  const money = (minor: number) => formatRupiahCompact(minor, {}, figures);
+  const day = (date: string) => formatShortDay(date, {}, figures);
+  const meta = [formatCalendarDayLong(print.date, figures), ...(showCoach ? [t.coachedBy({ name: print.coach.name })] : []), t.finalized];
   const h2 = 'mt-4 text-lg font-bold text-amber-ink';
   const line = 'text-md text-navy';
   const actionItems = [...print.actionItems].sort(byDueDate);
   return (
     <article data-print-view="" className="hidden bg-card p-2 font-body text-navy print:block">
-      <h1 className="font-display text-xl font-bold text-navy">Coaching Session — {print.coachee.name}</h1>
+      <h1 className="font-display text-xl font-bold text-navy">{t.title({ name: print.coachee.name })}</h1>
       {/* Two spaces each side of the dot, as the prototype draws it; kept, and wrapped where the paper is narrow (F3). */}
       <p className="mt-1 whitespace-pre-wrap text-sm text-muted">{meta.join('  ·  ')}</p>
 
       {print.lastWeekItems.length > 0 && (
         <section>
-          <h2 className={h2}>Last week&apos;s action items</h2>
+          <h2 className={h2}>{agreement.lastWeek}</h2>
           {print.lastWeekItems.map((item, i) => (
-            <p key={i} className={line}>{item.done ? '[x] ' : '[ ] '}{item.text}</p>
+            <p key={i} className={line}>{item.done ? TICKED : UNTICKED}{item.text}</p>
           ))}
         </section>
       )}
 
       <section>
-        <h2 className={h2}>Goal</h2>
+        <h2 className={h2}>{goal.title}</h2>
         {goalHasTarget(print.goal) ? (
           <>
-            <p className={line}>{printGoalLine('This month', print.goal.monthly, formatRupiahCompact)}</p>
-            <p className={line}>{printGoalLine('This year', print.goal.yearly, formatRupiahCompact)}</p>
+            <p className={line}>{printGoalLine('month', print.goal.monthly, money, language)}</p>
+            <p className={line}>{printGoalLine('year', print.goal.yearly, money, language)}</p>
           </>
         ) : (
-          <p className={line}>No goal set</p>
+          <p className={line}>{goal.none}</p>
         )}
       </section>
 
       <section>
-        <h2 className={h2}>Coaching tips</h2>
+        <h2 className={h2}>{agreement.tips}</h2>
         {print.tips.length
           ? print.tips.map((tip, i) => <p key={i} className={line}>{`${i + 1}. ${tip.text}`}</p>)
-          : <p className={line}>None added.</p>}
+          : <p className={line}>{t.noneAdded}</p>}
       </section>
 
       <section>
-        <h2 className={h2}>Next action items — from leads</h2>
+        <h2 className={h2}>{t.fromLeads}</h2>
         {print.leadActions.length
           ? print.leadActions.map((action, i) => (
-            <p key={i} className={line}>{printLeadActionLine(i, action, formatShortDay)}</p>
+            <p key={i} className={line}>{printLeadActionLine(i, action, day, language)}</p>
           ))
-          : <p className={line}>None.</p>}
+          : <p className={line}>{t.none}</p>}
       </section>
 
       <section>
-        <h2 className={h2}>Next action items — other</h2>
+        <h2 className={h2}>{t.other}</h2>
         {actionItems.length
           ? actionItems.map((item, i) => (
-            <p key={i} className={line}>{printActionLine(i, item, formatShortDay)}</p>
+            <p key={i} className={line}>{printActionLine(i, item, day)}</p>
           ))
-          : <p className={line}>None added.</p>}
+          : <p className={line}>{t.noneAdded}</p>}
       </section>
     </article>
   );

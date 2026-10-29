@@ -4,10 +4,13 @@ import { useEffect, useId, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { DateField } from '@/components/ui/date-field';
 import { Button, ErrorBanner, Field, Switch, TextInput } from '@/components/ui/field';
+import type { Language } from '@/i18n/language';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { adminOfficesMessages } from '@/i18n/messages/admin-offices';
 import { updateSubscription, type TenantRow } from '@/lib/admin';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { costMissingWords, subscriptionCosts } from '@/lib/billing';
-import { dayInZone, formatCalendarDay } from '@/lib/format';
+import { dayInZone, formatCalendarDay, moneyPrefix } from '@/lib/format';
 import { formatRupiah, groupDigits, parseDigits, toMajor, toMinor } from '@/lib/goals';
 
 /** The five fields, as typed. Money and the limit are text until saved: an empty box is "none". */
@@ -21,13 +24,13 @@ interface Draft {
 
 type FieldName = 'startDate' | 'endDate' | 'pricePerLeaderMinor' | 'maxLeaders' | 'keepActiveAfterEnd';
 
-function draftOf(row: TenantRow): Draft {
+function draftOf(row: TenantRow, language: Language): Draft {
   const s = row.subscription;
   return {
     startDate: s?.startDate ?? '',
     endDate: s?.endDate ?? '',
     price: s?.pricePerLeaderMinor === null || s?.pricePerLeaderMinor === undefined
-      ? '' : groupDigits(toMajor(s.pricePerLeaderMinor)),
+      ? '' : groupDigits(toMajor(s.pricePerLeaderMinor), language),
     maxLeaders: s?.maxLeaders === null || s?.maxLeaders === undefined ? '' : String(s.maxLeaders),
     keepActiveAfterEnd: s?.keepActiveAfterEnd ?? false,
   };
@@ -58,8 +61,12 @@ export function SubscriptionDialog({
   onClose: () => void;
   onSaved: (row: TenantRow) => void;
 }) {
+  const language = useFigureLanguage();
+  const words = useLanguage();
+  const t = useMessages(adminOfficesMessages);
+  const w = t.subscription;
   const id = useId();
-  const [draft, setDraft] = useState<Draft>(() => draftOf(row));
+  const [draft, setDraft] = useState<Draft>(() => draftOf(row, language));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [fieldError, setFieldError] = useState<{ field: FieldName; message: string } | null>(null);
@@ -67,9 +74,11 @@ export function SubscriptionDialog({
   // Opened again, it starts from what is saved, with no old refusal on it.
   useEffect(() => {
     if (!open) return;
-    setDraft(draftOf(row));
+    setDraft(draftOf(row, language));
     setError(null);
     setFieldError(null);
+    // A change of language leaves an open form as it was typed (P18.98-T2 AC-3): only opening it again resets it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, row]);
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
@@ -104,15 +113,15 @@ export function SubscriptionDialog({
     const startDate = draft.startDate || null;
     const endDate = draft.endDate || null;
     if ((startDate === null) !== (endDate === null)) {
-      refuse(startDate === null ? 'startDate' : 'endDate', 'Enter a start date and an end date, or neither.');
+      refuse(startDate === null ? 'startDate' : 'endDate', w.bothOrNeither);
       return;
     }
     if (startDate && endDate && endDate < startDate) {
-      refuse('endDate', 'The end date is on or after the start date.');
+      refuse('endDate', w.endAfterStart);
       return;
     }
     if (draft.maxLeaders.trim() !== '' && !/^\d+$/.test(draft.maxLeaders.trim())) {
-      refuse('maxLeaders', 'Enter a whole number of leaders, or leave it empty for no limit.');
+      refuse('maxLeaders', w.wholeLeaders);
       return;
     }
 
@@ -144,14 +153,14 @@ export function SubscriptionDialog({
   return (
     <Modal
       open={open}
-      title="Edit subscription"
-      description={`KPM ${row.code} · ${row.branchName}`}
+      title={w.title}
+      description={t.office({ code: row.code, branch: row.branchName })}
       onClose={onClose}
       className="max-w-[30rem]"
       footer={(
         <div className="flex flex-wrap gap-2">
-          <Button type="submit" form={`${id}-form`} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
-          <Button variant="secondary" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button type="submit" form={`${id}-form`} disabled={busy}>{busy ? t.saving : w.save}</Button>
+          <Button variant="secondary" onClick={onClose} disabled={busy}>{t.cancel}</Button>
         </div>
       )}
     >
@@ -159,7 +168,7 @@ export function SubscriptionDialog({
         {error && <ErrorBanner {...error} />}
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Start date" htmlFor={`${id}-start`} error={errorOf('startDate')}>
+          <Field label={w.startDate} htmlFor={`${id}-start`} error={errorOf('startDate')}>
             <DateField
               id={`${id}-start`}
               value={draft.startDate}
@@ -169,9 +178,9 @@ export function SubscriptionDialog({
             />
           </Field>
           <Field
-            label="End date"
+            label={w.endDate}
             htmlFor={`${id}-end`}
-            hint="The last day the office can be used."
+            hint={w.endHint}
             error={errorOf('endDate')}
           >
             <DateField
@@ -185,25 +194,25 @@ export function SubscriptionDialog({
         </div>
 
         <Field
-          label="Price per leader per month"
+          label={w.price}
           htmlFor={`${id}-price`}
-          hint="Recorded with the office. Nothing is charged from it."
+          hint={w.priceHint}
           error={errorOf('pricePerLeaderMinor')}
         >
           <TextInput
             id={`${id}-price`}
             inputMode="numeric"
-            prefix="Rp"
+            prefix={moneyPrefix(language)}
             value={draft.price}
             invalid={Boolean(errorOf('pricePerLeaderMinor'))}
-            onChange={(e) => set('price', e.target.value.trim() === '' ? '' : groupDigits(parseDigits(e.target.value)))}
+            onChange={(e) => set('price', e.target.value.trim() === '' ? '' : groupDigits(parseDigits(e.target.value), language))}
           />
         </Field>
 
         <Field
-          label="Maximum leaders"
+          label={w.max}
           htmlFor={`${id}-max`}
-          hint="ABs and AABs together, the Owner included. Empty for no limit."
+          hint={w.maxHint}
           error={errorOf('maxLeaders')}
         >
           <TextInput
@@ -217,30 +226,30 @@ export function SubscriptionDialog({
 
         <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-1 rounded-md border border-hairline bg-base p-3 text-md">
           <dt className="text-muted">
-            {quota === null ? 'Per month' : `Per month for ${quota} ${quota === 1 ? 'leader' : 'leaders'}`}
+            {quota === null ? w.perMonth : w.perMonthFor({ n: quota })}
           </dt>
           <dd className="text-right font-semibold text-navy">
-            {costs.monthlyMinor === null ? costMissingWords(costs.missing.monthly) : formatRupiah(costs.monthlyMinor)}
+            {costs.monthlyMinor === null ? costMissingWords(costs.missing.monthly, words) : formatRupiah(costs.monthlyMinor, language)}
           </dd>
-          <dt className="text-muted">Duration</dt>
+          <dt className="text-muted">{w.duration}</dt>
           <dd className="text-right font-semibold text-navy">
             {costs.months === null
-              ? costMissingWords(costs.missing.months)
-              : `${costs.months} ${costs.months === 1 ? 'month' : 'months'}`}
+              ? costMissingWords(costs.missing.months, words)
+              : w.months({ n: costs.months })}
           </dd>
-          <dt className="text-muted">Over the duration</dt>
+          <dt className="text-muted">{w.overDuration}</dt>
           <dd className="text-right font-semibold text-navy">
-            {costs.totalMinor === null ? costMissingWords(costs.missing.total) : formatRupiah(costs.totalMinor)}
+            {costs.totalMinor === null ? costMissingWords(costs.missing.total, words) : formatRupiah(costs.totalMinor, language)}
           </dd>
         </dl>
 
         <p className="text-md text-navy">
-          Leaders used now: <span className="font-semibold">{row.leadersUsed}</span>
+          {w.leadersUsed({ n: <span className="font-semibold">{row.leadersUsed}</span> })}
         </p>
 
         <Switch
           id={`${id}-keep`}
-          label="Keep active after the end date"
+          label={w.keepActive}
           checked={draft.keepActiveAfterEnd}
           onChange={(next) => set('keepActiveAfterEnd', next)}
         />
@@ -249,15 +258,14 @@ export function SubscriptionDialog({
         <div aria-live="polite" className="flex flex-col gap-2">
           {overLimit && (
             <p className="rounded-md border border-alert/30 bg-alert/5 p-3 text-md text-navy">
-              This office has {row.leadersUsed} leaders now, more than {max}. Nobody is demoted, and each new
-              AB or AAB past {max} waits for AgencyBoost&apos;s approval.
+              {w.overLimit({ used: row.leadersUsed, max: max as number })}
             </p>
           )}
           {endPassed && (
             <p className="rounded-md border border-alert/30 bg-alert/5 p-3 text-md text-navy">
               {draft.keepActiveAfterEnd
-                ? `This end date, ${formatCalendarDay(draft.endDate)}, has passed. The office stays open because it is kept active.`
-                : `This end date, ${formatCalendarDay(draft.endDate)}, has passed. Once you save, nobody in this office can use AgencyBoost until the date is moved or it is kept active.`}
+                ? w.endPassedKept({ day: formatCalendarDay(draft.endDate, language) })
+                : w.endPassed({ day: formatCalendarDay(draft.endDate, language) })}
             </p>
           )}
         </div>

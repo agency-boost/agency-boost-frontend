@@ -1,4 +1,8 @@
+'use client';
+
 import { Button } from '@/components/ui/field';
+import { useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
 
 /**
  * *Previous*, *Page {n} of {m}*, *Next* — for a list the server pages by number (P12.1-T4 AC-4).
@@ -23,17 +27,18 @@ export function Pager({
   label: string;
   onPage: (page: number) => void;
 }) {
+  const t = useMessages(uiMessages).pager;
   if (pages <= 1) return null;
   return (
     <nav aria-label={label} className="mt-4 flex flex-wrap items-center gap-3">
       <Button variant="secondary" disabled={page <= 1} onClick={() => onPage(page - 1)}>
-        Previous
+        {t.previous}
       </Button>
       <span className="text-sm text-muted" aria-live="polite">
-        Page {page} of {pages}
+        {t.page({ page: String(page), pages: String(pages) })}
       </span>
       <Button variant="secondary" disabled={page >= pages} onClick={() => onPage(page + 1)}>
-        Next
+        {t.next}
       </Button>
     </nav>
   );

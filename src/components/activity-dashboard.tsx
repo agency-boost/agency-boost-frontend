@@ -11,6 +11,10 @@ import { Segmented } from '@/components/ui/segmented';
 import { SkeletonCards, SkeletonTable } from '@/components/ui/skeleton';
 import { TermText } from '@/components/ui/term-tip';
 import { SummaryStrip } from '@/components/summary-strip';
+import type { MessagesOf } from '@/i18n/catalogue';
+import type { Language } from '@/i18n/language';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { activityMessages } from '@/i18n/messages/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   readActivityDashboard, type ActivityDashboard, type DashboardBucket, type DashboardRange,
@@ -64,11 +68,10 @@ export interface DashboardSubject {
  * number (`ACTIVITY.DASHBOARD_RANGE_MAX_DAYS`) and is not restated here: a longer one comes back
  * refused, with the server's words.
  */
-const RANGES = [
-  { id: 'ROLLING_7D', label: 'Last 7 days' },
-  { id: 'ROLLING_30D', label: 'Last 30 days' },
-  { id: 'CUSTOM', label: 'Custom' },
-] as const;
+const RANGES = ['ROLLING_7D', 'ROLLING_30D', 'CUSTOM'] as const;
+
+/** The module's words, in the reader's language (`messages/activity.tsx`; P18.98-T4). */
+type ActivityWords = MessagesOf<typeof activityMessages.en>;
 
 /**
  * How long a custom date must stay put before it is asked about. A date field typed into a digit at a
@@ -77,11 +80,14 @@ const RANGES = [
  */
 const SETTLE_MS = 400;
 
-/** Why a custom range cannot be asked for, or null. Only what needs no server number: the rest is the server's. */
-function invalid(from: string, to: string, today: string): string | null {
-  if (!from || !to) return 'Choose both dates.';
-  if (from > to) return 'The range starts after it ends.';
-  if (to > today) return `The range ends after today, ${formatShortDay(today, { year: true })}.`;
+/**
+ * Why a custom range cannot be asked for, or null. Only what needs no server number: the rest is the server's. In the
+ * reader's words, its day in the reader's figures (P18.98-T4).
+ */
+function invalid(from: string, to: string, today: string, t: ActivityWords, figures: Language): string | null {
+  if (!from || !to) return t.dashboard.chooseBoth;
+  if (from > to) return t.dashboard.startsAfterEnd;
+  if (to > today) return t.dashboard.endsAfterToday({ day: formatShortDay(today, { year: true }, figures) });
   return null;
 }
 
@@ -93,6 +99,8 @@ function invalid(from: string, to: string, today: string): string | null {
  * logs another person's day (§3.5), so the link would be an action the API refuses.
  */
 export function ActivityDashboardPanel({ subject }: { subject?: DashboardSubject }) {
+  const t = useMessages(activityMessages);
+  const figures = useFigureLanguage();
   const [range, setRange] = useState<DashboardRange>('ROLLING_7D');
   const [custom, setCustom] = useState<{ from: string; to: string } | null>(null);
   const [view, setView] = useState<ActivityDashboard | null>(null);
@@ -103,7 +111,7 @@ export function ActivityDashboardPanel({ subject }: { subject?: DashboardSubject
   const phone = usePhone();
 
   const today = view?.today ?? null;
-  const problem = range === 'CUSTOM' && custom && today ? invalid(custom.from, custom.to, today) : null;
+  const problem = range === 'CUSTOM' && custom && today ? invalid(custom.from, custom.to, today, t, figures) : null;
 
   useEffect(() => {
     if (range === 'CUSTOM' && custom && problem) return undefined;
@@ -147,28 +155,29 @@ export function ActivityDashboardPanel({ subject }: { subject?: DashboardSubject
   const current = view && view.range === range
     && (range !== 'CUSTOM' || (custom !== null && view.from === custom.from && view.to === custom.to));
   const showing = current && !problem && !refused ? view : null;
-  const caption = subject ? `${subject.name}’s activity` : 'Your activity';
+  const caption = subject ? t.dashboard.theirs({ name: subject.name }) : t.dashboard.yours;
+  const ranges = RANGES.map((id) => ({ id, label: t.dashboard.ranges[id] }));
 
   return (
     <>
       {error && <ErrorBanner {...error} />}
 
-      <Segmented label="Range" tabs={RANGES} active={range} onSelect={choose} className="w-fit [&_button]:whitespace-nowrap [&_button]:px-3.5">
+      <Segmented label={t.dashboard.range} tabs={ranges} active={range} onSelect={choose} className="w-fit [&_button]:whitespace-nowrap [&_button]:px-3.5">
         {() => (
           <>
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
               {range === 'CUSTOM' && custom ? (
                 <div className="flex items-center gap-2">
                   <DateField
-                    aria-label="From"
+                    aria-label={t.dashboard.from}
                     value={custom.from}
                     max={today ?? undefined}
                     onChange={(from) => setCustom({ ...custom, from })}
                     className="w-40"
                   />
-                  <span className="text-sm text-muted">to</span>
+                  <span className="text-sm text-muted">{t.dashboard.toWord}</span>
                   <DateField
-                    aria-label="To"
+                    aria-label={t.dashboard.to}
                     value={custom.to}
                     max={today ?? undefined}
                     onChange={(to) => setCustom({ ...custom, to })}
@@ -189,21 +198,21 @@ export function ActivityDashboardPanel({ subject }: { subject?: DashboardSubject
               {view && (
                 <p role="status" className="text-sm text-muted">
                   {problem || refused ? (
-                    <span className="text-alert">Pick a valid range — {problem ?? refused}</span>
+                    <span className="text-alert">{t.dashboard.pickValid({ reason: problem ?? refused ?? '' })}</span>
                   ) : showing ? (
                     <RangeLabel view={showing} />
-                  ) : error ? null : 'Loading…'}
+                  ) : error ? null : t.dashboard.loading}
                 </p>
               )}
             </div>
 
             {/* Shaped like what is coming: on a phone, its lines (P18.95-T3 AC-6). */}
             {!view && !error && (phone ? (
-              <SkeletonCards count={3} label={`Loading ${caption.toLowerCase()}…`} />
+              <SkeletonCards count={3} label={t.dashboard.loadingList({ caption })} />
             ) : (
               <SkeletonTable
                 caption={caption}
-                columns={['Activity', 'Total', 'Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5']}
+                columns={[t.dashboard.activity, t.dashboard.total, ...[1, 2, 3, 4, 5].map((n) => t.dashboard.day({ n }))]}
               />
             ))}
 
@@ -223,29 +232,38 @@ export function ActivityDashboardPanel({ subject }: { subject?: DashboardSubject
  * day says so (ADR-0042). The payload still carries `correctedDays`; nothing here reads it.
  */
 function RangeLabel({ view }: { view: ActivityDashboard }) {
-  return (
-    <>
-      <strong className="text-navy">{view.days}</strong> {view.days === 1 ? 'day' : 'days'}
-      {' · '}
-      {formatShortDay(view.from)} – {formatShortDay(view.to, { year: true })}
-    </>
-  );
+  const t = useMessages(activityMessages);
+  const figures = useFigureLanguage();
+  return t.dashboard.rangeDays({
+    days: <strong className="text-navy">{view.days}</strong>,
+    n: view.days,
+    from: formatShortDay(view.from, {}, figures),
+    to: formatShortDay(view.to, { year: true }, figures),
+  });
 }
 
-/** A column's heading: the day, or the block and its dates (`Overall.html:5000-5050`). */
-function heading(bucket: DashboardBucket, index: number): { label: string; detail: string } {
+/**
+ * A column's heading: the day, or the block and its dates (`Overall.html:5000-5050`) — its words the reader's, its
+ * weekday and days in the reader's figures (P18.98-T4).
+ */
+function heading(bucket: DashboardBucket, index: number, t: ActivityWords, figures: Language): { label: string; detail: string } {
   const dates = bucket.from === bucket.to
-    ? formatShortDay(bucket.from)
-    : `${formatShortDay(bucket.from)}–${formatShortDay(bucket.to)}`;
-  if (bucket.kind === 'day') return { label: formatWeekday(bucket.from), detail: bucket.from.slice(8).replace(/^0/, '') };
-  if (bucket.kind === 'week') return { label: `Week ${index + 1}`, detail: dates };
-  return { label: `Remaining ${bucket.days} ${bucket.days === 1 ? 'day' : 'days'}`, detail: dates };
+    ? formatShortDay(bucket.from, {}, figures)
+    : `${formatShortDay(bucket.from, {}, figures)}–${formatShortDay(bucket.to, {}, figures)}`;
+  if (bucket.kind === 'day') {
+    return { label: formatWeekday(bucket.from, figures), detail: bucket.from.slice(8).replace(/^0/, '') };
+  }
+  if (bucket.kind === 'week') return { label: t.dashboard.week({ n: index + 1 }), detail: dates };
+  return { label: t.dashboard.remaining({ n: bucket.days }), detail: dates };
 }
 
-/** Why a row is not one of the sections shown today, in the words of whoever's days they are. */
-function standingNote(standing: Exclude<DashboardStanding, 'shown'>, subject?: DashboardSubject): string {
-  if (standing === 'archived') return 'Archived';
-  return `No longer in ${subject ? PRONOUN_FORMS[subject.pronoun].possessive : 'your'} sections`;
+/**
+ * Why a row is not one of the sections shown today, in the words of whoever's days they are: *your*, or the coachee's
+ * pronoun in English (`PRONOUN_FORMS`), and *-nya* for anybody in Indonesian.
+ */
+function standingNote(standing: Exclude<DashboardStanding, 'shown'>, t: ActivityWords, subject?: DashboardSubject): string {
+  if (standing === 'archived') return t.dashboard.archived;
+  return subject ? t.dashboard.notTheirs({ possessive: PRONOUN_FORMS[subject.pronoun].possessive }) : t.dashboard.notYours;
 }
 
 /**
@@ -258,9 +276,13 @@ function standingNote(standing: Exclude<DashboardStanding, 'shown'>, subject?: D
 function Dashboard({
   view, subject, caption, phone,
 }: { view: ActivityDashboard; subject?: DashboardSubject; caption: string; phone: boolean }) {
+  const t = useMessages(activityMessages);
+  const figures = useFigureLanguage();
   const { config } = useTenantConfig();
   const { me } = useSession();
-  const columns: Column[] = ['Activity', 'Total', ...view.buckets.map(heading)];
+  const columns: Column[] = [
+    t.dashboard.activity, t.dashboard.total, ...view.buckets.map((bucket, i) => heading(bucket, i, t, figures)),
+  ];
   const count = (n: number, key: string) => (
     <Cell key={key} className={cn('text-center', n === 0 ? 'text-muted' : 'font-medium')}>{n}</Cell>
   );
@@ -282,7 +304,7 @@ function Dashboard({
     subject?.rungCode ?? me?.membership?.orgLevelCode ?? '',
     (category) => totals.get(category.code) ?? 0,
     // What a touch is, once, on the strip's total (P18.95-T9 AC-3; UI-028).
-    { label: 'Total touches', value: view.total, term: 'TOUCHES' },
+    { label: t.dashboard.totalTouches, value: view.total, term: 'TOUCHES' },
   );
 
   return (
@@ -291,11 +313,11 @@ function Dashboard({
 
       {view.total === 0 && (
         <p className="mb-3 text-sm text-muted">
-          Nothing logged in this range yet.
+          {t.dashboard.nothingLogged}
           {!subject && (
             <>
               {' '}
-              <Link href="/activity/log" className="font-semibold text-navy underline">Log Activity</Link>
+              <Link href="/activity/log" className="font-semibold text-navy underline">{t.dashboard.logActivity}</Link>
             </>
           )}
         </p>
@@ -316,7 +338,7 @@ function Dashboard({
             */}
           {view.range === 'ROLLING_30D' && (
             <Row className="bg-amber/[0.16] font-bold">
-              <Cell className="font-display">Total — all categories</Cell>
+              <Cell className="font-display">{t.dashboard.totalAll}</Cell>
               <Cell className="bg-amber/[0.28] text-center">{view.total}</Cell>
               {view.counts.map((n, i) => (
                 <Cell key={i} className="text-center">{n}</Cell>
@@ -350,13 +372,14 @@ function SectionRows({
   /** Which of this section's words first name a term on the screen (`activityTermMentions`, P18.95-T9 AC-3). */
   terms?: Map<string, TermKey[]>;
 }) {
+  const t = useMessages(activityMessages);
   return (
     <>
       <Row className="bg-navy/5 font-bold">
         <Cell className="font-display">
           {section.label}
           {section.standing !== 'shown' && (
-            <ConfigBadge tone="navy" className="ml-2 align-middle">{standingNote(section.standing, subject)}</ConfigBadge>
+            <ConfigBadge tone="navy" className="ml-2 align-middle">{standingNote(section.standing, t, subject)}</ConfigBadge>
           )}
         </Cell>
         <Cell className="bg-amber/[0.12] text-center">{section.total}</Cell>
@@ -377,7 +400,7 @@ function SectionRows({
                   </span>
                 )}
                 {type.standing !== 'shown' && section.standing === 'shown' && (
-                  <ConfigBadge tone="navy" className="mt-1">{standingNote(type.standing, subject)}</ConfigBadge>
+                  <ConfigBadge tone="navy" className="mt-1">{standingNote(type.standing, t, subject)}</ConfigBadge>
                 )}
               </span>
             </span>
@@ -415,6 +438,8 @@ interface PhoneItem {
  * it as a tap does. The figures are the same answer's, the zero muted as in the table.
  */
 function PhoneTotals({ view, subject, caption }: { view: ActivityDashboard; subject?: DashboardSubject; caption: string }) {
+  const t = useMessages(activityMessages);
+  const figures = useFigureLanguage();
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   const toggle = (key: string) => setOpen((was) => {
     const next = new Set(was);
@@ -422,7 +447,7 @@ function PhoneTotals({ view, subject, caption }: { view: ActivityDashboard; subj
     else next.add(key);
     return next;
   });
-  const columns = view.buckets.map((bucket, i) => ({ kind: bucket.kind, ...heading(bucket, i) }));
+  const columns = view.buckets.map((bucket, i) => ({ kind: bucket.kind, ...heading(bucket, i, t, figures) }));
   const line = (key: string, item: PhoneItem) => (
     <PhoneLine key={key} item={item} columns={columns} open={open.has(key)} onToggle={() => toggle(key)} />
   );
@@ -431,12 +456,12 @@ function PhoneTotals({ view, subject, caption }: { view: ActivityDashboard; subj
     <div className="overflow-hidden rounded-lg border border-hairline bg-card">
       {/* The table's first two headings, over the lines: each line's name is its own. */}
       <p aria-hidden="true" className="flex justify-between border-b border-hairline px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted">
-        <span>Activity</span>
-        <span className="pr-6">Total</span>
+        <span>{t.dashboard.activity}</span>
+        <span className="pr-6">{t.dashboard.total}</span>
       </p>
       <ul role="list" aria-label={caption}>
         {view.range === 'ROLLING_30D' && line('all', {
-          kind: 'all', label: 'Total — all categories', order: 0, description: null, note: null, total: view.total, counts: view.counts,
+          kind: 'all', label: t.dashboard.totalAll, order: 0, description: null, note: null, total: view.total, counts: view.counts,
         })}
         {view.sections.map((section) => {
           const sectionKey = section.code || section.label;
@@ -447,7 +472,7 @@ function PhoneTotals({ view, subject, caption }: { view: ActivityDashboard; subj
                 label: section.label,
                 order: 0,
                 description: null,
-                note: section.standing !== 'shown' ? standingNote(section.standing, subject) : null,
+                note: section.standing !== 'shown' ? standingNote(section.standing, t, subject) : null,
                 total: section.total,
                 counts: section.counts,
               })}
@@ -456,7 +481,7 @@ function PhoneTotals({ view, subject, caption }: { view: ActivityDashboard; subj
                 label: type.label,
                 order: type.displayOrder,
                 description: type.description,
-                note: type.standing !== 'shown' && section.standing === 'shown' ? standingNote(type.standing, subject) : null,
+                note: type.standing !== 'shown' && section.standing === 'shown' ? standingNote(type.standing, t, subject) : null,
                 total: type.total,
                 counts: type.counts,
               }))}
@@ -477,6 +502,7 @@ function PhoneLine({
   open: boolean;
   onToggle: () => void;
 }) {
+  const t = useMessages(activityMessages);
   const panelId = useId();
   return (
     <li
@@ -500,7 +526,7 @@ function PhoneLine({
           {item.note && <ConfigBadge tone="navy" className="mt-1">{item.note}</ConfigBadge>}
         </span>
         <span className="shrink-0 font-bold">
-          <span className="sr-only">, total </span>
+          <span className="sr-only">{t.dashboard.totalSaid}</span>
           {item.total}
         </span>
         <span aria-hidden="true" className={cn('w-4 shrink-0 text-center leading-normal text-muted transition-transform', open && 'rotate-180')}>⌄</span>

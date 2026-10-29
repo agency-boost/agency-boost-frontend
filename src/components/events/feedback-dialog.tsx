@@ -4,16 +4,11 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
 import { Segmented } from '@/components/ui/segmented';
-import { ADMIN_COPY } from '@/lib/events-admin';
+import { useMessages } from '@/i18n/language-provider';
+import { eventsOfficeMessages } from '@/i18n/messages/events-office';
 import { useCan } from '@/lib/session';
 import { FeedbackSummarySection } from './feedback-summary';
 import { RollCallSection } from './roll-call';
-
-/** The dialog's two parts, as tabs (P18.8-T13, ADR-0161 §6). */
-const PARTS = [
-  { id: 'roll-call', label: ADMIN_COPY.rollCall },
-  { id: 'feedback', label: ADMIN_COPY.feedbackSummaryTab },
-] as const;
 
 /**
  * **What *View feedback* opens on a past event's row** (`KPM_Owner.html:1655`, an `alert()` there; P18.5-T5
@@ -36,6 +31,12 @@ const PARTS = [
  * tab strip**: a strip of one tab is a control that switches nothing.
  */
 export function FeedbackDialog({ eventId, title, onClose }: { eventId: string; title: string; onClose: () => void }) {
+  const t = useMessages(eventsOfficeMessages);
+  /** The dialog's two parts, as tabs (P18.8-T13, ADR-0161 §6). */
+  const parts = [
+    { id: 'roll-call', label: t.rollCall },
+    { id: 'feedback', label: t.feedbackSummaryTab },
+  ] as const;
   const [version, setVersion] = useState(0);
   const mayReadRollCall = useCan('event_attendance:confirm');
   const mayReadFeedback = useCan('event_feedback:read');
@@ -57,14 +58,14 @@ export function FeedbackDialog({ eventId, title, onClose }: { eventId: string; t
       footer={(
         // A way out a finger can find: Escape and the scrim close it too, and neither is visible. Held at the foot.
         <div className="flex justify-end pt-1">
-          <Button variant="secondary" onClick={onClose}>{ADMIN_COPY.close}</Button>
+          <Button variant="secondary" onClick={onClose}>{t.close}</Button>
         </div>
       )}
     >
       {tabbed ? (
         <Segmented
-          label={ADMIN_COPY.feedbackParts}
-          tabs={PARTS}
+          label={t.feedbackParts}
+          tabs={parts}
           active={part}
           onSelect={setPart}
           className="w-fit [&_button]:whitespace-nowrap [&_button]:px-3.5"

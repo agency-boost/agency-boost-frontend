@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
-import { atWidth, wears } from '@test/harness';
+import { atWidth, browserChose, resetLanguage, wears } from '@test/harness';
 import {
   billions, bodyOf, completedMeeting, makeMeetingView, makeScorecard, makeScorecardKeptBefore, readOnlyMeeting, renderTab,
   versionConflict, writeFailed, writesIn,
@@ -55,8 +55,8 @@ describe('P18.97-T1 the forum’s stats table, the client’s reference slide (A
     const headers = within(table()).getAllByRole('columnheader');
     expect(headers.map((h) => h.textContent)).toEqual([
       'Metrics', '⟵ Full Year & YTD View ⟶', '⟵ Monthly View ⟶',
-      "Full Year 2025(Jan-Des '25)", "YTD 2025(Jan-Sep '25)", "YTD 2026(Jan-Sep '26)", 'This Month, Last Year(Sep-25)',
-      'Last Month(Agu-26)', 'This Month(Sep-26)', 'Monthly Target',
+      "Full Year 2025(Jan-Dec '25)", "YTD 2025(Jan-Sep '25)", "YTD 2026(Jan-Sep '26)", 'This Month, Last Year(Sep-25)',
+      'Last Month(Aug-26)', 'This Month(Sep-26)', 'Monthly Target',
     ]);
     const ytd = screen.getByRole('columnheader', { name: "YTD 2025 (Jan-Sep '25)" });
     expect(ytd).toHaveClass('text-alert');
@@ -74,7 +74,7 @@ describe('P18.97-T1 the forum’s stats table, the client’s reference slide (A
     const { unmount } = renderTab(Scorecard, makeMeetingView({ date: '2026-01-13', scorecard: january }));
     expect(screen.getByRole('columnheader', { name: "YTD 2026 (Jan '26)" })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: "YTD 2025 (Jan '25)" })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Last Month (Des-25)' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Last Month (Dec-25)' })).toBeInTheDocument();
     unmount();
     const december = makeScorecard({
       periods: {
@@ -83,8 +83,8 @@ describe('P18.97-T1 the forum’s stats table, the client’s reference slide (A
       },
     });
     renderTab(Scorecard, makeMeetingView({ date: '2026-12-15', scorecard: december }));
-    expect(screen.getByRole('columnheader', { name: "Full Year 2025 (Jan-Des '25)" })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: "YTD 2025 (Jan-Des '25)" })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: "Full Year 2025 (Jan-Dec '25)" })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: "YTD 2025 (Jan-Dec '25)" })).toBeInTheDocument();
   });
 
   it('P18.97-T1 AC-3 the two groups are header cells over their columns (colgroup), their arrows hidden; a dashed line between', () => {
@@ -107,40 +107,62 @@ describe('P18.97-T1 the forum’s stats table, the client’s reference slide (A
     renderTab(Scorecard);
     const firstCells = within(table()).getAllByRole('row').slice(2).map((r) => r.firstElementChild!.textContent);
     expect(firstCells).toEqual([
-      'APE (Rp M)', 'Manpower', 'FLC (avg. monthly)', 'Annual Active Agents1',
+      'APE (IDR B)', 'Manpower', 'FLC (avg. monthly)', 'Annual Active Agents1',
       'Activation',
       '3M new agent %2', 'Avg. monthly AA3',
       'Productivity',
-      'Case submission4', 'Cases/producing agents', 'Avg. Case Size (Rp jt)4',
+      'Case submission4', 'Cases/producing agents', 'Avg. Case Size (IDR M)4',
     ]);
     expect(screen.queryByText(/New AA/)).toBeNull();
     expect(screen.queryByText(/Producing agents/)).toBeNull();
-    expect(rowOf('APE (Rp M)').firstElementChild).toHaveClass('font-bold');
+    expect(rowOf('APE (IDR B)').firstElementChild).toHaveClass('font-bold');
     const manpower = rowOf('Manpower').firstElementChild!;
     expect(manpower).toHaveClass('font-bold');
     expect(manpower.className).toMatch(/color-mix\(in_srgb,var\(--color-alert\)_4%/);
     expect(rowOf('FLC (avg. monthly)').firstElementChild).toHaveClass('pl-7', 'font-normal');
     expect(rowOf('Annual Active Agents').firstElementChild).toHaveClass('pl-7', 'font-bold');
     expect(rowOf('Cases/producing agents').firstElementChild).toHaveClass('font-bold');
-    expect(rowOf('Avg. Case Size (Rp jt)').firstElementChild!.className).toMatch(/color-mix\(in_srgb,var\(--color-alert\)_4%/);
+    expect(rowOf('Avg. Case Size (IDR M)').firstElementChild!.className).toMatch(/color-mix\(in_srgb,var\(--color-alert\)_4%/);
     expect(screen.getByText('Activation').className).toMatch(/color-mix\(in_srgb,var\(--color-alert\)_6%/);
   });
 
   it('P18.97-T1 AC-15 the numbers as the slide writes them: APE in miliar and case size in juta to a tenth, % whole, counts whole, a comma', () => {
     renderTab(Scorecard);
-    expect(cells('APE (Rp M)')).toEqual(['12,1', '7,9', '8,4*, covers part of its period; see the notes below', '0,8', 'pending data', 'pending data']);
+    expect(cells('APE (IDR B)')).toEqual(['12.1', '7.9', '8.4*, covers part of its period; see the notes below', '0.8', 'pending data', 'pending data']);
     expect(cells('Manpower')).toEqual(['201', '190', '187', '196', '181', '187']);
     expect(cells('Avg. monthly AA').slice(0, 4)).toEqual(['14', '12', '11', '10']);
     expect(cells('3M new agent %').slice(0, 3)).toEqual(['30%', '25%', 'pending data']);
-    expect(cells('Cases/producing agents').slice(0, 2)).toEqual(['4,4', '3,8']);
+    expect(cells('Cases/producing agents').slice(0, 2)).toEqual(['4.4', '3.8']);
+    expect(cells('Avg. Case Size (IDR M)').slice(0, 2)).toEqual(['19.8', '17.6']);
+  });
+
+  it('P18.98-T3 AC-1 in Indonesian: APE (Rp M) and Avg. Case Size (Rp jt), each figure with a comma, the months Indonesian', () => {
+    renderTab(Scorecard, makeMeetingView(), {}, 'id');
+    // The table's own words in Indonesian too since P18.98-T4 moved them into the catalogue.
+    expect(cells('APE (Rp M)')).toEqual(['12,1', '7,9', '8,4*, hanya mencakup sebagian periodenya; lihat catatan di bawah', '0,8', 'menunggu data', 'menunggu data']);
     expect(cells('Avg. Case Size (Rp jt)').slice(0, 2)).toEqual(['19,8', '17,6']);
+    expect(cells('Cases/producing agents').slice(0, 2)).toEqual(['4,4', '3,8']);
+    expect(screen.queryByText(/IDR/)).toBeNull();
+    expect(screen.getByRole('columnheader', { name: 'Last Month (Agu-26)' })).toBeInTheDocument();
+    expect(screen.getByText('AS OF 5 Sep 2026')).toBeInTheDocument();
+  });
+
+  it('P18.98-T3 AC-1, AC-2 a small sum reads < 0,1 in Indonesian and < 0.1 in English — the same figure, never 0', () => {
+    const small = withRows((row) => (row.key === 'ape'
+      ? { ...row, cells: { ...row.cells, fy: { kind: 'figure', value: billions(0.04), leavesOut: [] } } }
+      : row));
+    const { unmount } = renderTab(Scorecard, small, {}, 'id');
+    expect(cells('APE (Rp M)')[0]).toBe('< 0,1');
+    unmount();
+    renderTab(Scorecard, small);
+    expect(cells('APE (IDR B)')[0]).toBe('< 0.1');
   });
 
   it('P18.97-T1 AC-15 a sum that is not zero and rounds to 0,0 reads < 0,1; nothing reads the old two places below 1', () => {
     renderTab(Scorecard, withRows((row) => (row.key === 'ape'
       ? { ...row, cells: { ...row.cells, fy: { kind: 'figure', value: billions(0.04), leavesOut: [] }, ytdLastYear: { kind: 'figure', value: billions(0.1), leavesOut: [] } } }
       : row)));
-    expect(cells('APE (Rp M)').slice(0, 2)).toEqual(['< 0,1', '0,1']);
+    expect(cells('APE (IDR B)').slice(0, 2)).toEqual(['< 0.1', '0.1']);
   });
 
   it('P18.97-T1 AC-7 a Not tracked cell is a light hatch from a token, nothing to see, Not tracked to a screen reader — never a navy block', () => {
@@ -157,7 +179,7 @@ describe('P18.97-T1 the forum’s stats table, the client’s reference slide (A
 
   it('P18.97-T1 AC-8 a red outline frames the YTD pair on APE, Annual Active Agents and Case submission, and nowhere else', () => {
     renderTab(Scorecard);
-    for (const label of ['APE (Rp M)', 'Annual Active Agents', 'Case submission']) {
+    for (const label of ['APE (IDR B)', 'Annual Active Agents', 'Case submission']) {
       const [lastYear, thisYear] = [rowOf(label).children[2], rowOf(label).children[3]];
       expect([label, lastYear.className]).toEqual([label, expect.stringContaining('border-y-2 border-l-2 border-y-alert border-l-alert')]);
       expect([label, thisYear.className]).toEqual([label, expect.stringContaining('border-y-2 border-r-2 border-y-alert border-r-alert')]);
@@ -191,8 +213,8 @@ describe('P18.97-T1 the forum’s stats table, the client’s reference slide (A
       { column: 'fy', leavesOut: ['2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06', '2025-07'] },
       { column: 'ytd', leavesOut: ['2026-08'] },
     ] } });
-    expect(screen.getByText('(*) Full Year 2025 covers Agu–Des 2025 only; earlier months not uploaded')).toBeInTheDocument();
-    expect(screen.getByText('(*) YTD 2026 covers Jan–Sep 2026 without Agu 2026, not uploaded')).toBeInTheDocument();
+    expect(screen.getByText('(*) Full Year 2025 covers Aug–Dec 2025 only; earlier months not uploaded')).toBeInTheDocument();
+    expect(screen.getByText('(*) YTD 2026 covers Jan–Sep 2026 without Aug 2026, not uploaded')).toBeInTheDocument();
     // Marked: APE's Full Year and the three YTD figures that leave August out; nothing else.
     const marks = within(table()).getAllByText('*');
     expect(marks).toHaveLength(5);
@@ -212,7 +234,7 @@ describe('P18.97-T1 the forum’s stats table, the client’s reference slide (A
 
   it('*—* over nothing says why: no policies, no annual active agents', () => {
     renderTab(Scorecard, withRows((row) => (row.key === 'cases_per_producing_agent' ? { ...row, cells: { ...row.cells, ytd: { kind: 'none' } } } : row)));
-    expect(within(rowOf('Avg. Case Size (Rp jt)').children[3] as HTMLElement).getByText('No policies in this period.')).toHaveClass('sr-only');
+    expect(within(rowOf('Avg. Case Size (IDR M)').children[3] as HTMLElement).getByText('No policies in this period.')).toHaveClass('sr-only');
     expect(within(rowOf('Cases/producing agents').children[3] as HTMLElement).getByText('No annual active agents in this period.')).toHaveClass('sr-only');
   });
 
@@ -254,20 +276,20 @@ describe('P18.97-T1 AC-16, AC-17 the table on a tablet and on a phone', () => {
     await waitFor(() => expect(screen.queryByRole('table')).toBeNull());
     const cards = screen.getAllByRole('listitem').filter((li) => li.querySelector('h4'));
     expect(cards.map((c) => c.querySelector('h4')!.textContent)).toEqual([
-      'APE (Rp M)', 'Manpower', 'FLC (avg. monthly)', 'Annual Active Agents1', '3M new agent %2', 'Avg. monthly AA3',
-      'Case submission4', 'Cases/producing agents', 'Avg. Case Size (Rp jt)4',
+      'APE (IDR B)', 'Manpower', 'FLC (avg. monthly)', 'Annual Active Agents1', '3M new agent %2', 'Avg. monthly AA3',
+      'Case submission4', 'Cases/producing agents', 'Avg. Case Size (IDR M)4',
     ]);
     const ape = within(cards[0]);
     const pairs = [...cards[0].querySelectorAll('dt')].map((dt) => [dt.textContent, dt.nextElementSibling!.textContent]);
     expect(pairs).toEqual([
-      ["YTD 2026(Jan-Sep '26)", '8,4*, covers part of its period; see the notes below'],
-      ["YTD 2025(Jan-Sep '25)", '7,9'],
+      ["YTD 2026(Jan-Sep '26)", '8.4*, covers part of its period; see the notes below'],
+      ["YTD 2025(Jan-Sep '25)", '7.9'],
       ['Change', '+6%'],
       ['This Month(Sep-26)', 'pending data'],
-      ['Last Month(Agu-26)', 'pending data'],
+      ['Last Month(Aug-26)', 'pending data'],
       ['Monthly Target', ''],
     ]);
-    expect(ape.getByRole('textbox', { name: 'Monthly Target per unit, APE (Rp M)' })).toHaveValue('TBD');
+    expect(ape.getByRole('textbox', { name: 'Monthly Target per unit, APE (IDR B)' })).toHaveValue('TBD');
     // A row the table does not track month by month leaves its months and its target off its card.
     const producing = [...cards[3].querySelectorAll('dt')].map((dt) => dt.textContent);
     expect(producing).toEqual(["YTD 2026(Jan-Sep '26)", "YTD 2025(Jan-Sep '25)", 'Change']);
@@ -277,7 +299,7 @@ describe('P18.97-T1 AC-16, AC-17 the table on a tablet and on a phone', () => {
     // The footnotes and the (*) notes follow the cards.
     const notes = screen.getByText(/^Annual Active Agents — /).closest('ol')!;
     expect(cards.at(-1)!.compareDocumentPosition(notes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByText('(*) YTD 2026 covers Jan–Sep 2026 without Agu 2026, not uploaded')).toBeInTheDocument();
+    expect(screen.getByText('(*) YTD 2026 covers Jan–Sep 2026 without Aug 2026, not uploaded')).toBeInTheDocument();
   });
 
   it('P18.97-T1 AC-17 768px and wider draw the table, not the cards', async () => {
@@ -331,7 +353,7 @@ describe('P18.97-T8 the phone’s cards after the walk (F1, F2)', () => {
 
   it('P18.97-T8 F2 at 375px an editor’s target is a line of its own under the figures, outside their grid; the field fills it', async () => {
     await onAPhone();
-    const ape = cardOf('APE (Rp M)');
+    const ape = cardOf('APE (IDR B)');
     const [figures, target, ...more] = [...ape.querySelectorAll('dl')];
     expect(more).toEqual([]);
     // The figures' two-column grid holds the figures alone: no field sets the width of their value column.
@@ -345,7 +367,7 @@ describe('P18.97-T8 the phone’s cards after the walk (F1, F2)', () => {
     expect(target).not.toHaveClass('grid');
     expect(target).toHaveClass('flex', 'flex-wrap');
     expect(within(target).getByText('Monthly Target').tagName).toBe('DT');
-    const field = within(target).getByRole('textbox', { name: 'Monthly Target per unit, APE (Rp M)' });
+    const field = within(target).getByRole('textbox', { name: 'Monthly Target per unit, APE (IDR B)' });
     expect(field.closest('dd')).toHaveClass('flex-1');
     expect(field).toHaveValue('TBD');
   });
@@ -358,7 +380,7 @@ describe('P18.97-T8 the phone’s cards after the walk (F1, F2)', () => {
       ['YTD 2026', "(Jan-Sep '26)"],
       ['YTD 2025', "(Jan-Sep '25)"],
       ['This Month', '(Sep-26)'],
-      ['Last Month', '(Agu-26)'],
+      ['Last Month', '(Aug-26)'],
     ]);
     for (const dt of labels) expect(dt.firstElementChild).toHaveClass('flex', 'flex-wrap');
   });
@@ -376,7 +398,7 @@ describe('P18.97-T1 AC-10 *Monthly Target*, typed as a rate per unit', () => {
   it('P18.97-T1 AC-10 shown "{rate × units} ({rate} @ unit)" from the server; APE reads TBD with no rate, every other row blank', () => {
     renderTab(Scorecard);
     expect(screen.getAllByRole('textbox').map((i) => [i.getAttribute('aria-label'), (i as HTMLInputElement).value])).toEqual([
-      ['Monthly Target per unit, APE (Rp M)', 'TBD'],
+      ['Monthly Target per unit, APE (IDR B)', 'TBD'],
       ['Monthly Target per unit, Manpower', ''],
       ['Monthly Target per unit, FLC (avg. monthly)', '32 (1 @ unit)'],
       ['Monthly Target per unit, Avg. monthly AA', '96 (3 @ unit)'],
@@ -417,7 +439,7 @@ describe('P18.97-T1 AC-10 *Monthly Target*, typed as a rate per unit', () => {
     expect(writes).toHaveLength(1);
     expect(writes[0].init.method).toBe('PUT');
     expect(bodyOf(writes[0])).toEqual({ rate: 1.5, version: 1 });
-    expect(target('FLC (avg. monthly)')).toHaveValue('48 (1,5 @ unit)');
+    expect(target('FLC (avg. monthly)')).toHaveValue('48 (1.5 @ unit)');
     expect(held().scorecard.rows.find((r) => r.key === 'flc')!.monthlyTarget).toEqual({ rate: 1.5, value: 48, typed: null, version: 2 });
     expect(held().writtenIn).toBe(true);
   });
@@ -428,14 +450,14 @@ describe('P18.97-T1 AC-10 *Monthly Target*, typed as a rate per unit', () => {
       'PUT /leader-meetings/m14/monthly-targets/ape': { body: { rate: 50_000_000_000, value: 1_600_000_000_000, typed: null, version: 3 } },
       'PUT /leader-meetings/m14/monthly-targets/avg_monthly_aa': { body: { rate: null, value: null, typed: null, version: 2 } },
     });
-    await user.click(target('APE (Rp M)'));
-    expect(target('APE (Rp M)')).toHaveValue('');
-    expect(target('APE (Rp M)')).toHaveAttribute('placeholder', 'TBD');
-    await user.type(target('APE (Rp M)'), '0,5');
+    await user.click(target('APE (IDR B)'));
+    expect(target('APE (IDR B)')).toHaveValue('');
+    expect(target('APE (IDR B)')).toHaveAttribute('placeholder', 'TBD');
+    await user.type(target('APE (IDR B)'), '0,5');
     await user.tab();
     await waitFor(() => expect(writesIn(calls)).toHaveLength(1));
     expect(bodyOf(writesIn(calls)[0])).toEqual({ rate: 50_000_000_000, version: 2 });
-    await waitFor(() => expect(target('APE (Rp M)')).toHaveValue('16,0 (0,5 @ unit)'));
+    await waitFor(() => expect(target('APE (IDR B)')).toHaveValue('16.0 (0.5 @ unit)'));
 
     await user.click(target('Avg. monthly AA'));
     await user.clear(target('Avg. monthly AA'));
@@ -455,7 +477,7 @@ describe('P18.97-T1 AC-10 *Monthly Target*, typed as a rate per unit', () => {
     expect(writesIn(calls)).toHaveLength(0);
     expect(target('Manpower')).toHaveAttribute('aria-invalid', 'true');
     expect(target('Manpower')).toHaveValue('about 2');
-    expect(target('Manpower')).toHaveAccessibleDescription('Type a number from 0, like 1 or 0,5.');
+    expect(target('Manpower')).toHaveAccessibleDescription('Type a number from 0, like 1 or 0.5.');
     for (const typed of ['-1', '1,2,3']) {
       await user.clear(target('Manpower'));
       await user.type(target('Manpower'), typed);
@@ -468,7 +490,7 @@ describe('P18.97-T1 AC-10 *Monthly Target*, typed as a rate per unit', () => {
     await waitFor(() => expect(writesIn(calls)).toHaveLength(1));
     expect(bodyOf(writesIn(calls)[0])).toEqual({ rate: 2, version: 0 });
     await waitFor(() => expect(target('Manpower')).not.toHaveAttribute('aria-invalid'));
-    expect(screen.queryByText('Type a number from 0, like 1 or 0,5.')).toBeNull();
+    expect(screen.queryByText('Type a number from 0, like 1 or 0.5.')).toBeNull();
   });
 
   it('a 409: the meeting is read again, the cell shows what the other leader saved, and one line says so', async () => {
@@ -553,5 +575,61 @@ describe('P18.97-T1 AC-21 no axe violations: the groups, the hatched cells, the 
     }));
     await screen.findByText('+20 points');
     expect((await clean()).map((v) => v.id)).toEqual([]);
+  });
+});
+
+/**
+ * **P18.98-T3 figures on the forum's scorecard** (ADR-0174, ADR-0179 §6): written in the reader's chosen language,
+ * and in Indonesian with no choice, whether or not the switch is live. Until it is, a reader with no choice reads the
+ * table as it was before T3 — its words English, its figures *APE (Rp M)*, *12,1*, *Agu* — never *APE (IDR B)* beside
+ * an unwired screen's *Rp 5,8 M* (the client's UI-019). Rendered under the app's own provider (`renderTab`'s `{ live }`).
+ */
+describe('P18.98-T3 figures on the forum’s scorecard', () => {
+  afterEach(() => resetLanguage());
+
+  const INDONESIAN_APE = ['12,1', '7,9', '8,4*, covers part of its period; see the notes below', '0,8', 'pending data', 'pending data'];
+  /** The same figures with the table's own words in Indonesian, a reader's who chose it or once live (P18.98-T4). */
+  const INDONESIAN_APE_AND_WORDS = ['12,1', '7,9', '8,4*, hanya mencakup sebagian periodenya; lihat catatan di bawah', '0,8', 'menunggu data', 'menunggu data'];
+  const ENGLISH_APE = ['12.1', '7.9', '8.4*, covers part of its period; see the notes below', '0.8', 'pending data', 'pending data'];
+
+  it('P18.98-T3 figures, unchosen and not live: English words and Indonesian figures — APE (Rp M), 12,1, Agu', () => {
+    renderTab(Scorecard, makeMeetingView(), {}, { live: false });
+
+    expect(cells('APE (Rp M)')).toEqual(INDONESIAN_APE);
+    expect(cells('Avg. Case Size (Rp jt)').slice(0, 2)).toEqual(['19,8', '17,6']);
+    expect(cells('Cases/producing agents').slice(0, 2)).toEqual(['4,4', '3,8']);
+    expect(screen.getByRole('columnheader', { name: 'Last Month (Agu-26)' })).toBeInTheDocument();
+    expect(screen.queryByText(/IDR/)).toBeNull();
+    // Its words English, as before the phase: the title, the columns, *pending data* above, the screen's language.
+    expect(screen.getByRole('heading', { level: 3, name: 'BSD City Branch: Sep 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Metrics' })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe('en');
+  });
+
+  it('P18.98-T3 figures, chosen English by the browser, not live: APE (IDR B), 12.1, Aug', () => {
+    browserChose('en');
+    renderTab(Scorecard, makeMeetingView(), {}, { live: false });
+
+    expect(cells('APE (IDR B)')).toEqual(ENGLISH_APE);
+    expect(cells('Avg. Case Size (IDR M)').slice(0, 2)).toEqual(['19.8', '17.6']);
+    expect(screen.getByRole('columnheader', { name: 'Last Month (Aug-26)' })).toBeInTheDocument();
+  });
+
+  it('P18.98-T3 figures, chosen Indonesian by the browser, not live: APE (Rp M), 12,1, and the screen in Indonesian', () => {
+    browserChose('id');
+    renderTab(Scorecard, makeMeetingView(), {}, { live: false });
+
+    expect(cells('APE (Rp M)')).toEqual(INDONESIAN_APE_AND_WORDS);
+    expect(screen.queryByText(/IDR/)).toBeNull();
+    expect(document.documentElement.lang).toBe('id');
+  });
+
+  it('P18.98-T3 figures, live and unchosen: Indonesian figures on a screen whose language is Indonesian', () => {
+    renderTab(Scorecard, makeMeetingView(), {}, { live: true });
+
+    expect(cells('APE (Rp M)')).toEqual(INDONESIAN_APE_AND_WORDS);
+    expect(screen.getByRole('columnheader', { name: 'Last Month (Agu-26)' })).toBeInTheDocument();
+    // The words' language too (`<html lang>`), the table's own words with it since P18.98-T4.
+    expect(document.documentElement.lang).toBe('id');
   });
 });

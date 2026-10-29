@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
 import { useScrollLock } from '@/lib/use-scroll-lock';
 import { Button } from './field';
 
@@ -27,7 +29,7 @@ export function Dialog({
   open,
   message,
   confirmLabel,
-  cancelLabel = 'Cancel',
+  cancelLabel,
   tone = 'primary',
   onConfirm,
   onCancel,
@@ -36,12 +38,14 @@ export function Dialog({
   message: string;
   /** Says what will happen — *Delete lead*, *Discard counts* — never *OK*. */
   confirmLabel: string;
+  /** *Cancel* in the reader's language where a caller names nothing else (P18.98-T4). */
   cancelLabel?: string;
   /** `danger` for something that destroys, which the prototype paints quieter, not louder. */
   tone?: 'primary' | 'danger';
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const t = useMessages(uiMessages);
   const confirm = useRef<HTMLButtonElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const returnTo = useRef<Element | null>(null);
@@ -92,7 +96,7 @@ export function Dialog({
         <p className="mb-4 min-h-0 overflow-y-auto overscroll-contain text-md leading-relaxed text-navy">{message}</p>
         <div className="flex shrink-0 justify-end gap-2.5">
           <Button ref={cancel} variant="secondary" onClick={onCancel}>
-            {cancelLabel}
+            {cancelLabel ?? t.cancel}
           </Button>
           <Button ref={confirm} variant={tone} onClick={onConfirm}>
             {confirmLabel}

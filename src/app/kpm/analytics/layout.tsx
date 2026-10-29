@@ -4,7 +4,8 @@ import type { ReactNode } from 'react';
 import { NotAvailableToYou } from '@/components/require-session';
 import { RoleShell } from '@/components/role-shell';
 import { RouteTabs } from '@/components/ui/route-tabs';
-import { PROTOTYPE_COPY } from '@/lib/kpm-analytics';
+import { useMessages } from '@/i18n/language-provider';
+import { kpmAnalyticsMessages } from '@/i18n/messages/kpm-analytics';
 import { readsOfficeAnalytics } from '@/lib/route-access';
 import { useSession } from '@/lib/session';
 import { TenantConfigProvider } from '@/lib/tenant-config-cache';
@@ -24,18 +25,20 @@ import { TenantConfigProvider } from '@/lib/tenant-config-cache';
  * for this; one who is not a Core Leader is drawn *Not available to you* here without asking the API, which answers
  * them 404 in any case (§3.9 ¶). The API answers the reader's own office whatever this decides.
  *
- * The office's configuration is read once here for the pages beneath, as the two group layouts read it.
+ * The office's configuration is read once here for the pages beneath, as the two group layouts read it. The title and
+ * the tabs are names, kept English in both languages (§A.2, §A.3); the sub-line is the reader's (P18.98-T4).
  */
 export default function KpmAnalyticsLayout({ children }: { children: ReactNode }) {
+  const t = useMessages(kpmAnalyticsMessages);
   return (
     <TenantConfigProvider>
-      <RoleShell title={PROTOTYPE_COPY.title} subtitle={PROTOTYPE_COPY.subtitle} permission="kpm_analytics:read">
+      <RoleShell title={t.title} subtitle={t.subtitle} permission="kpm_analytics:read">
         <OfficeAnalyticsReader>
           <RouteTabs
-            label={PROTOTYPE_COPY.title}
+            label={t.title}
             tabs={[
-              { href: '/kpm/analytics', label: PROTOTYPE_COPY.tabOverview },
-              { href: '/kpm/analytics/compliance', label: PROTOTYPE_COPY.tabCompliance },
+              { href: '/kpm/analytics', label: t.tabOverview },
+              { href: '/kpm/analytics/compliance', label: t.tabCompliance },
             ]}
           />
           {children}

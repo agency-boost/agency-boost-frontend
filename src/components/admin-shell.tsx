@@ -5,6 +5,9 @@ import { AppShell, type NavSection } from '@/components/app-shell';
 import { type NavIconName } from '@/components/ui/nav-icon';
 import { RequireSession } from '@/components/require-session';
 import { ToastHost } from '@/components/ui/toast';
+import { kept } from '@/i18n/kept';
+import { useMessages } from '@/i18n/language-provider';
+import { shellMessages } from '@/i18n/messages/shell';
 import { displayName } from '@/lib/display-name';
 import { useSession } from '@/lib/session';
 import { useLeaderLimitPending } from '@/lib/use-leader-limit-pending';
@@ -25,7 +28,8 @@ type AdminNavItem = {
 };
 
 /**
- * The Superadmin nav (`Superadmin.html:169-205`), verbatim.
+ * The Superadmin nav (`Superadmin.html:169-205`), verbatim. Every heading and item is kept English in both languages
+ * (`kept`, the glossary's §A.1; P18.98-T1).
  *
  * Five groups, `Overview` alone and unlabelled at the top. Until 2026-09-06 there was no
  * Super Admin prototype and this was two invented groups — `Platform` and `Later phases`.
@@ -39,15 +43,15 @@ const SECTIONS: readonly { label: string | null; divider?: boolean; items: Admin
   {
     label: null,
     items: [
-      { label: 'Overview', href: '/admin', icon: 'gauge' },
+      { label: kept('Overview'), href: '/admin', icon: 'gauge' },
     ],
     divider: true,
   },
   {
-    label: 'Companies',
+    label: kept('Companies'),
     items: [
-      { label: 'Manage companies', href: '/admin/companies', icon: 'building' },
-      { label: 'Org role ladder', href: '/admin/org-levels', icon: 'ladder' },
+      { label: kept('Manage companies'), href: '/admin/companies', icon: 'building' },
+      { label: kept('Org role ladder'), href: '/admin/org-levels', icon: 'ladder' },
       /*
        * **No `Product catalog` item.** ADR-0033 moved the catalog to the Company template's
        * Products tab — a product belongs to one insurer, and a flat platform screen has no
@@ -58,9 +62,9 @@ const SECTIONS: readonly { label: string | null; divider?: boolean; items: Admin
     divider: true,
   },
   {
-    label: 'KPMs',
+    label: kept('KPMs'),
     items: [
-      { label: 'All KPMs', href: '/admin/tenants', icon: 'office' },
+      { label: kept('All KPMs'), href: '/admin/tenants', icon: 'office' },
       /*
        * **No `Create / assign KPM` item.** `/admin/tenants` carries **New office** in its
        * header and again in its empty state, so the nav was a third way to the same form —
@@ -69,38 +73,38 @@ const SECTIONS: readonly { label: string | null; divider?: boolean; items: Admin
       // Not `upcoming`. P3.5-T2 built this screen and its endpoints and left the flag
       // on, and `upcoming` renders an anchor with **no href** — so a shipped surface was
       // reachable from nowhere, while `12-kpm-requests.md` told the reader to click it.
-      { label: 'Pending KPM requests', href: '/admin/kpm-requests', icon: 'inbox' },
+      { label: kept('Pending KPM requests'), href: '/admin/kpm-requests', icon: 'inbox' },
       /*
        * ADR-0157 §3, the client's request of 2026-10-26: a leader an office would add past its limit waits here for
        * AgencyBoost. Beside the other queue of this group, with its pending count, as that one is drawn.
        */
-      { label: 'Leaders past the limit', href: '/admin/leader-limit-requests', icon: 'userPlus', count: 'leaderLimitPending' },
+      { label: kept('Leaders past the limit'), href: '/admin/leader-limit-requests', icon: 'userPlus', count: 'leaderLimitPending' },
       /*
        * The quote tool (P13.2-T2). `Billing_Subscription.html` draws it as the only item of its own
        * sidebar (`:214`, *"Billing & Subscription"*); **last in this group, in the console's sentence
        * case** (ADR-0111 §8): a quote is for an office that does not exist yet, and an existing group
        * is a smaller footprint than a new one.
        */
-      { label: 'Billing & subscription', href: '/admin/billing', icon: 'receipt' },
+      { label: kept('Billing & subscription'), href: '/admin/billing', icon: 'receipt' },
     ],
     divider: true,
   },
   {
-    label: 'Platform admin',
+    label: kept('Platform admin'),
     items: [
-      { label: 'KPM Owners & Admins', href: '/admin/tenant-admins', icon: 'shield' },
-      { label: 'Audit / role change log', href: '/admin/audit', icon: 'history' },
+      { label: kept('KPM Owners & Admins'), href: '/admin/tenant-admins', icon: 'shield' },
+      { label: kept('Audit / role change log'), href: '/admin/audit', icon: 'history' },
     ],
     divider: true,
   },
   {
-    label: 'Reporting',
+    label: kept('Reporting'),
     /*
      * Live since P18-T8, OD-148's answer 1: adoption across offices, inside ADR-0011's line. It was
      * the console's last *Soon*, as drawn (`:204`); the console has none now, and `upcomingLabel`
      * stays for the next destination that is scheduled before it is built.
      */
-    items: [{ label: 'Cross-platform analytics', href: '/admin/analytics', icon: 'chart' }],
+    items: [{ label: kept('Cross-platform analytics'), href: '/admin/analytics', icon: 'chart' }],
   },
 ];
 
@@ -156,6 +160,7 @@ function AdminChrome({
   const leaderLimitPending = useLeaderLimitPending();
   const { signOut, busy } = useSignOut();
   const pathname = usePathname();
+  const t = useMessages(shellMessages);
 
   // `/admin` is a prefix of every other admin route, so it only matches exactly.
   const isActive = (href: string) =>
@@ -175,15 +180,16 @@ function AdminChrome({
     <AppShell
       sections={sections}
       user={{
-        name: (me && displayName(me.user)) || 'Super Admin',
-        role: 'Superadmin',
+        // The platform's role, kept English (§A.5), as the console's tag below.
+        name: (me && displayName(me.user)) || kept('Super Admin'),
+        role: kept('Superadmin'),
         initials: me?.user.initials ?? 'SA',
         email: me?.user.email,
         // The first of the phone's menu details (P18.95-T12 AC-3): the name in full, where the chip greets by the preferred one.
         fullName: me?.user.fullName,
       }}
-      brandTag="SUPERADMIN"
-      upcomingLabel="Soon"
+      brandTag={kept('SUPERADMIN')}
+      upcomingLabel={t.soon}
       account={{ href: '/profile', onSignOut: () => void signOut(), signingOut: busy }}
       notifications={{ href: '/notifications', unread }}
       title={title}

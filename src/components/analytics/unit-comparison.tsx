@@ -6,16 +6,18 @@ import { TAP_AREA, TAP_TARGET, TEXT_TAP } from '@/components/ui/phone';
 import { CardField, CardFields, RowCard, RowCards } from '@/components/ui/row-cards';
 import { TermTip } from '@/components/ui/term-tip';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { kpmAnalyticsMessages } from '@/i18n/messages/kpm-analytics';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/lib/session';
 import { formatRupiahCompact } from '@/lib/format';
 import {
-  activeWords, agentsSub, clubTermFirsts, drillsAnywhere, headName, leadsWords, manpowerSub, mocTermName, mocTip, moneyWords,
-  OWN_COPY, PROTOTYPE_COPY, rateWords, unitDashboardHref,
+  activeWords, agentsSub, clubTermFirsts, drillsAnywhere, headName, leadsWords, manpowerSub, mocTip, moneyWords,
+  rateWords, unitDashboardHref,
   type AabUnitRow, type AgencyRow, type AnalyticsClub, type AnalyticsHead, type AnalyticsMoney, type AnalyticsTotal,
   type KpmAnalyticsView, type UnitFigures,
 } from '@/lib/kpm-analytics';
-import type { TermKey } from '@/lib/terms';
+import { termQuestion, type TermKey } from '@/lib/terms';
 import { MocCell, type MocOpen } from './moc';
 
 /**
@@ -41,6 +43,10 @@ import { MocCell, type MocOpen } from './moc';
  *
  * **Below 768px the same rows are cards** (`UnitComparisonCards`, P18.97-T7 AC-1): the screen asks the window and draws
  * one or the other, never both.
+ *
+ * **Its words are the reader's** (P18.98-T4; `kpmAnalyticsMessages`) — every column's KPI name kept English in both
+ * languages — and **its figures the figures' language** (`useFigureLanguage()`, named `figureLanguage` here, where a
+ * row's `figures` are its numbers). A name, a club's label and the company's MOC rules are shown as sent.
  */
 export interface ComparisonProps {
   view: KpmAnalyticsView;
@@ -62,6 +68,8 @@ export function UnitComparisonTable({
   onToggleList,
   onOpenMoc,
 }: ComparisonProps) {
+  const t = useMessages(kpmAnalyticsMessages);
+  const language = useLanguage();
   // The first badge of each club the reader meets carries its ⓘ (AC-8): the agencies in the table's order.
   const clubTerms = clubTermFirsts(view.agencies);
   return (
@@ -70,27 +78,27 @@ export function UnitComparisonTable({
         <table aria-labelledby={labelledBy} className="w-full min-w-[1180px] border-collapse text-left text-md">
           <thead>
             <tr className="border-b border-hairline">
-              <th scope="col" className={HEAD}>{PROTOTYPE_COPY.headAb}</th>
-              <th scope="col" className={HEAD}>{PROTOTYPE_COPY.headManpower}</th>
+              <th scope="col" className={HEAD}>{t.headAb}</th>
+              <th scope="col" className={HEAD}>{t.headManpower}</th>
               <th scope="col" className={HEAD}>
                 {/* *APE*'s first appearance on the screen, so its ⓘ is here, opening below (P18.95-T9 AC-3; UI-028). */}
                 <span className="inline-flex items-center gap-1">
-                  {PROTOTYPE_COPY.headApeMonth(view.period)}
+                  {t.headApeMonth({ period: view.period })}
                   <TermTip term="APE" className={RULES_TIP} />
                 </span>
               </th>
-              <th scope="col" className={HEAD}>{PROTOTYPE_COPY.headApeAnnual}</th>
-              <th scope="col" className={HEAD}>{PROTOTYPE_COPY.headCoached}</th>
-              <th scope="col" className={HEAD}>{PROTOTYPE_COPY.headActive(view.period)}</th>
-              <th scope="col" className={HEAD}>{PROTOTYPE_COPY.headLeads}</th>
+              <th scope="col" className={HEAD}>{t.headApeAnnual}</th>
+              <th scope="col" className={HEAD}>{t.headCoached}</th>
+              <th scope="col" className={HEAD}>{t.headActive({ period: view.period })}</th>
+              <th scope="col" className={HEAD}>{t.headLeads}</th>
               <th scope="col" className={HEAD}>
                 <span className="inline-flex items-center gap-1">
-                  {PROTOTYPE_COPY.headMoc}
+                  {t.headMoc}
                   {/* One ⓘ, the prototype's tooltip on the heading (`:1248`): what MOC is, then the company's rules (AC-8). */}
                   <TippedGlyph
                     glyph="ⓘ"
-                    name={mocTermName}
-                    tip={mocTip(view.mocRulesText)}
+                    name={termQuestion('MOC', language)}
+                    tip={mocTip(view.mocRulesText, language)}
                     align="fit"
                     // Below the heading: above it, the table's own scroll box would cut the bubble off.
                     className={RULES_TIP}
@@ -140,16 +148,22 @@ const RULES_TIP = cn(
 
 /** The total row (`.total-row`, `:342-344`): the warm base, bold, its sub-lines regular. */
 function TotalRow({ total, split }: { total: AnalyticsTotal; split: number }) {
+  const t = useMessages(kpmAnalyticsMessages);
+  const language = useLanguage();
+  const figureLanguage = useFigureLanguage();
+  const leftOut = total.leaversExcludedMinor !== null && total.leaversExcludedMinor > 0
+    ? t.leaversLeftOut({ amount: formatRupiahCompact(total.leaversExcludedMinor, {}, figureLanguage) })
+    : null;
   return (
     <tr className="border-b border-hairline bg-base font-bold">
       <th scope="row" className={cn(CELL, 'font-bold')}>
         <span className="inline-flex items-start gap-1">
-          {PROTOTYPE_COPY.total(total.abCount)}
-          {total.leaversExcludedMinor !== null && total.leaversExcludedMinor > 0 && (
+          {t.total({ n: total.abCount })}
+          {leftOut && (
             <TippedGlyph
               glyph="ⓘ"
-              name={OWN_COPY.leaversLeftOut(formatRupiahCompact(total.leaversExcludedMinor))}
-              tip={OWN_COPY.leaversLeftOut(formatRupiahCompact(total.leaversExcludedMinor))}
+              name={leftOut}
+              tip={leftOut}
               align="fit"
               // Below the row, as the MOC rules' bubble opens: the table's scroll box would clip it above.
               className={cn('-my-1', BELOW_TIP)}
@@ -160,12 +174,12 @@ function TotalRow({ total, split }: { total: AnalyticsTotal; split: number }) {
       <td className={CELL}>
         <div className="font-bold text-navy">{total.manpower.total}</div>
         {/* *AAB*'s first appearance, in the first row (P18.95-T9 AC-3): opening below, inside the table's scroll box. */}
-        <div className={SUB}>{manpowerSub(total.manpower)} <TermTip term="AAB" className={BELOW_TIP} /></div>
+        <div className={SUB}>{manpowerSub(total.manpower, language)} <TermTip term="AAB" className={BELOW_TIP} /></div>
       </td>
-      <Figures figures={total} split={split} annualNote={OWN_COPY.currentMembersOnly} />
+      <Figures figures={total} split={split} annualNote={t.currentMembersOnly} />
       <td className={CELL}>
         <div className="text-md font-bold text-navy">{total.mocMet} / {total.mocOf}</div>
-        <div className={PCT}>{PROTOTYPE_COPY.absMeetingMoc}</div>
+        <div className={PCT}>{t.absMeetingMoc}</div>
       </td>
     </tr>
   );
@@ -190,13 +204,15 @@ function AgencyRows({
   onToggleList: (membershipId: string) => void;
   onOpenMoc: (open: MocOpen) => void;
 }) {
+  const t = useMessages(kpmAnalyticsMessages);
+  const language = useLanguage();
   const listId = useId();
   const subRowsId = useId();
   const id = agency.head.membershipId;
   const expandable = agency.aabUnits.length > 0;
   /** The rows the expander shows: its *(Direct)* row and each AAB unit's, named for `aria-controls`. */
   const subRowIds = [`${subRowsId}-direct`, ...agency.aabUnits.map((_, i) => `${subRowsId}-${i}`)];
-  const name = headName(agency.head);
+  const name = headName(agency.head, language);
 
   /** The row's own click is the expander's, as `.ab-row-clickable` (`:3417-3422`); a link or a button is its own. */
   const fromRow = (e: MouseEvent<HTMLTableRowElement>) => {
@@ -219,7 +235,7 @@ function AgencyRows({
                 type="button"
                 aria-expanded={open}
                 aria-controls={open ? subRowIds.join(' ') : undefined}
-                aria-label={OWN_COPY.expand(agency.head.name)}
+                aria-label={t.expand({ name: agency.head.name })}
                 onClick={() => onToggle(id)}
                 className="-ml-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-xs text-muted hover:text-navy"
               >
@@ -228,7 +244,7 @@ function AgencyRows({
             )}
             <span className="min-w-0">
               <LeaderLink head={agency.head}>{agency.head.name}</LeaderLink>
-              {agency.head.isReader && <span className="text-navy"> {PROTOTYPE_COPY.you}</span>}
+              {agency.head.isReader && <span className="text-navy"> {t.you}</span>}
             </span>
           </span>
         </th>
@@ -242,9 +258,9 @@ function AgencyRows({
             className="font-bold text-navy hover:text-amber-ink hover:underline"
           >
             {agency.manpower.total}
-            <span className="sr-only">{OWN_COPY.members(agency.head.name, agency.manpower.total)}</span>
+            <span className="sr-only">{t.members({ name: agency.head.name, n: agency.manpower.total })}</span>
           </button>
-          <div className={SUB}>{manpowerSub(agency.manpower)}</div>
+          <div className={SUB}>{manpowerSub(agency.manpower, language)}</div>
         </td>
         <Figures figures={agency} split={split} club={agency.club} clubTerm={clubTerm} />
         <td className={CELL}>
@@ -272,11 +288,11 @@ function AgencyRows({
 
       {open && (
         <>
-          <SubRow id={subRowIds[0]} row={agency.direct} tag={PROTOTYPE_COPY.tagAb} split={split}>
-            <span className="text-sm italic text-muted">{PROTOTYPE_COPY.seeAbove(agency.head.name)}</span>
+          <SubRow id={subRowIds[0]} row={agency.direct} direct split={split}>
+            <span className="text-sm italic text-muted">{t.seeAbove({ name: agency.head.name })}</span>
           </SubRow>
           {agency.aabUnits.map((unit, i) => (
-            <SubRow key={unit.head.membershipId} id={subRowIds[i + 1]} row={unit} tag={PROTOTYPE_COPY.tagAab} split={split}>
+            <SubRow key={unit.head.membershipId} id={subRowIds[i + 1]} row={unit} split={split}>
               <MocCell moc={unit.moc} name={unit.head.name} onOpen={onOpenMoc} />
             </SubRow>
           ))}
@@ -292,16 +308,19 @@ function AgencyRows({
  * the MOC column the AAB's own verdict or *"See {name} above"*.
  */
 function SubRow({
-  id, row, tag, split, children,
+  id, row, direct = false, split, children,
 }: {
   id: string;
   row: UnitFigures | AabUnitRow;
-  tag: string;
+  /** The agency's own *(Direct)* row, tagged *AB*; an AAB's unit otherwise, tagged *AAB*. */
+  direct?: boolean;
   split: number;
   children: ReactNode;
 }) {
-  const direct = tag === PROTOTYPE_COPY.tagAb;
-  const name = direct ? PROTOTYPE_COPY.direct(row.head.name) : row.head.name;
+  const t = useMessages(kpmAnalyticsMessages);
+  const language = useLanguage();
+  const tag = direct ? t.tagAb : t.tagAab;
+  const name = direct ? t.direct({ name: row.head.name }) : row.head.name;
   return (
     <tr id={id} className="border-b border-hairline bg-info/[0.03]">
       {/* Named by the row's name alone, so a cell is read with whose it is and not with the link's hint. */}
@@ -319,7 +338,7 @@ function SubRow({
       </th>
       <td className={CELL}>
         <div className="font-bold text-navy">{row.manpower.total}</div>
-        <div className={SUB}>{agentsSub(row.manpower)}</div>
+        <div className={SUB}>{agentsSub(row.manpower, language)}</div>
       </td>
       <Figures figures={row} split={split} />
       <td className={CELL}>{children}</td>
@@ -333,6 +352,7 @@ function SubRow({
  * would open as the Super Admin, who has no office, and be refused.
  */
 function LeaderLink({ head, children, className }: { head: AnalyticsHead; children: ReactNode; className?: string }) {
+  const t = useMessages(kpmAnalyticsMessages);
   const { me } = useSession();
   const newTab = !me?.isImpersonating;
   // A head who leads nobody has no Unit Dashboard to open (it answers *not found*): the name is plain text. So is
@@ -347,13 +367,15 @@ function LeaderLink({ head, children, className }: { head: AnalyticsHead; childr
       className={cn('font-semibold text-navy hover:text-amber-ink hover:underline', className)}
     >
       {children}
-      {newTab && <span className="sr-only">{head.isReader ? OWN_COPY.newTabOwn : OWN_COPY.newTab}</span>}
+      {newTab && <span className="sr-only">{head.isReader ? t.newTabOwn : t.newTab}</span>}
     </Link>
   );
 }
 
 /** What every row's figures are read from: an agency's, a unit's, the total's. */
-type RowFigures = Pick<UnitFigures, 'apeMonth' | 'apeAnnual' | 'coached7d' | 'activeAgents' | 'activePct' | 'leads' | 'manpower'>;
+type RowFigures = Pick<
+  UnitFigures, 'apeMonth' | 'apeAnnual' | 'coached7d' | 'activeAgents' | 'activePct' | 'activeOf' | 'leads' | 'manpower'
+>;
 
 /** The five figure columns every row shares: the two APEs, *Coached (7d)*, *Producing* and *Total leads*. */
 function Figures({
@@ -367,9 +389,12 @@ function Figures({
   /** A line under *APE — Annual* saying what it counts: the total's *Current members only* (AC-4). */
   annualNote?: string;
 }) {
-  const coached = rateWords(figures.coached7d);
-  const active = activeWords(figures);
-  const leads = leadsWords(figures.leads);
+  const language = useLanguage();
+  const figureLanguage = useFigureLanguage();
+  const coached = rateWords(figures.coached7d, figureLanguage);
+  // OD-235: the count over the share's own base, *4 / 5 · 80%* (`activeWords`).
+  const active = activeWords(figures, language, figureLanguage);
+  const leads = leadsWords(figures.leads, language);
   return (
     <>
       <td className={CELL}><Ape money={figures.apeMonth} split={split} /></td>
@@ -398,7 +423,9 @@ function Figures({
 
 /** An APE cell (`apeCellHtml`, `:3229-3231`; `.ape-actual`, `.ape-of`, `:320-321`). */
 function Ape({ money, split }: { money: AnalyticsMoney; split: number }) {
-  const words = moneyWords(money, split);
+  const language = useLanguage();
+  const figureLanguage = useFigureLanguage();
+  const words = moneyWords(money, split, language, figureLanguage);
   return (
     <>
       <div className={cn('whitespace-nowrap text-md font-bold', words.uploaded ? 'text-navy' : 'font-semibold text-muted')}>
@@ -518,40 +545,42 @@ export function UnitComparisonCards({
 
 /** The total as a card (`TotalRow`): the warm base, its name bold, and every heading's ⓘ, which it is the first to show. */
 function TotalCard({ view }: { view: KpmAnalyticsView }) {
+  const t = useMessages(kpmAnalyticsMessages);
+  const language = useLanguage();
+  const figureLanguage = useFigureLanguage();
   const { total } = view;
   const split = view.thresholds.statusSplitPct;
   const leftOut = total.leaversExcludedMinor !== null && total.leaversExcludedMinor > 0
-    ? OWN_COPY.leaversLeftOut(formatRupiahCompact(total.leaversExcludedMinor))
+    ? t.leaversLeftOut({ amount: formatRupiahCompact(total.leaversExcludedMinor, {}, figureLanguage) })
     : null;
+  // *MOC* with the table header's one ⓘ, on the first card that names MOC (AC-8).
+  const mocHeading = (
+    <span className="inline-flex items-center gap-1">
+      {t.headMoc}
+      <TippedGlyph glyph="ⓘ" name={termQuestion('MOC', language)} tip={mocTip(view.mocRulesText, language)} align="fit" className={CARD_RULES_TIP} />
+    </span>
+  );
   return (
     <RowCard className="bg-base">
       <p className="flex items-start gap-1 break-words text-md font-bold text-navy">
-        {PROTOTYPE_COPY.total(total.abCount)}
+        {t.total({ n: total.abCount })}
         {leftOut && <TippedGlyph glyph="ⓘ" name={leftOut} tip={leftOut} align="fit" className="-my-1" />}
       </p>
       <CardFields>
-        <CardField label={PROTOTYPE_COPY.headManpower}>
+        <CardField label={t.headManpower}>
           <div className={FIGURE}>{total.manpower.total}</div>
-          <div className={SUB}>{manpowerSub(total.manpower)} <TermTip term="AAB" /></div>
+          <div className={SUB}>{manpowerSub(total.manpower, language)} <TermTip term="AAB" /></div>
         </CardField>
         <FigureFields
           figures={total}
           period={view.period}
           split={split}
           apeTerm
-          annualNote={OWN_COPY.currentMembersOnly}
+          annualNote={t.currentMembersOnly}
         />
-        <CardField
-          label={(
-            <span className="inline-flex items-center gap-1">
-              {PROTOTYPE_COPY.headMoc}
-              {/* The table header's one ⓘ, on the first card that names MOC (AC-8). */}
-              <TippedGlyph glyph="ⓘ" name={mocTermName} tip={mocTip(view.mocRulesText)} align="fit" className={CARD_RULES_TIP} />
-            </span>
-          )}
-        >
+        <CardField label={mocHeading}>
           <div className={FIGURE}>{total.mocMet} / {total.mocOf}</div>
-          <div className={PCT}>{PROTOTYPE_COPY.absMeetingMoc}</div>
+          <div className={PCT}>{t.absMeetingMoc}</div>
         </CardField>
       </CardFields>
     </RowCard>
@@ -574,35 +603,39 @@ function FigureFields({
   club?: AnalyticsClub | null;
   clubTerm?: TermKey | null;
 }) {
-  const coached = rateWords(figures.coached7d);
-  const active = activeWords(figures);
-  const leads = leadsWords(figures.leads);
+  const t = useMessages(kpmAnalyticsMessages);
+  const language = useLanguage();
+  const figureLanguage = useFigureLanguage();
+  const coached = rateWords(figures.coached7d, figureLanguage);
+  // OD-235: the count over the share's own base, *4 / 5 · 80%* (`activeWords`).
+  const active = activeWords(figures, language, figureLanguage);
+  const leads = leadsWords(figures.leads, language);
+  // *APE*'s ⓘ on the first card's heading.
+  const apeHeading = apeTerm ? (
+    <span className="inline-flex items-center gap-1">
+      {t.headApeMonth({ period })}
+      <TermTip term="APE" className="normal-case tracking-normal" />
+    </span>
+  ) : t.headApeMonth({ period });
   return (
     <>
-      <CardField
-        label={apeTerm ? (
-          <span className="inline-flex items-center gap-1">
-            {PROTOTYPE_COPY.headApeMonth(period)}
-            <TermTip term="APE" className="normal-case tracking-normal" />
-          </span>
-        ) : PROTOTYPE_COPY.headApeMonth(period)}
-      >
+      <CardField label={apeHeading}>
         <Ape money={figures.apeMonth} split={split} />
       </CardField>
-      <CardField label={PROTOTYPE_COPY.headApeAnnual}>
+      <CardField label={t.headApeAnnual}>
         <Ape money={figures.apeAnnual} split={split} />
         {annualNote && <div className={PCT}>{annualNote}</div>}
         {club && <ClubBadge club={club} term={clubTerm} />}
       </CardField>
-      <CardField label={PROTOTYPE_COPY.headCoached}>
+      <CardField label={t.headCoached}>
         <div className={FIGURE}>{coached.main}</div>
         <div className={PCT}>{coached.pct}</div>
       </CardField>
-      <CardField label={PROTOTYPE_COPY.headActive(period)}>
+      <CardField label={t.headActive({ period })}>
         <div className={cn(FIGURE, figures.activeAgents === null && 'font-semibold text-muted')}>{active.main}</div>
         {active.pct !== null && <div className={PCT}>{active.pct}</div>}
       </CardField>
-      <CardField label={PROTOTYPE_COPY.headLeads}>
+      <CardField label={t.headLeads}>
         <div className={FIGURE}>{leads.total}</div>
         <div className={SUB}>{leads.sub}</div>
       </CardField>
@@ -624,6 +657,8 @@ function AgencyCard({
   onToggleList: (membershipId: string) => void;
   onOpenMoc: (open: MocOpen) => void;
 }) {
+  const t = useMessages(kpmAnalyticsMessages);
+  const language = useLanguage();
   const listId = useId();
   const unitsId = useId();
   const id = agency.head.membershipId;
@@ -643,7 +678,7 @@ function AgencyCard({
             type="button"
             aria-expanded={open}
             aria-controls={open ? unitsId : undefined}
-            aria-label={OWN_COPY.expand(agency.head.name)}
+            aria-label={t.expand({ name: agency.head.name })}
             onClick={() => onToggle(id)}
             className={cn('-ml-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-xs text-muted hover:text-navy', TAP_TARGET)}
           >
@@ -652,11 +687,11 @@ function AgencyCard({
         )}
         <span className="min-w-0 break-words text-md">
           <LeaderLink head={agency.head} className={TEXT_TAP}>{agency.head.name}</LeaderLink>
-          {agency.head.isReader && <span className="text-navy"> {PROTOTYPE_COPY.you}</span>}
+          {agency.head.isReader && <span className="text-navy"> {t.you}</span>}
         </span>
       </p>
       <CardFields>
-        <CardField label={PROTOTYPE_COPY.headManpower}>
+        <CardField label={t.headManpower}>
           {/* The figure is the control, opening the agency's people by name, as on the table. */}
           <span>
             <button
@@ -668,10 +703,10 @@ function AgencyCard({
               className={cn('font-bold text-navy hover:text-amber-ink hover:underline', TEXT_TAP, 'max-md:min-w-11')}
             >
               {agency.manpower.total}
-              <span className="sr-only">{OWN_COPY.members(agency.head.name, agency.manpower.total)}</span>
+              <span className="sr-only">{t.members({ name: agency.head.name, n: agency.manpower.total })}</span>
             </button>
           </span>
-          <div className={SUB}>{manpowerSub(agency.manpower)}</div>
+          <div className={SUB}>{manpowerSub(agency.manpower, language)}</div>
           {listOpen && (
             <ul id={listId} aria-label={agency.head.name} className="mt-2 flex flex-wrap gap-2">
               {agency.members.map((member) => (
@@ -683,7 +718,7 @@ function AgencyCard({
           )}
         </CardField>
         <FigureFields figures={agency} period={period} split={split} club={agency.club} clubTerm={clubTerm} />
-        <CardField label={PROTOTYPE_COPY.headMoc}>
+        <CardField label={t.headMoc}>
           <span className="relative inline-flex">
             <MocCell moc={agency.moc} name={agency.head.name} onOpen={onOpenMoc} className={TAP_AREA} />
           </span>
@@ -691,12 +726,12 @@ function AgencyCard({
       </CardFields>
 
       {open && (
-        <ul id={unitsId} role="list" aria-label={OWN_COPY.expand(agency.head.name)} className="-mx-4 mt-3 border-t border-hairline">
-          <SubCard row={agency.direct} tag={PROTOTYPE_COPY.tagAb} period={period} split={split}>
-            <span className="text-sm italic text-muted">{PROTOTYPE_COPY.seeAbove(agency.head.name)}</span>
+        <ul id={unitsId} role="list" aria-label={t.expand({ name: agency.head.name })} className="-mx-4 mt-3 border-t border-hairline">
+          <SubCard row={agency.direct} direct period={period} split={split}>
+            <span className="text-sm italic text-muted">{t.seeAbove({ name: agency.head.name })}</span>
           </SubCard>
           {agency.aabUnits.map((unit) => (
-            <SubCard key={unit.head.membershipId} row={unit} tag={PROTOTYPE_COPY.tagAab} period={period} split={split}>
+            <SubCard key={unit.head.membershipId} row={unit} period={period} split={split}>
               <span className="relative inline-flex">
                 <MocCell moc={unit.moc} name={unit.head.name} onOpen={onOpenMoc} className={TAP_AREA} />
               </span>
@@ -714,16 +749,19 @@ function AgencyCard({
  * or *"See {name} above"*.
  */
 function SubCard({
-  row, tag, period, split, children,
+  row, direct = false, period, split, children,
 }: {
   row: UnitFigures | AabUnitRow;
-  tag: string;
+  /** The agency's own *(Direct)* unit, tagged *AB*; an AAB's unit otherwise, tagged *AAB*. */
+  direct?: boolean;
   period: KpmAnalyticsView['period'];
   split: number;
   children: ReactNode;
 }) {
-  const direct = tag === PROTOTYPE_COPY.tagAb;
-  const name = direct ? PROTOTYPE_COPY.direct(row.head.name) : row.head.name;
+  const t = useMessages(kpmAnalyticsMessages);
+  const language = useLanguage();
+  const tag = direct ? t.tagAb : t.tagAab;
+  const name = direct ? t.direct({ name: row.head.name }) : row.head.name;
   return (
     <li
       className={cn(
@@ -743,12 +781,12 @@ function SubCard({
         </span>
       </p>
       <CardFields className="mt-2">
-        <CardField label={PROTOTYPE_COPY.headManpower}>
+        <CardField label={t.headManpower}>
           <div className={FIGURE}>{row.manpower.total}</div>
-          <div className={SUB}>{agentsSub(row.manpower)}</div>
+          <div className={SUB}>{agentsSub(row.manpower, language)}</div>
         </CardField>
         <FigureFields figures={row} period={period} split={split} />
-        <CardField label={PROTOTYPE_COPY.headMoc}>{children}</CardField>
+        <CardField label={t.headMoc}>{children}</CardField>
       </CardFields>
     </li>
   );

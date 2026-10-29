@@ -9,8 +9,10 @@ import { DateField } from '@/components/ui/date-field';
 import { Button, TextInput } from '@/components/ui/field';
 import { InlineSaveStatus, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Skeleton, SkeletonText } from '@/components/ui/skeleton';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { activationMessages } from '@/i18n/messages/activation';
 import {
-  attributionOf, isWholeDate, OWN_COPY, recordHref, sourceLineOf, takesHandWrite,
+  attributionOf, isWholeDate, recordHref, sourceLineOf, takesHandWrite,
   type ActivationClosing, type ActivationItemProgress, type ActivationRecordInput,
 } from '@/lib/activation';
 import { toDisplayError } from '@/lib/api-client';
@@ -39,6 +41,9 @@ const RECORD_TEXT_MAX = 500;
  * **Closing the form leaves the reader where they were** (P18.96-T7 AC-2; UI-008): its *Save* or *Cancel* goes with
  * it, and the focus goes back to the box it opened from — or to the row, when the answer leaves the box inert — without
  * scrolling. Otherwise it fell to the page itself, and the next Tab started again from the top.
+ *
+ * **Its words are the catalogue's** (`i18n/messages/activation.ts`; P18.98-T4), its days written in the figures'
+ * language.
  */
 export function DataItemRow({
   item, reader, writable, audience, hireId, today, startDate, loadClosings, onSave, status, error,
@@ -65,11 +70,13 @@ export function DataItemRow({
   const box = useRef<HTMLInputElement>(null);
   /** Set when the form closes, so the focus goes back once the row has drawn what the answer left. */
   const [refocus, setRefocus] = useState(0);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const editable = writable && takesHandWrite(item);
-  const line = sourceLineOf(item, reader);
+  const line = sourceLineOf(item, reader, language, figures);
   const href = recordHref(item, audience, hireId);
   // The tick's own history, kept beside the box while it waits: *"Ticked by {name} · {date}"*.
-  const history = item.done && item.waiting ? attributionOf(item, reader) : null;
+  const history = item.done && item.waiting ? attributionOf(item, reader, language, figures) : null;
   const form = item.link?.form ?? null;
 
   useEffect(() => {
@@ -156,14 +163,15 @@ function RecordFrame({
   saving: boolean;
   problem: string | null;
 }) {
+  const t = useMessages(activationMessages);
   return (
     <fieldset id={id} className="ml-[26px] mt-2.5 flex min-w-0 flex-col gap-2.5 rounded-md border border-hairline bg-base p-3">
       <legend className="px-1 text-sm font-semibold text-navy">{legend}</legend>
       {children}
       {problem && <p role="alert" className="text-xs font-semibold text-alert">{problem}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button onClick={onSave} disabled={saving}>{saving ? OWN_COPY.saving : OWN_COPY.saveRecord}</Button>
-        <Button variant="secondary" onClick={onCancel} disabled={saving}>{OWN_COPY.cancelRecord}</Button>
+        <Button onClick={onSave} disabled={saving}>{saving ? t.saving : t.save}</Button>
+        <Button variant="secondary" onClick={onCancel} disabled={saving}>{t.cancel}</Button>
       </div>
     </fieldset>
   );
@@ -186,6 +194,8 @@ function ClosingForm({
   onSubmit: (record: ActivationRecordInput) => Promise<boolean>;
   onCancel: () => void;
 }) {
+  const t = useMessages(activationMessages);
+  const figures = useFigureLanguage();
   const [closings, setClosings] = useState<ActivationClosing[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [choice, setChoice] = useState<string>('new');
@@ -216,7 +226,7 @@ function ClosingForm({
       ? { kind: 'closing', name: name.trim(), date }
       : { kind: 'closing', leadId: choice };
     if (choice === 'new' && (!name.trim() || !isWholeDate(date))) {
-      setProblem(OWN_COPY.recordIncomplete);
+      setProblem(t.recordIncomplete);
       return;
     }
     setProblem(null);
@@ -231,12 +241,12 @@ function ClosingForm({
   const group = `${id}-case`;
   return (
     <RecordFrame
-      id={id} legend={OWN_COPY.whichCase} onSave={() => void save()} onCancel={onCancel} saving={saving} problem={problem}
+      id={id} legend={t.whichCase} onSave={() => void save()} onCancel={onCancel} saving={saving} problem={problem}
     >
       <span className="sr-only">{label}</span>
-      {closings === null && <Skeleton label={OWN_COPY.loadingClosings}><SkeletonText lines={2} /></Skeleton>}
-      {loadError && <p role="alert" className="text-xs font-semibold text-alert">{OWN_COPY.notSaved(loadError)}</p>}
-      {closings !== null && closings.length === 0 && !loadError && <p className="text-sm text-muted">{OWN_COPY.noClosings}</p>}
+      {closings === null && <Skeleton label={t.loadingClosings}><SkeletonText lines={2} /></Skeleton>}
+      {loadError && <p role="alert" className="text-xs font-semibold text-alert">{t.notSaved({ why: loadError })}</p>}
+      {closings !== null && closings.length === 0 && !loadError && <p className="text-sm text-muted">{t.noClosings}</p>}
       {closings?.map((closing, i) => (
         <label key={closing.leadId} className="flex items-center gap-2 text-md text-navy">
           <input
@@ -248,7 +258,7 @@ function ClosingForm({
             onChange={() => setChoice(closing.leadId)}
             className="h-4 w-4 accent-navy"
           />
-          {OWN_COPY.closingOption(closing.name, formatShortDay(closing.date, { year: true }))}
+          {closing.name} · {formatShortDay(closing.date, { year: true }, figures)}
         </label>
       ))}
       {closings !== null && (
@@ -262,20 +272,20 @@ function ClosingForm({
             onChange={() => setChoice('new')}
             className="h-4 w-4 accent-navy"
           />
-          {OWN_COPY.newClosing}
+          {t.newClosing}
         </label>
       )}
       {closings !== null && choice === 'new' && (
         <div className="ml-6 flex flex-wrap items-end gap-2.5">
           <span className="flex min-w-0 flex-[1_1_180px] flex-col gap-1">
-            <label htmlFor={nameId} className={FIELD_LABEL}>{OWN_COPY.closingName}</label>
+            <label htmlFor={nameId} className={FIELD_LABEL}>{t.closingName}</label>
             <TextInput
               id={nameId} value={name} maxLength={RECORD_TEXT_MAX}
               onChange={(e) => setName(e.target.value)} className="w-full"
             />
           </span>
           <span className="flex flex-col gap-1">
-            <label htmlFor={dateId} className={FIELD_LABEL}>{OWN_COPY.closingDate}</label>
+            <label htmlFor={dateId} className={FIELD_LABEL}>{t.closingDate}</label>
             <DateField id={dateId} value={date} min={startDate} max={today} onChange={setDate} className="w-[150px]" />
           </span>
         </div>
@@ -298,6 +308,7 @@ function OneOnOneForm({
   onSubmit: (record: ActivationRecordInput) => Promise<boolean>;
   onCancel: () => void;
 }) {
+  const t = useMessages(activationMessages);
   const [date, setDate] = useState(today);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -309,7 +320,7 @@ function OneOnOneForm({
 
   const save = async () => {
     if (!note.trim() || !isWholeDate(date)) {
-      setProblem(OWN_COPY.recordIncomplete);
+      setProblem(t.recordIncomplete);
       return;
     }
     setProblem(null);
@@ -323,19 +334,19 @@ function OneOnOneForm({
 
   return (
     <RecordFrame
-      id={id} legend={OWN_COPY.logOneOnOne} onSave={() => void save()} onCancel={onCancel} saving={saving} problem={problem}
+      id={id} legend={t.logOneOnOne} onSave={() => void save()} onCancel={onCancel} saving={saving} problem={problem}
     >
       <span className="sr-only">{label}</span>
       <div className="flex flex-wrap items-end gap-2.5">
         <span className="flex flex-col gap-1">
-          <label htmlFor={dateId} className={FIELD_LABEL}>{OWN_COPY.oneOnOneDate}</label>
+          <label htmlFor={dateId} className={FIELD_LABEL}>{t.oneOnOneDate}</label>
           <DateField id={dateId} value={date} min={startDate} max={today} onChange={setDate} className="w-[150px]" />
         </span>
         <span className="flex min-w-0 flex-[1_1_200px] flex-col gap-1">
-          <label htmlFor={noteId} className={FIELD_LABEL}>{OWN_COPY.oneOnOneNote}</label>
+          <label htmlFor={noteId} className={FIELD_LABEL}>{t.oneOnOneNote}</label>
           <TextInput
             id={noteId} value={note} maxLength={RECORD_TEXT_MAX}
-            placeholder={OWN_COPY.oneOnOnePlaceholder} onChange={(e) => setNote(e.target.value)} className="w-full"
+            placeholder={t.oneOnOnePlaceholder} onChange={(e) => setNote(e.target.value)} className="w-full"
           />
         </span>
       </div>

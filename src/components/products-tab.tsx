@@ -10,70 +10,56 @@ import {
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { suggestCode } from '@/lib/config-code';
-import { parseDecimal } from '@/lib/format';
+import { formatDecimalInput, parseDecimal } from '@/lib/format';
 import {
   closeProductToNewBusiness, COMMISSION_MAX_YEARS, createProduct, readProducts, reopenProduct, reorderProducts,
   updateProduct, withdrawProduct,
   type Product, type ProductFields, type ProductLifecycle,
 } from '@/lib/admin';
+import { AGE_CHOICES, budgetChoices, channelLabel, needLabel } from '@/lib/product-catalog';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import type { MessagesOf } from '@/i18n/catalogue';
+import type { Language } from '@/i18n/language';
+import { adminTemplateProductsMessages } from '@/i18n/messages/admin-template-products';
+import { productCatalogMessages } from '@/i18n/messages/product-catalog';
+import { settingsMessages } from '@/i18n/messages/settings';
 
-const CHANNELS = [
-  { value: 'conventional', label: 'Conventional' },
-  { value: 'syariah', label: 'Syariah' },
-];
+/** The two channels, named as the agents' catalogue names them (`channelLabel`). */
+const CHANNELS = ['conventional', 'syariah'] as const;
 
-const CATEGORIES = [
-  { value: 'life', label: 'Life' },
-  { value: 'health', label: 'Health' },
-  { value: 'ci', label: 'Critical illness' },
-  { value: 'education', label: 'Education' },
-  { value: 'investment', label: 'Investment' },
-];
+/** The categories, named as the catalogue's tabs (§A.3, kept): the words are `admin-template-products.tsx`' `categories`. */
+const CATEGORIES = ['life', 'health', 'ci', 'education', 'investment'] as const;
+type CategoryCode = (typeof CATEGORIES)[number];
+const isCategory = (value: string): value is CategoryCode => (CATEGORIES as readonly string[]).includes(value);
 
 /** `accident` is a need and not a category — accident products sit under health. */
 const NEEDS = [
   'life-protection', 'health', 'ci', 'accident', 'education', 'investment', 'retirement', 'legacy',
 ];
 
-/** From `Overall.html:9527-9533`, which is the copy the seeded bands are scored against. */
-const AGE_BANDS = [
-  { band: 1, label: '< 25' }, { band: 2, label: '25–34' }, { band: 3, label: '35–49' },
-  { band: 4, label: '50–64' }, { band: 5, label: '65+' },
-];
-/** Compact, as the catalog's own chips write them (`BUDGET_CHOICES`, ADR-0167 §1): the prototype's *M* was a million. */
-const BUDGET_BANDS = [
-  { band: 1, label: '< Rp 500 rb' }, { band: 2, label: 'Rp 500 rb–Rp 2 jt' }, { band: 3, label: 'Rp 2 jt–Rp 5 jt' },
-  { band: 4, label: 'Rp 5 jt–Rp 10 jt' }, { band: 5, label: 'Rp 10 jt–Rp 20 jt' }, { band: 6, label: '> Rp 20 jt' },
-  { band: 7, label: 'Lump-sum' },
-];
-
 /**
  * The seven fields the Owner's own override modal names (`KPM_Owner.html:1786-1793`), **in its
  * order** — the numbers are the modal's, and a reader who meets them as 0, 1, 3, 4a, 4b, 5, 2 is
- * reading a form that lost one.
+ * reading a form that lost one. Their words are the catalogue's (`plan`).
  *
  * `benefits` is a list the reader types one per line, which is why it carries `list`.
  */
 const PLAN_FIELDS: {
-  key: keyof Product['defaultAttackPlan']; label: string; lines?: number; list?: true;
+  key: keyof Product['defaultAttackPlan']; lines?: number; list?: true;
 }[] = [
-  { key: 'goodFit', label: '0 · Good fit for' },
-  { key: 'opening', label: '1 · Opening line', lines: 2 },
-  { key: 'benefits', label: '2 · Lead with these benefits', lines: 4, list: true },
-  { key: 'fullScript', label: '3 · Full script', lines: 6 },
-  { key: 'objectionTheySay', label: '4a · If they push back — they say', lines: 2 },
-  { key: 'objectionYouSay', label: '4b · If they push back — you say', lines: 3 },
-  { key: 'nextAction', label: '5 · Next action', lines: 2 },
+  { key: 'goodFit' },
+  { key: 'opening', lines: 2 },
+  { key: 'benefits', lines: 4, list: true },
+  { key: 'fullScript', lines: 6 },
+  { key: 'objectionTheySay', lines: 2 },
+  { key: 'objectionYouSay', lines: 3 },
+  { key: 'nextAction', lines: 2 },
 ];
 
-const LIFECYCLE_LABEL: Record<ProductLifecycle, string> = {
-  active: 'Active',
-  closed_to_new_business: 'Closed to new business',
-  withdrawn: 'Withdrawn',
-};
+type ProductWords = MessagesOf<typeof adminTemplateProductsMessages.en>;
 
-const label = (options: { value: string; label: string }[], value: string) =>
-  options.find((o) => o.value === value)?.label ?? value;
+/** A category's name, kept English (§A.3); a code the list does not hold, as it is. */
+const categoryLabel = (t: ProductWords, value: string) => (isCategory(value) ? t.categories[value] : value);
 
 const move = <T,>(rows: T[], from: number, to: number): T[] => {
   if (to < 0 || to >= rows.length) return rows;
@@ -86,13 +72,13 @@ const move = <T,>(rows: T[], from: number, to: number): T[] => {
 const linesToList = (value: string) => value.split('\n').map((l) => l.trim()).filter(Boolean);
 
 /**
- * A stored proportion as the percentage typed and read on screen: `0.125` is `12,5` — a comma, as the
- * figure is written (ADR-0167 §1).
+ * A stored proportion as the percentage typed and read on screen: `0.125` is `12,5` — the reader's decimal mark, as the
+ * figure is written (ADR-0167 §1; P18.98-T3, `formatDecimalInput`): *12.5* in English.
  *
  * Through `toFixed`, because `0.07 * 100` is `7.000000000000001` and a Super Admin who typed 7
  * should read 7 back.
  */
-const percentOf = (rate: number) => String(Number((rate * 100).toFixed(4))).replace('.', ',');
+const percentOf = (rate: number, figures: Language) => formatDecimalInput(Number((rate * 100).toFixed(4)), figures);
 
 /** A typed percentage — a comma or a point (`parseDecimal`) — as the proportion the API stores (`commissionSchedule`, parity F-15). */
 const proportionOf = (percent: string) => parseDecimal(percent) / 100;
@@ -100,14 +86,14 @@ const proportionOf = (percent: string) => parseDecimal(percent) / 100;
 /**
  * Why a typed rate cannot be saved, or `null` when it can: a number from 0 to 100, **to at most two
  * decimal places** — what the drawer prints (`formatRate`, `toFixed(2)`), so the rate an agent reads is
- * the rate stored rather than a rounding of it (the Phase 14 exit review).
+ * the rate stored rather than a rounding of it (the Phase 14 exit review). In the reader's words (`t`).
  */
-function rateError(percent: string): string | null {
+function rateError(percent: string, t: ProductWords['commission']): string | null {
   const typed = percent.trim();
   const value = parseDecimal(typed);
-  if (typed === '' || !Number.isFinite(value) || value < 0 || value > 100) return 'Enter a rate from 0 to 100.';
+  if (typed === '' || !Number.isFinite(value) || value < 0 || value > 100) return t.outOfRange;
   const [, decimals = ''] = typed.split(/[.,]/);
-  return decimals.length > 2 ? 'Use at most two decimal places.' : null;
+  return decimals.length > 2 ? t.tooPrecise : null;
 }
 
 /**
@@ -120,6 +106,9 @@ function rateError(percent: string): string | null {
  * for a Publish button that should not exist.
  */
 export function ProductsTab({ companyId }: { companyId: string }) {
+  const t = useMessages(adminTemplateProductsMessages);
+  const settings = useMessages(settingsMessages);
+  const language = useLanguage();
   const [rows, setRows] = useState<Product[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -172,8 +161,8 @@ export function ProductsTab({ companyId }: { companyId: string }) {
   if (error && rows === null) {
     return (
       <EmptyState
-        title={`Could not read this company’s catalog. ${error.message}`}
-        action={<Button onClick={() => void load()}>Try again</Button>}
+        title={t.readFailed({ message: error.message })}
+        action={<Button onClick={() => void load()}>{t.tryAgain}</Button>}
       />
     );
   }
@@ -185,16 +174,11 @@ export function ProductsTab({ companyId }: { companyId: string }) {
     <div className="flex flex-col gap-4">
       <Card>
         <p className="text-md text-navy">
-          <strong>This catalog is live.</strong>{' '}
-          <span className="text-muted">
-            It has no draft and no version: what you change here reaches every office of this
-            company on their next read, and no Owner has to publish it. What an office decides —
-            which of these it sells, and its own wording — stays the office’s.
-          </span>
+          <strong>{t.live}</strong>{' '}
+          <span className="text-muted">{t.liveDetail}</span>
         </p>
         <p className="mt-2 text-sm text-muted">
-          {rows.length} {rows.length === 1 ? 'product' : 'products'} · {live} active ·{' '}
-          {rows.filter((p) => p.activeByDefault).length} active by default in a new office
+          {t.counts({ products: rows.length, active: live, byDefault: rows.filter((p) => p.activeByDefault).length })}
         </p>
       </Card>
 
@@ -205,8 +189,8 @@ export function ProductsTab({ companyId }: { companyId: string }) {
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted">Drag ⠿ to reorder, or focus it and press ↑ or ↓.</p>
-        <Button disabled={busy || adding} onClick={() => setAdding(true)}>Add a product</Button>
+        <p className="text-sm text-muted">{t.reorderHint}</p>
+        <Button disabled={busy || adding} onClick={() => setAdding(true)}>{t.addProduct}</Button>
       </div>
 
       {adding && (
@@ -221,10 +205,7 @@ export function ProductsTab({ companyId }: { companyId: string }) {
       )}
 
       {rows.length === 0 ? (
-        <EmptyState
-          title={'This company has no products yet. Add the first one, and every office of this '
-            + 'company can sell it from their next read.'}
-        />
+        <EmptyState title={t.empty} />
       ) : (
         <ul className="flex flex-col gap-3">
           {rows.map((product, index) => (
@@ -272,13 +253,13 @@ export function ProductsTab({ companyId }: { companyId: string }) {
                       <p className="mt-0.5 text-sm text-muted">{product.tagline}</p>
                     )}
                     <p className="mt-1 flex flex-wrap items-center gap-2">
-                      <ConfigBadge tone="open">{label(CHANNELS, product.channel)}</ConfigBadge>
-                      <ConfigBadge tone="open">{label(CATEGORIES, product.category)}</ConfigBadge>
+                      <ConfigBadge tone="open">{channelLabel(product.channel, language)}</ConfigBadge>
+                      <ConfigBadge tone="open">{categoryLabel(t, product.category)}</ConfigBadge>
                       <ConfigBadge tone={product.lifecycle === 'active' ? 'won' : 'open'}>
-                        {LIFECYCLE_LABEL[product.lifecycle]}
+                        {t.lifecycle[product.lifecycle]}
                       </ConfigBadge>
                       {product.activeByDefault && (
-                        <ConfigBadge tone="won">Active by default</ConfigBadge>
+                        <ConfigBadge tone="won">{t.activeByDefault}</ConfigBadge>
                       )}
                     </p>
                   </div>
@@ -289,7 +270,7 @@ export function ProductsTab({ companyId }: { companyId: string }) {
                       disabled={busy}
                       onClick={() => setEditing(editing === product.id ? null : product.id)}
                     >
-                      {editing === product.id ? 'Close' : 'Edit'}
+                      {editing === product.id ? t.close : settings.edit}
                     </Button>
                   </div>
                 </div>
@@ -349,6 +330,10 @@ function ProductEditor({
   onSave: (fields: ProductFields) => void | Promise<void>;
   onLifecycle: (next: ProductLifecycle, replacedByProductId?: string) => void | Promise<void>;
 }) {
+  const t = useMessages(adminTemplateProductsMessages);
+  const settings = useMessages(settingsMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const [form, setForm] = useState({
     name: product.name,
     tagline: product.tagline,
@@ -366,11 +351,11 @@ function ProductEditor({
   const [successor, setSuccessor] = useState(product.replacedByProductId ?? '');
   /** One typed percentage per policy year, Y1 first (OD-135). Absent for a reader not sent it. */
   const [rates, setRates] = useState<string[]>(
-    (product.commissionSchedule ?? []).map((row) => percentOf(row.rate)),
+    (product.commissionSchedule ?? []).map((row) => percentOf(row.rate, figures)),
   );
   /** Errors wait for a save attempt, so a year just added is not shouted at for being empty. */
   const [triedSave, setTriedSave] = useState(false);
-  const scheduleInvalid = rates.some((rate) => rateError(rate) !== null);
+  const scheduleInvalid = rates.some((rate) => rateError(rate, t.commission) !== null);
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((now) => ({ ...now, [key]: value }));
@@ -392,17 +377,17 @@ function ProductEditor({
         <CodeField
           id={`code-product-${product.code}`}
           value={product.code}
-          reason="Typed once. A policy and a lead point at it, so it never changes."
+          reason={t.codeReason}
         />
         <ReadOnlyField
-          label="Version"
+          label={t.version}
           value={String(product.version)}
-          reason="Bumped by every change but a reorder, which is presentation."
+          reason={t.versionReason}
         />
       </div>
 
       <div className="mt-3 flex flex-wrap gap-3">
-        <Field label="Name" htmlFor={`name-${product.id}`} className="min-w-60 flex-1">
+        <Field label={settings.name} htmlFor={`name-${product.id}`} className="min-w-60 flex-1">
           <TextInput
             id={`name-${product.id}`}
             value={form.name}
@@ -410,7 +395,7 @@ function ProductEditor({
             onChange={(e) => set('name', e.target.value)}
           />
         </Field>
-        <Field label="Tagline" htmlFor={`tagline-${product.id}`} className="min-w-60 flex-1">
+        <Field label={t.tagline} htmlFor={`tagline-${product.id}`} className="min-w-60 flex-1">
           <TextInput
             id={`tagline-${product.id}`}
             value={form.tagline}
@@ -421,34 +406,31 @@ function ProductEditor({
       </div>
 
       <div className="mt-3 flex flex-wrap gap-3">
-        <Field label="Channel" htmlFor={`channel-${product.id}`} className="min-w-48">
+        <Field label={t.channel} htmlFor={`channel-${product.id}`} className="min-w-48">
           <Select
             id={`channel-${product.id}`}
             value={form.channel}
             disabled={disabled}
             onChange={(e) => set('channel', e.target.value)}
           >
-            {CHANNELS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {CHANNELS.map((value) => <option key={value} value={value}>{channelLabel(value, language)}</option>)}
           </Select>
         </Field>
-        <Field label="Category" htmlFor={`category-${product.id}`} className="min-w-48">
+        <Field label={t.category} htmlFor={`category-${product.id}`} className="min-w-48">
           <Select
             id={`category-${product.id}`}
             value={form.category}
             disabled={disabled}
             onChange={(e) => set('category', e.target.value)}
           >
-            {CATEGORIES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {CATEGORIES.map((value) => <option key={value} value={value}>{t.categories[value]}</option>)}
           </Select>
         </Field>
       </div>
 
       <fieldset className="mt-4">
-        <legend className="text-sm font-semibold text-navy">Primary need</legend>
-        <p className="text-sm text-muted">
-          What the customer is buying. Accident is a need, not a category — accident products sit
-          under Health.
-        </p>
+        <legend className="text-sm font-semibold text-navy">{t.primaryNeed}</legend>
+        <p className="text-sm text-muted">{t.primaryNeedHint}</p>
         <div className="mt-2 flex flex-wrap gap-3">
           {NEEDS.map((need) => (
             <label key={need} className="flex items-center gap-2 text-md text-navy">
@@ -458,25 +440,25 @@ function ProductEditor({
                 disabled={disabled}
                 onChange={() => toggle('primaryNeeds', need)}
               />
-              {need}
+              {t.need({ code: need, name: needLabel(need, language) ?? need })}
             </label>
           ))}
         </div>
       </fieldset>
 
       <fieldset className="mt-4">
-        <legend className="text-sm font-semibold text-navy">Who it fits</legend>
+        <legend className="text-sm font-semibold text-navy">{t.whoItFits}</legend>
         {/* It ended by naming the phase that builds the fit check: our schedule, which the
             reader can do nothing with (ADR-0062 §3, P10.1-T2). The bands are saved and read
             back today. */}
-        <p className="text-sm text-muted">
-          What the fit check scores a prospect against.
-        </p>
+        <p className="text-sm text-muted">{t.whoItFitsHint}</p>
         <div className="mt-2 flex flex-wrap gap-4">
           <div>
-            <p className="text-sm font-semibold text-muted">Age</p>
+            <p className="text-sm font-semibold text-muted">{t.age}</p>
             <div className="mt-1 flex flex-wrap gap-3">
-              {AGE_BANDS.map(({ band, label: text }) => (
+              {/* From `Overall.html:9527-9533`, the copy the seeded bands are scored against: figures under a thousand,
+                  written alike in both languages (`AGE_CHOICES`). */}
+              {AGE_CHOICES.map(({ value: band, label: text }) => (
                 <label key={band} className="flex items-center gap-2 text-md text-navy">
                   <input
                     type="checkbox"
@@ -490,9 +472,11 @@ function ProductEditor({
             </div>
           </div>
           <div>
-            <p className="text-sm font-semibold text-muted">Monthly budget</p>
+            <p className="text-sm font-semibold text-muted">{t.monthlyBudget}</p>
             <div className="mt-1 flex flex-wrap gap-3">
-              {BUDGET_BANDS.map(({ band, label: text }) => (
+              {/* Compact, as the catalog's own chips write them, in the reader's figures and words (`budgetChoices`,
+                  ADR-0167 §1, P18.98-T3): *< Rp 500 rb* … *Lump-sum*, *< IDR 500K* in English. */}
+              {budgetChoices(figures, language).map(({ value: band, label: text }) => (
                 <label key={band} className="flex items-center gap-2 text-md text-navy">
                   <input
                     type="checkbox"
@@ -509,9 +493,9 @@ function ProductEditor({
       </fieldset>
 
       <Field
-        label="Benefits"
+        label={t.benefits}
         htmlFor={`benefits-${product.id}`}
-        hint="One per line."
+        hint={t.onePerLine}
         className="mt-4"
       >
         <Textarea
@@ -523,7 +507,7 @@ function ProductEditor({
         />
       </Field>
 
-      <Field label="What makes it different" htmlFor={`diff-${product.id}`} className="mt-3">
+      <Field label={t.differentiator} htmlFor={`diff-${product.id}`} className="mt-3">
         <Textarea
           id={`diff-${product.id}`}
           rows={3}
@@ -533,7 +517,7 @@ function ProductEditor({
         />
       </Field>
 
-      <Field label="Best for" htmlFor={`bestfor-${product.id}`} className="mt-3">
+      <Field label={t.bestFor} htmlFor={`bestfor-${product.id}`} className="mt-3">
         <TextInput
           id={`bestfor-${product.id}`}
           value={form.bestFor}
@@ -551,25 +535,19 @@ function ProductEditor({
           onChange={(e) => set('activeByDefault', e.target.checked)}
         />
         <span>
-          Active by default
-          <span className="block text-sm text-muted">
-            What an office sells before its Owner has an opinion about this product. An office that
-            has already decided keeps its decision.
-          </span>
+          {t.activeByDefault}
+          <span className="block text-sm text-muted">{t.activeByDefaultHint}</span>
         </span>
       </label>
 
-      <h3 className="mt-5 font-display text-md font-bold text-navy">The default attack plan</h3>
-      <p className="text-sm text-muted">
-        The words an agent opens with. An office may override them, and its own approval gate
-        decides when its agents see the override.
-      </p>
+      <h3 className="mt-5 font-display text-md font-bold text-navy">{t.plan.title}</h3>
+      <p className="text-sm text-muted">{t.plan.lead}</p>
       {PLAN_FIELDS.map((field) => (
         <Field
           key={field.key}
-          label={field.label}
+          label={t.plan[field.key]}
           htmlFor={`${field.key}-${product.id}`}
-          hint={field.list ? 'One per line.' : undefined}
+          hint={field.list ? t.onePerLine : undefined}
           className="mt-3"
         >
           {field.lines ? (
@@ -591,9 +569,9 @@ function ProductEditor({
         </Field>
       ))}
 
-      <h3 className="mt-5 font-display text-md font-bold text-navy">Commission</h3>
+      <h3 className="mt-5 font-display text-md font-bold text-navy">{t.commission.title}</h3>
       {product.commissionSchedule === undefined ? (
-        <p className="text-sm text-muted">You are not shown commission rates.</p>
+        <p className="text-sm text-muted">{t.commission.notShown}</p>
       ) : (
         <CommissionEditor
           productId={product.id}
@@ -642,22 +620,21 @@ function ProductEditor({
             });
           }}
         >
-          Save product
+          {t.saveProduct}
         </Button>
       </div>
 
       <div className="mt-4 border-t border-hairline pt-4">
-        <h3 className="font-display text-md font-bold text-navy">Lifecycle</h3>
+        <h3 className="font-display text-md font-bold text-navy">{t.lifecycleTitle}</h3>
         <p className="text-sm text-muted">
-          Each of these reaches <strong>every office of this company</strong> on their next read.
-          There is no delete: a policy whose product vanished is a record nobody can read.
+          {t.lifecycleLead({ strong: (words) => <strong>{words}</strong> })}
         </p>
 
         {product.lifecycle !== 'withdrawn' && (
           <Field
-            label="Replaced by"
+            label={t.replacedBy}
             htmlFor={`successor-${product.id}`}
-            hint="Optional, and only a product on this company’s shelf."
+            hint={t.replacedByHint}
             className="mt-3 max-w-md"
           >
             <Select
@@ -666,7 +643,7 @@ function ProductEditor({
               disabled={disabled}
               onChange={(e) => setSuccessor(e.target.value)}
             >
-              <option value="">Nothing replaces it</option>
+              <option value="">{t.nothingReplaces}</option>
               {others.map((p) => (
                 <option key={p.id} value={p.id}>{p.name} ({p.code})</option>
               ))}
@@ -679,30 +656,30 @@ function ProductEditor({
             <Button
               variant="inline"
               disabled={disabled}
-              title="Existing policies keep running; nobody sells it to somebody new."
+              title={t.closeTip}
               onClick={() => void onLifecycle('closed_to_new_business', successor || undefined)}
             >
-              Close to new business
+              {t.closeToNewBusiness}
             </Button>
           )}
           {product.lifecycle !== 'withdrawn' && (
             <Button
               variant="inlineDanger"
               disabled={disabled}
-              title="Every office of this company stops selling it on their next read."
+              title={t.withdrawTip}
               onClick={() => void onLifecycle('withdrawn', successor || undefined)}
             >
-              Withdraw
+              {t.withdraw}
             </Button>
           )}
           {product.lifecycle !== 'active' && (
             <Button
               variant="inline"
               disabled={disabled}
-              title="Back on sale. Offices keep whatever they had decided."
+              title={t.reopenTip}
               onClick={() => void onLifecycle('active')}
             >
-              Reopen
+              {t.reopen}
             </Button>
           )}
         </div>
@@ -735,6 +712,8 @@ function CommissionEditor({
   showErrors: boolean;
   disabled?: boolean;
 }) {
+  const t = useMessages(adminTemplateProductsMessages).commission;
+  const catalog = useMessages(productCatalogMessages).drawer;
   const setRate = (index: number, value: string) =>
     onChange(rates.map((rate, i) => (i === index ? value : rate)));
   /** The API's last policy year reached: no year is added past it. */
@@ -744,32 +723,30 @@ function CommissionEditor({
   return (
     <div className="mt-1">
       {rates.length === 0 ? (
-        <p className="text-sm text-muted">
-          Not set. Nothing is shown to an agent until this company states its schedule — a figure
-          somebody reads as their pay is never one this product invents.
-        </p>
+        <p className="text-sm text-muted">{t.notSet}</p>
       ) : (
         <table className="relative border-collapse">
-          <caption className="sr-only">Commission rate</caption>
+          <caption className="sr-only">{t.caption}</caption>
           <thead>
             <tr>
-              <th scope="col" className={TH}>Year</th>
-              <th scope="col" className={TH}>Rate (%)</th>
+              <th scope="col" className={TH}>{t.year}</th>
+              <th scope="col" className={TH}>{t.rate}</th>
             </tr>
           </thead>
           <tbody>
             {rates.map((rate, index) => {
               const year = index + 1;
               const id = `commission-${productId}-y${year}`;
-              const error = rateError(rate);
+              const error = rateError(rate, t);
               const shown = error && (showErrors || rate.trim() !== '') ? error : null;
               return (
                 <tr key={year}>
-                  <th scope="row" className={TD}>Y{year}</th>
+                  {/* The year as the agents' drawer heads its row (`product-catalog.ts`): *Y1*, *Tahun 1*. */}
+                  <th scope="row" className={TD}>{catalog.yearRow({ year })}</th>
                   <td className={TD}>
                     <TextInput
                       id={id}
-                      aria-label={`Rate for year ${year}`}
+                      aria-label={t.rateFor({ year })}
                       aria-describedby={shown ? `${id}-error` : undefined}
                       type="text"
                       inputMode="decimal"
@@ -801,7 +778,7 @@ function CommissionEditor({
           aria-describedby={full ? fullId : undefined}
           onClick={() => onChange([...rates, ''])}
         >
-          + Add year
+          {t.addYear}
         </Button>
         {rates.length > 0 && (
           <Button
@@ -809,13 +786,11 @@ function CommissionEditor({
             disabled={disabled}
             onClick={() => onChange(rates.slice(0, -1))}
           >
-            Remove year {rates.length}
+            {t.removeYear({ year: rates.length })}
           </Button>
         )}
         {full && (
-          <p id={fullId} className="m-0 text-xs text-muted">
-            A schedule covers at most {COMMISSION_MAX_YEARS} years.
-          </p>
+          <p id={fullId} className="m-0 text-xs text-muted">{t.full({ max: COMMISSION_MAX_YEARS })}</p>
         )}
       </div>
     </div>
@@ -834,6 +809,9 @@ function AddProduct({
   onAdd: (body: ProductFields & { code: string }) => void | Promise<void>;
   onCancel: () => void;
 }) {
+  const t = useMessages(adminTemplateProductsMessages);
+  const settings = useMessages(settingsMessages);
+  const language = useLanguage();
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [touched, setTouched] = useState(false);
@@ -844,7 +822,7 @@ function AddProduct({
   return (
     <Card>
       <FieldRow>
-        <Field label="Name" htmlFor="add-product-name" className="min-w-60 flex-1">
+        <Field label={settings.name} htmlFor="add-product-name" className="min-w-60 flex-1">
           <TextInput
             id="add-product-name"
             value={name}
@@ -856,10 +834,10 @@ function AddProduct({
           />
         </Field>
         <Field
-          label="Code"
+          label={settings.code}
           htmlFor="add-product-code"
-          hint="Filled in from the name. Typed once, and never reused."
-          error={clash ? 'This company already has a product with this code.' : undefined}
+          hint={t.addCodeHint}
+          error={clash ? t.codeTaken : undefined}
           className="min-w-48"
         >
           <TextInput
@@ -874,24 +852,24 @@ function AddProduct({
             }}
           />
         </Field>
-        <Field label="Channel" htmlFor="add-product-channel" className="min-w-40">
+        <Field label={t.channel} htmlFor="add-product-channel" className="min-w-40">
           <Select
             id="add-product-channel"
             value={channel}
             disabled={disabled}
             onChange={(e) => setChannel(e.target.value)}
           >
-            {CHANNELS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {CHANNELS.map((value) => <option key={value} value={value}>{channelLabel(value, language)}</option>)}
           </Select>
         </Field>
-        <Field label="Category" htmlFor="add-product-category" className="min-w-40">
+        <Field label={t.category} htmlFor="add-product-category" className="min-w-40">
           <Select
             id="add-product-category"
             value={category}
             disabled={disabled}
             onChange={(e) => setCategory(e.target.value)}
           >
-            {CATEGORIES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            {CATEGORIES.map((value) => <option key={value} value={value}>{t.categories[value]}</option>)}
           </Select>
         </Field>
         <FieldRow.Actions>
@@ -904,9 +882,9 @@ function AddProduct({
               category: category as Product['category'],
             })}
           >
-            Add
+            {settings.add}
           </Button>
-          <Button variant="secondary" disabled={disabled} onClick={onCancel}>Cancel</Button>
+          <Button variant="secondary" disabled={disabled} onClick={onCancel}>{settings.cancel}</Button>
         </FieldRow.Actions>
       </FieldRow>
     </Card>

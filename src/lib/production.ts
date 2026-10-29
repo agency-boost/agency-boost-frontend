@@ -1,3 +1,7 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { kept } from '@/i18n/kept';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { dataUploadMessages } from '@/i18n/messages/data-upload';
 import { api } from '@/lib/api-client';
 
 /** Which writer a figure came from. `null` when nothing has written it. */
@@ -7,12 +11,12 @@ export type Provenance = 'imported' | 'corrected' | 'self_reported';
  * One figure and where it came from. **`null` is not zero**: a cell nothing has written is *no data*,
  * a cell the carrier reported as nothing is `0`, and the table shows them differently.
  */
-/** Which writer a figure came from, as a reader is told it (P9-T6). */
-export const PROVENANCE_LABEL: Record<'imported' | 'corrected' | 'self_reported', string> = {
-  imported: 'the carrier’s file',
-  corrected: 'corrected by hand',
-  self_reported: 'the agent’s own figure',
-};
+/**
+ * Which writer a figure came from, as a reader is told it (P9-T6) — in English, the catalogue's source
+ * (`i18n/messages/data-upload.ts`, `provenance`; P18.98-T4): a screen reads `useMessages(dataUploadMessages)`.
+ */
+export const PROVENANCE_LABEL: Record<'imported' | 'corrected' | 'self_reported', string> =
+  messagesIn(dataUploadMessages, SOURCE_LANGUAGE).provenance;
 
 export interface MetricCell {
   value: number | null;
@@ -34,31 +38,35 @@ export type ProductionMetric = (typeof PRODUCTION_METRICS)[number];
 /**
  * A metric as a sentence names it — *Correct APE this month for Rina Wijaya* — after the prototype's
  * own subtitle (`KPM_Owner.html:1293`), minus its unit suffix. The table's headings are
- * `METRIC_COLUMN_LABEL`.
+ * `METRIC_COLUMN_LABEL`. **Metric names, kept English in both languages** (the glossary's §A.4; P18.98-T4).
  */
 export const METRIC_LABEL: Record<ProductionMetric, string> = {
-  ape: 'APE',
-  persistency: 'Rolling persistency',
-  recruitment: 'Recruitment',
-  newActiveAgents: 'New active agents',
-  fyp: 'FYP',
-  policyCount: '# of policy',
+  ape: kept('APE'),
+  persistency: kept('Rolling persistency'),
+  recruitment: kept('Recruitment'),
+  newActiveAgents: kept('New active agents'),
+  fyp: kept('FYP'),
+  policyCount: kept('# of policy'),
 };
 
 /**
  * The table's column headings: the prototype's `METRIC_LABELS` (`KPM_Owner.html:4680`), verbatim but
  * for APE's and FYP's *(Rp M)*. The table shows rupiah in full (I-111), and a heading that said
  * millions over a figure in rupiah would misstate it; the file keeps *(Rp M)*, because it is in
- * millions (`production-template.ts`). Persistency keeps its *(%)*, which is true of both.
+ * millions (`production-template.ts`). Persistency keeps its *(%)*, which is true of both. **The carrier's file's own
+ * names, kept English in both languages** (§A.4; P18.98-T4), as the file's header is in no language (P18.98-T3 AC-4).
  */
 export const METRIC_COLUMN_LABEL: Record<ProductionMetric, string> = {
-  ape: 'APE',
-  persistency: 'Rolling Persistency (%)',
-  recruitment: 'Recruitment',
-  newActiveAgents: 'New Active Agents',
-  fyp: 'FYP',
-  policyCount: '# of Policy',
+  ape: kept('APE'),
+  persistency: kept('Rolling Persistency (%)'),
+  recruitment: kept('Recruitment'),
+  newActiveAgents: kept('New Active Agents'),
+  fyp: kept('FYP'),
+  policyCount: kept('# of Policy'),
 };
+
+/** The table's first column: the member, by the role every row of it holds — kept (§A.5). */
+export const AGENT_COLUMN = kept('Agent');
 
 /**
  * **This month's six, then the same six for the year** — the prototype's two groups, in its order and
@@ -66,7 +74,8 @@ export const METRIC_COLUMN_LABEL: Record<ProductionMetric, string> = {
  * then the same 6 metrics again as annual (YTD) figures"*).
  */
 export const CADENCES = ['monthly', 'ytd'] as const;
-export const CADENCE_GROUP_LABEL: Record<Cadence, string> = { monthly: 'This Month', ytd: 'YTD' };
+/** The two groups' headings: KPI names, kept English in both languages (§A.4). */
+export const CADENCE_GROUP_LABEL: Record<Cadence, string> = { monthly: kept('This Month'), ytd: kept('YTD') };
 
 /** The twelve figures in the order the table draws them and the template lists them (P13.1-T7). */
 export const FIGURE_COLUMNS: readonly { cadence: Cadence; metric: ProductionMetric }[] = CADENCES.flatMap(
@@ -298,9 +307,12 @@ export interface CorrectionResult {
 export const correctCell = (input: CorrectionInput) =>
   api<CorrectionResult>('/kpm/data-upload/cell', { method: 'PATCH', body: input });
 
-/** `APE this month`, `# of policy year to date` — a figure named the way a sentence names it. */
-export const figureLabel = (metric: ProductionMetric, cadence: Cadence) =>
-  `${METRIC_LABEL[metric]} ${cadence === 'monthly' ? 'this month' : 'year to date'}`;
+/**
+ * `APE this month`, `# of policy year to date` — a figure named the way a sentence names it; *APE bulan ini* in
+ * Indonesian, the metric's name kept. In the reader's `language` (P18.98-T4), English when passed none.
+ */
+export const figureLabel = (metric: ProductionMetric, cadence: Cadence, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(dataUploadMessages, language).figureLabel({ metric: METRIC_LABEL[metric], ytd: cadence === 'ytd' });
 
 /** The UTF-8 byte-order mark, percent-encoded: `EF BB BF`. */
 const UTF8_BOM = '%EF%BB%BF';

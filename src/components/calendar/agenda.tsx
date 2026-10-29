@@ -1,9 +1,11 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { calendarMessages } from '@/i18n/messages/calendar';
 import { itemsOnDay } from '@/lib/calendar-layout';
 import {
-  entryNameSuffix, isBusy, OWN_COPY, titleOf, TYPE_LABEL, type CalendarEntry, type CalendarItem, type CalendarRead,
+  entryName, isBusy, titleOf, type CalendarEntry, type CalendarItem, type CalendarRead,
 } from '@/lib/calendar';
 import { formatTimeSpan, formatWeekdayDay } from '@/lib/format';
 import { cn } from '@/lib/cn';
@@ -67,6 +69,8 @@ export function AgendaDay({
   date: string;
   onOpen: (entry: CalendarEntry) => void;
 }) {
+  const t = useMessages(calendarMessages);
+  const language = useFigureLanguage();
   const items = itemsOnDay(read.entries, date);
   const today = date === read.today;
   const heading = `agenda-${read.subject.membershipId}-${date}`;
@@ -77,10 +81,10 @@ export function AgendaDay({
         aria-current={today ? 'date' : undefined}
         className={cn('px-3.5 py-2 text-sm font-bold', today ? 'bg-amber/[0.08] text-amber-ink' : 'bg-base text-navy')}
       >
-        {formatWeekdayDay(date)}
+        {formatWeekdayDay(date, language)}
       </h2>
       {items.length === 0 ? (
-        <p className="px-3.5 py-2.5 text-sm text-muted">{OWN_COPY.noEvents}</p>
+        <p className="px-3.5 py-2.5 text-sm text-muted">{t.noEvents}</p>
       ) : (
         <ul aria-labelledby={heading} className="flex flex-col gap-1.5 p-2">
           {items.map((item, i) => (
@@ -100,14 +104,17 @@ export function AgendaDay({
  * the reader owes it, so a voice user says the same words in either view. A trip has no time to show.
  */
 function AgendaItem({ item, onOpen }: { item: CalendarItem; onOpen: (entry: CalendarEntry) => void }) {
-  const time = item.allDay ? '' : formatTimeSpan(item.start ?? '', item.end ?? '');
+  const t = useMessages(calendarMessages);
+  const words = useLanguage();
+  const language = useFigureLanguage();
+  const time = item.allDay ? '' : formatTimeSpan(item.start ?? '', item.end ?? '', language);
   const shape = 'flex min-h-11 w-full items-start gap-3 rounded-[6px] border-l-[3px] px-2.5 py-2 text-left text-navy';
   const when = <span className="w-[88px] shrink-0 text-sm font-bold">{time}</span>;
   if (isBusy(item)) {
     return (
       <div data-busy="" className={cn(shape, 'border-muted bg-navy/[0.06]')}>
         {when}
-        <span className="min-w-0 flex-1 text-md font-semibold">{OWN_COPY.busy}</span>
+        <span className="min-w-0 flex-1 text-md font-semibold">{t.busy}</span>
       </div>
     );
   }
@@ -115,14 +122,14 @@ function AgendaItem({ item, onOpen }: { item: CalendarItem; onOpen: (entry: Cale
     <button
       type="button"
       data-entry=""
-      aria-label={`${TYPE_LABEL[item.type]}: ${titleOf(item)}${time ? `, ${time}` : ''}${entryNameSuffix(item)}`}
+      aria-label={entryName(item, time, words)}
       onClick={() => onOpen(item)}
       className={cn(shape, 'hover:brightness-[0.96]', ENTRY_TONE[item.type])}
     >
       {when}
       <span className="min-w-0 flex-1">
-        <span className="block break-words text-md font-semibold">{titleOf(item)}</span>
-        <span className="block text-xs">{TYPE_LABEL[item.type]}</span>
+        <span className="block break-words text-md font-semibold">{titleOf(item, words)}</span>
+        <span className="block text-xs">{t.types[item.type]}</span>
       </span>
     </button>
   );

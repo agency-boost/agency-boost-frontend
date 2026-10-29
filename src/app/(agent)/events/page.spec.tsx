@@ -131,7 +131,7 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       const refresh = card('Product refresh briefing');
       expect(within(refresh).getByText('Going', { selector: '[data-pill]' })).toBeInTheDocument();
       expect(within(refresh).getByText('Prudential Event | All agents')).toBeInTheDocument();
-      expect(within(refresh).getByText(/15 Okt 2026, 14.00/)).toBeInTheDocument();
+      expect(within(refresh).getByText(/15 Oct 2026, 14:00/)).toBeInTheDocument();
       const where = within(refresh).getByRole('link', { name: /Online — Zoom/ });
       expect(where).toHaveAttribute('href', 'https://zoom.us/j/1234567890');
       expect(where).toHaveAttribute('target', '_blank');
@@ -353,8 +353,8 @@ describe('/events, KPM Events (P18.5-T5, T6)', () => {
       const box = await dialog('Kickoff 2026');
       expect(within(box).getByText('Not Joined')).toBeInTheDocument();
       expect(within(box).getByText('KPM | All agents')).toBeInTheDocument();
-      expect(within(box).getByText('24 Okt 2026', { selector: 'strong' })).toBeInTheDocument();
-      expect(within(box).getByText(/, 18.00/)).toBeInTheDocument();
+      expect(within(box).getByText('24 Oct 2026', { selector: 'strong' })).toBeInTheDocument();
+      expect(within(box).getByText(/, 18:00/)).toBeInTheDocument();
       expect(within(box).getByText('BSD City Branch')).toBeInTheDocument();
       expect(within(box).getByText('About ev-kickoff.')).toBeInTheDocument();
       expect(box).toHaveAttribute('aria-modal', 'true');

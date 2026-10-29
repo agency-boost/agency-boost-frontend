@@ -1,7 +1,9 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { ENTRY_TYPES, TYPE_LABEL, type EntryType } from '@/lib/calendar';
+import { useMessages } from '@/i18n/language-provider';
+import { calendarMessages } from '@/i18n/messages/calendar';
+import { ENTRY_TYPES, type EntryType } from '@/lib/calendar';
 import { cn } from '@/lib/cn';
 
 /**
@@ -118,12 +120,13 @@ export function PaneHeadBar({ head, pill }: { head: PaneHead; pill?: ReactNode }
 
 /** The five swatches, in the legend's order (`:309-315`). */
 export function TypeLegend() {
+  const t = useMessages(calendarMessages);
   return (
     <ul className="mb-4 flex flex-wrap gap-4 text-sm text-muted">
       {ENTRY_TYPES.map((type) => (
         <li key={type} className="inline-flex items-center gap-1.5">
           <span aria-hidden="true" className={cn('h-2.5 w-2.5 shrink-0 rounded-[3px]', TYPE_SWATCH[type])} />
-          {TYPE_LABEL[type]}
+          {t.types[type]}
         </li>
       ))}
     </ul>

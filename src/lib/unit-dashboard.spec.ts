@@ -5,9 +5,9 @@ import {
 } from '@test/unit-dashboard-fixtures';
 import {
   candidates, countWords, dialogGroups, everyRow, gapWords, goalBar, goalWords, inputsOf, lockedWords, missingWords,
-  namesMissing, namesNewHires, newHireWords, OWN_COPY, periodFrom, prefill, productionChanges, productionToast,
-  PROTOTYPE_COPY, provenanceWords, readUnitDashboard, readerName, recruitLine, regroup, rowName, salesLine, totalNote,
-  totalRecruitLine, touchesWords, updateUnitProduction,
+  namesMissing, namesNewHires, newHireWords, onPaceWords, OWN_COPY, periodFrom, prefill, productionChanges, productionToast,
+  PROTOTYPE_COPY, provenanceWords, readUnitDashboard, readerName, recruitLine, regroup, rowName, salesLine, STATUS_TOOLTIP,
+  totalNote, totalRecruitLine, touchesWords, UNIT_PERIODS, unitPeriods, updateUnitProduction,
 } from './unit-dashboard';
 
 describe('the Unit Dashboard’s client', () => {
@@ -304,5 +304,85 @@ describe('the dialog’s figures', () => {
     const inputs = inputsOf([YANTI]);
     inputs['mem-yanti'].monthly = '0';
     expect(productionChanges([YANTI], inputs)).toEqual([{ membershipId: 'mem-yanti', apeMonthlyMinor: 0 }]);
+  });
+});
+
+/**
+ * **P18.98-T4 (coaching and unit): the words in Indonesian, the figures in theirs.** Each function takes the words'
+ * language — English when passed none, every case above — and one that writes a figure takes the figures' after it,
+ * Indonesian when passed none, as before T3. Asked for Indonesian, the words are the approved glossary's: one form for
+ * one and many (§B.0 rule 8), the kept terms English, names as typed.
+ */
+describe('P18.98-T4 the Unit Dashboard’s words in Indonesian', () => {
+  it('names the reader’s row, counts agents and candidates, and toasts the rows changed', () => {
+    expect(readerName('Agus Santoso', 'id')).toBe('Anda (Agus)');
+    expect(rowName(AGUS_ROW, 'id')).toBe('Anda (Agus)');
+    expect(rowName(DIMAS, 'id')).toBe('Dimas Pratama');
+    expect(candidates(1, 'id')).toBe('1 kandidat');
+    expect(candidates(3, 'id')).toBe('3 kandidat');
+    expect(productionToast(1, 'id')).toBe('Produksi diperbarui untuk 1 agent.');
+    expect(productionToast(3, 'id')).toBe('Produksi diperbarui untuk 3 agent.');
+  });
+
+  it('writes the goal line over and short, Not uploaded yet and No goal set, the figures in theirs', () => {
+    expect(goalWords(goalCell(), 'id')).toEqual({ tone: 'short', line: '82% · kurang Rp 14,4 jt', sub: 'Rp 65,6 jt dari 80 jt' });
+    expect(goalWords(goalCell({ actualMinor: rp(108), attainmentPct: 135, targetMet: true, overMinor: rp(28) }), 'id').line)
+      .toBe('135% · lebih Rp 28 jt');
+    expect(goalWords(goalCell({ actualMinor: null, attainmentPct: null }), 'id'))
+      .toEqual({ tone: 'missing', line: 'Belum diunggah', sub: 'dari target Rp 80 jt' });
+    expect(goalWords(goalCell({ set: false, targetMinor: null, attainmentPct: null }), 'id'))
+      .toEqual({ tone: 'none', line: 'Goal belum diatur', sub: 'produksi Rp 65,6 jt' });
+    expect(goalWords({ targetMinor: 0, actualMinor: rp(12), attainmentPct: null }, 'id').line).toBe('Target tahun ini tercapai');
+    // The words' language and the figures' are apart: English words, Indonesian figures, as a reader with no choice reads.
+    expect(goalWords(goalCell())).toEqual({ tone: 'short', line: '82% · Rp 14,4 jt short', sub: 'Rp 65,6 jt of 80 jt' });
+    expect(goalWords(goalCell(), 'en', 'en')).toEqual({ tone: 'short', line: '82% · IDR 14.4M short', sub: 'IDR 65.6M of 80M' });
+  });
+
+  it('writes the leads lines, the goal activities and the breakdown, pro-rated', () => {
+    const counts = { salesOpen: 12, salesClosing: 3, recruitOpen: 2, recruitNominated: 1 };
+    expect(salesLine(counts, 'id')).toEqual({ count: 12, rest: '· 3 closing' });
+    expect(recruitLine(counts, 'id')).toEqual({ count: 2, rest: '· 1 dinominasikan' });
+    expect(totalRecruitLine({ ...counts, recruitNominated: 3 }, 'id')).toEqual({ count: 3, rest: 'rekrut potensial' });
+    expect(touchesWords({ logged: 20, target: 22 }, '7d', 'id')).toEqual({ logged: 20, rest: '/ 22 prorata aktivitas goal', pct: 91 });
+    expect(touchesWords({ logged: 1, target: null }, 'month', 'id').rest).toBe('aktivitas goal');
+    expect(countWords({ logged: 14, target: 16 }, '7d', 'id')).toBe('14/16 prorata');
+  });
+
+  it('writes the gap, the provenance, the totals’ marks and the lock', () => {
+    expect(gapWords(goalCell(), 'id')).toEqual({ value: 'Sisa Rp 14,4 jt', note: '≈ perlu 1 polis lagi, dengan rata-rata ukuran case-nya Rp 18 jt.' });
+    const corrected = {
+      provenance: 'corrected' as const, month: '2026-10',
+      correctedBy: { membershipId: 'mem-owner', name: 'Ibu Ratna' }, correctedAt: '2026-10-05T18:00:00.000Z',
+    };
+    expect(provenanceWords(corrected, 'month', false, 'id')).toBe('Dikoreksi setelah unggahan produksi, Okt 2026, oleh Ibu Ratna pada 6 Okt 2026');
+    expect(provenanceWords(corrected, 'year', false, 'id'))
+      .toBe('Dikoreksi setelah unggahan produksi, sejak awal tahun per Okt 2026, oleh Ibu Ratna pada 6 Okt 2026');
+    expect(provenanceWords(corrected, 'month', false, 'en', 'en')).toBe('Corrected after the production upload, Oct 2026, by Ibu Ratna on 6 Oct 2026');
+    const own = { provenance: 'self_reported' as const, month: null, correctedBy: null, correctedAt: null };
+    expect(provenanceWords(own, 'month', true, 'id')).toBe('Angka Anda sendiri, diisi di Goal Settings');
+    expect(provenanceWords(own, 'month', false, 'id')).toBe('Angkanya sendiri, diisi di Goal Settings');
+    expect(missingWords(1, ['Yanti Puspita'], 'id')).toBe('Belum diunggah untuk Yanti Puspita, jadi tidak dihitung dalam total ini.');
+    expect(missingWords(2, ['Yanti Puspita'], 'id')).toBe('Belum diunggah untuk 2 orang, jadi tidak dihitung dalam total ini.');
+    expect(newHireWords(2, ['Yanti Puspita', 'Tono Saputra'], 'id'))
+      .toBe('Belum ada penjualan pertama untuk Yanti Puspita, Tono Saputra, new hire, jadi tidak dihitung dalam total ini.');
+    expect(newHireWords(2, [], 'id')).toBe('Belum ada penjualan pertama untuk 2 new hire, jadi tidak dihitung dalam total ini.');
+    expect(namesNewHires([{ ...AGUS_ROW, newHireBeforeFirstSale: true }], 'id')).toEqual(['Anda (Agus)']);
+    expect(lockedWords('2026-10', 'id')).toBe('Produksi untuk Okt 2026 dikunci. Owner atau Admin dapat membukanya kembali.');
+    expect(lockedWords('2026-10', 'en', 'en')).toBe('Production for Oct 2026 is locked. The Owner or Admin can reopen it.');
+    expect(onPaceWords({ count: 6, of: 12 }, 'id')).toBe('On pace to be active: 6/12');
+  });
+
+  it('names the dialog’s groups, a unit below the reader for its head', () => {
+    expect(dialogGroups(dashboard(), 'id').map((g) => g.label)).toEqual([
+      'Agen langsung Anda', 'Unit Arief Wibowo', 'Unit Dewi Kartika', 'Unit Sari Wulandari',
+    ]);
+    expect(dialogGroups(SARI_UNIT, 'id')[0].label).toBe('Agen langsung Sari Wulandari');
+  });
+
+  it('keeps the old shapes as the catalogue’s English', () => {
+    expect(unitPeriods('id').map((p) => p.label)).toEqual(['7 hari terakhir', 'Bulan ini', 'Tahun ini']);
+    expect(UNIT_PERIODS.map((p) => p.label)).toEqual(['Last 7 days', 'This month', 'This year']);
+    expect(PROTOTYPE_COPY.title).toBe('Unit Dashboard');
+    expect(STATUS_TOOLTIP.on_track).toBe('Pacing to qualify as a Monthly Active Agent, at or above 90% of expected goal pace.');
   });
 });

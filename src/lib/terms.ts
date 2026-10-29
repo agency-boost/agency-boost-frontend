@@ -1,3 +1,7 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { termMessages } from '@/i18n/messages/terms';
+
 /**
  * **The words a reader may not know, each with one plain line** (P18.95-T9 AC-3; ADR-0167 §10, OD-205; the
  * client's UI review of 2026-10-26, UI-028: *APE, MDRT, AAB, NBO, NPA, BOP, JFW, "touches", "CI premium
@@ -18,7 +22,7 @@ export interface Term {
   readonly name: string;
   /** The glossary row the line is written from: its *Term* column, verbatim. */
   readonly glossary: string;
-  /** The one line the ⓘ shows. */
+  /** The one line the ⓘ shows, in English: the catalogue's source (`termMessages`, P18.98-T4); `termDefinition` writes it in a language. */
   readonly definition: string;
   /** How the term is found in a sentence somebody else wrote. */
   readonly pattern: RegExp;
@@ -28,67 +32,67 @@ export const TERMS = {
   APE: {
     name: 'APE',
     glossary: 'APE',
-    definition: 'Annualised Premium Equivalent: a policy’s first-year premium, counted as a full year’s. Goals, production and clubs all count in it.',
+    definition: termMessages.en.APE.definition,
     pattern: /\bAPE\b/,
   },
   MDRT: {
     name: 'MDRT',
     glossary: 'MDRT',
-    definition: 'Million Dollar Round Table: the international club for the top-producing advisers, qualified by a year’s production.',
+    definition: termMessages.en.MDRT.definition,
     pattern: /\bMDRT\b/,
   },
   AAB: {
     name: 'AAB',
     glossary: 'AAB',
-    definition: 'Associate Agency Builder: a leader under an AB, with agents of their own.',
+    definition: termMessages.en.AAB.definition,
     pattern: /\bAAB\b/,
   },
   NBO: {
     name: 'NBO',
     glossary: 'NBO',
-    definition: 'New Business Opportunity: the pitch that presents the agent career to somebody you want to recruit.',
+    definition: termMessages.en.NBO.definition,
     pattern: /\bNBO\b/,
   },
   NPA: {
     name: 'NPA',
     glossary: 'NPA',
-    definition: 'New agent registration: the paperwork that gives a recruit their agent code.',
+    definition: termMessages.en.NPA.definition,
     pattern: /\bNPA\b/,
   },
   BOP: {
     name: 'BOP',
     glossary: 'BOP',
-    definition: 'Business Opportunity Presentation: the company’s group session that presents the agent career to candidates.',
+    definition: termMessages.en.BOP.definition,
     pattern: /\bBOP\b/,
   },
   JFW: {
     name: 'JFW',
     glossary: 'JFW',
-    definition: 'Joint field work: a visit to a prospect that an agent makes with their leader there too.',
+    definition: termMessages.en.JFW.definition,
     pattern: /\bJFW\b/,
   },
   TOUCHES: {
     name: 'a touch',
     glossary: 'Touch',
-    definition: 'A touch is one logged activity: each one you add on Log Activity counts once.',
+    definition: termMessages.en.TOUCHES.definition,
     pattern: /\btouch(?:es)?\b/i,
   },
   CI_PREMIUM_WAIVER: {
     name: 'a CI premium waiver',
     glossary: 'CI premium waiver',
-    definition: 'If the insured is diagnosed with a critical illness, the premiums still to come are waived and the cover carries on.',
+    definition: termMessages.en.CI_PREMIUM_WAIVER.definition,
     pattern: /\bCI premium waiver\b/i,
   },
   AS_BILLED: {
     name: 'as-billed',
     glossary: 'As-billed',
-    definition: 'Hospital costs paid as the bill charges them, up to the plan’s limits, rather than a fixed amount a day.',
+    definition: termMessages.en.AS_BILLED.definition,
     pattern: /\bas-billed\b/i,
   },
   POTENTIAL_MAA: {
     name: 'a Potential Monthly Active Agent',
     glossary: 'Potential Monthly Active Agent',
-    definition: 'Potential Monthly Active Agent (✓): pacing, from this month’s activity, to submit at least 1 policy this month. A projection, not a sale.',
+    definition: termMessages.en.POTENTIAL_MAA.definition,
     pattern: /\bPotential (?:MAA|Monthly Active Agents?)\b/i,
   },
   /*
@@ -99,25 +103,25 @@ export const TERMS = {
   MOC: {
     name: 'MOC',
     glossary: 'MOC',
-    definition: 'Maintenance of Contract: the bar a leader must clear to keep their role, set by the company for each leader rung.',
+    definition: termMessages.en.MOC.definition,
     pattern: /\bMOC\b/,
   },
   STAR_CLUB: {
     name: 'Star Club',
     glossary: 'Star Club',
-    definition: 'The first of the company’s production clubs, badged on an agency whose APE this year reaches its bar.',
+    definition: termMessages.en.STAR_CLUB.definition,
     pattern: /\bStar Club\b/i,
   },
   ELITE_CLUB: {
     name: 'Elite Club',
     glossary: 'Elite Club',
-    definition: 'The middle production club, above Star Club, badged on an agency whose APE this year reaches its bar.',
+    definition: termMessages.en.ELITE_CLUB.definition,
     pattern: /\bElite Club\b/i,
   },
   CHAIRMANS_CLUB: {
     name: 'Chairman’s Club',
     glossary: "Chairman's Club",
-    definition: 'The highest of the company’s production clubs, badged on an agency whose APE this year reaches its bar.',
+    definition: termMessages.en.CHAIRMANS_CLUB.definition,
     pattern: /\bChairman[’']s Club\b/i,
   },
 } as const satisfies Record<string, Term>;
@@ -141,8 +145,13 @@ export const CONTENT_TERM_KEYS = TERM_KEYS.filter(
   (key) => key !== 'TOUCHES' && key !== 'POTENTIAL_MAA' && !ANALYTICS_TERM_KEYS.includes(key),
 );
 
-/** The ⓘ's accessible name: *What is APE?* */
-export const termQuestion = (key: TermKey): string => `What is ${TERMS[key].name}?`;
+/** The ⓘ's accessible name, *What is APE?* — *Apa itu APE?* — in the reader's `language` (P18.98-T4). */
+export const termQuestion = (key: TermKey, language: Language = SOURCE_LANGUAGE): string =>
+  messagesIn(termMessages, language)[key].question;
+
+/** The ⓘ's one line, in the reader's `language` (P18.98-T4): the glossary's definition, its kept terms kept. */
+export const termDefinition = (key: TermKey, language: Language = SOURCE_LANGUAGE): string =>
+  messagesIn(termMessages, language)[key].definition;
 
 /** Where `key` first appears in `text`, as `[start, end)`; `null` when it does not. */
 export function termAt(text: string, key: TermKey): [number, number] | null {

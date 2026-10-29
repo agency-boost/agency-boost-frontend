@@ -5,10 +5,12 @@ import { TextInput } from '@/components/ui/field';
 import { InlineSaveField, useInlineSave, type InlineSaveOutcome } from '@/components/ui/inline-save-status';
 import { TEXT_TAP } from '@/components/ui/phone';
 import { Toast, useToast } from '@/components/ui/toast';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  OWN_COPY, parseTarget, PROTOTYPE_COPY, recruitPill, saveRecruitTarget, targetValueWords, type OverviewRecruitment,
+  parseTarget, recruitPill, saveRecruitTarget, targetValueWords, type OverviewRecruitment,
 } from '@/lib/kpm-overview';
 import { useCan, useSession } from '@/lib/session';
 import { OverviewCard } from './parts';
@@ -38,6 +40,8 @@ const TARGET_KEY = 'target';
  * (roles §3.13: the member's screen as they see it, nothing written), and writes nothing.
  */
 export function Recruitment({ recruitment, month }: { recruitment: OverviewRecruitment; month: string }) {
+  const t = useMessages(kpmOverviewMessages);
+  const language = useLanguage();
   const { me } = useSession();
   const holds = useCan('kpm_overview:set_recruit_target');
   const readOnly = !!me?.impersonationReadOnly;
@@ -117,7 +121,7 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
         if (!gone.current) {
           const hadFocus = typeof document !== 'undefined' && document.activeElement !== null && document.activeElement === input();
           close(hadFocus);
-          show(OWN_COPY.targetSaved);
+          show(t.targetSaved);
         }
         return true;
       } catch (err) {
@@ -131,7 +135,7 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
     // Leaving the page as it saves: nowhere to say how it went.
     if (gone.current) void attempt();
     else void saveInline(TARGET_KEY, attempt);
-  }, [month, saveInline, close, show, input]);
+  }, [month, saveInline, close, show, input, t]);
 
   /** Enter, or leaving the box: save what it holds, if it is a target and not the one kept. */
   const commit = (how: 'enter' | 'blur') => {
@@ -171,18 +175,18 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
   };
 
   const shownTarget = editing && parsed !== null ? parsed : saved;
-  const pill = recruitPill(recruitment.expectedToClose, shownTarget);
+  const pill = recruitPill(recruitment.expectedToClose, shownTarget, language);
 
   return (
     <OverviewCard className="p-5">
       <div className="mb-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <RecruitTile label={PROTOTYPE_COPY.expectedToClose}>
+        <RecruitTile label={t.expectedToClose}>
           <Value>{recruitment.expectedToClose}</Value>
         </RecruitTile>
-        <RecruitTile label={PROTOTYPE_COPY.target} htmlFor={editing ? inputId : undefined}>
+        <RecruitTile label={t.target} htmlFor={editing ? inputId : undefined}>
           {editing ? (
             // Its status on the line under it, inside the tile (P18.95-T1 AC-5); the refusal's reason stays below the tiles.
-            <InlineSaveField status={inline.statusOf(TARGET_KEY)} label={PROTOTYPE_COPY.target}>
+            <InlineSaveField status={inline.statusOf(TARGET_KEY)} label={t.target}>
               <TextInput
                 id={inputId}
                 type="number"
@@ -203,37 +207,37 @@ export function Recruitment({ recruitment, month }: { recruitment: OverviewRecru
           ) : (
             <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
               {saved === null
-                ? <p className="text-md font-semibold text-muted">{targetValueWords(saved)}</p>
-                : <Value>{targetValueWords(saved)}</Value>}
+                ? <p className="text-md font-semibold text-muted">{targetValueWords(saved, language)}</p>
+                : <Value>{targetValueWords(saved, language)}</Value>}
               {showEdit && (
                 <button
                   ref={editButton}
                   type="button"
                   disabled={readOnly}
-                  aria-label={OWN_COPY.editTarget}
+                  aria-label={t.editTarget}
                   onClick={open}
                   className={cn(
                     'text-sm font-semibold text-amber-ink underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:no-underline',
                     TEXT_TAP,
                   )}
                 >
-                  {OWN_COPY.edit}
+                  {t.edit}
                 </button>
               )}
             </div>
           )}
         </RecruitTile>
-        <RecruitTile label={PROTOTYPE_COPY.lastMonth}>
+        <RecruitTile label={t.lastMonth}>
           <Value>{recruitment.closedLastMonth}</Value>
         </RecruitTile>
-        <RecruitTile label={PROTOTYPE_COPY.pipelineNow}>
+        <RecruitTile label={t.pipelineNow}>
           <Value>{recruitment.pipelineNow}</Value>
         </RecruitTile>
       </div>
 
       {(invalid || error) && (
         <p id={errorId} role="alert" className="mb-2 text-sm text-alert">
-          {invalid ? OWN_COPY.targetInvalid : `${OWN_COPY.targetNotSaved} ${error?.message ?? ''}`.trim()}
+          {invalid ? t.targetInvalid : `${t.targetNotSaved} ${error?.message ?? ''}`.trim()}
         </p>
       )}
 

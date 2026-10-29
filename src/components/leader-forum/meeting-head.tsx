@@ -3,11 +3,12 @@
 import Link from 'next/link';
 import { useId } from 'react';
 import { Button } from '@/components/ui/field';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { forumMessages } from '@/i18n/messages/forum';
 import { cn } from '@/lib/cn';
 import { formatShortDay } from '@/lib/format';
 import {
-  changeDateLabel, editorsInOrder, FORUM_COPY, initialsOf, rungShort, stateLabel,
-  type ForumPerson, type MeetingView,
+  editorsInOrder, initialsOf, rungShort, type ForumPerson, type MeetingView,
 } from '@/lib/leader-meetings';
 import { useMeetingSave } from './meeting-writer';
 
@@ -36,8 +37,10 @@ export function MeetingHead({
   onShare: () => void;
   onPrint: () => void;
 }) {
+  const t = useMessages(forumMessages);
+  const language = useFigureLanguage();
   const { flush, line } = useMeetingSave();
-  const date = formatShortDay(meeting.date, { year: true });
+  const date = formatShortDay(meeting.date, { year: true }, language);
   const movable = meeting.can.reschedule || meeting.can.delete;
   const anyButton = meeting.can.share || meeting.can.print || meeting.can.edit;
 
@@ -57,29 +60,29 @@ export function MeetingHead({
                 type="button"
                 onClick={onDetails}
                 // The spec's words, then the date it shows, so the name holds what is read on the screen.
-                aria-label={`${changeDateLabel(meeting.title)}, ${date}`}
+                aria-label={`${t.changeDate({ title: meeting.title })}, ${date}`}
                 className="rounded-sm font-semibold text-navy-soft underline decoration-dashed underline-offset-2 hover:decoration-solid print:font-normal print:text-muted print:no-underline"
               >
                 {date}
               </button>
             ) : date}
-            {' · '}{stateLabel(meeting.state)}
+            {' · '}{t.state[meeting.state]}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2.5 print:hidden max-sm:items-start">
           <span className="whitespace-nowrap rounded-pill bg-navy/5 px-[9px] py-[3px] text-xs text-muted">
-            {FORUM_COPY.cadence}
+            {t.cadence}
           </span>
           {anyButton && (
             <div className="flex flex-wrap gap-2">
               {meeting.can.share && (
-                <Button variant="secondary" className={cn(SMALL, OUTLINED)} onClick={onShare}>{FORUM_COPY.share}</Button>
+                <Button variant="secondary" className={cn(SMALL, OUTLINED)} onClick={onShare}>{t.share}</Button>
               )}
               {meeting.can.print && (
-                <Button variant="secondary" className={cn(SMALL, OUTLINED)} onClick={onPrint}>{FORUM_COPY.savePdf}</Button>
+                <Button variant="secondary" className={cn(SMALL, OUTLINED)} onClick={onPrint}>{t.savePdf}</Button>
               )}
               {meeting.can.edit && (
-                <Button className={SMALL} onClick={() => void flush()}>{FORUM_COPY.save}</Button>
+                <Button className={SMALL} onClick={() => void flush()}>{t.save}</Button>
               )}
             </div>
           )}
@@ -97,11 +100,12 @@ export function MeetingHead({
  * Live while the meeting is upcoming; once it is over, the list written onto it then (F-186).
  */
 function Editors({ meeting }: { meeting: MeetingView }) {
+  const t = useMessages(forumMessages);
   const labelId = useId();
   const owner = meeting.editors.owner;
   return (
     <div className="flex flex-wrap items-center gap-2.5 border-t border-hairline pt-[14px]">
-      <span id={labelId} className="text-xs font-bold uppercase tracking-wide text-muted">{FORUM_COPY.canEdit}</span>
+      <span id={labelId} className="text-xs font-bold uppercase tracking-wide text-muted">{t.canEdit}</span>
       <ul aria-labelledby={labelId} className="flex flex-wrap items-center gap-2.5">
         {editorsInOrder(meeting.editors).map((person) => (
           <Chip key={person.membershipId} person={person} owner={person.membershipId === owner?.membershipId} />
@@ -112,7 +116,7 @@ function Editors({ meeting }: { meeting: MeetingView }) {
           href="/people/members"
           className="ml-auto text-sm font-semibold text-navy-soft underline-offset-2 hover:underline print:hidden"
         >
-          {FORUM_COPY.manageTags}
+          {t.manageTags}
         </Link>
       )}
     </div>
@@ -120,6 +124,7 @@ function Editors({ meeting }: { meeting: MeetingView }) {
 }
 
 function Chip({ person, owner }: { person: ForumPerson; owner: boolean }) {
+  const t = useMessages(forumMessages);
   return (
     <li className="inline-flex items-center gap-1.5 rounded-pill bg-navy/5 py-[3px] pl-[3px] pr-2.5 text-sm font-semibold text-navy">
       <span
@@ -131,7 +136,7 @@ function Chip({ person, owner }: { person: ForumPerson; owner: boolean }) {
       >
         {initialsOf(person.name)}
       </span>
-      {person.name}{person.isReader ? ` ${FORUM_COPY.you}` : ''} · {rungShort(person.rung)}
+      {person.name}{person.isReader ? ` ${t.you}` : ''} · {rungShort(person.rung)}
     </li>
   );
 }

@@ -3,9 +3,12 @@
 import { useRef, useState } from 'react';
 import { Button, ErrorBanner, TextInput } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import { moneyPrefix } from '@/lib/format';
 import {
-  dialogGroups, everyRow, inputsOf, OWN_COPY, productionChanges, PROTOTYPE_COPY, regroup, rowName, updateUnitProduction,
+  dialogGroups, everyRow, inputsOf, productionChanges, regroup, rowName, updateUnitProduction,
   type ProductionCadence, type ProductionInputs, type UnitDashboardView,
 } from '@/lib/unit-dashboard';
 
@@ -24,6 +27,9 @@ import {
  * moved (409), a figure out of bounds (422) — and the box it names is marked. A stale revision reads the
  * dashboard again behind the dialog, so the next *Save all* is pinned to the new one; only what was typed
  * here is sent, so nobody else's figure is overwritten by a box nobody touched.
+ *
+ * **Its words are the catalogue's** (`messages/unit-dashboard.ts`, P18.98-T4); the money's mark in each heading is the
+ * figures' (`moneyPrefix`), as the boxes beneath it are prefixed (P18.98-T3 AC-3).
  */
 export function UpdateProductionDialog({
   view, onClose, onSaved, onStale,
@@ -35,9 +41,13 @@ export function UpdateProductionDialog({
   /** The month moved on somewhere else: read the dashboard again for its new revision. */
   onStale: () => void;
 }) {
+  const figures = useFigureLanguage();
+  const language = useLanguage();
+  const words = useMessages(unitDashboardMessages);
+  const t = words.prototype;
   // What the dialog opened on: its groups, and the figures each box was prefilled with.
-  const [opened] = useState(() => ({ groups: dialogGroups(view), rows: everyRow(view) }));
-  const [inputs, setInputs] = useState<ProductionInputs>(() => inputsOf(opened.rows));
+  const [opened] = useState(() => ({ groups: dialogGroups(view, language), rows: everyRow(view) }));
+  const [inputs, setInputs] = useState<ProductionInputs>(() => inputsOf(opened.rows, figures));
   const [error, setError] = useState<ApiError | null>(null);
   const [saving, setSaving] = useState(false);
   /** The first box, which takes the focus as the dialog opens: the ✕ comes before it in the page. */
@@ -47,7 +57,7 @@ export function UpdateProductionDialog({
   };
 
   const type = (membershipId: string, cadence: ProductionCadence, typed: string) =>
-    setInputs((current) => ({ ...current, [membershipId]: { ...current[membershipId], [cadence]: regroup(typed) } }));
+    setInputs((current) => ({ ...current, [membershipId]: { ...current[membershipId], [cadence]: regroup(typed, figures) } }));
 
   /** The box a 422 names (`details.membershipId`, `details.cadence`), marked until the next save. */
   const refused = error?.details && typeof error.details.membershipId === 'string'
@@ -76,21 +86,25 @@ export function UpdateProductionDialog({
     }
   }
 
+  // The headings name the money as the boxes beneath them are prefixed: *Rp*, *IDR*.
+  const unit = moneyPrefix(figures);
+  const month = t.dialogMonth({ unit });
+  const year = t.dialogYear({ unit });
   let first = true;
   return (
     <Modal
       open
-      title={PROTOTYPE_COPY.updateProduction}
-      description={PROTOTYPE_COPY.dialogHint}
+      title={t.updateProduction}
+      description={t.dialogHint}
       onClose={onClose}
       initialFocus={firstInput}
       className="relative max-w-[560px]"
       footer={(
         // `.bulk-modal-footer` (`:1638`): *Cancel* and *Save all*, at its end — held there as the table scrolls.
         <div className="flex justify-end gap-2.5">
-          <Button variant="secondary" onClick={onClose}>{PROTOTYPE_COPY.cancel}</Button>
+          <Button variant="secondary" onClick={onClose}>{t.cancel}</Button>
           <Button onClick={() => void save()} disabled={saving}>
-            {saving ? OWN_COPY.saving : PROTOTYPE_COPY.saveAll}
+            {saving ? words.own.saving : t.saveAll}
           </Button>
         </div>
       )}
@@ -98,7 +112,7 @@ export function UpdateProductionDialog({
         // `.bulk-close` (`:4686`): ✕ at the header's end, named *Close*.
         <Button
           variant="icon"
-          aria-label={PROTOTYPE_COPY.close}
+          aria-label={t.close}
           onClick={onClose}
           className="absolute right-4 top-4"
         >
@@ -110,7 +124,7 @@ export function UpdateProductionDialog({
         <table className="relative w-full min-w-[440px] border-collapse text-left">
           <thead>
             <tr>
-              {[PROTOTYPE_COPY.dialogName, PROTOTYPE_COPY.dialogMonth, PROTOTYPE_COPY.dialogYear].map((name) => (
+              {[t.dialogName, month, year].map((name) => (
                 <th
                   key={name}
                   scope="col"
@@ -133,7 +147,7 @@ export function UpdateProductionDialog({
                 </th>
               </tr>
               {group.rows.map(({ row, indent }) => {
-                const name = rowName(row);
+                const name = rowName(row, language);
                 const boxes = inputs[row.membershipId];
                 return (
                   <tr key={row.membershipId} className="border-b border-hairline">
@@ -148,11 +162,11 @@ export function UpdateProductionDialog({
                       return (
                         <td key={cadence} ref={ref} className="px-[22px] py-2">
                           <TextInput
-                            prefix="Rp"
+                            prefix={unit}
                             type="text"
                             inputMode="numeric"
                             autoComplete="off"
-                            aria-label={`${cadence === 'monthly' ? PROTOTYPE_COPY.dialogMonth : PROTOTYPE_COPY.dialogYear}, ${name}`}
+                            aria-label={`${cadence === 'monthly' ? month : year}, ${name}`}
                             value={boxes?.[cadence] ?? ''}
                             onChange={(e) => type(row.membershipId, cadence, e.target.value)}
                             invalid={refused?.membershipId === row.membershipId && refused.cadence === cadence}

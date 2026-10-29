@@ -14,9 +14,14 @@ import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Toast, useToast } from '@/components/ui/toast';
+import { messagesIn, type MessagesOf } from '@/i18n/catalogue';
+import type { Language } from '@/i18n/language';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { activationMessages } from '@/i18n/messages/activation';
+import { newHiresMessages } from '@/i18n/messages/new-hires';
 import {
-  ACTIVATION_3M_LABEL, ACTIVATION_NOTE_MAX, attributionOf, correctionOf, correctStartDate, earliestStart, groupTitle, isDataBacked, isManual,
-  isTickedByHandLink, markHireLeft, newHireHref, OWN_COPY, PROTOTYPE_COPY, readHireClosings, readNewHire, readNewHires,
+  ACTIVATION_NOTE_MAX, attributionOf, correctionOf, correctStartDate, earliestStart, groupTitle, isDataBacked, isManual,
+  isTickedByHandLink, markHireLeft, newHireHref, readHireClosings, readNewHire, readNewHires,
   saveActivationNote, saveHireItem, startDateAllowed, startDateRangeText, type Activation3MFigures, type Activation3MShare,
   type ActivationItemProgress, type ActivationRecordInput, type ActivationView, type NewHireRow, type NewHiresRoster,
   type NewHiresSections,
@@ -24,7 +29,7 @@ import {
 import { oneOnOneHref } from '@/lib/calendar';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { formatMonth, formatOfficeDay, formatPercent, formatShortDay } from '@/lib/format';
+import { formatMonth, formatOfficeDay, formatPercent, formatShortDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import { useCan, useSession } from '@/lib/session';
 import { usePhone } from '@/lib/use-phone';
 
@@ -33,11 +38,11 @@ import { usePhone } from '@/lib/use-phone';
  */
 
 type SectionKey = keyof NewHiresSections;
-const SECTIONS: readonly { key: SectionKey; title: string }[] = [
-  { key: 'inProgress', title: OWN_COPY.sectionInProgress },
-  { key: 'activated', title: OWN_COPY.sectionActivated },
-  { key: 'notActivated', title: OWN_COPY.sectionNotActivated },
-];
+/** The three sections, in order; each one's title is the catalogue's (`sections`). */
+const SECTIONS: readonly SectionKey[] = ['inProgress', 'activated', 'notActivated'];
+
+/** The roster's and the detail's words (`i18n/messages/new-hires.ts`; P18.98-T4). */
+type HiresWords = MessagesOf<typeof newHiresMessages.en>;
 
 /**
  * **New Hires** (`/new-hires`; P13-T5, rebuilt by P18.96-T6 — ADR-0173; the client's report of 2026-10-27, R4, R5,
@@ -53,8 +58,12 @@ const SECTIONS: readonly { key: SectionKey; title: string }[] = [
  * the first sale or *—*; the result. **An overdue or not-activated row offers *Schedule 1:1* and *Mark left*** (AC-4,
  * I-473): the calendar's new-entry dialog as a 1:1 with them, and a confirmation that records their leaving. **Below
  * 768px a card per hire**, the same fields in words (P18.95-T3 AC-4, ADR-0167 §6).
+ *
+ * **Its words are the catalogue's** (`i18n/messages/new-hires.ts`; P18.98-T4), a unit's name in the reader's language
+ * (`groupTitle`), and every date, month and percentage in the figures' (`useFigureLanguage()`).
  */
 export function NewHires() {
+  const t = useMessages(newHiresMessages);
   const { me } = useSession();
   const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
   const mayMarkLeft = useCan('new_hire:mark_left') && !readOnly;
@@ -89,15 +98,15 @@ export function NewHires() {
     setRefused(null);
     try {
       await markHireLeft(row.hire.membershipId);
-      show(OWN_COPY.markedLeft(row.hire.name));
+      show(t.markedLeft({ name: row.hire.name }));
       setAttempt((n) => n + 1);
     } catch (err) {
-      setRefused(OWN_COPY.markLeftFailed(toDisplayError(err).message));
+      setRefused(t.markLeftFailed({ why: toDisplayError(err).message }));
     }
   };
 
   if (empty) {
-    return <Card><p className="text-center text-md text-muted">{OWN_COPY.rosterEmpty}</p></Card>;
+    return <Card><p className="text-center text-md text-muted">{t.empty}</p></Card>;
   }
 
   const inMonth = (row: NewHireRow) => month === 'all' || row.joinDate.startsWith(month);
@@ -112,17 +121,17 @@ export function NewHires() {
       {error && (
         <div>
           <ErrorBanner {...error} />
-          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
         </div>
       )}
-      {!roster && !error && <SkeletonCards count={2} label={OWN_COPY.loadingRoster} />}
+      {!roster && !error && <SkeletonCards count={2} label={t.loading} />}
       {roster && <Activation3MCard roster={roster} month={month} onMonth={setMonth} />}
       {refused && <p role="alert" className="text-sm font-semibold text-alert">{refused}</p>}
-      {roster && SECTIONS.map(({ key, title }) => (
+      {roster && SECTIONS.map((key) => (
         <SectionCard
           key={key}
           section={key}
-          title={title}
+          title={t.sections[key]}
           rows={roster.sections[key].filter(inMonth)}
           days={roster.days}
           phone={phone}
@@ -132,9 +141,9 @@ export function NewHires() {
       ))}
       <Dialog
         open={asking !== null}
-        message={asking ? OWN_COPY.markLeftQuestion(asking.hire.name) : ''}
-        confirmLabel={OWN_COPY.markLeft}
-        cancelLabel={PROTOTYPE_COPY.cancel}
+        message={asking ? t.markLeftQuestion({ name: asking.hire.name }) : ''}
+        confirmLabel={t.markLeft}
+        cancelLabel={t.cancel}
         tone="danger"
         onConfirm={() => { if (asking) void markLeft(asking); }}
         onCancel={() => setAsking(null)}
@@ -146,15 +155,17 @@ export function NewHires() {
 
 /** A share's figure, `—` with its words for a screen reader while nobody is decided. */
 function ShareFigure({ pct, className }: { pct: number | null; className?: string }) {
+  const t = useMessages(newHiresMessages);
+  const figures = useFigureLanguage();
   if (pct === null) {
     return (
       <span className={className}>
-        <span aria-hidden="true">{OWN_COPY.noFigure}</span>
-        <span className="sr-only">{OWN_COPY.noFigureName}</span>
+        <span aria-hidden="true">—</span>
+        <span className="sr-only">{t.noFigureName}</span>
       </span>
     );
   }
-  return <span className={className}>{formatPercent(pct)}</span>;
+  return <span className={className}>{formatPercent(pct, {}, figures)}</span>;
 }
 
 /** A unit's or the reader's figures, for the month chosen: the served month's share, or the whole year's. */
@@ -166,28 +177,33 @@ const shareFor = (figures: Activation3MFigures, month: string): Activation3MShar
  * month the server lists, newest first, and *All* — and, where the reader has more than one unit, each unit's figure.
  */
 function Activation3MCard({ roster, month, onMonth }: { roster: NewHiresRoster; month: string; onMonth: (m: string) => void }) {
+  const t = useMessages(newHiresMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const share = shareFor(roster.activation3M, month);
   return (
     <section aria-labelledby="activation-3m" className="rounded-lg border border-hairline bg-card px-6 py-[22px] max-md:px-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h2 id="activation-3m" className="font-display text-md font-bold text-navy">{OWN_COPY.activation3MHeading}</h2>
+          <h2 id="activation-3m" className="font-display text-md font-bold text-navy">{t.activation3M}</h2>
           <ShareFigure pct={share.pct} className="mt-1 block font-display text-2xl font-bold text-navy" />
-          <p className="text-sm text-muted">{OWN_COPY.activation3MCounts(share.activated, share.notActivated, share.inProgress)}</p>
+          <p className="text-sm text-muted">
+            {t.counts({ activated: share.activated, notActivated: share.notActivated, inProgress: share.inProgress })}
+          </p>
         </div>
         <label className="flex items-center gap-2 text-xs font-semibold text-navy">
-          {OWN_COPY.joinMonth}
+          {t.joinMonth}
           <Select value={month} onChange={(e) => onMonth(e.target.value)} className="w-auto">
-            <option value="all">{OWN_COPY.allMonths}</option>
-            {roster.activation3M.byMonth.map((m) => <option key={m.month} value={m.month}>{formatMonth(m.month)}</option>)}
+            <option value="all">{t.allMonths}</option>
+            {roster.activation3M.byMonth.map((m) => <option key={m.month} value={m.month}>{formatMonth(m.month, figures)}</option>)}
           </Select>
         </label>
       </div>
       {roster.units.length > 1 && (
-        <ul aria-label={OWN_COPY.byUnit} className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-hairline pt-3 text-sm text-navy">
+        <ul aria-label={t.byUnit} className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-hairline pt-3 text-sm text-navy">
           {roster.units.map((unit) => (
             <li key={unit.leader?.membershipId ?? 'direct'}>
-              <span className="text-muted">{groupTitle(unit)}</span>{' '}
+              <span className="text-muted">{groupTitle(unit, language)}</span>{' '}
               <ShareFigure pct={shareFor(unit.activation3M, month).pct} className="font-semibold" />
             </li>
           ))}
@@ -212,19 +228,22 @@ const TD = 'border-b border-hairline px-3 py-3.5 text-md font-medium text-navy';
 
 /** The name: a link to the detail, plain once they left — and their unit under it, where the reader has several. */
 function HireName({ row, showUnit, className }: { row: NewHireRow; showUnit: boolean; className?: string }) {
+  const language = useLanguage();
   return (
     <>
       {row.leftOn === null
         ? <Link href={newHireHref(row.hire.membershipId)} className={cn('text-navy hover:underline', className)}>{row.hire.name}</Link>
         : <span className={className}>{row.hire.name}</span>}
-      {showUnit && <span className="block text-xs font-normal text-muted">{groupTitle(row.unit)}</span>}
+      {showUnit && <span className="block text-xs font-normal text-muted">{groupTitle(row.unit, language)}</span>}
     </>
   );
 }
 
 /** The checklist's bar and percentage, red and bold when overdue — said to a screen reader too — or *No checklist*. */
 function ChecklistCell({ checklist, fill = false }: { checklist: NewHireRow['checklist']; fill?: boolean }) {
-  if (!checklist) return <span className="text-sm text-muted">{OWN_COPY.noChecklist}</span>;
+  const t = useMessages(newHiresMessages);
+  const figures = useFigureLanguage();
+  if (!checklist) return <span className="text-sm text-muted">{t.noChecklist}</span>;
   const width = Math.min(100, Math.max(0, checklist.pct));
   return (
     <div className="flex items-center gap-[9px]" data-overdue={checklist.overdue || undefined}>
@@ -232,40 +251,41 @@ function ChecklistCell({ checklist, fill = false }: { checklist: NewHireRow['che
         <div className="h-full rounded-sm bg-gradient-to-r from-amber to-amber-dark" style={{ width: `${width}%` }} />
       </div>
       <span className={cn('shrink-0', checklist.overdue && 'font-bold text-alert')}>
-        {formatPercent(checklist.pct)}
-        {checklist.overdue && <span className="sr-only">{OWN_COPY.overdue}</span>}
+        {formatPercent(checklist.pct, {}, figures)}
+        {checklist.overdue && <span className="sr-only">{t.overdue}</span>}
       </span>
     </div>
   );
 }
 
-/** The result's words: the section's, and *Left {date}* for one who left. */
-function resultWords(row: NewHireRow): string {
-  const result = ACTIVATION_3M_LABEL[row.activation3M];
-  return row.leftOn ? `${result} · ${OWN_COPY.leftOn(formatShortDay(row.leftOn, { year: true }))}` : result;
+/** The result's words: the section's, and *Left {date}* for one who left — its day in `figures`. */
+function resultWords(row: NewHireRow, t: HiresWords, figures: Language): string {
+  const result = t.result3M[row.activation3M];
+  return row.leftOn ? `${result} · ${t.leftOn({ on: formatShortDay(row.leftOn, { year: true }, figures) })}` : result;
 }
 
 /** *Schedule 1:1* and *Mark left*, on a row that needs them and to a reader who may. */
 function RowActionButtons({ row, actions }: { row: NewHireRow; actions: RowActions }) {
+  const t = useMessages(newHiresMessages);
   if (!needsAction(row) || (!actions.scheduleHref && !actions.onMarkLeft)) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
       {actions.scheduleHref && (
         <Link
           href={actions.scheduleHref(row.hire.membershipId)}
-          aria-label={OWN_COPY.scheduleOneOnOneName(row.hire.name)}
+          aria-label={t.scheduleOneOnOneName({ name: row.hire.name })}
           className={cn('text-sm font-semibold text-navy-soft underline-offset-2 hover:text-navy hover:underline', TEXT_TAP)}
         >
-          {OWN_COPY.scheduleOneOnOne}
+          {t.scheduleOneOnOne}
         </Link>
       )}
       {actions.onMarkLeft && (
         <Button
           variant="inlineDanger"
-          aria-label={OWN_COPY.markLeftName(row.hire.name)}
+          aria-label={t.markLeftName({ name: row.hire.name })}
           onClick={() => actions.onMarkLeft!(row)}
         >
-          {OWN_COPY.markLeft}
+          {t.markLeft}
         </Button>
       )}
     </div>
@@ -284,12 +304,15 @@ function SectionCard({
   showUnit: boolean;
   actions: RowActions;
 }) {
+  const t = useMessages(newHiresMessages);
+  const figures = useFigureLanguage();
+  const day = (value: string) => formatShortDay(value, { year: true }, figures);
   const inProgress = section === 'inProgress';
   const withActions = rows.some(needsAction) && (actions.scheduleHref !== null || actions.onMarkLeft !== null);
   return (
     <section aria-label={title} className={cn('rounded-lg border border-hairline bg-card', phone ? 'px-4 py-[18px]' : 'px-6 py-[22px]')}>
       <h2 className="mb-3 font-display text-md font-bold text-navy">{title}</h2>
-      {rows.length === 0 && <p className="text-sm text-muted">{OWN_COPY.sectionEmpty}</p>}
+      {rows.length === 0 && <p className="text-sm text-muted">{t.sectionEmpty}</p>}
       {rows.length > 0 && phone && (
         <ul role="list" aria-label={title}>
           {rows.map((row) => (
@@ -298,12 +321,11 @@ function SectionCard({
               <div className="mt-1.5 text-md font-medium text-navy"><ChecklistCell checklist={row.checklist} fill /></div>
               <p className="mt-1.5 text-sm font-medium text-navy">
                 {inProgress
-                  ? OWN_COPY.dayOf(String(row.day), days)
-                  : resultWords(row)}
+                  ? t.dayOf({ day: String(row.day), of: days })
+                  : resultWords(row, t, figures)}
               </p>
               <p className="text-sm text-muted">
-                {PROTOTYPE_COPY.joinDate} {formatShortDay(row.joinDate, { year: true })} · {OWN_COPY.firstSale}{' '}
-                {row.firstSaleDate ? formatShortDay(row.firstSaleDate, { year: true }) : PROTOTYPE_COPY.none}
+                {t.cardDates({ join: day(row.joinDate), firstSale: row.firstSaleDate ? day(row.firstSaleDate) : '—' })}
               </p>
               <div className="mt-1"><RowActionButtons row={row} actions={actions} /></div>
             </li>
@@ -318,20 +340,20 @@ function SectionCard({
             <caption className="sr-only">{title}</caption>
             <thead>
               <tr>
-                <th scope="col" className={TH}>{PROTOTYPE_COPY.name}</th>
-                <th scope="col" className={TH}>{PROTOTYPE_COPY.joinDate}</th>
-                {inProgress && <th scope="col" className={cn(TH, 'text-center')}>{PROTOTYPE_COPY.day}</th>}
-                <th scope="col" className={TH}>{OWN_COPY.checklist}</th>
-                <th scope="col" className={TH}>{OWN_COPY.firstSale}</th>
-                {!inProgress && <th scope="col" className={TH}>{OWN_COPY.result}</th>}
-                {withActions && <th scope="col" className={TH}><span className="sr-only">{OWN_COPY.actions}</span></th>}
+                <th scope="col" className={TH}>{t.columns.name}</th>
+                <th scope="col" className={TH}>{t.columns.joinDate}</th>
+                {inProgress && <th scope="col" className={cn(TH, 'text-center')}>{t.columns.day}</th>}
+                <th scope="col" className={TH}>{t.columns.checklist}</th>
+                <th scope="col" className={TH}>{t.columns.firstSale}</th>
+                {!inProgress && <th scope="col" className={TH}>{t.columns.result}</th>}
+                {withActions && <th scope="col" className={TH}><span className="sr-only">{t.columns.actions}</span></th>}
               </tr>
             </thead>
             <tbody className="[&>tr:last-child>*]:border-b-0">
               {rows.map((row) => (
                 <tr key={row.hire.membershipId} className="hover:bg-navy/[0.03]">
                   <th scope="row" className={cn(TD, 'text-left')}><HireName row={row} showUnit={showUnit} /></th>
-                  <td className={TD}><time dateTime={row.joinDate}>{formatShortDay(row.joinDate, { year: true })}</time></td>
+                  <td className={TD}><time dateTime={row.joinDate}>{day(row.joinDate)}</time></td>
                   {inProgress && (
                     <td className={cn(TD, 'text-center')}>
                       {row.day}
@@ -341,10 +363,10 @@ function SectionCard({
                   <td className={TD}><ChecklistCell checklist={row.checklist} /></td>
                   <td className={TD}>
                     {row.firstSaleDate
-                      ? <time dateTime={row.firstSaleDate}>{formatShortDay(row.firstSaleDate, { year: true })}</time>
-                      : <span className="text-muted">{PROTOTYPE_COPY.none}</span>}
+                      ? <time dateTime={row.firstSaleDate}>{day(row.firstSaleDate)}</time>
+                      : <span className="text-muted">—</span>}
                   </td>
-                  {!inProgress && <td className={TD}>{resultWords(row)}</td>}
+                  {!inProgress && <td className={TD}>{resultWords(row, t, figures)}</td>}
                   {withActions && <td className={TD}><RowActionButtons row={row} actions={actions} /></td>}
                 </tr>
               ))}
@@ -381,8 +403,14 @@ function SectionCard({
  *   the skeleton until this hire's one read answers, its links evaluated; a tick changes the box at once and the
  *   figures when its answer lands, **in place** — every row and card keeps its node, the focus stays on the box, and
  *   nothing scrolls the page.
+ * - **Its words are the catalogue's** (`new-hires.ts`, and `activation.ts` for the parts the hire's page shares;
+ *   P18.98-T4), every date in the figures' language — so the join date beside the shared date field reads as its
+ *   face does.
  */
 export function NewHireDetail({ membershipId }: { membershipId: string }) {
+  const t = useMessages(newHiresMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const { me } = useSession();
   const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
   const mayTick = useCan('activation:update_manual_item') && !readOnly;
@@ -449,7 +477,7 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
       return queue(async () => {
         try {
           setView(await saveHireItem(membershipId, code, done, record));
-          show(PROTOTYPE_COPY.statusUpdated);
+          show(t.detail.statusUpdated);
           return true;
         } catch (err) {
           const gone = err instanceof ApiRequestError && err.status === 404;
@@ -461,7 +489,7 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
         }
       });
     });
-  }, [membershipId, queue, show, track]);
+  }, [membershipId, queue, show, track, t]);
   const loadClosings = useCallback(async () => (await readHireClosings(membershipId)).closings, [membershipId]);
 
   const correct = useCallback((startDate: string) => {
@@ -470,7 +498,7 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
       return queue(async () => {
         try {
           setView(await correctStartDate(membershipId, startDate));
-          show(OWN_COPY.startSaved);
+          show(t.detail.startSaved);
           return true;
         } catch (err) {
           setStartError(toDisplayError(err).message);
@@ -479,7 +507,7 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
         }
       });
     });
-  }, [membershipId, queue, show, track]);
+  }, [membershipId, queue, show, track, t]);
 
   if (missing) return <HireNotFound />;
 
@@ -492,7 +520,7 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
       {view && (
         <PageHeader
           title={view.hire.name}
-          subtitle={view.state === 'open' ? PROTOTYPE_COPY.detailSubtitle : closedLine(view, reader)}
+          subtitle={view.state === 'open' ? t.detail.subtitle : closedLine(view, reader, language, figures)}
         />
       )}
       <BackToRoster />
@@ -500,16 +528,16 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
       {error && (
         <div>
           <ErrorBanner {...error} />
-          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
         </div>
       )}
-      {!view && !error && <ActivationSkeleton label={OWN_COPY.loadingHire} />}
+      {!view && !error && <ActivationSkeleton label={t.detail.loading} />}
 
       {view && (
         <div className="flex flex-col gap-4">
           <Card density="compact">
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3.5">
-              <ProgressHeading>{PROTOTYPE_COPY.detailHeading}</ProgressHeading>
+              <ProgressHeading>{t.detail.heading}</ProgressHeading>
               <JoinDateField
                 view={view}
                 reader={reader}
@@ -520,7 +548,7 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
                 resetKey={startReset}
               />
             </div>
-            <ProgressSummary view={view} label={PROTOTYPE_COPY.detailHeading} markOverdue />
+            <ProgressSummary view={view} label={t.detail.heading} markOverdue />
           </Card>
 
           {view.aspects.map((aspect, i) => (
@@ -561,7 +589,7 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
             writable={mayNote && open}
             onSaved={(note) => {
               setView((v) => (v ? { ...v, note } : v));
-              show(PROTOTYPE_COPY.noteSaved(view.hire.name));
+              show(t.note.saved({ name: view.hire.name }));
             }}
             onMissing={() => setMissing(true)}
           />
@@ -574,6 +602,7 @@ export function NewHireDetail({ membershipId }: { membershipId: string }) {
 
 /** *Back to New Hires* (`:3365-3368`; the prototype's *Your New Hires* until P18.95-T9 AC-2, `.training-back-btn` `:1811-1816`): the prototype's chevron and words, as a link. */
 function BackToRoster() {
+  const t = useMessages(newHiresMessages);
   return (
     <Link
       href="/new-hires"
@@ -582,7 +611,7 @@ function BackToRoster() {
       <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
         <path d="M15 18l-6-6 6-6" />
       </svg>
-      {PROTOTYPE_COPY.back}
+      {t.detail.back}
     </Link>
   );
 }
@@ -605,13 +634,16 @@ function JoinDateField({
   error: string | null;
   resetKey: number;
 }) {
-  const corrected = correctionOf(view, reader);
+  const a = useMessages(activationMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const corrected = correctionOf(view, reader, language, figures);
   if (!writable) {
     return (
       <dl className="flex items-center gap-2">
-        <dt className="whitespace-nowrap text-xs font-semibold text-navy">{PROTOTYPE_COPY.joinDate}</dt>
+        <dt className="whitespace-nowrap text-xs font-semibold text-navy">{a.joinDate}</dt>
         <dd className="flex h-[34px] items-center rounded-md border-[1.5px] border-hairline bg-base px-3 text-base text-navy">
-          <time dateTime={view.startDate}>{formatShortDay(view.startDate, { year: true })}</time>
+          <time dateTime={view.startDate}>{formatShortDay(view.startDate, { year: true }, figures)}</time>
         </dd>
         {corrected && <dd><AttributionMark words={corrected} /></dd>}
       </dl>
@@ -621,7 +653,7 @@ function JoinDateField({
     <div className="flex flex-col items-end">
       <div className="flex items-center gap-2">
         <label htmlFor="activation-start-date" className="whitespace-nowrap text-xs font-semibold text-navy">
-          {PROTOTYPE_COPY.joinDate}
+          {a.joinDate}
         </label>
         <AutoSaveDateField
           id="activation-start-date"
@@ -629,26 +661,28 @@ function JoinDateField({
           min={earliestStart(view.today)}
           max={view.today}
           allowed={(value) => startDateAllowed(value, view.today)}
-          invalidText={startDateRangeText(view.today)}
+          invalidText={startDateRangeText(view.today, language, figures)}
           resetKey={resetKey}
           onCommit={(next) => { if (next) onCommit(next); }}
         />
         <AttributionMark words={corrected} />
       </div>
-      <InlineSaveStatus {...status} label={PROTOTYPE_COPY.joinDate} className="mt-1" />
+      <InlineSaveStatus {...status} label={a.joinDate} className="mt-1" />
       <RowError message={error ?? undefined} />
     </div>
   );
 }
 
-/** How an activation that is over ended, in the subtitle's place (parity L-89). */
-function closedLine(view: ActivationView, reader: string | null | undefined): string {
+/** How an activation that is over ended, in the subtitle's place (parity L-89): words in `language`, days in `figures`. */
+function closedLine(view: ActivationView, reader: string | null | undefined, language: Language, figures: Language): string {
+  const t = messagesIn(newHiresMessages, language).detail;
+  const you = messagesIn(activationMessages, language).you;
   return view.state === 'graduated'
-    ? OWN_COPY.closedGraduated(
-      view.graduatedBy ? (view.graduatedBy.membershipId === reader ? OWN_COPY.you : view.graduatedBy.name) : view.hire.name,
-      view.graduatedAt ? formatOfficeDay(view.graduatedAt) : '',
-    )
-    : OWN_COPY.closedExpired(formatShortDay(view.endsOn, { year: true }));
+    ? t.closedGraduated({
+      by: view.graduatedBy ? (view.graduatedBy.membershipId === reader ? you : view.graduatedBy.name) : view.hire.name,
+      on: view.graduatedAt ? formatOfficeDay(view.graduatedAt, OFFICE_TIME_ZONE, figures) : '',
+    })
+    : t.closedExpired({ on: formatShortDay(view.endsOn, { year: true }, figures) });
 }
 
 /** A leader's row (`:6823-6840`): a box to tick for a manual item, *Auto* and inert for a live link. */
@@ -663,6 +697,7 @@ function HireItemRow({
   status: InlineSaveStatusProps;
   error: string | undefined;
 }) {
+  const words = attributionOf(item, reader, useLanguage(), useFigureLanguage());
   const manual = isManual(item);
   return (
     <div className={ITEM_ROW} data-code={item.code}>
@@ -680,7 +715,7 @@ function HireItemRow({
         {!manual && item.link && <AutoBadge link={item.link} />}
         {/* D-orphan (P18.5-T3 AC-4): a link that does not complete the item now — ticked by hand, as Settings says. */}
         {isTickedByHandLink(item) && <ByHandBadge />}
-        <AttributionMark words={attributionOf(item, reader)} />
+        <AttributionMark words={words} />
         <InlineSaveStatus {...status} label={item.label} />
       </div>
       <RowError message={error} />
@@ -702,17 +737,23 @@ function NoteCard({
   onSaved: (note: NonNullable<ActivationView['note']>) => void;
   onMissing: () => void;
 }) {
+  const t = useMessages(newHiresMessages);
+  const a = useMessages(activationMessages);
+  const figures = useFigureLanguage();
   const [draft, setDraft] = useState(view.note?.text ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const savedBy = view.note
-    ? OWN_COPY.noteSavedBy(view.note.by.membershipId === reader ? OWN_COPY.you : view.note.by.name, formatOfficeDay(view.note.at))
+    ? t.note.savedBy({
+      who: view.note.by.membershipId === reader ? a.you : view.note.by.name,
+      when: formatOfficeDay(view.note.at, OFFICE_TIME_ZONE, figures),
+    })
     : null;
 
   const save = async () => {
     const text = draft.trim();
     if (!text) {
-      setError(OWN_COPY.noteEmpty);
+      setError(t.note.empty);
       return;
     }
     setSaving(true);
@@ -723,7 +764,7 @@ function NoteCard({
     } catch (err) {
       if (err instanceof ApiRequestError && err.status === 404) onMissing();
       // Read as every other write on these pages reads a refusal (L-85): *Not saved. {why}*.
-      setError(OWN_COPY.notSaved(toDisplayError(err).message));
+      setError(a.notSaved({ why: toDisplayError(err).message }));
     } finally {
       setSaving(false);
     }
@@ -732,17 +773,17 @@ function NoteCard({
   return (
     <section aria-labelledby="coaching-note" className="rounded-lg border border-hairline bg-card p-[18px]">
       <div className="flex items-center gap-1.5">
-        <h2 id="coaching-note" className="font-display text-md font-bold text-navy">{PROTOTYPE_COPY.noteHeading}</h2>
+        <h2 id="coaching-note" className="font-display text-md font-bold text-navy">{a.noteHeading}</h2>
         <AttributionMark words={savedBy} />
       </div>
-      <p id="coaching-note-hint" className="mb-2.5 mt-1 text-sm text-muted">{PROTOTYPE_COPY.noteHint}</p>
+      <p id="coaching-note-hint" className="mb-2.5 mt-1 text-sm text-muted">{t.note.hint}</p>
       <Textarea
         aria-labelledby="coaching-note"
         aria-describedby="coaching-note-hint"
         value={draft}
         readOnly={!writable}
         maxLength={ACTIVATION_NOTE_MAX}
-        placeholder={PROTOTYPE_COPY.noteExample}
+        placeholder={t.note.example}
         onChange={(e) => { setDraft(e.target.value); setError(null); }}
         className="w-full resize-y text-md"
       />
@@ -750,7 +791,7 @@ function NoteCard({
       {writable && (
         <div className="mt-3 flex justify-end">
           <Button onClick={() => void save()} disabled={saving}>
-            {saving ? OWN_COPY.saving : PROTOTYPE_COPY.saveNote}
+            {saving ? t.note.saving : t.note.save}
           </Button>
         </div>
       )}
@@ -760,12 +801,13 @@ function NoteCard({
 
 /** Outside the reader's reach, or no activation (T5 AC-8): the same words for each, naming nobody. */
 function HireNotFound() {
+  const t = useMessages(newHiresMessages);
   return (
     <div>
       <BackToRoster />
       <Card>
-        <h2 className="font-display text-lg font-bold text-navy">{OWN_COPY.hireNotFoundTitle}</h2>
-        <p className="mt-1 text-md text-muted">{OWN_COPY.hireNotFoundLine}</p>
+        <h2 className="font-display text-lg font-bold text-navy">{t.detail.notFoundTitle}</h2>
+        <p className="mt-1 text-md text-muted">{t.detail.notFoundLine}</p>
       </Card>
     </div>
   );

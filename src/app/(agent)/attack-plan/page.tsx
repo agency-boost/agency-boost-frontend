@@ -4,7 +4,9 @@ import { Suspense } from 'react';
 import { AttackPlanScreen, type PlanAddress } from '@/components/attack-plan';
 import { Page } from '@/components/page';
 import { SalesToolsTabs } from '@/components/sales-tools-tabs';
-import { briefFromQuery, productFromQuery, PROTOTYPE_COPY } from '@/lib/product-catalog';
+import { useMessages } from '@/i18n/language-provider';
+import { salesAttackPlanMessages } from '@/i18n/messages/sales-attack-plan';
+import { briefFromQuery, productFromQuery } from '@/lib/product-catalog';
 import { useQuery } from '@/lib/use-query';
 
 /**
@@ -28,6 +30,7 @@ export default function AttackPlanPage() {
 }
 
 function AttackPlan() {
+  const t = useMessages(salesAttackPlanMessages);
   const query = useQuery();
   const brief = briefFromQuery(query);
   const product = productFromQuery(query);
@@ -38,7 +41,7 @@ function AttackPlan() {
       : { kind: 'brief' };
   return (
     // No sub-line: the brief's one line says it, at every size (P18.95-T7 AC-1, grey text row 10).
-    <Page title={PROTOTYPE_COPY.planTitle} permission="product_catalog:read">
+    <Page title={t.title} permission="product_catalog:read">
       <SalesToolsTabs />
       <AttackPlanScreen address={address} />
     </Page>

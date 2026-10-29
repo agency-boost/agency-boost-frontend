@@ -1,7 +1,11 @@
+import { kept } from '@/i18n/kept';
 import type { Me } from './session';
 
-/** The words the profile line says for a Core Leader (ADR-0159 §5), as the directory's chip says them. */
-export const CORE_LEADER_LABEL = 'Core Leader';
+/**
+ * The words the profile line says for a Core Leader (ADR-0159 §5), as the directory's chip says them. A role, so kept
+ * English in both languages (the glossary's §A.5; P18.98-T1).
+ */
+export const CORE_LEADER_LABEL = kept('Core Leader');
 
 /**
  * **The sidebar's profile line** (ADR-0159 §5, P18.8-T6 AC-2): under the name, one line — the role · *Core Leader*

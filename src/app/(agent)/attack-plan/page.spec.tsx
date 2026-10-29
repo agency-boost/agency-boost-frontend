@@ -117,7 +117,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       expect(chips('Age band').map(([t]) => t)).toEqual(['< 25', '25–34', '35–49', '50–64', '65+']);
       // P18.95-T6 AC-3: six monthly bands, and *Lump-sum* as an option of its own after them.
       expect(chips('Monthly premium budget').map(([t]) => t)).toEqual([
-        '< Rp 500 rb', 'Rp 500 rb–Rp 2 jt', 'Rp 2 jt–Rp 5 jt', 'Rp 5 jt–Rp 10 jt', 'Rp 10 jt–Rp 20 jt', '> Rp 20 jt',
+        '< IDR 500K', 'IDR 500K–IDR 2M', 'IDR 2M–IDR 5M', 'IDR 5M–IDR 10M', 'IDR 10M–IDR 20M', '> IDR 20M',
       ]);
       expect(chips('Or pay once').map(([t]) => t)).toEqual(['Lump-sum']);
       for (const name of ['Primary need', 'Age band', 'Monthly premium budget', 'Or pay once']) {
@@ -134,7 +134,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Retirement income' }));
       await userEvent.click(within(group('Age band')).getByRole('button', { name: '25–34' }));
       expect(build).toBeDisabled();
-      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'Rp 500 rb–Rp 2 jt' }));
+      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'IDR 500K–IDR 2M' }));
       expect(build).toBeEnabled();
       expect(screen.queryByText('Pick a need, age band, and budget to continue.')).not.toBeInTheDocument();
       expect(within(group('Age band')).getByRole('button', { name: '25–34' })).toHaveAttribute('aria-pressed', 'true');
@@ -154,7 +154,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       show();
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       const lumpSum = () => within(group('Or pay once')).getByRole('button', { name: 'Lump-sum' });
-      const monthly = () => within(group('Monthly premium budget')).getByRole('button', { name: '> Rp 20 jt' });
+      const monthly = () => within(group('Monthly premium budget')).getByRole('button', { name: '> IDR 20M' });
       // Not under the monthly question: a group of its own, after it.
       expect(within(group('Monthly premium budget')).queryByRole('button', { name: 'Lump-sum' })).not.toBeInTheDocument();
       expect(group('Monthly premium budget').compareDocumentPosition(group('Or pay once')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -241,7 +241,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
     it('P14-T8 AC-3 the summary, the result card — tag, the office’s name, tagline, pill — the blocks and the alternative', async () => {
       show(BRIEF);
       await result();
-      expect(screen.getByLabelText('Customer brief').textContent).toBe('Need: Retirement incomeAge: 25–34Budget: Rp 500 rb–Rp 2 jt');
+      expect(screen.getByLabelText('Customer brief').textContent).toBe('Need: Retirement incomeAge: 25–34Budget: IDR 500K–IDR 2M');
       expect(screen.getByText('Retirement income · Conventional')).toBeInTheDocument();
       expect(screen.getByText('Dana pensiun yang cair rutin dari usia 55.')).toBeInTheDocument();
       expect(screen.getByText('Good fit')).toHaveAttribute('data-tone', 'success');
@@ -340,7 +340,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Retirement income' }));
       await userEvent.click(within(group('Age band')).getByRole('button', { name: '25–34' }));
-      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'Rp 500 rb–Rp 2 jt' }));
+      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'IDR 500K–IDR 2M' }));
       await userEvent.click(screen.getByRole('button', { name: 'Build attack plan' }));
       navigate(view, BRIEF);
       await result();
@@ -358,7 +358,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       navigate(view, {});
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       expect(within(group('Primary need')).getByRole('button', { name: 'Retirement income' })).toHaveAttribute('aria-pressed', 'true');
-      expect(within(group('Monthly premium budget')).getByRole('button', { name: 'Rp 500 rb–Rp 2 jt' })).toHaveAttribute('aria-pressed', 'true');
+      expect(within(group('Monthly premium budget')).getByRole('button', { name: 'IDR 500K–IDR 2M' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByRole('button', { name: 'Build attack plan' })).toBeEnabled();
     });
 
@@ -448,7 +448,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Retirement income' }));
       await userEvent.click(within(group('Age band')).getByRole('button', { name: '25–34' }));
-      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'Rp 500 rb–Rp 2 jt' }));
+      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'IDR 500K–IDR 2M' }));
       await userEvent.click(screen.getByRole('button', { name: 'Build attack plan' }));
       navigate(view, BRIEF);
       const shown = await screen.findByText(words);
@@ -474,7 +474,7 @@ describe('/attack-plan, the Sales Attack Plan (P14-T8)', () => {
       await screen.findByRole('heading', { level: 2, name: 'Who are we talking to?' });
       await userEvent.click(within(group('Primary need')).getByRole('button', { name: 'Retirement income' }));
       await userEvent.click(within(group('Age band')).getByRole('button', { name: '25–34' }));
-      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'Rp 500 rb–Rp 2 jt' }));
+      await userEvent.click(within(group('Monthly premium budget')).getByRole('button', { name: 'IDR 500K–IDR 2M' }));
       await userEvent.click(screen.getByRole('button', { name: 'Build attack plan' }));
       navigate(view, BRIEF);
       const heading = await result();

@@ -3,12 +3,14 @@ import { join } from 'node:path';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderInLayout, stubFetch, type StubReply } from '@test/harness';
+import { makeMe, renderInIndonesian, renderInLayout, stubFetch, type StubReply } from '@test/harness';
 import { ADMIN_ME, CORE_LEADER_ME, OWNER_ME, SHELL_STUBS } from '@test/kpm-analytics-fixtures';
 import { TOWN_HALL_SUMMARY } from '@test/events-fixtures';
 import {
   complianceView, EMPTY_CATALOG, ITEM_REFUSED, NEXT_YEAR_CAMPAIGN, NO_AB, NOT_FOUND, SERVER_ERROR,
 } from '@test/kpm-compliance-fixtures';
+import { englishOnly, englishShown } from '@test/english-left';
+import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
 import type { ComplianceCategory, ComplianceView } from '@/lib/kpm-compliance';
 import KpmAnalyticsLayout from '../layout';
 import KpmAnalyticsCompliancePage from './page';
@@ -249,7 +251,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       open();
       await tree();
       expect(row('mem-hendra')).toHaveTextContent(/Completed\s*1 Sep$/);
-      expect(row('mem-ika')).toHaveTextContent(/Completed\s*20 Des 2025$/);
+      expect(row('mem-ika')).toHaveTextContent(/Completed\s*20 Dec 2025$/);
       expect(row('mem-rina')).toHaveTextContent(/In progress\s*—$/);
       expect(row('mem-dedy')).toHaveTextContent(/Not started\s*—$/);
     });
@@ -274,14 +276,14 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     it('Activity Mgmt: Logged with the last day, Missed', async () => {
       open(undefined, { query: { category: 'activity' } });
       await tree();
-      expect(row('mem-rina')).toHaveTextContent(/Logged\s*10 Okt$/);
+      expect(row('mem-rina')).toHaveTextContent(/Logged\s*10 Oct$/);
       expect(row('mem-dedy')).toHaveTextContent(/Missed\s*—$/);
     });
 
     it('Activation: Completed with the graduation day, In progress, Overdue and —', async () => {
       open(undefined, { query: { category: 'activation' } });
       await tree();
-      expect(row('mem-sinta')).toHaveTextContent(/Completed\s*1 Agu$/);
+      expect(row('mem-sinta')).toHaveTextContent(/Completed\s*1 Aug$/);
       expect(row('mem-agus')).toHaveTextContent(/In progress\s*—$/);
       expect(row('mem-dedy')).toHaveTextContent(/Overdue\s*—$/);
       expect(row('mem-rina')).toHaveTextContent(/—\s*—$/);
@@ -441,7 +443,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       open();
       await tree();
       const dateOf = (id: string) => row(id).lastElementChild!;
-      expect(dateOf('mem-ika')).toHaveTextContent('20 Des 2025');
+      expect(dateOf('mem-ika')).toHaveTextContent('20 Dec 2025');
       for (const id of ['mem-ika', 'mem-hendra', 'mem-rina']) expect(dateOf(id)).toHaveClass('w-[84px]', 'shrink-0', 'text-right');
     });
 
@@ -573,12 +575,12 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       const picker = screen.getByRole('combobox', { name: 'Event' });
       const groups = [...picker.querySelectorAll('optgroup')].map((g) => [g.label, [...g.querySelectorAll('option')].map((o) => o.textContent)]);
       expect(groups).toEqual([
-        ['Upcoming', ['Leaders’ huddle — 10 Okt', 'Kickoff 2026 — 24 Okt']],
-        ['Past', ['PRULink briefing — 19 Sep', 'August Town Hall — 15 Agu']],
+        ['Upcoming', ['Leaders’ huddle — 10 Oct', 'Kickoff 2026 — 24 Oct']],
+        ['Past', ['PRULink briefing — 19 Sep', 'August Town Hall — 15 Aug']],
       ]);
       // The read's default: the first, the running huddle, its tag the phase word.
       expect(picker).toHaveValue('ev-huddle');
-      expect(picker.parentElement).toHaveTextContent(/Running\s*10 Okt$/);
+      expect(picker.parentElement).toHaveTextContent(/Running\s*10 Oct$/);
     });
 
     it('reads the event picked, and tags a past one Past', async () => {
@@ -587,7 +589,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Event' }), 'ev-townhall');
       expect(nav.replace).toHaveBeenLastCalledWith('/kpm/analytics/compliance?category=events&item=ev-townhall', { scroll: false });
       await waitFor(() => expect(reads(calls)).toContain('/kpm/analytics/compliance?category=events&item=ev-townhall'));
-      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Event' }).parentElement).toHaveTextContent(/Past\s*15 Agu$/));
+      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Event' }).parentElement).toHaveTextContent(/Past\s*15 Aug$/));
     });
   });
 
@@ -666,7 +668,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       expect(groups).toEqual([
         ['Structural', ['MDRT Qualification — Always on']],
         ['Seasonal — Ongoing', ['Q4 APE Push — Since 1 Sep', 'Year-End Star Club Drive — Starts 1 Nov']],
-        ['Seasonal — Past', ['Persistency Push — Ended 31 Agu']],
+        ['Seasonal — Past', ['Persistency Push — Ended 31 Aug']],
       ]);
       expect(picker.parentElement).toHaveTextContent(/Structural\s*Always on$/);
     });
@@ -693,7 +695,7 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
     it.each([
       ['APE_SPRINT', /Ongoing\s*Since 1 Sep$/],
       ['APE_CHALLENGE_NEXT', /Upcoming\s*Starts 1 Nov$/],
-      ['PERSISTENCY_PUSH', /Past\s*Ended 31 Agu$/],
+      ['PERSISTENCY_PUSH', /Past\s*Ended 31 Aug$/],
     ])('tags %s and dates it', async (code, words) => {
       open(undefined, { query: { category: 'campaigns', item: code } });
       await tree();
@@ -739,5 +741,95 @@ describe('KPM analytics › Compliance, Events, and Campaigns (P18.6-T1, P18.6-T
       expect(within(row('mem-rina')).getByRole('button', { name: /Override Rina Agustina/ })).toBeInTheDocument();
       expect(within(row('mem-agus')).queryByRole('button', { name: /Override/ })).not.toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * **P18.98-T4 the compliance tree in Indonesian** (`i18n/messages/kpm-compliance.ts`; ADR-0179): the heading and the six
+ * chips kept English (§A.3), every status, column, verb, picker and state the approved glossary's, the office's own
+ * names — categories, modules, events, campaigns, people — as typed, and the dates Indonesian.
+ */
+describe('P18.98-T4 Compliance, Events, and Campaigns in Indonesian', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function openInIndonesian(query: Record<string, string> = {}, reply: StubReply = answer()) {
+    stubFetch({ ...SHELL_STUBS, [READ]: reply, [FEEDBACK]: { body: TOWN_HALL_SUMMARY } });
+    nav.search = new URLSearchParams(query).toString();
+    renderInIndonesian(<KpmAnalyticsLayout><KpmAnalyticsCompliancePage /></KpmAnalyticsLayout>, { me: OWNER_ME });
+  }
+
+  const tree = () => screen.findAllByRole('region');
+
+  it('P18.98-T4 keeps the heading and the chips, and writes the sub-line, statuses and dates in Indonesian', async () => {
+    openInIndonesian();
+    await tree();
+    expect(screen.getByRole('heading', { level: 2, name: 'Compliance, Events, and Campaigns' })).toBeInTheDocument();
+    expect(screen.getByText(/^Setiap unit AB di KPM ini — \d+ orang di \d+ units?$/)).toBeInTheDocument();
+    const chips = within(screen.getByRole('group', { name: 'Kategori' }));
+    for (const name of ['Training', 'Goal Setting', 'Activity Mgmt', 'Activation', 'Events', 'Campaigns']) {
+      expect(chips.getByRole('button', { name: new RegExp(`${name}$`) })).toBeInTheDocument();
+    }
+    expect(screen.getByRole('group', { name: 'Kategori Training' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Modules' })).toBeInTheDocument();
+    expect(row('mem-hendra')).toHaveTextContent(/Selesai\s*1 Sep$/);
+    expect(row('mem-ika')).toHaveTextContent(/Selesai\s*20 Des 2025$/);
+    expect(row('mem-rina')).toHaveTextContent(/Berjalan\s*—$/);
+    expect(row('mem-dedy')).toHaveTextContent(/Belum dimulai\s*—$/);
+    expect(row('mem-hendra')).toHaveTextContent('Pribadi');
+    expect(unit('mem-hendra')).toHaveTextContent('2 / 4 selesai');
+    expect(section('mem-hendra')).toHaveTextContent('selesai secara keseluruhan');
+    expect(screen.getByRole('searchbox', { name: 'Cari nama agent atau leader' })).toHaveAttribute('placeholder', 'Cari nama agent atau leader…');
+    expect(screen.getByRole('button', { name: /lebih dulu$/ })).toHaveTextContent('↓ Perlu perhatian lebih dulu');
+    expect(englishOnly(kpmComplianceMessages).length).toBeGreaterThan(40);
+    expect(document.body.textContent).toContain('Belum dimulai');
+    expect(englishShown(document.body, englishOnly(kpmComplianceMessages))).toEqual([]);
+  });
+
+  it('P18.98-T4 writes the single-item categories, Activity’s note and an expired activation in Indonesian', async () => {
+    openInIndonesian({ category: 'activity' });
+    await tree();
+    expect(row('mem-rina')).toHaveTextContent(/Tercatat\s*10 Okt$/);
+    expect(row('mem-dedy')).toHaveTextContent(/Terlewat\s*—$/);
+    expect(screen.getByText(/^Apakah aktivitas tercatat setidaknya sekali dalam 7 hari terakhir/)).toBeInTheDocument();
+    expect(englishShown(document.body, englishOnly(kpmComplianceMessages))).toEqual([]);
+    vi.unstubAllGlobals();
+    document.body.innerHTML = '';
+    openInIndonesian({ category: 'activation' });
+    await tree();
+    expect(within(row('mem-yoga')).getByRole('button', { name: 'Terlambat: berakhir pada 30 Sep tanpa ditandai selesai' })).toBeInTheDocument();
+    expect(row('mem-sinta')).toHaveTextContent(/Selesai\s*1 Agu$/);
+  });
+
+  it('P18.98-T4 writes the event picker and its rows in Indonesian, each event’s title as typed', async () => {
+    openInIndonesian({ category: 'events' });
+    await tree();
+    const picker = screen.getByRole('combobox', { name: 'Event' });
+    expect([...picker.querySelectorAll('optgroup')].map((g) => g.label)).toEqual(['Akan datang', 'Sudah lewat']);
+    expect(picker.querySelector('option')).toHaveTextContent('Leaders’ huddle — 10 Okt');
+    expect(picker.parentElement).toHaveTextContent(/Berjalan\s*10 Okt$/);
+    expect(unit('mem-hendra')).toHaveTextContent(/IkutMasukan/);
+    expect(screen.getByRole('button', { name: /lebih dulu$/ })).toHaveTextContent('↓ Belum ikut lebih dulu');
+  });
+
+  it('P18.98-T4 writes the campaign picker, its rows and the override’s control in Indonesian', async () => {
+    openInIndonesian({ category: 'campaigns', item: 'PERSISTENCY_PUSH' });
+    await tree();
+    const picker = screen.getByRole('combobox', { name: 'Campaign' });
+    expect([...picker.querySelectorAll('optgroup')].map((g) => g.label)).toEqual(['Struktural', 'Musiman — Berjalan', 'Musiman — Sudah lewat']);
+    expect([...picker.querySelectorAll('option')].map((o) => o.textContent)).toContain('MDRT Qualification — Selalu aktif');
+    expect(picker.parentElement).toHaveTextContent(/Sudah lewat\s*Berakhir 31 Agu$/);
+    expect(row('mem-rina')).toHaveTextContent(/Mengejar: \S.*Tercapai: Tercapai/);
+    expect(row('mem-sinta')).toHaveTextContent(/Tercapai: Tidak tercapai/);
+    expect(within(row('mem-rina')).getByRole('button', { name: /^Tercapai — Ubah hasil Rina Agustina untuk / })).toBeInTheDocument();
+    expect(englishShown(document.body, englishOnly(kpmComplianceMessages))).toEqual([]);
+  });
+
+  it('P18.98-T4 says a team with no AB, and a year with nothing to show, in Indonesian', async () => {
+    openInIndonesian({}, { body: NO_AB });
+    expect(await screen.findByText('Belum ada AB.')).toBeInTheDocument();
+    vi.unstubAllGlobals();
+    document.body.innerHTML = '';
+    openInIndonesian({ category: 'events' }, { body: EMPTY_CATALOG('events') });
+    expect(await screen.findByText('Tidak ada event tahun ini.')).toBeInTheDocument();
   });
 });

@@ -156,8 +156,9 @@ describe('the Products tab', () => {
     });
     const row = await open('PRUMapan');
 
-    // Seven budget bands, not five: the scale of the copy the ERD records.
-    expect(within(row).getAllByRole('checkbox', { name: /Rp/ })).toHaveLength(6);
+    // Seven budget bands, not five: the scale of the copy the ERD records — in the reader's figures since P18.98-T6,
+    // English here as every spec reads (*< Rp 500 rb* in Indonesian).
+    expect(within(row).getAllByRole('checkbox', { name: /IDR/ })).toHaveLength(6);
     await userEvent.click(within(row).getByRole('checkbox', { name: 'Lump-sum' }));
     await userEvent.click(within(row).getByRole('checkbox', { name: '65+' }));
     await userEvent.click(within(row).getByRole('checkbox', { name: 'health' }));

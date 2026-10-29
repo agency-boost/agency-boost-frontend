@@ -36,6 +36,14 @@ describe('register KPM (P3-T3)', () => {
     expect(await screen.findByText('Prudential — KPM 0417')).toBeInTheDocument();
   });
 
+  it('P18.98 §C1: the subtitle names no company, because the directory under it lists every company', async () => {
+    stubFetch({ '/join/me': { body: NO_OFFICE }, '/join/kpm-request': { body: { request: null } }, '/join/kpms': { body: OFFICES } });
+    renderInLayout(AgentLayout, <RegisterKpmPage />, { me: NEWCOMER });
+
+    expect(await screen.findByText('Find the KPM your branch belongs to.')).toBeInTheDocument();
+    expect(screen.queryByText(/Find the Prudential/)).not.toBeInTheDocument();
+  });
+
   it('AC-2: locks Find your leader until an office is registered', async () => {
     stubFetch({ '/join/me': { body: NO_OFFICE }, '/join/kpm-request': { body: { request: null } }, '/join/kpms': { body: OFFICES } });
     renderInLayout(AgentLayout, <RegisterKpmPage />, { me: NEWCOMER });

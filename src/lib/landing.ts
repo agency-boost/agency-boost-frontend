@@ -1,3 +1,6 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { shellMessages } from '@/i18n/messages/shell';
 import type { Me } from './session';
 
 /**
@@ -44,19 +47,26 @@ export interface ViewSwitch {
  * permission follows from it**: every field route already answers an Owner or an Admin by their rung's
  * grants, and every one keeps its own guard — the link decides what is offered, never what is allowed.
  * Sign-in is unchanged, `landingFor` still sends both to the console.
+ *
+ * **Its words are the reader's** (P18.98-T1): the shells pass `useLanguage()`; English by default, as its spec reads.
  */
-export function viewSwitchFor(me: Me | null, from: 'office' | 'field'): ViewSwitch | null {
+export function viewSwitchFor(
+  me: Me | null,
+  from: 'office' | 'field',
+  language: Language = SOURCE_LANGUAGE,
+): ViewSwitch | null {
   const membership = me?.membership;
   // Only an active membership has both views; a pending or removed one lands elsewhere (`landingFor`).
   if (!membership || membership.status !== 'active') return null;
+  const t = messagesIn(shellMessages, language);
   if (from === 'office') {
     return membership.isKpmOwner || membership.isKpmAdmin
-      ? { href: fieldLandingFor(membership), label: 'Open agent view' }
+      ? { href: fieldLandingFor(membership), label: t.openAgentView }
       : null;
   }
   // The Owner first: somebody who is both is the Owner, as the console's chip already names them.
-  if (membership.isKpmOwner) return { href: OFFICE_LANDING, label: 'Open Owner view' };
-  if (membership.isKpmAdmin) return { href: OFFICE_LANDING, label: 'Open Admin view' };
+  if (membership.isKpmOwner) return { href: OFFICE_LANDING, label: t.openOwnerView };
+  if (membership.isKpmAdmin) return { href: OFFICE_LANDING, label: t.openAdminView };
   return null;
 }
 

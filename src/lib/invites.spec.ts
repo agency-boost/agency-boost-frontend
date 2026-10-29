@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
 import {
-  acceptInvite, addAgent, AGENT_CODE_DIGITS, approveTransfer, askedFor, cancelInvite, declineTransfer, inviteMessage, inviteTokenOf,
-  inviteWhatsAppLink, readInviteBanner, readInvites, readMyTransfers, readTransferQueue, resendInvite,
+  acceptInvite, addAgent, AGENT_CODE_DIGITS, approveTransfer, askedFor, cancelInvite, declineTransfer, INVITEE_LANGUAGE,
+  inviteMessage, inviteTokenOf, inviteWhatsAppLink, readInviteBanner, readInvites, readMyTransfers, readTransferQueue,
+  resendInvite,
 } from './invites';
 
 describe('+ Add agent’s calls (P18.96-T3)', () => {
@@ -63,5 +64,26 @@ describe('+ Add agent’s calls (P18.96-T3)', () => {
     expect(inviteTokenOf(new URLSearchParams(''))).toBeNull();
     expect(AGENT_CODE_DIGITS.test('80777')).toBe(true);
     expect(AGENT_CODE_DIGITS.test('PRU-1')).toBe(false);
+  });
+});
+
+/**
+ * **P18.98-T4: the WhatsApp message is the invitee's** (`add-agent.ts`' `whatsAppMessage`): written in the language of
+ * the person it is sent to, who has chosen none — Bahasa Indonesia, the client's own sample — whichever language the
+ * leader's screen is in. Its English is the catalogue's source, for a recipient whose language is known.
+ */
+describe('P18.98-T4 the invite’s message in each language', () => {
+  const link = 'https://app.test/register?invite=kpm.abc';
+
+  it('writes it in Bahasa Indonesia by default, the language a person with no choice reads', () => {
+    expect(INVITEE_LANGUAGE).toBe('id');
+    expect(inviteMessage('Yusuf Hidayat', link)).toBe(inviteMessage('Yusuf Hidayat', link, 'id'));
+    expect(inviteWhatsAppLink('0812-8077-7001', 'Yusuf Hidayat', link)).toBe(inviteWhatsAppLink('0812-8077-7001', 'Yusuf Hidayat', link, 'id'));
+  });
+
+  it('writes it in English for a recipient who reads English, the product’s name kept', () => {
+    expect(inviteMessage(' Yusuf Hidayat ', link, 'en')).toBe(
+      'Hello Yusuf Hidayat, I am inviting you to join my team on AgencyBoost: https://app.test/register?invite=kpm.abc',
+    );
   });
 });

@@ -1,9 +1,13 @@
 import type { ReactNode } from 'react';
 import { TermTip } from '@/components/ui/term-tip';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
 import { formatPercent, formatRupiahCompact, formatRupiahCompactPair } from '@/lib/format';
 import {
-  agentsCount, candidates, everyRow, missingWords, namesMissing, namesNewHires, newHireWords, OWN_COPY, PROTOTYPE_COPY,
+  agentsCount, candidates, everyRow, missingWords, namesMissing, namesNewHires, newHireWords,
   totalNote, type UnitDashboardView, type UnitPeriod,
 } from '@/lib/unit-dashboard';
 
@@ -16,8 +20,13 @@ import {
  * **On a unit below the reader** the words that would say *you* of somebody else name the unit's head
  * instead — *(including Sari Lestari)*, *Sari Lestari's unit* — as the title and the groups do (data
  * honesty): the reader is not in that unit.
+ *
+ * **Its words are the catalogue's** (`messages/unit-dashboard.ts`, P18.98-T4), its figures in `useFigureLanguage()`'s.
  */
 export function UnitTiles({ view, period }: { view: UnitDashboardView; period: UnitPeriod }) {
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const t = useMessages(unitDashboardMessages);
   const { team, directGroupProduction: production, potentialActive, potentialRecruits } = view.tiles;
   const own = view.head.isReader;
   const rows = everyRow(view);
@@ -25,36 +34,36 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
    * **The new hires before a first sale both figures leave out** (P18.96-T5 AC-4; ADR-0172 §2): in *Your team*, and named
    * in the production's ⓘ beside who holds no figure, and in an ⓘ of *On pace*'s own — its `of` no longer every row.
    */
-  const newHires = newHireWords(team.newHires, namesNewHires(rows));
-  const missing = totalNote(missingWords(production.missing, namesMissing(rows)), newHires);
+  const newHires = newHireWords(team.newHires, namesNewHires(rows, language), language);
+  const missing = totalNote(missingWords(production.missing, namesMissing(rows, language), language), newHires);
 
   return (
     <div className="mb-3 mt-5 grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-4">
-      <Tile label={PROTOTYPE_COPY.yourTeam}>
-        <p className={HEADLINE}>{agentsCount(team.total)}</p>
+      <Tile label={t.prototype.yourTeam}>
+        <p className={HEADLINE}>{agentsCount(team.total, language)}</p>
         {/*
           * **The client's line, at every size** (P18.95-T7 AC-1, grey text row 19; ADR-0167 §7): *4 direct · 8 under
           * AABs*, where it read *"4 direct agents (including you) · 3 AAB units · 5 agents under AABs"*. Under AABs is
           * every AAB unit with its head — the units and everybody in them — so the two parts add up to the headline.
           */}
         {/* *AAB*'s first appearance on the dashboard, so its ⓘ is here (P18.95-T9 AC-3; UI-028). */}
-        <p className="text-sm text-muted">{teamLine(team)} <TermTip term="AAB" /></p>
+        <p className="text-sm text-muted">{teamLine(team, language)} <TermTip term="AAB" /></p>
       </Tile>
 
-      <Tile label={PROTOTYPE_COPY.directGroupProduction}>
+      <Tile label={t.prototype.directGroupProduction}>
         <div className="flex flex-wrap items-baseline justify-between gap-x-2.5">
           <span className="flex items-start gap-1">
             <span className={production.actualMinor === null ? `${HEADLINE} text-muted` : HEADLINE}>
               {production.actualMinor === null
-                ? OWN_COPY.notUploaded
+                ? t.own.notUploaded
                 : production.targetMinor === null || production.targetMinor === 0
-                  ? formatRupiahCompact(production.actualMinor)
-                  : formatRupiahCompactPair(production.actualMinor, production.targetMinor, '/')}
+                  ? formatRupiahCompact(production.actualMinor, {}, figures)
+                  : formatRupiahCompactPair(production.actualMinor, production.targetMinor, '/', figures)}
             </span>
             {missing && <TippedGlyph glyph="ⓘ" name={missing} tip={missing} align="fit" className="-my-1" />}
           </span>
           {production.attainmentPct !== null && production.actualMinor !== null && (
-            <span className="whitespace-nowrap text-md font-bold text-navy-soft">{formatPercent(production.attainmentPct)}</span>
+            <span className="whitespace-nowrap text-md font-bold text-navy-soft">{formatPercent(production.attainmentPct, {}, figures)}</span>
           )}
         </div>
         {production.attainmentPct !== null && production.actualMinor !== null && (
@@ -64,35 +73,39 @@ export function UnitTiles({ view, period }: { view: UnitDashboardView; period: U
           </div>
         )}
         {production.actualMinor === null && production.targetMinor !== null && production.targetMinor > 0 && (
-          <p className="text-sm text-muted">of {formatRupiahCompact(production.targetMinor)} target</p>
+          <p className="text-sm text-muted">{t.goal.ofTarget({ sum: formatRupiahCompact(production.targetMinor, {}, figures) })}</p>
         )}
         {/* Every row with a target made its year before this month began (ADR-0047): no *of Rp 0*. */}
-        {production.targetMinor === 0 && <p className="text-sm text-muted">{OWN_COPY.targetMade}</p>}
+        {production.targetMinor === 0 && <p className="text-sm text-muted">{t.own.targetMade}</p>}
         {production.targetMinor === null && production.actualMinor !== null && (
-          <p className="text-sm text-muted">{OWN_COPY.noGoal}</p>
+          <p className="text-sm text-muted">{t.own.noGoal}</p>
         )}
         {/* Under *Last 7 days* the figures are this month's, and the tile says so (D-period). */}
-        {period === '7d' && <p className="mt-1 text-sm text-muted">{OWN_COPY.thisMonth}</p>}
+        {period === '7d' && <p className="mt-1 text-sm text-muted">{t.own.thisMonth}</p>}
       </Tile>
 
-      <Tile label={PROTOTYPE_COPY.potentialActiveTile}>
+      <Tile label={t.prototype.potentialActiveTile}>
         <span className="flex items-start gap-1">
-          <span className={HEADLINE}>{potentialActive.count} / {potentialActive.of} agents</span>
+          <span className={HEADLINE}>{t.agentsOf({ count: potentialActive.count, of: potentialActive.of })}</span>
           {newHires && <TippedGlyph glyph="ⓘ" name={newHires} tip={newHires} align="fit" className="-my-1" />}
         </span>
       </Tile>
 
-      <Tile label={PROTOTYPE_COPY.potentialRecruitsTile}>
-        <TeamRow label={own ? PROTOTYPE_COPY.yourUnitRecruits : `${view.head.name}’s unit`} value={candidates(potentialRecruits.yourUnit)} first />
-        <TeamRow label={own ? PROTOTYPE_COPY.yourAabs : `${view.head.name}’s AABs`} value={candidates(potentialRecruits.aabs)} />
+      <Tile label={t.prototype.potentialRecruitsTile}>
+        <TeamRow
+          label={own ? t.prototype.yourUnitRecruits : t.unitLower({ name: view.head.name })}
+          value={candidates(potentialRecruits.yourUnit, language)}
+          first
+        />
+        <TeamRow label={own ? t.prototype.yourAabs : t.aabsOf({ name: view.head.name })} value={candidates(potentialRecruits.aabs, language)} />
       </Tile>
     </div>
   );
 }
 
 /** *4 direct · 8 under AABs*: the head's own unit, then every AAB unit beneath it, heads included (row 19). */
-export const teamLine = (team: { direct: number; units: number; underUnits: number }) =>
-  `${team.direct} direct · ${team.units + team.underUnits} under AABs`;
+export const teamLine = (team: { direct: number; units: number; underUnits: number }, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(unitDashboardMessages, language).teamLine({ direct: team.direct, under: team.units + team.underUnits });
 
 /** `.tile-headline` (`:1560`): 19px Manrope, navy. */
 const HEADLINE = 'mb-0.5 font-display text-[1.1875rem] font-bold text-navy';

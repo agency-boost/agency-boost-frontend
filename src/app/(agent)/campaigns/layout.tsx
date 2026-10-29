@@ -3,7 +3,8 @@
 import type { ReactNode } from 'react';
 import { CampaignList } from '@/components/campaigns/campaign-list';
 import { Page } from '@/components/page';
-import { PROTOTYPE_COPY } from '@/lib/campaigns';
+import { useMessages } from '@/i18n/language-provider';
+import { campaignsMessages } from '@/i18n/messages/campaigns';
 
 /**
  * **Campaigns** (`/campaigns`, and its dialog at `/campaigns/[campaignCode]`; `Overall.html:3664-3702`, title
@@ -17,8 +18,9 @@ import { PROTOTYPE_COPY } from '@/lib/campaigns';
  * through their field view (ADR-0114). The API answers the office's own campaigns whatever this decides.
  */
 export default function CampaignsLayout({ children }: { children: ReactNode }) {
+  const t = useMessages(campaignsMessages);
   return (
-    <Page title={PROTOTYPE_COPY.title} subtitle={PROTOTYPE_COPY.subtitle} permission="campaign:read_list">
+    <Page title={t.title} subtitle={t.subtitle} permission="campaign:read_list">
       <CampaignList>{children}</CampaignList>
     </Page>
   );

@@ -129,8 +129,9 @@ describe('the words', () => {
     const source = readFileSync(join(__dirname, 'calendar.ts'), 'utf8').split('\n');
     for (const key of ['tripTooLong', 'titleTooLong', 'notesTooLong', 'tooManyInvitees']) {
       const line = source.find((l) => l.trim().startsWith(`${key}:`)) ?? '';
-      // Through `formatNumber` where the limit can reach a thousand, so it is grouped `1.000` (ADR-0167 §1).
-      expect(line, key).toMatch(/\$\{(?:formatNumber\()?[A-Z_]+_MAX\b/);
+      // Through `formatNumber` where the limit can reach a thousand, so it is grouped `1.000` (ADR-0167 §1). Since
+      // P18.98-T4 the words are the catalogue's and the limit is handed to them as a value (`limitWords`, `max:`).
+      expect(line, key).toMatch(/(?:\$\{|max: )(?:formatNumber\()?[A-Z_]+_MAX\b/);
       expect(line, key).not.toMatch(/\d/);
     }
   });

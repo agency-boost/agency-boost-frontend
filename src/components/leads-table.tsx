@@ -19,6 +19,9 @@ import { NavIcon } from '@/components/ui/nav-icon';
 import { TAP_HEIGHT, TAP_TARGET } from '@/components/ui/phone';
 import { Skeleton, SkeletonCards, SkeletonTable, SkeletonText } from '@/components/ui/skeleton';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import type { MessagesOf } from '@/i18n/catalogue';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { leadsMessages } from '@/i18n/messages/leads';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { formatCalendarDay } from '@/lib/format';
@@ -32,6 +35,9 @@ import type { LeadStatusRow } from '@/lib/tenant-config';
 import { useTenantConfig } from '@/lib/tenant-config-cache';
 import { useDebounced } from '@/lib/use-debounced';
 import { usePhone } from '@/lib/use-phone';
+
+/** The module's words, in the reader's language (`messages/leads.tsx`; P18.98-T4). */
+type LeadsWords = MessagesOf<typeof leadsMessages.en>;
 
 /**
  * The order the table can be in, as `GET /leads` names it: the three headings that sort
@@ -103,14 +109,14 @@ const WIDTHS_WITH_HANDLES = ['2.75rem', ...WIDTHS.slice(1)] as const;
  * ascending is no type, then Sales, then Recruit, and descending the reverse; `status` ascending is the
  * first stage of a ladder first, a lead with no stage before it.
  */
-const SORT_CHOICES: readonly { sort: Sort; label: string }[] = [
-  { sort: null, label: 'Saved order' },
-  { sort: { key: 'name', dir: 'asc' }, label: 'Name A–Z' },
-  { sort: { key: 'name', dir: 'desc' }, label: 'Name Z–A' },
-  { sort: { key: 'type', dir: 'asc' }, label: 'Sales first' },
-  { sort: { key: 'type', dir: 'desc' }, label: 'Recruit first' },
-  { sort: { key: 'status', dir: 'asc' }, label: 'Earliest stage first' },
-  { sort: { key: 'status', dir: 'desc' }, label: 'Furthest stage first' },
+const SORT_CHOICES: readonly { sort: Sort; words: Exclude<keyof LeadsWords['sort'], 'label'> }[] = [
+  { sort: null, words: 'saved' },
+  { sort: { key: 'name', dir: 'asc' }, words: 'nameAsc' },
+  { sort: { key: 'name', dir: 'desc' }, words: 'nameDesc' },
+  { sort: { key: 'type', dir: 'asc' }, words: 'typeAsc' },
+  { sort: { key: 'type', dir: 'desc' }, words: 'typeDesc' },
+  { sort: { key: 'status', dir: 'asc' }, words: 'statusAsc' },
+  { sort: { key: 'status', dir: 'desc' }, words: 'statusDesc' },
 ];
 const sortValue = (sort: Sort) => (sort ? `${sort.key}:${sort.dir}` : 'saved');
 
@@ -141,27 +147,27 @@ type Refusals = Record<string, Record<string, ApiError>>;
  * (`name must be 2–120 characters`) in the reader's words, for the one bound a draft can miss; the
  * code is the one the server would have answered with, had it been asked.
  */
-const SHORT_NAME: ApiError = {
+const shortName = (t: LeadsWords): ApiError => ({
   code: 'VALIDATION_FAILED',
-  message: `A lead’s name must be at least ${LEAD_NAME_MIN} characters.`,
+  message: t.shortName({ min: LEAD_NAME_MIN }),
   requestId: 'unknown',
-};
+});
 
 /**
  * The coaching card's own words for a name not given at all (`Overall.html:10894`), said where the
  * name is rather than in a toast: a refusal the reader has to act on stays beside what caused it
  * (`components-and-patterns.md`, *Toast*).
  */
-const NO_NAME: ApiError = {
+const noName = (t: LeadsWords): ApiError => ({
   code: 'VALIDATION_FAILED',
-  message: 'Enter a name first.',
+  message: t.noName,
   requestId: 'unknown',
-};
+});
 
-/** The coaching card's words for the two outcomes (`Overall.html:10867-10881`). */
-const OUTCOME_WORD: Record<LeadOutcome, string> = { won: 'Won', lost: 'Lost' };
-/** *Recruit*, not *Recruitment*, wherever a lead's type is named (ADR-0161 §2). The stored value stays `recruitment`. */
-const TYPE_WORD: Record<LeadType, string> = { sales: 'Sales', recruitment: 'Recruit' };
+/*
+ * The coaching card's words for the two outcomes (`Overall.html:10867-10881`) are `t.outcomes`, and a lead's type is
+ * named *Recruit*, not *Recruitment* (ADR-0161 §2), `t.types` — the stored value stays `recruitment`.
+ */
 
 /** A control on the inline row with nothing to write to yet: there, and plainly not live. */
 const INERT_CONTROL = 'cursor-not-allowed opacity-40';
@@ -257,7 +263,7 @@ const byRegisteredDesc = (a: Lead, b: Lead) =>
 export function LeadsTable({
   filters = false,
   offerDelete = true,
-  caption = 'Your leads',
+  caption: captionGiven,
   owner,
   readOnly = false,
   onNotice,
@@ -275,7 +281,7 @@ export function LeadsTable({
    * (roles-and-permissions §3.7), so P11-T8 turns it off. `/leads` keeps it.
    */
   offerDelete?: boolean;
-  /** The table's accessible name, and the card list's. */
+  /** The table's accessible name, and the card list's: *Your leads* where none is given. */
   caption?: string;
   /**
    * **Whose leads: the coachee's**, on the coaching session's card (ADR-0076, P11-T8 AC-7). Every
@@ -297,6 +303,10 @@ export function LeadsTable({
   /** After any write lands — the session re-reads what it derives from the leads. */
   onWrite?: (lead: Lead) => void;
 }) {
+  const t = useMessages(leadsMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const caption = captionGiven ?? t.yourLeads;
   const { config, loading: configLoading } = useTenantConfig();
   const { me } = useSession();
   const myMembership = me?.membership?.membershipId;
@@ -752,7 +762,7 @@ export function LeadsTable({
   /** The type, and the prototype's *"{name} moved to Sales."* once it lands (`Overall.html:10837`). */
   async function writeType(row: Lead, type: LeadType | null) {
     await saveField(row, 'type', (version) => updateLead(row.id, { type }, version), { moves: ['type', 'status'] }, (saved) => {
-      if (saved.type) onNotice?.(`${saved.name} moved to ${TYPE_WORD[saved.type]}.`);
+      if (saved.type) onNotice?.(t.notices.movedTo({ name: saved.name, type: t.types[saved.type] }));
     });
   }
 
@@ -760,7 +770,7 @@ export function LeadsTable({
   async function writeStatus(row: Lead, code: string) {
     await saveField(row, 'status', (version) => setLeadStatus(row.id, code, version), { moves: ['status'] }, (saved) => {
       const label = ladderFor(saved.type).find((s) => s.code === saved.statusCode)?.label;
-      if (label) onNotice?.(`${saved.name}'s status updated to "${label}".`);
+      if (label) onNotice?.(t.notices.statusTo({ name: saved.name, stage: label }));
     });
   }
 
@@ -802,12 +812,12 @@ export function LeadsTable({
         inline.clear(`${draft.key}\nname`);
       } else if (owner) {
         // Enter on an empty name, in the session: the coaching card's own sentence.
-        refuse(draft.key, ['name'], NO_NAME);
+        refuse(draft.key, ['name'], noName(t));
       }
       return;
     }
     if (name.length < LEAD_NAME_MIN) {
-      refuse(draft.key, ['name'], SHORT_NAME);
+      refuse(draft.key, ['name'], shortName(t));
       return;
     }
     const { key } = draft;
@@ -829,7 +839,7 @@ export function LeadsTable({
       });
       setDraft(null);
       forget(key);
-      onNotice?.(`${created.name} added.`);
+      onNotice?.(t.notices.added({ name: created.name }));
       onWrite?.(created);
       return true;
     } catch (err) {
@@ -877,14 +887,14 @@ export function LeadsTable({
   });
 
   const columns: readonly Column[] = [
-    { label: 'Row', visuallyHidden: true },
-    sortable('Lead name', 'name'),
-    sortable('Type', 'type'),
-    sortable('Status', 'status'),
-    'This month',
-    'Remarks',
-    'Next action',
-    'Actions',
+    { label: t.columns.row, visuallyHidden: true },
+    sortable(t.columns.name, 'name'),
+    sortable(t.columns.type, 'type'),
+    sortable(t.columns.status, 'status'),
+    t.columns.thisMonth,
+    t.columns.remarks,
+    t.columns.nextAction,
+    t.columns.actions,
   ];
 
   const held = open?.rows ?? [];
@@ -1042,28 +1052,28 @@ export function LeadsTable({
    */
   const editedByOf = (row: Lead) => (row.lastEditedBy && row.lastEditedBy.membershipId !== myMembership
     // In a session, a name the payload no longer has is said without ADR-0084's *office*.
-    ? `Last changed by ${row.lastEditedBy.name ?? (owner ? 'someone else' : 'someone in your office')}`
+    ? t.editedBy({ name: row.lastEditedBy.name ?? (owner ? t.someoneElse : t.someoneInYourOffice) })
     : null);
 
   /** The row's ⋮ menu: what can be done to this lead, each disabled with its reason where it is (AC-3). */
   function menuFor(row: Lead, locked: boolean, foreign: boolean): ActionMenuItem[] {
-    const details: ActionMenuItem = { label: 'Lead details', glyph: '☎', onSelect: () => setDetailsFor(row.id) };
+    const details: ActionMenuItem = { label: t.menu.details, glyph: '☎', onSelect: () => setDetailsFor(row.id) };
     // A finalized session's lock: the details still read, and nothing else is offered.
     if (readOnly) return [details];
     const terminal = isTerminal(row);
     const items: ActionMenuItem[] = [
       details,
       {
-        label: 'Mark successful',
+        label: t.menu.markWon,
         glyph: '✓',
         tone: 'success',
         disabled: locked || !terminal,
-        reason: terminal ? undefined : 'Available once status reaches the final stage',
+        reason: terminal ? undefined : t.menu.wonHeld,
         onSelect: () => setConfirmOutcome({ row, outcome: 'won' }),
       },
       // Lost is allowed at any stage (§3.7); only won is gated.
       {
-        label: 'Mark not successful',
+        label: t.menu.markLost,
         glyph: '✕',
         tone: 'alert',
         disabled: locked,
@@ -1078,10 +1088,10 @@ export function LeadsTable({
      */
     if (offerDelete) {
       items.push({
-        label: 'Delete',
+        label: t.menu.delete,
         glyph: '🗑',
         disabled: locked || foreign,
-        reason: foreign ? 'Only the person who owns this lead can delete it.' : undefined,
+        reason: foreign ? t.menu.deleteHeld : undefined,
         onSelect: () => setConfirmDelete(row),
       });
     }
@@ -1110,18 +1120,18 @@ export function LeadsTable({
      * of the lead rather than a moment: no type yet, not on the final stage.
      */
     const locked = saving || isDraft || readOnly;
-    const monthAction = row.type === 'recruitment' ? 'Recruit this month' : 'Close this month';
+    const monthAction = row.type === 'recruitment' ? t.recruitThisMonth : t.closeThisMonth;
     const foreign = !isDraft && row.ownerMembershipId !== myMembership;
     const sheet = variant === 'sheet';
     const dateId = sheet ? sheetFieldId('nextActionDate') : `${uid}-date-${keyFor[row.id] ?? row.id}`;
     const chat = isDraft ? null : whatsAppLink(row.contact.phone);
     const call = isDraft ? null : callLink(row.contact.phone);
     /** Why the two are held — nothing saved, or nothing that can be dialled (AC-3) — or `null` where they are live. */
-    const dialless = isDraft ? null : phoneHeld(row.contact.phone);
-    const who = row.name || 'this lead';
+    const dialless = isDraft ? null : phoneHeld(row.contact.phone, language);
+    const who = row.name || t.thisLead;
     /** In a row a control is named for its row; in the sheet its own label above it names it. */
-    const nameOf = (label: string) => (sheet ? undefined : `${label}, row ${n}`);
-    const saveLabel = (label: string) => (sheet ? label : `${label}, row ${n}`);
+    const nameOf = (label: string) => (sheet ? undefined : t.inRow({ label, n }));
+    const saveLabel = (label: string) => (sheet ? label : t.inRow({ label, n }));
     const density = sheet ? 'default' : 'cell';
     /** A text box in the sheet: a field's box at rest, 44px at least, its words 16px on a phone. */
     const SHEET_TEXT = 'min-h-11 rounded-md border-hairline bg-card px-3 py-2.5';
@@ -1136,7 +1146,7 @@ export function LeadsTable({
       handle: ordering && !isDraft && !foreign ? (
         <DragHandle
           id={handleId(row.id)}
-          label={row.name || 'this lead'}
+          label={row.name || t.thisLead}
           disabled={!complete}
           className={cn(
             'cursor-grab select-none text-sm leading-none text-muted disabled:cursor-not-allowed',
@@ -1153,14 +1163,14 @@ export function LeadsTable({
        * the box no label; it gets a name a screen reader can say and nothing a reader can see.
        */
       name: (heading = false) => (
-        <InlineSaveField status={inline.statusOf(saveKey(row, 'name'))} label={saveLabel('Lead name')}>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'name'))} label={saveLabel(t.columns.name)}>
           <TextInput
             id={isDraft ? draftInputId : sheet ? sheetFieldId('name') : nameId(row.id)}
-            aria-label={nameOf('Lead name')}
+            aria-label={nameOf(t.columns.name)}
             density={density}
             className={cn('w-full', heading && 'text-md font-semibold', sheet && TAP_HEIGHT)}
             value={isDraft ? row.name : draftOf(row, 'name', row.name)}
-            placeholder="First Last"
+            placeholder={t.namePlaceholder}
             readOnly={isDraft ? draft?.posting : saving || readOnly}
             onChange={(e) => {
               // A finalized session's card is inert (P11-T8 AC-10): nothing typed, nothing saved.
@@ -1196,10 +1206,10 @@ export function LeadsTable({
        * hover and the focus ring are the cell's own.
        */
       type: (
-        <InlineSaveField status={inline.statusOf(saveKey(row, 'type'))} label={saveLabel('Type')}>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'type'))} label={saveLabel(t.columns.type)}>
           <Select
             id={sheet ? sheetFieldId('type') : undefined}
-            aria-label={nameOf('Type')}
+            aria-label={nameOf(t.columns.type)}
             density={density}
             className={cn(
               'border-hairline',
@@ -1216,9 +1226,9 @@ export function LeadsTable({
               changeType(row, e.target.value as '' | LeadType);
             }}
           >
-            <option value="">Select type</option>
-            <option value="sales">{TYPE_WORD.sales}</option>
-            <option value="recruitment">{TYPE_WORD.recruitment}</option>
+            <option value="">{t.selectType}</option>
+            <option value="sales">{t.types.sales}</option>
+            <option value="recruitment">{t.types.recruitment}</option>
           </Select>
         </InlineSaveField>
       ),
@@ -1230,10 +1240,10 @@ export function LeadsTable({
        * option says why (`Overall.html:5447-5455`); the server refuses a stage without one either way.
        */
       status: (
-        <InlineSaveField status={inline.statusOf(saveKey(row, 'status'))} label={saveLabel('Status')}>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'status'))} label={saveLabel(t.columns.status)}>
           <Select
             id={sheet ? sheetFieldId('status') : undefined}
-            aria-label={nameOf('Status')}
+            aria-label={nameOf(t.columns.status)}
             density={density}
             className={cn('font-semibold', stageTint(row, ladder), sheet && cn('w-full', TAP_HEIGHT))}
             value={row.statusCode ?? ''}
@@ -1245,12 +1255,12 @@ export function LeadsTable({
               void writeStatus(row, code);
             }}
           >
-            {row.type ? <option value="">Select status</option> : <option value="">Select type first</option>}
+            {row.type ? <option value="">{t.selectStatus}</option> : <option value="">{t.selectTypeFirst}</option>}
             {/*
               * A stage the office has since retired. The snapshot carries **active** stages only, so the
               * code is the truthful fallback — it is what the lead holds (invariant §3).
               */}
-            {retired && <option value={row.statusCode!}>{row.statusCode} (retired)</option>}
+            {retired && <option value={row.statusCode!}>{t.retired({ code: row.statusCode! })}</option>}
             {ladder.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
           </Select>
         </InlineSaveField>
@@ -1299,10 +1309,10 @@ export function LeadsTable({
        * is typed** (P18.95-T4 AC-1; UI-016: the remark was clipped), from 44px.
        */
       remarks: (
-        <InlineSaveField status={inline.statusOf(saveKey(row, 'remarks'))} label={saveLabel('Remarks')}>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'remarks'))} label={saveLabel(t.columns.remarks)}>
           <AutoGrowTextarea
             id={sheet ? sheetFieldId('remarks') : undefined}
-            aria-label={nameOf('Remarks')}
+            aria-label={nameOf(t.columns.remarks)}
             className={cn('w-full border-hairline', isDraft && INERT_CONTROL, sheet && SHEET_TEXT)}
             value={draftOf(row, 'remarks', row.remarks)}
             readOnly={locked}
@@ -1314,14 +1324,14 @@ export function LeadsTable({
       ),
 
       date: (
-        <InlineSaveField status={inline.statusOf(saveKey(row, 'nextActionDate'))} label={saveLabel('Next action date')}>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'nextActionDate'))} label={saveLabel(t.nextActionDate)}>
           {/*
             * The shared date field (P18.96-T2 AC-4): the day as the app writes it — never the browser's *mm/dd/yyyy* —
             * with the calendar on its left (P13.1-T4 AC-5), and the device's picker opened by a click on the field.
             */}
           <DateField
             id={dateId}
-            aria-label={nameOf('Next action date')}
+            aria-label={nameOf(t.nextActionDate)}
             density={density}
             glyph="start"
             className={cn('w-full', isDraft && INERT_CONTROL, sheet && TAP_HEIGHT)}
@@ -1340,10 +1350,10 @@ export function LeadsTable({
       ),
 
       note: (
-        <InlineSaveField status={inline.statusOf(saveKey(row, 'nextActionNote'))} label={saveLabel('Next action note')}>
+        <InlineSaveField status={inline.statusOf(saveKey(row, 'nextActionNote'))} label={saveLabel(t.nextActionNote)}>
           <AutoGrowTextarea
             id={sheet ? sheetFieldId('nextActionNote') : undefined}
-            aria-label={nameOf('Next action note')}
+            aria-label={nameOf(t.nextActionNote)}
             className={cn('w-full border-hairline', isDraft && INERT_CONTROL, sheet && SHEET_TEXT)}
             value={draftOf(row, 'nextActionNote', row.nextActionNote)}
             readOnly={locked}
@@ -1366,8 +1376,8 @@ export function LeadsTable({
           href={chat}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label={`Chat with ${who} on WhatsApp (opens in a new tab)`}
-          title="WhatsApp"
+          aria-label={t.chatOpens({ who })}
+          title={t.whatsapp}
           className={cn(CONTACT_GLYPH, 'text-success hover:bg-success/[0.12]')}
         >
           <NavIcon name="whatsapp" className="h-4 w-4" />
@@ -1375,7 +1385,7 @@ export function LeadsTable({
       ) : (
         <TippedGlyph
           glyph={<NavIcon name="whatsapp" className="h-4 w-4" />}
-          name={`Chat with ${who} on WhatsApp`}
+          name={t.chat({ who })}
           tip={dialless ?? ''}
           unavailable
           align="fit"
@@ -1390,8 +1400,8 @@ export function LeadsTable({
       call: isDraft ? null : call ? (
         <a
           href={call}
-          aria-label={`Call ${who}`}
-          title="Call"
+          aria-label={t.callWho({ who })}
+          title={t.call}
           className={cn(CONTACT_GLYPH, 'text-sm leading-none hover:bg-navy/[0.08]')}
         >
           <span aria-hidden="true">📞</span>
@@ -1399,7 +1409,7 @@ export function LeadsTable({
       ) : (
         <TippedGlyph
           glyph="📞"
-          name={`Call ${who}`}
+          name={t.callWho({ who })}
           tip={dialless ?? ''}
           unavailable
           align="fit"
@@ -1413,7 +1423,7 @@ export function LeadsTable({
        */
       actions: (
         <ActionMenu
-          label={`Actions for ${row.name || (isDraft ? 'the new lead' : 'this lead')}`}
+          label={t.actionsFor({ who: row.name || (isDraft ? t.theNewLead : t.thisLead) })}
           items={menuFor(row, locked, foreign)}
           inert={isDraft}
         />
@@ -1503,11 +1513,11 @@ export function LeadsTable({
         </div>
         <div className="px-1.5">{c.month}</div>
         <div className="flex flex-col gap-1">
-          <span aria-hidden="true" className={cn(CARD_LABEL, 'px-1.5')}>Remarks</span>
+          <span aria-hidden="true" className={cn(CARD_LABEL, 'px-1.5')}>{t.columns.remarks}</span>
           {c.remarks}
         </div>
         <div className="flex flex-col gap-1">
-          <span aria-hidden="true" className={cn(CARD_LABEL, 'px-1.5')}>Next action</span>
+          <span aria-hidden="true" className={cn(CARD_LABEL, 'px-1.5')}>{t.columns.nextAction}</span>
           {c.date}
           {c.note}
         </div>
@@ -1561,8 +1571,8 @@ export function LeadsTable({
     const remarks = draftOf(row, 'remarks', row.remarks).trim();
     const day = draftOf(row, 'nextActionDate', row.nextActionDate);
     const note = draftOf(row, 'nextActionNote', row.nextActionNote).trim();
-    const next = [day ? formatCalendarDay(day) : '', note].filter(Boolean).join(' · ');
-    const stage = stageLabel(row) ?? (row.statusCode ? `${row.statusCode} (retired)` : null);
+    const next = [day ? formatCalendarDay(day, figures) : '', note].filter(Boolean).join(' · ');
+    const stage = stageLabel(row) ?? (row.statusCode ? t.retired({ code: row.statusCode }) : null);
     return (
       <li
         key={key}
@@ -1575,7 +1585,7 @@ export function LeadsTable({
           <button
             type="button"
             id={isDraft ? undefined : nameId(row.id)}
-            aria-label={isDraft ? 'Edit the new lead' : `Edit ${name || 'this lead'}`}
+            aria-label={isDraft ? t.editNew : t.editWho({ who: name || t.thisLead })}
             aria-haspopup="dialog"
             onClick={() => setSheetFor(key)}
             className={cn(
@@ -1586,7 +1596,7 @@ export function LeadsTable({
               'focus-visible:after:-outline-offset-2 focus-visible:after:outline-amber',
             )}
           >
-            {name || <span className="font-normal text-muted">New lead</span>}
+            {name || <span className="font-normal text-muted">{t.newLead}</span>}
           </button>
           <span className="relative z-10 flex shrink-0 items-center">{c.whatsapp}{c.call}{c.actions}</span>
         </div>
@@ -1599,7 +1609,7 @@ export function LeadsTable({
               row.type === null && 'font-normal text-muted',
             )}
           >
-            {row.type ? TYPE_WORD[row.type] : 'No type yet'}
+            {row.type ? t.types[row.type] : t.noType}
           </span>
           {stage && <span className={cn('rounded-sm px-1.5 py-0.5 font-semibold', stageTint(row, ladderFor(row.type)))}>{stage}</span>}
         </p>
@@ -1607,20 +1617,20 @@ export function LeadsTable({
           <dl className="flex flex-col gap-2">
             {next && (
               <div className="flex flex-col gap-0.5">
-                <dt className={CARD_LABEL}>Next action</dt>
+                <dt className={CARD_LABEL}>{t.columns.nextAction}</dt>
                 <dd className="break-words text-sm text-navy">{next}</dd>
               </div>
             )}
             {remarks && (
               <div className="flex flex-col gap-0.5">
-                <dt className={CARD_LABEL}>Remarks</dt>
+                <dt className={CARD_LABEL}>{t.columns.remarks}</dt>
                 <dd className="whitespace-pre-wrap break-words text-sm text-navy">{remarks}</dd>
               </div>
             )}
           </dl>
         )}
         {/* The sheet says its own while it is open; this is for once it has closed. */}
-        {sheetFor !== key && <InlineSaveStatus {...cardSave(row)} label={name || 'the new lead'} className="relative z-10" />}
+        {sheetFor !== key && <InlineSaveStatus {...cardSave(row)} label={name || t.theNewLead} className="relative z-10" />}
         {c.errors.length > 0 && <div className="relative z-10 flex flex-col gap-2">{c.errors}</div>}
       </li>
     );
@@ -1642,24 +1652,24 @@ export function LeadsTable({
       <Modal
         open
         placement="sheet"
-        title={isDraft ? 'New lead' : `Edit ${row.name || 'this lead'}`}
+        title={isDraft ? t.newLead : t.editWho({ who: row.name || t.thisLead })}
         // An existing lead opens on its title, so no keyboard rises over the sheet until a field is chosen.
         focusDialog={!isDraft}
         onClose={closeSheet}
       >
         <div className="flex flex-col gap-4">
-          <Field label="Lead name" htmlFor={isDraft ? draftInputId : sheetFieldId('name')}>{c.name()}</Field>
+          <Field label={t.columns.name} htmlFor={isDraft ? draftInputId : sheetFieldId('name')}>{c.name()}</Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Type" htmlFor={sheetFieldId('type')}>{c.type}</Field>
-            <Field label="Status" htmlFor={sheetFieldId('status')}>{c.status}</Field>
+            <Field label={t.columns.type} htmlFor={sheetFieldId('type')}>{c.type}</Field>
+            <Field label={t.columns.status} htmlFor={sheetFieldId('status')}>{c.status}</Field>
           </div>
           {c.month}
-          <Field label="Remarks" htmlFor={sheetFieldId('remarks')}>{c.remarks}</Field>
-          <Field label="Next action date" htmlFor={sheetFieldId('nextActionDate')}>{c.date}</Field>
-          <Field label="Next action note" htmlFor={sheetFieldId('nextActionNote')}>{c.note}</Field>
+          <Field label={t.columns.remarks} htmlFor={sheetFieldId('remarks')}>{c.remarks}</Field>
+          <Field label={t.nextActionDate} htmlFor={sheetFieldId('nextActionDate')}>{c.date}</Field>
+          <Field label={t.nextActionNote} htmlFor={sheetFieldId('nextActionNote')}>{c.note}</Field>
           {c.errors.length > 0 && <div className="flex flex-col gap-2">{c.errors}</div>}
           <div className="flex justify-end">
-            <Button variant="secondary" className={TAP_HEIGHT} onClick={closeSheet}>Close</Button>
+            <Button variant="secondary" className={TAP_HEIGHT} onClick={closeSheet}>{t.close}</Button>
           </div>
         </div>
       </Modal>
@@ -1670,19 +1680,19 @@ export function LeadsTable({
     /* The coaching card has one empty line whatever narrowed it (`Overall.html:10815`). */
     <EmptyState
       variant={narrowed ? 'filtered' : 'empty'}
-      title={narrowed || owner ? 'No leads match.' : 'No leads yet — add your first one above.'}
+      title={narrowed || owner ? t.noneMatch : t.noneYet}
     />
   );
 
   /** A card has no heading to sort from, so the card layout's toolbar says the order in words. */
   const sortChoice = cards && (
     <Select
-      aria-label="Sort leads"
+      aria-label={t.sort.label}
       className={TAP_HEIGHT}
       value={sortValue(sort)}
       onChange={(e) => setSort(SORT_CHOICES.find((c) => sortValue(c.sort) === e.target.value)?.sort ?? null)}
     >
-      {SORT_CHOICES.map((c) => <option key={sortValue(c.sort)} value={sortValue(c.sort)}>{c.label}</option>)}
+      {SORT_CHOICES.map((c) => <option key={sortValue(c.sort)} value={sortValue(c.sort)}>{t.sort[c.words]}</option>)}
     </Select>
   );
 
@@ -1708,38 +1718,38 @@ export function LeadsTable({
   const filterBar = !filters && (
     <div
       role="search"
-      aria-label="Search and filter leads"
+      aria-label={t.searchAndFilter}
       className="mb-3 flex flex-wrap items-center gap-2.5 max-md:grid max-md:grid-cols-2"
     >
       <TextInput
         type="search"
-        aria-label="Search leads"
-        placeholder="Search leads…"
+        aria-label={t.search}
+        placeholder={t.searchPlaceholder}
         className={cn('w-56 max-w-full max-md:col-span-2 max-md:w-full', TAP_HEIGHT)}
         value={term}
         onChange={(e) => setTerm(e.target.value)}
       />
       <Select
-        aria-label="Filter by type"
+        aria-label={t.byType}
         className={cn('max-md:w-full max-md:min-w-0', TAP_HEIGHT)}
         value={typeFilter}
         onChange={(e) => chooseType(e.target.value as '' | LeadType)}
       >
-        <option value="">All types</option>
-        <option value="sales">{TYPE_WORD.sales}</option>
-        <option value="recruitment">{TYPE_WORD.recruitment}</option>
+        <option value="">{t.allTypes}</option>
+        <option value="sales">{t.types.sales}</option>
+        <option value="recruitment">{t.types.recruitment}</option>
       </Select>
       <Select
-        aria-label="Filter by status"
+        aria-label={t.byStatus}
         className={cn('max-md:w-full max-md:min-w-0', TAP_HEIGHT)}
         value={statusFilter}
         onChange={(e) => setStatusFilter(e.target.value)}
       >
-        <option value="">All statuses</option>
+        <option value="">{t.allStatuses}</option>
         {typeFilter
           ? ladderFor(typeFilter).map((s) => <option key={s.code} value={s.code}>{s.label}</option>)
           : pipelines.map((p) => (
-            <optgroup key={p.pipeline} label={TYPE_WORD[p.pipeline]}>
+            <optgroup key={p.pipeline} label={t.types[p.pipeline]}>
               {p.statuses.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
             </optgroup>
           ))}
@@ -1752,7 +1762,7 @@ export function LeadsTable({
     body = <ErrorBanner {...loadError} />;
   } else if (!open || configLoading) {
     body = cards
-      ? <SkeletonCards count={3} label={`Loading ${caption.toLowerCase()}…`} />
+      ? <SkeletonCards count={3} label={t.loadingList({ caption })} />
       : <SkeletonTable caption={caption} columns={columns} rows={5} />;
   } else {
     body = (
@@ -1762,38 +1772,35 @@ export function LeadsTable({
             {/* A finalized session rests them at 0.6, as the prototype's lock does (`Overall.html:1416-1417`). */}
             <TextInput
               type="search"
-              aria-label="Search leads"
-              placeholder="Search leads…"
+              aria-label={t.search}
+              placeholder={t.searchPlaceholder}
               className={cn('w-56 max-w-full', readOnly && 'opacity-60')}
               value={term}
               disabled={readOnly}
               onChange={(e) => setTerm(e.target.value)}
             />
             <Select
-              aria-label="Filter by type"
+              aria-label={t.byType}
               value={typeFilter}
               disabled={readOnly}
               className={cn(readOnly && 'opacity-60')}
               onChange={(e) => setTypeFilter(e.target.value as '' | LeadType)}
             >
-              <option value="">All types</option>
-              <option value="sales">{TYPE_WORD.sales}</option>
-              <option value="recruitment">{TYPE_WORD.recruitment}</option>
+              <option value="">{t.allTypes}</option>
+              <option value="sales">{t.types.sales}</option>
+              <option value="recruitment">{t.types.recruitment}</option>
             </Select>
             {sortChoice}
-            {!readOnly && <Button ref={addButton} onClick={addLead}>+ Add lead</Button>}
+            {!readOnly && <Button ref={addButton} onClick={addLead}>{t.add}</Button>}
           </div>
         ) : (
           /* The prototype's toolbar: the count, and the screen's one action (`Overall.html:2791-2794`). */
           <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             {/* Narrowed, the count is what matched — the whole list is not on the screen (P18.95-T4 AC-2). */}
-            <p className="text-sm text-muted">
-              {open.total} active lead{open.total === 1 ? '' : 's'}
-              {narrowed && (open.total === 1 ? ' matches' : ' match')}
-            </p>
+            <p className="text-sm text-muted">{t.count({ n: open.total, narrowed })}</p>
             <div className="flex flex-wrap items-center gap-2.5">
               {sortChoice}
-              <Button ref={addButton} onClick={addLead}>+ Add lead</Button>
+              <Button ref={addButton} onClick={addLead}>{t.add}</Button>
             </div>
           </div>
         )}
@@ -1832,7 +1839,7 @@ export function LeadsTable({
           */}
         {unshown > 0 && (
           <div className="mt-3 flex justify-center">
-            <Button variant="secondary" onClick={showMore}>Show more</Button>
+            <Button variant="secondary" onClick={showMore}>{t.showMore}</Button>
           </div>
         )}
 
@@ -1884,19 +1891,21 @@ export function LeadsTable({
         <Dialog
           open={confirmOutcome !== null}
           message={owner && confirmOutcome
-            ? `Mark as ${OUTCOME_WORD[confirmOutcome.outcome]}? ${confirmOutcome.row.name || 'This lead'} will move to Closed leads as "${OUTCOME_WORD[confirmOutcome.outcome]}". You can still find them there afterward.`
+            ? t.confirm.asOutcome({
+              outcome: t.outcomes[confirmOutcome.outcome], who: confirmOutcome.row.name || t.confirm.thisLeadCapital,
+            })
             : confirmOutcome?.outcome === 'won'
-              ? `Mark ${confirmOutcome.row.name || 'this lead'} as a successful lead?`
-              : `Mark ${confirmOutcome?.row.name || 'this lead'} as not successful? This moves them to the closed list.`}
+              ? t.confirm.won({ who: confirmOutcome.row.name || t.thisLead })
+              : t.confirm.lost({ who: confirmOutcome?.row.name || t.thisLead })}
           confirmLabel={owner && confirmOutcome
-            ? `Mark as ${OUTCOME_WORD[confirmOutcome.outcome]}`
-            : confirmOutcome?.outcome === 'won' ? 'Mark successful' : 'Mark not successful'}
+            ? t.confirm.markAs({ outcome: t.outcomes[confirmOutcome.outcome] })
+            : confirmOutcome?.outcome === 'won' ? t.menu.markWon : t.menu.markLost}
           onCancel={() => setConfirmOutcome(null)}
           onConfirm={async () => {
             const { row, outcome } = confirmOutcome!;
             setConfirmOutcome(null);
             const saved = await run(row.id, () => setLeadOutcome(row.id, outcome, row.version), { done: moveToClosed });
-            if (saved) onNotice?.(`${saved.name} marked as ${OUTCOME_WORD[outcome]}.`);
+            if (saved) onNotice?.(t.notices.markedAs({ name: saved.name, outcome: t.outcomes[outcome] }));
           }}
         />
 
@@ -1906,8 +1915,8 @@ export function LeadsTable({
           */}
         <Dialog
           open={confirmDelete !== null}
-          message={`Delete ${confirmDelete?.name || 'this lead'}?`}
-          confirmLabel="Delete lead"
+          message={t.confirm.delete({ who: confirmDelete?.name || t.thisLead })}
+          confirmLabel={t.confirm.deleteLead}
           tone="danger"
           onCancel={() => setConfirmDelete(null)}
           onConfirm={async () => {
@@ -1927,8 +1936,8 @@ export function LeadsTable({
 
         <Dialog
           open={confirmType !== null}
-          message="Changing the type clears this lead’s stage and its commitment for this month. The two ladders share no stage. Continue?"
-          confirmLabel="Change the type"
+          message={t.confirm.type}
+          confirmLabel={t.confirm.changeType}
           onCancel={() => setConfirmType(null)}
           onConfirm={() => {
             const { row, type } = confirmType!;
@@ -2031,14 +2040,15 @@ function ClosedLeads({
   /** Absent under a finalized session's lock: the lists still read, and nothing moves back. */
   onReopen?: (row: Lead) => void;
 }) {
+  const t = useMessages(leadsMessages);
   const cards = [
-    { outcome: 'won' as const, title: '✓ Successful', card: won, empty: 'No successful leads yet.', waiting: 'Loading successful leads…' },
-    { outcome: 'lost' as const, title: '✕ Not successful', card: lost, empty: 'No lost leads yet.', waiting: 'Loading lost leads…' },
+    { outcome: 'won' as const, title: t.closed.won, card: won, empty: t.closed.noneWon, waiting: t.closed.loadingWon },
+    { outcome: 'lost' as const, title: t.closed.lost, card: lost, empty: t.closed.noneLost, waiting: t.closed.loadingLost },
   ];
 
   return (
     <section className="mt-8">
-      <h2 className="mb-3 font-display text-md font-bold text-navy">Closed leads</h2>
+      <h2 className="mb-3 font-display text-md font-bold text-navy">{t.closed.title}</h2>
       <div className="grid gap-4 lg:grid-cols-2">
         {cards.map(({ outcome, title, card: { list, error }, empty, waiting }) => (
           <div key={outcome} className="overflow-hidden rounded-lg border border-hairline bg-card">
@@ -2064,9 +2074,9 @@ function ClosedLeads({
                     <div key={row.id} className="border-b border-hairline px-4 py-2.5 last:border-b-0">
                       <div className="flex items-center justify-between gap-2.5">
                         <span className="flex min-w-0 flex-col gap-0.5">
-                          <span className="truncate text-md font-semibold text-navy">{row.name || '(unnamed)'}</span>
+                          <span className="truncate text-md font-semibold text-navy">{row.name || t.closed.unnamed}</span>
                           <span className="text-xs text-muted">
-                            {TYPE_WORD[row.type === 'recruitment' ? 'recruitment' : 'sales']}
+                            {t.types[row.type === 'recruitment' ? 'recruitment' : 'sales']}
                             {stageLabel(row) ? ` · ${stageLabel(row)}` : ''}
                           </span>
                         </span>
@@ -2080,7 +2090,7 @@ function ClosedLeads({
                             'disabled:cursor-not-allowed disabled:opacity-40',
                           )}
                         >
-                          ↺ Move to active
+                          {t.closed.reopen}
                         </button>}
                       </div>
                       {/* A refused reopen says so where it was asked for, as a row's refusal does. */}
@@ -2091,9 +2101,7 @@ function ClosedLeads({
                   ))}
                 {error && (
                   <div className="flex flex-col gap-2 border-t border-hairline px-4 py-3">
-                    <p className="text-xs text-muted">
-                      Showing {list.rows.length} of {list.total} — the rest did not load.
-                    </p>
+                    <p className="text-xs text-muted">{t.closed.partial({ shown: list.rows.length, total: list.total })}</p>
                     <ErrorBanner {...error} />
                   </div>
                 )}

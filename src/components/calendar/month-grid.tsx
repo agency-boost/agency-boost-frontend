@@ -1,12 +1,15 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { messagesIn } from '@/i18n/catalogue';
+import type { Language } from '@/i18n/language';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { calendarMessages } from '@/i18n/messages/calendar';
 import { itemsOnDay, MONTH_LINES } from '@/lib/calendar-layout';
 import {
-  entryNameSuffix, isBusy, OWN_COPY, PROTOTYPE_COPY, titleOf, TYPE_LABEL, type CalendarEntry, type CalendarItem,
-  type CalendarRead,
+  isBusy, owesOf, titleOf, type CalendarEntry, type CalendarItem, type CalendarRead,
 } from '@/lib/calendar';
-import { formatMonthSpan, formatWeekdayDay } from '@/lib/format';
+import { formatMonthSpan, formatNumber, formatWeekdayDay, weekdayHeadings } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import { AgendaDay } from './agenda';
 import { MONTH_BORDER, PaneHeadBar, TYPE_SWATCH, type PaneHead } from './calendar-parts';
@@ -66,10 +69,13 @@ export function MonthGrid({
   selected?: string;
   onSelect?: (date: string) => void;
 }) {
+  const t = useMessages(calendarMessages);
+  const words = useLanguage();
+  const language = useFigureLanguage();
   const showing = phone && selected && read.days.some((d) => d.date === selected) ? selected : undefined;
   const grid = (
     <div className={cn('grid grid-cols-7', !head && !phone && FRAME)}>
-      {PROTOTYPE_COPY.dayNames.map((name) => (
+      {weekdayHeadings(language).map((name) => (
         <div key={name} className="border-b border-hairline bg-base py-[9px] text-center text-xs font-bold text-muted">
           {name}
         </div>
@@ -91,7 +97,9 @@ export function MonthGrid({
           >
             <button
               type="button"
-              aria-label={phone && items.length > 0 ? `${formatWeekdayDay(date)}, ${OWN_COPY.eventCount(items.length)}` : formatWeekdayDay(date)}
+              aria-label={phone && items.length > 0
+                ? `${formatWeekdayDay(date, language)}, ${t.eventCount({ n: items.length, count: formatNumber(items.length, {}, language) })}`
+                : formatWeekdayDay(date, language)}
               aria-current={today ? 'date' : undefined}
               aria-pressed={phone ? showing === date : undefined}
               onClick={() => (phone ? onSelect?.(date) : onWeek(date))}
@@ -116,7 +124,7 @@ export function MonthGrid({
                       <button
                         type="button"
                         data-entry=""
-                        aria-label={lineName(item)}
+                        aria-label={lineName(item, words, language)}
                         onClick={() => onOpen(item)}
                         className={cn(
                           'pointer-events-auto block w-full truncate rounded-sm border-l-[2.5px] bg-navy-soft/10 px-[5px] py-0.5 text-left text-2xs font-semibold leading-tight text-navy',
@@ -124,9 +132,9 @@ export function MonthGrid({
                         )}
                       >
                         {!item.allDay && (
-                          <span className="mr-1 font-bold text-navy-soft">{formatMonthSpan(item.start ?? '', item.end ?? '')}</span>
+                          <span className="mr-1 font-bold text-navy-soft">{formatMonthSpan(item.start ?? '', item.end ?? '', language)}</span>
                         )}
-                        {titleOf(item)}
+                        {titleOf(item, words)}
                       </button>
                     )}
                   </li>
@@ -162,13 +170,15 @@ export function MonthGrid({
 
 /** A compared member's busy block in a month cell: *Busy* and its time, in the month's form; it opens nothing. */
 function BusyLine({ item }: { item: CalendarItem }) {
+  const t = useMessages(calendarMessages);
+  const language = useFigureLanguage();
   return (
     <span
       data-busy=""
       className="block w-full truncate rounded-sm border-l-[2.5px] border-muted bg-navy/[0.06] px-[5px] py-0.5 text-2xs font-semibold leading-tight text-navy"
     >
-      {!item.allDay && <span className="mr-1 font-bold">{formatMonthSpan(item.start ?? '', item.end ?? '')}</span>}
-      {OWN_COPY.busy}
+      {!item.allDay && <span className="mr-1 font-bold">{formatMonthSpan(item.start ?? '', item.end ?? '', language)}</span>}
+      {t.busy}
     </span>
   );
 }
@@ -178,6 +188,7 @@ function BusyLine({ item }: { item: CalendarItem }) {
  * *+{n}* — drawn, not read: the cell's name says how many (P18.95-T8 AC-1).
  */
 function Dots({ items }: { items: CalendarItem[] }) {
+  const t = useMessages(calendarMessages);
   return (
     <span aria-hidden="true" className="pointer-events-none relative mt-1 flex flex-wrap items-center gap-[3px]">
       {items.slice(0, MONTH_LINES).map((item, i) => (
@@ -187,7 +198,7 @@ function Dots({ items }: { items: CalendarItem[] }) {
         />
       ))}
       {items.length > MONTH_LINES && (
-        <span className="text-2xs font-bold leading-none text-muted">{OWN_COPY.moreShort(items.length - MONTH_LINES)}</span>
+        <span className="text-2xs font-bold leading-none text-muted">{t.moreCount({ n: items.length - MONTH_LINES })}</span>
       )}
     </span>
   );
@@ -199,8 +210,9 @@ function Dots({ items }: { items: CalendarItem[] }) {
  * one string; `calendar.spec.ts` holds the phrase to starting with that count.
  */
 function MoreButton({ hiddenCount, onClick }: { hiddenCount: number; onClick: () => void }) {
-  const count = OWN_COPY.moreShort(hiddenCount);
-  const rest = PROTOTYPE_COPY.more(hiddenCount).slice(count.length);
+  const t = useMessages(calendarMessages);
+  const count = t.moreCount({ n: hiddenCount });
+  const rest = t.moreRest;
   return (
     <button
       type="button"
@@ -213,10 +225,11 @@ function MoreButton({ hiddenCount, onClick }: { hiddenCount: number; onClick: ()
   );
 }
 
-/** A line's name: its type, then the words drawn on it — the month's time and the title (WCAG 2.5.3). */
-function lineName(entry: CalendarEntry): string {
-  const time = entry.allDay ? '' : `${formatMonthSpan(entry.start ?? '', entry.end ?? '')} `;
-  return `${TYPE_LABEL[entry.type]}: ${time}${titleOf(entry)}${entryNameSuffix(entry)}`;
+/** A line's name: its type, then the words drawn on it — the month's time and the title (WCAG 2.5.3) — in `words`. */
+function lineName(entry: CalendarEntry, words: Language, figures: Language): string {
+  const t = messagesIn(calendarMessages, words);
+  const time = entry.allDay ? '' : formatMonthSpan(entry.start ?? '', entry.end ?? '', figures);
+  return t.lineName({ type: t.types[entry.type], time, title: titleOf(entry, words), owes: owesOf(entry) });
 }
 
 /**
@@ -224,9 +237,10 @@ function lineName(entry: CalendarEntry): string {
  * a phone's cells as short as its month draws them (P18.95-T8 AC-1).
  */
 export function MonthSkeleton({ phone = false }: { phone?: boolean }) {
+  const language = useFigureLanguage();
   return (
     <div aria-hidden="true" className="grid grid-cols-7">
-      {PROTOTYPE_COPY.dayNames.map((name) => (
+      {weekdayHeadings(language).map((name) => (
         <div key={name} className="border-b border-hairline bg-base py-[9px] text-center text-xs font-bold text-muted">
           {name}
         </div>

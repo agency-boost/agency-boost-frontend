@@ -159,3 +159,61 @@ describe('formatRatioForStatus — a rounded figure never reads as the other sid
   });
 });
 
+
+/**
+ * **P18.98-T3: a ratio and its benchmark in each language** (ADR-0174 §6; the glossary's §E). Indonesian is every
+ * case above, unchanged; English writes the same figure with a point — *29.6%*, *0.30*, *±30 points* — to the same
+ * places. The words beside a figure (*points*) are the catalogue's, and move with their screens (P18.98-T4).
+ */
+describe('P18.98-T3 a ratio in each language', () => {
+  it.each([
+    [0.3, 'percent', '30%', '30%'],
+    [0.155, 'percent', '15,5%', '15.5%'],
+    [1, 'decimal', '1,00', '1.00'],
+    [1.5, 'decimal', '1,50', '1.50'],
+    [30, 'points', '±30 points', '±30 points'],
+    [25.5, 'points', '±25,5 points', '±25.5 points'],
+  ] as const)('P18.98-T3 AC-1 writes a benchmark of %d (%s) as %s, and %s in English', (value, unit, id, en) => {
+    expect(formatBenchmark(value, unit, 'id')).toBe(id);
+    expect(formatBenchmark(value, unit, 'en')).toBe(en);
+  });
+
+  it('P18.98-T3 AC-1 writes a computed ratio 29.6% and 0.38 in English, its tenth and its two places kept', () => {
+    expect(formatRatioValue(0.296, 'percent', 'en')).toBe('29.6%');
+    expect(formatRatioValue(0.3, 'percent', 'en')).toBe('30.0%');
+    expect(formatRatioValue(0.38, 'decimal', 'en')).toBe('0.38');
+    expect(formatRatioValue(24.4, 'points', 'en')).toBe('24 points');
+    expect(formatRatioValue(null, 'percent', 'en')).toBe('–');
+  });
+
+  it('P18.98-T3 AC-2 adds the same place in both languages where the rounding would reach the benchmark', () => {
+    // 8 ÷ 27 is 0.296: below 0.30, so neither language may write 0,30 or 0.30.
+    expect(formatRatioForStatus(8 / 27, 'decimal', 0.3, 'alert', 'id')).toBe('0,296');
+    expect(formatRatioForStatus(8 / 27, 'decimal', 0.3, 'alert', 'en')).toBe('0.296');
+    expect(formatRatioForStatus(0.2996, 'percent', 0.3, 'alert', 'id')).toBe('29,96%');
+    expect(formatRatioForStatus(0.2996, 'percent', 0.3, 'alert', 'en')).toBe('29.96%');
+    expect(formatRatioForStatus(30.43, 'points', 30, 'alert', 'en')).toBe('30.4 points');
+    // A ratio far below its benchmark, or on track, keeps its own places in both.
+    expect(formatRatioForStatus(0.25, 'percent', 0.3, 'alert', 'en')).toBe('25.0%');
+    expect(formatRatioForStatus(0.31, 'percent', 0.3, 'success', 'en')).toBe('31.0%');
+  });
+
+  it('P18.98-T3 AC-2 reads the figure back by its Indonesian writing, so a grouped English figure decides nothing differently', () => {
+    // 12,345% — a figure past a thousand, grouped `12.345,0%` and `12,345.0%`: the same places in both.
+    const id = formatRatioForStatus(123.45, 'percent', 124, 'alert', 'id');
+    const en = formatRatioForStatus(123.45, 'percent', 124, 'alert', 'en');
+    expect(id).toBe('12.345,0%');
+    expect(en).toBe('12,345.0%');
+  });
+
+  it('P18.98-T3 AC-3 puts a stored benchmark in its input in the reader’s mark, and reads either mark back', () => {
+    expect(benchmarkToInput(0.155, 'percent', 'id')).toBe('15,5');
+    expect(benchmarkToInput(0.155, 'percent', 'en')).toBe('15.5');
+    expect(benchmarkToInput(0.3, 'decimal', 'en')).toBe('0.3');
+    expect(benchmarkFromInput('15.5', 'percent')).toBe(0.155);
+    expect(benchmarkFromInput('15,5', 'percent')).toBe(0.155);
+    expect(reexpress('0.3', 'decimal', 'percent', 'en')).toBe('30');
+    expect(reexpress('15.5', 'percent', 'decimal', 'en')).toBe('0.155');
+    expect(reexpress('15,5', 'percent', 'decimal', 'id')).toBe('0,155');
+  });
+});

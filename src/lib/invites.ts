@@ -1,5 +1,8 @@
 'use client';
 
+import { messagesIn } from '@/i18n/catalogue';
+import { DEFAULT_LANGUAGE, type Language } from '@/i18n/language';
+import { addAgentMessages } from '@/i18n/messages/add-agent';
 import { api } from './api-client';
 import { whatsAppNumber } from './leads';
 
@@ -142,20 +145,29 @@ export const declineTransfer = (transferId: string, reason?: string) =>
   });
 
 /**
- * **The words sent with the link on WhatsApp** (AC-2): to the invitee, in Bahasa Indonesia, as the office writes to
- * its people — short, their name and the link. The screen around it is English.
+ * **The language the invite is written to the invitee in** (P18.98-T4): theirs, and they have chosen none — so the
+ * language a reader with no choice reads, Bahasa Indonesia (`DEFAULT_LANGUAGE`, ADR-0179 §1), whichever language the
+ * leader's own screen is in. As the client wrote the message (P18.96-T3 AC-2).
  */
-export function inviteMessage(fullName: string, link: string): string {
-  return `Halo ${fullName.trim()}, saya mengundang Anda bergabung di tim saya di AgencyBoost: ${link}`;
+export const INVITEE_LANGUAGE: Language = DEFAULT_LANGUAGE;
+
+/**
+ * **The words sent with the link on WhatsApp** (AC-2): to the invitee, as the office writes to its people — short,
+ * their name and the link — in the invitee's language (`INVITEE_LANGUAGE`), the catalogue's (`add-agent.ts`).
+ */
+export function inviteMessage(fullName: string, link: string, language: Language = INVITEE_LANGUAGE): string {
+  return messagesIn(addAgentMessages, language).whatsAppMessage({ name: fullName.trim(), link });
 }
 
 /**
  * **Share on WhatsApp**: the chat with the invitee's number, the message filled in — `wa.me/{number}?text=…` — or
  * `null` when the number is not one WhatsApp can open (`whatsAppNumber`, the leads' rule), so no button fails.
  */
-export function inviteWhatsAppLink(phone: string, fullName: string, link: string): string | null {
+export function inviteWhatsAppLink(
+  phone: string, fullName: string, link: string, language: Language = INVITEE_LANGUAGE,
+): string | null {
   const number = whatsAppNumber(phone);
-  return number ? `https://wa.me/${number}?text=${encodeURIComponent(inviteMessage(fullName, link))}` : null;
+  return number ? `https://wa.me/${number}?text=${encodeURIComponent(inviteMessage(fullName, link, language))}` : null;
 }
 
 /** The token from an invite link, `?invite=…` — the register page's and the join page's. */

@@ -12,14 +12,16 @@ import { Dialog } from '@/components/ui/dialog';
 import { Button, Card, ErrorBanner, TextInput } from '@/components/ui/field';
 import { InlineSaveField, InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Toast, useHostToast, useToast } from '@/components/ui/toast';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { activationMessages } from '@/i18n/messages/activation';
 import {
   attributionOf, correctionOf, graduateMyActivation, isComplete, isDataBacked, isManual, isTickedByHandLink, ITEM_NOTE_MAX,
-  MY_COACHING_ACTIVATION_HREF, OWN_COPY, PROTOTYPE_COPY, readMyActivation, readMyClosings, saveMyItem,
+  MY_COACHING_ACTIVATION_HREF, readMyActivation, readMyClosings, saveMyItem,
   type ActivationItemProgress, type ActivationRecordInput, type ActivationView, type MyItemInput,
 } from '@/lib/activation';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { formatOfficeDay, formatShortDay } from '@/lib/format';
+import { formatOfficeDay, formatShortDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import { landingFor } from '@/lib/landing';
 import { useCan, useSession } from '@/lib/session';
 
@@ -54,8 +56,12 @@ type ItemField = 'done' | 'note' | 'date';
  *
  * **A read-only support session draws no write control** (T4 AC-9, the calendar's L-79): the boxes are
  * drawn disabled, the note and date read-only, and there is no button.
+ *
+ * **Its words are the catalogue's** (`i18n/messages/activation.ts`; P18.98-T4) and its dates are written in the
+ * figures' language (`useFigureLanguage()`), so a date beside the shared date field reads as its face does.
  */
 export function MyActivation() {
+  const t = useMessages(activationMessages);
   const { me, reload } = useSession();
   const router = useRouter();
   const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
@@ -150,7 +156,7 @@ export function MyActivation() {
     setGraduateError(null);
     try {
       await graduateMyActivation();
-      (hostToast ?? local.show)(PROTOTYPE_COPY.graduated);
+      (hostToast ?? local.show)(t.graduated);
       // The reader's landing, in place of the prototype's *New hires* (`:6687`; contradiction 4, a Fix):
       // a hire with no hires has no such page. Replaced, so Back does not return to a page no longer offered.
       router.replace(landingFor(me));
@@ -171,16 +177,16 @@ export function MyActivation() {
       {error && (
         <div>
           <ErrorBanner {...error} />
-          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
         </div>
       )}
-      {!view && !error && <ActivationSkeleton label={OWN_COPY.loading} />}
+      {!view && !error && <ActivationSkeleton label={t.loading} />}
 
       {view && (
         <>
           <Card density="compact">
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3.5">
-              <ProgressHeading>{PROTOTYPE_COPY.progressHeading}</ProgressHeading>
+              <ProgressHeading>{t.progressHeading}</ProgressHeading>
               <div className="flex flex-wrap items-end gap-2.5">
                 <JoinDate view={view} reader={me?.membership?.membershipId} />
                 {mayGraduate && (
@@ -192,16 +198,16 @@ export function MyActivation() {
                       onClick={() => setAsking(true)}
                       className="h-auto px-4 py-[9px] text-base"
                     >
-                      {PROTOTYPE_COPY.graduate}
+                      {t.graduate}
                     </Button>
                     {/* P18.96-T6 AC-5 (ADR-0173 §4): while it waits, it says why — the checklist's own total, served. */}
-                    {view.pct < 100 && <p id={lockedId} className="mt-1 text-xs text-muted">{OWN_COPY.graduateLocked(view.total)}</p>}
+                    {view.pct < 100 && <p id={lockedId} className="mt-1 text-xs text-muted">{t.graduateLocked({ n: view.total })}</p>}
                   </div>
                 )}
               </div>
             </div>
             {graduateError && <div className="mb-4"><ErrorBanner {...graduateError} /></div>}
-            <ProgressSummary view={view} label={PROTOTYPE_COPY.progressHeading} />
+            <ProgressSummary view={view} label={t.progressHeading} />
           </Card>
 
           {view.aspects.map((aspect, i) => (
@@ -238,13 +244,13 @@ export function MyActivation() {
 
           {view.note && <NoteFromLeader view={view} reader={me?.membership?.membershipId} />}
 
-          <p className="mt-1 text-center text-sm leading-relaxed text-muted">{PROTOTYPE_COPY.footer}</p>
+          <p className="mt-1 text-center text-sm leading-relaxed text-muted">{t.footer}</p>
 
           <Dialog
             open={asking}
-            message={PROTOTYPE_COPY.graduateQuestion}
-            confirmLabel={PROTOTYPE_COPY.confirm}
-            cancelLabel={PROTOTYPE_COPY.cancel}
+            message={t.graduateQuestion}
+            confirmLabel={t.confirm}
+            cancelLabel={t.cancel}
             onConfirm={() => void graduate()}
             onCancel={() => setAsking(false)}
           />
@@ -261,12 +267,15 @@ export function MyActivation() {
  * shown, not offered. When a leader moved it, the marker beside it says who and when.
  */
 function JoinDate({ view, reader }: { view: ActivationView; reader: string | null | undefined }) {
-  const corrected = correctionOf(view, reader);
+  const t = useMessages(activationMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const corrected = correctionOf(view, reader, language, figures);
   return (
     <dl className="flex items-center gap-2">
-      <dt className="whitespace-nowrap text-xs font-semibold text-navy">{PROTOTYPE_COPY.joinDate}</dt>
+      <dt className="whitespace-nowrap text-xs font-semibold text-navy">{t.joinDate}</dt>
       <dd className="flex h-[34px] items-center rounded-md border-[1.5px] border-hairline bg-base px-3 text-base text-navy">
-        <time dateTime={view.startDate}>{formatShortDay(view.startDate, { year: true })}</time>
+        <time dateTime={view.startDate}>{formatShortDay(view.startDate, { year: true }, figures)}</time>
       </dd>
       {corrected && <dd><AttributionMark words={corrected} /></dd>}
     </dl>
@@ -291,9 +300,10 @@ function MyItemRow({
   error: string | undefined;
   resetKey: number;
 }) {
+  const t = useMessages(activationMessages);
   const [open, setOpen] = useState(false);
   const metaId = useId();
-  const words = attributionOf(item, reader);
+  const words = attributionOf(item, reader, useLanguage(), useFigureLanguage());
 
   if (!isManual(item) && item.link) {
     return (
@@ -337,7 +347,7 @@ function MyItemRow({
         </div>
         <button
           type="button"
-          aria-label={PROTOTYPE_COPY.showNoteAndDate}
+          aria-label={t.showNoteAndDate}
           aria-expanded={open}
           aria-controls={metaId}
           onClick={() => setOpen((was) => !was)}
@@ -353,16 +363,16 @@ function MyItemRow({
       </div>
       {/* `hidden` alone loses to Tailwind's `flex`, which sets `display`: the class goes with the state. */}
       <div id={metaId} hidden={!open} className={cn('ml-[26px] mt-2.5 flex-wrap gap-2', open ? 'flex' : 'hidden')}>
-        <InlineSaveField status={status('note')} label={OWN_COPY.itemNoteName(item.label)} className="min-w-0 flex-[1_1_170px]">
+        <InlineSaveField status={status('note')} label={t.itemNoteName({ label: item.label })} className="min-w-0 flex-[1_1_170px]">
           <NoteInput item={item} writable={writable} onSave={(patch) => onSave(patch, 'note')} resetKey={resetKey} />
         </InlineSaveField>
-        <InlineSaveField status={status('date')} label={OWN_COPY.itemDateName(item.label)}>
+        <InlineSaveField status={status('date')} label={t.itemDateName({ label: item.label })}>
           <AutoSaveDateField
             value={item.date}
             clearable
             readOnly={!writable}
             resetKey={resetKey}
-            aria-label={OWN_COPY.itemDateName(item.label)}
+            aria-label={t.itemDateName({ label: item.label })}
             onCommit={(date) => onSave({ done: item.done, date }, 'date')}
           />
         </InlineSaveField>
@@ -379,6 +389,7 @@ function MyItemRow({
 function NoteInput({
   item, writable, onSave, resetKey,
 }: { item: ActivationItemProgress; writable: boolean; onSave: (patch: MyItemInput) => void; resetKey: number }) {
+  const t = useMessages(activationMessages);
   const [draft, setDraft] = useState(item.note ?? '');
   useEffect(() => { setDraft(item.note ?? ''); }, [item.note, resetKey]);
   return (
@@ -387,8 +398,8 @@ function NoteInput({
       value={draft}
       readOnly={!writable}
       maxLength={ITEM_NOTE_MAX}
-      placeholder={PROTOTYPE_COPY.notePlaceholder}
-      aria-label={OWN_COPY.itemNoteName(item.label)}
+      placeholder={t.notePlaceholder}
+      aria-label={t.itemNoteName({ label: item.label })}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => {
         const next = draft.trim();
@@ -408,13 +419,15 @@ function NoteInput({
  * fact a tooltip can carry.
  */
 function NoteFromLeader({ view, reader }: { view: ActivationView; reader: string | null | undefined }) {
+  const t = useMessages(activationMessages);
+  const figures = useFigureLanguage();
   const note = view.note!;
-  const who = note.by.membershipId === reader ? OWN_COPY.you : note.by.name;
+  const who = note.by.membershipId === reader ? t.you : note.by.name;
   return (
     <section aria-labelledby="activation-note" className="rounded-lg border border-hairline bg-card p-[18px]">
-      <h2 id="activation-note" className="font-display text-md font-bold text-navy">{PROTOTYPE_COPY.noteHeading}</h2>
+      <h2 id="activation-note" className="font-display text-md font-bold text-navy">{t.noteHeading}</h2>
       <p className="mt-2 whitespace-pre-line text-md text-navy">{note.text}</p>
-      <p className="mt-2 text-sm text-muted">{OWN_COPY.noteFrom(who, formatOfficeDay(note.at))}</p>
+      <p className="mt-2 text-sm text-muted">{t.noteFrom({ who, when: formatOfficeDay(note.at, OFFICE_TIME_ZONE, figures) })}</p>
     </section>
   );
 }
@@ -426,19 +439,25 @@ function NoteFromLeader({ view, reader }: { view: ActivationView; reader: string
  * coaching, whose *Activation* tab keeps it (D-coaching-me).
  */
 function NotOffered({ view, coachingLink }: { view: ActivationView | null; coachingLink: boolean }) {
+  const t = useMessages(activationMessages);
+  const figures = useFigureLanguage();
   const [title, line] = !view
-    ? [OWN_COPY.noneTitle, OWN_COPY.noneLine]
+    ? [t.noneTitle, t.noneLine]
     : view.state === 'graduated'
-      ? [OWN_COPY.graduatedTitle, OWN_COPY.graduatedLine(view.graduatedAt ? formatOfficeDay(view.graduatedAt) : formatShortDay(view.today, { year: true }))]
-      : [OWN_COPY.expiredTitle, OWN_COPY.expiredLine(formatShortDay(view.endsOn, { year: true }))];
+      ? [t.graduatedTitle, t.graduatedLine({
+        on: view.graduatedAt
+          ? formatOfficeDay(view.graduatedAt, OFFICE_TIME_ZONE, figures)
+          : formatShortDay(view.today, { year: true }, figures),
+      })]
+      : [t.expiredTitle, t.expiredLine({ on: formatShortDay(view.endsOn, { year: true }, figures) })];
   return (
     <Card>
       <h2 className="font-display text-lg font-bold text-navy">{title}</h2>
       <p className="mt-1 text-md text-muted">{line}</p>
       {view && coachingLink && (
         <p className="mt-1 text-md text-muted">
-          {OWN_COPY.checklistElsewhere}{' '}
-          <Link href={MY_COACHING_ACTIVATION_HREF} className="font-semibold text-navy underline">{OWN_COPY.ownCoaching}</Link>
+          {t.checklistElsewhere}{' '}
+          <Link href={MY_COACHING_ACTIVATION_HREF} className="font-semibold text-navy underline">{t.ownCoaching}</Link>
         </p>
       )}
     </Card>

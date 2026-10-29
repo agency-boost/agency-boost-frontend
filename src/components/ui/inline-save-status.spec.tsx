@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { useState } from 'react';
+import { InLanguage } from '@test/harness';
 import {
   INLINE_SAVE_COPY, INLINE_SAVED_MS, InlineSaveField, InlineSaveStatus, useInlineSave, type InlineSaveOutcome,
 } from './inline-save-status';
@@ -197,5 +198,36 @@ describe('the inline save confirmation (P18.95-T1 AC-5)', () => {
       expect(results.violations).toEqual([]);
       unmount();
     }
+  });
+});
+
+/**
+ * **P18.98-T2: its words are the catalogue's** (`messages/inline-save.ts`, the approved glossary's §B.2), moved with
+ * *Language* on *Your account*, which saves itself this way and changes the language as it does. English is unchanged;
+ * in Indonesian, *Menyimpan…*, *Tersimpan ✓* and *Gagal menyimpan — coba lagi*.
+ */
+describe('P18.98-T2 the inline save in each language', () => {
+  it('AC-4 keeps its English as it was', () => {
+    expect(INLINE_SAVE_COPY).toMatchObject({
+      saving: 'Saving…', saved: 'Saved ✓', failed: "Couldn't save — retry", failedFinal: "Couldn't save",
+    });
+  });
+
+  it.each([
+    ['saving', 'Menyimpan…'],
+    ['saved', 'Tersimpan ✓'],
+  ] as const)('AC-4 says %s in Indonesian: %s', (state, words) => {
+    render(<InLanguage language="id"><InlineSaveStatus state={state} /></InLanguage>);
+    expect(screen.getByRole('status')).toHaveTextContent(words);
+  });
+
+  it('AC-4 offers the retry in Indonesian, named for its field', () => {
+    render(<InLanguage language="id"><InlineSaveStatus state="failed" onRetry={vi.fn()} label="Bahasa" /></InLanguage>);
+    expect(screen.getByRole('button', { name: 'Gagal menyimpan — coba lagi: Bahasa' })).toHaveTextContent('Gagal menyimpan — coba lagi');
+  });
+
+  it('AC-4 says a failure with nothing to retry in Indonesian', () => {
+    render(<InLanguage language="id"><InlineSaveStatus state="failed" /></InLanguage>);
+    expect(screen.getByRole('status')).toHaveTextContent('Gagal menyimpan');
   });
 });

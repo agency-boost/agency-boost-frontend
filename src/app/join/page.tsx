@@ -13,6 +13,8 @@ import { signInPathFrom } from '@/lib/return-path';
 import { useSession } from '@/lib/session';
 import { landingFor } from '@/lib/landing';
 import { RoleShell } from '@/components/role-shell';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { joinMessages } from '@/i18n/messages/join';
 
 /**
  * Opening a leader's invite link, or typing their code.
@@ -50,21 +52,6 @@ function Join() {
   return <CodeJoin />;
 }
 
-/** The invite page's words (ADR-0170 §3): ours, no prototype draws an invite to one person. */
-const INVITE_JOIN_COPY = {
-  title: 'Join your leader’s team',
-  subtitle: 'An invite from your leader, to you by your agent code.',
-  banner: (leader: string, kpm: string) => `You're joining ${leader}'s team · KPM ${kpm}`,
-  details: (code: string, day: string) => `Agent code ${code} · Join date ${formatCalendarDay(day)}`,
-  accept: 'Accept and join',
-  accepting: 'Joining…',
-  signIn: 'Sign in to accept',
-  signedOut: 'Sign in with the account your agent code belongs to, then accept.',
-  noAccount: 'No account yet?',
-  createOne: 'Create one with this invite',
-  checking: 'Checking your invite…',
-} as const;
-
 /**
  * **A leader's invite, for an account that exists** (P18.96-T3 AC-4, ADR-0170 §4, case d): the banner, read before
  * anybody signs in, and — signed in as the account the code belongs to — *Accept and join*, which places them under
@@ -78,6 +65,8 @@ function InviteJoin({ token }: { token: string }) {
   const [banner, setBanner] = useState<InviteBanner | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const t = useMessages(joinMessages).invite;
+  const figures = useFigureLanguage();
 
   useEffect(() => {
     let live = true;
@@ -102,33 +91,33 @@ function InviteJoin({ token }: { token: string }) {
 
   const here = `?invite=${encodeURIComponent(token)}`;
   return (
-    <RoleShell title={INVITE_JOIN_COPY.title} subtitle={INVITE_JOIN_COPY.subtitle} allowSignedOut>
+    <RoleShell title={t.title} subtitle={t.subtitle} allowSignedOut>
       <Card>
         {error && <ErrorBanner {...error} />}
-        {!banner && !error && <Skeleton label={INVITE_JOIN_COPY.checking}><SkeletonText lines={3} /></Skeleton>}
+        {!banner && !error && <Skeleton label={t.checking}><SkeletonText lines={3} /></Skeleton>}
         {banner && (
           <div>
             <div className="rounded-md border-l-4 border-l-amber bg-base p-3">
-              <p className="font-display text-lg font-bold text-navy">{INVITE_JOIN_COPY.banner(banner.leaderName, banner.kpm.code)}</p>
+              <p className="font-display text-lg font-bold text-navy">{t.banner({ leader: banner.leaderName, kpm: banner.kpm.code })}</p>
               <p className="mt-1 text-md text-muted">{banner.kpm.branchName} · {banner.companyName}</p>
-              <p className="mt-1 text-md text-navy">{INVITE_JOIN_COPY.details(banner.agentCode, banner.joinDate)}</p>
+              <p className="mt-1 text-md text-navy">{t.details({ code: banner.agentCode, date: formatCalendarDay(banner.joinDate, figures) })}</p>
             </div>
             {!loading && !me ? (
               <div className="mt-4">
-                <p className="text-md text-navy">{INVITE_JOIN_COPY.signedOut}</p>
+                <p className="text-md text-navy">{t.signedOut}</p>
                 <ButtonLink href={signInPathFrom({ pathname: '/join', search: here })} className="mt-3">
-                  {INVITE_JOIN_COPY.signIn}
+                  {t.signIn}
                 </ButtonLink>
                 {!banner.existingAccount && (
                   <p className="mt-2 text-sm text-muted">
-                    {INVITE_JOIN_COPY.noAccount}{' '}
-                    <Link href={`/register${here}`} className="underline">{INVITE_JOIN_COPY.createOne}</Link>.
+                    {t.noAccount}{' '}
+                    <Link href={`/register${here}`} className="underline">{t.createOne}</Link>.
                   </p>
                 )}
               </div>
             ) : (
               <Button className="mt-4" disabled={busy || loading} onClick={() => void accept()}>
-                {busy ? INVITE_JOIN_COPY.accepting : INVITE_JOIN_COPY.accept}
+                {busy ? t.accepting : t.accept}
               </Button>
             )}
           </div>
@@ -148,6 +137,7 @@ function CodeJoin() {
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(false);
+  const t = useMessages(joinMessages).code;
 
   const fromLink = params.get('code');
 
@@ -192,8 +182,8 @@ function CodeJoin() {
 
   return (
     <RoleShell
-      title="Join an office"
-      subtitle="With a leader's code, link or QR. All three are the same invite."
+      title={t.title}
+      subtitle={t.subtitle}
       // Opened from an emailed link by somebody who may have no account yet: it says *Sign in first* itself.
       allowSignedOut
     >
@@ -203,34 +193,25 @@ function CodeJoin() {
 
         {!loading && !me && (
           <div className="mb-4 rounded-md border border-hairline bg-base p-3">
-            <p className="text-md text-navy">Sign in first, then open this link again.</p>
+            <p className="text-md text-navy">{t.signInFirst}</p>
             <ButtonLink href="/login" className="mt-3">
-              Sign in
+              {t.signIn}
             </ButtonLink>
             <p className="mt-2 text-sm text-muted">
-              No account yet?{' '}
-              <Link href="/register" className="underline">
-                Create one
-              </Link>
-              .
+              {t.noAccount({ link: (words) => <Link href="/register" className="underline">{words}</Link> })}
             </p>
           </div>
         )}
 
         {alreadyIn && (
           <div className="mb-4 rounded-md border border-hairline bg-base p-3">
-            <p className="text-md text-navy">
-              You are already in an office, so this invite is not for you.
-            </p>
-            <p className="mt-1 text-sm text-muted">
-              Moving between offices is not something you do to yourself — ask whoever
-              administers yours.
-            </p>
+            <p className="text-md text-navy">{t.alreadyIn}</p>
+            <p className="mt-1 text-sm text-muted">{t.alreadyInLine}</p>
             {/* The way out. Somebody who opened a colleague's invite by mistake was told
                 this and then given nothing — no link, and until 2026-09-06 no sidebar
                 either, so the browser's back button was the only exit. */}
             <ButtonLink href={landingFor(me)} variant="secondary" className="mt-3">
-              Back to your work
+              {t.backToWork}
             </ButtonLink>
           </div>
         )}
@@ -238,9 +219,9 @@ function CodeJoin() {
         {!preview && (
           <form onSubmit={check} className="flex flex-col gap-4" noValidate>
             <Field
-              label="Invite code"
+              label={t.label}
               htmlFor="code"
-              hint="Six characters. Upper or lower case, it does not matter."
+              hint={t.hint}
             >
               <TextInput
                 id="code"
@@ -253,7 +234,7 @@ function CodeJoin() {
               />
             </Field>
             <Button type="submit" disabled={checking || code.trim().length < 4}>
-              {checking ? 'Checking…' : 'Check this invite'}
+              {checking ? t.checking : t.check}
             </Button>
           </form>
         )}
@@ -261,20 +242,15 @@ function CodeJoin() {
         {preview && (
           <div>
             <p className="text-sm font-semibold uppercase tracking-wide text-muted">
-              This invite is for
+              {t.inviteFor}
             </p>
             <p className="mt-1 font-display text-xl font-bold text-navy">{preview.kpmLabel}</p>
-            <p className="mt-1 text-md text-navy">
-              You would report to <strong>{preview.leaderName}</strong>.
-            </p>
-            <p className="mt-3 text-md text-muted">
-              Accepting joins you straight away — nobody has to approve it. You can be moved to a
-              different leader later, but not by yourself.
-            </p>
+            <p className="mt-1 text-md text-navy">{t.reportTo({ leader: <strong>{preview.leaderName}</strong> })}</p>
+            <p className="mt-3 text-md text-muted">{t.straightAway}</p>
 
             <div className="mt-4 flex flex-wrap gap-2">
               <Button disabled={busy || alreadyIn || !me} onClick={() => void accept()}>
-                {busy ? 'Joining…' : 'Accept and join'}
+                {busy ? t.joining : t.accept}
               </Button>
               <Button
                 variant="secondary"
@@ -284,7 +260,7 @@ function CodeJoin() {
                   setError(null);
                 }}
               >
-                Use a different code
+                {t.different}
               </Button>
             </div>
           </div>

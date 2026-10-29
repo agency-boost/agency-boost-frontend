@@ -9,10 +9,12 @@ import {
   Button, ButtonLink, Card, CodeField, Field, Select, Switch, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
+import { trainingSettingsMessages } from '@/i18n/messages/training-settings';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { suggestCode } from '@/lib/config-code';
 import { useCan } from '@/lib/session';
-import { STAGED_LABEL } from '@/lib/staged-projection';
 import {
   applyConfigChanges, listTraining, stageChange,
   type ConfigChange, type TrainingCategoryRow,
@@ -24,19 +26,22 @@ import {
 
 type Tab = 'categories' | 'skills' | 'modules';
 
-/** The prototype's three subtabs (`KPM_Owner.html:1566-1570`), held in the URL. */
-const TABS = [
-  { label: 'Categories', href: '#categories' },
-  { label: 'Skills', href: '#skills' },
-  { label: 'Modules', href: '#modules' },
-];
+/** The prototype's three subtabs (`KPM_Owner.html:1566-1570`), held in the URL; their names kept English (§A.3). */
+const TAB_KEYS: readonly Tab[] = ['categories', 'skills', 'modules'];
+
+/** The level an add panel or a code's refusal names, by tab. */
+const LEVEL = { categories: 'category', skills: 'skill', modules: 'module' } as const;
+
+/**
+ * Examples of a code, in the fields that take one: identifiers, the same in both languages, never words (the approved
+ * glossary's §D: *a code or key* is not a string to translate).
+ */
+const CODE_EXAMPLE = { category: 'PRODUCT_KNOWLEDGE', skill: 'NEEDS_ANALYSIS', module: 'REFERRAL_GENERATION' } as const;
 
 const tabOf = (hash: string): Tab | null => {
   const key = hash.replace(/^#/, '');
   return key === 'categories' || key === 'skills' || key === 'modules' ? key : null;
 };
-
-const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
 interface Draft {
   code: string;
@@ -71,7 +76,10 @@ const EMPTY_DRAFT: Draft = {
  * shows its skills and modules going with it, because that is what saving it will do.
  */
 export default function TrainingSettingsPage() {
+  const t = useMessages(trainingSettingsMessages);
+  const s = useMessages(settingsMessages);
   const router = useRouter();
+  const TABS = TAB_KEYS.map((key) => ({ label: t.tabs[key], href: `#${key}` }));
   const canWrite = useCan('tenant_config:write');
   const [tree, setTree] = useState<TrainingCategoryRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -216,19 +224,19 @@ export default function TrainingSettingsPage() {
         {row.staged && (
           <p className="mt-1 text-sm">
             <span className="rounded-full bg-amber/20 px-2 py-0.5 text-navy">
-              {STAGED_LABEL[row.staged]}
+              {s.staged.mark[row.staged]}
             </span>
             <button
               type="button"
               className="ml-2 font-semibold text-navy underline"
               onClick={() => setStaged((now) => unstageTraining(now, entity, row.row))}
             >
-              Undo
+              {s.undo}
             </button>
           </p>
         )}
         {row.cascaded && (
-          <p className="mt-1 text-sm text-muted">Archived with {parent} — not saved yet</p>
+          <p className="mt-1 text-sm text-muted">{t.archivedWith({ parent })}</p>
         )}
       </>
     );
@@ -242,7 +250,7 @@ export default function TrainingSettingsPage() {
    */
   function meta(archived: boolean) {
     if (!archived) return null;
-    return <p className="mt-0.5 text-sm text-muted">archived</p>;
+    return <p className="mt-0.5 text-sm text-muted">{s.archivedLine}</p>;
   }
 
   /** Archive, or Restore — or, where the row above is archived, why it cannot come back yet. */
@@ -261,12 +269,12 @@ export default function TrainingSettingsPage() {
           disabled={busy}
           onClick={() => setStaged((now) => stageStatus(now, entity, row.row, 'archive'))}
         >
-          Archive
+          {s.archive}
         </Button>
       );
     }
     if (parent?.archived) {
-      return <span className="text-sm text-muted">Restore {parent.label} first</span>;
+      return <span className="text-sm text-muted">{t.restoreFirst({ name: parent.label })}</span>;
     }
     return (
       <Button
@@ -274,29 +282,27 @@ export default function TrainingSettingsPage() {
         disabled={busy}
         onClick={() => setStaged((now) => stageStatus(now, entity, row.row, 'restore'))}
       >
-        Restore
+        {s.restore}
       </Button>
     );
   }
 
   /** The Code field of an add panel: suggested from the name until somebody types in it. */
-  function codeField(level: string, rows: ShownRow<{ code: string }>[], placeholder: string) {
+  function codeField(level: 'category' | 'skill' | 'module', rows: ShownRow<{ code: string }>[]) {
     const taken = codeTaken(rows, draft.code);
     return (
       <Field
-        label="Code"
+        label={s.code}
         htmlFor="training-new-code"
-        hint="Filled in from the name. Permanent once saved."
-        error={taken
-          ? `This office already has a ${level} with this code. Archived ones count — a code is never reused.`
-          : undefined}
+        hint={t.codeHint}
+        error={taken ? t.codeTaken[level] : undefined}
         className="min-w-48"
       >
         <TextInput
           id="training-new-code"
           value={draft.code}
           invalid={taken}
-          placeholder={placeholder}
+          placeholder={CODE_EXAMPLE[level]}
           onChange={(e) => {
             const value = e.target.value.toUpperCase();
             setDraft((d) => ({ ...d, code: value, codeTouched: value !== '' }));
@@ -312,9 +318,9 @@ export default function TrainingSettingsPage() {
 
   function addPanel() {
     if (!view) return null;
-    const heading = { categories: 'Add a category', skills: 'Add a skill', modules: 'Add a module' }[tab];
+    const heading = t.addHeading[LEVEL[tab]];
     const categorySelect = (
-      <Field label="Category" htmlFor="training-new-category" className="min-w-48">
+      <Field label={t.category} htmlFor="training-new-category" className="min-w-48">
         <Select
           id="training-new-category"
           value={draft.categoryCode}
@@ -335,7 +341,7 @@ export default function TrainingSettingsPage() {
     );
     const cancel = (
       <Button variant="secondary" onClick={() => { setAdding(false); setDraft(EMPTY_DRAFT); }}>
-        Cancel
+        {s.cancel}
       </Button>
     );
 
@@ -345,14 +351,14 @@ export default function TrainingSettingsPage() {
         <Card className="mb-4">
           <h2 className="font-display text-lg font-bold text-navy">{heading}</h2>
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <Field label="Name" htmlFor="training-new-label" className="min-w-60 flex-1">
+            <Field label={s.name} htmlFor="training-new-label" className="min-w-60 flex-1">
               <TextInput id="training-new-label" value={draft.label} onChange={(e) => nameChanged(e.target.value)} />
             </Field>
-            {codeField('category', view.categories, 'PRODUCT_KNOWLEDGE')}
+            {codeField('category', view.categories)}
             <Field
-              label="Description"
+              label={s.description}
               htmlFor="training-new-description"
-              hint="Optional. Shown under the name on the agent's training screen."
+              hint={t.descriptionHint}
               className="min-w-60 flex-1"
             >
               <TextInput
@@ -378,7 +384,7 @@ export default function TrainingSettingsPage() {
                 setDraft(EMPTY_DRAFT);
               }}
             >
-              Add the category
+              {t.addButton.category}
             </Button>
             {cancel}
           </div>
@@ -394,15 +400,15 @@ export default function TrainingSettingsPage() {
           <h2 className="font-display text-lg font-bold text-navy">{heading}</h2>
           {liveCategories.length === 0 ? (
             <p className="mt-2 text-md text-navy">
-              Add a category first, or restore one — a skill always sits in a category.
+              {t.categoryFirst}
             </p>
           ) : (
             <div className="mt-3 flex flex-wrap items-center gap-3">
               {categorySelect}
-              <Field label="Name" htmlFor="training-new-label" className="min-w-60 flex-1">
+              <Field label={s.name} htmlFor="training-new-label" className="min-w-60 flex-1">
                 <TextInput id="training-new-label" value={draft.label} onChange={(e) => nameChanged(e.target.value)} />
               </Field>
-              {codeField('skill', view.skills, 'NEEDS_ANALYSIS')}
+              {codeField('skill', view.skills)}
             </div>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
@@ -419,7 +425,7 @@ export default function TrainingSettingsPage() {
                 setDraft(EMPTY_DRAFT);
               }}
             >
-              Add the skill
+              {t.addButton.skill}
             </Button>
             {cancel}
           </div>
@@ -434,32 +440,31 @@ export default function TrainingSettingsPage() {
       <Card className="mb-4">
         <h2 className="font-display text-lg font-bold text-navy">{heading}</h2>
         <p className="mt-1 text-sm text-muted">
-          A new module starts as a draft, which no agent is offered. Publish it here when it is
-          ready — agents see it once your office next publishes its changes.
+          {t.moduleLead}
         </p>
         {liveSkills.length === 0 ? (
           <p className="mt-2 text-md text-navy">
-            Add a skill first, or restore one — a module always teaches a skill.
+            {t.skillFirst}
           </p>
         ) : (
           <div className="mt-3 flex flex-wrap items-center gap-3">
             {categorySelect}
-            <Field label="Skill" htmlFor="training-new-skill" className="min-w-48">
+            <Field label={t.skill} htmlFor="training-new-skill" className="min-w-48">
               <Select
                 id="training-new-skill"
                 value={draft.skillCode}
                 onChange={(e) => setDraft((d) => ({ ...d, skillCode: e.target.value }))}
               >
-                {skillsOfDraft.length === 0 && <option value="">No skills in this category</option>}
+                {skillsOfDraft.length === 0 && <option value="">{t.noSkillsInCategory}</option>}
                 {skillsOfDraft.map((s) => (
                   <option key={s.row.code} value={s.row.code}>{s.row.label}</option>
                 ))}
               </Select>
             </Field>
-            <Field label="Title" htmlFor="training-new-label" className="min-w-60 flex-1">
+            <Field label={t.moduleTitle} htmlFor="training-new-label" className="min-w-60 flex-1">
               <TextInput id="training-new-label" value={draft.label} onChange={(e) => nameChanged(e.target.value)} />
             </Field>
-            {codeField('module', view.modules, 'REFERRAL_GENERATION')}
+            {codeField('module', view.modules)}
           </div>
         )}
         <div className="mt-3 flex flex-wrap gap-2">
@@ -476,7 +481,7 @@ export default function TrainingSettingsPage() {
               setDraft(EMPTY_DRAFT);
             }}
           >
-            Add the module
+            {t.addButton.module}
           </Button>
           {cancel}
         </div>
@@ -486,15 +491,15 @@ export default function TrainingSettingsPage() {
 
   /** A category's badge: what it holds that agents are offered, or *Empty*. */
   function categoryBadge(row: ShownRow<{ code: string }>) {
-    if (row.archived) return <Badge tone="open">Archived</Badge>;
+    if (row.archived) return <Badge tone="open">{s.archivedBadge}</Badge>;
     const skills = liveSkills.filter((s) => s.row.categoryCode === row.row.code);
-    if (skills.length === 0) return <Badge tone="open">Empty</Badge>;
+    if (skills.length === 0) return <Badge tone="open">{t.empty}</Badge>;
     const codes = new Set(skills.map((s) => s.row.code));
     const offered = view!.modules.filter((m) =>
       !m.archived && codes.has(m.row.skillCode) && m.row.publishState === 'published').length;
     return (
       <Badge tone={offered > 0 ? 'won' : 'open'}>
-        {plural(skills.length, 'skill', 'skills')} · {plural(offered, 'module', 'modules')} published
+        {t.categoryBadge({ skills: skills.length, modules: offered })}
       </Badge>
     );
   }
@@ -505,7 +510,7 @@ export default function TrainingSettingsPage() {
 
   const hint = !view ? ' ' : tab === 'skills' ? (
     <div className={filterClass}>
-      <label htmlFor="training-skills-category" className={filterLabel}>Category</label>
+      <label htmlFor="training-skills-category" className={filterLabel}>{t.category}</label>
       <Select
         id="training-skills-category"
         value={skillsTabCategory?.code ?? ''}
@@ -518,7 +523,7 @@ export default function TrainingSettingsPage() {
     <div className={filterClass}>
       {/* Each label held to its select, so a narrow screen wraps a pair, never a label alone. */}
       <span className={filterPair}>
-        <label htmlFor="training-modules-category" className={filterLabel}>Category</label>
+        <label htmlFor="training-modules-category" className={filterLabel}>{t.category}</label>
         <Select
           id="training-modules-category"
           value={modulesTabCategory?.code ?? ''}
@@ -528,25 +533,25 @@ export default function TrainingSettingsPage() {
         </Select>
       </span>
       <span className={filterPair}>
-        <label htmlFor="training-modules-skill" className={filterLabel}>Skill</label>
+        <label htmlFor="training-modules-skill" className={filterLabel}>{t.skill}</label>
         {/* The chosen category's skills. The prototype offers Sales's whatever is chosen (F-13). */}
         <Select
           id="training-modules-skill"
           value={modulesTabSkill}
           onChange={(e) => setModulesSkill(e.target.value)}
         >
-          <option value="all">All skills</option>
+          <option value="all">{t.allSkills}</option>
           {modulesTabSkills.map((s) => <option key={s.row.code} value={s.row.code}>{s.row.label}</option>)}
         </Select>
       </span>
     </div>
   ) : undefined;
 
-  const addLabel = { categories: '+ Add category', skills: '+ Add skill', modules: '+ Add module' }[tab];
+  const addLabel = t.addLabel[LEVEL[tab]];
 
   function categoriesList() {
     if (categories.length === 0) {
-      return <EmptyState title="No training categories yet." />;
+      return <EmptyState title={t.noCategories} />;
     }
     return (
       <ul className="flex flex-col divide-y divide-hairline">
@@ -559,10 +564,10 @@ export default function TrainingSettingsPage() {
                   <CodeField
                     id={`code-category-row-code-${category.row.code}`}
                     value={category.row.code}
-                    reason="Every skill in this category, and every module under them, points at it."
+                    reason={t.categoryReason}
                   />
                   <div className="flex flex-wrap items-center gap-3">
-                    <Field label="Name" htmlFor={`name-${category.row.id}`} className="min-w-60 flex-1">
+                    <Field label={s.name} htmlFor={`name-${category.row.id}`} className="min-w-60 flex-1">
                       <TextInput
                         id={`name-${category.row.id}`}
                         value={edit.label}
@@ -570,9 +575,9 @@ export default function TrainingSettingsPage() {
                       />
                     </Field>
                     <Field
-                      label="Description"
+                      label={s.description}
                       htmlFor={`description-${category.row.id}`}
-                      hint="Optional. Shown under the name on the agent's training screen."
+                      hint={t.descriptionHint}
                       className="min-w-60 flex-1"
                     >
                       <TextInput
@@ -592,9 +597,9 @@ export default function TrainingSettingsPage() {
                         setEditing(null);
                       }}
                     >
-                      Save
+                      {s.save}
                     </Button>
-                    <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                    <Button variant="secondary" onClick={() => setEditing(null)}>{s.cancel}</Button>
                   </div>
                 </div>
               ) : (
@@ -622,7 +627,7 @@ export default function TrainingSettingsPage() {
                           });
                         }}
                       >
-                        Edit
+                        {s.edit}
                       </Button>
                       {statusAction('trainingCategory', category)}
                     </div>
@@ -637,10 +642,10 @@ export default function TrainingSettingsPage() {
   }
 
   function skillsList() {
-    if (!skillsTabCategory) return <EmptyState title="No training categories yet." />;
+    if (!skillsTabCategory) return <EmptyState title={t.noCategories} />;
     const rows = shown(view!.skills).filter((s) => s.row.categoryCode === skillsTabCategory.code);
     if (rows.length === 0) {
-      return <EmptyState title="No skills for this category yet." />;
+      return <EmptyState title={t.noSkills} />;
     }
     return (
       <ul className="flex flex-col divide-y divide-hairline">
@@ -655,10 +660,10 @@ export default function TrainingSettingsPage() {
                   <CodeField
                     id={`code-skill-row-code-${skill.row.code}`}
                     value={skill.row.code}
-                    reason="Every module teaching this skill points at it."
+                    reason={t.skillReason}
                   />
                   <div className="flex flex-wrap items-center gap-3">
-                    <Field label="Name" htmlFor={`name-${skill.row.id}`} className="min-w-60 flex-1">
+                    <Field label={s.name} htmlFor={`name-${skill.row.id}`} className="min-w-60 flex-1">
                       <TextInput
                         id={`name-${skill.row.id}`}
                         value={edit.label}
@@ -666,9 +671,9 @@ export default function TrainingSettingsPage() {
                       />
                     </Field>
                     <Field
-                      label="Category"
+                      label={t.category}
                       htmlFor={`category-${skill.row.id}`}
-                      hint="Its modules move with it."
+                      hint={t.movesWithIt}
                       className="min-w-48"
                     >
                       <Select
@@ -698,9 +703,9 @@ export default function TrainingSettingsPage() {
                         setEditing(null);
                       }}
                     >
-                      Save
+                      {s.save}
                     </Button>
-                    <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                    <Button variant="secondary" onClick={() => setEditing(null)}>{s.cancel}</Button>
                   </div>
                 </div>
               ) : (
@@ -711,10 +716,10 @@ export default function TrainingSettingsPage() {
                     {marks('trainingSkill', skill, category?.row.label ?? '')}
                   </div>
                   {skill.archived
-                    ? <Badge tone="open">Archived</Badge>
+                    ? <Badge tone="open">{s.archivedBadge}</Badge>
                     : (
                       <Badge tone={modules.length > 0 ? 'won' : 'open'}>
-                        {plural(modules.length, 'module', 'modules')}
+                        {t.moduleCount({ n: modules.length })}
                       </Badge>
                     )}
                   {canWrite && !unsaved && (
@@ -727,7 +732,7 @@ export default function TrainingSettingsPage() {
                           setEdit({ label: skill.row.label, description: '', categoryCode: skill.row.categoryCode });
                         }}
                       >
-                        Edit
+                        {s.edit}
                       </Button>
                       {statusAction(
                         'trainingSkill',
@@ -746,12 +751,12 @@ export default function TrainingSettingsPage() {
   }
 
   function modulesList() {
-    if (!modulesTabCategory) return <EmptyState title="No training categories yet." />;
+    if (!modulesTabCategory) return <EmptyState title={t.noCategories} />;
     const rows = modulesTabSkills
       .filter((s) => modulesTabSkill === 'all' || s.row.code === modulesTabSkill)
       .flatMap((s) => shown(view!.modules).filter((m) => m.row.skillCode === s.row.code));
     if (rows.length === 0) {
-      return <EmptyState title="No modules for this category/skill yet." />;
+      return <EmptyState title={t.noModules} />;
     }
     return (
       <ul className="flex flex-col divide-y divide-hairline">
@@ -767,7 +772,7 @@ export default function TrainingSettingsPage() {
                 {meta(module.row.status === 'archived')}
                 {marks('trainingModule', module, skill?.row.label ?? '')}
               </div>
-              {module.archived ? <Badge tone="open">Archived</Badge> : (
+              {module.archived ? <Badge tone="open">{s.archivedBadge}</Badge> : (
                 /*
                   * One control, not a badge and a button. The row used to show a *Published*
                   * badge beside an *Unpublish* button — two things answering one question, and
@@ -782,7 +787,7 @@ export default function TrainingSettingsPage() {
                   */
                 <Switch
                   id={`publish-${module.row.id}`}
-                  label="Published"
+                  label={t.published}
                   checked={isPublished}
                   disabled={busy || !canWrite || unsaved}
                   onChange={(next) => stageFields('trainingModule', module.row.id, {
@@ -797,7 +802,7 @@ export default function TrainingSettingsPage() {
                     href={`/kpm/settings/training/${module.row.id}`}
                     onClick={(e) => openModule(e, module.row.id, module.row.title)}
                   >
-                    Edit
+                    {s.edit}
                   </ButtonLink>
 
                   {statusAction(
@@ -816,11 +821,11 @@ export default function TrainingSettingsPage() {
 
   return (
     <SettingsScreen
-      title="Training"
-      subtitle="Categories, skills, and modules available to this KPM"
+      title={t.title}
+      subtitle={t.subtitle}
       permission="training_settings:read"
       tabs={TABS}
-      tabsLabel="Training sections"
+      tabsLabel={s.sections({ title: t.title })}
       activeHref={`#${tab}`}
       onSelectTab={selectTab}
       error={error}
@@ -843,7 +848,7 @@ export default function TrainingSettingsPage() {
           <>
             <label className="flex items-center gap-2 text-md text-navy">
               <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-              Show archived
+              {s.showArchived}
             </label>
             {canWrite && view && !adding && <Button onClick={openAdd}>{addLabel}</Button>}
           </>
@@ -853,9 +858,9 @@ export default function TrainingSettingsPage() {
       {leaving && (
         <div role="alert" className="mb-4 rounded-md border border-amber bg-card p-4">
           <p className="text-md text-navy">
-            <strong>You have changes here that are not saved.</strong>{' '}
+            <strong>{t.unsaved}</strong>{' '}
             <span className="text-muted">
-              Opening {leaving.title} discards them. Save them first, or discard them and open it.
+              {t.openingDiscards({ title: leaving.title })}
             </span>
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -868,9 +873,9 @@ export default function TrainingSettingsPage() {
                 router.push(`/kpm/settings/training/${id}`);
               }}
             >
-              Discard and open {leaving.title}
+              {t.discardAndOpen({ title: leaving.title })}
             </Button>
-            <Button onClick={() => setLeaving(null)}>Stay here</Button>
+            <Button onClick={() => setLeaving(null)}>{t.stayHere}</Button>
           </div>
         </div>
       )}

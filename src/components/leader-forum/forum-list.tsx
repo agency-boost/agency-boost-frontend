@@ -3,10 +3,12 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/field';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { forumMessages } from '@/i18n/messages/forum';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  defaultMeetingTitle, filterMeetings, FORUM_COPY, readMeetings, type MeetingFilter, type MeetingListView,
+  defaultMeetingTitle, filterMeetings, readMeetings, type MeetingFilter, type MeetingListView,
 } from '@/lib/leader-meetings';
 import { useSession } from '@/lib/session';
 import { ListSkeleton, LoadError, NotFound } from './forum-states';
@@ -25,6 +27,8 @@ const FILTERS: readonly MeetingFilter[] = ['all', 'upcoming', 'past'];
  * own line (`:2004`) said it again and is gone at every size.
  */
 export function ForumList() {
+  const t = useMessages(forumMessages);
+  const language = useLanguage();
   const { me, loading, signedOut, expired } = useSession();
   const router = useRouter();
   const pathname = usePathname();
@@ -77,21 +81,21 @@ export function ForumList() {
                 filter === f ? 'bg-navy text-white' : 'text-muted hover:text-navy',
               )}
             >
-              {FORUM_COPY.filters[f]}
+              {t.filters[f]}
             </button>
           ))}
         </div>
         {view.can.create && (
-          <Button onClick={() => setCreating(true)}>{FORUM_COPY.newMeeting}</Button>
+          <Button onClick={() => setCreating(true)}>{t.newMeeting}</Button>
         )}
       </div>
 
       {view.meetings.length === 0 ? (
         <p className="rounded-lg border border-hairline bg-card px-[18px] py-10 text-center text-base text-muted">
-          {FORUM_COPY.noMeetings}
+          {t.noMeetings}
         </p>
       ) : shown.length === 0 ? (
-        <p className="px-[18px] py-10 text-center text-base text-muted">{FORUM_COPY.noMatch}</p>
+        <p className="px-[18px] py-10 text-center text-base text-muted">{t.noMatch}</p>
       ) : (
         <ul className="mb-8 flex flex-col gap-3">
           {shown.map((meeting) => <MeetingCardRow key={meeting.id} meeting={meeting} />)}
@@ -103,7 +107,7 @@ export function ForumList() {
           open={creating}
           onClose={() => setCreating(false)}
           limits={view.limits}
-          defaultTitle={defaultMeetingTitle(view.meetings)}
+          defaultTitle={defaultMeetingTitle(view.meetings, language)}
           onCreated={(card) => router.push(`/leader-meetings/${encodeURIComponent(card.id)}`)}
         />
       )}

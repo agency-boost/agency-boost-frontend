@@ -148,7 +148,8 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     await screen.findByRole('heading', { name: 'Selling success rate' });
     expect(screen.getByText('15%')).toBeInTheDocument();
     expect(screen.getByText('±30 points')).toBeInTheDocument();
-    expect(screen.getByText('0,50')).toBeInTheDocument();
+    // The figures in the spec's language since P18.98-T4 wired them (the harness's English is a chosen English).
+    expect(screen.getByText('0.50')).toBeInTheDocument();
     expect(screen.queryByText('0,15')).not.toBeInTheDocument();
     expect(screen.queryByText('0.15')).not.toBeInTheDocument();
   });
@@ -187,7 +188,8 @@ describe('the office ratio benchmarks (P4-T2)', () => {
     await userEvent.clear(field);
     await userEvent.type(field, '17,5');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(await screen.findByText('17,5%')).toBeInTheDocument();
+    // Written back in the spec's language since P18.98-T4: a point in English, the comma `indonesian.spec.tsx`'s.
+    expect(await screen.findByText('17.5%')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     const post = calls.find((c) => c.url.includes('/kpm/settings/changes'))!;
@@ -556,7 +558,7 @@ describe('the office ratio benchmarks (P4-T2)', () => {
       );
       await userEvent.clear(benchmark);
       await userEvent.type(benchmark, '25');
-      expect(benchmark).toHaveAccessibleDescription(/each side between 37,5% and 62,5%\.$/);
+      expect(benchmark).toHaveAccessibleDescription(/each side between 37\.5% and 62\.5%\.$/);
 
       await userEvent.click(screen.getByRole('button', { name: 'Add the ratio' }));
       const post = calls.find((c) => c.init.method === 'POST')!;

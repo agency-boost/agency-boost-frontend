@@ -9,7 +9,7 @@ import TenantAdminsPage from './(admin)/admin/tenant-admins/page';
 import NotificationsPage from './notifications/page';
 import TenantLayout from '@/app/(tenant)/layout';
 import AgentLayout from '@/app/(agent)/layout';
-import { atWidth, makeMe, renderInLayout, renderWithSession, routeParams, stubFetch } from '@test/harness';
+import { atWidth, InLanguage, makeMe, renderInLayout, renderWithSession, routeParams, stubFetch } from '@test/harness';
 import LoginPage from './(auth)/login/page';
 import RegisterPage from './(auth)/register/page';
 import ForgotPasswordPage from './(auth)/forgot-password/page';
@@ -67,9 +67,11 @@ import AddAgentsPage from './(agent)/user-management/add/page';
 import PendingPage from './(agent)/user-management/pending/page';
 import GroupTreePage from './(agent)/group-tree/page';
 import OrgTreePage from './(tenant)/people/org-tree/page';
+import PeopleImportPage from './(tenant)/people/import/page';
 import OrgLevelsPage from './(admin)/admin/org-levels/page';
 import TenantRosterImportPage from './(admin)/admin/tenants/[kpmId]/roster/page';
 import ChooseAPasswordPage from './choose-a-password/page';
+import JoinPage from './join/page';
 import CalendarPage from './(agent)/calendar/page';
 import ActivationPage from './(agent)/activation/page';
 import NewHiresPage from './(agent)/new-hires/page';
@@ -494,6 +496,58 @@ describe('screens have no axe violations', () => {
     await expectClean('kpm/data-upload');
   });
 
+  it('P18.98-T4 the month table in Indonesian: its lock, legend, marks and history, the headings kept', async () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: true, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: [
+        'member:read_profile', 'data_upload:read', 'data_upload:download_template', 'data_upload:upload_and_preview',
+        'data_upload:correct_cell', 'data_upload:read_history', 'data_upload:revert_batch', 'data_upload:lock_month',
+      ],
+    });
+    const empty = { value: null, provenance: null };
+    const metrics = Object.fromEntries(
+      ['ape', 'persistency', 'recruitment', 'newActiveAgents', 'fyp', 'policyCount'].map((m) => [m, { monthly: empty, ytd: empty }]),
+    );
+    stubFetch({
+      '/kpm/data-upload/': {
+        body: {
+          month: '2026-09', withData: 1,
+          state: { month: '2026-09', revision: 3, locked: false, reason: 'open', editableUntil: '2026-10-07', changedAt: null, changedBy: null },
+          rows: [
+            { membershipId: 'mem-rina', agentCode: 'PRU-001', name: 'Rina Wijaya', monthlyActiveAgent: true,
+              metrics: { ...metrics, ape: { monthly: { value: 15000000000, provenance: 'imported' }, ytd: empty } } },
+            { membershipId: 'mem-budi', agentCode: 'PRU-002', name: 'Budi Santoso', metrics, monthlyActiveAgent: null },
+          ],
+        },
+      },
+      '/kpm/data-upload/template': {
+        body: {
+          month: '2026-09', version: 1, filename: 'KPM0417-agent-data-Sep-2026.csv',
+          header: ['Agent Code', 'Agent Name'], file: 'Agent Code,Agent Name\nPRU-001,"Rina Wijaya"', rowCount: 1,
+        },
+      },
+      '/kpm/data-upload/history': {
+        body: {
+          month: '2026-09',
+          batches: [{
+            id: 'b-1', month: '2026-09', filename: 'KPM0417-agent-data-Sep-2026.csv', status: 'committed', templateVersion: 1,
+            rowCount: 2, writtenRowCount: 2, cellCount: 24, issueCount: 0, committedAt: '2026-09-26T07:00:00.000Z',
+            committedBy: 'Wilson Tanoto', revertedAt: null, revertedBy: null, restoredCellCount: 0, keptCellCount: 0,
+            keptCorrectionCount: 0, replacedCorrectionCount: 0, canRevert: true,
+          }],
+        },
+      },
+    });
+    renderWithSession(<InLanguage language="id"><TenantLayout><DataUploadPage /></TenantLayout></InLanguage>, { me: owner });
+    await screen.findByRole('table', { name: 'Data untuk Sep 2026' });
+    await screen.findByRole('link', { name: 'Unduh templat' });
+    await screen.findByRole('heading', { name: 'Impor untuk Sep 2026' });
+    await expectClean('kpm/data-upload, in Indonesian');
+  });
+
   it('the month with a figure being corrected, and a refusal on it (P9-T5)', async () => {
     const owner = makeMe({
       membership: {
@@ -524,7 +578,7 @@ describe('screens have no axe violations', () => {
       },
     });
     renderInLayout(TenantLayout, <DataUploadPage />, { me: owner });
-    await userEvent.click(await screen.findByRole('button', { name: 'Correct APE this month for Rina Wijaya, now Rp 1.500.000' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Correct APE this month for Rina Wijaya, now IDR 1,500,000' }));
     await userEvent.type(screen.getByLabelText('Why is it being corrected?'), 'Carrier restated it');
     await userEvent.click(screen.getByRole('button', { name: 'Save correction' }));
     await screen.findByText('APE this month is negative.');
@@ -644,6 +698,16 @@ describe('screens have no axe violations', () => {
       renderInLayout(TenantLayout, <KpmOverviewPage />, { me: owner });
       await overviewRegion();
       await expectClean('kpm/overview');
+    });
+
+    it('P18.98-T4 filled, in Indonesian, the not-logged list and the full ranking open', async () => {
+      stubFetch({ '/kpm/overview/not-logged': { body: OVERVIEW_NOT_LOGGED }, '/kpm/overview': { body: overviewFixture() } });
+      renderWithSession(<InLanguage language="id"><TenantLayout><KpmOverviewPage /></TenantLayout></InLanguage>, { me: owner });
+      await overviewRegion();
+      await userEvent.click(screen.getByRole('button', { name: 'Lihat siapa yang belum mencatat →' }));
+      await within(screen.getByRole('region', { name: 'Engagement' })).findAllByRole('listitem');
+      await userEvent.click(screen.getAllByRole('button', { name: 'lihat peringkat lengkap →' })[0]);
+      await expectClean('kpm/overview, in Indonesian');
     });
 
     it('P18.97-T3 AC-5, AC-7: an AB who leads nobody on the full board, No team, and the Target’s box open', async () => {
@@ -1198,8 +1262,8 @@ describe('screens have no axe violations', () => {
         stubFetch(routes(draft));
         inSession();
         await screen.findByDisplayValue('Desi Pratama');
-        await screen.findByText('Rp 340 jt remaining this year.');
-        await screen.findByText('18,0%');
+        await screen.findByText('IDR 340M remaining this year.');
+        await screen.findByText('18.0%');
         const drill = await screen.findByRole('button', { name: '→ view full dashboard' });
         await waitFor(() => expect(drill).toBeEnabled());
         await expectClean('coaching/[membershipId]/session (a draft)');
@@ -1215,7 +1279,7 @@ describe('screens have no axe violations', () => {
         ));
         inSession();
         await screen.findByDisplayValue('Desi Pratama');
-        await screen.findByText('✓ Finalized Jumat, 2 Okt 2026');
+        await screen.findByText('✓ Finalized Friday, 2 Oct 2026');
         await expectClean('coaching/[membershipId]/session (finalized)');
         await userEvent.click(screen.getByRole('button', { name: 'Edit again' }));
         await screen.findByRole('dialog', { name: 'Edit this session again?' });
@@ -2521,7 +2585,7 @@ describe('screens have no axe violations', () => {
       stubFetch(calendarRoutes);
       nav.pathname = '/calendar';
       renderInLayout(AgentLayout, <CalendarPage />, { me });
-      return screen.findByRole('region', { name: 'Calendar, 28 Sep – 4 Okt 2026' });
+      return screen.findByRole('region', { name: 'Calendar, 28 Sep – 4 Oct 2026' });
     };
 
     it('the week, filled: overlapping entries, a trip, a pending invitation and the now-line', async () => {
@@ -2533,7 +2597,7 @@ describe('screens have no axe violations', () => {
       stubFetch({ ...SHELL_STUBS, '/calendar/entries?view=week': { body: weekRead({ entries: [] }) } });
       nav.pathname = '/calendar';
       renderInLayout(AgentLayout, <CalendarPage />, { me: RINA });
-      await screen.findByRole('region', { name: 'Calendar, 28 Sep – 4 Okt 2026' });
+      await screen.findByRole('region', { name: 'Calendar, 28 Sep – 4 Oct 2026' });
       await expectClean('calendar (empty week)');
     });
 
@@ -2562,7 +2626,7 @@ describe('screens have no axe violations', () => {
       });
       nav.pathname = '/calendar';
       renderInLayout(AgentLayout, <CalendarPage />, { me: AGUS });
-      await screen.findByRole('region', { name: 'Calendar, 28 Sep – 4 Okt 2026' });
+      await screen.findByRole('region', { name: 'Calendar, 28 Sep – 4 Oct 2026' });
       await userEvent.click(screen.getByRole('button', { name: '+ New event' }));
       const dialog = screen.getByRole('dialog', { name: 'New event' });
       const field = within(dialog).getByRole('combobox', { name: 'Invite (optional) — anyone in your KPM' });
@@ -2613,7 +2677,7 @@ describe('screens have no axe violations', () => {
       await open();
       await userEvent.click(screen.getByRole('button', { name: '+ Compare with downline' }));
       await userEvent.click(await screen.findByRole('button', { name: /^Indah Permata/ }));
-      await screen.findByRole('region', { name: 'Calendar, Indah Permata, 28 Sep – 4 Okt 2026' });
+      await screen.findByRole('region', { name: 'Calendar, Indah Permata, 28 Sep – 4 Oct 2026' });
       await expectClean('calendar (compare)');
     });
 
@@ -4006,6 +4070,181 @@ describe('screens have no axe violations', () => {
     });
   });
 
+  /**
+   * **P18.98-T4: the office's settings in ID mode, each in its main state** — axe in Indonesian, as the block above runs
+   * them in English (ADR-0179 §9). The shell's words are the catalogue's since T1, so the page reads in Indonesian but
+   * for what is kept English (§A) and what the office typed (ADR-0179 §5); `lang` on kept terms is T7's.
+   */
+  describe('P18.98-T4 the office’s settings in Indonesian', () => {
+    const owner = makeMe({
+      membership: {
+        membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+        isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+      },
+      permissions: [
+        'member:read_profile', 'tenant_config:read', 'tenant_config:write', 'kpm:read_profile',
+        'activation_settings:read', 'training_settings:read', 'recruitment:read', 'activity_binding:read',
+      ],
+    });
+    const TAXONOMY = [{
+      id: 'c1', code: 'SELLING', label: 'Penjualan', description: null, appliesToOrgLevelCodes: [], displayOrder: 1,
+      version: 1, status: 'active', summaryGroupCode: null, summaryGroupLabel: null,
+      types: [{
+        id: 't1', code: 'SELL_SUBMISSION', categoryCode: 'SELLING', label: 'Submission polis', description: null,
+        appliesToOrgLevelCodes: [], displayOrder: 1, version: 1, status: 'active',
+      }],
+    }];
+    const RATIOS = [{
+      id: 'r1', code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate', numerator: ['SELL_SUBMISSION'],
+      denominator: ['SELL_SUBMISSION'], benchmark: 0.155, comparison: 'gte', displayUnit: 'percent', displayOrder: 1,
+      version: 1, status: 'active', origin: 'platform', appliesToOrgLevelCodes: [],
+    }];
+    const shell = {
+      '/kpm/config': { body: { activity: TAXONOMY, ratios: RATIOS, leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/kpm/settings/publish-state': {
+        body: { publishedVersion: 1, workingVersion: 2, hasUnpublishedChanges: true, publishedAt: null },
+      },
+    };
+    const inIndonesian = (path: string, page: React.ReactElement) => {
+      nav.pathname = path;
+      return renderWithSession(<InLanguage language="id"><TenantLayout>{page}</TenantLayout></InLanguage>, { me: owner });
+    };
+
+    it('activity types, with the publish bar and a bound type’s chip', async () => {
+      stubFetch({
+        ...shell,
+        '/kpm/settings/activity-types': { body: TAXONOMY },
+        '/kpm/settings/activity-binding': {
+          body: { leads: [], appointments: [], closings: ['SELL_SUBMISSION'], version: 1, updatedAt: null },
+        },
+      });
+      inIndonesian('/kpm/settings/activity-types', <ActivityTypesPage />);
+      await screen.findByText('Dihitung sebagai: Submission polis');
+      await screen.findByText('Agent Anda belum melihat perubahan ini.');
+      await expectClean('kpm/settings/activity-types (id)');
+    });
+
+    it('ratio benchmarks, its figures Indonesian', async () => {
+      stubFetch({ ...shell, '/kpm/settings/ratio-benchmarks': { body: RATIOS }, '/kpm/settings/activity-types': { body: TAXONOMY } });
+      inIndonesian('/kpm/settings/ratio-benchmarks', <RatioBenchmarksPage />);
+      await screen.findByText('15,5%');
+      await expectClean('kpm/settings/ratio-benchmarks (id)');
+    });
+
+    it('lead statuses, a stage that closes the pipeline and one expected to close', async () => {
+      stubFetch({
+        ...shell,
+        '/kpm/settings/lead-statuses': {
+          body: [
+            {
+              pipeline: 'sales',
+              statuses: [
+                {
+                  id: 's0', pipeline: 'sales', code: 'FOLLOW_UP', label: 'Sudah di-follow up', rank: 1, isTerminal: false,
+                  isLateStage: true, version: 1, status: 'active',
+                },
+                {
+                  id: 's1', pipeline: 'sales', code: 'PAID_AND_ISSUED', label: 'Polis terbit', rank: 2, isTerminal: true,
+                  isLateStage: false, version: 1, status: 'active',
+                },
+              ],
+            },
+            { pipeline: 'recruitment', statuses: [] },
+          ],
+        },
+      });
+      inIndonesian('/kpm/settings/lead-statuses', <LeadStatusesPage />);
+      await screen.findByText('Menutup pipeline');
+      await expectClean('kpm/settings/lead-statuses (id)');
+    });
+
+    it('branch info, the months in Indonesian', async () => {
+      stubFetch({ ...shell, '/kpm/settings/branch-info': { body: KPM } });
+      inIndonesian('/kpm/settings/branch-info', <BranchInfoPage />);
+      await screen.findByLabelText('Tahun buku dimulai');
+      await expectClean('kpm/settings/branch-info (id)');
+    });
+
+    it('capability mapping, both halves', async () => {
+      const e = (code: string, label: string) => ({ code, label, displayOrder: 1, status: 'active' });
+      stubFetch({
+        ...shell,
+        '/kpm/settings/capability-mapping': {
+          body: {
+            stages: [{ ...e('KOMPETEN', 'Produsen kompeten'), requiredMilestoneCodes: ['MANDIRI'], stageOrder: 1 }],
+            milestones: [e('MANDIRI', 'Menjual polis secara mandiri')],
+            grids: [{ ...e('PENJUALAN', 'Penjualan pribadi'), requiresDownline: true, items: [e('PENDEKATAN', 'Pendekatan')] }],
+            version: 1,
+          },
+        },
+      });
+      inIndonesian('/kpm/settings/capability-mapping', <CapabilityMappingPage />);
+      await screen.findByText('Perlu 1 milestone');
+      await expectClean('kpm/settings/capability-mapping#ladder (id)');
+      await userEvent.click(screen.getByRole('link', { name: 'Skills' }));
+      await screen.findByText('Hanya untuk yang memiliki downline');
+      await expectClean('kpm/settings/capability-mapping#skills (id)');
+      window.location.hash = '';
+    });
+
+    it('activation checklist, an item being added', async () => {
+      stubFetch({
+        ...shell,
+        '/kpm/settings/training': { body: [] },
+        '/kpm/settings/activation-checklist': {
+          body: {
+            windowDays: 90,
+            draft: null,
+            published: {
+              id: 'v1', version: 1, status: 'published', publishedAt: '2026-09-01T00:00:00.000Z',
+              aspects: [{
+                code: 'PENGENALAN', label: '1. Pengenalan', displayOrder: 1,
+                items: [{ code: 'DASAR', label: 'Pelajari dasar-dasar asuransi', displayOrder: 1, autoLink: null, link: null }],
+              }],
+            },
+          },
+        },
+      });
+      inIndonesian('/kpm/settings/activation-checklist', <ActivationChecklistPage />);
+      await screen.findByText('Pelajari dasar-dasar asuransi');
+      await userEvent.click(screen.getByRole('button', { name: '+ Tambah item' }));
+      await expectClean('kpm/settings/activation-checklist (id)');
+    });
+
+    it('recruitment pitch, partly confirmed, with a refusal said in its card', async () => {
+      const ticked = (code: string, label: string, on: boolean) => ({ code, label, ticked: on });
+      const slot = (s: string, title: string, over: Record<string, unknown> = {}) => ({
+        slot: s, title, line: `${title}'s line`, required: s !== 'company' && s !== 'agency', state: 'missing', file: null,
+        checklist: [], version: 0, ...over,
+      });
+      stubFetch({
+        ...shell,
+        'GET /recruitment/pitch-materials': {
+          body: {
+            slots: [
+              slot('opportunity', 'Opportunity Overview', {
+                state: 'partial', version: 1, file: { name: 'Peluang.pdf', bytes: 2.4 * 1024 * 1024, uploadedOn: '2026-10-12' },
+                checklist: [ticked('income', 'Income Potential', true), ticked('support', 'Support provided', false)],
+              }),
+              slot('proof', 'Proof & Credibility'), slot('faq', 'FAQ'), slot('howtojoin', 'How to Join'),
+              slot('company', 'Company Profile'), slot('agency', 'Agency Profile'),
+            ],
+            summary: { done: 0, total: 4, missing: 3, unconfirmed: 1 },
+          },
+        },
+      });
+      inIndonesian('/kpm/settings/recruitment-pitch', <RecruitmentPitchPage />);
+      await screen.findByText('Recruitment Pitch belum lengkap');
+      await userEvent.upload(
+        screen.getByRole('article', { name: 'FAQ' }).querySelector('input[type=file]') as HTMLInputElement,
+        new File(['x'], 'scan.pdf', { type: 'image/png' }),
+      );
+      await screen.findByText(/bukan PDF/);
+      await expectClean('kpm/settings/recruitment-pitch (id)');
+    });
+  });
+
   /** P17-T8: the Company template's *Recruitment* tab — the company's playbook, a card open. */
   describe('the Company template’s Recruitment tab (P17-T8)', () => {
     const PLAYBOOK_TEMPLATES = [{
@@ -4081,6 +4320,22 @@ describe('screens have no axe violations', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Units in Hendra Wibowo’s agency' }));
       await userEvent.click(screen.getByRole('button', { name: '31 people in Hendra Wibowo’s agency' }));
       await expectClean('kpm/analytics');
+    });
+
+    it('P18.98-T4 filled, in Indonesian: an agency open, its people listed, and the MOC dialog', async () => {
+      nav.pathname = '/kpm/analytics';
+      stubFetch({ ...ANALYTICS_SHELL, 'GET /kpm/analytics': { body: analyticsView() } });
+      renderWithSession(
+        <InLanguage language="id"><KpmAnalyticsLayout>{analyticsPage()}</KpmAnalyticsLayout></InLanguage>,
+        { me: ANALYTICS_OWNER },
+      );
+      await screen.findByRole('table', { name: 'Unit comparison' });
+      await userEvent.click(screen.getByRole('button', { name: 'Unit di agensi Hendra Wibowo' }));
+      await userEvent.click(screen.getByRole('button', { name: '31 orang di agensi Hendra Wibowo' }));
+      await expectClean('kpm/analytics, in Indonesian');
+      await userEvent.click(screen.getByRole('button', { name: 'Syarat MOC terpenuhi untuk Hendra Wibowo' }));
+      await screen.findByRole('dialog', { name: 'Hendra Wibowo — Maintenance of Contract' });
+      await expectClean('kpm/analytics (MOC dialog), in Indonesian');
     });
 
     it('the MOC dialog, met and with an input not uploaded', async () => {
@@ -4174,6 +4429,38 @@ describe('screens have no axe violations', () => {
       await userEvent.type(screen.getByRole('searchbox'), 'zzz');
       await screen.findByText('No one matches this search.');
       await expectClean('kpm/analytics/compliance (searched to nothing)');
+    });
+
+    it('P18.98-T4 in Indonesian: Training’s tree, and a campaign’s with its override controls', async () => {
+      nav.pathname = '/kpm/analytics/compliance';
+      stubFetch({
+        ...ANALYTICS_SHELL,
+        'GET /kpm/analytics/compliance': { body: complianceView('training') },
+        'GET /kpm/settings/events/': { body: eventFeedbackSummary() },
+      });
+      const { unmount } = renderWithSession(
+        <InLanguage language="id"><KpmAnalyticsLayout>{compliancePage()}</KpmAnalyticsLayout></InLanguage>,
+        { me: ANALYTICS_OWNER },
+      );
+      await screen.findByRole('group', { name: 'Kategori Training' });
+      await expectClean('kpm/analytics/compliance, in Indonesian');
+      unmount();
+      vi.unstubAllGlobals();
+
+      stubFetch({
+        ...ANALYTICS_SHELL,
+        'GET /kpm/analytics/compliance': { body: complianceView('campaigns', 'PERSISTENCY_PUSH') },
+        'GET /kpm/settings/events/': { body: eventFeedbackSummary() },
+      });
+      renderWithSession(
+        <InLanguage language="id">
+          <KpmAnalyticsLayout>{compliancePage({ category: 'campaigns', item: 'PERSISTENCY_PUSH' })}</KpmAnalyticsLayout>
+        </InLanguage>,
+        { me: ANALYTICS_OWNER },
+      );
+      await screen.findByRole('combobox', { name: 'Campaign' });
+      await screen.findAllByRole('button', { name: /Ubah hasil .* untuk / });
+      await expectClean('kpm/analytics/compliance?category=campaigns, in Indonesian');
     });
 
     it('empty: no AB yet, and a category with nothing to show', async () => {
@@ -4565,5 +4852,1963 @@ describe('P18.97-T7 the Owner’s screens on a phone have no axe violations', ()
     renderInLayout(TenantLayout, <KpmProductsPage />, { me: owner });
     await userEvent.click(await screen.findByRole('button', { name: 'Customize' }));
     await expectClean('kpm/settings/products (phone)');
+  });
+});
+
+/**
+ * **P18.98-T4: the forum and the office's people screens in ID mode, each in its main state** — axe in Indonesian, as
+ * the blocks above run them in English (ADR-0179 §9): the forum's list, a meeting on its three tabs and its dialogs, a
+ * phone's cards; *All Members* on its tabs, a member's page, *Manage KPM Admins*, *Org Tree* and *Import people*. The
+ * words are the catalogue's (`messages/forum*.ts`, `members.tsx`, `member.tsx`, `admins.ts`, `org-tree.ts`,
+ * `roster-import.tsx`, `requests.ts`, `leader-limit.tsx`); `lang` on kept terms is T7's.
+ */
+describe('P18.98-T4 the forum and the people screens in Indonesian', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const owner = makeMe({
+    membership: {
+      membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+      isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 2,
+    },
+    permissions: [
+      'member:read_profile', 'member:transfer_approve', 'kpm_admin:grant', 'kpm_admin:revoke', 'kpm_admin:list',
+      'org_tree:read', 'kpm:import_roster',
+    ],
+  });
+  const inIndonesian = (path: string, page: React.ReactElement, me = owner) => {
+    nav.pathname = path;
+    return renderWithSession(<InLanguage language="id">{page}</InLanguage>, { me });
+  };
+  const person = (over: Record<string, unknown> = {}) => ({
+    membershipId: 'mem-1', agentCode: 'KPM0417-001', role: 'agent', status: 'active',
+    fullName: 'Rina Wijaya', preferredName: 'Rina', email: 'rina@kpm0417.test', initials: 'RW',
+    leaderId: 'mem-owner', leaderName: 'Wilson Tanoto', depth: 1, directCount: 0, subtreeCount: 0, isLeader: false,
+    isKpmOwner: false, isKpmAdmin: false, joinedAt: '2026-03-01T00:00:00.000Z', ...over,
+  });
+  const roster = (members: unknown[]) => ({ body: { members, nextCursor: null, counts: { directory: 2, pending: 1, removed: 0 } } });
+
+  it('the forum’s list, and New meeting with a refusal under its field', async () => {
+    stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings': { body: forumList() } });
+    inIndonesian('/leader-meetings', <LeaderMeetingsPage />, FORUM_OWNER);
+    await screen.findByRole('button', { name: '+ Rapat baru' });
+    await expectClean('leader-meetings (id)');
+    await userEvent.click(screen.getByRole('button', { name: '+ Rapat baru' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Buat rapat' }));
+    await screen.findByText('Pilih tanggal.');
+    await expectClean('leader-meetings (id, New meeting)');
+  });
+
+  it('a meeting on each of its three tabs, and Share these minutes', async () => {
+    stubFetch({
+      ...FORUM_SHELL,
+      'GET /leader-meetings/m-14': { body: forumMeeting() },
+      'POST /leader-meetings/m-14/share-links': { status: 201, body: { token: 'tok_abc', expiresAt: '2026-10-24T03:00:00.000Z' } },
+    });
+    inIndonesian('/leader-meetings/m-14', <LeaderMeetingPage params={routeParams({ meetingId: 'm-14' })} />, FORUM_OWNER);
+    await screen.findByText('Dapat mengubah notulen ini');
+    await expectClean('leader-meetings/[meetingId] (id, Overview & Stats)');
+    await userEvent.click(screen.getByRole('tab', { name: 'Agenda' }));
+    await expectClean('leader-meetings/[meetingId] (id, Agenda)');
+    await userEvent.click(screen.getByRole('tab', { name: 'Action Items' }));
+    await expectClean('leader-meetings/[meetingId] (id, Action Items)');
+    await userEvent.click(screen.getByRole('button', { name: 'Bagikan' }));
+    await screen.findByRole('button', { name: 'Salin tautan' });
+    await expectClean('leader-meetings/[meetingId] (id, Share these minutes)');
+  });
+
+  it('the stats on a phone, one card per metric', async () => {
+    atWidth(375);
+    stubFetch({ ...FORUM_SHELL, 'GET /leader-meetings/m-14': { body: forumMeeting() } });
+    inIndonesian('/leader-meetings/m-14', <LeaderMeetingPage params={routeParams({ meetingId: 'm-14' })} />, FORUM_OWNER);
+    await screen.findByRole('heading', { level: 4, name: 'Manpower' });
+    expect(screen.getAllByText('Perubahan').length).toBeGreaterThan(0);
+    await expectClean('leader-meetings/[meetingId] (id, Overview & Stats, phone)');
+  });
+
+  it('people/members: the directory, Pending with a transfer, and Groups', async () => {
+    stubFetch({
+      '/members': [
+        roster([person({ membershipId: 'mem-owner', fullName: 'Wilson Tanoto', preferredName: null, role: 'ab', isKpmOwner: true, isLeader: true, directCount: 1, subtreeCount: 1, canTagCoreLeader: true, leaderId: null, leaderName: null })]),
+        roster([person({ status: 'pending' })]),
+      ],
+      '/join/requests': { body: [{ requestId: 'req-1', membershipId: 'mem-1', fullName: 'Rina Wijaya', initials: 'RW', email: 'rina@kpm0417.test', agentCode: 'KPM0417-001', role: 'agent', requestedAt: '2026-10-01T00:00:00.000Z', routedFromName: null }] },
+      '/members/leader-limit-requests': { body: [] },
+      '/transfer-requests': {
+        body: [{
+          transferId: 'tr-1', member: { membershipId: 'mem-raka', name: 'Raka Aditama', agentCode: '87014' },
+          from: { membershipId: 'mem-satria', name: 'Satria Nugraha' }, to: { membershipId: 'mem-agus', name: 'Agus Prasetyo' },
+          requestedBy: { membershipId: 'mem-agus', name: 'Agus Prasetyo' }, requestedAt: '2026-10-26T03:00:00.000Z', requestedName: null,
+        }],
+      },
+      '/members/groups': { body: [{ groupId: 'g1', name: 'Top Producers Circle', ownerMembershipId: 'mem-1', ownerName: 'Rina Wijaya', ownerHasLeft: false, memberCount: 3 }] },
+      '/members/tree': { body: { nodes: [treeNode({ membershipId: 'mem-1', fullName: 'Rina Wijaya' })], leader: null, rootIds: ['mem-1'], selfId: null, counts: { ab: 0, aab: 0, agent: 1, total: 1 } } },
+    });
+    inIndonesian('/people/members', <TenantLayout><MembersPage /></TenantLayout>);
+    await screen.findByRole('table', { name: 'Roster KPM' });
+    await expectClean('people/members (id)');
+    await userEvent.click(screen.getByRole('button', { name: /^Pending/ }));
+    await screen.findByRole('table', { name: 'Permintaan pemindahan, terlama dulu' });
+    await userEvent.click(screen.getAllByRole('button', { name: 'Setujui' })[0]);
+    await expectClean('people/members (id, Pending, a join date asked)');
+    await userEvent.click(screen.getByRole('button', { name: 'Groups' }));
+    await screen.findByRole('table', { name: 'Grup informal' });
+    await expectClean('people/members (id, Groups)');
+  });
+
+  it('people/members/[membershipId]: the details, a role change explained and a removal asked', async () => {
+    stubFetch({
+      '/members/mem-1/reports': { body: [] },
+      '/members/mem-1/tags': { body: { membershipId: 'mem-1', fullName: 'Rina Wijaya', groupIds: [], isCoreLeader: false, canBeCoreLeader: false } },
+      '/members/groups': { body: [] },
+      '/members/leader-limit-requests': { body: [] },
+      '/members/mem-1': { body: person({ joinDate: '2026-03-02', canChangeRole: true, canPromoteToAb: true, canRemove: true }) },
+    });
+    inIndonesian('/people/members/mem-1', <TenantLayout><MemberPage params={routeParams({ membershipId: 'mem-1' })} /></TenantLayout>);
+    await screen.findByRole('heading', { name: 'Pribadi' });
+    await userEvent.selectOptions(screen.getByLabelText('Peran baru'), 'aab');
+    await userEvent.click(screen.getByRole('button', { name: 'Keluarkan Rina' }));
+    await expectClean('people/members/[membershipId] (id)');
+  });
+
+  it('people/admins, a revoke asked', async () => {
+    stubFetch({
+      '/members/admins': { body: [{ membershipId: 'mem-admin', fullName: 'Maya Halim', initials: 'MH', agentCode: 'KPM0417-002', role: 'ab', grantedAt: '2026-01-14T00:00:00.000Z', grantedByName: 'Wilson Tanoto', canRevoke: true }] },
+      '/members/tree': { body: { nodes: [treeNode({ membershipId: 'mem-agus', fullName: 'Agus Prasetyo', role: 'ab' })], leader: null, rootIds: ['mem-agus'], selfId: null, counts: { ab: 1, aab: 0, agent: 0, total: 1 } } },
+    });
+    inIndonesian('/people/admins', <TenantLayout><AdminsPage /></TenantLayout>);
+    await userEvent.click(await screen.findByRole('button', { name: 'Cabut' }));
+    await screen.findByRole('button', { name: 'Cabut akses' });
+    await expectClean('people/admins (id, a revoke asked)');
+  });
+
+  it('people/org-tree on the canvas, and on a phone as the list', async () => {
+    const tree = {
+      nodes: [
+        treeNode({ membershipId: 'mem-owner', fullName: 'Wilson Tanoto', initials: 'WT', role: 'ab', layer: 1, isLeader: true, directCount: 1, isSelf: true }),
+        treeNode({ membershipId: 'mem-ab', fullName: 'Agus Prasetyo', initials: 'AP', role: 'ab', layer: 2, leaderId: 'mem-owner' }),
+      ],
+      leader: null, rootIds: ['mem-owner'], selfId: 'mem-owner', counts: { ab: 1, aab: 0, agent: 0, total: 1 },
+    };
+    stubFetch({ '/members/tree': { body: tree } });
+    const { unmount } = inIndonesian('/people/org-tree', <TenantLayout><OrgTreePage /></TenantLayout>);
+    await screen.findByText('Lapisan 1');
+    await expectClean('people/org-tree (id)');
+    unmount();
+    atWidth(375);
+    stubFetch({ '/members/tree': { body: tree } });
+    inIndonesian('/people/org-tree', <TenantLayout><OrgTreePage /></TenantLayout>);
+    await screen.findByRole('button', { name: 'Sembunyikan yang melapor kepada Wilson Tanoto' });
+    await expectClean('people/org-tree (id, phone)');
+  });
+
+  it('people/import: the file’s columns, the template, a paste checked with a problem', async () => {
+    const HEADER = 'fullName,email,agentCode,role,leaderAgentCode,dateOfBirth,companyJoinMonth,workStatus,gender';
+    stubFetch({
+      '/admin/tenants/roster-template': { body: { header: HEADER, columns: [], template: `${HEADER}\n`, examples: [] } },
+      '/admin/tenants/kpm-1/roster/preview': { body: { willCreate: 0, rows: [], issues: [{ line: 2, column: 'email', message: '"x" is not an email address.' }] } },
+    });
+    inIndonesian('/people/import', <TenantLayout><PeopleImportPage /></TenantLayout>);
+    await screen.findByRole('link', { name: 'Unduh templat' });
+    await userEvent.type(screen.getByLabelText('Baris dari spreadsheet Anda'), 'A,x,881,ab');
+    await userEvent.click(screen.getByRole('button', { name: 'Periksa file' }));
+    await screen.findByRole('table', { name: 'Yang salah dengan file ini' });
+    await expectClean('people/import (id, a problem)');
+  });
+});
+
+/**
+ * **P18.98-T4: the field's selling screens in ID mode, each in its main state** — axe in Indonesian, as the blocks above
+ * run them in English (ADR-0179 §9): *Leads Management* with its ⋮ menu and the lead's details open; *Log Activity* on a
+ * closed, corrected day and on a phone; the *Dashboard*, and on a phone with an item opened; the *Ratio* tab with its
+ * formula open. The words are the catalogue's (`messages/leads.tsx`, `messages/activity.tsx`); `lang` on kept terms is
+ * T7's.
+ */
+describe('P18.98-T4 the field’s selling screens in Indonesian', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    nav.search = '';
+  });
+
+  const inIndonesian = (path: string, page: React.ReactElement, me = makeMe()) => {
+    nav.pathname = path;
+    return renderWithSession(<InLanguage language="id"><AgentLayout>{page}</AgentLayout></InLanguage>, { me });
+  };
+  const lead = (over: Record<string, unknown> = {}) => ({
+    id: 'l1', ownerMembershipId: 'mem-1', type: 'sales', name: 'Pak Budi', contact: { phone: null, email: null },
+    statusCode: 'FOLLOW_UP', thisMonth: true, remarks: 'Hobi golf', nextActionDate: '2026-10-02', nextActionNote: null,
+    outcome: null, source: null, dateRegistered: '2026-09-04T03:00:00.000Z', version: 2, flags: [], overdueDays: null,
+    committedMonths: [], lastEditedBy: null, ...over,
+  });
+  const leadsPage = (rows: unknown[]) => ({ body: { rows, total: rows.length, page: 1, pageSize: 200 } });
+  const taxonomy = [{
+    id: 'c1', code: 'LEADS', label: 'Leads', description: null, appliesToOrgLevelCodes: [], displayOrder: 1, version: 1,
+    status: 'active', summaryGroupCode: 'LEADS', summaryGroupLabel: 'Leads Generation',
+    types: [{
+      id: 't1', code: 'LEADS_CONTACTED', label: 'Set Appointment', categoryCode: 'LEADS', description: null,
+      displayOrder: 1, version: 1, status: 'active',
+    }],
+  }];
+  const phone = () => vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+  })));
+
+  it('leads: the table, its ⋮ menu open, and the lead’s details', async () => {
+    stubFetch({
+      '/kpm/config': {
+        body: {
+          activity: [], ratios: [], version: 1,
+          leadPipelines: [{
+            pipeline: 'sales',
+            statuses: [{
+              id: 's1', pipeline: 'sales', code: 'FOLLOW_UP', label: 'Sudah di-follow up', rank: 1, isTerminal: false,
+              isLateStage: false, version: 1, status: 'active',
+            }],
+          }],
+        },
+      },
+      '/kpm/org-levels': { body: [] },
+      '/leads': leadsPage([
+        lead({ flags: ['overdue'], overdueDays: 9, lastEditedBy: { membershipId: 'mem-aab', name: 'Ibu Sari' } }),
+        lead({ id: 'l2', ownerMembershipId: 'mem-7', name: 'Bu Rina', thisMonth: false, remarks: null, nextActionDate: null }),
+      ]),
+      'outcome=won': leadsPage([lead({ id: 'w1', name: 'Ibu Wulan Sari', outcome: 'won', thisMonth: false })]),
+      'outcome=lost': leadsPage([]),
+    });
+    inIndonesian('/leads', <LeadsPage />, makeMe({ permissions: ['lead:read', 'lead:update', 'lead:mark_outcome'] }));
+
+    await screen.findByText('Ibu Wulan Sari');
+    expect(screen.getByRole('table', { name: 'Leads Anda' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Aksi untuk Pak Budi' }));
+    await screen.findByRole('menu', { name: 'Aksi untuk Pak Budi' });
+    await expectClean('leads (id, the ⋮ menu open)');
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Detail lead' }));
+    const details = await screen.findByRole('dialog', { name: 'Detail lead untuk Pak Budi' });
+    await within(details).findByText('Terakhir diubah oleh Ibu Sari');
+    await expectClean('leads (id)');
+  });
+
+  it('leads on a phone: the read-only cards, and a lead’s edit sheet', async () => {
+    phone();
+    stubFetch({
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/leads': leadsPage([lead({ type: null, statusCode: null })]),
+      'outcome=won': leadsPage([]),
+      'outcome=lost': leadsPage([]),
+    });
+    inIndonesian('/leads', <LeadsPage />, makeMe({ permissions: ['lead:read', 'lead:create', 'lead:update'] }));
+
+    await screen.findByRole('list', { name: 'Leads Anda' });
+    await expectClean('leads (id, phone)');
+    await userEvent.click(screen.getByRole('button', { name: 'Ubah Pak Budi' }));
+    await screen.findByRole('dialog', { name: 'Ubah Pak Budi' });
+    await expectClean('leads (id, phone, the edit sheet)');
+  });
+
+  it('log activity: a closed, corrected day, its reason asked', async () => {
+    stubFetch({
+      '/kpm/config': { body: { activity: taxonomy, ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/activity/log': {
+        body: {
+          membershipId: 'mem-1', localDate: '2026-03-11', entries: [], totalCount: 0, version: 1,
+          frozenAt: '2026-03-12T00:00:00Z', editable: false, correctionCount: 2,
+        },
+      },
+    });
+    inIndonesian('/activity/log', <LogActivityPage />);
+
+    await screen.findByLabelText('Mengapa catatan ini dikoreksi?');
+    expect(screen.getByText(/^Total sentuhan hari ini/)).toBeInTheDocument();
+    await expectClean('activity/log (id)');
+  });
+
+  it('log activity on a phone: the one-line total and the save bar', async () => {
+    phone();
+    stubFetch({
+      '/kpm/config': { body: { activity: taxonomy, ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/activity/log': {
+        body: {
+          membershipId: 'mem-1', localDate: '2026-03-11',
+          entries: [{ activityTypeId: 't1', activityTypeCode: 'LEADS_CONTACTED', label: 'Set Appointment', count: 2 }],
+          totalCount: 2, version: 1, frozenAt: null, editable: true, correctionCount: 0,
+        },
+      },
+    });
+    inIndonesian('/activity/log', <LogActivityPage />);
+
+    await screen.findByRole('button', { name: 'Simpan aktivitas' });
+    expect(screen.getByText(/^Hari ini:/)).toHaveTextContent('Hari ini: 2 sentuhan');
+    await expectClean('activity/log (id, phone)');
+  });
+
+  it('the activity dashboard, and on a phone with an item opened', async () => {
+    const day = (iso: string) => ({ from: iso, to: iso, days: 1, kind: 'day' });
+    const counts = [3, 0, 1, 0, 2, 0, 0];
+    const routes = {
+      '/kpm/config': {
+        body: {
+          activity: [{
+            id: 'c1', code: 'SELLING', label: 'Selling', description: null, appliesToOrgLevelCodes: [], displayOrder: 1,
+            version: 1, status: 'active', summaryGroupCode: 'SELLING', summaryGroupLabel: 'Selling', types: [],
+          }],
+          ratios: [], leadPipelines: [], version: 1,
+        },
+      },
+      '/kpm/org-levels': { body: [] },
+      '/activity/dashboard': {
+        body: {
+          range: 'ROLLING_7D', from: '2026-09-22', to: '2026-09-28', days: 7, today: '2026-09-28',
+          buckets: ['28', '27', '26', '25', '24', '23', '22'].map((d) => day(`2026-09-${d}`)),
+          sections: [{
+            code: 'SELLING', label: 'Selling', standing: 'shown', total: 6, counts,
+            types: [
+              { code: 'SELL_SUBMISSION', label: 'Submission polis', description: null, displayOrder: 6, standing: 'shown', total: 4, counts: [2, 0, 1, 0, 1, 0, 0] },
+              { code: 'SELL_OLD', label: 'Item lama', description: 'Diarsipkan di bulan Agustus', displayOrder: 9, standing: 'archived', total: 2, counts: [1, 0, 0, 0, 1, 0, 0] },
+            ],
+          }],
+          total: 6, counts, daysLogged: 5, correctedDays: 1,
+        },
+      },
+    };
+    stubFetch(routes);
+    inIndonesian('/activity/dashboard', <ActivityDashboardPage />);
+    await screen.findByText('Submission polis');
+    await screen.findByText('Total sentuhan');
+    await expectClean('activity/dashboard (id)');
+
+    cleanup();
+    phone();
+    stubFetch(routes);
+    inIndonesian('/activity/dashboard', <ActivityDashboardPage />);
+    await screen.findByRole('list', { name: 'Aktivitas Anda' });
+    await userEvent.click(screen.getByRole('button', { name: /^Submission polis/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^Item lama/ }));
+    await expectClean('activity/dashboard (id, phone, opened)');
+  });
+
+  it('the ratio tab, a rate and a balance, the formula open', async () => {
+    const term = (code: string, label: string, displayOrder: number) => ({ code, label, displayOrder });
+    const base = {
+      comparison: 'gte', displayUnit: 'percent', benchmark: 0.3, tag: { code: 'SELLING', label: 'Selling' }, sides: null,
+      numerator: [term('SELL_SUBMISSION', 'Submission polis', 6)], denominator: [term('SELL_PRESENTATION', 'Presentasi', 4)],
+      purpose: 'Mengukur konversi', divergesFromStandard: true, numeratorCount: 1, denominatorCount: 11, share: null,
+    };
+    stubFetch({
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/activity/ratios': {
+        body: {
+          membershipId: 'm-1', from: '2026-08-30', to: '2026-09-28', days: 30,
+          ratios: [
+            { ...base, code: 'SELLING_VS_RECRUITMENT', label: 'Selling vs Recruitment', comparison: 'band',
+              displayUnit: 'points', benchmark: 30, tag: { code: null, label: 'Balance' },
+              sides: { numerator: 'Selling', denominator: 'Recruitment' }, value: 34, share: 67, status: 'alert' },
+            { ...base, code: 'SELLING_SUCCESS_RATE', label: 'Selling success rate', value: 0.09, status: 'alert' },
+          ],
+        },
+      },
+    });
+    inIndonesian('/activity/ratio', <ActivityRatioPage />);
+    const card = await screen.findByRole('article', { name: 'Selling success rate' });
+    await userEvent.click(within(card).getByText('Apa itu ratio ini?'));
+    await expectClean('activity/ratio (id)');
+  });
+
+  /* ── The sales tools and Recruitment's Attack Plan (`messages/product-catalog.ts`, `sales-attack-plan.tsx`, `plan.ts`, `recruitment-plan.ts`) */
+
+  const SALES_SHELL = {
+    '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+    '/kpm/org-levels': { body: [] },
+  };
+
+  it('the product catalog, filled, and a search that finds nothing', async () => {
+    stubFetch({ ...SALES_SHELL, 'GET /product-catalog': { body: { products: SHELF } } });
+    inIndonesian('/product-catalog', <ProductCatalogLayout><ProductCatalogPage /></ProductCatalogLayout>, SALES_ME);
+    await screen.findByRole('heading', { level: 2, name: 'Life' });
+    await expectClean('product-catalog (id)');
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Cari produk berdasarkan nama' }), 'zzz');
+    await screen.findByText('Tidak ada produk yang cocok dengan “zzz”.');
+    await expectClean('product-catalog (id, search, no match)');
+  });
+
+  it.each(['Details', 'Attack Plan', 'Documents'])('the product drawer open on %s, the tab kept English', async (tab) => {
+    stubFetch({
+      ...SALES_SHELL, 'GET /product-catalog': { body: { products: SHELF } }, 'GET /product-catalog/PRUMAPAN': { body: salesProduct() },
+    });
+    inIndonesian(
+      '/product-catalog/PRUMAPAN',
+      <ProductCatalogLayout><ProductDrawerPage params={routeParams({ productCode: 'PRUMAPAN' })} /></ProductCatalogLayout>,
+      SALES_ME,
+    );
+    const box = await screen.findByRole('dialog', { name: 'PRUMapan' });
+    await userEvent.click(within(box).getByRole('tab', { name: tab }));
+    await expectClean(`product-catalog/[productCode] (id, ${tab})`);
+  });
+
+  it('the sales attack plan: its brief part chosen, then a plan with its more line', async () => {
+    stubFetch({ ...SALES_SHELL, 'GET /product-catalog': { body: { products: SHELF } } });
+    inIndonesian('/attack-plan', <AttackPlanPage />, SALES_ME);
+    await screen.findByRole('heading', { level: 2, name: 'Dengan siapa kita bicara?' });
+    await userEvent.click(within(screen.getByRole('group', { name: 'Kebutuhan utama' })).getByRole('button', { name: 'Kesehatan' }));
+    await expectClean('attack-plan (id, brief)');
+
+    cleanup();
+    const alternatives = ['A', 'B', 'C', 'D'].map((c) => ({ code: c, name: `Product ${c}` }));
+    stubFetch({
+      ...SALES_SHELL, 'GET /product-catalog': { body: { products: SHELF } },
+      'GET /attack-plan': { body: salesPlan({ alternatives, moreCount: 3 }) },
+    });
+    nav.search = new URLSearchParams({ need: 'health', age: '2', budget: '2' }).toString();
+    inIndonesian('/attack-plan', <AttackPlanPage />, SALES_ME);
+    await screen.findByRole('heading', { level: 2, name: 'PRUMapan' });
+    await expectClean('attack-plan (id, plan)');
+  });
+
+  it('the sales attack plan’s Check fit, its note in one Indonesian sentence', async () => {
+    stubFetch({
+      ...SALES_SHELL, 'GET /product-catalog': { body: { products: SHELF } },
+      'GET /attack-plan': { body: salesPlan({ verdict: 'check_fit', outside: ['age', 'budget'] }) },
+    });
+    nav.search = new URLSearchParams({ need: 'retirement', age: '5', budget: '6' }).toString();
+    inIndonesian('/attack-plan', <AttackPlanPage />, SALES_ME);
+    await screen.findByText(/Di luar rentang usia dan rentang anggaran/);
+    await expectClean('attack-plan (id, check fit)');
+  });
+
+  it('recruitment’s attack plan: the brief part chosen, the plan, and a company with no playbook', async () => {
+    const recruitment = () => <RecruitmentLayout><RecruitmentAttackPlanPage /></RecruitmentLayout>;
+    stubFetch({ ...SALES_SHELL, 'GET /recruitment/attack-plan': { body: recruitmentView() } });
+    inIndonesian('/recruitment/attack-plan', recruitment(), RECRUITMENT_ME);
+    await screen.findByRole('heading', { level: 2, name: 'Dengan siapa kita bicara?' });
+    // The chips are the company's playbook, shown as typed.
+    await userEvent.click(within(screen.getByRole('group', { name: 'Jenis kandidat' })).getByRole('button', { name: 'Retiree' }));
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'Apa yang mendorongnya' })).getByRole('button', { name: 'Career change' }),
+    );
+    await expectClean('recruitment/attack-plan (id, brief)');
+
+    cleanup();
+    stubFetch({ ...SALES_SHELL, 'GET /recruitment/attack-plan': { body: recruitmentView(recruitmentPlan()) } });
+    nav.search = new URLSearchParams(RECRUITMENT_BRIEF).toString();
+    inIndonesian('/recruitment/attack-plan', recruitment(), RECRUITMENT_ME);
+    await screen.findByRole('heading', { level: 2, name: 'Fresh graduate' });
+    await expectClean('recruitment/attack-plan (id, plan)');
+
+    cleanup();
+    nav.search = '';
+    stubFetch({ ...SALES_SHELL, 'GET /recruitment/attack-plan': { body: recruitmentView(null, false) } });
+    inIndonesian('/recruitment/attack-plan', recruitment(), RECRUITMENT_ME);
+    await screen.findByText('Belum ada rencana recruitment yang dapat disusun.');
+    await expectClean('recruitment/attack-plan (id, no playbook)');
+  });
+
+  /* ── Goal Settings and Personal Summary (`messages/goals.tsx`, `goal-words.ts`, `summary.tsx`) */
+
+  it('goal settings: five numbered cards, two entry modes and a live cascade', async () => {
+    const period = String(new Date().getFullYear());
+    stubFetch({
+      // The cascade's three types, so each column carries its activity's chip (P10.1-T6; by name since P18.95-T5).
+      '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/goals': {
+        body: {
+          period,
+          mode: 'direct',
+          annualApeTargetMinor: 500_000_000_00,
+          savingsTargetMinor: 50_000_000_00,
+          commissionRatePct: 10,
+          monthsLeft: 5,
+          monthsLeftIsOverride: false,
+          apeAchievedMinor: 0,
+          achieved: { minor: 0, provenance: 'self_reported', month: null },
+          caseSizeMinor: 18_000_000_00,
+          leadsToApptPct: 30,
+          closingRatePct: 30,
+          snapshot: {
+            monthlyApeTargetMinor: 100_000_000_00,
+            policiesPerMonth: 6, appointmentsPerMonth: 20, leadsPerMonth: 67,
+          },
+          projected: {
+            annualApeTargetMinor: 500_000_000_00, apeAchievedMinor: 0,
+            remainingApeMinor: 500_000_000_00, monthlyApeTargetMinor: 100_000_000_00,
+            policiesPerMonth: 6, policiesPerWeek: 1.4,
+            appointmentsPerMonth: 20, appointmentsPerWeek: 5,
+            leadsPerMonth: 67, leadsPerWeek: 16, targetMet: false,
+          },
+          cascadeMapping: {
+            leadsCode: 'LEADS_CONTACTED',
+            appointmentsCode: 'SELL_PRESENTATION',
+            closingsCode: 'SELL_SUBMISSION',
+          },
+          cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
+          measured: { from: '2026-08-15', to: '2026-09-13', days: 30, leadToAppointmentRate: 0.25, closingRate: null },
+          savedAt: '2026-09-13T04:00:00.000Z',
+          savedByMembershipId: 'mem-leader',
+        },
+      },
+    });
+    inIndonesian('/goals', <GoalSettingsPage />, makeMe({ permissions: ['goal:read', 'goal:update'] }));
+
+    await screen.findByRole('button', { name: 'Simpan goal' });
+    await expectClean('goals (id)');
+  });
+
+  it('goal settings on a phone: the save bar under the commitment, the months left in one sentence', async () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    })));
+    const period = String(new Date().getFullYear());
+    stubFetch({
+      '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
+      '/kpm/org-levels': { body: [] },
+      '/goals': {
+        body: {
+          period, mode: 'direct', annualApeTargetMinor: 500_000_000_00, savingsTargetMinor: 50_000_000_00,
+          commissionRatePct: 10, monthsLeft: 2.2, monthsLeftIsOverride: false, apeAchievedMinor: 0,
+          achieved: { minor: 290_000_000_00, provenance: 'imported', month: '2026-09' },
+          caseSizeMinor: 18_000_000_00, leadsToApptPct: 50, closingRatePct: 30,
+          snapshot: { monthlyApeTargetMinor: 95_454_545_00, policiesPerMonth: 6, appointmentsPerMonth: 18, leadsPerMonth: 36 },
+          projected: {
+            annualApeTargetMinor: 500_000_000_00, apeAchievedMinor: 290_000_000_00,
+            remainingApeMinor: 210_000_000_00, monthlyApeTargetMinor: 95_454_545_00,
+            policiesPerMonth: 6, policiesPerWeek: 1.4, appointmentsPerMonth: 18, appointmentsPerWeek: 5,
+            leadsPerMonth: 36, leadsPerWeek: 9, targetMet: false,
+          },
+          cascadeMapping: { leadsCode: 'LEADS_CONTACTED', appointmentsCode: 'SELL_PRESENTATION', closingsCode: 'SELL_SUBMISSION' },
+          cascadeBinding: { leads: ['LEADS_CONTACTED'], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
+          measured: { from: '2026-08-15', to: '2026-09-13', days: 30, leadToAppointmentRate: 0.25, closingRate: null },
+          savedAt: '2026-09-13T04:00:00.000Z', savedByMembershipId: 'mem-1',
+        },
+      },
+    });
+    inIndonesian('/goals', <GoalSettingsPage />, makeMe({ permissions: ['goal:read', 'goal:update'] }));
+
+    const save = await screen.findByRole('button', { name: 'Simpan goal' });
+    expect(save.parentElement).toHaveAttribute('data-action-bar');
+    expect(screen.getByText(/Untuk mencapai APE/).closest('p')).toHaveTextContent('(sekitar 2 bulan lagi)');
+    await expectClean('goals (id, phone)');
+  });
+
+  it('personal summary, populated: the gap, the pace, the chips, the pulse, the leads, the insights, then its year', async () => {
+    const M = 1_000_000 * 100;
+    const figures = {
+      targetMinor: 75 * M, actualMinor: 30 * M, attainmentPct: 40, gapMinor: 45 * M, overMinor: 0, policiesNeeded: 3, targetMet: false,
+    };
+    const target = (key: string, logged: number, goal: number | null) => ({
+      key, code: key, logged, target: goal, attainmentPct: goal ? Math.round((logged / goal) * 100) : null, targetMet: false,
+    });
+    const activity = {
+      from: '2026-09-01', to: '2026-09-14', total: 42,
+      // One chip with a bar, one with no target, one met at 0 — every shape the card draws.
+      targets: [target('leads', 20, 57), target('appointments', 6, null), { ...target('closings', 2, 0), targetMet: true }],
+      // The seed's two summary tiles (ADR-0064): a section of its own, and a group of two.
+      sections: [
+        { code: 'RECRUITMENT', label: 'Recruitment', total: 3, rows: [{ code: 'RECRUIT_PRESENTATION', label: 'Melakukan presentasi recruitment', count: 3 }] },
+        {
+          code: 'DEVELOPMENT', label: 'Development', total: 5,
+          rows: [
+            { code: 'DEV_TRAINING_ATTEND', label: 'Menghadiri meeting atau training dari KPM atau Prudential', count: 2 },
+            { code: 'DEV_TEAM_ACTIVITY', label: 'Aktivitas team development', count: 3 },
+          ],
+        },
+      ],
+    };
+    const rate = (code: string, value: number | null, status: string) => ({
+      code, label: code, comparison: 'gte', displayUnit: 'percent', benchmark: 0.15, tag: null, sides: null,
+      numerator: [], denominator: [], purpose: null, divergesFromStandard: false, value, share: null,
+      numeratorCount: 1, denominatorCount: 10, status,
+    });
+    stubFetch({
+      // P18.5-T7 AC-6: *Campaigns you're chasing*, with its rows.
+      'GET /campaigns/chasing': { body: CAMPAIGNS_RINA_CHASING },
+      '/activity/ratios': {
+        body: { membershipId: 'm-1', from: '2026-08-16', to: '2026-09-14', days: 30, ratios: [rate('SSR', 0.1, 'alert'), rate('LPA', null, 'neutral')] },
+      },
+      '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+      '/summary': {
+        body: {
+          year: '2026', month: '2026-09', today: '2026-09-14', goal: { set: true, savedAt: '2026-09-01T02:00:00.000Z' },
+          period: { firstMonth: '2026-01', thisMonth: '2026-09', currentMonth: true, currentYear: true },
+          caseSizeMinor: 18 * M,
+          monthly: { ...figures, source: { provenance: 'imported', month: '2026-09' } },
+          yearly: { ...figures, targetMinor: 500 * M, source: { provenance: 'self_reported', month: null } },
+          pace: { closingTarget: 6, closingsLast30Days: 4, dayOfMonth: 14, daysInMonth: 30, weeksLeft: 3, policiesNeeded: 5, neededPerWeek: 2, targetMet: false },
+          activity: { monthly: activity, yearly: activity },
+          leads: {
+            total: 12,
+            rows: [
+              {
+                id: 'l-1', name: 'Pak Hendro', type: 'sales', statusCode: 'FOLLOW_UP', statusLabel: 'Follow-up', thisMonth: true,
+                flags: ['overdue', 'no-remarks'], overdueDays: 6, nextActionDate: '2026-09-08', nextActionNote: 'Chase the illustration.',
+              },
+              {
+                id: 'l-2', name: 'Pak Bambang', type: null, statusCode: null, statusLabel: null, thisMonth: false,
+                flags: ['no-next-action'], overdueDays: null, nextActionDate: null, nextActionNote: null,
+              },
+            ],
+          },
+          // Both insight cards: a numbered action list and a bulleted improvement list.
+          insights: [
+            { rule: 'LEAD_OVERDUE', kind: 'action', facts: { leadId: 'l-1', name: 'Pak Hendro', overdueDays: 6, others: 0 } },
+            { rule: 'NOTHING_LOGGED', kind: 'action', facts: { windowDays: 7, lastLoggedOn: '2026-09-01' } },
+            {
+              rule: 'RATIO_STRENGTH', kind: 'improve',
+              facts: { code: 'LPA', label: 'Leads per activity', value: 0.6, benchmark: 0.3, displayUnit: 'decimal' },
+            },
+          ],
+        },
+      },
+    });
+    inIndonesian('/summary', <PersonalSummaryPage />);
+    await screen.findByRole('region', { name: 'Gap' });
+    await screen.findByText('SSR');
+    await within(await screen.findByRole('region', { name: 'Campaigns yang Anda kejar' })).findByText('Q4 APE Sprint');
+    await expectClean('summary (id)');
+    await userEvent.click(screen.getByRole('tab', { name: 'Tahunan' }));
+    await screen.findByRole('region', { name: 'Gap' });
+    await expectClean('summary (id, the year)');
+  });
+});
+
+/**
+ * **P18.98-T4: new hires, the 90-day activation and User Management in ID mode, each in its main state** — axe in
+ * Indonesian, as *the 90-day activation (P13)* block and the User Management tests above run them in English (ADR-0179
+ * §9): the hire's `/activation` with a row's note and date open and *Which case?* open; `/new-hires` with its sections,
+ * *Tandai keluar*'s confirmation, a phone's cards, *Menunggu bergabung* and *+ Tambah agent* with its share step; a
+ * hire's detail; and the four User Management screens. The words are the catalogue's (`messages/activation.ts`,
+ * `new-hires.ts`, `add-agent.ts`, `user-management.ts`); `lang` on kept terms is T7's.
+ */
+describe('P18.98-T4 new hires, activation and User Management in Indonesian', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const SHELL = {
+    '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+    '/kpm/org-levels': { body: [] },
+  };
+  const inIndonesian = (path: string, page: React.ReactElement, me: ReturnType<typeof makeMe>) => {
+    nav.pathname = path;
+    return renderWithSession(<InLanguage language="id"><AgentLayout>{page}</AgentLayout></InLanguage>, { me });
+  };
+  const ADDING = { ...SARI_ME, permissions: [...SARI_ME.permissions, ...JOINING_PERMISSIONS, 'new_hire:mark_left', 'calendar_entry:create'] };
+
+  it('the hire’s page: a row’s note and date open, an Otomatis chip’s words shown, and Which case? open', async () => {
+    stubFetch({
+      ...SHELL,
+      '/activation/me/closings': { body: { closings: [{ leadId: 'l-1', name: 'Ibu Ratna', date: '2026-09-20' }] } },
+      '/activation/me': { body: activationView({}, withWaitingCheckIn()) },
+    });
+    inIndonesian('/activation', <ActivationPage />, RINA_ME);
+    await screen.findByRole('heading', { level: 2, name: 'Progres activation Anda' });
+    await userEvent.click(within(document.querySelector('[data-code="INSURANCE_BASICS"]') as HTMLElement)
+      .getByRole('button', { name: 'Tampilkan catatan dan tanggal' }));
+    await userEvent.click(screen.getAllByRole('button', { name: /^Otomatis — / })[0]);
+    await expectClean('activation (id)');
+    const milestone = within(document.querySelector('[data-code="INDEPENDENT_AGENT_MILESTONE"]') as HTMLElement);
+    await userEvent.click(milestone.getByRole('checkbox'));
+    await userEvent.click(await milestone.findByRole('radio', { name: 'Catat closing baru' }));
+    await expectClean('activation (id, which case)');
+  });
+
+  it('the hire’s page at 100%, its confirmation open, and with no activation', async () => {
+    stubFetch({ ...SHELL, '/activation/me': { body: completeView() } });
+    const { unmount } = inIndonesian('/activation', <ActivationPage />, RINA_ME);
+    await userEvent.click(await screen.findByRole('button', { name: 'Tandai checklist selesai' }));
+    await screen.findByRole('dialog');
+    await expectClean('activation (id, confirm)');
+    unmount();
+    stubFetch({ ...SHELL, '/activation/me': { status: 404, body: { error: { code: 'NOT_FOUND', message: 'Not found', requestId: 'r-1' } } } });
+    inIndonesian('/activation', <ActivationPage />, { ...RINA_ME, activation: null });
+    await screen.findByRole('heading', { level: 2, name: 'Anda tidak punya 90-day activation.' });
+    await expectClean('activation (id, none)');
+  });
+
+  it('the roster: its sections, Tandai keluar asked, Menunggu bergabung, + Tambah agent and its share step', async () => {
+    stubFetch({
+      ...SHELL,
+      '/new-hires': { body: ROSTER },
+      '/new-hires/invites': { body: { today: JOINING_TODAY, invites: [invite(), invite({ inviteId: 'inv-2', fullName: 'Rudi Hartono', status: 'expired' })] } },
+      '/new-hires/transfers': { body: [requestedTransfer()] },
+      '/join/requests': { body: [joinRequest()] },
+      '/join/requests/routing': { body: [] },
+      'POST /new-hires/agents': { body: { outcome: 'invited', ...shared() } },
+    });
+    inIndonesian('/new-hires', <NewHiresPage />, ADDING);
+    await screen.findByRole('region', { name: 'Tidak teraktivasi' });
+    await screen.findByRole('region', { name: 'Menunggu bergabung' });
+    await screen.findByRole('button', { name: 'Tinjau permintaan (1)' });
+    await expectClean('new-hires (id)');
+    await userEvent.click(screen.getByRole('button', { name: 'Tandai keluar — Lukman Hakim' }));
+    await screen.findByRole('dialog');
+    await expectClean('new-hires (id, mark left)');
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Batal' }));
+    await userEvent.click(screen.getByRole('button', { name: '+ Tambah agent' }));
+    const form = within(await screen.findByRole('dialog', { name: 'Tambah agent' }));
+    await expectClean('new-hires (id, add agent)');
+    await userEvent.type(form.getByLabelText('Kode agen'), '80777');
+    await userEvent.type(form.getByLabelText('Nama'), 'Yusuf Hidayat');
+    await userEvent.type(form.getByLabelText('Nomor WhatsApp'), '0812-8077-7001');
+    await userEvent.click(form.getByRole('button', { name: 'Tambah agent' }));
+    await screen.findByRole('dialog', { name: 'Undang Yusuf Hidayat' });
+    await expectClean('new-hires (id, invite share)');
+  });
+
+  it('the roster on a phone, a card per hire', async () => {
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    })));
+    stubFetch({ ...SHELL, '/new-hires': { body: ROSTER } });
+    inIndonesian('/new-hires', <NewHiresPage />, SARI_ME);
+    await screen.findByRole('list', { name: 'Tidak teraktivasi' });
+    await expectClean('new-hires (id, phone)');
+  });
+
+  it('one hire’s detail, overdue, with the join date’s correction and the coaching note, and Catat 1:1 open', async () => {
+    stubFetch({
+      ...SHELL,
+      '/new-hires/mem-rina': { body: leaderView({ day: 95, overdue: true, startCorrected: { by: SARI, at: '2026-09-01T02:00:00.000Z' } }) },
+    });
+    inIndonesian('/new-hires/mem-rina', <NewHireDetailPage params={routeParams({ membershipId: 'mem-rina' })} />, SARI_ME);
+    await screen.findByRole('heading', { level: 2, name: 'Progres activation' });
+    await expectClean('new-hires/[membershipId] (id)');
+    await userEvent.click(within(document.querySelector('[data-code="WEEKLY_CHECK_IN"]') as HTMLElement).getByRole('checkbox'));
+    await screen.findByRole('group', { name: 'Catat 1:1' });
+    await expectClean('new-hires/[membershipId] (id, log 1:1)');
+  });
+
+  it('User Management’s four screens', async () => {
+    const NO_OFFICE = {
+      kpmId: null, kpmLabel: null, registeredAt: null, leaderMembershipId: null, leaderName: null, status: 'none', pendingRequestTo: null,
+    };
+    const REGISTERED = { ...NO_OFFICE, kpmId: 'kpm-1', kpmLabel: 'Prudential — KPM 0417 · BSD City Branch', status: 'pending' };
+    const leader = makeMe({
+      membership: {
+        membershipId: 'mem-ab', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+        isKpmOwner: false, isKpmAdmin: false, directCount: 2,
+      },
+      permissions: [
+        'member:invite', 'member:search_untagged_pool', 'member:change_role', 'member:remove_from_team',
+        'leader_request:read_inbox', 'leader_request:approve', 'leader:search_directory', 'leader_request:create',
+      ],
+    });
+
+    stubFetch({
+      '/join/me': { body: NO_OFFICE }, '/join/kpm-request': { body: { request: null } },
+      '/join/kpms': { body: [{ kpmId: 'kpm-1', code: '0417', branchName: 'BSD City Branch', companyName: 'Prudential', city: 'Tangerang' }] },
+    });
+    const kpm = inIndonesian('/user-management/kpm', <RegisterKpmPage />, makeMe({ membership: null, permissions: ['kpm:read_directory', 'kpm_registration:create'] }));
+    await screen.findByText('Prudential — KPM 0417');
+    await userEvent.click(screen.getByRole('button', { name: 'Ajukan KPM' }));
+    await expectClean('user-management/kpm (id)');
+    kpm.unmount();
+
+    stubFetch({
+      '/join/me': { body: { ...REGISTERED, pendingRequestTo: 'mem-x' } },
+      '/join/leaders': {
+        body: [
+          { membershipId: 'mem-x', fullName: 'Wilson Tanoto', role: 'ab', unitSize: 4, isCurrentLeader: false, requestSent: true },
+          { membershipId: 'mem-y', fullName: 'Dewi Lestari', role: 'aab', unitSize: 0, isCurrentLeader: false, requestSent: false },
+        ],
+      },
+    });
+    const find = inIndonesian('/user-management/leader', <FindLeaderPage />, leader);
+    await screen.findByText('Wilson Tanoto');
+    await expectClean('user-management/leader (id)');
+    find.unmount();
+
+    stubFetch({
+      '/join/my-code': { body: { code: 'JOR417', url: 'https://agencyboost.app/join?code=JOR417' } },
+      '/members/my-team': {
+        body: [{ membershipId: 'mem-r', fullName: 'Rina Wijaya', initials: 'RW', agentCode: '80001', role: 'agent', orgLevelCode: 'AGENT', directCount: 2, canChangeRole: true }],
+      },
+      '/join/untagged': { body: [{ membershipId: 'mem-b', fullName: 'Budi Santoso', initials: 'BS', agentCode: '80002' }] },
+    });
+    const add = inIndonesian('/user-management/add', <AddAgentsPage />, leader);
+    await screen.findByText('Budi Santoso');
+    await userEvent.click(await screen.findByRole('button', { name: 'Keluarkan Rina Wijaya' }));
+    await expectClean('user-management/add (id, a removal asked)');
+    add.unmount();
+
+    stubFetch({ '/join/requests/routing': { body: [] }, '/join/requests': { body: [joinRequest()] } });
+    inIndonesian('/user-management/pending', <PendingPage />, leader);
+    await screen.findByText('Putri Anggraini');
+    await expectClean('user-management/pending (id)');
+  });
+});
+
+/**
+ * **P18.98-T4: coaching and the Unit Dashboard in ID mode, each in its main state** — axe in Indonesian, as the blocks
+ * above run them in English (ADR-0179 §9): the coaching roster as a table and as a phone's cards, a session as a draft
+ * with its Activity drill open and finalized with *Edit again* asked, a past session's archive, the reader's own
+ * coaching, *Leader Notes*, a coachee's *Activation*; the Unit Dashboard filled, opened, on a phone, with *Update
+ * production* open, empty and a unit below the reader; the Group tree. The words are the catalogue's
+ * (`messages/coaching*.ts(x)`, `unit-dashboard.ts`, `group-tree.ts`, `activation.ts`'s `record`); `lang` on kept terms
+ * is T7's.
+ */
+describe('P18.98-T4 coaching and the Unit Dashboard in Indonesian', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    nav.params = {};
+    nav.search = '';
+  });
+
+  const shell = {
+    '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [{ pipeline: 'sales', statuses: [] }, { pipeline: 'recruitment', statuses: [] }], version: 1 } },
+    '/kpm/org-levels': { body: [] },
+    '/notifications': { body: { items: [], unread: 0 } },
+  };
+  const coachMe = makeMe({
+    user: {
+      id: 'u-agus', email: 'agus@kpm0417.test', fullName: 'Agus Santoso', preferredName: 'Agus',
+      pronoun: 'he', initials: 'AS', platformRole: 'none',
+    },
+    membership: {
+      membershipId: 'mem-agus', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab', status: 'active',
+      isKpmOwner: false, isKpmAdmin: false, directCount: 4,
+    },
+    permissions: [
+      'coaching_session:read', 'coaching_session:create', 'coaching_session:edit', 'coaching_session:finalize',
+      'coaching_session:reopen', 'coaching_session:export_pdf', 'personal_summary:read', 'goal:read', 'goal:update',
+      'activity_ratios:read', 'lead:read', 'lead:create', 'lead:update', 'lead:mark_outcome',
+      'coaching_profile:read', 'coaching_profile:update', 'leader_notes:read', 'leader_notes:write', 'activation:read',
+    ],
+  });
+  const inIndonesian = (path: string, page: React.ReactElement, me = coachMe) => {
+    nav.pathname = path;
+    return renderWithSession(<InLanguage language="id"><AgentLayout>{page}</AgentLayout></InLanguage>, { me });
+  };
+  const inPerson = (path: string, tab: React.ReactElement) =>
+    inIndonesian(path, <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}>{tab}</CoachingPersonLayout>);
+  const onPhone = () => vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+  })));
+
+  const agus = { membershipId: 'mem-agus', name: 'Agus Santoso' };
+  const rosterRow = (membershipId: string, name: string, over: Record<string, unknown> = {}) => ({
+    membershipId, name, rung: { code: 'AGENT', label: 'Agent' }, depth: 1,
+    lastOneOnOne: { days: 9, date: '2026-09-23', overdue: true, coach: agus }, status: 'watch_closely', ...over,
+  });
+  const roster = {
+    today: '2026-10-02', overdueAfterDays: 7,
+    directAgents: [rosterRow('mem-rina', 'Rina Wijaya'), rosterRow('mem-melati', 'Melati Putri', { lastOneOnOne: null, status: 'no_goal_set' })],
+    units: [{
+      head: rosterRow('mem-dimas', 'Dimas Aditya', { rung: { code: 'AAB', label: 'Associate Agency Builder' }, status: 'on_track' }),
+      members: [rosterRow('mem-tono', 'Tono Saputra', { depth: 2, status: 'needs_attention' })],
+    }],
+  };
+  const rina = {
+    membershipId: 'mem-rina', name: 'Rina Wijaya', pronoun: 'she', rung: { code: 'AGENT', label: 'Agent' },
+    leader: agus, direct: true, downline: { members: 0, leaders: 0 }, today: '2026-10-02',
+  };
+  const M = 1_000_000 * 100;
+  const draft = {
+    sessionId: 's-1', coachee: { membershipId: 'mem-rina', name: 'Rina Wijaya' }, coach: agus, status: 'draft', version: 1,
+    date: null, startedAt: '2026-10-02T02:00:00.000Z', finalizedAt: null, finalizedBy: null, reopenableUntil: null,
+    lastWeek: { sessionId: 's-0924', date: '2026-09-24' },
+    lastWeekItems: [
+      { itemId: 'lw-1', text: 'Confirm submission paperwork', dueDate: '2026-09-24', lead: null, done: true },
+      { itemId: 'lw-2', text: 'Call Alvin', dueDate: '2026-09-24', lead: { leadId: 'l-2', name: 'Alvin Sanjaya' }, done: false },
+    ],
+    leadActions: [{ leadId: 'l-1', leadName: 'Desi Pratama', dueDate: '2026-10-05', text: null }],
+    actionItems: [{ itemId: 'a-1', text: 'Practice a tighter close', dueDate: '2026-10-06' }],
+    tips: [{ tipId: 't-1', text: 'Slow down on the opening line.' }],
+    snapshot: null, earlier: [],
+  };
+  const figures = (target: number, actual: number, pct: number, gap: number) => ({
+    targetMinor: target, actualMinor: actual, attainmentPct: pct, gapMinor: gap, overMinor: 0, policiesNeeded: 1, targetMet: false,
+  });
+  const none = { from: '2026-10-01', to: '2026-10-02', targets: [], total: 0, sections: [] };
+  const sessionRoutes = (current: unknown, read: unknown = draft) => ({
+    ...shell,
+    'GET /coaching/coachees/mem-rina': { body: rina },
+    'GET /coaching/coachees/mem-rina/sessions': {
+      body: { today: '2026-10-02', current, sessions: [{ sessionId: 's-0924', date: '2026-09-24', coach: agus, actionItemCount: 3, completedCount: 1 }] },
+    },
+    'GET /coaching/sessions/s-1': { body: read },
+    '/summary?for=mem-rina': {
+      body: {
+        year: '2026', month: '2026-10', today: '2026-10-02', goal: { set: true, savedAt: null }, caseSizeMinor: 18 * M,
+        period: { firstMonth: '2026-01', thisMonth: '2026-10', currentMonth: true, currentYear: true },
+        monthly: { ...figures(80 * M, 65.6 * M, 82, 14.4 * M), source: { provenance: 'imported', month: '2026-09' } },
+        yearly: { ...figures(960 * M, 620 * M, 65, 340 * M), source: { provenance: 'imported', month: '2026-09' } },
+        pace: null, activity: { monthly: none, yearly: none }, leads: { rows: [], total: 0 }, insights: [],
+      },
+    },
+    '/activity/ratios?for=mem-rina': { body: { ...UNIT_RATIOS, membershipId: 'mem-rina' } },
+    '/activity/summary?': {
+      body: {
+        from: '2026-09-26', to: '2026-10-02', totals: [], daysLogged: 5, totalCount: 20,
+        targets: [
+          { key: 'leads', code: 'LEADS_CONTACTED', logged: 14, target: 16 },
+          { key: 'appointments', code: 'SELL_PRESENTATION', logged: 4, target: 5 },
+          { key: 'closings', code: 'SELL_SUBMISSION', logged: 1, target: 1 },
+        ],
+        sections: [{ code: 'DEVELOPMENT', label: 'Development', total: 2, rows: [{ code: 'DEV_TRAINING', label: 'Training attended', count: 2 }] }],
+      },
+    },
+    'outcome=open': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
+    'outcome=won': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
+    'outcome=lost': { body: { rows: [], total: 0, page: 1, pageSize: 200 } },
+  });
+  const record = (over: Record<string, unknown> = {}) => ({
+    ...draft, sessionId: 's-0924', status: 'finalized', version: 4, date: '2026-09-24', finalizedAt: '2026-09-25T03:00:00.000Z',
+    finalizedBy: agus, reopenableUntil: '2026-10-01', lastWeek: { sessionId: 's-0917', date: '2026-09-17' },
+    snapshot: {
+      takenAt: '2026-09-24T03:00:00.000Z',
+      goal: {
+        period: '2026', month: '2026-09', currency: 'IDR',
+        monthly: { targetMinor: 80 * M, actualMinor: 65.6 * M, attainmentPct: 82, gapMinor: 14.4 * M, targetMet: false },
+        yearly: { targetMinor: 960 * M, actualMinor: 620 * M, attainmentPct: 65, gapMinor: 340 * M, targetMet: false },
+        source: { provenance: 'imported', month: '2026-08' },
+      },
+      ratios: { from: '2026-08-26', to: '2026-09-24', days: 30, rows: [] },
+      activity: { from: '2026-09-18', to: '2026-09-24', targets: [], sections: [] },
+    },
+    earlier: [{
+      finalizedAt: '2026-09-24T03:00:00.000Z', finalizedBy: agus, reopenedAt: '2026-09-25T02:00:00.000Z', reopenedBy: agus,
+      reason: 'Two action items had the wrong dates.', lastWeekItems: [], leadActions: [], actionItems: [], tips: [],
+    }],
+    ...over,
+  });
+
+  it('coaching: the roster as a table, and as a phone’s cards', async () => {
+    stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
+    const { unmount } = inIndonesian('/coaching', <CoachingRosterPage />);
+    await screen.findByRole('table', { name: 'Semua orang yang Anda coaching' });
+    await expectClean('coaching (id)');
+    unmount();
+    onPhone();
+    stubFetch({ ...shell, '/coaching/coachees': { body: roster } });
+    inIndonesian('/coaching', <CoachingRosterPage />);
+    await screen.findByRole('list', { name: 'Agen langsung Anda' });
+    await expectClean('coaching (id, phone)');
+  });
+
+  it('coaching/[membershipId]/session: a draft with the Activity drill open', async () => {
+    stubFetch(sessionRoutes({ sessionId: 's-1', status: 'draft' }));
+    inPerson('/coaching/mem-rina/session', <CoachingSessionTabPage />);
+    await screen.findByText('Sisa Rp 340 jt untuk tahun ini.');
+    const drill = await screen.findByRole('button', { name: '→ lihat dashboard lengkap' });
+    await waitFor(() => expect(drill).toBeEnabled());
+    await expectClean('coaching/[membershipId]/session (id, a draft)');
+    await userEvent.click(drill);
+    await screen.findByRole('dialog', { name: 'Rina Wijaya — Activity Dashboard' });
+    await expectClean('coaching/[membershipId]/session (id, the Activity drill)');
+  });
+
+  it('coaching/[membershipId]/session: finalized, with Edit again’s reason asked', async () => {
+    stubFetch(sessionRoutes(
+      { sessionId: 's-1', status: 'finalized' },
+      { ...draft, status: 'finalized', version: 3, date: '2026-10-02', finalizedAt: '2026-10-02T03:00:00.000Z', finalizedBy: agus, reopenableUntil: '2026-10-09' },
+    ));
+    inPerson('/coaching/mem-rina/session', <CoachingSessionTabPage />);
+    await screen.findByText('✓ Difinalkan Jumat, 2 Okt 2026');
+    await userEvent.click(screen.getByRole('button', { name: 'Ubah lagi' }));
+    await screen.findByRole('dialog', { name: 'Ubah sesi ini lagi?' });
+    await expectClean('coaching/[membershipId]/session (id, Edit again)');
+  });
+
+  it('coaching/[membershipId]/archive/[sessionId]: the record, its earlier version open', async () => {
+    nav.params = { membershipId: 'mem-rina', sessionId: 's-0924' };
+    stubFetch({ ...shell, '/coaching/coachees/mem-rina': { body: { ...rina, today: '2026-09-28' } }, '/coaching/sessions/s-0924': { body: record() } });
+    inPerson('/coaching/mem-rina/archive/s-0924', <CoachingArchivePage />);
+    await screen.findByRole('region', { name: 'Versi sebelumnya' });
+    await userEvent.click(screen.getByRole('button', { name: 'Lihat yang disepakati' }));
+    await expectClean('coaching/[membershipId]/archive/[sessionId] (id)');
+  });
+
+  it('coaching/me: the reader’s own coaching, its past sessions open', async () => {
+    stubFetch({
+      ...shell,
+      '/coaching/me/sessions': {
+        body: {
+          sessions: [{ sessionId: 's-0924', date: '2026-09-24', coach: { membershipId: 'mem-w', name: 'Wilson Tanoto' }, actionItemCount: 2, completedCount: 1 }],
+          ledFormerly: [{ sessionId: 's-led', date: '2026-08-20', coachee: { membershipId: 'mem-bayu', name: 'Bayu Pratama' }, actionItemCount: 2, completedCount: 1 }],
+        },
+      },
+      '/coaching/sessions/s-0924': { body: record({ coachee: agus, coach: { membershipId: 'mem-w', name: 'Wilson Tanoto' }, reopenableUntil: null }) },
+    });
+    inIndonesian('/coaching/me', <MyCoachingPage />);
+    await screen.findByRole('region', { name: 'Tips coaching dari Wilson' });
+    await userEvent.click(screen.getByRole('button', { name: 'Lihat sesi sebelumnya' }));
+    await expectClean('coaching/me (id)');
+  });
+
+  it('coaching/[membershipId]/leader-notes: the capability mapping, the skill tracker and the notes', async () => {
+    const item = (code: string, label: string, displayOrder: number) => ({ code, label, displayOrder, status: 'active' });
+    stubFetch({
+      ...shell,
+      'GET /coaching/coachees/mem-rina': { body: rina },
+      'GET /coaching/coachees/mem-rina/profile': {
+        body: {
+          catalog: {
+            stages: [{ ...item('COMPETENT', 'Competent Producer', 1), stageOrder: 1, requiredMilestoneCodes: ['M1'] }],
+            milestones: [item('M1', 'Sells policies independently', 1)],
+            grids: [{ ...item('DEVELOPING_DOWNLINE_AGENT', 'Developing downline agent', 1), requiresDownline: true, items: [item('VIS', 'Visibility', 1)] }],
+          },
+          milestoneCodes: ['M1'], skillCodes: [], stageCode: 'COMPETENT', version: 1, updatedAt: null, updatedBy: null,
+        },
+      },
+      'GET /coaching/coachees/mem-rina/leader-notes': {
+        body: { mine: null, others: [{ noteId: 'n-2', author: { membershipId: 'mem-sari', name: 'Sari Wulandari' }, text: 'Watch her load.', updatedAt: '2026-09-29T03:00:00.000Z' }] },
+      },
+    });
+    inPerson('/coaching/mem-rina/leader-notes', <CoacheeLeaderNotesTab />);
+    await screen.findByRole('region', { name: 'Catatan pribadi dari Sari Wulandari' });
+    await expectClean('coaching/[membershipId]/leader-notes (id)');
+  });
+
+  it('coaching/[membershipId]/activation: a coachee’s checklist', async () => {
+    stubFetch({ ...shell, '/coaching/coachees/': { body: rina }, 'GET /new-hires/mem-rina': { body: leaderView() } });
+    inPerson('/coaching/mem-rina/activation', <CoacheeActivationTab />);
+    await screen.findByText('31% selesai');
+    await expectClean('coaching/[membershipId]/activation (id)');
+  });
+
+  const unitShow = (view: unknown = unitDashboard()) => {
+    stubFetch({ ...shell, 'GET /unit/dashboard': { body: view }, '/activity/ratios': { body: UNIT_RATIOS } });
+    return inIndonesian('/unit/dashboard', <UnitDashboardPage />, UNIT_READER);
+  };
+
+  it('unit/dashboard: filled, two rows opened, and Update production open', async () => {
+    unitShow();
+    await screen.findByRole('table', { name: 'Roster tim Anda' });
+    await expectClean('unit/dashboard (id)');
+    await userEvent.click(screen.getByRole('button', { name: 'Lihat detail Dimas Pratama' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Lihat detail Anda' }));
+    await screen.findAllByText('Selling success rate');
+    await expectClean('unit/dashboard (id, expanded)');
+    await userEvent.click(screen.getByRole('button', { name: 'Perbarui produksi' }));
+    await screen.findByRole('dialog', { name: 'Perbarui produksi' });
+    await expectClean('unit/dashboard (id, Update production)');
+  });
+
+  it('unit/dashboard: on a phone, a card opened', async () => {
+    onPhone();
+    unitShow();
+    await screen.findByRole('list', { name: 'Unit Anda' });
+    await userEvent.click(screen.getByRole('button', { name: 'Lihat detail Dimas Pratama' }));
+    await screen.findAllByText('Selling success rate');
+    await expectClean('unit/dashboard (id, phone)');
+  });
+
+  it('unit/dashboard: empty, and a unit below the reader', async () => {
+    const { unmount } = unitShow(UNIT_EMPTY);
+    await screen.findByText('Belum ada siapa pun di unit Anda.');
+    await expectClean('unit/dashboard (id, empty)');
+    unmount();
+    vi.unstubAllGlobals();
+    stubFetch({ ...shell, 'GET /unit/dashboard': { body: SARI_UNIT }, '/activity/ratios': { body: UNIT_RATIOS } });
+    inIndonesian('/unit/dashboard/mem-sari', <UnitBelowPage params={routeParams({ membershipId: 'mem-sari' })} />, UNIT_READER);
+    await screen.findByRole('heading', { level: 1, name: 'Unit Dashboard Sari Wulandari' });
+    await expectClean('unit/dashboard/[membershipId] (id)');
+  });
+
+  it('group-tree: its line, and its empty state', async () => {
+    stubFetch({ ...shell, '/members/tree': { body: { nodes: [], leader: null, rootIds: [], selfId: 'mem-agus', counts: { ab: 0, aab: 0, agent: 0, total: 0 } } } });
+    inIndonesian('/group-tree', <GroupTreePage />, makeMe({ ...coachMe, permissions: ['org_tree:read'] }));
+    await screen.findByText(/^Belum ada yang melapor kepada Anda\./);
+    await expectClean('group-tree (id, empty)');
+  });
+});
+
+describe('P18.98-T4 the shared pieces in Indonesian', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const notice = (over: Record<string, unknown> = {}) => ({
+    notificationId: 'n-1', templateId: 'join_request.approved', title: 'Anda sudah bergabung',
+    detail: 'Permintaan Anda disetujui.', href: null, kpmId: 'kpm-1', createdAt: '2026-09-01T00:00:00.000Z', readAt: null,
+    ...over,
+  });
+  const inbox = {
+    items: [
+      notice(),
+      notice({ notificationId: 'n-2', title: 'Sesi difinalkan', detail: null, readAt: '2026-09-02T00:00:00.000Z' }),
+      notice({ notificationId: 'n-3', title: 'Sesi difinalkan', detail: null, readAt: '2026-09-02T00:00:00.000Z' }),
+    ],
+    unread: 1, total: 45, page: 1, pageSize: 20,
+  };
+
+  it('notifications: the inbox, a repeated notice, the pager and a notice opened', async () => {
+    stubFetch({ '/notifications': { body: inbox }, 'POST /notifications/n-1/read': { body: { notificationId: 'n-1', readAt: '2026-10-01T00:00:00.000Z', unread: 0 } } });
+    renderWithSession(<InLanguage language="id"><NotificationsPage /></InLanguage>, { me: SUPER_ADMIN });
+    await screen.findByRole('button', { name: 'Belum dibaca: Anda sudah bergabung' });
+    expect(screen.getByRole('navigation', { name: 'Halaman notifikasi' })).toBeInTheDocument();
+    await expectClean('notifications (id)');
+    await userEvent.click(screen.getByRole('button', { name: 'Belum dibaca: Anda sudah bergabung' }));
+    await screen.findByRole('dialog', { name: 'Anda sudah bergabung' });
+    await expectClean('notifications (id, a notice opened)');
+  });
+
+  it('notifications: empty, and refused by the browser', async () => {
+    stubFetch({ '/notifications': { body: { items: [], unread: 0, total: 0, page: 1, pageSize: 20 } } });
+    const { unmount } = renderWithSession(<InLanguage language="id"><NotificationsPage /></InLanguage>, { me: SUPER_ADMIN });
+    await screen.findByText(/^Belum ada apa pun\./);
+    await expectClean('notifications (id, empty)');
+    unmount();
+    vi.unstubAllGlobals();
+    stubFetch({ '/notifications': { status: 503, body: null } });
+    renderWithSession(<InLanguage language="id"><NotificationsPage /></InLanguage>, { me: SUPER_ADMIN });
+    await screen.findByText('Terjadi kesalahan. Silakan coba lagi.');
+    await expectClean('notifications (id, refused)');
+  });
+
+  it('the page frame: the refusal, an office that cannot be used, and the sign for a route not built yet', async () => {
+    const { NotAvailableToYou } = await import('@/components/require-session');
+    const { OfficeUnavailable } = await import('@/components/office-unavailable');
+    const { ComingInPhase } = await import('@/components/coming-in-phase');
+    const { unmount } = renderWithSession(<InLanguage language="id"><main><NotAvailableToYou permission="kpm_analytics:read" /></main></InLanguage>);
+    expect(screen.getByRole('heading', { name: 'Tidak tersedia untuk Anda' })).toBeInTheDocument();
+    await expectClean('refusal (id)');
+    unmount();
+    const office = renderWithSession(
+      <InLanguage language="id">
+        <OfficeUnavailable
+          error={{ code: 'TENANT_SUBSCRIPTION_ENDED', message: 'x', details: { kpmCode: '0417', endDate: '2026-10-01' }, requestId: 'r' }}
+          onSignOut={() => undefined}
+        />
+      </InLanguage>,
+    );
+    expect(screen.getByRole('heading', { name: 'Langganan KPM Anda telah berakhir' })).toBeInTheDocument();
+    await expectClean('office unavailable (id)');
+    office.unmount();
+    renderWithSession(
+      <InLanguage language="id">
+        <main>
+          <h1>Advanced analytics</h1>
+          <ComingInPhase what="Analitik lanjutan untuk KPM Anda." elsewhere={[{ href: '/kpm/overview', label: 'Overview', detail: 'Ringkasan KPM Anda.' }]} />
+        </main>
+      </InLanguage>,
+    );
+    expect(screen.getByRole('heading', { name: 'Yang dapat Anda lakukan sekarang' })).toBeInTheDocument();
+    await expectClean('placeholder (id)');
+  });
+});
+
+/**
+ * **P18.98-T4: the pages before a session and *Your account* in ID mode, each in its main state** — axe in Indonesian,
+ * as the blocks above run them in English (ADR-0179 §9): sign-in with the development accounts panel open, registration
+ * on a leader's invite, *Reset your password* sent, *Choose a new password* with its two messages, *Verify your email*
+ * verified, *Choose your own password*, `/join` signed out and with a code checked, and *Your account* with its sessions.
+ * The words are the catalogue's (`messages/auth.tsx`, `join.tsx`, `account.ts`); `lang` on kept terms is T7's.
+ */
+describe('P18.98-T4 the public and account pages in Indonesian', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    nav.search = '';
+  });
+
+  const inIndonesian = (page: React.ReactElement, me: ReturnType<typeof makeMe> | null = null) =>
+    renderWithSession(<InLanguage language="id">{page}</InLanguage>, { me });
+
+  it('login, with the development accounts panel open', async () => {
+    const original = process.env.NEXT_PUBLIC_APP_ENV;
+    process.env.NEXT_PUBLIC_APP_ENV = 'development';
+    try {
+      inIndonesian(<LoginPage />);
+      await userEvent.click(screen.getByRole('button', { name: /^Tampilkan semua \d+ akun$/ }));
+      expect(screen.getByRole('heading', { name: 'Akun pengembangan' })).toBeInTheDocument();
+      await expectClean('login (id, dev accounts)');
+    } finally {
+      process.env.NEXT_PUBLIC_APP_ENV = original;
+    }
+  });
+
+  it('register, on a leader’s invite', async () => {
+    nav.search = 'invite=kpm-1.secret';
+    stubFetch({
+      '/companies': { body: [{ _id: 'co-2', name: 'Prudential' }] },
+      '/invites/': {
+        body: {
+          leaderName: 'Agus Prasetyo', kpm: { code: '0417', branchName: 'BSD City Branch' }, companyId: 'co-2', companyName: 'Prudential',
+          agentCode: '80777', joinDate: JOINING_TODAY, fullName: 'Yusuf Hidayat', existingAccount: false, expiresAt: '2026-11-10T03:00:00.000Z',
+        },
+      },
+    });
+    inIndonesian(<RegisterPage />);
+    await screen.findByText('Anda bergabung ke tim Agus Prasetyo · KPM 0417');
+    await expectClean('register (id, invite)');
+  });
+
+  it('forgot password, sent', async () => {
+    stubFetch({ '/auth/forgot-password': { status: 202, body: {} } });
+    inIndonesian(<ForgotPasswordPage />);
+    await userEvent.type(screen.getByLabelText('Email'), 'rina@kpm0417.test');
+    await userEvent.click(screen.getByRole('button', { name: 'Kirim tautan atur ulang' }));
+    await screen.findByText(/tautan atur ulang kata sandi sedang dikirim/);
+    await expectClean('forgot-password (id, sent)');
+  });
+
+  it('reset password, with its two messages', async () => {
+    inIndonesian(<ResetPasswordPage params={routeParams({ token: 't' })} />);
+    await userEvent.type(screen.getByLabelText('Kata sandi baru'), 'short');
+    await userEvent.type(screen.getByLabelText('Konfirmasi kata sandi'), 'other');
+    expect(screen.getByText('Kedua kata sandi tidak sama.')).toBeInTheDocument();
+    await expectClean('reset-password (id)');
+  });
+
+  it('verify email, verified', async () => {
+    stubFetch({ '/auth/verify-email': { body: {} } });
+    inIndonesian(<VerifyEmailPage params={routeParams({ token: 't' })} />);
+    await screen.findByText(/sudah terverifikasi/);
+    await expectClean('verify-email (id)');
+  });
+
+  it('choose your own password', async () => {
+    inIndonesian(<ChooseAPasswordPage />, makeMe({ mustChangePassword: true }));
+    await expectClean('choose-a-password (id)');
+  });
+
+  // Signed out, `/join` draws its card with no landmark around it (`RoleShell`'s `allowSignedOut`), which axe's
+  // *region* refuses in both languages — a page structure, not its words, and why the English block above lists `/join`
+  // as not yet covered. Signed in, the shell's `<main>` holds it.
+  it('join: a code checked', async () => {
+    nav.search = 'code=JOR417';
+    stubFetch({
+      '/join/invite': { body: { code: 'JOR417', kpmLabel: 'Prudential — KPM 0417 · BSD City Branch', leaderName: 'Wilson Tanoto' } },
+      '/notifications': { body: { items: [], unread: 0 } },
+    });
+    inIndonesian(<JoinPage />, makeMe({ membership: null, permissions: ['join_via_code_link_qr'] }));
+    await screen.findByRole('button', { name: 'Terima dan bergabung' });
+    await expectClean('join (id, code checked)');
+  });
+
+  it('profile, with where the account is signed in', async () => {
+    stubFetch({
+      '/auth/sessions': {
+        body: [
+          { sessionId: 's1', userAgent: 'Mozilla/5.0 (Linux; Android 13) Chrome/120', ip: '103.10.1.2', lastUsedAt: '2026-09-10T08:00:00.000Z', startedAt: null, expiresAt: '2026-10-01T08:00:00.000Z', current: true },
+          { sessionId: 's2', userAgent: null, ip: null, lastUsedAt: null, startedAt: null, expiresAt: '2026-10-01T08:00:00.000Z', current: false },
+        ],
+      },
+      '/notifications': { body: { items: [], unread: 0 } },
+    });
+    inIndonesian(<ProfilePage />, makeMe({ permissions: ['profile:read_self'] }));
+    await screen.findByText('Perangkat ini');
+    await expectClean('profile (id)');
+  });
+});
+
+/**
+ * **P18.98-T4: training and the office's products in ID mode, each in its main state** — axe in Indonesian, as the
+ * blocks above run them in English (ADR-0179 §9): the learner's list, on a desktop and on a phone, a module's page with
+ * its toggle and in a support session, the reader's own coaching *Training* tab; Settings › Training on Modules with the
+ * add panel open, a module's page with its Files, Videos and Links; Settings › Products with a product opened, and *Script
+ * approvals* with a send-back asked. The words are the catalogue's (`messages/training.ts`, `training-settings.tsx`,
+ * `settings-products.tsx`); `lang` on kept terms is T7's.
+ */
+describe('P18.98-T4 training and the office’s products in Indonesian', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    window.history.replaceState(null, '', '/');
+  });
+
+  const fieldShell = {
+    '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+    '/kpm/org-levels': { body: [] },
+    '/notifications': { body: { items: [], unread: 0 } },
+    'GET /training/progress': { body: trainingProgressView() },
+  };
+  const inField = (path: string, page: React.ReactElement, me = TRAINING_LEARNER) => {
+    nav.pathname = path;
+    return renderWithSession(<InLanguage language="id"><AgentLayout>{page}</AgentLayout></InLanguage>, { me });
+  };
+  const learnerList = (
+    <LearnerTrainingLayout><LearnerCategoryPage params={routeParams({ categoryCode: 'SALES' })} /></LearnerTrainingLayout>
+  );
+  const learnerModule = (
+    <LearnerTrainingLayout>
+      <LearnerModulePage params={routeParams({ categoryCode: 'SALES', moduleCode: 'CLOSING_TECHNIQUES' })} />
+    </LearnerTrainingLayout>
+  );
+
+  it('training/[categoryCode]: the Skills List, and on a phone', async () => {
+    stubFetch(fieldShell);
+    const { unmount } = inField('/training/SALES', learnerList);
+    await screen.findByRole('heading', { level: 2, name: 'Daftar skill' });
+    await expectClean('training/[categoryCode] (id)');
+    unmount();
+    vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+      media: query, matches: query === PHONE_QUERY, addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    })));
+    stubFetch(fieldShell);
+    inField('/training/SALES', learnerList);
+    await screen.findByRole('list', { name: 'Modul Prospecting' });
+    await expectClean('training/[categoryCode] (id, phone)');
+  });
+
+  it('training/[categoryCode]/[moduleCode]: the tiles and the toggle, and in a support session', async () => {
+    stubFetch({ ...fieldShell, 'GET /training/modules/CLOSING_TECHNIQUES': { body: trainingModulePage({ status: 'in_progress' }) } });
+    const { unmount } = inField('/training/SALES/CLOSING_TECHNIQUES', learnerModule);
+    await screen.findByRole('group', { name: 'Status Closing Techniques That Work' });
+    await expectClean('training/[categoryCode]/[moduleCode] (id)');
+    unmount();
+    stubFetch({ ...fieldShell, 'GET /training/modules/CLOSING_TECHNIQUES': { body: trainingModulePage({ can: { update: false } }) } });
+    inField('/training/SALES/CLOSING_TECHNIQUES', learnerModule, TRAINING_SUPPORT);
+    await screen.findByText('Modul pelatihan terstruktur.');
+    await expectClean('training/[categoryCode]/[moduleCode] (id, support session)');
+  });
+
+  it('coaching/me/training: the reader’s own Training tab', async () => {
+    stubFetch(fieldShell);
+    inField('/coaching/me/training', <MyCoachingTrainingPage />);
+    await screen.findByRole('heading', { level: 2, name: 'Sales (4/10)' });
+    await expectClean('coaching/me/training (id)');
+  });
+
+  const owner = makeMe({
+    membership: {
+      membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+      isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+    },
+    permissions: [
+      'member:read_profile', 'tenant_config:read', 'tenant_config:write', 'kpm:read_profile',
+      'product_settings:read', 'training_settings:read', 'sales_script:approve',
+    ],
+  });
+  const officeShell = {
+    '/kpm/settings/publish-state': {
+      body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+    },
+    '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+    '/kpm/org-levels': { body: [] },
+    '/notifications': { body: { items: [], unread: 0 } },
+    '/kpm/settings/branch-info': { body: { _id: 'k1', companyId: 'c1', companyName: 'Allianz Life', code: '0417' } },
+  };
+  const inOffice = (page: React.ReactElement) =>
+    renderWithSession(<InLanguage language="id"><TenantLayout>{page}</TenantLayout></InLanguage>, { me: owner });
+  const settingsTree = [{
+    id: 'tc1', code: 'PENJUALAN', label: 'Penjualan', description: null, displayOrder: 1, version: 1, status: 'active',
+    skills: [{
+      id: 'ts1', code: 'PROSPEK', categoryCode: 'PENJUALAN', label: 'Mencari prospek', displayOrder: 1, version: 1,
+      status: 'active',
+      modules: [
+        { id: 'tm1', code: 'DAFTAR_PROSPEK', skillCode: 'PROSPEK', title: 'Menyusun daftar prospek', publishState: 'published', displayOrder: 1, version: 1, status: 'active' },
+        { id: 'tm2', code: 'TELEPON', skillCode: 'PROSPEK', title: 'Telepon pertama', publishState: 'draft', displayOrder: 2, version: 1, status: 'active' },
+      ],
+    }],
+  }];
+
+  it('kpm/settings/training: on Modules with the add panel open', async () => {
+    window.history.replaceState(null, '', '/kpm/settings/training#modules');
+    nav.pathname = '/kpm/settings/training';
+    stubFetch({ ...officeShell, '/kpm/settings/training': { body: settingsTree } });
+    inOffice(<TrainingSettingsPage />);
+    await screen.findByText('Menyusun daftar prospek');
+    await userEvent.click(screen.getByRole('button', { name: '+ Tambah modul' }));
+    await expectClean('kpm/settings/training (id)');
+  });
+
+  it('kpm/settings/training/[moduleId]: its fields, and its Files, Videos and Links', async () => {
+    nav.pathname = '/kpm/settings/training/tm1';
+    stubFetch({
+      ...officeShell,
+      '/kpm/settings/training/modules/DAFTAR_PROSPEK/content': {
+        body: {
+          moduleCode: 'DAFTAR_PROSPEK', title: 'Menyusun daftar prospek', overridden: true,
+          content: {
+            files: [{ id: 'f1', label: 'Materi prospek', storageKey: 'k/1', mimeType: 'application/pdf', bytes: 2_097_152 }],
+            videos: [], links: [{ id: 'l1', label: 'Webinar', url: 'https://example.com/w' }],
+          },
+          companyContent: { files: [], videos: [], links: [] },
+        },
+      },
+      '/kpm/settings/training': { body: settingsTree },
+    });
+    inOffice(<TrainingModulePage params={routeParams({ moduleId: 'tm1' })} />);
+    await screen.findByText('KPM ini punya materi sendiri untuk modul ini.');
+    await expectClean('kpm/settings/training/[moduleId] (id)');
+  });
+
+  it('kpm/settings/products: a product opened, and Script approvals with a send-back asked', async () => {
+    nav.pathname = '/kpm/settings/products';
+    const f = <T,>(value: T, overridden = false) => ({ value, overridden });
+    const script = {
+      goodFit: f('Keluarga muda'), opening: f('Halo dari kami.', true), benefits: f(['Proteksi jiwa']), fullScript: f('Halo.'),
+      objectionTheySay: f('Terlalu mahal.'), objectionYouSay: f('Bisa disesuaikan.'), nextAction: f('Siapkan ilustrasi.'),
+    };
+    const row = {
+      productId: 'p1', code: 'PRUMAPAN', companyName: 'PRUMapan', channel: 'conventional', category: 'life',
+      lifecycle: 'active', sellable: true, active: f(true), displayName: f('PRUMapan'), description: f('Dana pensiun.'),
+      script, reviewState: 'pending', rejectionReason: null,
+      documents: [{ slot: 'brochure', label: 'Brosur', storageKey: null, filename: null, source: 'none' }],
+    };
+    stubFetch({
+      ...officeShell,
+      '/kpm/settings/products/script-reviews': { body: [row] },
+      '/kpm/settings/products/p1/script/effective': { body: { source: 'company', script } },
+      '/kpm/settings/products': { body: [row] },
+    });
+    inOffice(<KpmProductsPage />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Sesuaikan' }));
+    await screen.findByLabelText('Nama yang dipakai KPM Anda');
+    await expectClean('kpm/settings/products (id)');
+    await userEvent.click(screen.getByRole('link', { name: 'Script approvals' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Kembalikan' }));
+    await screen.findByLabelText('Mengapa Anda mengembalikannya?');
+    await expectClean('kpm/settings/products#approvals (id)');
+  });
+});
+
+/**
+ * **P18.98-T6: the Super Admin's console in ID mode, each screen in its main state** — axe in Indonesian, as the blocks
+ * above run them in English (ADR-0179 §9): the Overview, *All KPMs* with *Edit subscription* open, *New office*, an
+ * office's page, *Transfer owner*, *KPM Owners & Admins*, *Billing & subscription* (the editor, the dialog refused, the
+ * quote), *Cross-platform analytics*, the audit log, the two queues, and a support session's two pages. The words are
+ * the catalogue's (`messages/admin-*.ts(x)`, `billing.tsx`, `support-session.tsx`, `office-subscription.ts`); `lang` on
+ * kept terms is T7's. The pages are imported where they are run, so this block adds nothing to the file's head.
+ */
+describe('P18.98-T6 the Super Admin’s console in Indonesian', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    nav.search = '';
+  });
+
+  const ADMIN = makeMe({
+    ...SUPER_ADMIN,
+    permissions: [
+      ...SUPER_ADMIN.permissions, 'kpm:read_profile', 'kpm:suspend', 'kpm:assign_owner', 'platform_metrics:read',
+      'platform_analytics:read', 'billing:read_prices', 'kpm_request:read', 'kpm_request:decide', 'leader_limit_request:read',
+      'leader_limit_request:decide', 'kpm_admin:list_platform', 'impersonation:start', 'impersonation:elevate_to_write',
+    ],
+  });
+  const INBOX = { '/notifications': { body: { items: [], total: 0, page: 1, pageSize: 1, unread: 0 } } };
+  const SUBSCRIBED = {
+    ...KPM, ownerUserId: 'u-owner', ownerName: 'Rina Wijaya', ownerEmail: 'rina@kpm0417.test', leadersUsed: 13,
+    subscriptionState: 'active',
+    subscription: { startDate: '2026-01-06', endDate: '2027-01-05', pricePerLeaderMinor: 350_000_00, currency: 'IDR', maxLeaders: 10, keepActiveAfterEnd: false },
+  };
+  const inIndonesian = (path: string, page: React.ReactElement) => {
+    nav.pathname = path;
+    return renderWithSession(<InLanguage language="id"><AdminLayout>{page}</AdminLayout></InLanguage>, { me: ADMIN });
+  };
+
+  it('admin: the Overview, filled', async () => {
+    stubFetch({ ...INBOX, '/admin/overview': { body: OVERVIEW } });
+    inIndonesian('/admin', <AdminOverviewPage />);
+    await screen.findByRole('heading', { name: 'Perlu perhatian Anda' });
+    await expectClean('admin (id)');
+  });
+
+  it('admin/tenants: the list past the limit, and Edit subscription open', async () => {
+    stubFetch({ ...INBOX, '/admin/tenants': { body: [SUBSCRIBED] } });
+    inIndonesian('/admin/tenants', <TenantsPage />);
+    await screen.findByRole('table', { name: 'KPM di platform' });
+    await expectClean('admin/tenants (id)');
+    await userEvent.click(screen.getByRole('button', { name: /^Ubah langganan untuk KPM 0417/ }));
+    await screen.findByRole('dialog', { name: 'Ubah langganan' });
+    await expectClean('admin/tenants, Edit subscription (id)');
+  });
+
+  it('admin/tenants/new and an office’s page', async () => {
+    stubFetch({ ...INBOX, '/admin/companies': { body: [COMPANY] }, '/admin/companies/co-1/templates': { body: [] } });
+    const { unmount } = inIndonesian('/admin/tenants/new', <NewTenantPage />);
+    await screen.findByLabelText('Kode KPM');
+    await expectClean('admin/tenants/new (id)');
+    unmount();
+    vi.unstubAllGlobals();
+    const { default: TenantDetailPage } = await import('./(admin)/admin/tenants/[kpmId]/page');
+    stubFetch({ ...INBOX, '/admin/tenants/kpm-1': { body: SUBSCRIBED } });
+    inIndonesian('/admin/tenants/kpm-1', <TenantDetailPage params={routeParams({ kpmId: 'kpm-1' })} />);
+    await screen.findByRole('heading', { name: 'Siklus hidup' });
+    await expectClean('admin/tenants/[kpmId] (id)');
+  });
+
+  it('admin/tenants/[kpmId]/owner, transferring', async () => {
+    const { default: AssignOwnerPage } = await import('./(admin)/admin/tenants/[kpmId]/owner/page');
+    stubFetch({ ...INBOX, '/admin/tenants/kpm-1': { body: SUBSCRIBED } });
+    inIndonesian('/admin/tenants/kpm-1/owner', <AssignOwnerPage params={routeParams({ kpmId: 'kpm-1' })} />);
+    await screen.findByRole('heading', { level: 1, name: 'Pindahkan Owner' });
+    await expectClean('admin/tenants/[kpmId]/owner (id)');
+  });
+
+  it('admin/tenant-admins', async () => {
+    stubFetch({
+      ...INBOX,
+      '/admin/tenant-admins': {
+        body: [{ membershipId: 'mem-1', fullName: 'Wilson Tanoto', email: 'wilson@kpm0417.test', initials: 'WT', kpmId: 'kpm-1', kpmLabel: 'KPM 0417 — BSD City Branch', isOwner: true, isAdmin: false, grantedAt: null }],
+      },
+    });
+    inIndonesian('/admin/tenant-admins', <TenantAdminsPage />);
+    await screen.findByText('Melekat pada KPM');
+    await expectClean('admin/tenant-admins (id)');
+  });
+
+  it('admin/billing: the editor with its override open, the dialog refused, and the quote', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-07T18:30:00Z'));
+    const { default: BillingPage } = await import('./(admin)/admin/billing/page');
+    const tier = (code: string, min: number, max: number | null, s: number, six: number, annual: number) => ({
+      code, minLeaders: min, maxLeaders: max, standardMinor: s * 100, sixMonthMinor: six * 100, annualMinor: annual * 100, customPricing: max === null,
+    });
+    stubFetch({
+      ...INBOX,
+      '/admin/billing/prices': {
+        body: { currency: 'IDR', annualDiscountPct: 5, tiers: [tier('T1', 1, 10, 500_000, 400_000, 380_000), tier('T2', 11, null, 375_000, 250_000, 237_500)] },
+      },
+    });
+    inIndonesian('/admin/billing', <BillingPage />);
+    await screen.findByText('Perkirakan harga Anda');
+    await userEvent.click(screen.getByText('Penyesuaian manual'));
+    await expectClean('admin/billing (id)');
+    await userEvent.click(screen.getByRole('button', { name: 'Kirim penawaran' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Buat penawaran' }));
+    await screen.findByText('Isi nama KPM.');
+    await expectClean('admin/billing, the dialog refused (id)');
+    await userEvent.type(screen.getByLabelText('Nama KPM'), 'Jakarta Selatan');
+    await userEvent.type(screen.getByLabelText('Nama PIC'), 'Andi Wijaya');
+    await userEvent.type(screen.getByLabelText('Diisi oleh sales'), 'Maya');
+    await userEvent.click(screen.getByRole('button', { name: 'Buat penawaran' }));
+    await screen.findByRole('heading', { name: 'Penawaran langganan' });
+    await expectClean('admin/billing, the quote (id)');
+  });
+
+  it('admin/analytics and admin/audit', async () => {
+    const figures = { members: 20, byRung: [{ code: 'AGENT', label: 'Agent', count: 20 }], joinedThisMonth: 1, leftThisMonth: 0, signedIn7d: 12, signedIn30d: 18 };
+    stubFetch({
+      ...INBOX,
+      '/admin/analytics': {
+        body: {
+          month: '2026-10',
+          offices: [{ kpmId: 'kpm-1', code: '0417', branch: 'BSD City Branch', company: { id: 'co-1', name: 'Prudential' }, state: 'active', ...figures }],
+          companies: [{ id: 'co-1', name: 'Prudential', offices: 1, ...figures }],
+          platform: { offices: 1, companies: 1, ...figures },
+        },
+      },
+    });
+    const { unmount } = inIndonesian('/admin/analytics', <PlatformAnalyticsPage />);
+    await screen.findByRole('table', { name: 'Adopsi per cabang dan perusahaan' });
+    await expectClean('admin/analytics (id)');
+    unmount();
+    vi.unstubAllGlobals();
+    stubFetch({ ...INBOX, '/admin/audit': { body: [AUDIT] }, '/admin/tenants': { body: [KPM] } });
+    inIndonesian('/admin/audit', <AuditPage />);
+    await screen.findByRole('table', { name: 'Entri audit, terbaru lebih dulu' });
+    await expectClean('admin/audit (id)');
+  });
+
+  it('admin/kpm-requests and admin/leader-limit-requests, a card waiting and the decided table', async () => {
+    stubFetch({
+      ...INBOX,
+      '/admin/kpm-requests': {
+        body: [
+          { requestId: 'req-1', branchName: 'Surabaya Branch', companyId: 'co-1', companyName: 'Prudential', requestedByName: 'Rangga Wibisono', requestedByEmail: 'rangga@example.test', note: null, status: 'pending', requestedAt: '2026-09-01T00:00:00.000Z', decidedAt: null, reason: null, createdKpmId: null },
+          { requestId: 'req-2', branchName: 'Medan Branch', companyId: 'co-1', companyName: 'Prudential', requestedByName: 'Dewi', requestedByEmail: 'dewi@example.test', note: null, status: 'approved', requestedAt: '2026-09-01T00:00:00.000Z', decidedAt: '2026-09-02T00:00:00.000Z', reason: null, createdKpmId: 'kpm-9' },
+        ],
+      },
+    });
+    const { unmount } = inIndonesian('/admin/kpm-requests', <KpmRequestsPage />);
+    await screen.findByRole('table', { name: 'Pendaftaran yang sudah diputuskan' });
+    await expectClean('admin/kpm-requests (id)');
+    unmount();
+    vi.unstubAllGlobals();
+    const limit = (over: Record<string, unknown>) => ({
+      requestId: 'llr-1', kpmId: 'kpm-1', kpmCode: '0603', kpmBranchName: 'Tangerang Branch', subjectMembershipId: 'mem-1',
+      subjectName: 'Rizky Ramadhan', subjectAgentCode: '86114', action: 'promote', fromOrgLevelCode: 'AGENT', toOrgLevelCode: 'AAB',
+      reason: 'Siap memimpin', requestedByMembershipId: 'mem-owner', requestedByName: 'Hendra Gunawan', status: 'pending',
+      requestedAt: '2026-10-25T00:00:00.000Z', decidedAt: null, declineReason: null, maxLeaders: 10, leadersUsed: 13, ...over,
+    });
+    stubFetch({ ...INBOX, '/admin/leader-limit-requests': { body: [limit({}), limit({ requestId: 'llr-2', status: 'declined', declineReason: 'Naikkan saat perpanjangan.' })] } });
+    inIndonesian('/admin/leader-limit-requests', <LeaderLimitRequestsPage />);
+    await screen.findByRole('table', { name: 'Permintaan yang sudah diputuskan' });
+    await expectClean('admin/leader-limit-requests (id)');
+  });
+
+  it('admin/impersonate/[userId] from Open as Owner, and admin/impersonation/[sessionId]', async () => {
+    const { default: ImpersonatePage } = await import('./(admin)/admin/impersonate/[userId]/page');
+    const { default: ElevateSessionPage } = await import('./(admin)/admin/impersonation/[sessionId]/page');
+    nav.search = 'purpose=setup&kpmId=kpm-1';
+    stubFetch({ ...INBOX, '/admin/tenants/kpm-1': { body: SUBSCRIBED } });
+    const { unmount } = inIndonesian('/admin/impersonate/u-owner', <ImpersonatePage params={routeParams({ userId: 'u-owner' })} />);
+    await screen.findByText('Rina Wijaya');
+    await expectClean('admin/impersonate/[userId] (id)');
+    unmount();
+    inIndonesian('/admin/impersonation/s1', <ElevateSessionPage params={routeParams({ sessionId: 's1' })} />);
+    await userEvent.type(screen.getByLabelText('Mengapa melihat saja tidak cukup?'), 'pendek');
+    await screen.findByText('Minimal 10 karakter.');
+    await expectClean('admin/impersonation/[sessionId] (id)');
+  });
+});
+
+/**
+ * **P18.98-T4, events, campaigns and the calendar, in Indonesian** — each screen's main state through axe with its
+ * words in the reader's language: the agents' *Event List* and an event's modal, Settings › Events with *View feedback*
+ * and the picker, the *Campaign List* and a campaign's dialog, Settings › Campaigns with its form, and the calendar's
+ * week, month, phone agenda and dialogs. Longer Indonesian names must still name every control once.
+ */
+describe('P18.98-T4 events, campaigns and the calendar in Indonesian', () => {
+  const shell = {
+    '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: [], version: 1 } },
+    '/kpm/org-levels': { body: [] },
+    '/kpm/settings/publish-state': {
+      body: { publishedVersion: 1, workingVersion: 1, hasUnpublishedChanges: false, publishedAt: null },
+    },
+  };
+  const owner = makeMe({
+    membership: {
+      membershipId: 'mem-owner', kpmId: 'kpm-1', orgLevelCode: 'AB', hierarchyRole: 'ab',
+      isKpmOwner: true, isKpmAdmin: false, status: 'active', directCount: 0,
+    },
+    permissions: [
+      'member:read_profile', 'tenant_config:read', 'tenant_config:write', 'event_settings:read', 'event_attendance:confirm',
+      'event_feedback:read', 'campaign_settings:read', 'notification:read_inbox',
+    ],
+  });
+  const agent = (ui: React.ReactElement, me: ReturnType<typeof makeMe>) =>
+    renderWithSession(<InLanguage language="id"><AgentLayout>{ui}</AgentLayout></InLanguage>, { me });
+  const tenant = (ui: React.ReactElement) =>
+    renderWithSession(<InLanguage language="id"><TenantLayout>{ui}</TenantLayout></InLanguage>, { me: owner });
+
+  it('the Event List, and an event’s modal in each of its states', async () => {
+    nav.pathname = '/events';
+    stubFetch({ ...EVENTS_SHELL, 'GET /events': { body: eventsList() } });
+    const { unmount } = agent(<EventsLayout><EventsPage /></EventsLayout>, EVENTS_ME);
+    await screen.findByRole('region', { name: 'Akan datang' });
+    await expectClean('events (id)');
+    unmount();
+    for (const event of [EVENT_KICKOFF, EVENT_PRULINK, EVENT_TOWN_HALL, EVENT_BOOTCAMP]) {
+      vi.unstubAllGlobals();
+      nav.pathname = `/events/${event.id}`;
+      stubFetch({ ...EVENTS_SHELL, 'GET /events': { body: eventsList() }, [`GET /events/${event.id}`]: { body: event } });
+      const view = agent(<EventsLayout><EventModalPage params={routeParams({ eventId: event.id })} /></EventsLayout>, EVENTS_ME);
+      await screen.findByRole('dialog', { name: event.title });
+      await expectClean(`events/[eventId] (${event.id}, id)`);
+      view.unmount();
+    }
+  });
+
+  it('Settings › Events: the list with the panel and the picker, and View feedback’s two tabs', async () => {
+    const past = {
+      id: 'ev-prulink', code: 'PRULINK', typeCode: 'TRAINING', title: 'PRULink briefing', blurb: '', description: '',
+      startsAt: '2026-09-19T02:00:00.000Z', endsAt: '2026-09-19T04:00:00.000Z', startsOn: '2026-09-19', location: 'Jakarta',
+      locationUrl: null, audience: { issuer: 'company', scope: 'select_agents', inviteeMembershipIds: ['mem-rina'] },
+      phase: 'past', status: 'active', version: 1,
+    };
+    stubFetch({
+      ...shell,
+      '/kpm/settings/events/types': {
+        body: [{ id: 't1', code: 'TRAINING', label: 'Training', description: null, emoji: '📚', color: '#2D9CDB', displayOrder: 1, status: 'active', events: 1 }],
+      },
+      '/kpm/settings/events': { body: [past] },
+      'GET /kpm/settings/events/invitees': { body: { people: EVENT_INVITEES } },
+      'GET /kpm/settings/events/ev-prulink/attendance': { body: eventRollCall() },
+      'GET /kpm/settings/events/ev-prulink/feedback': { body: eventFeedbackSummary() },
+    });
+    nav.pathname = '/kpm/settings/events';
+    tenant(<EventsSettingsPage />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Ubah' }));
+    await screen.findByRole('searchbox', { name: 'Cari orang' });
+    await expectClean('kpm/settings/events (picker, id)');
+    await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Lihat masukan' }));
+    await screen.findByRole('table');
+    await expectClean('kpm/settings/events (Daftar hadir, id)');
+    await userEvent.click(screen.getByRole('tab', { name: 'Ringkasan masukan' }));
+    await screen.findByRole('heading', { name: 'PRULink briefing — Ringkasan masukan' });
+    await expectClean('kpm/settings/events (Ringkasan masukan, id)');
+  });
+
+  it('the Campaign List, seasonal and structural, and a campaign’s dialog', async () => {
+    nav.pathname = '/campaigns';
+    stubFetch({ ...EVENTS_SHELL, 'GET /campaigns': { body: CAMPAIGN_LIST } });
+    const { unmount } = agent(<CampaignsLayout><CampaignsPage /></CampaignsLayout>, CAMPAIGNS_RINA);
+    await screen.findByRole('region', { name: 'Berjalan' });
+    await expectClean('campaigns (seasonal, id)');
+    await userEvent.click(screen.getByRole('tab', { name: 'Struktural' }));
+    await screen.findByRole('region', { name: 'Kriteria promosi' });
+    await expectClean('campaigns (structural, id)');
+    unmount();
+    vi.unstubAllGlobals();
+    nav.pathname = '/campaigns/APE_SPRINT';
+    stubFetch({ ...EVENTS_SHELL, 'GET /campaigns': { body: CAMPAIGN_LIST }, 'GET /campaigns/APE_SPRINT': { body: campaignDetail() } });
+    agent(<CampaignsLayout><CampaignDialogPage params={routeParams({ campaignCode: 'APE_SPRINT' })} /></CampaignsLayout>, CAMPAIGNS_RINA);
+    await screen.findByRole('dialog', { name: 'Q4 APE Sprint' });
+    await expectClean('campaigns/[campaignCode] (id)');
+  });
+
+  it('Settings › Campaigns: the list, the form with a requirement row, and the carrier’s tiers', async () => {
+    stubFetch({
+      ...shell,
+      '/kpm/settings/campaigns/rules': { body: [] },
+      '/kpm/settings/campaigns': { body: [] },
+      '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true, campaign: true }] },
+    });
+    nav.pathname = '/kpm/settings/campaigns';
+    tenant(<CampaignsSettingsPage />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Tambah campaign' }));
+    await userEvent.selectOptions(screen.getByLabelText('Jenis'), 'structural');
+    await userEvent.click(screen.getByRole('button', { name: '+ Tambah syarat' }));
+    await userEvent.selectOptions(screen.getByLabelText('Syarat 1'), 'APE_ACHIEVED');
+    await screen.findByLabelText('Bagian');
+    await expectClean('kpm/settings/campaigns (form, id)');
+    await userEvent.click(screen.getByRole('link', { name: 'Production club tiers' }));
+    await screen.findByText('Ini milik perusahaan asuransi Anda, bukan milik KPM Anda.');
+    await expectClean('kpm/settings/campaigns (tiers, id)');
+  });
+
+  it('the calendar: the week with the compare popover, the month, a dialog, and a phone’s agenda', async () => {
+    nav.pathname = '/calendar';
+    const routes = {
+      ...SHELL_STUBS,
+      '/calendar/entries?view=week': { body: weekRead() },
+      '/calendar/entries?view=month': { body: monthRead() },
+      '/calendar/settings': { body: { hideDetails: false } },
+      '/calendar/downline': { body: DOWNLINE },
+      '/calendar/people': { body: peoplePage() },
+    };
+    stubFetch(routes);
+    const { unmount } = agent(<CalendarPage />, AGUS);
+    await screen.findByRole('region', { name: 'Kalender, 28 Sep – 4 Okt 2026' });
+    await userEvent.click(screen.getByRole('button', { name: '+ Bandingkan dengan downline' }));
+    await screen.findByRole('group', { name: 'Unit langsung' });
+    await expectClean('calendar (week, compare, id)');
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(screen.getByRole('button', { name: '+ Event baru' }));
+    await screen.findByRole('dialog', { name: 'Event baru' });
+    await expectClean('calendar (Event baru, id)');
+    await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Month' }));
+    await screen.findByText('Sep 2026');
+    await expectClean('calendar (month, id)');
+    unmount();
+    vi.unstubAllGlobals();
+    atWidth(375);
+    stubFetch(routes);
+    agent(<CalendarPage />, AGUS);
+    await screen.findByRole('heading', { level: 2, name: 'Senin, 28 Sep 2026' });
+    await userEvent.click(screen.getByRole('button', { name: /^Rapat internal: Weekly unit standup/ }));
+    await screen.findByRole('dialog', { name: 'Weekly unit standup' });
+    await expectClean('calendar (phone agenda, detail, id)');
+  });
+});
+
+/**
+ * **P18.98-T6: the Super Admin's company templates in ID mode, each in its main state** — axe in Indonesian, as the
+ * blocks above run them in English (ADR-0179 §9): *Manage Companies*, a company's Company template on its tabs with its
+ * picker's dialogs, and the *Org role ladder* (`admin-template*.ts(x)`). What a company typed is as typed; `lang` on
+ * kept terms is T7's.
+ */
+describe('P18.98-T6 the company templates in Indonesian', () => {
+  afterEach(() => {
+    window.location.hash = '';
+    vi.unstubAllGlobals();
+  });
+
+  const ROOT = makeMe({
+    ...SUPER_ADMIN,
+    permissions: [
+      ...SUPER_ADMIN.permissions, 'company_template:read', 'company_template:write', 'recruitment_playbook:write',
+      'product_catalog:crud', 'commission_rates:read', 'org_level:read', 'org_level:crud',
+    ],
+  });
+  const inIndonesian = (path: string, page: React.ReactElement) => {
+    nav.pathname = path;
+    return renderWithSession(<InLanguage language="id"><AdminLayout>{page}</AdminLayout></InLanguage>, { me: ROOT });
+  };
+  const draft = (kind: string, payload: unknown, over: Record<string, unknown> = {}) => ({
+    id: `tpl-${kind}`, companyId: 'c1', kind, version: 2, status: 'draft', publishedAt: null, publishedVersion: 1,
+    officesBehind: 1, officesUnrecorded: 2, payload, ...over,
+  });
+  const TEMPLATES = [
+    {
+      id: 't-default', companyId: 'c1', name: 'Prudential template', isDefault: true, status: 'active', archivedAt: null,
+      origin: { kind: 'migration' }, officeCount: 3, publishedVersions: { activity_taxonomy: 1 },
+      createdAt: '2026-10-07T03:00:00.000Z', updatedAt: '2026-10-07T03:00:00.000Z',
+    },
+    {
+      id: 't-old', companyId: 'c1', name: 'Old settings', isDefault: false, status: 'archived',
+      archivedAt: '2026-10-01T00:00:00.000Z', origin: { kind: 'empty' }, officeCount: 0, publishedVersions: {},
+      createdAt: '2026-10-07T03:00:00.000Z', updatedAt: '2026-10-07T03:00:00.000Z',
+    },
+  ];
+  const TAXONOMY = draft('activity_taxonomy', {
+    categories: [{ code: 'SELLING', label: 'Penjualan', displayOrder: 1 }],
+    types: [
+      { code: 'SELL_PRESENTATION', categoryCode: 'SELLING', label: 'Presentasi', description: null, displayOrder: 1 },
+      { code: 'SELL_SUBMISSION', categoryCode: 'SELLING', label: 'Submission polis', description: 'Kirim SPAJ', displayOrder: 2 },
+    ],
+    bindings: { leads: [], appointments: ['SELL_PRESENTATION'], closings: ['SELL_SUBMISSION'] },
+  });
+  const template = (routes: Record<string, unknown> = {}, hash = '') => {
+    window.location.hash = hash;
+    stubFetch({
+      '/admin/companies/c1/templates': { body: TEMPLATES },
+      '/admin/companies/c1/template': { body: TAXONOMY },
+      '/admin/companies': {
+        body: [
+          { _id: 'c1', name: 'Prudential', slug: 'prudential', status: 'active', kind: 'insurer' },
+          { _id: 'c2', name: 'Allianz Life', slug: 'allianz-life', status: 'active', kind: 'insurer' },
+        ],
+      },
+      '/admin/companies/c2/templates': { body: [{ ...TEMPLATES[0], id: 'a-1', companyId: 'c2', name: 'Allianz Life template' }] },
+      ...routes,
+    });
+    return inIndonesian('/admin/companies/c1/template', <CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />);
+  };
+
+  it('admin/companies: the list, a row being renamed, and Add a company', async () => {
+    stubFetch({
+      '/admin/companies': {
+        body: [
+          { ...COMPANY, usesPlatformDefaults: true, kind: 'insurer' },
+          { ...COMPANY, _id: 'co-2', name: 'Sejahtera Baru Life', slug: 'sejahtera', status: 'suspended', usesPlatformDefaults: false, kind: 'insurer' },
+          { ...COMPANY, _id: 'co-lib', name: 'Template', slug: 'template', usesPlatformDefaults: true, kind: 'template' },
+        ],
+      },
+    });
+    inIndonesian('/admin/companies', <CompaniesPage />);
+    const table = await screen.findByRole('table', { name: 'Perusahaan' });
+    await expectClean('admin/companies (id)');
+    await userEvent.click(within(table).getAllByRole('button', { name: 'Ubah' })[0]);
+    await expectClean('admin/companies (id, renaming)');
+  });
+
+  it('admin/companies/[companyId]/template: Activity types with its binding, a section being renamed', async () => {
+    template();
+    await screen.findByText('Kirim SPAJ');
+    await screen.findByText(/^1 KPM menjalankan versi yang lebih lama\./);
+    await expectClean('admin/companies/[companyId]/template (id)');
+    const section = screen.getByRole('heading', { name: 'Penjualan' }).closest('.rounded-lg') as HTMLElement;
+    await userEvent.click(within(section).getAllByRole('button', { name: 'Ubah' })[0]);
+    await userEvent.click(screen.getByRole('button', { name: 'Ubah pengaitan' }));
+    await expectClean('admin/companies/[companyId]/template (id, editing)');
+  });
+
+  it('admin/companies/[companyId]/template: the picker’s New template and Import from another company', async () => {
+    template();
+    await userEvent.click(await screen.findByRole('button', { name: 'Templat baru' }));
+    await screen.findByRole('dialog', { name: 'Templat baru' });
+    await expectClean('admin/companies/[companyId]/template (id, New template)');
+    await userEvent.click(screen.getByRole('button', { name: 'Batal' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Impor dari perusahaan lain' }));
+    const dialog = within(screen.getByRole('dialog', { name: 'Impor dari perusahaan lain' }));
+    await userEvent.selectOptions(await dialog.findByLabelText('Perusahaan'), 'c2');
+    await dialog.findByLabelText('Templat');
+    await expectClean('admin/companies/[companyId]/template (id, Import)');
+  });
+
+  it('admin/companies/[companyId]/template: the checklist, the carrier rules and the capability ladder', async () => {
+    const { unmount } = template({
+      '/admin/companies/c1/template/activation_checklist': {
+        body: {
+          ...draft('activation_checklist', {
+            aspects: [{
+              code: 'SETUP', label: 'Persiapan awal',
+              items: [
+                { code: 'GOAL', label: 'Mengatur goal', autoLink: 'feature:goals' },
+                { code: 'LEADS', label: 'Menambah leads', autoLink: 'feature:leads' },
+              ],
+            }],
+          }),
+          linkKinds: {
+            'feature:goals': { label: 'Goal Settings', route: '/goals', completesWhen: 'new hire menyimpan goal', live: true },
+            'feature:leads': { label: 'Leads Management', route: '/leads', completesWhen: 'new hire menambah lead', live: false },
+          },
+        },
+      },
+      '/admin/companies/c1/template/training_taxonomy': { body: draft('training_taxonomy', { categories: [], skills: [], modules: [] }) },
+    }, '#activation');
+    await screen.findByText('2 item di 1 aspek');
+    await expectClean('admin/companies/[companyId]/template#activation (id)');
+    unmount();
+    vi.unstubAllGlobals();
+
+    const rules = template({
+      '/admin/companies/c1/template/campaign_kinds': {
+        body: draft('campaign_kinds', {
+          rules: [{
+            kind: 'production_club', code: 'STAR_CLUB', name: 'Star Club', rank: 1, reward: 'Bonus promosi', groupMode: 'all',
+            criteriaGroups: [{ mode: 'all', criteria: [{ metricKey: 'APE_ACHIEVED', comparator: 'gte', value: 120000000000 }] }],
+          }],
+        }),
+      },
+      '/metrics': { body: [{ key: 'APE_ACHIEVED', name: 'APE achieved', unit: 'idr_minor', phase: 9, computed: true }] },
+    }, '#campaign-tiers');
+    await screen.findByText('Bonus promosi');
+    await expectClean('admin/companies/[companyId]/template#campaign-tiers (id)');
+    rules.unmount();
+    vi.unstubAllGlobals();
+
+    template({
+      '/admin/companies/c1/template/capability_ladder': {
+        body: draft('capability_ladder', {
+          stages: [{ code: 'COMPETENT', label: 'Kompeten', requiredMilestoneCodes: ['SELLS'], stageOrder: 1 }],
+          milestones: [{ code: 'SELLS', label: 'Menjual sendiri' }],
+          grids: [],
+        }),
+      },
+    }, '#capability-ladder');
+    await screen.findByRole('group', { name: 'Dicapai dengan' });
+    await expectClean('admin/companies/[companyId]/template#capability-ladder (id)');
+  });
+
+  it('admin/companies/[companyId]/template: Products with a product open, and Recruitment with a type open', async () => {
+    const products = template({
+      '/admin/companies/c1/products': {
+        body: [{
+          id: 'p1', companyId: 'c1', code: 'PRUMAPAN', name: 'PRUMapan', tagline: 'Proteksi jiwa dengan manfaat pensiun',
+          channel: 'conventional', category: 'life', primaryNeeds: ['retirement'], eligibleAgeBands: [1],
+          eligibleBudgetBands: [1, 7], benefits: ['Dana Mapan'], differentiator: 'Terjangkau.', bestFor: 'Profesional',
+          defaultAttackPlan: {
+            goodFit: 'Profesional', opening: 'Halo.', benefits: ['Dana Mapan'], fullScript: 'Halo.',
+            objectionTheySay: 'Nanti saja.', objectionYouSay: 'Lebih ringan sekarang.', nextAction: 'Siapkan ilustrasi.',
+          },
+          commissionSchedule: [{ year: 1, rate: 0.125 }], lifecycle: 'active', replacedByProductId: null,
+          activeByDefault: true, sortOrder: 1, version: 1,
+        }],
+      },
+    }, '#products');
+    await userEvent.click(await screen.findByRole('button', { name: 'Ubah' }));
+    await screen.findByRole('table', { name: 'Commission rate' });
+    await expectClean('admin/companies/[companyId]/template#products (id, a product open)');
+    products.unmount();
+    vi.unstubAllGlobals();
+
+    const body = {
+      profiles: {
+        'fresh-grad': {
+          label: 'Lulusan baru', tagline: 'Baru masuk dunia kerja.', goodFitFor: 'Pekerjaan pertama.',
+          benefits: ['Tanpa pengalaman.'], openings: { 'side-income': 'Mau penghasilan tambahan?' },
+        },
+      },
+      objections: { time: { theySay: 'Butuh berapa lama?', youSay: 'Yang diukur aktivitas.' } },
+      profileObjections: {},
+      nextAction: 'Kirimkan Opportunity Overview.',
+    };
+    template({
+      '/admin/companies/c1/recruitment-playbook': {
+        body: {
+          playbook: { companyId: 'c1', version: 2, body, updatedAt: '2026-10-09T07:05:00.000Z', updatedBy: { name: 'Root' } },
+          defaults: body,
+          vocabulary: {
+            types: [{ code: 'fresh-grad', label: 'Lulusan baru' }],
+            motivations: [{ code: 'side-income', label: 'Penghasilan tambahan' }],
+            hesitations: [{ code: 'time', label: 'Khawatir soal waktu' }],
+          },
+          limits: { textMax: 600, benefitsMax: 6 },
+        },
+      },
+    }, '#recruitment');
+    await screen.findByText('Playbook ini langsung berlaku.');
+    await userEvent.click(within(screen.getByRole('group', { name: 'Lulusan baru' })).getByRole('button', { name: 'Ubah' }));
+    await expectClean('admin/companies/[companyId]/template#recruitment (id, a type open)');
+  });
+
+  it('admin/org-levels: the ladder, its tiers and Add a rung', async () => {
+    stubFetch({
+      '/admin/org-levels': {
+        body: [
+          { orgLevelId: 'l1', companyId: 'co-1', code: 'AGENT', label: 'Agent', displayOrder: 1, status: 'active', archivedAt: null, leaderTier: null },
+          { orgLevelId: 'l2', companyId: 'co-1', code: 'AB', label: 'Agency Builder', displayOrder: 2, status: 'active', archivedAt: null, leaderTier: 'senior' },
+          { orgLevelId: 'l3', companyId: 'co-1', code: 'OLD', label: 'Penasihat', displayOrder: 3, status: 'archived', archivedAt: null, leaderTier: null },
+        ],
+      },
+      '/admin/companies': { body: [COMPANY] },
+    });
+    inIndonesian('/admin/org-levels', <OrgLevelsPage />);
+    await screen.findByRole('table', { name: 'Susunan jenjang, dari yang paling junior' });
+    await expectClean('admin/org-levels (id)');
   });
 });

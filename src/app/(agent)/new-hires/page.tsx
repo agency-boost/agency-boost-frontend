@@ -3,7 +3,8 @@
 import { NewHires } from '@/components/new-hires';
 import { NewHiresJoining, useNewHiresJoining } from '@/components/new-hires-joining';
 import { Page } from '@/components/page';
-import { PROTOTYPE_COPY } from '@/lib/activation';
+import { useMessages } from '@/i18n/language-provider';
+import { newHiresMessages } from '@/i18n/messages/new-hires';
 
 /**
  * *Your New Hires* (`/new-hires`, `Overall.html:3354-3361`, title `:10409`; P13-T5): the open
@@ -13,14 +14,16 @@ import { PROTOTYPE_COPY } from '@/lib/activation';
  *
  * **Its header carries *+ Add agent* and *Review requests (n)*** (P18.96-T3 AC-1, AC-5; ADR-0170 §1, §5): the one
  * form, and the request inbox while somebody waits on the reader. Above the roster, *Waiting to join*: the invites
- * and transfers the reader made that nobody has accepted or decided (`new-hires-joining.tsx`).
+ * and transfers the reader made that nobody has accepted or decided (`new-hires-joining.tsx`). Its title is the nav
+ * item's words, kept English (§A.2); its line the catalogue's (P18.98-T4).
  */
 export default function NewHiresPage() {
+  const t = useMessages(newHiresMessages);
   const joining = useNewHiresJoining();
   return (
     <Page
-      title={PROTOTYPE_COPY.rosterTitle}
-      subtitle={PROTOTYPE_COPY.rosterSubtitle}
+      title={t.title}
+      subtitle={t.subtitle}
       subtitleOnPhone={false}
       permission="new_hires:read_roster"
       actions={joining.actions}

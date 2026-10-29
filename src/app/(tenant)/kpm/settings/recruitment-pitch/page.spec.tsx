@@ -184,8 +184,9 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       render();
       const opp = await screen.findByRole('article', { name: 'Opportunity Overview' });
       expect(within(opp).getByText('Opportunity_Overview_v3.pdf')).toBeInTheDocument();
-      expect(within(opp).getByText('2,4 MB · updated 12 Sep 2026')).toBeInTheDocument();
-      expect(within(card('Proof & Credibility')).getByText('1,1 MB · updated 30 Agu 2026')).toBeInTheDocument();
+      // The size and the day in the spec's language since P18.98-T4 wired them (the harness's English is a chosen English).
+      expect(within(opp).getByText('2.4 MB · updated 12 Sep 2026')).toBeInTheDocument();
+      expect(within(card('Proof & Credibility')).getByText('1.1 MB · updated 30 Aug 2026')).toBeInTheDocument();
       expect(within(card('FAQ')).getByText('Not uploaded yet')).toBeInTheDocument();
       expect(card('FAQ').className).toContain('border-dashed');
       expect(opp.className).not.toContain('border-dashed');
@@ -419,7 +420,8 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       await screen.findByRole('article', { name: 'FAQ' });
       await userEvent.upload(picker('FAQ'), pdf('huge.pdf', 26 * 1024 * 1024));
 
-      expect(await within(card('FAQ')).findByText('“huge.pdf” is 26,0 MB. A PDF can be 25 MB at most.')).toBeInTheDocument();
+      // The size in the spec's language since P18.98-T4 wired it (the harness's English is a chosen English).
+      expect(await within(card('FAQ')).findByText('“huge.pdf” is 26.0 MB. A PDF can be 25 MB at most.')).toBeInTheDocument();
       expect(calls(stub, '/uploads', 'POST')).toEqual([]);
     });
 
@@ -443,7 +445,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       await userEvent.upload(picker('FAQ'), pdf('faq.pdf', 14_336));
 
       expect(await within(card('FAQ')).findByText('faq.pdf')).toBeInTheDocument();
-      expect(within(card('FAQ')).getByText('14 KB · updated 9 Okt 2026')).toBeInTheDocument();
+      expect(within(card('FAQ')).getByText('14 KB · updated 9 Oct 2026')).toBeInTheDocument();
       expect(JSON.parse(calls(stub, '/recruitment-pitch/uploads', 'POST')[0].init.body as string))
         .toEqual({ filename: 'faq.pdf', mimeType: 'application/pdf', bytes: 14_336 });
       // The signed policy's own fields, then the file — what storage checks the upload against.
@@ -504,7 +506,7 @@ describe('Settings › Recruitment pitch (P17-T5)', () => {
       await userEvent.upload(picker('Agency Profile'), pdf('Agency_Profile.pdf', 30_720));
 
       expect(await within(card('Agency Profile')).findByText('Agency_Profile.pdf')).toBeInTheDocument();
-      expect(within(card('Agency Profile')).getByText('30 KB · updated 9 Okt 2026')).toBeInTheDocument();
+      expect(within(card('Agency Profile')).getByText('30 KB · updated 9 Oct 2026')).toBeInTheDocument();
       expect(within(card('Agency Profile')).getByText('Uploaded')).toBeInTheDocument();
       expect(JSON.parse(calls(stub, '/recruitment-pitch/agency', 'PUT')[0].init.body as string)).toEqual({ storageKey: SIGNED.storageKey });
       await waitFor(() => expect(calls(stub, '/recruitment/pitch-materials')).toHaveLength(2));

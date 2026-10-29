@@ -3,7 +3,8 @@
 import type { ReactNode } from 'react';
 import { Page } from '@/components/page';
 import { EventsScreen } from '@/components/events/events-screen';
-import { PROTOTYPE_COPY } from '@/lib/events';
+import { useMessages } from '@/i18n/language-provider';
+import { eventsMessages } from '@/i18n/messages/events';
 
 /**
  * **KPM Events** (`/events`, and an event's modal at `/events/[eventId]`; `Overall.html:3423-3448`, title
@@ -18,8 +19,9 @@ import { PROTOTYPE_COPY } from '@/lib/events';
  * at each event's start, whatever this decides (ADR-0039).
  */
 export default function EventsLayout({ children }: { children: ReactNode }) {
+  const t = useMessages(eventsMessages);
   return (
-    <Page title={PROTOTYPE_COPY.title} subtitle={PROTOTYPE_COPY.sub} permission="event:read_list">
+    <Page title={t.title} subtitle={t.sub} permission="event:read_list">
       <EventsScreen>{children}</EventsScreen>
     </Page>
   );

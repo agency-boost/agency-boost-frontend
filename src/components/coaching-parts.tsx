@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useId, useState, type ReactNode } from 'react';
-import { SectionChips, SummaryCard } from '@/components/personal-summary';
+import { SectionChips, SummaryCard } from '@/components/summary-card';
 import { Button, ErrorBanner, Textarea } from '@/components/ui/field';
 import { TEXT_TAP } from '@/components/ui/phone';
 import { Modal } from '@/components/ui/modal';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { coachingSessionMessages } from '@/i18n/messages/coaching-session';
 import type { ActivitySection, SubPeriodTarget } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
@@ -21,19 +23,22 @@ import type { PeriodFigures } from '@/lib/summary';
  * (`coaching-record.tsx`). One set, so a finalized session reads the same wherever it is opened — the
  * workspace's finalized state, `Overall.html:1389-1417`, is the idiom all three follow.
  *
- * Coaching's own strings use none of ADR-0084's six words, and none names a phase, an id or a code.
+ * Coaching's own strings use none of ADR-0084's six words, and none names a phase, an id or a code. Its words are the
+ * catalogue's (`messages/coaching-session.tsx`, P18.98-T4), its figures in `useFigureLanguage()`'s.
  */
 
 /** The prototype's tags (`.action-date-tag`, `.action-from-tag`, `Overall.html:1332-1335`). */
 export function DateTag({ day }: { day: string | null }) {
+  const language = useFigureLanguage();
   // Navy where the prototype has amber-dark: small amber text clears no contrast floor (`tokens.md`).
-  return <span className="whitespace-nowrap text-xs font-bold text-navy">{day ? formatShortDay(day) : '—'}</span>;
+  return <span className="whitespace-nowrap text-xs font-bold text-navy">{day ? formatShortDay(day, {}, language) : '—'}</span>;
 }
 
 export function FromLeadTag({ name }: { name: string }) {
+  const t = useMessages(coachingSessionMessages).agreement;
   return (
     <span className="whitespace-nowrap rounded-pill bg-navy-soft/[0.08] px-2 py-0.5 text-2xs text-navy-soft">
-      Leads · {name}
+      {t.fromLead({ name })}
     </span>
   );
 }
@@ -61,9 +66,11 @@ export const byDueDate = (a: { dueDate: string | null }, b: { dueDate: string | 
 
 /** The finalized state's green tag (`Overall.html:4309`): *✓ Finalized {date}*, the session's own day. */
 export function FinalizedBadge({ date }: { date: string | null }) {
+  const figures = useFigureLanguage();
+  const t = useMessages(coachingSessionMessages).finalize;
   return (
     <span className="inline-block rounded-pill bg-success/10 px-3.5 py-1.5 text-sm font-bold text-success">
-      ✓ Finalized {date ? formatCalendarDayLong(date) : ''}
+      {t.badge({ day: date ? formatCalendarDayLong(date, figures) : '' })}
     </span>
   );
 }
@@ -83,18 +90,20 @@ export function GoalRow({
   editor?: ReactNode;
   className?: string;
 }) {
+  const language = useFigureLanguage();
+  const t = useMessages(coachingSessionMessages).goal;
   const pct = figures.attainmentPct;
-  const label = period === 'month' ? 'This month’s target' : 'This year’s target';
+  const label = period === 'month' ? t.month : t.year;
   return (
     <div className={className}>
       <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-1.5">
         <span className="font-body text-[1.1875rem] font-bold text-navy">
           {figures.actualMinor === null
-            ? <span className="text-muted">Not uploaded yet</span>
-            : formatRupiahCompact(figures.actualMinor)}
+            ? <span className="text-muted">{t.notUploaded}</span>
+            : formatRupiahCompact(figures.actualMinor, {}, language)}
           {target !== null && <> / {target}</>}
         </span>
-        {pct !== null && <span className="text-md font-bold text-navy-soft">{formatPercent(pct)}</span>}
+        {pct !== null && <span className="text-md font-bold text-navy-soft">{formatPercent(pct, {}, language)}</span>}
       </div>
       {editor && <div className="mb-2">{editor}</div>}
       {pct !== null && (
@@ -104,7 +113,7 @@ export function GoalRow({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={Math.min(100, pct)}
-          aria-valuetext={formatPercent(pct)}
+          aria-valuetext={formatPercent(pct, {}, language)}
           className="h-1.5 overflow-hidden rounded bg-navy/[0.08]"
         >
           <div className="h-full rounded bg-navy-soft" style={{ width: `${Math.min(100, pct)}%` }} />
@@ -112,7 +121,7 @@ export function GoalRow({
       )}
       {figures.gapMinor !== null && (
         <p className="mt-2 text-sm text-muted">
-          {formatRupiahCompact(figures.gapMinor)} remaining this {period}.
+          {t.remaining({ sum: formatRupiahCompact(figures.gapMinor, {}, language), period })}
         </p>
       )}
     </div>
@@ -157,21 +166,25 @@ const RATIO_VALUE: Record<RatioLineData['status'], string> = {
  * configuration would print today's words on a past record.
  */
 export function RatioLine({ ratio }: { ratio: RatioLineData }) {
+  const figures = useFigureLanguage();
+  const words = useLanguage();
+  const t = useMessages(coachingSessionMessages).ratios;
   const band = ratio.comparison === 'band';
   const benchmark = ratio.benchmark ?? 0;
   const shares = band && !!ratio.sides && ratio.share !== undefined;
   let value: string;
   if (ratio.value === null) value = '–';
   else if (shares && ratio.share != null) {
-    const names = balanceSideNames(ratio.sides);
-    const split = formatBalanceSplit(ratio.share, benchmark, ratio.status);
+    // A side's name is the office's section, as typed; *Side A* and *Side B* are the catalogue's.
+    const names = balanceSideNames(ratio.sides, words);
+    const split = formatBalanceSplit(ratio.share, benchmark, ratio.status, figures);
     value = `${split.first} ${names.first} · ${split.second} ${names.second}`;
   } else if (band) {
-    value = formatRatioForStatus(ratio.value, 'points', benchmark, ratio.status);
+    value = formatRatioForStatus(ratio.value, 'points', benchmark, ratio.status, figures, words);
   } else {
-    value = formatRatioForStatus(ratio.value, ratio.displayUnit, benchmark, ratio.status);
+    value = formatRatioForStatus(ratio.value, ratio.displayUnit, benchmark, ratio.status, figures, words);
   }
-  const edges = formatBalanceBand(benchmark);
+  const edges = formatBalanceBand(benchmark, figures);
   return (
     <li className="flex items-center justify-between gap-3 text-base">
       <span className="min-w-0 flex-1 text-navy">{ratio.label}</span>
@@ -179,9 +192,11 @@ export function RatioLine({ ratio }: { ratio: RatioLineData }) {
         <span className={cn('font-bold', RATIO_VALUE[ratio.status])}>{value}</span>
         {ratio.benchmark !== null && (
           <span className="whitespace-nowrap text-2xs font-medium text-muted">
-            Benchmark: {shares
-              ? `${edges.low}–${edges.high} each side`
-              : formatBenchmark(ratio.benchmark, band ? 'points' : ratio.displayUnit)}
+            {t.benchmark({
+              value: shares
+                ? t.eachSide({ low: edges.low, high: edges.high })
+                : formatBenchmark(ratio.benchmark, band ? 'points' : ratio.displayUnit, figures, words),
+            })}
           </span>
         )}
       </span>
@@ -196,11 +211,12 @@ export function RatioLine({ ratio }: { ratio: RatioLineData }) {
 export function RatiosPanel({
   rows, error, emptyLine,
 }: { rows: readonly RatioLineData[] | null; error: ApiError | null; emptyLine: string }) {
+  const t = useMessages(coachingSessionMessages).ratios;
   return (
-    <SummaryCard id="session-ratios" title="Ratios" tag="Last 30 days" className="min-w-0">
+    <SummaryCard id="session-ratios" title={t.title} tag={t.tag} className="min-w-0">
       {error && <ErrorBanner {...error} />}
       {!rows && !error && (
-        <Skeleton label="Working out the ratios…">
+        <Skeleton label={t.working}>
           {[0, 1, 2, 3].map((i) => <SkeletonBar key={i} className="mb-3 h-4 w-full" />)}
         </Skeleton>
       )}
@@ -220,17 +236,13 @@ export function RatiosPanel({
  */
 
 /**
- * The three chip labels, in the cascade's words (ADR-0160 §4; P18.9-T2's cleanup, 2026-10-26) — the Summary's and
- * `/goals`'. The prototype reads *Leads contacted*, *Appointments* and *Closings* (`Overall.html:4223-4238`).
+ * One of the three targets: its label in the cascade's words (ADR-0160 §4; P18.9-T2's cleanup, 2026-10-26) — the
+ * Summary's and `/goals`', kept in both languages (§A.6). The prototype reads *Leads contacted*, *Appointments* and
+ * *Closings* (`Overall.html:4223-4238`).
  */
-export const TARGET_LABEL: Record<SubPeriodTarget['key'], string> = {
-  leads: 'Set appointment',
-  appointments: 'Sales meeting',
-  closings: 'Submission polis',
-};
-
 export function WeekChip({ target }: { target: SubPeriodTarget }) {
-  const label = TARGET_LABEL[target.key];
+  const t = useMessages(coachingSessionMessages).activity;
+  const label = t.targets[target.key];
   const pct = target.target ? Math.min(100, Math.round((target.logged / target.target) * 100)) : 0;
   return (
     <div className="rounded-[10px] border border-hairline bg-base p-3">
@@ -238,21 +250,21 @@ export function WeekChip({ target }: { target: SubPeriodTarget }) {
       <span className="mb-2 block font-body text-lg font-bold text-navy">
         {target.logged}
         {target.target !== null && target.target > 0 && (
-          <span className="text-xs font-medium text-muted"> / {target.target} pro-rated</span>
+          <span className="text-xs font-medium text-muted">{t.proRated({ target: target.target })}</span>
         )}
       </span>
       {target.target === null ? (
-        <span className="block text-xs text-muted">No target yet</span>
+        <span className="block text-xs text-muted">{t.noTarget}</span>
       ) : target.target === 0 ? (
-        <span className="block text-xs text-muted">Nothing more needed this month</span>
+        <span className="block text-xs text-muted">{t.nothingMore}</span>
       ) : (
         <div
           role="progressbar"
-          aria-label={`${label} against the pro-rated target`}
+          aria-label={t.against({ label })}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={pct}
-          aria-valuetext={`${target.logged} of ${target.target}`}
+          aria-valuetext={t.of({ logged: target.logged, target: target.target })}
           className="h-1.5 overflow-hidden rounded bg-navy/[0.08]"
         >
           <div className="h-full rounded bg-navy-soft" style={{ width: `${pct}%` }} />
@@ -276,32 +288,36 @@ export interface ActivityWeek {
  * `week` is `null` while it is read.
  */
 export function ActivityPanel({ name, week, error }: { name: string; week: ActivityWeek | null; error: ApiError | null }) {
+  const t = useMessages(coachingSessionMessages).activity;
   const [drill, setDrill] = useState(false);
   const targets = week?.targets ?? [];
   const sections = week?.sections ?? [];
 
+  // The heading, and the drill beside its words (`Overall.html:4221`).
+  const heading = (
+    <>
+      {t.title}{' '}
+      <button
+        type="button"
+        disabled={!week}
+        onClick={() => setDrill(true)}
+        className={cn('rounded-sm text-xs font-medium text-navy-soft hover:underline disabled:cursor-default', TEXT_TAP)}
+      >
+        {t.full}
+      </button>
+    </>
+  );
+
   return (
     <SummaryCard
       id="session-activity"
-      title={(
-        <>
-          Activity{' '}
-          <button
-            type="button"
-            disabled={!week}
-            onClick={() => setDrill(true)}
-            className={cn('rounded-sm text-xs font-medium text-navy-soft hover:underline disabled:cursor-default', TEXT_TAP)}
-          >
-            → view full dashboard
-          </button>
-        </>
-      )}
-      tag="Last 7 days"
+      title={heading}
+      tag={t.tag}
       className="min-w-0"
     >
       {error && <ErrorBanner {...error} />}
       {!week && !error && (
-        <Skeleton label="Reading the last 7 days…">
+        <Skeleton label={t.reading}>
           <div className="grid gap-2.5 md:grid-cols-3">
             {[0, 1, 2].map((i) => <SkeletonBar key={i} className="h-[72px] rounded-[10px]" />)}
           </div>
@@ -320,28 +336,28 @@ export function ActivityPanel({ name, week, error }: { name: string; week: Activ
 
       <Modal
         open={drill && week !== null}
-        title={`${name} — Activity Dashboard`}
-        description="Last 7 days · category breakdown"
+        title={t.dialog({ name })}
+        description={t.dialogLine}
         onClose={() => setDrill(false)}
         focusDialog
         className="max-w-[40rem]"
       >
         <div className="overflow-x-auto rounded-lg border border-hairline">
           <table className="relative w-full border-collapse text-left text-base">
-            <caption className="sr-only">{`${name}, last 7 days`}</caption>
+            <caption className="sr-only">{t.caption({ name })}</caption>
             <thead>
               <tr className="bg-navy/[0.04] text-2xs uppercase text-muted">
-                <th scope="col" className="px-4 py-2.5 font-semibold">Category</th>
-                <th scope="col" className="px-4 py-2.5 font-semibold">Logged</th>
-                <th scope="col" className="px-4 py-2.5 font-semibold">Target (pro-rated)</th>
+                <th scope="col" className="px-4 py-2.5 font-semibold">{t.columns.category}</th>
+                <th scope="col" className="px-4 py-2.5 font-semibold">{t.columns.logged}</th>
+                <th scope="col" className="px-4 py-2.5 font-semibold">{t.columns.target}</th>
               </tr>
             </thead>
             <tbody>
-              {targets.map((t) => (
-                <tr key={t.key} className="border-t border-hairline">
-                  <th scope="row" className="px-4 py-2.5 font-normal text-navy">{TARGET_LABEL[t.key]}</th>
-                  <td className="px-4 py-2.5 font-bold text-navy">{t.logged}</td>
-                  <td className="px-4 py-2.5 text-navy">{t.target ?? '–'}</td>
+              {targets.map((row) => (
+                <tr key={row.key} className="border-t border-hairline">
+                  <th scope="row" className="px-4 py-2.5 font-normal text-navy">{t.targets[row.key]}</th>
+                  <td className="px-4 py-2.5 font-bold text-navy">{row.logged}</td>
+                  <td className="px-4 py-2.5 text-navy">{row.target ?? '–'}</td>
                 </tr>
               ))}
               {sections.flatMap((section) => section.rows).map((row) => (
@@ -355,7 +371,7 @@ export function ActivityPanel({ name, week, error }: { name: string; week: Activ
           </table>
         </div>
         <div className="mt-4 flex justify-end">
-          <Button variant="secondary" onClick={() => setDrill(false)}>Close</Button>
+          <Button variant="secondary" onClick={() => setDrill(false)}>{t.close}</Button>
         </div>
       </Modal>
     </SummaryCard>
@@ -374,6 +390,7 @@ export function ActivityPanel({ name, week, error }: { name: string; week: Activ
 export function EditAgainButton({
   closed, until, onClick,
 }: { closed: boolean; until: string; onClick: () => void }) {
+  const t = useMessages(coachingSessionMessages).editAgain;
   const windowNote = useId();
   return (
     <>
@@ -381,16 +398,16 @@ export function EditAgainButton({
         variant="secondary"
         aria-disabled={closed || undefined}
         aria-describedby={closed ? windowNote : undefined}
-        title={closed ? `This session could be reopened until ${until}.` : undefined}
+        title={closed ? t.closed({ until }) : undefined}
         className={cn(closed && 'cursor-not-allowed opacity-40')}
         onClick={() => {
           if (closed) return;
           onClick();
         }}
       >
-        Edit again
+        {t.button}
       </Button>
-      {closed && <span id={windowNote} className="sr-only">This session could be reopened until {until}.</span>}
+      {closed && <span id={windowNote} className="sr-only">{t.closed({ until })}</span>}
     </>
   );
 }
@@ -416,6 +433,7 @@ export function ReopenDialog({
   onReopened: (session: CoachingSession) => Promise<void>;
   onConflict: () => void;
 }) {
+  const t = useMessages(coachingSessionMessages).editAgain;
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -448,13 +466,13 @@ export function ReopenDialog({
   return (
     <Modal
       open={open}
-      title="Edit this session again?"
-      description={`Say why it needs changing. The reason stays with the session, and everyone who reads the session reads it — ${coacheeName} included.`}
+      title={t.title}
+      description={t.line({ name: coacheeName })}
       onClose={onClose}
       className="text-left"
     >
       <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
-        <label htmlFor={fieldId} className="text-sm font-semibold text-navy">Reason</label>
+        <label htmlFor={fieldId} className="text-sm font-semibold text-navy">{t.reason}</label>
         <Textarea
           id={fieldId}
           value={reason}
@@ -464,8 +482,8 @@ export function ReopenDialog({
         />
         {error && <ErrorBanner {...error} />}
         <div className="flex justify-end gap-2.5">
-          <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy || !reason.trim()}>Edit again</Button>
+          <Button variant="secondary" onClick={onClose}>{t.cancel}</Button>
+          <Button type="submit" disabled={busy || !reason.trim()}>{t.button}</Button>
         </div>
       </form>
     </Modal>

@@ -4,10 +4,12 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { TAP_AREA } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { eventsMessages } from '@/i18n/messages/events';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  audienceLine, cancelledToast, cancelRsvp, canJoin, dayOf, goingToast, isGoing, OWN_COPY, pastBlockOf, PROTOTYPE_COPY,
+  audienceLine, cancelledToast, cancelRsvp, canJoin, dayOf, goingToast, isGoing, pastBlockOf,
   readEvent, refusalOf, rsvpEvent, timeOf, type EventsMeta, type GuestEvent,
 } from '@/lib/events';
 import { useScrollLock } from '@/lib/use-scroll-lock';
@@ -43,6 +45,8 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), texta
  * open. Where it fits, it is drawn as before.
  */
 export function EventModal({ id }: { id: string }) {
+  const t = useMessages(eventsMessages);
+  const language = useLanguage();
   const { meta, metaError, reload, close, toast, replace } = useEventsHost();
   const [event, setEvent] = useState<GuestEvent | null>(null);
   const [missing, setMissing] = useState(false);
@@ -113,17 +117,17 @@ export function EventModal({ id }: { id: string }) {
 
   /** A refusal said beside the control; a 409 means the event moved on, so it is read again. */
   const refused = (err: unknown) => {
-    setWriteError(refusalOf(err));
+    setWriteError(refusalOf(err, language));
     if (err instanceof ApiRequestError && err.status === 409) setAttempt((n) => n + 1);
   };
 
-  const rsvp = async (call: (id: string) => Promise<GuestEvent>, said: (title: string) => string) => {
+  const rsvp = async (call: (id: string) => Promise<GuestEvent>, said: (title: string, words: typeof language) => string) => {
     if (busy || !event) return;
     setBusy(true);
     setWriteError(null);
     try {
       const next = await call(event.id);
-      answered(next, said(next.title));
+      answered(next, said(next.title, language));
     } catch (err) {
       refused(err);
     } finally {
@@ -145,7 +149,7 @@ export function EventModal({ id }: { id: string }) {
           role="dialog"
           aria-modal="true"
           aria-labelledby={ready ? titleId : undefined}
-          aria-label={ready ? undefined : PROTOTYPE_COPY.title}
+          aria-label={ready ? undefined : t.title}
           tabIndex={-1}
           onKeyDown={keys}
           /*
@@ -162,7 +166,7 @@ export function EventModal({ id }: { id: string }) {
           {!ready && <CloseButton onClose={close} onPoster={false} />}
 
           {!ready && !missing && !failed && (
-            <Skeleton label={OWN_COPY.loadingEvent}>
+            <Skeleton label={t.loadingEvent}>
               <div className="h-[190px] bg-hairline" />
               <div className="px-5 pb-6 pt-5 sm:px-[26px]">
                 <SkeletonBar className="w-20" />
@@ -179,16 +183,16 @@ export function EventModal({ id }: { id: string }) {
                 className="mt-3"
                 onClick={() => { if (error) setAttempt((n) => n + 1); else reload(); }}
               >
-                {OWN_COPY.tryAgain}
+                {t.tryAgain}
               </Button>
             </div>
           )}
           {missing && (
             <div data-state="not-found" className="px-5 pb-6 pt-14 sm:px-[26px]">
-              <p className="m-0 text-md font-semibold text-navy">{OWN_COPY.notFound}</p>
-              <p className="m-0 mt-1 text-base text-muted">{OWN_COPY.notFoundHint}</p>
+              <p className="m-0 text-md font-semibold text-navy">{t.notFound}</p>
+              <p className="m-0 mt-1 text-base text-muted">{t.notFoundHint}</p>
               <button type="button" onClick={close} className="mt-3 rounded-sm text-base font-semibold text-amber-ink hover:underline">
-                {OWN_COPY.backToEvents}
+                {t.backToEvents}
               </button>
             </div>
           )}
@@ -228,6 +232,9 @@ function EventDetail({ event, meta, form, onClose, titleId, busy, writeError, on
   onAnswer: (next: GuestEvent, message: string) => void;
   onStale: () => void;
 }) {
+  const t = useMessages(eventsMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   return (
     <>
       {/*
@@ -243,11 +250,11 @@ function EventDetail({ event, meta, form, onClose, titleId, busy, writeError, on
       </EventPosterFrame>
       <div className="px-5 pb-[26px] pt-[22px] sm:px-[26px]">
         <div className="mb-2"><EventTagLabel event={event} /></div>
-        <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">{audienceLine(event.audience, meta.companyName)}</p>
+        <p className="mb-1 text-2xs font-semibold uppercase tracking-wide text-muted">{audienceLine(event.audience, meta.companyName, language)}</p>
         <h2 id={titleId} className="mb-1.5 break-words text-2xl font-extrabold text-navy">{event.title}</h2>
         <div className="mb-3.5 flex flex-col gap-[3px] text-md text-muted">
           {/* One date and time, written as every screen writes one: *24 Okt 2026, 18.00* (ADR-0167 §1). */}
-          <span><span aria-hidden="true">📅 </span><strong className="text-navy">{dayOf(event)}</strong>, {timeOf(event)}</span>
+          <span><span aria-hidden="true">📅 </span><strong className="text-navy">{dayOf(event, figures)}</strong>, {timeOf(event, figures)}</span>
           <span><span aria-hidden="true">📍 </span><EventLocation event={event} /></span>
         </div>
         {event.description && (
@@ -258,17 +265,17 @@ function EventDetail({ event, meta, form, onClose, titleId, busy, writeError, on
           <div className="mb-5 flex flex-wrap items-center gap-2.5" data-block="rsvp">
             {isGoing(event) ? (
               <>
-                <EventStatePill pill="going" label={PROTOTYPE_COPY.youreGoing} />
+                <EventStatePill pill="going" label={t.youreGoing} />
                 {meta.can.cancelRsvp && (
                   <Button variant="secondary" className="h-8 px-3.5 text-base" aria-disabled={busy || undefined} onClick={onCancel}>
-                    {PROTOTYPE_COPY.cancelRsvp}
+                    {t.cancelRsvp}
                   </Button>
                 )}
               </>
             ) : (
               // One rule for the modal's *Join event* and the card's *Join* (P18.95-T10 AC-1).
               canJoin(event, meta.can) && (
-                <Button aria-disabled={busy || undefined} onClick={onJoin}>{PROTOTYPE_COPY.joinEvent}</Button>
+                <Button aria-disabled={busy || undefined} onClick={onJoin}>{t.joinEvent}</Button>
               )
             )}
           </div>
@@ -294,10 +301,11 @@ function EventDetail({ event, meta, form, onClose, titleId, busy, writeError, on
 
 /** The poster's ✕ (`.event-modal-close`, `:2113-2117`), named *Close* — the prototype's has no name. */
 function CloseButton({ onClose, onPoster }: { onClose: () => void; onPoster: boolean }) {
+  const t = useMessages(eventsMessages);
   return (
     <button
       type="button"
-      aria-label={OWN_COPY.closeModal}
+      aria-label={t.closeModal}
       onClick={onClose}
       className={cn(
         onPoster
@@ -307,7 +315,7 @@ function CloseButton({ onClose, onPoster }: { onClose: () => void; onPoster: boo
         TAP_AREA,
       )}
     >
-      <span aria-hidden="true">{PROTOTYPE_COPY.close}</span>
+      <span aria-hidden="true">✕</span>
     </button>
   );
 }

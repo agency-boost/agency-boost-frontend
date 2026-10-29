@@ -2,7 +2,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
-import { makeMe, renderInLayout, routeParams, stubFetch, type StubReply } from '@test/harness';
+import { InLanguage, makeMe, renderInLayout, renderWithSession, routeParams, stubFetch, type StubReply } from '@test/harness';
+import type { Language } from '@/i18n/language';
 import { act } from 'react';
 import CoachingPersonLayout from '../layout';
 import CoachingSessionTabPage from './page';
@@ -181,7 +182,8 @@ const echoSave: StubReply = ({ body }) => {
   };
 };
 
-const show = (routes: Record<string, StubReply | StubReply[]> = {}) => {
+/** The session tab, in English (every spec's default) or, asked for, in Indonesian (P18.98-T3). */
+const show = (routes: Record<string, StubReply | StubReply[]> = {}, language?: Language) => {
   const stub = stubFetch({
     '/kpm/config': { body: { activity: [], ratios: [], leadPipelines: PIPELINES, version: 1 } },
     '/kpm/org-levels': { body: [] },
@@ -199,17 +201,19 @@ const show = (routes: Record<string, StubReply | StubReply[]> = {}) => {
     'PUT /goals/2026': { body: GOAL },
     ...routes,
   });
-  const view = renderInLayout(
-    AgentLayout,
-    <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoachingSessionTabPage /></CoachingPersonLayout>,
-    { me: LEADER },
-  );
+  const tab = <CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}><CoachingSessionTabPage /></CoachingPersonLayout>;
+  const view = language
+    ? renderWithSession(<InLanguage language={language}><AgentLayout>{tab}</AgentLayout></InLanguage>, { me: LEADER })
+    : renderInLayout(AgentLayout, tab, { me: LEADER });
   return { ...stub, ...view };
 };
 
 const card = (name: string | RegExp) => screen.findByRole('region', { name });
-/** *Today's session — {date}* and its tag: one line, across its `<strong>` and its tag. */
-const headerLine = () => screen.getByText((_, el) => el?.tagName === 'P' && /^Today's session — /.test(el.textContent ?? ''));
+/**
+ * *Today's session — {date}* and its tag: one line, across its `<strong>` and its tag — in either language, *Sesi hari
+ * ini — …* (P18.98-T4).
+ */
+const headerLine = () => screen.getByText((_, el) => el?.tagName === 'P' && /^(Today's session|Sesi hari ini) — /.test(el.textContent ?? ''));
 const sent = (calls: { url: string; init: RequestInit }[], method: string, fragment: string) =>
   calls.filter((c) => (c.init.method ?? 'GET') === method && c.url.includes(fragment));
 const bodyOf = (call: { init: RequestInit }) => JSON.parse(call.init.body as string);
@@ -232,9 +236,9 @@ describe('the session workspace (P11-T8)', () => {
       await screen.findByRole('button', { name: 'Start coaching session' });
       const header = headerLine();
       // P18.95-T7 AC-2 (UI-021): *Not started*, not the prototype's *Draft* of a session nobody has opened.
-      expect(header).toHaveTextContent("Today's session — Jumat, 2 Okt 2026 Not started");
+      expect(header).toHaveTextContent("Today's session — Friday, 2 Oct 2026 Not started");
       expect(header).not.toHaveTextContent('Draft');
-      expect(within(header).getByText('Jumat, 2 Okt 2026').tagName).toBe('STRONG');
+      expect(within(header).getByText('Friday, 2 Oct 2026').tagName).toBe('STRONG');
     });
 
     it('P18.95-T7 AC-2 tags a session Draft once it is open, and Finalized once it is done', () => {
@@ -387,22 +391,39 @@ describe('the session workspace (P11-T8)', () => {
   });
 
   describe('the Goal card', () => {
+    it('P18.98-T3 AC-1 in Indonesian: the header’s day, the Goal card’s sums in juta and the ratios with a comma', async () => {
+      show({}, 'id');
+      const goal = await card('Goal');
+      await within(goal).findByText(/Rp 65,6 jt/);
+      expect(goal).toHaveTextContent('Rp 65,6 jt / Rp 80 jt');
+      // The words around the figures are the catalogue's Indonesian since P18.98-T4 (coaching and unit).
+      expect(goal).toHaveTextContent('Sisa Rp 14,4 jt untuk bulan ini.');
+      expect(goal).toHaveTextContent('82%');
+      expect(headerLine()).toHaveTextContent('Sesi hari ini — Jumat, 2 Okt 2026');
+      const ratios = await card('Ratios');
+      expect(await within(ratios).findByText('18,0%')).toBeInTheDocument();
+      // The box holds the target's digits in its marks, its prefix *Rp*.
+      expect(within(goal).getAllByRole('button').map((b) => b.textContent)).toEqual(['Rp 960 jt, target tahun ini — ubah']);
+      await userEvent.click(within(goal).getByRole('button', { name: /target tahun ini — ubah/ }));
+      expect(within(goal).getByLabelText('Annual APE target')).toHaveValue('960.000.000');
+    });
+
     it('P11-T8 AC-4, P18.97-T3 AC-1 shows the month and the year as her Summary does, in one money formatter, the attainment whole, with what remains', async () => {
       const { calls } = show();
       const goal = await card('Goal');
 
-      await within(goal).findByText(/Rp 65,6 jt/);
-      expect(goal).toHaveTextContent('Rp 65,6 jt / Rp 80 jt');
+      await within(goal).findByText(/IDR 65.6M/);
+      expect(goal).toHaveTextContent('IDR 65.6M / IDR 80M');
       expect(goal).toHaveTextContent('82%');
-      expect(goal).not.toHaveTextContent('82,0%');
-      expect(goal).toHaveTextContent('Rp 14,4 jt remaining this month.');
-      expect(goal).toHaveTextContent('Rp 620 jt / Rp 960 jt');
+      expect(goal).not.toHaveTextContent('82.0%');
+      expect(goal).toHaveTextContent('IDR 14.4M remaining this month.');
+      expect(goal).toHaveTextContent('IDR 620M / IDR 960M');
       expect(goal).toHaveTextContent('65%');
-      expect(goal).toHaveTextContent('Rp 340 jt remaining this year.');
+      expect(goal).toHaveTextContent('IDR 340M remaining this year.');
       expect(within(goal).getByRole('progressbar', { name: 'This month’s target' })).toHaveAttribute('aria-valuenow', '82');
       expect(within(goal).getByText('Tap this year’s target to edit')).toBeInTheDocument();
       // One control on the card: the annual target. This month's target is a figure.
-      expect(within(goal).getAllByRole('button').map((b) => b.textContent)).toEqual(['Rp 960 jt, this year’s target — edit']);
+      expect(within(goal).getAllByRole('button').map((b) => b.textContent)).toEqual(['IDR 960M, this year’s target — edit']);
       expect(calls.filter((c) => c.url.includes('/summary?for=mem-rina')).map((c) => c.url))
         .toEqual(['http://api.test/api/v1/summary?for=mem-rina']);
     });
@@ -414,10 +435,10 @@ describe('the session workspace (P11-T8)', () => {
 
       const field = within(goal).getByLabelText('Annual APE target');
       expect(field).toHaveFocus();
-      expect(field).toHaveValue('960.000.000');
+      expect(field).toHaveValue('960,000,000');
       await userEvent.clear(field);
       await userEvent.type(field, '1200000000');
-      expect(field).toHaveValue('1.200.000.000');
+      expect(field).toHaveValue('1,200,000,000');
       // Leaving the box saves nothing: only Save does (ADR-0075).
       await userEvent.tab();
       expect(sent(calls, 'PUT', '/goals/')).toHaveLength(0);
@@ -456,7 +477,7 @@ describe('the session workspace (P11-T8)', () => {
       await userEvent.click(within(goal).getByRole('button', { name: 'Save' }));
 
       expect(await within(goal).findByRole('alert')).toHaveTextContent('This session is finalized.');
-      expect(within(goal).getByLabelText('Annual APE target')).toHaveValue('960.000.000');
+      expect(within(goal).getByLabelText('Annual APE target')).toHaveValue('960,000,000');
     });
 
     it('P11-T8 AC-4 says No goal set, and the annual target can still be set', async () => {
@@ -497,16 +518,16 @@ describe('the session workspace (P11-T8)', () => {
       const ratios = await card('Ratios');
 
       expect(within(ratios).getByText('Last 30 days')).toBeInTheDocument();
-      await within(ratios).findByText('18,0%');
+      await within(ratios).findByText('18.0%');
       const lines = within(ratios).getAllByRole('listitem').map((li) => li.textContent);
       expect(lines).toEqual([
-        'Selling success rate18,0%Benchmark: 15%',
-        'Leads per activity0,35Benchmark: 0,30',
+        'Selling success rate18.0%Benchmark: 15%',
+        'Leads per activity0.35Benchmark: 0.30',
         'Recruitment success rate–Benchmark: 15%',
         // Each side's share of the two, as her own Activity Ratios card writes it (P13.1-T6 AC-7).
-        'Sales vs. Recruitment70,0% Selling · 30,0% RecruitmentBenchmark: 35%–65% each side',
+        'Sales vs. Recruitment70.0% Selling · 30.0% RecruitmentBenchmark: 35%–65% each side',
       ]);
-      expect(within(ratios).getByText('18,0%')).toHaveClass('text-success');
+      expect(within(ratios).getByText('18.0%')).toHaveClass('text-success');
       expect(within(ratios).getByText('–')).toHaveClass('text-muted');
       expect(sent(calls, 'GET', '/activity/ratios').map((c) => c.url)).toEqual(['http://api.test/api/v1/activity/ratios?for=mem-rina']);
     });
@@ -668,8 +689,8 @@ describe('the session workspace (P11-T8)', () => {
       expect(within(next).getByRole('heading', { name: 'From leads (automatic)' })).toBeInTheDocument();
       const fromLeads = within(next).getAllByRole('list')[0];
       expect(within(fromLeads).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-        '5 OktLeads · Desi PratamaConfirm submission paperwork',
-        '7 OktLeads · Hana PermataFollow up with Hana Permata',
+        '5 OctLeads · Desi PratamaConfirm submission paperwork',
+        '7 OctLeads · Hana PermataFollow up with Hana Permata',
       ]);
     });
 
@@ -743,7 +764,7 @@ describe('the session workspace (P11-T8)', () => {
       expect(sent(calls, 'PUT', '/coaching/sessions/s-1')).toHaveLength(1);
       expect(bodyOf(sent(calls, 'POST', '/finalize')[0])).toEqual({ version: 2 });
 
-      expect(screen.getByText('✓ Finalized Jumat, 2 Okt 2026')).toBeInTheDocument();
+      expect(screen.getByText('✓ Finalized Friday, 2 Oct 2026')).toBeInTheDocument();
       expect(headerLine()).toHaveTextContent('Finalized');
       // The lock (`Overall.html:1389-1417`): no add, no remove, inputs as text, the target not a control.
       for (const name of ['Add tip', 'Add action', '+ Add lead', 'Remove tip 1', 'Finalize this session']) {
@@ -807,7 +828,7 @@ describe('the session workspace (P11-T8)', () => {
       await toastSays('Reopened for editing — finalize again when you’re done.');
       expect(bodyOf(sent(calls, 'POST', '/reopen')[0])).toEqual({ version: 3, reason: 'Wrong date on the follow-up' });
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(headerLine()).toHaveTextContent('Jumat, 2 Okt 2026 Draft');
+      expect(headerLine()).toHaveTextContent('Friday, 2 Oct 2026 Draft');
       expect(screen.getByLabelText('Tip 1')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Finalize this session' })).toBeInTheDocument();
     });
@@ -837,12 +858,12 @@ describe('the session workspace (P11-T8)', () => {
 
       const edit = await screen.findByRole('button', { name: 'Edit again' });
       expect(edit).toHaveAttribute('aria-disabled', 'true');
-      expect(edit).toHaveAttribute('title', 'This session could be reopened until 9 Okt 2026.');
-      expect(edit).toHaveAccessibleDescription('This session could be reopened until 9 Okt 2026.');
+      expect(edit).toHaveAttribute('title', 'This session could be reopened until 9 Oct 2026.');
+      expect(edit).toHaveAccessibleDescription('This session could be reopened until 9 Oct 2026.');
       await userEvent.click(edit);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       // The header names the session's own date, not the office's today (a Fix).
-      expect(headerLine()).toHaveTextContent('Jumat, 2 Okt 2026');
+      expect(headerLine()).toHaveTextContent('Friday, 2 Oct 2026');
     });
 
     it('P11-T8 AC-10 a finalized session still opens its past sessions, its closed leads and the Activity drill', async () => {
@@ -1096,7 +1117,7 @@ describe('the session workspace (P11-T8)', () => {
       await waitFor(() => expect(print).toHaveBeenCalledTimes(1));
       expect(calls.filter((c) => c.url.endsWith('/coaching/sessions/s-1/print'))).toHaveLength(1);
       // Its coach printed it: the paper does not name them.
-      expect(document.querySelector('[data-print-view] p')).toHaveTextContent(/^Jumat, 2 Okt 2026 · Finalized$/);
+      expect(document.querySelector('[data-print-view] p')).toHaveTextContent(/^Friday, 2 Oct 2026 · Finalized$/);
       act(() => { window.dispatchEvent(new Event('afterprint')); });
     });
 
@@ -1131,13 +1152,13 @@ describe('the session workspace (P11-T8)', () => {
 
       await waitFor(() => expect(calls.filter((c) => c.init.method === 'PUT' && c.url.includes('/goals/'))).toHaveLength(1));
       // Saved, not yet shown: the box stays, on what was saved, and nothing is said yet.
-      expect(within(goal).getByLabelText('Annual APE target')).toHaveValue('1.200.000.000');
+      expect(within(goal).getByLabelText('Annual APE target')).toHaveValue('1,200,000,000');
       expect(screen.queryByText('Goal updated — reflected across both tabs.')).not.toBeInTheDocument();
 
       await reread.open();
       await toastSays('Goal updated — reflected across both tabs.');
       expect(within(goal).queryByLabelText('Annual APE target')).not.toBeInTheDocument();
-      expect(goal).toHaveTextContent('Rp 620 jt / Rp 1,2 M');
+      expect(goal).toHaveTextContent('IDR 620M / IDR 1.2B');
     });
 
     it('P11-T8’s walk: reads the last 7 days again once the annual target is saved, since its pro-rated targets follow the goal', async () => {
@@ -1168,7 +1189,7 @@ describe('the session workspace (P11-T8)', () => {
       await userEvent.click(within(goal).getByRole('button', { name: 'Save' }));
 
       expect(await within(goal).findByRole('alert')).toHaveTextContent('Summary down');
-      expect(goal).not.toHaveTextContent('Rp 960 jt');
+      expect(goal).not.toHaveTextContent('IDR 960M');
       await toastSays('Goal updated — reflected across both tabs.');
     });
   });

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLanguageChoice } from '@/i18n/language-provider';
 import { endImpersonation } from '@/lib/admin';
 import {
   api, isImpersonating, onOfficeUnavailable, onSessionLost, refreshSession, setAccessToken, setImpersonating,
@@ -44,10 +45,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setUnavailable({ error, supportSession });
   }), []);
 
+  /*
+   * **The account's language, in the same render as the account** (ADR-0179 §2; P18.98-T2 AC-5): at sign-in a saved
+   * language wins over the browser's cookie and rewrites it, and an account with none keeps the browser's. Told here,
+   * beside `setMe`, so React renders the two together and a signed-in screen's first frame is already in it.
+   */
+  const { follow } = useLanguageChoice();
+
   const remember = useCallback((next: Me | null) => {
     signedIn.current = next;
     setMe(next);
-  }, []);
+    follow(next);
+  }, [follow]);
 
   /*
    * **A session that ends under the reader says so** (ADR-0168 §1). A request answered `401` whose refresh the

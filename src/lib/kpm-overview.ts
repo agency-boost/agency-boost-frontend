@@ -1,4 +1,8 @@
 import { shortOfRung } from '@/components/ui/role-badge';
+import { messagesIn } from '@/i18n/catalogue';
+import { kept } from '@/i18n/kept';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
 import { api } from './api-client';
 import { formatMonth, formatPercent, formatRupiahCompact, formatRupiahCompactPair, percentOf } from './format';
 
@@ -20,6 +24,11 @@ import { formatMonth, formatPercent, formatRupiahCompact, formatRupiahCompactPai
  *
  * Each interface is spelled out with named nested types, so `contract.spec.ts` can read its fields against
  * `backend/openapi.json`: it reads an interface's body up to the first `}`.
+ *
+ * **Its words are the catalogue's** (P18.98-T4; `i18n/messages/kpm-overview.ts`): each function that writes words takes
+ * the reader's `language` — English, the source, when passed none, which its spec reads — and one that writes a figure
+ * takes the figures' language after it (`figures`; Indonesian when passed none). Its caller passes `useLanguage()` and
+ * `useFigureLanguage()`.
  */
 
 /** A member named on the Overview: a leader on the leaderboard, an agency or an AAB unit's head. */
@@ -222,83 +231,93 @@ export const saveRecruitTarget = (body: RecruitTarget) =>
  * ── The prototype's words ───────────────────────────────────────────────────────────────────────
  */
 
-/** The strings `KPM_Owner.html` draws, verbatim (D-copy), with OD-142's title for the first card. */
+/** The module's words in English, the catalogue's source. */
+const EN = messagesIn(kpmOverviewMessages, SOURCE_LANGUAGE);
+
+/** The module's words in a language. */
+const wordsIn = (language: Language) => messagesIn(kpmOverviewMessages, language);
+
+/**
+ * **The strings `KPM_Owner.html` draws, in English** (D-copy), with OD-142's title for the first card — the catalogue's
+ * source (`i18n/messages/kpm-overview.ts`, P18.98-T4), in the shapes this module has always handed its callers and its
+ * spec. **A screen reads the reader's language instead**: `useMessages(kpmOverviewMessages)`.
+ *
+ * `title` is the prototype's *KPM Overview* (`:2027`), **the nav item's word since P18.95-T9 AC-2** (ADR-0167 §10,
+ * OD-205; UI-027, *menu labels = page titles*). `engagementSub` is the prototype's *Last 7 days* (`:965`), over a first
+ * card that counts the month: **the two periods its cards read** since P18.97-T3 AC-6 (ADR-0176 §3, UI-020; parity
+ * I-505). `legendZero` is the bar's start, a figure in no language.
+ */
 export const PROTOTYPE_COPY = {
-  /**
-   * The prototype's *KPM Overview* (`:2027`), **the nav item's word since P18.95-T9 AC-2** (ADR-0167 §10, OD-205;
-   * UI-027, *menu labels = page titles*): the nav reads *Overview* (`:873`).
-   */
-  title: 'Overview',
-  composition: 'Team composition',
-  engagement: 'Engagement',
-  /**
-   * The prototype's *Last 7 days* (`:965`), over a first card that counts the month: **the two periods its cards read**
-   * since P18.97-T3 AC-6 (ADR-0176 §3, UI-020; parity I-505) — data honesty, the line the prototype already has.
-   */
-  engagementSub: 'This month · Last 7 days',
-  coaching: 'Coaching coverage',
-  recruitment: 'Recruitment pipeline',
-  production: 'Production — this year',
-  totalMembers: 'Total members',
-  /** OD-142 (ADR-0127 onward): the title says what the figure counts; the sub-line is the prototype's. */
-  loggedMonthTitle: 'Agents who logged activity this month',
-  loggedMonthDesc: 'Logged at least one activity this month',
-  weekTitle: 'Activity logging — this week',
-  weekDesc: "Who has and hasn't logged in the last 7 days",
-  reveal: "View who hasn't logged →",
-  neverLogged: 'Never logged',
-  coached7d: 'Coached in last 7 days',
-  coached30d: 'Coached in last 30 days',
-  leaderboard: 'AB coaching frequency',
-  viewFullRanking: 'view full ranking →',
-  expectedToClose: 'Expected to close',
-  target: 'Target',
-  lastMonth: 'Last month',
-  pipelineNow: 'Pipeline now',
-  unitsTitle: 'Units furthest behind target',
-  unitsSub: 'Tap a row to see the AABs inside that unit',
-  noAab: 'No AAB in this unit yet',
+  title: EN.title,
+  composition: EN.composition,
+  engagement: EN.engagement,
+  engagementSub: EN.engagementSub,
+  coaching: EN.coaching,
+  recruitment: EN.recruitment,
+  production: EN.production,
+  totalMembers: EN.totalMembers,
+  loggedMonthTitle: EN.loggedMonthTitle,
+  loggedMonthDesc: EN.loggedMonthDesc,
+  weekTitle: EN.weekTitle,
+  weekDesc: EN.weekDesc,
+  reveal: EN.reveal,
+  neverLogged: EN.neverLogged,
+  coached7d: EN.coached7d,
+  coached30d: EN.coached30d,
+  leaderboard: EN.leaderboard,
+  viewFullRanking: EN.viewFullRanking,
+  expectedToClose: EN.expectedToClose,
+  target: EN.target,
+  lastMonth: EN.lastMonth,
+  pipelineNow: EN.pipelineNow,
+  unitsTitle: EN.unitsTitle,
+  unitsSub: EN.unitsSub,
+  noAab: EN.noAab,
   legendZero: '0',
 } as const;
 
 /**
- * The module's own strings — the states the prototype lacks. None of OD-39's six words, no phase, no code.
+ * **The module's own strings, in English** — the states the prototype lacks, from the catalogue's source as
+ * `PROTOTYPE_COPY` is. None of OD-39's six words, no phase, no code.
  */
 export const OWN_COPY = {
-  loading: 'Loading the overview…',
-  loadingList: 'Loading who has not logged…',
-  tryAgain: 'Try again',
-  notUploaded: 'Not uploaded yet',
-  noGoal: 'No goal set',
-  noTarget: 'No target set',
-  everybodyLogged: 'Everybody has logged in the last 7 days.',
-  noLeaders: 'No AB leads a team yet.',
+  loading: EN.loading,
+  loadingList: EN.loadingList,
+  tryAgain: EN.tryAgain,
+  notUploaded: EN.notUploaded,
+  noGoal: EN.noGoal,
+  noTarget: EN.noTarget,
+  everybodyLogged: EN.everybodyLogged,
+  noLeaders: EN.noLeaders,
   /** Where an AB who leads nobody's rate would be (P18.97-T3 AC-5; ADR-0176 §2, the glossary's *No team*). */
-  noTeam: 'No team',
-  noUnits: 'No AB leads a unit yet.',
-  showFewer: 'show fewer',
-  targetInvalid: 'Enter a whole number from 0.',
-  targetNotSaved: 'The target was not saved.',
+  noTeam: EN.noTeam,
+  noUnits: EN.noUnits,
+  showFewer: EN.showFewer,
+  targetInvalid: EN.targetInvalid,
+  targetNotSaved: EN.targetNotSaved,
   /** The *Target*'s control and its toast (P18.97-T3 AC-7; ADR-0176 §4, OD-200, UI-020; parity I-506). */
-  edit: 'Edit',
-  editTarget: 'Edit target',
-  targetSaved: 'Target saved ✓',
+  edit: EN.edit,
+  editTarget: EN.editTarget,
+  targetSaved: EN.targetSaved,
   /** The figure's own name when it is shown as a dash: a screen reader hears *no rate*, not *dash*. */
-  noRate: 'No rate: nobody to count',
+  noRate: EN.noRate,
 } as const;
 
 /*
  * ── Words built from figures ────────────────────────────────────────────────────────────────────
  */
 
-/** The sub-line: *"Prudential · KPM 0417 — BSD City Branch"* (`:933`). */
-export const officeLine = (office: OverviewOffice) => `${office.companyName} · KPM ${office.code} — ${office.branch}`;
+/**
+ * The sub-line: *"Prudential · KPM 0417 — BSD City Branch"* (`:933`) — the company's name, the office's code and its
+ * branch as the office has them, with the client's *KPM*, kept: the same in both languages.
+ */
+export const officeLine = (office: OverviewOffice) => `${office.companyName} · ${kept('KPM')} ${office.code} — ${office.branch}`;
 
 /** *"+6 new this month"* (`:946`). */
-export const newThisMonth = (n: number) => `+${n} new this month`;
+export const newThisMonth = (n: number, language: Language = SOURCE_LANGUAGE) => wordsIn(language).newThisMonth({ n });
 
-/** A percentage the server computed, whole (ADR-0174 §1) — *96%*, never *96,0%* — or *—* over nobody. */
-export const pctText = (pct: number | null) => (pct === null ? '—' : formatPercent(pct));
+/** A percentage the server computed, whole (ADR-0174 §1) — *96%*, never *96,0%* — or *—* over nobody; in `figures`. */
+export const pctText = (pct: number | null, figures?: Language) => (pct === null ? '—' : formatPercent(pct, {}, figures));
 
 /**
  * How a percentage is painted: the prototype's 70% split (`:3150`, `:3220`), which every status class on
@@ -324,16 +343,23 @@ export interface TrendWords {
  * *"Up from 138 last month (+3%)"* (`:977`) or *"Down from …"*; the change is relative to last month's
  * figure, rounded half up in integers — 142 against 138 is +3%, 23 more on 40 is +58% (`percentOf`; P18.97-T3, parity
  * F-254) — and written whole (ADR-0174 §1). With nothing logged by this day last month there is no percentage to give,
- * so the line stops at the figure. `null` — nothing to compare against — draws no line.
+ * so the line stops at the figure. `null` — nothing to compare against — draws no line. Its words in `language`, its
+ * change in `figures`.
  */
-export function trendWords(now: number, lastMonthToDate: number | null): TrendWords | null {
+export function trendWords(
+  now: number,
+  lastMonthToDate: number | null,
+  language: Language = SOURCE_LANGUAGE,
+  figures?: Language,
+): TrendWords | null {
   if (lastMonthToDate === null) return null;
-  if (now === lastMonthToDate) return { direction: 'same', lead: `Same as last month (${now})`, change: null };
+  const t = wordsIn(language);
+  if (now === lastMonthToDate) return { direction: 'same', lead: t.trendSame({ now }), change: null };
   const direction = now > lastMonthToDate ? 'up' : 'down';
-  const lead = `${direction === 'up' ? 'Up' : 'Down'} from ${lastMonthToDate} last month`;
+  const lead = direction === 'up' ? t.trendUp({ last: lastMonthToDate }) : t.trendDown({ last: lastMonthToDate });
   const pct = percentOf(Math.abs(now - lastMonthToDate), lastMonthToDate);
   if (pct === null) return { direction, lead, change: null };
-  return { direction, lead, change: `${direction === 'up' ? '+' : '−'}${formatPercent(pct)}` };
+  return { direction, lead, change: `${direction === 'up' ? '+' : '−'}${formatPercent(pct, {}, figures)}` };
 }
 
 /**
@@ -344,26 +370,30 @@ export function trendWords(now: number, lastMonthToDate: number | null): TrendWo
 export const rungShort = (rung: NotLoggedRung) => shortOfRung(rung);
 
 /** *"Last logged 9 days ago"* or *"Never logged"* (`:991-999`). */
-export function lastLoggedWords(daysSince: number | null): string {
-  if (daysSince === null) return PROTOTYPE_COPY.neverLogged;
-  return `Last logged ${daysSince} day${daysSince === 1 ? '' : 's'} ago`;
+export function lastLoggedWords(daysSince: number | null, language: Language = SOURCE_LANGUAGE): string {
+  const t = wordsIn(language);
+  return daysSince === null ? t.neverLogged : t.lastLogged({ days: daysSince });
 }
 
 /** *"+ 66 more — full list on the People screen"* (`:1001`). */
-export const moreWords = (n: number) => `+ ${n} more — full list on the People screen`;
+export const moreWords = (n: number, language: Language = SOURCE_LANGUAGE) => wordsIn(language).more({ n });
 
 /** *"· 31 in team"* (`:1027`). */
-export const inTeam = (n: number) => `· ${n} in team`;
+export const inTeam = (n: number, language: Language = SOURCE_LANGUAGE) => wordsIn(language).inTeam({ n });
 
 /**
  * *"6/31 · 19%"* (`:1029`); ***No team*** for an AB who leads nobody (P18.97-T3 AC-5), where the figure would be — never
- * *"0/0 · —"*, which reads as a team nobody coached.
+ * *"0/0 · —"*, which reads as a team nobody coached. Its words in `language`, its percentage in `figures`.
  */
-export const coachedWords = (row: Pick<LeaderboardRow, 'coached' | 'teamSize' | 'pct' | 'leads'>) =>
-  (row.leads ? `${row.coached}/${row.teamSize} · ${pctText(row.pct)}` : OWN_COPY.noTeam);
+export const coachedWords = (
+  row: Pick<LeaderboardRow, 'coached' | 'teamSize' | 'pct' | 'leads'>,
+  language: Language = SOURCE_LANGUAGE,
+  figures?: Language,
+) => (row.leads ? `${row.coached}/${row.teamSize} · ${pctText(row.pct, figures)}` : wordsIn(language).noTeam);
 
 /** *"Showing 4 of 8 ABs · "* (`:1045`, `:1218`), counted (D-copy). */
-export const showingWords = (shown: number, of: number) => `Showing ${shown} of ${of} ABs · `;
+export const showingWords = (shown: number, of: number, language: Language = SOURCE_LANGUAGE) =>
+  wordsIn(language).showing({ shown, of });
 
 /** How many rows a truncated list shows before *view full ranking →* (`:1024-1044`, `:1096-1218`). */
 export const RANKING_SHOWN = 4;
@@ -378,19 +408,21 @@ export interface PillWords {
 }
 
 /** `updateRecruitStatus()`'s three sentences, verbatim (`:4875-4889`). */
-export function recruitPill(expected: number, target: number | null): PillWords | null {
+export function recruitPill(expected: number, target: number | null, language: Language = SOURCE_LANGUAGE): PillWords | null {
   if (target === null) return null;
+  const t = wordsIn(language);
   const diff = expected - target;
-  if (diff === 0) return { tone: 'success', text: `On track to hit target (${expected} of ${target})` };
-  if (diff > 0) return { tone: 'success', text: `${diff} ahead of target (${expected} of ${target})` };
-  return { tone: 'alert', text: `${Math.abs(diff)} short of target (${expected} of ${target})` };
+  if (diff === 0) return { tone: 'success', text: t.recruitOnTrack({ expected, target }) };
+  if (diff > 0) return { tone: 'success', text: t.recruitAhead({ diff, expected, target }) };
+  return { tone: 'alert', text: t.recruitShort({ diff: Math.abs(diff), expected, target }) };
 }
 
 /**
  * The *Target* tile's value, read as a value (P18.97-T3 AC-7; ADR-0176 §4, UI-020): the number, or ***No target set***
  * where the office never set one — the tile's own *Target* label above it, so it reads *Target: 15*.
  */
-export const targetValueWords = (target: number | null) => (target === null ? OWN_COPY.noTarget : String(target));
+export const targetValueWords = (target: number | null, language: Language = SOURCE_LANGUAGE) =>
+  (target === null ? wordsIn(language).noTarget : String(target));
 
 /** A typed target as the API takes it — a whole number from 0 — or `null` for anything else. */
 export function parseTarget(typed: string): number | null {
@@ -399,13 +431,16 @@ export function parseTarget(typed: string): number | null {
 }
 
 /** *"of Rp 12,5 M target"* (`:1081`), the year's figure's sub-line — compact, as a card's figures are (ADR-0167 §1). */
-export const ofTarget = (targetMinor: number) => `of ${formatRupiahCompact(targetMinor)} target`;
+export const ofTarget = (targetMinor: number, language: Language = SOURCE_LANGUAGE, figures?: Language) =>
+  wordsIn(language).ofTarget({ target: formatRupiahCompact(targetMinor, {}, figures) });
 
 /** *"Projected: Rp 11,9 M"* (`:1087`). */
-export const projectedWords = (minor: number) => `Projected: ${formatRupiahCompact(minor)}`;
+export const projectedWords = (minor: number, language: Language = SOURCE_LANGUAGE, figures?: Language) =>
+  wordsIn(language).projected({ sum: formatRupiahCompact(minor, {}, figures) });
 
 /** *"Target: Rp 12,5 M"* (`:1090`). */
-export const targetLegend = (minor: number) => `Target: ${formatRupiahCompact(minor)}`;
+export const targetLegend = (minor: number, language: Language = SOURCE_LANGUAGE, figures?: Language) =>
+  wordsIn(language).targetLegend({ sum: formatRupiahCompact(minor, {}, figures) });
 
 /**
  * Where the projection marker sits along the bar, as a percentage of the target, clamped to the bar — a
@@ -420,36 +455,45 @@ export function markerAt(projectionMinor: number | null, targetMinor: number | n
  * A unit's line (`:1107`, `:1121`): *"Rp 620 jt / 1,5 M unit target"* on an agency, *"Rp 210 jt / 500 jt"* on
  * an AAB unit — compact, one `Rp` for the pair (UI-030, ADR-0167 §1). No figure becomes 0: a missing one says so.
  */
-export function unitNums(money: Pick<OverviewMoney, 'achievedMinor' | 'targetMinor'>, agency: boolean): string {
-  const unit = agency ? ' unit target' : '';
+export function unitNums(
+  money: Pick<OverviewMoney, 'achievedMinor' | 'targetMinor'>,
+  agency: boolean,
+  language: Language = SOURCE_LANGUAGE,
+  figures?: Language,
+): string {
+  const t = wordsIn(language);
+  const ofUnit = (line: string) => (agency ? t.unitTarget({ figures: line }) : line);
   if (money.achievedMinor === null) {
     return money.targetMinor === null
-      ? `${OWN_COPY.notUploaded} · ${OWN_COPY.noGoal}`
-      : `${OWN_COPY.notUploaded} / ${formatRupiahCompact(money.targetMinor)}${unit}`;
+      ? `${t.notUploaded} · ${t.noGoal}`
+      : ofUnit(t.notUploadedOf({ target: formatRupiahCompact(money.targetMinor, {}, figures) }));
   }
-  if (money.targetMinor === null) return `${formatRupiahCompact(money.achievedMinor)} · ${OWN_COPY.noGoal}`;
-  return `${formatRupiahCompactPair(money.achievedMinor, money.targetMinor, '/')}${unit}`;
+  if (money.targetMinor === null) return t.missingGoal({ figure: formatRupiahCompact(money.achievedMinor, {}, figures) });
+  return ofUnit(formatRupiahCompactPair(money.achievedMinor, money.targetMinor, '/', figures));
 }
 
-/** `a`, `a and b`, `a, b and c`. */
-function listed(items: readonly string[]): string {
+/** `a`, `a and b`, `a, b and c` — *dan* in Indonesian. */
+function listed(items: readonly string[], language: Language): string {
   if (items.length <= 1) return items.join('');
-  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+  return `${items.slice(0, -1).join(', ')} ${wordsIn(language).and} ${items[items.length - 1]}`;
 }
 
 /**
  * The year's total's tooltip (D-figures, Phase 15's rule): which months of the year it leaves out for want
- * of a file, and how many members' goals are not in its target. `null` when it leaves nothing out.
+ * of a file, and how many members' goals are not in its target. `null` when it leaves nothing out. Its months in
+ * `figures`.
  */
-export function leftOutWords(ytd: Pick<OverviewYtd, 'missingMonths' | 'membersWithoutGoal'>): string | null {
+export function leftOutWords(
+  ytd: Pick<OverviewYtd, 'missingMonths' | 'membersWithoutGoal'>,
+  language: Language = SOURCE_LANGUAGE,
+  figures?: Language,
+): string | null {
+  const t = wordsIn(language);
   const parts: string[] = [];
   if (ytd.missingMonths.length > 0) {
-    parts.push(`${OWN_COPY.notUploaded} for ${listed(ytd.missingMonths.map(formatMonth))}, so not counted in this total.`);
+    parts.push(t.leftOutMonths({ months: listed(ytd.missingMonths.map((month) => formatMonth(month, figures)), language) }));
   }
-  if (ytd.membersWithoutGoal > 0) {
-    const n = ytd.membersWithoutGoal;
-    parts.push(`${n} ${n === 1 ? 'member has' : 'members have'} no goal set, so the target leaves them out.`);
-  }
+  if (ytd.membersWithoutGoal > 0) parts.push(t.leftOutMembers({ n: ytd.membersWithoutGoal }));
   return parts.length > 0 ? parts.join(' ') : null;
 }
 
@@ -459,10 +503,12 @@ export function leftOutWords(ytd: Pick<OverviewYtd, 'missingMonths' | 'membersWi
 
 /**
  * *Last activity* and *Last coached* (`:1834`, `:4490-4519`): *Today*, *"{n} days ago"* (*"1 day ago"* at
- * one, as `ORG_STATS` writes it), or *Never*. The days are the server's, counted in the office's calendar.
+ * one, as `ORG_STATS` writes it), or *Never*. The days are the server's, counted in the office's calendar. In the
+ * reader's `language` (P18.98-T4): its caller passes `useLanguage()`; English when passed none.
  */
-export function daysAgoWords(days: number | null): string {
-  if (days === null) return 'Never';
-  if (days === 0) return 'Today';
-  return `${days} day${days === 1 ? '' : 's'} ago`;
+export function daysAgoWords(days: number | null, language: Language = SOURCE_LANGUAGE): string {
+  const t = wordsIn(language);
+  if (days === null) return t.never;
+  if (days === 0) return t.today;
+  return t.daysAgo({ days });
 }

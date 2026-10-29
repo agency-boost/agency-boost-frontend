@@ -9,6 +9,8 @@ import {
 } from '@/lib/activity-binding';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
+import { useMessages } from '@/i18n/language-provider';
+import { adminTemplateMessages } from '@/i18n/messages/admin-template';
 
 const same = (a: ActivityBinding, b: ActivityBinding) =>
   BINDING_ROLES.every((role) => a[role].length === b[role].length && a[role].every((code, i) => code === b[role][i]));
@@ -27,6 +29,8 @@ export function ActivityBindingCard({ kpmId }: { kpmId: string }) {
 }
 
 function BindingCard({ kpmId }: { kpmId: string }) {
+  const all = useMessages(adminTemplateMessages);
+  const t = all.binding;
   // Convenience: the API refuses anybody without it (`activity_binding:write`, the Super Admin's).
   const canWrite = useCan('activity_binding:write');
   const [view, setView] = useState<OfficeActivityBinding | null>(null);
@@ -66,11 +70,8 @@ function BindingCard({ kpmId }: { kpmId: string }) {
 
   return (
     <Card>
-      <h2 className="font-display text-lg font-bold text-navy">Activity binding</h2>
-      <p className="mt-1 text-md text-muted">
-        Which activities the summary, the goal plan and coaching count at each stage. To replace an activity, add
-        the new one beside the old: what was logged against the old one keeps counting.
-      </p>
+      <h2 className="font-display text-lg font-bold text-navy">{t.title}</h2>
+      <p className="mt-1 text-md text-muted">{t.lead}</p>
       <div className="mt-3 flex flex-col gap-3">
         {error && <ErrorBanner {...error} />}
         {view === null || draft === null ? (
@@ -86,13 +87,13 @@ function BindingCard({ kpmId }: { kpmId: string }) {
             />
             {canWrite && (
               <Button className="self-start" disabled={busy || same(draft, view)} onClick={() => void save()}>
-                {busy ? 'Saving…' : 'Save binding'}
+                {busy ? all.saving : t.save}
               </Button>
             )}
           </>
         )}
         <p role="status" className={saved ? 'text-md text-navy' : 'sr-only'}>
-          {saved ? 'Saved. The summary counts it from now.' : ''}
+          {saved ? t.saved : ''}
         </p>
       </div>
     </Card>

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { parse, renderable, sourceFiles, SRC } from '@test/copy-scan';
+import { catalogueTexts, parse, renderable, sourceFiles, SRC } from '@test/copy-scan';
 
 /**
  * The recruitment pitch's own strings use none of OD-39's six words (D-copy, P17-T5 AC-8, P17-T6
@@ -65,5 +65,29 @@ describe('the recruitment pitch’s own copy', () => {
       sixWords(f, readFileSync(join(SRC, f), 'utf8')).map((hit) => `src/${f}: ${hit}`),
     );
     expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * **P18.98-T4: the pitch's words are the catalogue's now** (`i18n/messages/recruitment-pitch.ts`), so the rule is held
+ * there, language by language (P18.98-T1 AC-6, `catalogueTexts`): none of the six words in the English, and none in the
+ * Indonesian either — not *KPM*, ID mode's word for *office* (§B.9), since the pitch's own words name no office, and
+ * not *kantor*.
+ */
+describe('P18.98-T4 the recruitment pitch’s catalogue, language by language', () => {
+  const AREA = 'i18n/messages/recruitment-pitch.ts';
+  const texts = catalogueTexts(AREA, readFileSync(join(SRC, AREA), 'utf8'));
+
+  it('reads both languages, so a silent zero cannot pass', () => {
+    expect(texts.en.map((t) => t.text)).toEqual(expect.arrayContaining(['Missing', 'Uploaded · needs confirmation']));
+    expect(texts.id.map((t) => t.text)).toEqual(expect.arrayContaining(['Belum ada', 'Terunggah · perlu konfirmasi']));
+  });
+
+  it.each(['en', 'id'] as const)('writes none of OD-39’s six words in %s', (language) => {
+    expect(texts[language].filter((t) => SIX_WORDS.test(t.text)).map((t) => `${t.line}: ${t.text}`)).toEqual([]);
+  });
+
+  it('writes no *kantor* in Indonesian', () => {
+    expect(texts.id.filter((t) => /\bkantor\b/i.test(t.text))).toEqual([]);
   });
 });

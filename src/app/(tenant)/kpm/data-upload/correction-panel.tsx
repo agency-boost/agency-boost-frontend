@@ -3,8 +3,12 @@
 import { useEffect, useId, useState } from 'react';
 import { Dialog } from '@/components/ui/dialog';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
+import { messagesIn } from '@/i18n/catalogue';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { dataUploadMessages } from '@/i18n/messages/data-upload';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
-import { formatDayLong, formatNumber, formatPercent, parseDecimal } from '@/lib/format';
+import { formatDayLong, formatDecimalInput, formatNumber, formatPercent, moneyPrefix, parseDecimal } from '@/lib/format';
 import { formatRupiah, groupDigits, parseDigits, toMajor, toMinor } from '@/lib/goals';
 import {
   correctCell, figureLabel, MONEY_METRICS, type Cadence, type CorrectionResult, type MetricCell,
@@ -22,33 +26,37 @@ export interface Editing {
   current: MetricCell;
 }
 
-const SOURCE: Record<string, string> = {
-  imported: 'from the carrier’s file',
-  corrected: 'corrected by hand',
-  self_reported: 'reported by the agent',
-};
-
 /**
- * `corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”` — whose a figure is, as the table's ✎ says
- * it and, on a phone, the edit sheet's field (P18.97-T7 AC-2).
+ * `corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”` — whose a figure is, as the table's ✎ says it
+ * and, on a phone, the edit sheet's field (P18.97-T7 AC-2). Its day in `figures`, its words in `language` (English when
+ * passed none, P18.98-T4); the name and the reason as typed.
  */
-export function correctedNote(cell: MetricCell): string {
+export function correctedNote(cell: MetricCell, figures: Language, language: Language = SOURCE_LANGUAGE): string {
   const c = cell.correction;
-  const verb = cell.value === null ? 'emptied by hand' : 'corrected by hand';
-  if (!c) return verb;
-  return `${verb}${c.by ? ` by ${c.by}` : ''}${c.at ? ` on ${formatDayLong(c.at)}` : ''}${c.reason ? ` — “${c.reason}”` : ''}`;
+  return messagesIn(dataUploadMessages, language).handNote({
+    emptied: cell.value === null,
+    by: c?.by ?? null,
+    day: c?.at ? formatDayLong(c.at, figures) : null,
+    reason: c?.reason ?? null,
+  });
 }
 
 /**
  * A figure in the table's own format, or *nothing reported*: money in full, as Data upload's cells write it
  * (ADR-0174 §4), a persistency with **every decimal it was filed with** and no *,0* (§3) — a figure checked against
- * the carrier's file is never rounded on its way to the reader — and a count as it is.
+ * the carrier's file is never rounded on its way to the reader — and a count as it is. The figure in `figures`, the
+ * words for none in `language` (English when passed none, P18.98-T4).
  */
-export function showFigure(metric: ProductionMetric, value: number | null): string {
-  if (value === null) return 'nothing reported';
-  if (MONEY_METRICS.includes(metric)) return formatRupiah(value);
-  if (metric === 'persistency') return formatPercent(value, { lossless: true });
-  return formatNumber(value, { maxDecimals: 4 });
+export function showFigure(
+  metric: ProductionMetric,
+  value: number | null,
+  figures: Language,
+  language: Language = SOURCE_LANGUAGE,
+): string {
+  if (value === null) return messagesIn(dataUploadMessages, language).nothingReported;
+  if (MONEY_METRICS.includes(metric)) return formatRupiah(value, figures);
+  if (metric === 'persistency') return formatPercent(value, { lossless: true }, figures);
+  return formatNumber(value, { maxDecimals: 4 }, figures);
 }
 
 /**
@@ -73,17 +81,20 @@ export function CorrectionPanel({
   onDone: (result: CorrectionResult) => void;
   onCancel: () => void;
 }) {
+  const t = useMessages(dataUploadMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const { metric, cadence, current, name } = editing;
   const money = MONEY_METRICS.includes(metric);
   const percent = metric === 'persistency';
-  const label = figureLabel(metric, cadence);
+  const label = figureLabel(metric, cadence, language);
   const headingId = useId();
   const figureId = useId();
   const reasonId = useId();
 
   const [typed, setTyped] = useState(() => {
     if (current.value === null) return '';
-    return money ? groupDigits(toMajor(current.value)) : String(current.value).replace('.', ',');
+    return money ? groupDigits(toMajor(current.value), figures) : formatDecimalInput(current.value, figures);
   });
   const [reason, setReason] = useState('');
   const [figureError, setFigureError] = useState<string | undefined>();
@@ -96,7 +107,7 @@ export function CorrectionPanel({
 
   const needReason = () => {
     if (reason.trim()) return false;
-    setReasonError('Say why the figure is being corrected.');
+    setReasonError(t.sayWhy);
     return true;
   };
 
@@ -122,14 +133,12 @@ export function CorrectionPanel({
   const save = (e: React.FormEvent) => {
     e.preventDefault();
     const blank = typed.trim() === '';
-    if (blank) setFigureError(current.value === null
-      ? 'Type the figure.'
-      : 'Type the new figure — to empty it, use Clear figure.');
+    if (blank) setFigureError(current.value === null ? t.typeFigure : t.typeNewFigure);
     if (needReason() || blank) return;
     // A decimal with a comma or a point (`parseDecimal`, ADR-0167 §1); money in whole rupiah, digits only.
     const value = money ? toMinor(parseDigits(typed)) : parseDecimal(typed);
     if (Number.isNaN(value)) {
-      setFigureError(`${label} is not a number.`);
+      setFigureError(t.notANumber({ label }));
       return;
     }
     void send(value);
@@ -137,38 +146,34 @@ export function CorrectionPanel({
 
   return (
     <Card className="mb-5" role="region" aria-labelledby={headingId}>
-      <h2 id={headingId} className="text-md font-semibold text-navy">Correct {label} for {name}</h2>
+      <h2 id={headingId} className="text-md font-semibold text-navy">{t.correctHeading({ label, name })}</h2>
       <p className="mt-1 text-sm text-muted">
-        {editing.agentCode} · {monthLabel(month)} · Now: {showFigure(metric, current.value)}
-        {current.provenance ? ` (${SOURCE[current.provenance]}` : ''}
-        {current.correction?.by ? ` by ${current.correction.by}` : ''}
-        {current.correction?.at ? ` on ${formatDayLong(current.correction.at)}` : ''}
-        {current.correction?.reason ? ` — “${current.correction.reason}”` : ''}
-        {current.provenance ? ')' : ''}
+        {editing.agentCode} · {monthLabel(month, figures)} · {t.now({ figure: showFigure(metric, current.value, figures, language) })}
+        {current.provenance ? t.sourceNote({
+          source: t.source[current.provenance],
+          by: current.correction?.by ?? null,
+          day: current.correction?.at ? formatDayLong(current.correction.at, figures) : null,
+          reason: current.correction?.reason ?? null,
+        }) : ''}
       </p>
 
       <form onSubmit={save} noValidate className="mt-3 grid gap-3 sm:grid-cols-2">
-        <Field label="New figure" htmlFor={figureId} error={figureError}>
+        <Field label={t.newFigure} htmlFor={figureId} error={figureError}>
           <TextInput
             id={figureId}
             inputMode={money ? 'numeric' : 'decimal'}
             autoComplete="off"
-            prefix={money ? 'Rp' : undefined}
+            prefix={money ? moneyPrefix(figures) : undefined}
             suffix={percent ? '%' : undefined}
             invalid={!!figureError}
             value={typed}
             onChange={(e) => {
               const v = e.target.value;
-              setTyped(money ? (v.replace(/\D/g, '') === '' ? '' : groupDigits(parseDigits(v))) : v);
+              setTyped(money ? (v.replace(/\D/g, '') === '' ? '' : groupDigits(parseDigits(v), figures)) : v);
             }}
           />
         </Field>
-        <Field
-          label="Why is it being corrected?"
-          htmlFor={reasonId}
-          hint="Kept with the figure, and in the audit log."
-          error={reasonError}
-        >
+        <Field label={t.why} htmlFor={reasonId} hint={t.whyHint} error={reasonError}>
           <TextInput
             id={reasonId}
             maxLength={500}
@@ -181,8 +186,8 @@ export function CorrectionPanel({
         {refused && <div className="sm:col-span-2"><ErrorBanner {...refused} /></div>}
 
         <div className="flex flex-wrap items-center gap-2.5 sm:col-span-2">
-          <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save correction'}</Button>
-          <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>Cancel</Button>
+          <Button type="submit" disabled={busy}>{busy ? t.saving : t.saveCorrection}</Button>
+          <Button type="button" variant="secondary" onClick={onCancel} disabled={busy}>{t.cancel}</Button>
           {current.value !== null && (
             <Button
               type="button"
@@ -190,7 +195,7 @@ export function CorrectionPanel({
               disabled={busy}
               onClick={() => { if (!needReason()) setClearing(true); }}
             >
-              Clear figure
+              {t.clearFigure}
             </Button>
           )}
         </div>
@@ -198,8 +203,9 @@ export function CorrectionPanel({
 
       <Dialog
         open={clearing}
-        message={`Clear ${label} for ${name} in ${monthLabel(month)}? The figure is emptied, as if nothing had been reported, and your reason is kept with the change.`}
-        confirmLabel="Clear figure"
+        message={t.clearOne({ label, name, month: monthLabel(month, figures) })}
+        confirmLabel={t.clearFigure}
+        cancelLabel={t.cancel}
         tone="danger"
         onConfirm={() => { setClearing(false); void send(null); }}
         onCancel={() => setClearing(false)}

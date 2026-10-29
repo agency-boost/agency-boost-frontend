@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
-import { goalInputsOf, monthsLeftInWords, producedFrom, saveGoal, type Goal } from './goals';
+import { goalInputsOf, groupDigits, monthsLeftInWords, producedFrom, saveGoal, type Goal } from './goals';
 
 /**
  * The provenance marker's words (ADR-0063 §5, P10.1-T6 AC-1): where the APE produced came from, and
@@ -121,5 +121,22 @@ describe('P18.95-T5 AC-5: monthsLeftInWords', () => {
 
   it.each([0.49, 0.1, 0, -1, Number.NaN])('P18.95-T5 AC-5: %s months — below half a month — reads less than a month', (months) => {
     expect(monthsLeftInWords(months)).toBe('less than a month');
+  });
+});
+
+/**
+ * **P18.98-T3: a goal's figures in the reader's language** (AC-1, AC-3): the provenance marker's month and a money
+ * field's grouping. Indonesian when nothing is passed, as every case above; the words move with the screen (T4).
+ */
+describe('P18.98-T3 a goal in each language', () => {
+  it('P18.98-T3 AC-1 writes the marker’s month in the reader’s language', () => {
+    expect(producedFrom({ provenance: 'imported', month: '2026-10' }, 'year', undefined, 'en')).toBe('As of Oct 2026');
+    expect(producedFrom({ provenance: 'imported', month: '2026-08' }, 'month', undefined, 'en')).toBe('From your office’s upload, Aug 2026');
+    expect(producedFrom({ provenance: 'imported', month: '2026-10' }, 'year', undefined, 'id')).toBe('As of Okt 2026');
+  });
+
+  it('P18.98-T3 AC-3 groups a money field’s digits in the reader’s marks', () => {
+    expect(groupDigits(500_000_000)).toBe('500.000.000');
+    expect(groupDigits(500_000_000, 'en')).toBe('500,000,000');
   });
 });

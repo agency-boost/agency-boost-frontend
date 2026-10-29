@@ -9,6 +9,8 @@ import {
 } from '@/lib/admin';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { TEMPLATE_NAME_MAX } from '@/lib/templates';
+import { useMessages } from '@/i18n/language-provider';
+import { adminTemplateMessages } from '@/i18n/messages/admin-template';
 
 /**
  * **Import from another company** (ADR-0115 §5, §6; P13.2-T7 AC-7): one of another company's templates
@@ -37,6 +39,7 @@ export function ImportTemplateDialog({
   onClose: () => void;
   onImported: (template: NamedTemplate) => void;
 }) {
+  const t = useMessages(adminTemplateMessages);
   const id = useId();
   const [companies, setCompanies] = useState<Company[] | null>(null);
   const [fromCompanyId, setFromCompanyId] = useState('');
@@ -104,7 +107,7 @@ export function ImportTemplateDialog({
     // The button waits for a template; a submit by Enter before one is chosen does nothing.
     if (!fromCompanyId || !templateId) return;
     if (!name.trim()) {
-      setNameError('Give the template a name.');
+      setNameError(t.nameMissing);
       return;
     }
     setSaving(true);
@@ -127,18 +130,18 @@ export function ImportTemplateDialog({
   return (
     <Modal
       open={open}
-      title="Import from another company"
-      description="A copy of one of its templates becomes a new template of this company. Later changes on either side never reach the other."
+      title={t.importing.title}
+      description={t.importing.lead}
       onClose={onClose}
       className="max-w-[30rem]"
       footer={(
         <div className="flex flex-wrap gap-2">
           {!none && (
             <Button type="submit" form={`${id}-form`} disabled={saving || !templateId}>
-              {saving ? 'Importing…' : 'Import template'}
+              {saving ? t.importing.importing : t.importing.submit}
             </Button>
           )}
-          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>{t.cancel}</Button>
         </div>
       )}
     >
@@ -146,37 +149,37 @@ export function ImportTemplateDialog({
         {loadError && <ErrorBanner {...loadError} />}
         {templatesError && <ErrorBanner {...templatesError} />}
         {error && <ErrorBanner {...error} />}
-        {companies === null && !loadError && <FieldSkeleton label="Loading companies…" />}
-        {none && <p className="text-md text-muted">There is no other company to import from.</p>}
+        {companies === null && !loadError && <FieldSkeleton label={t.loadingCompanies} />}
+        {none && <p className="text-md text-muted">{t.importing.noOtherCompany}</p>}
         {companies !== null && !none && (
           <>
-            <Field label="Company" htmlFor={`${id}-company`}>
+            <Field label={t.company} htmlFor={`${id}-company`}>
               <Select
                 id={`${id}-company`}
                 value={fromCompanyId}
                 onChange={(e) => setFromCompanyId(e.target.value)}
               >
-                <option value="" disabled>Choose a company</option>
+                <option value="" disabled>{t.importing.chooseCompany}</option>
                 {companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
               </Select>
             </Field>
             {fromCompanyId && templates === null && !templatesError && (
-              <FieldSkeleton label="Loading its templates…" />
+              <FieldSkeleton label={t.importing.loadingTemplates} />
             )}
             {/* The empty state, said rather than drawn as a select with nothing in it (L-01). */}
             {templates !== null && templates.length === 0 && (
-              <p className="text-md text-muted">{fromName ?? 'That company'} has no active template to import.</p>
+              <p className="text-md text-muted">{t.importing.noActive({ company: fromName ?? null })}</p>
             )}
             {templates !== null && templates.length > 0 && (
-              <Field label="Template" htmlFor={`${id}-template`}>
+              <Field label={t.importing.template} htmlFor={`${id}-template`}>
                 <Select id={`${id}-template`} value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>{t.isDefault ? `${t.name} · Default` : t.name}</option>
+                  {templates.map((row) => (
+                    <option key={row.id} value={row.id}>{row.isDefault ? t.picker.withDefault({ name: row.name }) : row.name}</option>
                   ))}
                 </Select>
               </Field>
             )}
-            <Field label="Name" htmlFor={`${id}-name`} error={nameError}>
+            <Field label={t.name} htmlFor={`${id}-name`} error={nameError}>
               <TextInput
                 id={`${id}-name`}
                 value={name}

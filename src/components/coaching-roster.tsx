@@ -4,9 +4,13 @@ import type { Column } from '@/components/ui/data-table';
 import { ButtonLink } from '@/components/ui/field';
 import { RoleBadge, useLadder } from '@/components/ui/role-badge';
 import { StatusPill } from '@/components/ui/status-pill';
+import { messagesIn } from '@/i18n/catalogue';
+import type { Language } from '@/i18n/language';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { coachingMessages } from '@/i18n/messages/coaching';
 import { cn } from '@/lib/cn';
 import {
-  coachingSessionHref, lastOneOnOneLine, lastOneOnOneOverdue, ROSTER_STATUS_LABEL,
+  coachingSessionHref, lastOneOnOneLine, lastOneOnOneOverdue, rosterStatusLabel,
   type Roster, type RosterRow, type RosterStatus,
 } from '@/lib/coaching';
 
@@ -26,13 +30,14 @@ import {
  * table they drew (§12).
  */
 
-/** The prototype's five headings (`:3963`); the last is empty on screen, and named for a screen reader. */
-export const ROSTER_COLUMNS: readonly Column[] = [
-  'Name', 'Last 1:1', 'Last Coached By', 'Status', { label: 'Actions', visuallyHidden: true },
-];
-
-/** Read by a screen reader before the table; the prototype's table has no caption to copy. */
-export const ROSTER_CAPTION = 'Everyone you coach';
+/**
+ * The prototype's five headings (`:3963`) in a language; the last is empty on screen, and named for a screen reader. Its
+ * words are the catalogue's (`messages/coaching.ts`, P18.98-T4).
+ */
+export function rosterColumns(language: Language): readonly Column[] {
+  const { columns } = messagesIn(coachingMessages, language).roster;
+  return [columns.name, columns.last, columns.coachedBy, columns.status, { label: columns.actions, visuallyHidden: true }];
+}
 
 /** `GOAL_PACE_STATUS` in the pill's tones: `Watch closely` is the prototype's amber-yellow (`:1445`). */
 const TONE = {
@@ -48,13 +53,16 @@ const CELL = 'px-5 py-[13px] align-middle';
 /** One step of nesting: `.roster-name-cell.nested{padding-left:26px}` (`:1457`). */
 const INDENT = 26;
 
+/** The table's five columns, a divider spanning them all. */
+const COLUMN_COUNT = 5;
+
 function GroupDivider({ label, count }: { label: string; count?: number }) {
   return (
     <tr>
       {/* `tr.group-divider td` (`:1440-1441`): a full-width band naming the group beneath it. */}
       <th
         scope="rowgroup"
-        colSpan={ROSTER_COLUMNS.length}
+        colSpan={COLUMN_COUNT}
         className="border-y border-hairline bg-navy/[0.045] px-5 py-2.5 text-left font-display text-base font-bold text-navy"
       >
         {label}
@@ -83,12 +91,14 @@ function PersonRow({
   /** Carries its rung's badge (`:10634`): a unit's head, and a head nested inside another unit. */
   badged?: boolean;
 }) {
+  const language = useLanguage();
+  const t = useMessages(coachingMessages).roster;
   const last = row.lastOneOnOne;
   const overdue = lastOneOnOneOverdue(last);
   // A unit's head stands at depth 1, so its members start one step in, as the prototype draws them.
   const steps = nested ? Math.max(1, row.depth - 1) : 0;
   const tone = TONE[row.status];
-  const label = ROSTER_STATUS_LABEL[row.status];
+  const label = rosterStatusLabel(row.status, language);
 
   return (
     <tr
@@ -129,7 +139,7 @@ function PersonRow({
       <td className={CELL}>
         <span className={cn('text-sm font-semibold', overdue ? 'text-alert' : 'text-success')}>
           {/* *Overdue* in words, not by colour alone (P18.8-T15 AC-7). */}
-          {lastOneOnOneLine(last)}
+          {lastOneOnOneLine(last, language)}
         </span>
       </td>
       <td className={CELL}>
@@ -162,7 +172,7 @@ function PersonRow({
             * flex items, the space between them is dropped, and the button reads *Coaching→*.
             */}
           <span>
-            Coaching <span aria-hidden="true">→</span>
+            {t.coaching} <span aria-hidden="true">→</span>
           </span>
         </ButtonLink>
       </td>
@@ -180,6 +190,8 @@ export function CoachingRoster({ roster, phone = false }: {
   /** The window is narrower than 768px: a card per person (P18.95-T3 AC-3). */
   phone?: boolean;
 }) {
+  const language = useLanguage();
+  const t = useMessages(coachingMessages).roster;
   // The junior rung: a member on any other rung heads a unit of their own, nested or not.
   const ladder = useLadder();
   const agentRung = [...ladder].sort((a, b) => a.displayOrder - b.displayOrder)[0]?.code;
@@ -192,10 +204,10 @@ export function CoachingRoster({ roster, phone = false }: {
     // `.list-table-card` (`:1437`), scrolling inside itself on a phone rather than widening the page.
     <div className="overflow-x-auto rounded-lg border border-hairline bg-card">
       <table className="relative w-full border-collapse text-left">
-        <caption className="sr-only">{ROSTER_CAPTION}</caption>
+        <caption className="sr-only">{t.caption}</caption>
         <thead>
           <tr className="border-b border-hairline">
-            {ROSTER_COLUMNS.map((column) => {
+            {rosterColumns(language).map((column) => {
               const name = typeof column === 'string' ? column : column.label;
               return (
                 <th
@@ -212,14 +224,14 @@ export function CoachingRoster({ roster, phone = false }: {
 
         {directAgents.length > 0 && (
           <tbody>
-            <GroupDivider label="Your direct agents" count={directAgents.length} />
+            <GroupDivider label={t.directAgents} count={directAgents.length} />
             {directAgents.map((row) => <PersonRow key={row.membershipId} row={row} />)}
           </tbody>
         )}
 
         {units.length > 0 && (
           <tbody>
-            <GroupDivider label="AAB units" />
+            <GroupDivider label={t.aabUnits} />
           </tbody>
         )}
         {units.map((unit) => (
@@ -256,21 +268,22 @@ const CARD_LABEL = 'text-xs font-semibold uppercase tracking-wide text-muted';
  * table's caption is the cards' heading, there for a screen reader as the caption is.
  */
 function RosterCards({ roster, badgedMember }: { roster: Roster; badgedMember: (member: RosterRow) => boolean }) {
+  const t = useMessages(coachingMessages).roster;
   const { directAgents, units } = roster;
   return (
     <div className="overflow-hidden rounded-lg border border-hairline bg-card">
-      <h2 className="sr-only">{ROSTER_CAPTION}</h2>
+      <h2 className="sr-only">{t.caption}</h2>
       {directAgents.length > 0 && (
         <>
-          <GroupBand label="Your direct agents" count={directAgents.length} />
-          <ul role="list" aria-label="Your direct agents">
+          <GroupBand label={t.directAgents} count={directAgents.length} />
+          <ul role="list" aria-label={t.directAgents}>
             {directAgents.map((row) => <PersonCard key={row.membershipId} row={row} />)}
           </ul>
         </>
       )}
-      {units.length > 0 && <GroupBand label="AAB units" />}
+      {units.length > 0 && <GroupBand label={t.aabUnits} />}
       {units.map((unit) => (
-        <ul key={unit.head.membershipId} role="list" aria-label={`${unit.head.name}’s unit`}>
+        <ul key={unit.head.membershipId} role="list" aria-label={t.unitOf({ name: unit.head.name })}>
           <PersonCard row={unit.head} head />
           {unit.members.map((member) => (
             <PersonCard key={member.membershipId} row={member} nested badged={badgedMember(member)} />
@@ -305,6 +318,8 @@ function GroupBand({ label, count }: { label: string; count?: number }) {
 function PersonCard({
   row, head = false, nested = false, badged = head,
 }: { row: RosterRow; head?: boolean; nested?: boolean; badged?: boolean }) {
+  const language = useLanguage();
+  const t = useMessages(coachingMessages).roster;
   const last = row.lastOneOnOne;
   const overdue = lastOneOnOneOverdue(last);
   const steps = nested ? Math.max(1, row.depth - 1) : 0;
@@ -324,17 +339,17 @@ function PersonCard({
       </p>
       <StatusPill
         status={TONE[row.status]}
-        label={ROSTER_STATUS_LABEL[row.status]}
+        label={rosterStatusLabel(row.status, language)}
         className="mt-2 w-[126px] justify-center px-2.5 py-1 text-xs font-semibold normal-case tracking-normal"
       />
       <dl className="mt-2.5">
-        <dt className={CARD_LABEL}>Last 1:1</dt>
+        <dt className={CARD_LABEL}>{t.columns.last}</dt>
         <dd className="mt-1">
           <span className={cn('text-sm font-semibold', overdue ? 'text-alert' : 'text-success')}>
             {/* *Overdue* in words, not by colour alone (P18.8-T15 AC-7). */}
-            {lastOneOnOneLine(last)}
+            {lastOneOnOneLine(last, language)}
           </span>
-          {last?.coach && <span className="mt-0.5 block text-xs text-muted">by {last.coach.name}</span>}
+          {last?.coach && <span className="mt-0.5 block text-xs text-muted">{t.by({ name: last.coach.name })}</span>}
         </dd>
       </dl>
       <ButtonLink
@@ -342,7 +357,7 @@ function PersonCard({
         className="mt-3 h-auto min-h-11 w-full justify-center px-3.5 py-2 text-base"
       >
         <span>
-          Coaching <span aria-hidden="true">→</span>
+          {t.coaching} <span aria-hidden="true">→</span>
         </span>
       </ButtonLink>
     </li>

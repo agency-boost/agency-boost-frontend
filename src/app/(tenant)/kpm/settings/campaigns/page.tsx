@@ -10,11 +10,18 @@ import { useLadder } from '@/components/ui/role-badge';
 import { DateField } from '@/components/ui/date-field';
 import { Button, Card, Field, Select, Textarea, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { messagesIn } from '@/i18n/catalogue';
+import type { Language } from '@/i18n/language';
+import { kept } from '@/i18n/kept';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { campaignsMessages } from '@/i18n/messages/campaigns';
+import { settingsMessages } from '@/i18n/messages/settings';
+import { settingsCampaignsMessages } from '@/i18n/messages/settings-campaigns';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { figureWords, officeDay, officeDayEdge, POSTER_COLORS, ratioUnitsOf, type PosterColor } from '@/lib/campaigns';
 import { cn } from '@/lib/cn';
 import { suggestCode } from '@/lib/config-code';
-import { parseDecimal } from '@/lib/format';
+import { moneyPrefix, parseDecimal } from '@/lib/format';
 import { parseDigits, toMinor } from '@/lib/goals';
 import { useCan } from '@/lib/session';
 import { byPhaseAndDate } from '@/lib/settings-order';
@@ -27,20 +34,19 @@ import {
   type QualificationRuleRow, type RequirementView,
 } from '@/lib/tenant-config';
 
+/** The two tabs, by their addresses: §A.3's names, the same in both languages (`settings-campaigns.ts`). */
 const TABS = [
-  { label: 'Campaigns', href: '#campaigns' },
-  { label: 'Production club tiers', href: '#tiers' },
+  { label: settingsCampaignsMessages.en.tabs.campaigns, href: '#campaigns' },
+  { label: settingsCampaignsMessages.en.tabs.tiers, href: '#tiers' },
 ];
 
-const PHASE: Record<string, { tone: 'won' | 'open'; text: string }> = {
-  upcoming: { tone: 'open', text: 'Upcoming' },
-  running: { tone: 'won', text: 'Running' },
-  ended: { tone: 'open', text: 'Ended' },
-};
+const PHASE_TONE: Record<string, 'won' | 'open'> = { upcoming: 'open', running: 'won', ended: 'open' };
 
-const COMPARATOR: Record<string, string> = {
-  gte: 'at least', gt: 'more than', lte: 'at most', lt: 'less than', eq: 'exactly',
-};
+/** The comparisons a requirement takes, in the order the form offers them. */
+const COMPARATORS = ['gte', 'gt', 'lte', 'lt', 'eq'] as const;
+
+/** A stored value's words, or the value itself for one this screen does not know. */
+const wordFor = (words: Readonly<Record<string, string>>, value: string) => words[value] ?? value;
 
 /**
  * One requirement in words.
@@ -52,8 +58,15 @@ const COMPARATOR: Record<string, string> = {
  * requirement on one of the office's ratios is written in that ratio's own unit, `ratioUnits` — *Recruitment success
  * rate at least 30%*, where it read *0,30* — and one the office does not hold as a number, as before.
  */
-function readRequirement(r: RequirementView, ratioUnits: ReadonlyMap<string, 'percent' | 'decimal'>): string {
-  return `${r.metricName} ${COMPARATOR[r.comparator] ?? r.comparator} ${figureWords(r.value, r.unit, ratioUnits.get(r.metricKey))}`;
+function readRequirement(
+  r: RequirementView, ratioUnits: ReadonlyMap<string, 'percent' | 'decimal'>, language: Language, figures: Language,
+): string {
+  const t = messagesIn(settingsCampaignsMessages, language);
+  return t.requirement({
+    name: r.metricName,
+    comparator: wordFor(t.comparators, r.comparator),
+    target: figureWords(r.value, r.unit, ratioUnits.get(r.metricKey), figures, language),
+  });
 }
 
 /**
@@ -108,11 +121,6 @@ function requirementBody(row: RequirementDraft, metrics: readonly MetricDefiniti
   };
 }
 
-/** The poster palette's names, in words, for the form's colour list (D-fields). */
-const COLOR_LABEL: Record<PosterColor, string> = {
-  amber: 'Amber', 'amber-dark': 'Dark amber', navy: 'Navy', 'navy-soft': 'Soft navy', muted: 'Grey', success: 'Green', gold: 'Gold',
-};
-
 /**
  * An office's campaigns, and the carrier rules it is measured against (P5-T7, ADR-0026).
  *
@@ -122,6 +130,11 @@ const COLOR_LABEL: Record<PosterColor, string> = {
  * rather than inert controls beside live ones (parity I-76).
  */
 export default function CampaignsSettingsPage() {
+  const t = useMessages(settingsCampaignsMessages);
+  const s = useMessages(settingsMessages);
+  const c = useMessages(campaignsMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const canWrite = useCan('tenant_config:write');
   const [tab, setTab] = useHashTab(TABS);
   const [campaigns, setCampaigns] = useState<CampaignRow[] | null>(null);
@@ -193,14 +206,14 @@ export default function CampaignsSettingsPage() {
               checked={showArchived}
               onChange={(e) => setShowArchived(e.target.checked)}
             />
-            Show archived
+            {s.showArchived}
           </label>
           {canWrite && (
             <Button
               disabled={busy || editing !== null}
               onClick={() => { setDraft(emptyDraft()); setEditing('new'); }}
             >
-              Add a campaign
+              {t.addCampaign}
             </Button>
           )}
         </div>
@@ -208,7 +221,7 @@ export default function CampaignsSettingsPage() {
         {editing && panel()}
 
         {shown.length === 0 ? (
-          <EmptyState title="No campaigns yet. A campaign is something your office runs, with a requirement your agents can actually be measured against." />
+          <EmptyState title={t.empty} />
         ) : (
           <ul className="flex flex-col gap-3">
             {shown.map((campaign) => (
@@ -221,28 +234,28 @@ export default function CampaignsSettingsPage() {
                         <p className="mt-0.5 text-sm text-muted">{campaign.description}</p>
                       )}
                       <p className="mt-1 flex flex-wrap items-center gap-2">
-                        <ConfigBadge tone={PHASE[campaign.phase].tone}>
-                          {PHASE[campaign.phase].text}
+                        <ConfigBadge tone={PHASE_TONE[campaign.phase]}>
+                          {wordFor(t.phases, campaign.phase)}
                         </ConfigBadge>
                         {/* *This office* (P18.97-T4 AC-8; UI-030), where it read *Your office’s*: run here, not by the insurer. */}
-                        <ConfigBadge tone="open">This office</ConfigBadge>
+                        <ConfigBadge tone="open">{t.thisOffice}</ConfigBadge>
                         {campaign.status === 'archived' && (
-                          <ConfigBadge tone="open">Archived</ConfigBadge>
+                          <ConfigBadge tone="open">{s.archivedBadge}</ConfigBadge>
                         )}
                       </p>
                       {campaign.requirements.length > 0 && (
                         <ul className="mt-2 flex flex-col gap-1">
                           {campaign.requirements.map((r) => (
                             <li key={r.metricKey} className="flex flex-wrap items-center gap-2 text-md text-navy">
-                              {readRequirement(r, ratioUnits)}
+                              {readRequirement(r, ratioUnits, language, figures)}
                               {/* A requirement stored before the evaluable set, naming what a campaign cannot measure (T8 AC-1). */}
-                              {r.measured === false && <ConfigBadge tone="open">Not measured yet</ConfigBadge>}
+                              {r.measured === false && <ConfigBadge tone="open">{c.notMeasured}</ConfigBadge>}
                             </li>
                           ))}
                         </ul>
                       )}
                       {campaign.reward && (
-                        <p className="mt-1 text-sm text-muted">Reward: {campaign.reward}</p>
+                        <p className="mt-1 text-sm text-muted">{t.reward({ reward: campaign.reward })}</p>
                       )}
                     </div>
                     {canWrite && (
@@ -252,7 +265,7 @@ export default function CampaignsSettingsPage() {
                           disabled={busy}
                           onClick={() => { setDraft(draftOf(campaign)); setEditing(campaign.id); }}
                         >
-                          Edit
+                          {s.edit}
                         </Button>
                         <Button
                           variant="inlineDanger"
@@ -261,7 +274,7 @@ export default function CampaignsSettingsPage() {
                             ? restoreCampaign(campaign.id)
                             : archiveCampaign(campaign.id)))}
                         >
-                          {campaign.status === 'archived' ? 'Restore' : 'Archive'}
+                          {campaign.status === 'archived' ? s.restore : s.archive}
                         </Button>
                       </div>
                     )}
@@ -286,7 +299,7 @@ export default function CampaignsSettingsPage() {
     return (
       <Card>
         <div className="flex flex-wrap gap-3">
-          <Field label="Title" htmlFor="c-title" className="min-w-60 flex-1">
+          <Field label={t.fieldTitle} htmlFor="c-title" className="min-w-60 flex-1">
             <TextInput
               id="c-title"
               value={draft.title}
@@ -299,9 +312,9 @@ export default function CampaignsSettingsPage() {
             />
           </Field>
           <Field
-            label="Code"
+            label={s.code}
             htmlFor="c-code"
-            hint={isNew ? 'Filled in from the title. Permanent.' : 'Permanent — it never changes.'}
+            hint={isNew ? t.codeHintNew : t.codeHintEditing}
             className="min-w-48"
           >
             <TextInput
@@ -321,7 +334,7 @@ export default function CampaignsSettingsPage() {
           * is an `alert()` (`KPM_Owner.html:1681`), so no form is drawn; the field names are the agent screen's.
           */}
         <div className="mt-3 flex flex-wrap gap-3">
-          <Field label="Kind" htmlFor="c-kind" className="min-w-40">
+          <Field label={t.kind} htmlFor="c-kind" className="min-w-40">
             <Select
               id="c-kind"
               value={draft.kind}
@@ -336,32 +349,32 @@ export default function CampaignsSettingsPage() {
                 }));
               }}
             >
-              <option value="seasonal">Seasonal</option>
-              <option value="structural">Structural</option>
+              <option value="seasonal">{c.seasonal}</option>
+              <option value="structural">{c.structural}</option>
             </Select>
           </Field>
           {structural && (
             <>
-              <Field label="Section" htmlFor="c-subtype" className="min-w-48">
+              <Field label={t.section} htmlFor="c-subtype" className="min-w-48">
                 <Select
                   id="c-subtype"
                   value={draft.subtype}
                   disabled={busy}
                   onChange={(e) => setDraft((n) => ({ ...n, subtype: e.target.value as CampaignSubtypeCode }))}
                 >
-                  <option value="promotion">Promotion Criteria</option>
-                  <option value="ongoing">Production Clubs</option>
+                  <option value="promotion">{c.promotionCriteria}</option>
+                  <option value="ongoing">{c.productionClubs}</option>
                 </Select>
               </Field>
-              <Field label="Read over" htmlFor="c-window" className="min-w-48">
+              <Field label={t.readOver} htmlFor="c-window" className="min-w-48">
                 <Select
                   id="c-window"
                   value={draft.window}
                   disabled={busy}
                   onChange={(e) => setDraft((n) => ({ ...n, window: e.target.value as CampaignWindowCode }))}
                 >
-                  <option value="rolling_12m">The last 12 months</option>
-                  <option value="calendar_year">Each calendar year</option>
+                  <option value="rolling_12m">{t.windows.rolling_12m}</option>
+                  <option value="calendar_year">{t.windows.calendar_year}</option>
                 </Select>
               </Field>
             </>
@@ -370,9 +383,9 @@ export default function CampaignsSettingsPage() {
 
         <div className="mt-3 flex flex-wrap gap-3">
           <Field
-            label="Starts"
+            label={t.starts}
             htmlFor="c-starts"
-            hint={structural ? undefined : 'Asking for production figures, it runs in whole months: from a 1st to a month’s last day.'}
+            hint={structural ? undefined : t.startsHint}
             className="min-w-48 flex-1"
           >
             <DateField
@@ -384,7 +397,7 @@ export default function CampaignsSettingsPage() {
             />
           </Field>
           {!structural && (
-            <Field label="Ends" htmlFor="c-ends" className="min-w-48 flex-1">
+            <Field label={t.ends} htmlFor="c-ends" className="min-w-48 flex-1">
               <DateField
                 id="c-ends"
                 value={draft.endsAt}
@@ -397,8 +410,8 @@ export default function CampaignsSettingsPage() {
         </div>
 
         <fieldset className="mt-3">
-          <legend className="mb-1 text-sm font-semibold text-navy">Open to</legend>
-          <p id="c-rungs-hint" className="mb-1.5 text-sm text-muted">Tick none and it is open to everybody.</p>
+          <legend className="mb-1 text-sm font-semibold text-navy">{t.openTo}</legend>
+          <p id="c-rungs-hint" className="mb-1.5 text-sm text-muted">{t.openToHint}</p>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5" aria-describedby="c-rungs-hint">
             {ladder.map((rung) => (
               <label key={rung.code} className="flex items-center gap-2 text-md text-navy">
@@ -418,7 +431,7 @@ export default function CampaignsSettingsPage() {
         </fieldset>
 
         <div className="mt-3 flex flex-wrap items-end gap-3">
-          <Field label="Poster emoji" htmlFor="c-emoji" className="w-32">
+          <Field label={t.posterEmoji} htmlFor="c-emoji" className="w-32">
             <TextInput
               id="c-emoji"
               value={draft.emoji}
@@ -426,14 +439,14 @@ export default function CampaignsSettingsPage() {
               onChange={(e) => setDraft((n) => ({ ...n, emoji: e.target.value }))}
             />
           </Field>
-          <Field label="Poster colour" htmlFor="c-color" className="min-w-40">
+          <Field label={t.posterColour} htmlFor="c-color" className="min-w-40">
             <Select
               id="c-color"
               value={draft.color}
               disabled={busy}
               onChange={(e) => setDraft((n) => ({ ...n, color: e.target.value as PosterColor }))}
             >
-              {POSTER_COLORS.map((c) => <option key={c} value={c}>{COLOR_LABEL[c]}</option>)}
+              {POSTER_COLORS.map((colour) => <option key={colour} value={colour}>{t.colours[colour]}</option>)}
             </Select>
           </Field>
           {/* The poster as the card draws it, so the colour is seen and not only named. */}
@@ -446,7 +459,7 @@ export default function CampaignsSettingsPage() {
           </span>
         </div>
 
-        <Field label="Card line" htmlFor="c-blurb" hint="One line under the title on the agent’s card." className="mt-3">
+        <Field label={t.cardLine} htmlFor="c-blurb" hint={t.cardLineHint} className="mt-3">
           <TextInput
             id="c-blurb"
             value={draft.blurb}
@@ -455,7 +468,7 @@ export default function CampaignsSettingsPage() {
           />
         </Field>
 
-        <Field label="Description" htmlFor="c-description" hint="What the campaign’s details open to." className="mt-3">
+        <Field label={s.description} htmlFor="c-description" hint={t.descriptionHint} className="mt-3">
           <Textarea
             id="c-description"
             value={draft.description}
@@ -471,10 +484,8 @@ export default function CampaignsSettingsPage() {
           * smallest that keeps a campaign's requirements whole.
           */}
         <fieldset className="mt-3" aria-describedby="c-requirements-hint">
-          <legend className="mb-1 text-sm font-semibold text-navy">What has to be reached</legend>
-          <p id="c-requirements-hint" className="mb-1.5 text-sm text-muted">
-            Only what a campaign can measure — a target nothing computes could never be reached. None, and the campaign is not measured.
-          </p>
+          <legend className="mb-1 text-sm font-semibold text-navy">{t.toReach}</legend>
+          <p id="c-requirements-hint" className="mb-1.5 text-sm text-muted">{t.toReachHint}</p>
           <ul className="flex flex-col gap-2.5">
             {draft.requirements.map((row, i) => {
               const n = i + 1;
@@ -485,14 +496,14 @@ export default function CampaignsSettingsPage() {
               const taken = new Set(draft.requirements.filter((r) => r.key !== row.key).map((r) => r.metricKey));
               return (
                 <li key={row.key} className="flex flex-wrap items-end gap-3" data-requirement-row>
-                  <Field label={`Requirement ${n}`} htmlFor={`c-metric-${row.key}`} className="min-w-56 flex-1">
+                  <Field label={t.requirementN({ n })} htmlFor={`c-metric-${row.key}`} className="min-w-56 flex-1">
                     <Select
                       id={`c-metric-${row.key}`}
                       value={row.metricKey}
                       disabled={busy}
                       onChange={(e) => setRow(row.key, { metricKey: e.target.value })}
                     >
-                      <option value="" disabled>Choose a metric</option>
+                      <option value="" disabled>{t.chooseMetric}</option>
                       {/*
                         * From the registry, not from this file (P5-T9, invariant 7), and only the metrics a campaign
                         * can measure (P18.5-T8 AC-1, D-evaluable): a production figure over whole months, logged
@@ -504,13 +515,13 @@ export default function CampaignsSettingsPage() {
                       {/* A requirement stored before the set existed stays on its own campaign, and goes back unchanged. */}
                       {row.metricKey && !measurable && (
                         <option value={row.metricKey}>
-                          {(metric?.name ?? row.stored?.metricName ?? row.metricKey)} (not measured yet)
+                          {t.notMeasuredOption({ name: metric?.name ?? row.stored?.metricName ?? row.metricKey })}
                         </option>
                       )}
                     </Select>
                   </Field>
                   <Field
-                    label={<><span className="sr-only">{`Requirement ${n} `}</span>Comparison</>}
+                    label={<><span className="sr-only">{t.requirementBefore({ n })}</span>{t.comparison}</>}
                     htmlFor={`c-comparator-${row.key}`}
                     className="min-w-36"
                   >
@@ -520,13 +531,13 @@ export default function CampaignsSettingsPage() {
                       disabled={busy}
                       onChange={(e) => setRow(row.key, { comparator: e.target.value })}
                     >
-                      {Object.entries(COMPARATOR).map(([value, words]) => (
-                        <option key={value} value={value}>{words}</option>
+                      {COMPARATORS.map((value) => (
+                        <option key={value} value={value}>{t.comparators[value]}</option>
                       ))}
                     </Select>
                   </Field>
                   <Field
-                    label={<><span className="sr-only">{`Requirement ${n} `}</span>{unit === 'idr_minor' ? 'Target (Rp)' : 'Target'}</>}
+                    label={<><span className="sr-only">{t.requirementBefore({ n })}</span>{unit === 'idr_minor' ? t.targetMoney({ mark: moneyPrefix(figures) }) : t.target}</>}
                     htmlFor={`c-value-${row.key}`}
                     className="min-w-40"
                   >
@@ -543,11 +554,11 @@ export default function CampaignsSettingsPage() {
                   <Button
                     variant="inlineDanger"
                     disabled={busy}
-                    aria-label={`Remove requirement ${n}`}
+                    aria-label={t.removeRequirement({ n })}
                     className="mb-2.5"
                     onClick={() => setDraft((d) => ({ ...d, requirements: d.requirements.filter((r) => r.key !== row.key) }))}
                   >
-                    Remove
+                    {s.remove}
                   </Button>
                 </li>
               );
@@ -559,11 +570,11 @@ export default function CampaignsSettingsPage() {
             className="mt-2.5"
             onClick={() => setDraft((d) => ({ ...d, requirements: [...d.requirements, blankRequirement()] }))}
           >
-            + Add requirement
+            {t.addRequirement}
           </Button>
         </fieldset>
 
-        <Field label="Reward" htmlFor="c-reward" className="mt-3">
+        <Field label={t.rewardField} htmlFor="c-reward" className="mt-3">
           <TextInput
             id="c-reward"
             value={draft.reward}
@@ -597,9 +608,9 @@ export default function CampaignsSettingsPage() {
               setEditing(null);
             })}
           >
-            {isNew ? 'Add the campaign' : 'Save the campaign'}
+            {isNew ? t.addTheCampaign : t.saveTheCampaign}
           </Button>
-          <Button variant="secondary" disabled={busy} onClick={() => setEditing(null)}>Cancel</Button>
+          <Button variant="secondary" disabled={busy} onClick={() => setEditing(null)}>{s.cancel}</Button>
         </div>
       </Card>
     );
@@ -614,25 +625,21 @@ export default function CampaignsSettingsPage() {
       <div className="flex flex-col gap-4">
         <Card>
           <p className="text-md text-navy">
-            <strong>These are your insurer’s, not your office’s.</strong>{' '}
-            <span className="text-muted">
-              Production club tiers and Maintenance of Contract are the carrier’s recognition and
-              contract rules. You can see what your leaders are measured against; changing them is
-              not your office’s to do — the same boundary as the Company field on Branch info.
-            </span>
+            <strong>{t.insurers}</strong>{' '}
+            <span className="text-muted">{t.insurersLine}</span>
           </p>
         </Card>
 
         {([
-          { heading: 'Production club tiers', rows: tiers },
-          { heading: 'Maintenance of Contract', rows: moc },
+          { heading: t.tierHeadings.tiers, rows: tiers },
+          { heading: t.tierHeadings.moc, rows: moc },
         ]).map(({ heading, rows }) => (
           <Card key={heading} className="p-0">
             <div className="border-b border-hairline px-4 py-3 sm:px-5">
               <h2 className="font-display text-lg font-bold text-navy">{heading}</h2>
             </div>
             {rows.length === 0 ? (
-              <p className="px-4 py-3 text-md text-muted sm:px-5">Nothing here yet.</p>
+              <p className="px-4 py-3 text-md text-muted sm:px-5">{t.nothingHere}</p>
             ) : (
               <ul className="flex flex-col divide-y divide-hairline">
                 {rows.map((rule) => (
@@ -645,7 +652,7 @@ export default function CampaignsSettingsPage() {
                         </ConfigBadge>
                       )}
                       {rule.waitingOnMetrics.length > 0 && (
-                        <ConfigBadge tone="open">Not measured yet</ConfigBadge>
+                        <ConfigBadge tone="open">{c.notMeasured}</ConfigBadge>
                       )}
                     </p>
                     <ul className="mt-1 flex flex-col gap-1">
@@ -653,25 +660,22 @@ export default function CampaignsSettingsPage() {
                         <li key={group.criteria.map((c) => c.metricKey).join('-')} className="text-md text-navy">
                           {i > 0 && (
                             <span className="text-sm font-semibold text-muted">
-                              {rule.groupMode === 'any' ? 'or ' : 'and '}
+                              {rule.groupMode === 'any' ? t.groupJoin.any : t.groupJoin.all}
                             </span>
                           )}
-                          {group.criteria.map((c) => readRequirement(c, ratioUnits)).join(
-                            group.mode === 'all' ? ', and ' : ', or ',
+                          {group.criteria.map((criterion) => readRequirement(criterion, ratioUnits, language, figures)).join(
+                            group.mode === 'all' ? t.criteriaJoin.all : t.criteriaJoin.any,
                           )}
                         </li>
                       ))}
                     </ul>
                     {rule.reward && (
-                      <p className="mt-1 text-sm text-muted">Reward: {rule.reward}</p>
+                      <p className="mt-1 text-sm text-muted">{t.reward({ reward: rule.reward })}</p>
                     )}
                     {rule.waitingOnMetrics.length > 0 && (
                       // The state and what it waits on, and nothing about when (ADR-0070). It read
                       // "until the production figures arrive", which was timing, and stale besides.
-                      <p className="mt-1 text-sm text-muted">
-                        Nothing measures {rule.waitingOnMetrics.join(', ')} yet, so this rule cannot
-                        be worked out. Nothing here guesses them.
-                      </p>
+                      <p className="mt-1 text-sm text-muted">{t.waitingOn({ metrics: rule.waitingOnMetrics.join(', ') })}</p>
                     )}
                   </li>
                 ))}
@@ -685,11 +689,11 @@ export default function CampaignsSettingsPage() {
 
   return (
     <SettingsScreen
-      title="Campaigns"
-      subtitle="What your office is running, and what your insurer measures your leaders against."
+      title={t.title}
+      subtitle={t.subtitle}
       permission="campaign_settings:read"
       tabs={TABS}
-      tabsLabel="Campaign sections"
+      tabsLabel={s.sections({ title: kept('Campaign') })}
       activeHref={tab}
       onSelectTab={setTab}
       error={campaigns === null ? error : null}

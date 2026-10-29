@@ -5,7 +5,9 @@ import { usePathname } from 'next/navigation';
 import { Page } from '@/components/page';
 import { CatalogSkeleton, ProductCatalog } from '@/components/product-catalog';
 import { SalesToolsTabs } from '@/components/sales-tools-tabs';
-import { PRODUCT_CATALOG_HREF, PROTOTYPE_COPY } from '@/lib/product-catalog';
+import { useMessages } from '@/i18n/language-provider';
+import { productCatalogMessages } from '@/i18n/messages/product-catalog';
+import { PRODUCT_CATALOG_HREF } from '@/lib/product-catalog';
 
 /**
  * **Product Catalog** (`/product-catalog`, and its drawer at `/product-catalog/[productCode]`;
@@ -23,13 +25,14 @@ import { PRODUCT_CATALOG_HREF, PROTOTYPE_COPY } from '@/lib/product-catalog';
  * drawer too. Behind an open drawer the strip, like the grid, takes no focus and no click: the dialog is modal.
  */
 export default function ProductCatalogLayout({ children }: { children: ReactNode }) {
+  const t = useMessages(productCatalogMessages);
   const drawerOpen = usePathname() !== PRODUCT_CATALOG_HREF;
   return (
     // The sub-line is not drawn on a phone: the client's *Remove* (P18.95-T7 AC-1, grey text row 13), its search above
     // the grid since P18.95-T6.
     <Page
-      title={PROTOTYPE_COPY.catalogTitle}
-      subtitle={PROTOTYPE_COPY.catalogSubtitle}
+      title={t.title}
+      subtitle={t.subtitle}
       subtitleOnPhone={false}
       permission="product_catalog:read"
     >

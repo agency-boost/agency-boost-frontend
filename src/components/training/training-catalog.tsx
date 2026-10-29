@@ -9,11 +9,13 @@ import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { TAB_PHONE, TAB_ROW_PHONE, TEXT_TAP, UNDERLINED_ROW_PHONE } from '@/components/ui/phone';
 import { useTabRow } from '@/components/ui/use-tab-row';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { trainingMessages } from '@/i18n/messages/training';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { usePhone } from '@/lib/use-phone';
 import {
-  OWN_COPY, PROTOTYPE_COPY, readTrainingProgress, trainingCategoryHref,
+  readTrainingProgress, trainingCategoryHref,
   type TrainingCategoryProgress, type TrainingProgressView,
 } from '@/lib/training';
 
@@ -74,6 +76,7 @@ export function TrainingCatalogProvider({ children }: { children: ReactNode }) {
  */
 export function TrainingLanding() {
   const { view, error, reload } = useTrainingCatalog();
+  const t = useMessages(trainingMessages);
   const router = useRouter();
   const first = view?.categories.find((c) => c.offered) ?? null;
 
@@ -84,8 +87,8 @@ export function TrainingLanding() {
   if (error && !view) return <ReadFailed error={error} onRetry={reload} />;
   if (!view || first) return <CatalogSkeleton />;
   return (
-    <Page title={OWN_COPY.title}>
-      <EmptyCard title={OWN_COPY.noTraining} sub={OWN_COPY.noTrainingSub} />
+    <Page title={t.title}>
+      <EmptyCard title={t.noTraining} sub={t.noTrainingSub} />
     </Page>
   );
 }
@@ -99,6 +102,7 @@ export function TrainingLanding() {
  */
 export function TrainingCategory({ code }: { code: string }) {
   const { view, error, reload, phone } = useTrainingCatalog();
+  const t = useMessages(trainingMessages);
   if (error && !view) return <ReadFailed error={error} onRetry={reload} />;
   if (!view) return <CatalogSkeleton />;
 
@@ -108,19 +112,19 @@ export function TrainingCategory({ code }: { code: string }) {
   if (!category) return <CategoryNotFound />;
 
   const hasModules = category.total > 0;
-  const title = PROTOTYPE_COPY.categoryTitle(category.label);
+  const title = t.categoryTitle({ label: category.label });
   // The nav item's words over every category (P18.95-T9 AC-2): the tab names the category, the empty card its title.
   return (
-    <Page title={OWN_COPY.title} subtitle={hasModules ? (category.description ?? undefined) : PROTOTYPE_COPY.comingSoon}>
+    <Page title={t.title} subtitle={hasModules ? (category.description ?? undefined) : t.comingSoon}>
       <TrainingSubtabs categories={offered} current={category.code} />
       <div className="mx-auto flex max-w-[820px] flex-col gap-3">
         {hasModules ? (
           <>
-            <h2 className="font-display text-xl font-bold text-navy">{PROTOTYPE_COPY.skillsList}</h2>
+            <h2 className="font-display text-xl font-bold text-navy">{t.skillsList}</h2>
             <SkillCards skills={category.skills} categoryCode={category.code} phone={phone} />
           </>
         ) : (
-          <EmptyCard title={title} sub={PROTOTYPE_COPY.comingSoon} />
+          <EmptyCard title={title} sub={t.comingSoon} />
         )}
       </div>
     </Page>
@@ -145,10 +149,11 @@ export function TrainingSubtabs({
 }) {
   const TAB = cn('-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold', TAB_PHONE);
   const row = useTabRow<HTMLElement>(current);
+  const t = useMessages(trainingMessages);
   return (
     <nav
       ref={row.ref}
-      aria-label={PROTOTYPE_COPY.tab}
+      aria-label={t.tab}
       data-fade={row.fade}
       className={cn('mb-6 flex flex-wrap gap-x-6 gap-y-2 border-b border-hairline', TAB_ROW_PHONE, UNDERLINED_ROW_PHONE)}
     >
@@ -177,9 +182,10 @@ export function EmptyCard({ title, sub }: { title: string; sub?: string }) {
 }
 
 function CategoryNotFound() {
+  const t = useMessages(trainingMessages);
   return (
-    <Page title={OWN_COPY.title}>
-      <NotFoundCard title={OWN_COPY.categoryNotFound} />
+    <Page title={t.title}>
+      <NotFoundCard title={t.categoryNotFound} />
     </Page>
   );
 }
@@ -189,12 +195,13 @@ function CategoryNotFound() {
  * and the way to the reader's training — the nav item's own words.
  */
 export function NotFoundCard({ title }: { title: string }) {
+  const t = useMessages(trainingMessages);
   return (
     <Card>
       <h2 className="font-display text-lg font-bold text-navy">{title}</h2>
-      <p className="mt-1 text-md text-muted">{OWN_COPY.notFoundSub}</p>
+      <p className="mt-1 text-md text-muted">{t.notFoundSub}</p>
       <Link href="/training" className={cn('mt-3 inline-block text-md font-semibold text-navy-soft hover:underline', TEXT_TAP)}>
-        {OWN_COPY.trainingModules}
+        {t.trainingModules}
       </Link>
     </Card>
   );
@@ -202,18 +209,20 @@ export function NotFoundCard({ title }: { title: string }) {
 
 /** The read failed (`toDisplayError`): why, and the way to ask again. */
 export function ReadFailed({ error, onRetry }: { error: ApiError; onRetry: () => void }) {
+  const t = useMessages(trainingMessages);
   return (
-    <Page title={OWN_COPY.title}>
+    <Page title={t.title}>
       <ErrorBanner {...error} />
-      <Button variant="secondary" className="mt-3" onClick={onRetry}>{OWN_COPY.tryAgain}</Button>
+      <Button variant="secondary" className="mt-3" onClick={onRetry}>{t.tryAgain}</Button>
     </Page>
   );
 }
 
 /** The list on its way: the title, the subtabs and two skill cards, shaped like what is coming. */
-export function CatalogSkeleton({ label = OWN_COPY.loadingCatalog }: { label?: string }) {
+export function CatalogSkeleton({ label }: { label?: string }) {
+  const t = useMessages(trainingMessages);
   return (
-    <Skeleton label={label}>
+    <Skeleton label={label ?? t.loadingCatalog}>
       <SkeletonBar className="h-7 w-56" />
       <SkeletonBar className="mt-2 w-80 max-w-full" />
       <div className="mb-6 mt-6 flex gap-6 border-b border-hairline pb-3">

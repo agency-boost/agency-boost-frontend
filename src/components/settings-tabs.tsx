@@ -6,6 +6,9 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
 import { TAB_PHONE, TAB_ROW_PHONE, UNDERLINED_ROW_PHONE } from '@/components/ui/phone';
 import { useTabRow } from '@/components/ui/use-tab-row';
+import { kept } from '@/i18n/kept';
+import { useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
 
 /**
  * The sub-tabs inside one Settings item.
@@ -24,7 +27,7 @@ export function SettingsTabs({
   tabs,
   onSelect,
   activeHref,
-  label = 'Activity settings',
+  label,
   variant = 'tabs',
 }: {
   /**
@@ -44,7 +47,7 @@ export function SettingsTabs({
   onSelect?: (href: string) => void;
   activeHref?: string;
   /**
-   * The row's accessible name.
+   * The row's accessible name — *Activity settings* where a screen gives none.
    *
    * Two rows of tabs on one screen — an item and its halves — are two `<nav>`s, and two
    * landmarks with the same name is a landmark a screen-reader user cannot tell apart.
@@ -64,6 +67,7 @@ export function SettingsTabs({
    */
   variant?: 'tabs' | 'subtabs';
 }) {
+  const t = useMessages(settingsMessages);
   const pathname = usePathname();
   const subtabs = variant === 'subtabs';
   const hintId = useId();
@@ -79,7 +83,7 @@ export function SettingsTabs({
         TAB_ROW_PHONE,
         !subtabs && UNDERLINED_ROW_PHONE,
       )}
-      aria-label={label}
+      aria-label={label ?? t.activitySettings}
     >
       {tabs.map((tab) => {
         const active = (activeHref ?? pathname) === tab.href;
@@ -114,8 +118,8 @@ export function SettingsTabs({
   );
 }
 
-/** The two halves of the prototype's Activity types screen. */
+/** The two halves of the prototype's Activity types screen: §A.3's tabs, the same in both languages. */
 export const ACTIVITY_SETTINGS_TABS = [
-  { label: 'Activity types', href: '/kpm/settings/activity-types' },
-  { label: 'Ratio benchmarks', href: '/kpm/settings/ratio-benchmarks' },
+  { label: kept('Activity types'), href: '/kpm/settings/activity-types' },
+  { label: kept('Ratio benchmarks'), href: '/kpm/settings/ratio-benchmarks' },
 ];

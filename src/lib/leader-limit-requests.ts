@@ -1,3 +1,6 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { leaderLimitMessages } from '@/i18n/messages/leader-limit';
 import { api, type ApiError } from './api-client';
 
 /**
@@ -78,12 +81,16 @@ export const declineLeaderLimitRequest = (requestId: string, reason: string) =>
 /** Said after the console decides, so the nav's pending count reads afresh (`useLeaderLimitPending`). */
 export const LEADER_LIMIT_QUEUE_CHANGED = 'agencyboost:leader-limit-queue-changed';
 
-/** What the request asks for, in a sentence: *Agent → Associate Agency Builder*, or *let in as AAB*. */
+/**
+ * What the request asks for, in a sentence: *Agent → Associate Agency Builder*, or *let in as AAB* — in the reader's
+ * `language` (P18.98-T4; `useLanguage()`), English, the source, when given none.
+ */
 export function requestedChange(
   row: Pick<LeaderLimitRequestRow, 'action' | 'fromOrgLevelCode' | 'toOrgLevelCode'>,
   label: (code: string) => string,
+  language: Language = SOURCE_LANGUAGE,
 ): string {
   return row.action === 'promote'
     ? `${label(row.fromOrgLevelCode)} → ${label(row.toOrgLevelCode ?? '')}`
-    : `Let in as ${label(row.fromOrgLevelCode)}`;
+    : messagesIn(leaderLimitMessages, language).letInAs({ rung: label(row.fromOrgLevelCode) });
 }

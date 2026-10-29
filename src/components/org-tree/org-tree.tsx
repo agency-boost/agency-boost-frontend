@@ -7,6 +7,10 @@ import {
 } from '@/components/ui/role-badge';
 import { TAP_TARGET } from '@/components/ui/phone';
 import { TermTip } from '@/components/ui/term-tip';
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { orgTreeMessages } from '@/i18n/messages/org-tree';
 import { cn } from '@/lib/cn';
 import { displayName } from '@/lib/display-name';
 import type { OrgLevel } from '@/lib/tenant-config-cache';
@@ -34,7 +38,10 @@ import { defaultCollapsed, defaultOpenInList, layoutTree, NODE_HEIGHT, NODE_WIDT
 export function unitBreakdown(
   counts: Record<string, number>,
   ladder: OrgLevel[] = SEEDED_LADDER,
+  /** The reader's language (P18.98-T4; `useLanguage()`): English, the source, when given none. */
+  language: Language = SOURCE_LANGUAGE,
 ): string {
+  const { directAgents } = messagesIn(orgTreeMessages, language);
   /*
    * Junior first, because that is the prototype's own order and it is also the useful
    * one: a leader's agents are the bulk of their unit and their AABs are the exception.
@@ -54,7 +61,7 @@ export function unitBreakdown(
     parts.push(
       rung.code === 'AGENT'
         // The prototype's exact words for the commonest case.
-        ? `${n} direct agent${n > 1 ? 's' : ''}`
+        ? directAgents({ n })
         : `${n} ${short}`,
     );
   }
@@ -81,6 +88,8 @@ export function OrgTree({
    */
   asList?: boolean;
 }) {
+  const t = useMessages(orgTreeMessages);
+  const language = useLanguage();
   // The company's ladder: labels and colours come from it, not from a map here (P4-T9).
   const ladder = useLadder();
   const [collapsed, setCollapsed] = useState(() => defaultCollapsed(tree));
@@ -101,8 +110,13 @@ export function OrgTree({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-md text-muted">
           {tree.counts.total === 0
-            ? 'Nobody reports to you yet.'
-            : `${tree.counts.total} below you · ${tree.counts.ab} ${rungShort('AB', ladder)} · ${tree.counts.aab} ${rungShort('AAB', ladder)} · ${tree.counts.agent} ${rungShort('AGENT', ladder)}`}
+            ? t.nobody
+            : t.counts({
+              total: tree.counts.total,
+              ab: `${tree.counts.ab} ${rungShort('AB', ladder)}`,
+              aab: `${tree.counts.aab} ${rungShort('AAB', ladder)}`,
+              agent: `${tree.counts.agent} ${rungShort('AGENT', ladder)}`,
+            })}
         </p>
         <ul className="flex flex-wrap items-center gap-3">
           {(['ab', 'aab', 'agent'] as const).map((role) => (
@@ -128,7 +142,7 @@ export function OrgTree({
           {/* Above the layers, never inside one. The prototype emits this card *after*
               the Layer 1 label, so on screen it sits below the rule it is meant to be
               above — contradicting its own comment. */}
-          <p className="text-sm font-semibold uppercase tracking-wide text-muted">Your leader</p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-muted">{t.yourLeader}</p>
           <div className="mt-1 inline-flex items-center gap-3 rounded-md border border-dashed border-hairline bg-card p-3">
             <span
               className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-md font-bold ${avatarClassFor(tree.leader.role, ladder)}`}
@@ -174,7 +188,7 @@ export function OrgTree({
                 className="absolute text-sm font-semibold uppercase tracking-wide text-muted"
                 style={{ left: column.nodes[0]?.x ?? 0, top: 0, width: NODE_WIDTH }}
               >
-                Layer {column.layer}
+                {t.layer({ n: column.layer })}
               </div>
               {column.nodes.map(({ node, x, y }) => {
                 const href = personHref?.(node.membershipId);
@@ -204,7 +218,7 @@ export function OrgTree({
                         )}
                         {node.isSelf && (
                           <span className="ml-1 rounded bg-amber px-1 text-sm font-bold text-navy">
-                            YOU
+                            {t.you}
                           </span>
                         )}
                       </span>
@@ -216,7 +230,7 @@ export function OrgTree({
                           below. */}
                       {node.isLeader && (
                         <span className="mt-0.5 block truncate text-2xs text-muted">
-                          {unitBreakdown(node.directCounts)}
+                          {unitBreakdown(node.directCounts, undefined, language)}
                         </span>
                       )}
                     </span>
@@ -228,8 +242,8 @@ export function OrgTree({
                         aria-expanded={!collapsed.has(node.membershipId)}
                         aria-label={
                           collapsed.has(node.membershipId)
-                            ? `Show who reports to ${node.fullName}`
-                            : `Hide who reports to ${node.fullName}`
+                            ? t.show({ name: node.fullName })
+                            : t.hide({ name: node.fullName })
                         }
                         className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-hairline bg-card text-sm text-navy"
                       >
@@ -246,10 +260,7 @@ export function OrgTree({
       )}
 
       {!asList && hiddenCount > 0 && (
-        <p className="mt-3 text-sm text-muted">
-          {hiddenCount} {hiddenCount === 1 ? 'person is' : 'people are'} inside a closed unit. Units
-          below layer 2 start closed, so a large office opens legibly.
-        </p>
+        <p className="mt-3 text-sm text-muted">{t.closed({ n: hiddenCount })}</p>
       )}
     </div>
   );
@@ -274,6 +285,8 @@ function OrgList({
   personHref?: (membershipId: string) => string | undefined;
   ladder: OrgLevel[];
 }) {
+  const t = useMessages(orgTreeMessages);
+  const language = useLanguage();
   const [open, setOpen] = useState(() => defaultOpenInList(tree));
   const childrenOf = useMemo(() => {
     const below = new Map<string, OrgTreeNode[]>();
@@ -317,7 +330,7 @@ function OrgList({
                   type="button"
                   onClick={() => toggle(node.membershipId)}
                   aria-expanded={expanded}
-                  aria-label={expanded ? `Hide who reports to ${node.fullName}` : `Show who reports to ${node.fullName}`}
+                  aria-label={expanded ? t.hide({ name: node.fullName }) : t.show({ name: node.fullName })}
                   className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-hairline bg-card text-sm text-navy', TAP_TARGET)}
                 >
                   {expanded ? '−' : '+'}
@@ -334,11 +347,11 @@ function OrgList({
               <span className="min-w-0 flex-1">
                 <span className="block break-words text-md font-semibold text-navy">
                   {href ? <Link href={href} className="underline">{label}</Link> : label}
-                  {node.isSelf && <span className="ml-1 rounded bg-amber px-1 text-sm font-bold text-navy">YOU</span>}
+                  {node.isSelf && <span className="ml-1 rounded bg-amber px-1 text-sm font-bold text-navy">{t.you}</span>}
                 </span>
                 <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
                   <RoleBadge role={node.role} tone="muted" />
-                  {node.isLeader && <span className="text-xs text-muted">{unitBreakdown(node.directCounts)}</span>}
+                  {node.isLeader && <span className="text-xs text-muted">{unitBreakdown(node.directCounts, undefined, language)}</span>}
                 </span>
               </span>
             </div>

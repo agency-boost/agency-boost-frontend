@@ -202,3 +202,72 @@ describe('KPM analytics’ client (P18-T2)', () => {
     }
   });
 });
+
+/**
+ * **OD-235, clarified 2026-10-29**: *Producing*'s count is over the same members as its percent — the share's base the
+ * server serves beside it (`activeOf`): a past month's members, a leaver since included — so *4 / 5 · 80%*, never
+ * *4 / 3 · 80%*. *Manpower* beside it stays today's.
+ */
+describe('OD-235 the Producing cell over the share’s own base', () => {
+  const based = (activeAgents: number | null, activePct: number | null, activeOf: number, total: number) =>
+    ({ activeAgents, activePct, activeOf, manpower: { aab: 0, agents: total, total } });
+
+  it('OD-235 writes a past month’s count over the base it was served, never over today’s manpower', () => {
+    expect(activeWords(based(4, 80, 5, 3))).toEqual({ main: '4 / 5', pct: '80%' });
+    expect(activeWords(based(4, 80, 5, 3)).main).not.toBe('4 / 3');
+  });
+
+  it('OD-235 writes this month’s over today’s manpower, which is its base', () => {
+    expect(activeWords(based(21, 68, 31, 31))).toEqual({ main: '21 / 31', pct: '68%' });
+  });
+
+  it('OD-235 keeps Not uploaded yet and the dash over nobody as they were', () => {
+    expect(activeWords(based(null, null, 5, 3))).toEqual({ main: 'Not uploaded yet', pct: null });
+    expect(activeWords(based(0, null, 0, 0))).toEqual({ main: '0 / 0', pct: '—' });
+  });
+});
+
+/**
+ * **P18.98-T4 the module's words in Indonesian** (`i18n/messages/kpm-analytics.ts`): the functions outside React write
+ * the reader's words, and their figures in the figures' language — each passed apart, as the screen passes them.
+ */
+describe('P18.98-T4 KPM analytics’ words, language by language', () => {
+  it('P18.98-T4 writes an APE cell in Indonesian words and figures: dari target Rp 1,5 M, Belum diunggah, Goal belum diatur', () => {
+    expect(moneyWords({ achievedMinor: rp(620), targetMinor: rp(1500), pct: 41 }, 70, 'id', 'id')).toEqual({
+      actual: 'Rp 620 jt', uploaded: true, of: 'dari target Rp 1,5 M', pill: { text: '41%', tone: 'alert' },
+    });
+    expect(moneyWords({ achievedMinor: null, targetMinor: null, pct: null }, 70, 'id', 'id'))
+      .toMatchObject({ actual: 'Belum diunggah', of: 'Goal belum diatur' });
+  });
+
+  it('P18.98-T4 keeps words and figures apart: English words with Indonesian figures, as an unchosen reader reads them', () => {
+    expect(moneyWords({ achievedMinor: rp(620), targetMinor: rp(1500), pct: 41 }, 70, 'en', 'id').of).toBe('of Rp 1,5 M target');
+    expect(moneyWords({ achievedMinor: rp(620), targetMinor: rp(1500), pct: 41 }, 70, 'en', 'en').of).toBe('of IDR 1.5B target');
+  });
+
+  it('P18.98-T4 writes the lines and names in Indonesian, the roles kept and a kept noun in its English plural', () => {
+    expect(leadsWords({ sales: 15, salesPotential: 9, recruit: 8, recruitPotential: 5 }, 'id').sub)
+      .toBe('15 penjualan (9 potensial) · 8 rekrut (5 potensial)');
+    expect(manpowerSub({ aab: 2, agents: 29, total: 31 }, 'id')).toBe('2 AAB · 29 Agents');
+    expect(agentsSub({ aab: 0, agents: 1, total: 1 }, 'id')).toBe('1 Agent');
+    expect(headName({ membershipId: 'm', name: 'Wilson Tanoto', isReader: true, leads: true }, 'id')).toBe('Wilson Tanoto (Anda)');
+    expect(activeWords(producing(null, null, 31), 'id')).toEqual({ main: 'Belum diunggah', pct: null });
+  });
+
+  it('P18.98-T4 names MOC’s button and its verdicts in Indonesian, the server’s sentence as it came', () => {
+    expect(mocButtonName(MOC_MET, 'Hendra Wibowo', 'id')).toBe('Syarat MOC terpenuhi untuk Hendra Wibowo');
+    expect(mocButtonName(MOC_NOT_MET, 'Budi Santoso', 'id')).toBe('Syarat MOC belum terpenuhi untuk Budi Santoso');
+    expect(mocButtonName(MOC_UNKNOWN, 'Wilson Tanoto', 'id')).toBe('MOC untuk Wilson Tanoto — Not uploaded yet: Rolling Persistency — DU/DG.');
+    expect([criterionVerdict(true, 'id'), criterionVerdict(false, 'id'), criterionVerdict(null, 'id')])
+      .toEqual(['Terpenuhi', 'Gap', 'Belum diunggah']);
+  });
+
+  it('P18.98-T4 writes a criterion, a period and a bar in the figures’ language alone', () => {
+    expect(criterionValue('NET_APE', rp(600), 'en')).toBe('IDR 600M');
+    expect(criterionValue('MOC_PERSISTENCY', 74.96, 'en')).toBe('74.96%');
+    expect(periodWords('2026-08..2026-09', 'en')).toBe('Aug – Sep 2026');
+    expect(shortMonth('2026-10', 'en')).toBe('Oct');
+    expect(chartBars([{ month: '2026-08', apeMinor: null }, { month: '2026-09', apeMinor: rp(800) }], 'id', 'en')
+      .map((b) => b.value)).toEqual(['Belum diunggah', 'IDR 800M']);
+  });
+});

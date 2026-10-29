@@ -11,6 +11,10 @@ import {
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { InlineSaveStatus, useInlineSave } from '@/components/ui/inline-save-status';
+import { kept } from '@/i18n/kept';
+import { useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
+import { leadStatusesMessages } from '@/i18n/messages/settings-lead-statuses';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
 import { usePhone } from '@/lib/use-phone';
@@ -27,16 +31,20 @@ import {
   type LeadPipelineRow,
 } from '@/lib/tenant-config';
 
+/** The two ladders by their tabs' names: §A.3's, the same in both languages. */
 const TITLE: Record<LeadPipeline, string> = {
-  sales: 'Sales',
-  recruitment: 'Recruitment',
+  sales: kept('Sales'),
+  recruitment: kept('Recruitment'),
 };
 
 /** A stage's *Expected to close* switch, in its *Saving… → Saved ✓* (P18.95-T1 AC-5). */
 const lateKey = (stageId: string) => `${stageId}\nlate`;
 
-/** Why the stage that closes a pipeline cannot be archived: *Archive*'s tooltip, and its reason behind ⋮. */
-const CLOSING_STAGE_KEPT = 'Make another stage close the pipeline first.';
+/** The switch's name and the badge's words: a metric's name, kept English (§A.4). */
+const EXPECTED_TO_CLOSE = kept('Expected to close');
+
+/** An example of a code, in the field that takes one: an identifier, the same in both languages (the glossary's §D). */
+const STAGE_CODE_EXAMPLE = 'AWAITING_UNDERWRITING';
 
 /**
  * The two lead pipelines (P4-T3, `KPM_Owner.html` Lead statuses).
@@ -57,6 +65,8 @@ const CLOSING_STAGE_KEPT = 'Make another stage close the pipeline first.';
  * answering one question and whichever one a reader trusts, the other contradicts it.
  */
 export default function LeadStatusesPage() {
+  const t = useMessages(leadStatusesMessages);
+  const s = useMessages(settingsMessages);
   const canWrite = useCan('tenant_config:write');
   const [pipelines, setPipelines] = useState<LeadPipelineRow[] | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -113,21 +123,21 @@ export default function LeadStatusesPage() {
   const stageMenu = (
     stage: LeadPipelineRow['statuses'][number], pipeline: LeadPipeline, at: number, count: number,
   ): ActionMenuItem[] => [
-    { label: 'Move up', disabled: busy || at <= 0, onSelect: () => void moveStage(pipeline, stage.id, -1) },
-    { label: 'Move down', disabled: busy || at >= count - 1, onSelect: () => void moveStage(pipeline, stage.id, 1) },
-    { label: 'Edit', onSelect: () => { setEditing(stage.id); setEditLabel(stage.label); } },
+    { label: t.moveUp, disabled: busy || at <= 0, onSelect: () => void moveStage(pipeline, stage.id, -1) },
+    { label: t.moveDown, disabled: busy || at >= count - 1, onSelect: () => void moveStage(pipeline, stage.id, 1) },
+    { label: s.edit, onSelect: () => { setEditing(stage.id); setEditLabel(stage.label); } },
     ...(!stage.isTerminal && stage.status === 'active'
-      ? [{ label: 'Make this close the pipeline', disabled: busy, onSelect: () => void run(() => setTerminalLeadStatus(stage.id)) }]
+      ? [{ label: t.makeClose, disabled: busy, onSelect: () => void run(() => setTerminalLeadStatus(stage.id)) }]
       : []),
     stage.status === 'active'
       ? {
-        label: 'Archive',
+        label: s.archive,
         tone: 'alert' as const,
         disabled: busy || stage.isTerminal,
-        reason: stage.isTerminal ? CLOSING_STAGE_KEPT : undefined,
+        reason: stage.isTerminal ? t.closingKept : undefined,
         onSelect: () => void run(() => archiveLeadStatus(stage.id)),
       }
-      : { label: 'Restore', disabled: busy, onSelect: () => void run(() => restoreLeadStatus(stage.id)) },
+      : { label: s.restore, disabled: busy, onSelect: () => void run(() => restoreLeadStatus(stage.id)) },
   ];
 
   /** The *Expected to close* switch and what it says about its save — on the row from 768px, on a line of its own below. */
@@ -135,7 +145,7 @@ export default function LeadStatusesPage() {
     <>
       <Switch
         id={`late-${stage.id}`}
-        label="Expected to close"
+        label={EXPECTED_TO_CLOSE}
         checked={stage.isLateStage}
         disabled={busy}
         describedBy="late-stage-hint"
@@ -149,7 +159,7 @@ export default function LeadStatusesPage() {
       />
       <InlineSaveStatus
         state={inline.stateOf(lateKey(stage.id))}
-        label={`Expected to close, ${stage.label}`}
+        label={t.expectedFor({ name: stage.label })}
         onRetry={() => {
           inline.retry(lateKey(stage.id));
           document.getElementById(`late-${stage.id}`)?.focus();
@@ -230,8 +240,8 @@ export default function LeadStatusesPage() {
 
   return (
     <SettingsScreen
-      title="Lead statuses"
-      subtitle="The stages a lead moves through. One ladder for sales, one for recruitment."
+      title={kept('Lead statuses')}
+      subtitle={t.subtitle}
       permission="tenant_config:read"
       /*
        * One row, not two: Lead statuses is its own sidebar entry, so the ladder tabs are
@@ -243,10 +253,10 @@ export default function LeadStatusesPage() {
        * does not exist. The template screen already uses fragments for the same reason.
        */
       tabs={[
-        { label: 'Sales', href: '#sales' },
-        { label: 'Recruitment', href: '#recruitment' },
+        { label: TITLE.sales, href: '#sales' },
+        { label: TITLE.recruitment, href: '#recruitment' },
       ]}
-      tabsLabel="Lead pipeline"
+      tabsLabel={t.pipelineTabs}
       activeHref={`#${tab}`}
       onSelectTab={(href) => setTab(href.slice(1) as LeadPipeline)}
       error={error}
@@ -256,9 +266,9 @@ export default function LeadStatusesPage() {
            is the one thing a drag handle cannot. */
         hint: pipelines === null
           ? '\u00a0'
-          : `${pipelines.find((p) => p.pipeline === tab)?.statuses
-            .filter((st) => st.status === 'active').length ?? 0} statuses — `
-            + 'order determines the pipeline stage sequence',
+          : t.count({
+            n: pipelines.find((p) => p.pipeline === tab)?.statuses.filter((st) => st.status === 'active').length ?? 0,
+          }),
         actions: (
           <>
             <label className="flex items-center gap-2 text-md text-navy">
@@ -267,7 +277,7 @@ export default function LeadStatusesPage() {
                 checked={showArchived}
                 onChange={(e) => setShowArchived(e.target.checked)}
               />
-              Show archived
+              {s.showArchived}
             </label>
           </>
         ),
@@ -296,9 +306,7 @@ export default function LeadStatusesPage() {
                    future tense since 2026-10-01 (P10.1-T2): the Overview's tile is not built,
                    and the sentence said it already counted these. */
                 <p id="late-stage-hint" className="mt-1 text-md text-muted">
-                  Switch on the stages a lead is usually close to converting from. Leads at those
-                  stages will count as <strong className="font-semibold">Expected to close</strong> on
-                  the KPM Overview.
+                  {t.lateHint({ expected: <strong className="font-semibold">{EXPECTED_TO_CLOSE}</strong> })}
                 </p>
               )}
 
@@ -306,7 +314,7 @@ export default function LeadStatusesPage() {
                 * A pipeline with no stage — an office started Empty (ADR-0115 §1). Its Owner adds the
                 * first below, and makes one of them close the pipeline.
                 */}
-              {pipeline.statuses.length === 0 && <EmptyState title="No stages yet." className="py-6" />}
+              {pipeline.statuses.length === 0 && <EmptyState title={t.none} className="py-6" />}
               <ol className="mt-3 flex flex-col divide-y divide-hairline">
                 {pipeline.statuses.map((stage, at) => (
                   <li
@@ -352,10 +360,10 @@ export default function LeadStatusesPage() {
                           <CodeField
                             id={`code-stage-code-${stage.code}`}
                             value={stage.code}
-                            reason="Every lead that reached this stage points at it."
+                            reason={t.codeReason}
                           />
                           <FieldRow>
-                          <Field label="Label" htmlFor={`label-${stage.id}`} className="min-w-60 flex-1">
+                          <Field label={s.label} htmlFor={`label-${stage.id}`} className="min-w-60 flex-1">
                             <TextInput
                               id={`label-${stage.id}`}
                               value={editLabel}
@@ -370,9 +378,9 @@ export default function LeadStatusesPage() {
                                 setEditing(null);
                               })}
                             >
-                              Save
+                              {s.save}
                             </Button>
-                            <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                            <Button variant="secondary" onClick={() => setEditing(null)}>{s.cancel}</Button>
                           </FieldRow.Actions>
                           </FieldRow>
                         </div>
@@ -385,21 +393,21 @@ export default function LeadStatusesPage() {
                                 and *Open* is the thing most stages actually are. */}
                             {stage.isTerminal ? (
                               <span className="rounded-full bg-amber px-2 py-0.5 text-sm font-semibold uppercase tracking-wide text-navy">
-                                Closes the pipeline
+                                {t.closesPipeline}
                               </span>
                             ) : (
                               <span className="rounded-full border border-hairline bg-canvas px-2 py-0.5 text-sm font-semibold uppercase tracking-wide text-muted">
-                                Open
+                                {t.open}
                               </span>
                             )}
                             {!canWrite && stage.isLateStage && (
                               <span className="rounded-full bg-success/10 px-2 py-0.5 text-sm font-semibold uppercase tracking-wide text-success">
-                                Expected to close
+                                {EXPECTED_TO_CLOSE}
                               </span>
                             )}
                           </p>
                           {stage.status === 'archived' && (
-                            <p className="mt-0.5 text-sm text-muted">archived</p>
+                            <p className="mt-0.5 text-sm text-muted">{s.archivedLine}</p>
                           )}
                           {/* On a phone, the switch under the stage's name, on a line of its own (AC-3). */}
                           {phone && canWrite && !stage.isTerminal && stage.status === 'active' && (
@@ -412,7 +420,7 @@ export default function LeadStatusesPage() {
                     {canWrite && editing !== stage.id && (phone ? (
                       // One ⋮ at the row's end, named for its stage, the menu's keys and words its own (AC-3).
                       <ActionMenu
-                        label={`Actions for ${stage.label}`}
+                        label={s.actionsFor({ name: stage.label })}
                         items={stageMenu(stage, pipeline.pipeline, at, pipeline.statuses.length)}
                       />
                     ) : (
@@ -421,7 +429,7 @@ export default function LeadStatusesPage() {
                           variant="inline"
                           onClick={() => { setEditing(stage.id); setEditLabel(stage.label); }}
                         >
-                          Edit
+                          {s.edit}
                         </Button>
                         {!stage.isTerminal && stage.status === 'active' && lateSwitch(stage)}
                         {!stage.isTerminal && stage.status === 'active' && (
@@ -430,17 +438,17 @@ export default function LeadStatusesPage() {
                             disabled={busy}
                             onClick={() => void run(() => setTerminalLeadStatus(stage.id))}
                           >
-                            Make this close the pipeline
+                            {t.makeClose}
                           </Button>
                         )}
                         {stage.status === 'active' ? (
                           <Button
                             variant="inlineDanger"
                             disabled={busy || stage.isTerminal}
-                            title={stage.isTerminal ? CLOSING_STAGE_KEPT : undefined}
+                            title={stage.isTerminal ? t.closingKept : undefined}
                             onClick={() => void run(() => archiveLeadStatus(stage.id))}
                           >
-                            Archive
+                            {s.archive}
                           </Button>
                         ) : (
                           <Button
@@ -448,7 +456,7 @@ export default function LeadStatusesPage() {
                             disabled={busy}
                             onClick={() => void run(() => restoreLeadStatus(stage.id))}
                           >
-                            Restore
+                            {s.restore}
                           </Button>
                         )}
                       </div>
@@ -460,19 +468,19 @@ export default function LeadStatusesPage() {
               {canWrite && (adding === pipeline.pipeline ? (
                 <FieldRow className="mt-3 border-t border-hairline pt-3">
                   <Field
-                    label="Code"
+                    label={s.code}
                     htmlFor={`code-${pipeline.pipeline}`}
-                    hint="Permanent. Every lead holds it."
+                    hint={t.codeHint}
                     className="min-w-48"
                   >
                     <TextInput
                       id={`code-${pipeline.pipeline}`}
                       value={draft.code}
                       onChange={(e) => setDraft({ ...draft, code: e.target.value.toUpperCase() })}
-                      placeholder="AWAITING_UNDERWRITING"
+                      placeholder={STAGE_CODE_EXAMPLE}
                     />
                   </Field>
-                  <Field label="Label" htmlFor={`new-${pipeline.pipeline}`} className="min-w-60 flex-1">
+                  <Field label={s.label} htmlFor={`new-${pipeline.pipeline}`} className="min-w-60 flex-1">
                     <TextInput
                       id={`new-${pipeline.pipeline}`}
                       value={draft.label}
@@ -490,9 +498,9 @@ export default function LeadStatusesPage() {
                         setDraft({ code: '', label: '' });
                       })}
                     >
-                      Add
+                      {s.add}
                     </Button>
-                    <Button variant="secondary" onClick={() => setAdding(null)}>Cancel</Button>
+                    <Button variant="secondary" onClick={() => setAdding(null)}>{s.cancel}</Button>
                   </FieldRow.Actions>
                 </FieldRow>
               ) : (
@@ -504,7 +512,7 @@ export default function LeadStatusesPage() {
                     setDraft({ code: '', label: '' });
                   }}
                 >
-                  Add a {TITLE[pipeline.pipeline].toLowerCase()} stage
+                  {t.addStage({ pipeline: pipeline.pipeline })}
                 </Button>
               ))}
             </Card>

@@ -5,30 +5,11 @@ import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { Dialog } from '@/components/ui/dialog';
 import { Button, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { Toast, useToast } from '@/components/ui/toast';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { requestsMessages } from '@/i18n/messages/requests';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { formatOfficeDay } from '@/lib/format';
+import { formatOfficeDay, OFFICE_TIME_ZONE } from '@/lib/format';
 import { approveTransfer, declineTransfer, readTransferQueue, type TransferView } from '@/lib/invites';
-
-/** The section's words (ADR-0170 §4): ours, no prototype draws a transfer. */
-export const TRANSFER_COPY = {
-  heading: 'Transfer requests',
-  line: 'A leader added somebody who reports to another leader. Approving moves them, and everybody under them, with their history.',
-  caption: 'Transfer requests, oldest first',
-  move: (from: string | null, to: string) => (from ? `From ${from}’s unit to ${to}’s` : `To ${to}’s unit`),
-  typedAs: (name: string) => `Added as ${name}`,
-  asked: (by: string, day: string) => `${by}, ${day}`,
-  approve: 'Approve',
-  decline: 'Decline',
-  cancel: 'Cancel',
-  why: 'Why?',
-  whyHint: 'Sent to the leader who asked.',
-  confirm: (name: string, to: string) => `Move ${name} to ${to}’s unit? Everybody under them moves too.`,
-  confirmLabel: 'Approve transfer',
-  approved: (name: string, to: string) => `Transfer approved ✓ — ${name} is in ${to}’s unit now.`,
-  declined: 'Transfer declined ✓',
-} as const;
-
-const COLUMNS = ['Who', 'Move', 'Asked by', { label: 'Actions', visuallyHidden: true }] as const;
 
 /** The leader typed a name that is not the account's — compared as a person reads them, case and spacing aside. */
 const typedOtherwise = (row: TransferView) => {
@@ -47,6 +28,10 @@ const typedOtherwise = (row: TransferView) => {
  * code typed for the wrong person before approving it.
  */
 export function TransferRequests() {
+  // The section's words (ADR-0170 §4; `i18n/messages/requests.ts`): ours, no prototype draws a transfer.
+  const copy = useMessages(requestsMessages).transfers;
+  const figures = useFigureLanguage();
+  const columns = [copy.columns.who, copy.columns.move, copy.columns.askedBy, { label: copy.columns.actions, visuallyHidden: true as const }];
   const [rows, setRows] = useState<TransferView[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -72,7 +57,7 @@ export function TransferRequests() {
     try {
       // The server answers with the queue as it now stands, so two admins deciding at once see the truth.
       setRows(action === 'approve' ? await approveTransfer(row.transferId) : await declineTransfer(row.transferId, reason.trim() || undefined));
-      show(action === 'approve' ? TRANSFER_COPY.approved(row.member.name, row.to.name) : TRANSFER_COPY.declined);
+      show(action === 'approve' ? copy.approved({ name: row.member.name, to: row.to.name }) : copy.declined);
       setDeclining(null);
       setReason('');
     } catch (err) {
@@ -87,41 +72,41 @@ export function TransferRequests() {
 
   return (
     <section aria-labelledby="transfer-requests" className="mt-6">
-      <h2 id="transfer-requests" className="font-display text-lg font-bold text-navy">{TRANSFER_COPY.heading}</h2>
-      <p className="mb-3 mt-1 text-md text-muted">{TRANSFER_COPY.line}</p>
+      <h2 id="transfer-requests" className="font-display text-lg font-bold text-navy">{copy.heading}</h2>
+      <p className="mb-3 mt-1 text-md text-muted">{copy.line}</p>
       {error && <div className="mb-3"><ErrorBanner {...error} /></div>}
       {rows.length > 0 && (
-        <DataTable caption={TRANSFER_COPY.caption} columns={COLUMNS}>
+        <DataTable caption={copy.caption} columns={columns}>
           {rows.map((row) => (
             <Row key={row.transferId}>
               <Cell className="font-semibold">
                 {row.member.name}
                 <span className="block text-sm font-normal text-muted">
                   {row.member.agentCode}
-                  {typedOtherwise(row) && <> · {TRANSFER_COPY.typedAs(row.requestedName!)}</>}
+                  {typedOtherwise(row) && <> · {copy.typedAs({ name: row.requestedName! })}</>}
                 </span>
               </Cell>
-              <Cell className="text-muted">{TRANSFER_COPY.move(row.from?.name ?? null, row.to.name)}</Cell>
+              <Cell className="text-muted">{copy.move({ from: row.from?.name ?? null, to: row.to.name })}</Cell>
               <Cell className="text-muted">
-                {TRANSFER_COPY.asked(row.requestedBy.name, formatOfficeDay(row.requestedAt))}
+                {`${row.requestedBy.name}, ${formatOfficeDay(row.requestedAt, OFFICE_TIME_ZONE, figures)}`}
               </Cell>
               <Cell>
                 {declining === row.transferId ? (
                   <div className="flex flex-col gap-2">
-                    <Field label={TRANSFER_COPY.why} htmlFor={`transfer-reason-${row.transferId}`} hint={TRANSFER_COPY.whyHint}>
+                    <Field label={copy.why} htmlFor={`transfer-reason-${row.transferId}`} hint={copy.whyHint}>
                       <TextInput id={`transfer-reason-${row.transferId}`} value={reason} onChange={(e) => setReason(e.target.value)} />
                     </Field>
                     <span className="flex flex-wrap gap-2">
-                      <Button variant="danger" disabled={busy} onClick={() => void decide(row, 'decline')}>{TRANSFER_COPY.decline}</Button>
+                      <Button variant="danger" disabled={busy} onClick={() => void decide(row, 'decline')}>{copy.decline}</Button>
                       <Button variant="secondary" disabled={busy} onClick={() => { setDeclining(null); setReason(''); }}>
-                        {TRANSFER_COPY.cancel}
+                        {copy.cancel}
                       </Button>
                     </span>
                   </div>
                 ) : (
                   <span className="flex flex-wrap gap-2">
-                    <Button disabled={busy} onClick={() => setApproving(row)}>{TRANSFER_COPY.approve}</Button>
-                    <Button variant="danger" disabled={busy} onClick={() => setDeclining(row.transferId)}>{TRANSFER_COPY.decline}</Button>
+                    <Button disabled={busy} onClick={() => setApproving(row)}>{copy.approve}</Button>
+                    <Button variant="danger" disabled={busy} onClick={() => setDeclining(row.transferId)}>{copy.decline}</Button>
                   </span>
                 )}
               </Cell>
@@ -131,8 +116,9 @@ export function TransferRequests() {
       )}
       <Dialog
         open={approving !== null}
-        message={approving ? TRANSFER_COPY.confirm(approving.member.name, approving.to.name) : ''}
-        confirmLabel={TRANSFER_COPY.confirmLabel}
+        message={approving ? copy.confirm({ name: approving.member.name, to: approving.to.name }) : ''}
+        confirmLabel={copy.confirmLabel}
+        cancelLabel={copy.cancel}
         onConfirm={() => { if (approving) void decide(approving, 'approve'); }}
         onCancel={() => setApproving(null)}
       />

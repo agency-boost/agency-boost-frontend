@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/field';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { calendarMessages } from '@/i18n/messages/calendar';
 import {
-  initialsOf, OWN_COPY, PEOPLE_GROUP_LABEL, PEOPLE_PAGE, personTag, PROTOTYPE_COPY, searchPeople,
+  initialsOf, PEOPLE_PAGE, personTag, searchPeople,
   type CalendarPeopleItem, type CalendarPeoplePageInfo,
 } from '@/lib/calendar';
 import { useDebounced } from '@/lib/use-debounced';
@@ -61,6 +63,7 @@ export function InviteField({
   onAdd: (person: Picked) => void;
   onRemove: (membershipId: string) => void;
 }) {
+  const t = useMessages(calendarMessages);
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const q = useDebounced(text.trim());
@@ -203,7 +206,7 @@ export function InviteField({
       }}
       className="relative flex flex-col gap-1"
     >
-      <label id={labelId} htmlFor={id} className="text-sm font-semibold text-navy">{PROTOTYPE_COPY.inviteLabel}</label>
+      <label id={labelId} htmlFor={id} className="text-sm font-semibold text-navy">{t.inviteLabel}</label>
       {(fixed.length > 0 || chosen.length > 0) && (
         <ul className="mb-1 flex flex-wrap gap-1.5">
           {fixed.map((person) => (
@@ -226,7 +229,7 @@ export function InviteField({
                   else removers.current.delete(person.membershipId);
                 }}
                 type="button"
-                aria-label={OWN_COPY.remove(person.name)}
+                aria-label={t.remove({ name: person.name })}
                 onClick={() => remove(at)}
                 className="flex h-5 w-5 items-center justify-center rounded-full text-2xs text-muted hover:bg-alert/15 hover:text-alert"
               >
@@ -247,7 +250,7 @@ export function InviteField({
         aria-activedescendant={activeId}
         autoComplete="off"
         value={text}
-        placeholder={PROTOTYPE_COPY.invitePlaceholder}
+        placeholder={t.invitePlaceholder}
         aria-describedby={error ? errorId : undefined}
         aria-invalid={error ? true : undefined}
         onFocus={() => {
@@ -314,16 +317,18 @@ function PeopleList({
   onPick: (person: CalendarPeopleItem) => void;
   onRetry: () => void;
 }) {
+  const t = useMessages(calendarMessages);
+  const language = useLanguage();
   if (failed) {
     return (
       <div role="alert" className="flex items-center justify-between gap-2 px-2.5 py-2 text-sm text-alert">
-        {OWN_COPY.listFailed}
-        <Button variant="inline" onClick={onRetry}>{OWN_COPY.tryAgain}</Button>
+        {t.listFailed}
+        <Button variant="inline" onClick={onRetry}>{t.tryAgain}</Button>
       </div>
     );
   }
-  if (items === null) return <p role="status" className="px-2.5 py-2 text-sm text-muted">{OWN_COPY.searching}</p>;
-  if (items.length === 0) return <p className="px-2.5 py-2 text-sm text-muted">{PROTOTYPE_COPY.noMatches}</p>;
+  if (items === null) return <p role="status" className="px-2.5 py-2 text-sm text-muted">{t.searching}</p>;
+  if (items.length === 0) return <p className="px-2.5 py-2 text-sm text-muted">{t.noMatches}</p>;
 
   // The server's order is the picker's: its groups in order, then tree order. A heading where it changes.
   const groups: { group: CalendarPeopleItem['group']; people: CalendarPeopleItem[] }[] = [];
@@ -338,7 +343,7 @@ function PeopleList({
       {groups.map(({ group, people }, g) => (
         <div key={`${group}-${g}`} role="group" aria-labelledby={`people-group-${group}-${g}`}>
           <p id={`people-group-${group}-${g}`} className="px-2.5 pb-[3px] pt-[7px] text-2xs font-bold uppercase tracking-[0.04em] text-muted">
-            {PEOPLE_GROUP_LABEL[group]}
+            {t.peopleGroups[group]}
           </p>
           {people.map((person) => {
             const id = optionId(person.membershipId);
@@ -359,7 +364,7 @@ function PeopleList({
               >
                 <Avatar initials={initialsOf(person.name)} />
                 <span className="min-w-0 truncate">{person.name}</span>
-                <span className="ml-auto whitespace-nowrap pl-2 text-2xs text-muted">{personTag(person)}</span>
+                <span className="ml-auto whitespace-nowrap pl-2 text-2xs text-muted">{personTag(person, language)}</span>
               </button>
             );
           })}

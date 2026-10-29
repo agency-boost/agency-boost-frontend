@@ -88,7 +88,7 @@ describe('the office’s Events screen', () => {
     render([type()], [event({ startsAt: '2026-10-01T23:30:00.000Z', startsOn: '2026-10-02' })]);
 
     // Written as every screen writes a date (ADR-0167 §1), never the ISO day the read carries.
-    expect(await screen.findByText(/^2 Okt 2026 ·/)).toBeInTheDocument();
+    expect(await screen.findByText(/^2 Oct 2026 ·/)).toBeInTheDocument();
     expect(screen.queryByText(/2026-10-02/)).not.toBeInTheDocument();
   });
 

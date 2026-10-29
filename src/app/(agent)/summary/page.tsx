@@ -2,11 +2,14 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { Page } from '@/components/page';
-import { SUMMARY_VIEWS, SummaryCards, type SummaryView } from '@/components/personal-summary';
+import { SummaryCards, useSummaryViews, type SummaryView } from '@/components/personal-summary';
 import { SummaryPeriodSelect, useSummaryPeriod } from '@/components/summary-period';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Segmented } from '@/components/ui/segmented';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import type { Language } from '@/i18n/language';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { summaryMessages } from '@/i18n/messages/summary';
 import { readActivityRatios, type ActivityRatios } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { formatMonth } from '@/lib/format';
@@ -55,18 +58,23 @@ import { useQuery } from '@/lib/use-query';
  * *Yearly*, from the office's first month to this one, the choice in the address (`?month=`, `?year=`). A closed
  * period shows its final figures, with no pace sentence and no *The gap*. While the next one is read the selects
  * stay and the cards wait as a skeleton: the old month's figures under the new month's name would lie.
+ *
+ * **Its words are the catalogue's** (P18.98-T4; `i18n/messages/summary.tsx`): the title, kept English (§A.2), the line,
+ * *Download*, the switch's *Monthly · Yearly* (`useSummaryViews`) and the wait, in the reader's language; the PDF's
+ * month in the reader's figures'.
  */
 type View = SummaryView;
-
-const VIEWS = SUMMARY_VIEWS;
 
 /**
  * *⬇ Download* (ADR-0068): the browser's print, as the prototype's handler is, under a title that says what
  * the page holds (`printAs`, shared with a coaching session's *⬇ Download as PDF*, ADR-0077).
  */
-/** The PDF's name: the page's title and the period on it — the month on *Monthly*, the year on *Yearly*. */
-const downloadTitle = (summary: Summary, view: View) =>
-  `Personal Summary – ${view === 'month' ? formatMonth(summary.month) : summary.year}`;
+/**
+ * The PDF's name: the page's title and the period on it — the month on *Monthly*, the year on *Yearly*. The title is
+ * kept English (§A.2), and the month is written in the reader's figures' language (P18.98-T4).
+ */
+const downloadTitle = (title: string, summary: Summary, view: View, figures: Language) =>
+  `${title} – ${view === 'month' ? formatMonth(summary.month, figures) : summary.year}`;
 
 export default function PersonalSummaryPage() {
   return (
@@ -78,6 +86,9 @@ export default function PersonalSummaryPage() {
 }
 
 function PersonalSummary() {
+  const t = useMessages(summaryMessages);
+  const figures = useFigureLanguage();
+  const views = useSummaryViews();
   const { asked, view, chooseView, choose, key } = useSummaryPeriod(summaryPeriodFrom(useQuery()));
   /** The last Summary read, and the period it was read for. */
   const [held, setHeld] = useState<{ key: string; summary: Summary } | null>(null);
@@ -116,25 +127,25 @@ function PersonalSummary() {
 
   return (
     <Page
-      title="Personal Summary"
-      subtitle="Your goals, activity and leads — on one page."
+      title={t.title}
+      subtitle={t.subtitle}
       // The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 25): from 768px it reads as before.
       subtitleOnPhone={false}
       actions={summary && (
         // The prototype's glyph before its label (`Overall.html:2705`), as *⬇ Download template* has it on
         // the data upload; hidden from the accessible name, which is the word alone.
-        <Button variant="primary" onClick={() => printAs(downloadTitle(summary, view))} className="gap-1 print:hidden">
-          <span aria-hidden="true">⬇</span>Download
+        <Button variant="primary" onClick={() => printAs(downloadTitle(t.title, summary, view, figures))} className="gap-1 print:hidden">
+          <span aria-hidden="true">⬇</span>{t.download}
         </Button>
       )}
     >
       <div className="mx-auto max-w-[860px]">
         {error && <ErrorBanner {...error} />}
-        {!frame && !error && <SkeletonCards count={2} label="Putting your summary together…" />}
+        {!frame && !error && <SkeletonCards count={2} label={t.loading} />}
         {frame && (
           <Segmented
-            label="Period"
-            tabs={VIEWS}
+            label={t.period}
+            tabs={views}
             active={view}
             onSelect={(id) => chooseView(id as View)}
             className="w-fit print:hidden [&_button]:whitespace-nowrap [&_button]:px-3.5"
@@ -144,7 +155,7 @@ function PersonalSummary() {
                 <SummaryPeriodSelect view={view} frame={frame} asked={asked} onChoose={(value) => choose(value, frame.period)} />
                 {summary
                   ? <SummaryCards summary={summary} view={view} pulse={{ ratios: pulse, error: pulseError }} />
-                  : !error && <SkeletonCards count={2} label="Putting your summary together…" />}
+                  : !error && <SkeletonCards count={2} label={t.loading} />}
               </>
             )}
           </Segmented>

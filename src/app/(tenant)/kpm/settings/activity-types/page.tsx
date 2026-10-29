@@ -11,10 +11,14 @@ import {
   Button, Card, CodeField, Field, FieldRow, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { kept } from '@/i18n/kept';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
+import { activityTypesMessages } from '@/i18n/messages/settings-activity-types';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { useCan } from '@/lib/session';
-import { projectStaged, unstageRow, STAGED_LABEL } from '@/lib/staged-projection';
+import { projectStaged, unstageRow } from '@/lib/staged-projection';
 import { planSummaryTile, summaryGroups, summaryTileName, tileRefusal } from '@/lib/summary-tiles';
 import { reservedRefusal } from '@/lib/reserved-types';
 import { BINDING_ROLE_LABEL, readOwnActivityBinding, rolesByCode, type BindingRole } from '@/lib/activity-binding';
@@ -31,20 +35,28 @@ import {
   type ActivityTypeRow,
 } from '@/lib/tenant-config';
 
-/** What archiving a section does, said beside its control: inline from 1024px, in the ⋮ below it. */
-const ARCHIVE_SECTION_HINT = 'Archives the section and everything in it.';
+/** The two section actions that open an editor in their line — the inline link and the ⋮ item, found by their words. */
+type Opener = 'rename' | 'scope';
 
-/** The two section actions that open an editor in their line, by their words — the inline link's and the ⋮ item's. */
-const OPENER_WORDS = { rename: 'Rename', scope: 'Change who it applies to' } as const;
-type Opener = keyof typeof OPENER_WORDS;
-
-/**
+/*
  * **The chip on a bound type: the stage it counts as** (P18.97-T4 AC-1, ADR-0176 §3; the client's UI-022: *"Set
  * Appointment Set appointment"* read as a name and its alias run together). It is no name of the type but the cascade
  * stage the office's activity binding counts it as (ADR-0163 §3), so it says so — *Counts as: Sales meeting* — on the
  * quiet chip the prototype draws for the activity a cascade column counts (`.activity-tag`, `Overall.html:718-721`).
+ * Its words are the catalogue's (`countsAs`, `messages/settings-activity-types.ts`).
  */
-const countsAs = (stage: string) => `Counts as: ${stage}`;
+
+/**
+ * Examples of a code, in the fields that take one: identifiers, the same in both languages, never words (the
+ * approved glossary's §D: *a code or key* is not a string to translate).
+ */
+const SECTION_CODE_EXAMPLE = 'REFERRALS';
+const TYPE_CODE_EXAMPLE = 'SELL_REFERRAL';
+/**
+ * The prototype's own example of a type's description (`KPM_Owner.html`), in the language the platform's activity
+ * items are written in (OD-238): an example of what an office types, shown as it is in both languages (ADR-0179 §5).
+ */
+const DESCRIPTION_EXAMPLE = 'telepon, WhatsApp, tatap muka, dll';
 
 /**
  * What this office counts (P4-T1, `KPM_Owner.html:1340-1440`).
@@ -60,6 +72,9 @@ const countsAs = (stage: string) => `Counts as: ${stage}`;
  * archived* is how somebody finds one to bring back.
  */
 export default function ActivityTypesPage() {
+  const t = useMessages(activityTypesMessages);
+  const s = useMessages(settingsMessages);
+  const language = useLanguage();
   const canWrite = useCan('tenant_config:write');
   /*
    * **Below 1024px a section's three actions sit behind one ⋮** (P18.97-T6 AC-3, ADR-0178 §2; the client's UI-037:
@@ -169,7 +184,8 @@ export default function ActivityTypesPage() {
         ? line.querySelector<HTMLElement>('input, select, textarea, button')
         : belowDesktop
           ? line.querySelector<HTMLElement>('button[aria-haspopup="menu"]')
-          : [...line.querySelectorAll<HTMLElement>('button')].find((b) => b.textContent === OPENER_WORDS[into]);
+          : [...line.querySelectorAll<HTMLElement>('button')]
+            .find((b) => b.textContent === (into === 'rename' ? s.rename : s.changeWhoItAppliesTo));
       target?.focus();
     };
     // Closed first, then opened: moving straight from one section's editor to another's ends in the new one.
@@ -177,7 +193,7 @@ export default function ActivityTypesPage() {
     if (was.scoping && was.scoping !== scoping) focusIn(was.scoping, 'scope');
     if (renaming && renaming !== was.renaming) focusIn(renaming, 'editor');
     if (scoping && scoping !== was.scoping) focusIn(scoping, 'editor');
-  }, [renaming, scoping, belowDesktop]);
+  }, [renaming, scoping, belowDesktop, s]);
 
   useEffect(() => {
     if (!canReadBinding) return;
@@ -198,7 +214,7 @@ export default function ActivityTypesPage() {
     } catch (err) {
       const shown = toDisplayError(err);
       // A bound type, or its section, refused archiving (ADR-0163 §5): said plainly.
-      setError(tileRefusal(shown) ?? reservedRefusal(shown) ?? shown);
+      setError(tileRefusal(shown, language) ?? reservedRefusal(shown) ?? shown);
     } finally {
       setBusy(null);
     }
@@ -296,7 +312,7 @@ export default function ActivityTypesPage() {
    */
   const appliesTo = (codes: string[]) =>
     (codes.length === 0
-      ? 'Everyone'
+      ? s.everyone
       : codes.map((c) => ladder.find((l) => l.code === c)?.label ?? c).join(' · '));
 
   /*
@@ -377,17 +393,17 @@ export default function ActivityTypesPage() {
   });
   /** The ⋮'s items, in the inline links' order and words; archive and restore held while a write is out, as theirs. */
   const sectionMenu = (category: Section): ActionMenuItem[] => [
-    { label: 'Rename', onSelect: () => startRename(category) },
-    { label: 'Change who it applies to', onSelect: () => startScoping(category) },
+    { label: s.rename, onSelect: () => startRename(category) },
+    { label: s.changeWhoItAppliesTo, onSelect: () => startScoping(category) },
     category.status === 'active'
       ? {
-        label: 'Archive the section',
+        label: t.archiveSection,
         tone: 'alert',
-        hint: ARCHIVE_SECTION_HINT,
+        hint: t.archiveSectionHint,
         disabled: busy !== null,
         onSelect: () => archiveSection(category),
       }
-      : { label: 'Restore the section', disabled: busy !== null, onSelect: () => restoreSection(category) },
+      : { label: t.restoreSection, disabled: busy !== null, onSelect: () => restoreSection(category) },
   ];
 
   /**
@@ -415,8 +431,8 @@ export default function ActivityTypesPage() {
 
   return (
     <SettingsScreen
-      title="Activity types"
-      subtitle="What this office counts. Agents see these on Log Activity, in this order."
+      title={kept('Activity types')}
+      subtitle={t.subtitle}
       permission="tenant_config:read"
       tabs={ACTIVITY_SETTINGS_TABS}
       error={error}
@@ -439,8 +455,10 @@ export default function ActivityTypesPage() {
            screen showed the staged one. */
         hint: categories === null
           ? '\u00a0'
-          : `${shown.flatMap((c) => c.types).filter(({ row }) => row.status === 'active').length} `
-            + `activity types across ${shown.length} categories`,
+          : t.count({
+            types: shown.flatMap((c) => c.types).filter(({ row }) => row.status === 'active').length,
+            sections: shown.length,
+          }),
         /* Archiving is reversible by design (invariant §3) and Restore is one click away,
            so the controls are not red and there is no confirmation: a confirm on a
            reversible act teaches people to dismiss confirms. */
@@ -452,7 +470,7 @@ export default function ActivityTypesPage() {
                 checked={showArchived}
                 onChange={(e) => setShowArchived(e.target.checked)}
               />
-              Show archived
+              {s.showArchived}
             </label>
           </>
         ),
@@ -463,21 +481,18 @@ export default function ActivityTypesPage() {
         <Card className="mb-4">
           {addingSection ? (
             <div className="flex flex-col gap-3">
-              <h2 className="font-display text-lg font-bold text-navy">Add a section</h2>
-              <p className="text-sm text-muted">
-                A heading on the agent&rsquo;s Log Activity screen, with its own activity
-                types under it. You choose who it applies to after it exists.
-              </p>
+              <h2 className="font-display text-lg font-bold text-navy">{t.addSection}</h2>
+              <p className="text-sm text-muted">{t.addSectionLead}</p>
               <FieldRow>
-                <Field label="Code" htmlFor="new-section-code" hint="Permanent once saved." className="min-w-48">
+                <Field label={s.code} htmlFor="new-section-code" hint={t.permanentOnceSaved} className="min-w-48">
                   <TextInput
                     id="new-section-code"
                     value={section.code}
                     onChange={(e) => setSection({ ...section, code: e.target.value.toUpperCase() })}
-                    placeholder="REFERRALS"
+                    placeholder={SECTION_CODE_EXAMPLE}
                   />
                 </Field>
-                <Field label="Name" htmlFor="new-section-label" className="min-w-60 flex-1">
+                <Field label={s.name} htmlFor="new-section-label" className="min-w-60 flex-1">
                   <TextInput
                     id="new-section-label"
                     value={section.label}
@@ -485,9 +500,9 @@ export default function ActivityTypesPage() {
                   />
                 </Field>
                 <Field
-                  label="Description"
+                  label={s.description}
                   htmlFor="new-section-description"
-                  hint="Optional."
+                  hint={s.optional}
                   className="min-w-60 flex-1"
                 >
                   <TextInput
@@ -513,7 +528,7 @@ export default function ActivityTypesPage() {
                     setAddingSection(false);
                   }}
                 >
-                  Add the section
+                  {t.addTheSection}
                 </Button>
                 <Button
                   variant="secondary"
@@ -522,12 +537,12 @@ export default function ActivityTypesPage() {
                     setSection({ code: '', label: '', description: '' });
                   }}
                 >
-                  Cancel
+                  {s.cancel}
                 </Button>
               </div>
             </div>
           ) : (
-            <Button variant="secondary" onClick={() => setAddingSection(true)}>Add a section</Button>
+            <Button variant="secondary" onClick={() => setAddingSection(true)}>{t.addSection}</Button>
           )}
         </Card>
       )}
@@ -535,7 +550,7 @@ export default function ActivityTypesPage() {
       {categories === null ? (
         <SkeletonCards count={5} />
       ) : categories.length === 0 ? (
-        <EmptyState title="No activity types yet" />
+        <EmptyState title={t.none} />
       ) : (
         // `acttype-grid`: two columns, one per category, collapsing at the prototype's
         // own 760px. Five cards stacked made the screen a scroll where it is a glance.
@@ -584,19 +599,19 @@ export default function ActivityTypesPage() {
                   {category.staged && (
                     <>
                       <span className="whitespace-nowrap rounded-full bg-amber/20 px-2 py-0.5 text-sm text-navy">
-                        {STAGED_LABEL[category.staged]}
+                        {s.staged.mark[category.staged]}
                       </span>
                       <button
                         type="button"
                         className="text-sm font-semibold text-navy underline"
                         onClick={() => setStaged((now) => unstageRow(now, 'category', category.id))}
                       >
-                        Undo
+                        {s.undo}
                       </button>
                     </>
                   )}
                   <span className="whitespace-nowrap rounded-full border border-hairline bg-canvas px-2 py-0.5 text-sm font-semibold text-muted">
-                    {category.types.length} {category.types.length === 1 ? 'item' : 'items'}
+                    {s.items({ n: category.types.length })}
                   </span>
                 </span>
               </div>
@@ -615,7 +630,7 @@ export default function ActivityTypesPage() {
                 {scoping === category.id ? (
                   <>
                     <fieldset className="min-w-0 flex-1">
-                      <legend className="text-sm font-semibold text-navy">Applies to</legend>
+                      <legend className="text-sm font-semibold text-navy">{s.appliesTo}</legend>
                       <ul className="mt-1 flex flex-wrap gap-3">
                         {ladder.map((rung) => (
                           <li key={rung.code}>
@@ -632,10 +647,7 @@ export default function ActivityTypesPage() {
                           </li>
                         ))}
                       </ul>
-                      <p className="mt-1 text-sm text-muted">
-                        Tick none to ask everyone. Everything in this section is hidden from
-                        anybody on a rung you leave unticked.
-                      </p>
+                      <p className="mt-1 text-sm text-muted">{t.scopeHint}</p>
                     </fieldset>
                     <Button
                       disabled={busy !== null}
@@ -649,15 +661,15 @@ export default function ActivityTypesPage() {
                         setScoping(null);
                       }}
                     >
-                      Save
+                      {s.save}
                     </Button>
-                    <Button variant="secondary" onClick={() => setScoping(null)}>Cancel</Button>
+                    <Button variant="secondary" onClick={() => setScoping(null)}>{s.cancel}</Button>
                   </>
                 ) : renaming === category.id ? (
                   <>
                     <FieldRow className="min-w-0 flex-1">
                       <Field
-                        label="Name"
+                        label={s.name}
                         htmlFor={`rename-${category.id}`}
                         className="min-w-60 flex-1"
                       >
@@ -668,9 +680,9 @@ export default function ActivityTypesPage() {
                         />
                       </Field>
                       <Field
-                        label="Description"
+                        label={s.description}
                         htmlFor={`redescribe-${category.id}`}
-                        hint="Optional."
+                        hint={s.optional}
                         className="min-w-60 flex-1"
                       >
                         <TextInput
@@ -688,9 +700,9 @@ export default function ActivityTypesPage() {
                         * a tile per section since P18.95-T5 AC-2).
                         */}
                       <Field
-                        label="Summary tile"
+                        label={t.summaryTile}
                         htmlFor={`tile-${category.id}`}
-                        hint="Sections with the same tile are counted together. Empty gives it a tile of its own."
+                        hint={t.summaryTileHint}
                         error={tileError ?? undefined}
                         className="min-w-60 flex-1"
                       >
@@ -712,7 +724,7 @@ export default function ActivityTypesPage() {
                         // Against every section, archived included — they still render history —
                         // and under the name being saved, so typing it means a tile of its own.
                         const plan = planSummaryTile(
-                          sectionDraft.tile, { ...category, label: sectionDraft.label.trim() }, shown,
+                          sectionDraft.tile, { ...category, label: sectionDraft.label.trim() }, shown, language,
                         );
                         if ('refused' in plan) {
                           setTileError(plan.refused);
@@ -748,35 +760,36 @@ export default function ActivityTypesPage() {
                         setRenaming(null);
                       }}
                     >
-                      Save
+                      {s.save}
                     </Button>
-                    <Button variant="secondary" onClick={() => { setTileError(null); setRenaming(null); }}>Cancel</Button>
+                    <Button variant="secondary" onClick={() => { setTileError(null); setRenaming(null); }}>{s.cancel}</Button>
                   </>
                 ) : (
                   <>
                     <p className="flex-1 text-md text-navy">
-                      <span className="text-muted">Applies to </span>
+                      {/* The label, then who: a label and its value, in that order in both languages. */}
+                      <span className="text-muted">{s.appliesTo}{' '}</span>
                       <strong>{appliesTo(category.appliesToOrgLevelCodes)}</strong>
                     </p>
                     {canWrite && (belowDesktop ? (
                       // One ⋮ at the line's end, named for its section, the menu's keys and words its own.
-                      <ActionMenu label={`Actions for ${category.label}`} items={sectionMenu(category)} />
+                      <ActionMenu label={s.actionsFor({ name: category.label })} items={sectionMenu(category)} />
                     ) : (
                       <>
                         <Button variant="inline" onClick={() => startRename(category)}>
-                          Rename
+                          {s.rename}
                         </Button>
                         <Button variant="inline" onClick={() => startScoping(category)}>
-                          Change who it applies to
+                          {s.changeWhoItAppliesTo}
                         </Button>
                         {category.status === 'active' ? (
                           <Button
                             variant="inlineDanger"
                             disabled={busy !== null}
-                            title={ARCHIVE_SECTION_HINT}
+                            title={t.archiveSectionHint}
                             onClick={() => archiveSection(category)}
                           >
-                            Archive the section
+                            {t.archiveSection}
                           </Button>
                         ) : (
                           <Button
@@ -784,7 +797,7 @@ export default function ActivityTypesPage() {
                             disabled={busy !== null}
                             onClick={() => restoreSection(category)}
                           >
-                            Restore the section
+                            {t.restoreSection}
                           </Button>
                         )}
                       </>
@@ -846,10 +859,10 @@ export default function ActivityTypesPage() {
                           <CodeField
                             id={`code-type-code-${type.code}`}
                             value={type.code}
-                            reason="Every activity logged, every ratio and every goal points at it."
+                            reason={t.codeReason}
                           />
                           <FieldRow>
-                            <Field label="Label" htmlFor={`label-${type.id}`} className="min-w-60 flex-1">
+                            <Field label={s.label} htmlFor={`label-${type.id}`} className="min-w-60 flex-1">
                               <TextInput
                                 id={`label-${type.id}`}
                                 value={editLabel}
@@ -857,9 +870,9 @@ export default function ActivityTypesPage() {
                               />
                             </Field>
                             <Field
-                              label="Description"
+                              label={s.description}
                               htmlFor={`description-${type.id}`}
-                              hint="Optional. Shown under the name on the agent's screen."
+                              hint={t.descriptionHint}
                               className="min-w-60 flex-1"
                             >
                               <TextInput
@@ -882,9 +895,9 @@ export default function ActivityTypesPage() {
                                 setEditing(null);
                               }}
                             >
-                              Save
+                              {s.save}
                             </Button>
-                            <Button variant="secondary" onClick={() => setEditing(null)}>Cancel</Button>
+                            <Button variant="secondary" onClick={() => setEditing(null)}>{s.cancel}</Button>
                           </div>
                         </div>
                       ) : (
@@ -897,11 +910,8 @@ export default function ActivityTypesPage() {
                                 tone="navy"
                                 className="ml-2 align-middle normal-case tracking-normal"
                               >
-                                <span
-                                  title={`The summary and the goal plan count this as ${BINDING_ROLE_LABEL[bound.get(type.code)!]}. `
-                                    + 'A Super Admin changes which activities count.'}
-                                >
-                                  {countsAs(BINDING_ROLE_LABEL[bound.get(type.code)!])}
+                                <span title={t.countsAsTip({ stage: BINDING_ROLE_LABEL[bound.get(type.code)!] })}>
+                                  {t.countsAs({ stage: BINDING_ROLE_LABEL[bound.get(type.code)!] })}
                                 </span>
                               </ConfigBadge>
                             )}
@@ -910,19 +920,19 @@ export default function ActivityTypesPage() {
                             <p className="text-sm text-muted">{type.description}</p>
                           )}
                           {type.status === 'archived' && (
-                            <p className="mt-0.5 text-sm text-muted">archived</p>
+                            <p className="mt-0.5 text-sm text-muted">{s.archivedLine}</p>
                           )}
                           {typeMark && (
                             <p className="mt-1 text-sm">
                               <span className="rounded-full bg-amber/20 px-2 py-0.5 text-navy">
-                                {STAGED_LABEL[typeMark]}
+                                {s.staged.mark[typeMark]}
                               </span>
                               <button
                                 type="button"
                                 className="ml-2 font-semibold text-navy underline"
                                 onClick={() => setStaged((now) => unstageRow(now, 'type', type.id))}
                               >
-                                Undo
+                                {s.undo}
                               </button>
                             </p>
                           )}
@@ -940,7 +950,7 @@ export default function ActivityTypesPage() {
                             setEditDescription(type.description ?? '');
                           }}
                         >
-                          Edit
+                          {s.edit}
                         </Button>
                         {type.status === 'active' ? (
                           <Button
@@ -950,7 +960,7 @@ export default function ActivityTypesPage() {
                               op: 'type.archive', id: type.id, expectedVersion: type.version,
                             })}
                           >
-                            Archive
+                            {s.archive}
                           </Button>
                         ) : (
                           <Button
@@ -960,7 +970,7 @@ export default function ActivityTypesPage() {
                               op: 'type.restore', id: type.id, expectedVersion: type.version,
                             })}
                           >
-                            Restore
+                            {s.restore}
                           </Button>
                         )}
                       </div>
@@ -972,19 +982,19 @@ export default function ActivityTypesPage() {
               {canWrite && (adding === category.code ? (
                 <FieldRow className="mt-3 border-t border-hairline pt-3">
                   <Field
-                    label="Code"
+                    label={s.code}
                     htmlFor={`code-${category.id}`}
-                    hint="Permanent. Ratios and goals bind to it."
+                    hint={t.typeCodeHint}
                     className="min-w-48"
                   >
                     <TextInput
                       id={`code-${category.id}`}
                       value={draft.code}
                       onChange={(e) => setDraft({ ...draft, code: e.target.value.toUpperCase() })}
-                      placeholder="SELL_REFERRAL"
+                      placeholder={TYPE_CODE_EXAMPLE}
                     />
                   </Field>
-                  <Field label="Label" htmlFor={`new-label-${category.id}`} className="min-w-60 flex-1">
+                  <Field label={s.label} htmlFor={`new-label-${category.id}`} className="min-w-60 flex-1">
                     <TextInput
                       id={`new-label-${category.id}`}
                       value={draft.label}
@@ -994,16 +1004,16 @@ export default function ActivityTypesPage() {
                   {/* `draft.description` was sent from the first day and no input was ever
                       bound to it, so it was always the empty string. */}
                   <Field
-                    label="Description"
+                    label={s.description}
                     htmlFor={`new-description-${category.id}`}
-                    hint="Optional. Shown under the name on the agent's screen."
+                    hint={t.descriptionHint}
                     className="min-w-60 flex-1"
                   >
                     <TextInput
                       id={`new-description-${category.id}`}
                       value={draft.description}
                       onChange={(e) => setDraft({ ...draft, description: e.target.value })}
-                      placeholder="telepon, WhatsApp, tatap muka, dll"
+                      placeholder={DESCRIPTION_EXAMPLE}
                     />
                   </Field>
                   <FieldRow.Actions>
@@ -1023,9 +1033,9 @@ export default function ActivityTypesPage() {
                         setDraft({ code: '', label: '', description: '' });
                       }}
                     >
-                      Add
+                      {s.add}
                     </Button>
-                    <Button variant="secondary" onClick={() => setAdding(null)}>Cancel</Button>
+                    <Button variant="secondary" onClick={() => setAdding(null)}>{s.cancel}</Button>
                   </FieldRow.Actions>
                 </FieldRow>
               ) : (
@@ -1034,7 +1044,7 @@ export default function ActivityTypesPage() {
                   className="mt-3"
                   onClick={() => { setAdding(category.code); setDraft({ code: '', label: '', description: '' }); }}
                 >
-                  Add to {category.label}
+                  {t.addTo({ name: category.label })}
                 </Button>
               ))}
             </Card>

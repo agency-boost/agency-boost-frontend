@@ -1,8 +1,10 @@
 import type { CSSProperties } from 'react';
 import { shortOfRung, useRoleAvatarClass } from '@/components/ui/role-badge';
 import { TermTip } from '@/components/ui/term-tip';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { kpmOverviewMessages } from '@/i18n/messages/kpm-overview';
 import { cn } from '@/lib/cn';
-import { newThisMonth, PROTOTYPE_COPY, type OverviewComposition, type OverviewRungCount } from '@/lib/kpm-overview';
+import { newThisMonth, type OverviewComposition, type OverviewRungCount } from '@/lib/kpm-overview';
 
 /**
  * *Team composition* (`KPM_Owner.html:938-961`, CSS `:450-459`): *Total members* with *"+{n} new this
@@ -17,14 +19,16 @@ import { newThisMonth, PROTOTYPE_COPY, type OverviewComposition, type OverviewRu
  * (`role-badge.tsx`) — and the label beside it carries the meaning, so colour is never the only cue.
  */
 export function Composition({ composition }: { composition: OverviewComposition }) {
+  const t = useMessages(kpmOverviewMessages);
+  const language = useLanguage();
   return (
     <div
       className="grid grid-cols-2 gap-3.5 lg:[grid-template-columns:1.3fr_repeat(var(--rungs),minmax(0,1fr))]"
       style={{ '--rungs': Math.max(1, composition.rungs.length) } as CSSProperties}
     >
-      <Tile label={PROTOTYPE_COPY.totalMembers} value={composition.total} total>
+      <Tile label={t.totalMembers} value={composition.total} total>
         <p className={cn('mt-1 text-xs font-semibold', composition.newThisMonth > 0 ? 'text-success' : 'text-muted')}>
-          {newThisMonth(composition.newThisMonth)}
+          {newThisMonth(composition.newThisMonth, language)}
         </p>
       </Tile>
       {composition.rungs.map((rung) => <RungTile key={rung.code} rung={rung} />)}
@@ -34,19 +38,17 @@ export function Composition({ composition }: { composition: OverviewComposition 
 
 function RungTile({ rung }: { rung: OverviewRungCount }) {
   const dot = useRoleAvatarClass(rung.code);
-  return (
-    <Tile
-      label={(
-        <>
-          <span aria-hidden="true" className={cn('mr-1.5 inline-block h-2 w-2 rounded-full align-middle', dot)} />
-          {/* The badge's name for the rung (P18.95-T9 AC-1): *AB*, *AAB*, *Agent*; *AAB*'s ⓘ, its first appearance (AC-3). */}
-          {shortOfRung(rung)}
-          {shortOfRung(rung) === 'AAB' && <> <TermTip term="AAB" /></>}
-        </>
-      )}
-      value={rung.count}
-    />
+  // The badge's name for the rung (P18.95-T9 AC-1): *AB*, *AAB*, *Agent* — a role, kept, or the company's own label;
+  // *AAB*'s ⓘ, its first appearance (AC-3).
+  const name = shortOfRung(rung);
+  const label = (
+    <>
+      <span aria-hidden="true" className={cn('mr-1.5 inline-block h-2 w-2 rounded-full align-middle', dot)} />
+      {name}
+      {name === 'AAB' && <> <TermTip term="AAB" /></>}
+    </>
   );
+  return <Tile label={label} value={rung.count} />;
 }
 
 /**

@@ -1,16 +1,20 @@
 'use client';
 
 import type { ReactNode, Ref } from 'react';
+import { kept } from '@/i18n/kept';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { billingMessages } from '@/i18n/messages/billing';
 import {
-  BILLING_COPY as COPY, money, perLeaderDiscount, quoteDay, tierLabel, type Pricing, type QuoteDetails,
+  money, perLeaderDiscount, quoteDay, tierLabel, type Pricing, type QuoteDetails,
 } from '@/lib/billing';
+import { formatCalendarDay } from '@/lib/format';
 import { cn } from '@/lib/cn';
 
 /** What *Generate quote* froze: the calculator's figures, the dialog's five values, and the day (`lastCalc`, `:535-546`). */
 export interface GeneratedQuote {
   pricing: Pricing;
   details: QuoteDetails;
-  /** The office's today when it was generated, `DD/MM/YYYY` (`:653`). */
+  /** The office's today when it was generated, `YYYY-MM-DD` (`:653`), written in the reader's figures. */
   generatedOn: string;
 }
 
@@ -55,6 +59,9 @@ export function QuoteSheet({
   /** The title takes the focus when the quote replaces the editor. */
   headingRef?: Ref<HTMLHeadingElement>;
 }) {
+  const COPY = useMessages(billingMessages).prototype;
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const { pricing, details } = quote;
   const annual = pricing.period === 'annual';
   const hasAnnual = pricing.annualDiscountMinor > 0;
@@ -62,8 +69,8 @@ export function QuoteSheet({
   const meta: [string, string][] = [
     [COPY.kpm, details.kpm.trim()],
     [COPY.pic, details.pic.trim()],
-    [COPY.planStart, quoteDay(details.start)],
-    [COPY.planEnd, quoteDay(details.end)],
+    [COPY.planStart, quoteDay(details.start, figures)],
+    [COPY.planEnd, quoteDay(details.end, figures)],
     [COPY.salesBy, details.sales.trim()],
   ];
 
@@ -72,13 +79,13 @@ export function QuoteSheet({
       <header className="mb-[22px] flex flex-wrap items-center justify-between gap-3 border-b-2 border-navy pb-[18px]">
         <div className="flex items-center gap-2.5">
           <QuoteMark />
-          <span className="font-display text-lg font-extrabold tracking-tight text-navy">AgencyBoost</span>
+          <span className="font-display text-lg font-extrabold tracking-tight text-navy">{kept('AgencyBoost')}</span>
         </div>
         <div className="text-right">
           <h2 ref={headingRef} tabIndex={-1} className="text-sm font-bold uppercase tracking-[0.05em] text-muted">
             {COPY.quoteTitle}
           </h2>
-          <p className="mt-0.5 text-base font-bold text-navy">{COPY.generated(quote.generatedOn)}</p>
+          <p className="mt-0.5 text-base font-bold text-navy">{COPY.generated({ day: formatCalendarDay(quote.generatedOn, figures) })}</p>
         </div>
       </header>
 
@@ -94,25 +101,25 @@ export function QuoteSheet({
       <h3 className={SECTION}>{COPY.planDetails}</h3>
       <dl>
         <QuoteRow label={COPY.tier}>
-          {tierLabel(pricing.tier)}{COPY.leadersSuffix}{pricing.tier.customPricing ? COPY.custom : ''}
+          {COPY.tierLeaders({ range: tierLabel(pricing.tier) })}{pricing.tier.customPricing ? COPY.custom : ''}
         </QuoteRow>
         <QuoteRow label={COPY.leadersOnPlan}>{pricing.leaders}</QuoteRow>
         <QuoteRow label={COPY.billingPeriod}>{annual ? COPY.annualPlan : COPY.sixMonthPlan}</QuoteRow>
-        <QuoteRow label={COPY.standardRow}>{money(pricing.standardMinor)}</QuoteRow>
-        <QuoteRow label={COPY.offerRow}>{money(pricing.offerMinor)}</QuoteRow>
+        <QuoteRow label={COPY.standardRow}>{money(pricing.standardMinor, figures)}</QuoteRow>
+        <QuoteRow label={COPY.offerRow}>{money(pricing.offerMinor, figures)}</QuoteRow>
       </dl>
 
       {(hasAnnual || hasManual) && <h3 className={SECTION}>{COPY.discounts}</h3>}
       <dl className={hasAnnual || hasManual ? undefined : 'mt-6'}>
-        {hasAnnual && <QuoteRow label={COPY.annualDiscount}>{perLeaderDiscount(pricing.annualDiscountMinor)}</QuoteRow>}
-        {hasManual && <QuoteRow label={COPY.manualDiscount}>{perLeaderDiscount(pricing.manualDiscountMinor)}</QuoteRow>}
-        <QuoteRow label={COPY.finalRow}>{money(pricing.finalMinor)}</QuoteRow>
+        {hasAnnual && <QuoteRow label={COPY.annualDiscount}>{perLeaderDiscount(pricing.annualDiscountMinor, figures, language)}</QuoteRow>}
+        {hasManual && <QuoteRow label={COPY.manualDiscount}>{perLeaderDiscount(pricing.manualDiscountMinor, figures, language)}</QuoteRow>}
+        <QuoteRow label={COPY.finalRow}>{money(pricing.finalMinor, figures)}</QuoteRow>
       </dl>
 
       <h3 className={SECTION}>{COPY.total}</h3>
       <dl>
-        <QuoteRow label={COPY.monthlyRow}>{money(pricing.monthlyTotalMinor)}</QuoteRow>
-        <QuoteRow label={annual ? COPY.annualTotal : COPY.sixMonthTotal} grand>{money(pricing.periodTotalMinor)}</QuoteRow>
+        <QuoteRow label={COPY.monthlyRow}>{money(pricing.monthlyTotalMinor, figures)}</QuoteRow>
+        <QuoteRow label={annual ? COPY.annualTotal : COPY.sixMonthTotal} grand>{money(pricing.periodTotalMinor, figures)}</QuoteRow>
       </dl>
 
       <p className="mt-[26px] text-sm text-muted">{COPY.footer}</p>

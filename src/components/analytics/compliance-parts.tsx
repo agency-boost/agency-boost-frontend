@@ -3,8 +3,10 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { StatusPill } from '@/components/ui/status-pill';
+import { useMessages } from '@/i18n/language-provider';
+import { kpmAnalyticsMessages } from '@/i18n/messages/kpm-analytics';
 import { cn } from '@/lib/cn';
-import { drillsAnywhere, OWN_COPY as ANALYTICS_COPY, unitDashboardHref } from '@/lib/kpm-analytics';
+import { drillsAnywhere, unitDashboardHref } from '@/lib/kpm-analytics';
 import { COMPLIANCE_PILL_CLASS, type CompliancePerson, type PillWords, type TagTone } from '@/lib/kpm-compliance';
 import { useSession } from '@/lib/session';
 
@@ -23,6 +25,8 @@ export function CompliancePill({ words }: { words: PillWords }) {
  * Following one writes nothing.
  */
 export function PersonLink({ person, className, children }: { person: CompliancePerson; className?: string; children?: ReactNode }) {
+  // The new-tab hint is the comparison's own, so the two drills say it in the same words.
+  const t = useMessages(kpmAnalyticsMessages);
   const { me } = useSession();
   const isReader = person.membershipId === me?.membership?.membershipId;
   const style = cn('text-navy hover:text-amber-ink hover:underline', className);
@@ -40,7 +44,7 @@ export function PersonLink({ person, className, children }: { person: Compliance
       className={style}
     >
       {children ?? person.name}
-      {newTab && <span className="sr-only">{isReader ? ANALYTICS_COPY.newTabOwn : ANALYTICS_COPY.newTab}</span>}
+      {newTab && <span className="sr-only">{isReader ? t.newTabOwn : t.newTab}</span>}
     </Link>
   );
 }

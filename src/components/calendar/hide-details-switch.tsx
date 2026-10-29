@@ -5,7 +5,9 @@ import { Switch } from '@/components/ui/field';
 import { InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { OWN_COPY, readCalendarSettings, saveCalendarSettings } from '@/lib/calendar';
+import { useMessages } from '@/i18n/language-provider';
+import { calendarMessages } from '@/i18n/messages/calendar';
+import { readCalendarSettings, saveCalendarSettings } from '@/lib/calendar';
 
 /** The setting as the page holds it: `null` until the read answers, and while it cannot be read. */
 export interface HideDetails {
@@ -82,13 +84,14 @@ export function HideDetailsSwitch({
   /** Its save confirmation, after the ⓘ on the toolbar's line (P18.95-T1 AC-5). */
   status?: InlineSaveStatusProps;
 }) {
+  const t = useMessages(calendarMessages);
   const id = useId();
   return (
     <span className="inline-flex items-center gap-1">
-      <Switch id={`${id}-switch`} label={OWN_COPY.hideDetails} checked={on} describedBy={`${id}-tip`} onChange={onChange} />
-      <span id={`${id}-tip`} className="sr-only">{OWN_COPY.hideDetailsTip}</span>
-      <TippedGlyph glyph="ⓘ" name={OWN_COPY.hideDetailsTip} tip={OWN_COPY.hideDetailsTip} align="fit" className="-my-1.5" />
-      <InlineSaveStatus {...status} label={OWN_COPY.hideDetails} className="ml-1" />
+      <Switch id={`${id}-switch`} label={t.hideDetails} checked={on} describedBy={`${id}-tip`} onChange={onChange} />
+      <span id={`${id}-tip`} className="sr-only">{t.hideDetailsTip}</span>
+      <TippedGlyph glyph="ⓘ" name={t.hideDetailsTip} tip={t.hideDetailsTip} align="fit" className="-my-1.5" />
+      <InlineSaveStatus {...status} label={t.hideDetails} className="ml-1" />
     </span>
   );
 }

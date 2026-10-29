@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { stubFetch } from '@test/harness';
+import { LANGUAGE_UNCHOSEN } from '@/i18n/language';
 import { ApiConfigError } from './api';
 import {
   api,
   ApiRequestError,
   getAccessToken,
+  getRequestLanguage,
   isImpersonating,
   isOfficeUnavailable,
   onOfficeUnavailable,
@@ -12,6 +14,7 @@ import {
   refreshSession,
   setAccessToken,
   setImpersonating,
+  setRequestLanguage,
   toDisplayError,
   tryRefresh,
 } from './api-client';
@@ -360,5 +363,52 @@ describe('api client', () => {
       expect(isOfficeUnavailable({ code: 'TENANT_ARCHIVED' })).toBe(true);
       expect(isOfficeUnavailable(null)).toBe(false);
     });
+  });
+});
+
+/**
+ * **P18.98-T2 AC-6: the API is told the screen's language on every request** (ADR-0179 §7): `Accept-Language: id` or
+ * `en`, set by `LanguageProvider` through `setRequestLanguage` as the token is set through `setAccessToken`. T5's input.
+ */
+describe('P18.98-T2 AC-6 the language on every request', () => {
+  beforeEach(() => {
+    setAccessToken(null);
+    setImpersonating(false);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    setRequestLanguage(LANGUAGE_UNCHOSEN);
+  });
+
+  const languageOf = (init: RequestInit) => (init.headers as Record<string, string>)['Accept-Language'];
+
+  it('AC-6 starts from the language the pages are prerendered in, before the provider has said anything', async () => {
+    const { calls } = stubFetch({ '/widgets': { body: {} } });
+    await api('/widgets');
+    expect(getRequestLanguage()).toBe(LANGUAGE_UNCHOSEN);
+    expect(languageOf(calls[0].init)).toBe(LANGUAGE_UNCHOSEN);
+  });
+
+  it.each(['id', 'en'] as const)('AC-6 sends Accept-Language: %s once the screen is in it, on a read and on a write', async (language) => {
+    setRequestLanguage(language);
+    const { calls } = stubFetch({ '/widgets': { body: {} } });
+
+    await api('/widgets');
+    await api('/widgets', { method: 'PATCH', body: { a: 1 } });
+
+    expect(calls.map((c) => languageOf(c.init))).toEqual([language, language]);
+  });
+
+  it('AC-6 sends it with a form too, and with the refresh and its replay', async () => {
+    setRequestLanguage('en');
+    setAccessToken('old');
+    const { calls } = stubFetch({
+      '/uploads': [{ status: 401, body: { error: { code: 'AUTH_TOKEN_EXPIRED' } } }, { body: {} }],
+      '/auth/refresh': { body: { accessToken: 'new' } },
+    });
+
+    await api('/uploads', { method: 'POST', body: new FormData() });
+
+    expect(calls.map((c) => languageOf(c.init))).toEqual(['en', 'en', 'en']);
   });
 });

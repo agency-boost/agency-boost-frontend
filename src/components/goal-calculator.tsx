@@ -19,10 +19,14 @@ import { TermTip } from '@/components/ui/term-tip';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { CONFIRMED } from '@/lib/confirmations';
+import { confirmationMessages } from '@/i18n/messages/confirmations';
 import type { TermKey } from '@/lib/terms';
-import { capitalized, PRONOUN_FORMS, type CoacheeSubject } from '@/lib/coaching';
-import { formatDay, formatDayLong, formatNumber, formatPercent, formatRupiahCompact } from '@/lib/format';
+import { PRONOUN_FORMS, type CoacheeSubject } from '@/lib/coaching';
+import { kept } from '@/i18n/kept';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { voiceOf } from '@/i18n/messages/goal-words';
+import { goalsMessages } from '@/i18n/messages/goals';
+import { formatDay, formatDayLong, formatNumber, formatPercent, formatRupiahCompact, moneyPrefix } from '@/lib/format';
 import {
   formatRupiah, goalInputsOf, groupDigits, monthsLeftInWords, parseDigits, producedFrom, readGoal, saveGoal, toMajor,
   toMinor, type Goal, type GoalInputs, type GoalMode,
@@ -67,14 +71,12 @@ import { useTenantConfig, type TenantConfig } from '@/lib/tenant-config-cache';
  * in step 1, 2,400px above the result; the APE already produced is shown once, not as a field and then a tile
  * repeating it; the months left read *about 2 months*; the cascade's chips name the activities; and step 1's two
  * options share the track at 375px rather than one scrolling out of sight.
+ *
+ * **Its words are the catalogue's** (P18.98-T4, field selling; ADR-0179 §4): `i18n/messages/goals.tsx`, the marker's and
+ * the months left's `goal-words.ts`, in the reader's language (`useLanguage()`); every figure in the reader's figures'
+ * (`useFigureLanguage()`), handed to the message that holds it. A coachee is written in their pronoun's English forms
+ * (`PRONOUN_FORMS`) and is *dia* in Indonesian. The activities each stage's chip names are the office's, as typed.
  */
-
-/** How the calculator's sentences read: the reader's own plan, or a coachee's in their pronoun. */
-function voiceOf(subject?: CoacheeSubject) {
-  if (!subject) return { pronoun: 'you', object: 'you', possessive: 'your', have: 'have' };
-  const forms = PRONOUN_FORMS[subject.pronoun];
-  return { pronoun: forms.subject, object: forms.object, possessive: forms.possessive, have: forms.have };
-}
 
 export function GoalCalculator({
   period,
@@ -89,9 +91,14 @@ export function GoalCalculator({
   subject?: CoacheeSubject;
 }) {
   const { me } = useSession();
+  const t = useMessages(goalsMessages);
+  const confirmed = useMessages(confirmationMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const { config } = useTenantConfig();
   const forId = subject?.membershipId;
-  const voice = voiceOf(subject);
+  /** Whose plan the sentences say: the reader's, or a coachee's in their pronoun. */
+  const voice = voiceOf(subject ? PRONOUN_FORMS[subject.pronoun] : undefined);
 
   const [goal, setGoal] = useState<Goal | null>(null);
   const [draft, setDraft] = useState<GoalInputs | null>(null);
@@ -134,7 +141,7 @@ export function GoalCalculator({
       setGoal(result);
       setDraft(goalInputsOf(result));
       setSaved(true);
-      show(CONFIRMED.goalSaved);
+      show(confirmed.goalSaved);
     } catch (err) {
       setError(toDisplayError(err));
       setSaved(false);
@@ -147,7 +154,7 @@ export function GoalCalculator({
     return (
       <>
         {error && <ErrorBanner {...error} />}
-        {!error && <SkeletonCards count={5} label={`Loading ${voice.possessive} plan…`} />}
+        {!error && <SkeletonCards count={5} label={t.loading({ who: voice })} />}
       </>
     );
   }
@@ -171,7 +178,42 @@ export function GoalCalculator({
     && goal.savedByMembershipId !== me?.membership?.membershipId;
   const numbers = activityNumbers(config, goal.cascadeBinding);
   const names = activityNames(config, goal.cascadeBinding);
-  const produced = producedFrom(goal.achieved, 'year', subject?.pronoun);
+  const produced = producedFrom(goal.achieved, 'year', subject?.pronoun, figures, language);
+  /** Step 2's two labels: each its words, and what stands beside them. */
+  const monthsLabel = (
+    <>
+      {t.monthsLeftThisYear}{' '}
+      {/*
+        * The prototype's `.auto-badge` (`:662-667`, `:2913`), which says the field fills
+        * itself in. With the placeholder's figure it is all that says so: the hint sentence
+        * under the box went in P10.1-T6 (ADR-0062), and the manual explains the override.
+        */}
+      {/*
+        * `-my-0.5` takes back the badge's own padding, so the label is a line of text tall
+        * with it or without: otherwise this box sat a pixel below the APE figure's beside
+        * it, and jumped when the badge went (P10.1-T8).
+        */}
+      {draft.monthsLeft === null && (
+        <ConfigBadge tone="navy" className="-my-0.5 ml-1 align-middle">{t.auto}</ConfigBadge>
+      )}
+    </>
+  );
+  const producedLabel = (
+    <>
+      {t.produced}{' '}
+      {/*
+        * **The provenance marker, on the one place the figure is** (ADR-0063 §5): the *Already
+        * produced* tile that carried it repeated this figure, and went (P18.95-T5 AC-5).
+        */}
+      <TippedGlyph
+        glyph="ⓘ"
+        name={produced}
+        tip={produced}
+        align="fit"
+        className="-my-2 align-middle"
+      />
+    </>
+  );
 
   return (
     <>
@@ -196,8 +238,10 @@ export function GoalCalculator({
         {byLeader && (
           <Card density="compact" className="border-amber/40 bg-amber/5">
             <p className="text-md text-navy">
-              <strong>Set by your leader</strong>
-              {goal.savedAt ? ` on ${formatDayLong(goal.savedAt)}` : ''}. You can change it — it is your plan.
+              {t.setByLeader({
+                strong: (words) => <strong>{words}</strong>,
+                date: goal.savedAt ? formatDayLong(goal.savedAt, figures) : null,
+              })}
             </p>
           </Card>
         )}
@@ -205,7 +249,7 @@ export function GoalCalculator({
         <Step
           n={1}
           // The coaching tool's own words for somebody else's plan (`Overall.html:5860`), verbatim.
-          title={mine ? "What's your APE target this year?" : "What's their APE target this year?"}
+          title={mine ? t.target.mine : t.target.theirs}
           // *APE*'s first appearance on the page, so its ⓘ is here (P18.95-T9 AC-3; UI-028).
           term="APE"
           actions={(
@@ -226,10 +270,10 @@ export function GoalCalculator({
                 * pixels below the button, which is nowhere.
                 */}
               <SaveStatus state={saved && !busy ? 'saved' : 'unsaved'}>
-                {busy ? 'Saving…' : saved ? 'Saved' : 'Not yet saved'}
+                {busy ? t.status.saving : saved ? t.status.saved : t.status.unsaved}
               </SaveStatus>
               <Button onClick={() => commit(draft)} disabled={busy}>
-                {busy ? 'Saving…' : 'Save goal'}
+                {busy ? t.status.saving : t.save}
               </Button>
             </div>
           )}
@@ -247,10 +291,10 @@ export function GoalCalculator({
             */}
           <Segmented
             phoneLayout="wrap"
-            label={mine ? 'How you want to set it' : 'How to set it'}
+            label={mine ? t.how.mine : t.how.theirs}
             tabs={[
-              { id: 'direct', label: 'Set APE target directly' },
-              { id: 'from_savings', label: 'Calculate from savings target' },
+              { id: 'direct', label: t.modes.direct },
+              { id: 'from_savings', label: t.modes.fromSavings },
             ]}
             active={draft.mode}
             onSelect={(mode) => set({ mode: mode as GoalMode })}
@@ -258,7 +302,7 @@ export function GoalCalculator({
             {(mode) => (mode === 'direct' ? (
               <FieldRow>
                 <Rupiah
-                  label="Annual APE target"
+                  label={t.annualApe}
                   id="goal-ape"
                   value={draft.annualApeTargetMinor}
                   onChange={(annualApeTargetMinor) => set({ annualApeTargetMinor })}
@@ -268,25 +312,25 @@ export function GoalCalculator({
               <>
                 <FieldRow>
                   <Rupiah
-                    label="Annual savings target"
+                    label={t.annualSavings}
                     id="goal-savings"
                     value={draft.savingsTargetMinor}
                     onChange={(savingsTargetMinor) => set({ savingsTargetMinor })}
                   />
                   <Percent
-                    label="Commission rate"
+                    label={t.commissionRate}
                     id="goal-commission"
                     value={draft.commissionRatePct}
                     onChange={(commissionRatePct) => set({ commissionRatePct })}
-                    hint="% of APE that becomes income / savings"
+                    hint={t.commissionHint}
                   />
                 </FieldRow>
                 {projected && (
                   <KpiTile
                     className="mt-3"
                     variant="insight"
-                    label="That is an APE target of"
-                    value={formatRupiahCompact(projected.annualApeTargetMinor)}
+                    label={t.apeTargetOf}
+                    value={formatRupiahCompact(projected.annualApeTargetMinor, {}, figures)}
                   />
                 )}
               </>
@@ -294,7 +338,7 @@ export function GoalCalculator({
           </Segmented>
         </Step>
 
-        <Step n={2} title={mine ? 'Your current progress' : 'Current progress'}>
+        <Step n={2} title={mine ? t.progress.mine : t.progress.theirs}>
           <FieldRow>
             {/*
               * **`null` means *use the office's calendar***, and that is what is sent unless the
@@ -303,24 +347,7 @@ export function GoalCalculator({
               * October, with a monthly target a fifth of the truth (client PRD §17).
               */}
             <Field
-              label={(
-                <>
-                  Months left this year{' '}
-                  {/*
-                    * The prototype's `.auto-badge` (`:662-667`, `:2913`), which says the field fills
-                    * itself in. With the placeholder's figure it is all that says so: the hint sentence
-                    * under the box went in P10.1-T6 (ADR-0062), and the manual explains the override.
-                    */}
-                  {/*
-                    * `-my-0.5` takes back the badge's own padding, so the label is a line of text tall
-                    * with it or without: otherwise this box sat a pixel below the APE figure's beside
-                    * it, and jumped when the badge went (P10.1-T8).
-                    */}
-                  {draft.monthsLeft === null && (
-                    <ConfigBadge tone="navy" className="-my-0.5 ml-1 align-middle">auto</ConfigBadge>
-                  )}
-                </>
-              )}
+              label={monthsLabel}
               htmlFor="goal-months"
               className="w-56"
             >
@@ -332,9 +359,9 @@ export function GoalCalculator({
                 */}
               <DecimalInput
                 id="goal-months"
-                suffix="months"
+                suffix={t.months}
                 className="w-full"
-                placeholder={formatNumber(goal.monthsLeft, { maxDecimals: 1 })}
+                placeholder={formatNumber(goal.monthsLeft, { maxDecimals: 1 }, figures)}
                 value={draft.monthsLeft}
                 onValueChange={(monthsLeft) => set({ monthsLeft })}
               />
@@ -362,7 +389,7 @@ export function GoalCalculator({
               */}
             {goal.achieved.provenance === 'self_reported' && !subject ? (
               <Rupiah
-                label="APE already produced this year"
+                label={t.produced}
                 id="goal-achieved"
                 value={draft.apeAchievedMinor}
                 onChange={(apeAchievedMinor) => set({ apeAchievedMinor })}
@@ -372,23 +399,8 @@ export function GoalCalculator({
               <ReadOnlyField
                 layout="field"
                 className="grow basis-56"
-                label={(
-                  <>
-                    APE already produced this year{' '}
-                    {/*
-                      * **The provenance marker, on the one place the figure is** (ADR-0063 §5): the *Already
-                      * produced* tile that carried it repeated this figure, and went (P18.95-T5 AC-5).
-                      */}
-                    <TippedGlyph
-                      glyph="ⓘ"
-                      name={produced}
-                      tip={produced}
-                      align="fit"
-                      className="-my-2 align-middle"
-                    />
-                  </>
-                )}
-                value={formatRupiah(goal.achieved.minor)}
+                label={producedLabel}
+                value={formatRupiah(goal.achieved.minor, figures)}
               />
             )}
           </FieldRow>
@@ -399,7 +411,7 @@ export function GoalCalculator({
                 * prototype's `.kpi-row` echoes the field above it in an *Already produced* tile (`:2928-2936`);
                 * the field holds the figure, so the row holds only what it adds, the remainder.
                 */}
-              <KpiTile className="mt-3" label="Remaining needed" value={formatRupiahCompact(projected.remainingApeMinor)} />
+              <KpiTile className="mt-3" label={t.remaining} value={formatRupiahCompact(projected.remainingApeMinor, {}, figures)} />
               {/*
                 * **The one number this card is for.** It was the third of three identical figures, so
                 * the answer looked like the two echoes of what you had just typed (`:2938-2941`).
@@ -407,17 +419,17 @@ export function GoalCalculator({
               <KpiTile
                 className="mt-2.5"
                 variant="insight"
-                label="This month's APE target"
-                value={formatRupiahCompact(projected.monthlyApeTargetMinor)}
+                label={t.monthlyTarget}
+                value={formatRupiahCompact(projected.monthlyApeTargetMinor, {}, figures)}
               />
             </>
           )}
         </Step>
 
-        <Step n={3} title="From APE to policy count">
+        <Step n={3} title={t.toPolicies}>
           <FieldRow>
             <Rupiah
-              label="Average case size (APE per policy)"
+              label={t.caseSize}
               id="goal-case-size"
               value={draft.caseSizeMinor}
               onChange={(caseSizeMinor) => set({ caseSizeMinor })}
@@ -428,26 +440,26 @@ export function GoalCalculator({
               * nothing, as since ADR-0160 §4 removed the tip; the ⓘ sits level with the label, outside it, since a
               * button inside a `<label>` would be a second control it names.
               */}
-            <PhoneTip text={CASE_SIZE_TIP} className="mt-0.5" />
+            <PhoneTip text={t.caseSizeTip} className="mt-0.5" />
           </FieldRow>
           {projected && (
             <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
               <KpiTile
-                label="Policies per month"
+                label={t.policiesPerMonth}
                 value={projected.policiesPerMonth}
-                unit="policies"
+                unit={t.policies}
               />
               {/*
                 * **One decimal** (ADR-0160 §5): the server divides by 4.33 to a tenth and a whole figure
                 * comes back whole, so six a month reads *≈ 1.4* where it read *≈ 2*. The 💡 tip under this
                 * step went at the client's request.
                 */}
-              <KpiTile label="Policies per week" value={`≈ ${formatNumber(projected.policiesPerWeek, { maxDecimals: 1 })}`} />
+              <KpiTile label={t.policiesPerWeek} value={`≈ ${formatNumber(projected.policiesPerWeek, { maxDecimals: 1 }, figures)}`} />
             </div>
           )}
         </Step>
 
-        <Step n={4} title="Conversion assumptions">
+        <Step n={4} title={t.assumptions}>
           <FieldRow>
             {/*
               * **The client's label, and no helper lines** (ADR-0160 §4, 2026-10-26): the prototype reads
@@ -461,14 +473,14 @@ export function GoalCalculator({
               * P10.1-T6. `GET /goals` keeps `measured`; where coaching shows it is P11-T1's.
               */}
             <Percent
-              label="Appointment to Sales meeting"
+              label={t.appointmentToMeeting}
               id="goal-leads-to-appt"
               className="min-w-[14rem] flex-1"
               value={draft.leadsToApptPct}
               onChange={(leadsToApptPct) => set({ leadsToApptPct })}
             />
             <Percent
-              label="Closing rate"
+              label={t.closingRate}
               id="goal-closing"
               className="min-w-[14rem] flex-1"
               value={draft.closingRatePct}
@@ -477,7 +489,7 @@ export function GoalCalculator({
           </FieldRow>
         </Step>
 
-        <Step n={5} title="Monthly activity target">
+        <Step n={5} title={t.activityTarget}>
           {/*
             * **Passing the target replaces the cascade rather than printing zeroes** (ADR-0047).
             * The arithmetic is right — a plan that has been met needs nothing more — but *contact
@@ -486,8 +498,7 @@ export function GoalCalculator({
             */}
           {projected?.targetMet ? (
             <p className="text-md text-navy">
-              <strong>{capitalized(voice.pronoun)} {voice.have} passed {voice.possessive} annual target.</strong> Set a new one above, or keep
-              going — there is nothing left for this plan to ask of {voice.object}.
+              {t.passed({ who: voice, strong: (words) => <strong>{words}</strong> })}
             </p>
           ) : projected ? (
             /*
@@ -508,34 +519,31 @@ export function GoalCalculator({
                   label: LABEL.leads,
                   chip: chipOf(names.leads, LABEL.leads),
                   icon: 'clipboard',
-                  month: `${formatNumber(projected.leadsPerMonth)}/month`,
-                  week: `≈ ${formatNumber(projected.leadsPerWeek, { maxDecimals: 1 })}/week`,
+                  month: t.perMonth({ n: formatNumber(projected.leadsPerMonth, {}, figures) }),
+                  week: t.perWeek({ n: formatNumber(projected.leadsPerWeek, { maxDecimals: 1 }, figures) }),
                 },
                 {
                   label: LABEL.appointments,
                   chip: chipOf(names.appointments, LABEL.appointments),
                   icon: 'calendar',
-                  month: `${formatNumber(projected.appointmentsPerMonth)}/month`,
-                  week: `≈ ${formatNumber(projected.appointmentsPerWeek, { maxDecimals: 1 })}/week`,
+                  month: t.perMonth({ n: formatNumber(projected.appointmentsPerMonth, {}, figures) }),
+                  week: t.perWeek({ n: formatNumber(projected.appointmentsPerWeek, { maxDecimals: 1 }, figures) }),
                 },
                 {
                   label: LABEL.closings,
                   chip: chipOf(names.closings, LABEL.closings),
                   icon: 'target',
-                  month: `${formatNumber(projected.policiesPerMonth)}/month`,
-                  week: `≈ ${formatNumber(projected.policiesPerWeek, { maxDecimals: 1 })}/week`,
+                  month: t.perMonth({ n: formatNumber(projected.policiesPerMonth, {}, figures) }),
+                  week: t.perWeek({ n: formatNumber(projected.policiesPerWeek, { maxDecimals: 1 }, figures) }),
                   hero: true,
                 },
               ]}
               // The plan's own two rates, as the fields above hold them (ADR-0174 §3): an echo of an input keeps
               // its places — *30%*, *33,3%* — where a whole percent would contradict the box it repeats.
-              links={[formatPercent(draft.leadsToApptPct, { lossless: true }), formatPercent(draft.closingRatePct, { lossless: true })]}
+              links={[formatPercent(draft.leadsToApptPct, { lossless: true }, figures), formatPercent(draft.closingRatePct, { lossless: true }, figures)]}
             />
           ) : (
-            <p className="text-md text-alert">
-              This plan cannot be worked out from the numbers above. Check the case size and the two
-              conversion rates — each has to be more than zero.
-            </p>
+            <p className="text-md text-alert">{t.unworkable}</p>
           )}
           {/*
             * The prototype's 🔗 tip, verbatim (`:3062-3065`), with the office's own numbers in place of
@@ -546,8 +554,7 @@ export function GoalCalculator({
           {/* The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 17): from 768px it reads as before. */}
           {numbers.leads !== null && numbers.appointments !== null && numbers.closings !== null && (
             <Tip glyph="🔗" className={REMOVED_ON_PHONE}>
-              Maps to activities {[numbers.leads, numbers.appointments, numbers.closings].map(hashes).join(', ')} in
-              {' '}Activity Management.
+              {t.mapsTo({ numbers: [numbers.leads, numbers.appointments, numbers.closings].map(hashes).join(', ') })}
             </Tip>
           )}
         </Step>
@@ -567,20 +574,23 @@ export function GoalCalculator({
             */}
           <h2 className="text-xs font-bold uppercase tracking-[0.06em] text-sidebar-text/60">
             {/* *Commitment* on the coaching tool (`Overall.html:5971`), whose sentence is in their pronoun. */}
-            {mine ? 'My commitment' : 'Commitment'}
-            {goal.savedAt && (
-              <> (as of {formatDay(goal.savedAt)})</>
-            )}
+            {t.commitment({ mine, date: goal.savedAt ? formatDay(goal.savedAt, figures) : null })}
           </h2>
           {projected && !projected.targetMet && (
             <p className="mt-2 text-lg leading-relaxed text-white">
               {/* *about 2 months*, not *2.2 months* (P18.95-T5 AC-5): a plan is not kept to a tenth of a month. */}
-              To reach APE <Figure>{formatRupiahCompact(projected.annualApeTargetMinor)}</Figure> this year
-              ({monthsLeftInWords(goal.monthsLeft)} left), this month&apos;s target is APE{' '}
-              <Figure>{formatRupiahCompact(projected.monthlyApeTargetMinor)}</Figure> — {mine ? 'I' : voice.pronoun} will contact{' '}
-              <Figure>{formatNumber(projected.leadsPerMonth)} leads</Figure>, get{' '}
-              <Figure>{formatNumber(projected.appointmentsPerMonth)} appointments</Figure>, and close{' '}
-              <Figure>{formatNumber(projected.policiesPerMonth)} policies</Figure> this month.
+              {t.pledge({
+                strong: (words) => <Figure>{words}</Figure>,
+                who: voice,
+                mine,
+                annual: formatRupiahCompact(projected.annualApeTargetMinor, {}, figures),
+                monthsLeft: monthsLeftInWords(goal.monthsLeft, figures, language),
+                monthly: formatRupiahCompact(projected.monthlyApeTargetMinor, {}, figures),
+                leads: formatNumber(projected.leadsPerMonth, {}, figures),
+                leadCount: projected.leadsPerMonth,
+                appointments: formatNumber(projected.appointmentsPerMonth, {}, figures),
+                policies: formatNumber(projected.policiesPerMonth, {}, figures),
+              })}
             </p>
           )}
           {/*
@@ -588,9 +598,7 @@ export function GoalCalculator({
             * and it survives only in three retired section files. A screen printing *contact 67
             * leads* without it reads as an instruction from the office (L-29).
             */}
-          <p className="mt-3 text-sm text-sidebar-text/70">
-            Estimates for personal planning — assumptions vary per individual.
-          </p>
+          <p className="mt-3 text-sm text-sidebar-text/70">{t.disclaimer}</p>
         </div>
 
         {/*
@@ -598,11 +606,7 @@ export function GoalCalculator({
           * `:746`). True as written: the Summary, this tab and the session all read the one goal this
           * saves (P8-T5), so nothing is copied that could fall out of step (P11-T7 AC-5).
           */}
-        {!mine && (
-          <p className="text-xs leading-relaxed text-muted">
-            Changes here update instantly in Personal Summary and Coaching Session — all three stay in sync.
-          </p>
-        )}
+        {!mine && <p className="text-xs leading-relaxed text-muted">{t.inSync}</p>}
       </div>
       <Toast toast={toast} />
     </>
@@ -657,12 +661,17 @@ const hashes = (numbers: readonly number[]) => numbers.map((n) => `#${n}`).join(
 
 /**
  * The cascade's three stages, in the client's words (ADR-0160 §4): each column's label, and what its chip is
- * compared with.
+ * compared with. Kept English in both languages (§A.6).
  */
-const LABEL = { leads: 'Set appointment', appointments: 'Sales meeting', closings: 'Submission polis' } as const;
+const LABEL = {
+  leads: kept('Set appointment'), appointments: kept('Sales meeting'), closings: kept('Submission polis'),
+} as const;
 
-/** Step 3's tip, the prototype's words verbatim (`Overall.html:2971`), in a phone's ⓘ (grey text row 15). */
-export const CASE_SIZE_TIP = 'APE per closing. Increase if one appointment often yields multiple policies.';
+/**
+ * Step 3's tip, the prototype's words verbatim (`Overall.html:2971`), in a phone's ⓘ (grey text row 15) — the
+ * catalogue's English (`goals.tsx`); the screen draws it in the reader's language.
+ */
+export const CASE_SIZE_TIP = goalsMessages.en.caseSizeTip;
 
 /**
  * **The names of the activities each stage counts** (P18.95-T5 AC-5; the client's UI review, UI-018): the
@@ -777,6 +786,7 @@ export function Rupiah({
   /** How the field sits in its row. */
   className?: string;
 }) {
+  const figures = useFigureLanguage();
   return (
     <Field label={label} htmlFor={id} className={className}>
       {/*
@@ -790,9 +800,9 @@ export function Rupiah({
         type="text"
         inputMode="numeric"
         autoComplete="off"
-        prefix="Rp"
+        prefix={moneyPrefix(figures)}
         className="w-full"
-        value={groupDigits(toMajor(value))}
+        value={groupDigits(toMajor(value), figures)}
         onChange={(e) => onChange(toMinor(parseDigits(e.target.value)))}
       />
     </Field>

@@ -8,6 +8,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { rungShort } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { adminOverviewMessages } from '@/i18n/messages/admin-overview';
 import { formatNumber } from '@/lib/format';
 import { readPlatformOverview, type AttentionItem, type PlatformOverview } from '@/lib/admin';
 
@@ -27,6 +29,9 @@ import { readPlatformOverview, type AttentionItem, type PlatformOverview } from 
  * reads them.
  */
 export default function AdminOverviewPage() {
+  const t = useMessages(adminOverviewMessages);
+  // The badge's name for the rung (P18.95-T9 AC-1), counted in its English plural.
+  const abs = t.abs({ ab: rungShort('AB') });
   const [overview, setOverview] = useState<PlatformOverview | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -39,22 +44,22 @@ export default function AdminOverviewPage() {
   return (
     // The nav item's word (P18.95-T9 AC-2; UI-027, menu labels = page titles): the prototype's *Platform Overview*
     // (`Superadmin.html:224`) under a nav item reading *Overview* (`:170`).
-    <Page title="Overview" subtitle="Every company and KPM on AgencyBoost">
+    <Page title={t.title} subtitle={t.subtitle}>
       {error && <ErrorBanner {...error} />}
 
       {!overview && !error && (
-        <SkeletonCards count={2} label="Loading the platform overview…" />
+        <SkeletonCards count={2} label={t.loading} />
       )}
 
       {overview && (
         <>
           <Card className="mb-6">
-            <h2 className="font-display text-lg font-bold text-navy">Needs your attention</h2>
+            <h2 className="font-display text-lg font-bold text-navy">{t.attention}</h2>
             {overview.attention.length === 0 ? (
               // The prototype has no empty state here — it has one state, loaded, with
               // four seeded rows. An empty queue is the good outcome and should read as
               // one, not as a card that failed to fill.
-              <EmptyState title="Nothing needs the platform right now." />
+              <EmptyState title={t.nothing} />
             ) : (
               <ul className="mt-3 flex flex-col gap-3">
                 {overview.attention.map((item) => (
@@ -64,30 +69,25 @@ export default function AdminOverviewPage() {
             )}
             {overview.attention.length > 0 && (
               <p className="mt-3 border-t border-hairline pt-3 text-sm text-muted">
-                {overview.attention.length === 1
-                  ? '1 item needs Superadmin action'
-                  : `${overview.attention.length} items need Superadmin action`}{' '}
-                — nothing here can be delegated to a KPM Owner or Admin.
+                {t.attentionFooter({ n: overview.attention.length })}
               </p>
             )}
           </Card>
 
-          <h2 className="font-display text-lg font-bold text-navy">At a glance</h2>
-          <p className="mb-3 mt-1 text-md text-muted">Across every company on the platform</p>
+          <h2 className="font-display text-lg font-bold text-navy">{t.glance}</h2>
+          <p className="mb-3 mt-1 text-md text-muted">{t.glanceLine}</p>
           {/* The prototype gives the first tile more room (`1.1fr 1fr 1fr 1fr`, `:90`)
               and colours only its number amber (`:95`). */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1.1fr_1fr_1fr_1fr]">
-            <Tile label="Companies" value={overview.tiles.companies} lead />
-            <Tile label="KPMs" value={overview.tiles.kpms} />
-            <Tile label="Total members" value={overview.tiles.totalMembers} />
+            <Tile label={t.companies} value={overview.tiles.companies} lead />
+            <Tile label={t.kpms} value={overview.tiles.kpms} />
+            <Tile label={t.totalMembers} value={overview.tiles.totalMembers} />
             {/* The badge's name, plural (P18.95-T9 AC-1): the prototype's *Agency Builders* was a second name for AB. */}
-            <Tile label={`${rungShort('AB')}s`} value={overview.tiles.agencyBuilders} />
+            <Tile label={abs} value={overview.tiles.agencyBuilders} />
           </div>
 
-          <h2 className="mt-6 font-display text-lg font-bold text-navy">Companies</h2>
-          <p className="mb-3 mt-1 text-md text-muted">
-            Each company has its own role ladder, product catalog, and Company template
-          </p>
+          <h2 className="mt-6 font-display text-lg font-bold text-navy">{t.companiesHeading}</h2>
+          <p className="mb-3 mt-1 text-md text-muted">{t.companiesLine}</p>
           <div className="flex flex-col gap-3">
             {overview.companies.map((c) => (
               <Card key={c.companyId} className="flex flex-wrap items-center gap-4">
@@ -104,18 +104,18 @@ export default function AdminOverviewPage() {
                       nothing on either side would read as a rendering failure. */}
                   <span className="block text-sm text-muted">
                     {c.ladder.length > 0
-                      ? `Role ladder: ${c.ladder.join(' → ')}`
-                      : 'No role ladder defined yet'}
+                      ? t.ladder({ ladder: c.ladder.join(' → ') })
+                      : t.noLadder}
                   </span>
                 </span>
                 <span className="flex gap-6 text-right">
-                  <Figure label="KPMs" value={c.kpmCount} />
-                  <Figure label="Members" value={c.memberCount} />
+                  <Figure label={t.kpms} value={c.kpmCount} />
+                  <Figure label={t.members} value={c.memberCount} />
                 </span>
               </Card>
             ))}
             {overview.companies.length === 0 && (
-              <EmptyState title="No companies yet. Add one to start provisioning offices." />
+              <EmptyState title={t.noCompanies} />
             )}
           </div>
         </>
@@ -150,25 +150,27 @@ function AttentionRow({ item }: { item: AttentionItem }) {
 }
 
 function Tile({ label, value, lead }: { label: string; value: number; lead?: boolean }) {
+  const figures = useFigureLanguage();
   return (
     <Card>
       <p className="text-sm font-semibold uppercase tracking-wide text-muted">{label}</p>
       <p
         className={`mt-1 font-display text-3xl font-bold ${lead ? 'text-amber-deep' : 'text-navy'}`}
       >
-        {formatNumber(value)}
+        {formatNumber(value, {}, figures)}
       </p>
     </Card>
   );
 }
 
 function Figure({ label, value }: { label: string; value: number }) {
+  const figures = useFigureLanguage();
   return (
     <span className="block">
       <span className="block text-2xs font-semibold uppercase tracking-wide text-muted">
         {label}
       </span>
-      <span className="block text-md font-bold text-navy">{formatNumber(value)}</span>
+      <span className="block text-md font-bold text-navy">{formatNumber(value, {}, figures)}</span>
     </span>
   );
 }

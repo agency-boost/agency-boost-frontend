@@ -1,9 +1,11 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
 import { cn } from '@/lib/cn';
 import {
-  campaignDateLabel, campaignGroups, campaignOf, campaignTag, dayWords, eventGroups, eventTag, OWN_COPY, PROTOTYPE_COPY,
+  campaignDateLabel, campaignGroups, campaignOf, campaignTag, dayWords, eventGroups, eventTag,
   skillsWithModules, type ComplianceCampaign, type ComplianceEvent, type ComplianceModule, type ComplianceSkill,
   type ComplianceTrainingCategory,
 } from '@/lib/kpm-compliance';
@@ -34,10 +36,11 @@ export function TrainingTabs({
   onSkill: (skill: ComplianceSkill) => void;
   onModule: (module: ComplianceModule) => void;
 }) {
+  const t = useMessages(kpmComplianceMessages);
   const skills = category ? skillsWithModules(category) : [];
   return (
     <>
-      <div role="group" aria-label={OWN_COPY.trainingCategoriesName} className="mb-2.5 flex flex-wrap gap-1.5">
+      <div role="group" aria-label={t.trainingCategoriesName} className="mb-2.5 flex flex-wrap gap-1.5">
         {catalog.map((c) => {
           const on = c.code === category?.code;
           const empty = skillsWithModules(c).length === 0;
@@ -62,7 +65,7 @@ export function TrainingTabs({
       </div>
 
       {skills.length > 0 && (
-        <div role="group" aria-label={OWN_COPY.skillsName} className="mb-2.5 flex flex-wrap gap-1.5">
+        <div role="group" aria-label={t.skillsName} className="mb-2.5 flex flex-wrap gap-1.5">
           {skills.map((s) => {
             const on = s.code === skill?.code;
             return (
@@ -84,7 +87,7 @@ export function TrainingTabs({
       )}
 
       {skill && skills.some((s) => s.code === skill.code) && (
-        <div role="group" aria-label={OWN_COPY.modulesName} className={ITEM_ROW}>
+        <div role="group" aria-label={t.modulesName} className={ITEM_ROW}>
           {skill.modules.map((m) => {
             const on = m.code === module;
             return (
@@ -135,22 +138,26 @@ export function EventPicker({
   today: string;
   onChoose: (id: string) => void;
 }) {
+  const t = useMessages(kpmComplianceMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const groups = eventGroups(events);
   const current = events.find((e) => e.id === selected) ?? null;
+  // The event's title is the office's, shown as typed; its day a figure.
   const option = (e: ComplianceEvent) => (
-    <option key={e.id} value={e.id}>{`${e.title} — ${dayWords(e.startsOn, today)}`}</option>
+    <option key={e.id} value={e.id}>{`${e.title} — ${dayWords(e.startsOn, today, figures)}`}</option>
   );
-  const tag = current ? eventTag(current) : null;
+  const tag = current ? eventTag(current, language) : null;
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2.5">
-      <select aria-label={OWN_COPY.eventName} value={current?.id ?? ''} onChange={(e) => onChoose(e.target.value)} className={SELECT}>
-        {groups.upcoming.length > 0 && <optgroup label={PROTOTYPE_COPY.eventGroups.upcoming}>{groups.upcoming.map(option)}</optgroup>}
-        {groups.past.length > 0 && <optgroup label={PROTOTYPE_COPY.eventGroups.past}>{groups.past.map(option)}</optgroup>}
+      <select aria-label={t.eventName} value={current?.id ?? ''} onChange={(e) => onChoose(e.target.value)} className={SELECT}>
+        {groups.upcoming.length > 0 && <optgroup label={t.eventGroups.upcoming}>{groups.upcoming.map(option)}</optgroup>}
+        {groups.past.length > 0 && <optgroup label={t.eventGroups.past}>{groups.past.map(option)}</optgroup>}
       </select>
       {current && tag && (
         <>
           <TypeTag tone={tag.tone}>{tag.label}</TypeTag>
-          <span className="text-sm text-muted">{dayWords(current.startsOn, today)}</span>
+          <span className="text-sm text-muted">{dayWords(current.startsOn, today, figures)}</span>
         </>
       )}
     </div>
@@ -170,23 +177,27 @@ export function CampaignPicker({
   today: string;
   onChoose: (code: string) => void;
 }) {
+  const t = useMessages(kpmComplianceMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const groups = campaignGroups(campaigns);
   const current = campaignOf(campaigns, selected);
+  // The campaign's title is the company's or the office's, shown as typed; its date label the reader's.
   const option = (c: ComplianceCampaign) => (
-    <option key={c.code} value={c.code}>{`${c.title} — ${campaignDateLabel(c, today)}`}</option>
+    <option key={c.code} value={c.code}>{`${c.title} — ${campaignDateLabel(c, today, language, figures)}`}</option>
   );
-  const tag = current ? campaignTag(current) : null;
+  const tag = current ? campaignTag(current, language) : null;
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2.5">
-      <select aria-label={OWN_COPY.campaignName} value={current?.code ?? ''} onChange={(e) => onChoose(e.target.value)} className={SELECT}>
-        {groups.structural.length > 0 && <optgroup label={PROTOTYPE_COPY.campaignGroups.structural}>{groups.structural.map(option)}</optgroup>}
-        {groups.ongoing.length > 0 && <optgroup label={PROTOTYPE_COPY.campaignGroups.ongoing}>{groups.ongoing.map(option)}</optgroup>}
-        {groups.past.length > 0 && <optgroup label={PROTOTYPE_COPY.campaignGroups.past}>{groups.past.map(option)}</optgroup>}
+      <select aria-label={t.campaignName} value={current?.code ?? ''} onChange={(e) => onChoose(e.target.value)} className={SELECT}>
+        {groups.structural.length > 0 && <optgroup label={t.campaignGroups.structural}>{groups.structural.map(option)}</optgroup>}
+        {groups.ongoing.length > 0 && <optgroup label={t.campaignGroups.ongoing}>{groups.ongoing.map(option)}</optgroup>}
+        {groups.past.length > 0 && <optgroup label={t.campaignGroups.past}>{groups.past.map(option)}</optgroup>}
       </select>
       {current && tag && (
         <>
           <TypeTag tone={tag.tone}>{tag.label}</TypeTag>
-          <span className="text-sm text-muted">{campaignDateLabel(current, today)}</span>
+          <span className="text-sm text-muted">{campaignDateLabel(current, today, language, figures)}</span>
         </>
       )}
     </div>

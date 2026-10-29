@@ -28,7 +28,7 @@ export function PushBackBox({
     <div className={cn('rounded-[10px] border border-hairline bg-base', size === 'page' ? 'px-4 py-3.5' : 'px-[15px] py-[13px]')}>
       <p className="m-0 mb-2 text-base font-semibold text-alert">
         {theySayLabel}{' '}
-        <em className="font-normal not-italic text-navy">&ldquo;{theySay}&rdquo;</em>
+        <em className="font-normal not-italic text-navy">“{theySay}”</em>
       </p>
       <p className="m-0 mb-1.5 text-base font-semibold text-success">{youSayLabel}</p>
       <p className={cn('m-0 text-navy', size === 'page' ? 'text-md leading-normal' : 'text-base leading-normal')}>{youSay}</p>

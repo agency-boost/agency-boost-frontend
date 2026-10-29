@@ -1,5 +1,8 @@
 import { shortOfRung } from '@/components/ui/role-badge';
 import { api } from './api-client';
+import { messagesIn } from '@/i18n/catalogue';
+import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { calendarMessages } from '@/i18n/messages/calendar';
 import { formatNumber } from './format';
 
 /**
@@ -28,14 +31,10 @@ export const ENTRY_TYPES: readonly EntryType[] = ['meeting', 'coaching', 'client
  * agenda's line too. The prototype's badge capitalised the code instead (*Meeting*, *Coaching*,
  * *Client*, `:824`), so the legend said *Internal meeting* and the popup *Meeting* for one entry (the
  * client's UI review, UI-020; ADR-0167). The legend's are the ones the reader chooses from, so they won.
+ * **In the catalogue** (`i18n/messages/calendar.tsx`, `types`; P18.98-T4): a screen reads the reader's language; this
+ * is its English.
  */
-export const TYPE_LABEL: Record<EntryType, string> = {
-  meeting: 'Internal meeting',
-  coaching: '1:1 coaching',
-  client: 'Client meeting',
-  task: 'Task',
-  travel: 'Travel',
-};
+export const TYPE_LABEL: Record<EntryType, string> = calendarMessages.en.types;
 
 /** What a read asks the server for: a week or a month. */
 export type CalendarView = 'week' | 'month';
@@ -327,155 +326,167 @@ export const PEOPLE_PAGE = 50;
 
 /*
  * ── Words ────────────────────────────────────────────────────────────────────────────────────────
+ *
+ * **In the catalogue** (`i18n/messages/calendar.tsx`; P18.98-T4): a screen reads the reader's language,
+ * `useMessages(calendarMessages)`; a function here takes the words' language (English when none is passed) and then
+ * the figures' (Indonesian when none is passed, as before), and its caller passes `useLanguage()` and
+ * `useFigureLanguage()`. The objects below are the catalogue's English in the shapes this module has always handed its
+ * spec, their figures Indonesian as they were.
  */
 
+/** The calendar's words in a language. */
+export const calendarWordsIn = (language: Language = SOURCE_LANGUAGE) => messagesIn(calendarMessages, language);
+
+const EN = calendarWordsIn(SOURCE_LANGUAGE);
+
 /**
- * **The prototype's own strings, verbatim** (ADR-0096): *KPM* included, characters kept (`—`, `…`,
+ * **The limits' sentences** (`functional/calendar.md`, *Its fields*): each built from its limit (m3), so a limit changed
+ * in one place changes the sentence with it — its words in `language`, its figure in `figures` (grouped *1.000* from a
+ * thousand up, ADR-0167 §1).
+ */
+export function limitWords(language: Language = SOURCE_LANGUAGE, figures: Language = DEFAULT_LANGUAGE) {
+  const t = calendarWordsIn(language);
+  return {
+    tripTooLong: t.tripTooLong({ max: formatNumber(TRIP_DAYS_MAX, {}, figures) }),
+    titleTooLong: t.titleTooLong({ max: formatNumber(TITLE_MAX, {}, figures) }),
+    notesTooLong: t.notesTooLong({ max: formatNumber(NOTES_MAX, {}, figures) }),
+    tooManyInvitees: t.tooManyInvitees({ max: formatNumber(INVITEES_MAX, {}, figures) }),
+  };
+}
+
+const LIMITS = limitWords();
+
+/**
+ * **The prototype's own strings, verbatim** (ADR-0096), in English: *KPM* included, characters kept (`—`, `…`,
  * `✓`). They follow OD-39's product-wide answer if it is *office*, and nothing else changes them.
  */
 export const PROTOTYPE_COPY = {
-  newEvent: '+ New event',
-  newTitle: 'New event',
-  newSub: 'Add a meeting, task, or coaching session to your calendar.',
-  editTitle: 'Edit event',
-  editSub: 'Update the details below.',
-  blockTitle: (name: string) => `Block time — ${name}`,
-  blockSub: 'This goes straight onto their calendar — no approval needed, they\'ll just see it appear.',
-  saveEvent: 'Save event',
-  titlePlaceholder: 'e.g. Weekly unit standup',
-  inviteLabel: 'Invite (optional) — anyone in your KPM',
-  invitePlaceholder: 'Search your KPM by name…',
-  notesLabel: 'Notes / location',
-  notesPlaceholder: 'Zoom link, office, or agenda notes',
-  untitled: '(untitled event)',
-  noOneElse: 'No one else invited',
-  noMatches: 'No matches.',
-  viewing: 'Viewing:',
-  myCalendar: 'My Calendar',
-  compare: '+ Compare with downline',
-  searchDownline: 'Search your downline…',
-  added: ' · added ✓',
-  compareCap: (max: number) => `You're comparing ${max} people already — remove one below to add another.`,
-  dragToBlock: 'Drag to block',
-  more: (n: number) => `+${n} more…`,
-  you: 'You',
-  calendar: 'Calendar',
-  today: 'Today',
-  week: 'Week',
-  month: 'Month',
-  // The month's column heads in `id-ID`, as the week's are (`formatWeekday`, ADR-0167 §1): the prototype's *Mon … Sun*.
-  dayNames: ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'],
-  inviting: 'Inviting',
-  toThisSlot: 'to this slot',
-  type: 'Type',
-  title: 'Title',
-  date: 'Date',
-  start: 'Start',
-  end: 'End',
-  departure: 'Departure date',
-  return: 'Return date',
-  when: 'When',
-  where: 'Location / notes',
-  invitees: 'Invitees',
-  close: 'Close',
-  cancel: 'Cancel',
-  edit: 'Edit',
-  delete: 'Delete',
+  newEvent: EN.newEvent,
+  newTitle: EN.newTitle,
+  newSub: EN.newSub,
+  editTitle: EN.editTitle,
+  editSub: EN.editSub,
+  blockTitle: (name: string) => EN.blockTitle({ name }),
+  blockSub: EN.blockSub,
+  saveEvent: EN.saveEvent,
+  titlePlaceholder: EN.titlePlaceholder,
+  inviteLabel: EN.inviteLabel,
+  invitePlaceholder: EN.invitePlaceholder,
+  notesLabel: EN.notesLabel,
+  notesPlaceholder: EN.notesPlaceholder,
+  untitled: EN.untitled,
+  noOneElse: EN.noOneElse,
+  noMatches: EN.noMatches,
+  viewing: EN.viewing,
+  myCalendar: EN.myCalendar,
+  compare: EN.compare,
+  searchDownline: EN.searchDownline,
+  added: EN.added,
+  compareCap: (max: number) => EN.compareCap({ max }),
+  dragToBlock: EN.dragToBlock,
+  more: (n: number) => `${EN.moreCount({ n })}${EN.moreRest}`,
+  you: EN.you,
+  calendar: EN.title,
+  today: EN.today,
+  week: EN.week,
+  month: EN.month,
+  // The month's column heads are the formatter's (`weekdayHeadings`, `lib/format.ts`; P18.98-T3 AC-5): the prototype's
+  // *Mon … Sun*, Monday first in both languages — *Sen … Min* in Indonesian.
+  type: EN.type,
+  title: EN.fieldTitle,
+  date: EN.date,
+  start: EN.start,
+  end: EN.end,
+  departure: EN.departure,
+  return: EN.return,
+  when: EN.when,
+  where: EN.where,
+  invitees: EN.invitees,
+  close: EN.close,
+  cancel: EN.cancel,
+  edit: EN.edit,
+  delete: EN.delete,
 } as const;
 
 /** The picker's group headings, verbatim, *KPM* included (`:469-480`). */
-export const PEOPLE_GROUP_LABEL: Record<PeopleGroup, string> = {
-  direct_unit: 'Your direct unit',
-  group: 'Your group (AAB teams)',
-  other: 'Other units in your KPM',
-  leadership: 'KPM leadership',
-};
+export const PEOPLE_GROUP_LABEL: Record<PeopleGroup, string> = EN.peopleGroups;
 
 /** The compare popover's group headings, verbatim (`:460-466`). */
-export const DOWNLINE_GROUP_LABEL: Record<DownlineGroup, string> = {
-  direct_unit: 'Direct unit',
-  group: 'AAB & their teams (group)',
-};
+export const DOWNLINE_GROUP_LABEL: Record<DownlineGroup, string> = EN.downlineGroups;
 
 /**
  * **The strings the calendar writes itself** (`functional/calendar.md`, *The calendar's own
- * strings*). ADR-0096: none of ADR-0084's six words — *office*, *KPM*, *reports to*, *tagged to*,
+ * strings*), in English. ADR-0096: none of ADR-0084's six words — *office*, *KPM*, *reports to*, *tagged to*,
  * *untagged*, *unassigned* — and no phase, internal id or permission code. `calendar.spec.ts` holds
  * every one of them to that.
  */
 export const OWN_COPY = {
   /** A 1:1 opened from `/new-hires` (P18.96-T6 AC-4): the title *Block time* gives one too, with the full name (L-65). */
-  oneOnOneWith: (name: string) => `1:1 with ${name}`,
-  accept: 'Accept',
-  decline: 'Decline',
+  oneOnOneWith: (name: string) => EN.oneOnOneWith({ name }),
+  accept: EN.accept,
+  decline: EN.decline,
   /** The toast after an answer: the dialog closes, so the change is said rather than marked. */
-  answeredAccepted: 'Invitation accepted.',
-  answeredDeclined: 'Invitation declined. It is no longer on your calendar.',
-  accepted: 'Accepted',
-  declined: 'Declined',
-  noAnswer: 'No answer yet',
-  organiser: 'Organiser',
+  answeredAccepted: EN.answeredAccepted,
+  answeredDeclined: EN.answeredDeclined,
+  accepted: EN.accepted,
+  declined: EN.declined,
+  noAnswer: EN.noAnswer,
+  organiser: EN.organiser,
   /** After the name, so a placed member's chip reads *{name}, time placed by the organiser*. */
-  placedChip: ', time placed by the organiser',
-  previousWeek: 'Previous week',
-  nextWeek: 'Next week',
-  previousMonth: 'Previous month',
-  nextMonth: 'Next month',
-  remove: (name: string) => `Remove ${name}`,
+  placedChip: EN.placedChip,
+  previousWeek: EN.previousWeek,
+  nextWeek: EN.nextWeek,
+  previousMonth: EN.previousMonth,
+  nextMonth: EN.nextMonth,
+  remove: (name: string) => EN.remove({ name }),
   /**
    * After the pill's visible *Drag to block*, read and never drawn, so its name is *"Drag to block:
    * Block time — {name}"*: the words on it first, then what it opens (WCAG 2.5.3, M2).
    */
-  blockPillSuffix: (name: string) => `: ${PROTOTYPE_COPY.blockTitle(name)}`,
+  blockPillSuffix: (name: string) => EN.blockPillSuffix({ name }),
   /** *+{n} more…* where a narrow cell has room for its count alone (F4); the rest is read, not drawn. */
-  moreShort: (n: number) => `+${n}`,
-  waiting: ', waiting for your answer',
-  placed: ', placed on your calendar',
-  region: (range: string) => `Calendar, ${range}`,
-  comparedRegion: (name: string, range: string) => `Calendar, ${name}, ${range}`,
-  busy: 'Busy',
-  view: 'View',
+  moreShort: (n: number) => EN.moreCount({ n }),
+  waiting: EN.owes.waiting,
+  placed: EN.owes.placed,
+  region: (range: string) => EN.region({ range }),
+  comparedRegion: (name: string, range: string) => EN.comparedRegion({ name, range }),
+  busy: EN.busy,
+  view: EN.view,
   /** The prototype's question less its second sentence, which a soft delete makes false (H-06, I-101). */
-  deleteQuestion: (title: string) => `Delete "${title}"?`,
-  chooseDate: 'Choose a date.',
-  endAfterStart: 'Choose an end time after the start.',
-  returnAfterDeparture: 'Choose a return date on or after the departure date.',
-  // Built from the limits above (m3), so a limit changed in one place changes the sentence with it.
-  tripTooLong: `A trip can be at most ${TRIP_DAYS_MAX} days.`,
-  titleTooLong: `Keep the title to ${formatNumber(TITLE_MAX)} characters.`,
-  notesTooLong: `Keep the notes to ${formatNumber(NOTES_MAX)} characters.`,
-  tooManyInvitees: `You can invite at most ${formatNumber(INVITEES_MAX)} people.`,
-  loadFailed: 'The calendar couldn\'t be loaded.',
-  tryAgain: 'Try again',
-  conflict: 'This entry was changed somewhere else, so it has been read again.',
-  notInvitable: 'Someone you invited can\'t be invited any more. Remove them and save again.',
-  gone: 'This entry isn\'t on your calendar any more.',
-  lost: (name: string) => `You can no longer view ${name}'s calendar.`,
-  searching: 'Searching…',
-  listFailed: 'The list couldn\'t be loaded.',
-  loading: 'Loading the calendar…',
+  deleteQuestion: (title: string) => EN.deleteQuestion({ title }),
+  chooseDate: EN.chooseDate,
+  endAfterStart: EN.endAfterStart,
+  returnAfterDeparture: EN.returnAfterDeparture,
+  // Built from the limits (m3), so a limit changed in one place changes the sentence with it.
+  ...LIMITS,
+  loadFailed: EN.loadFailed,
+  tryAgain: EN.tryAgain,
+  conflict: EN.conflict,
+  notInvitable: EN.notInvitable,
+  gone: EN.gone,
+  lost: (name: string) => EN.lost({ name }),
+  searching: EN.searching,
+  listFailed: EN.listFailed,
+  loading: EN.loading,
   /** The toolbar's switch, in the client's words (ADR-0110). It names the control, never its state. */
-  hideDetails: 'Hide my personal activities',
+  hideDetails: EN.hideDetails,
   /** What the switch does: its ⓘ's words, and the switch's description. */
-  hideDetailsTip: 'Leaders who view your calendar see only "Busy" and the time. People you invite still see the details.',
+  hideDetailsTip: EN.hideDetailsTip,
   /** A save of the switch refused: it is back where it was, and this says so. */
-  hideDetailsFailed: 'Your setting couldn\'t be saved, so it has been put back.',
-  /*
-   * ── A phone's calendar, and the popup's link (P18.95-T8; the client's UI review, UI-020) ──
-   */
+  hideDetailsFailed: EN.hideDetailsFailed,
   /** The phone's third view, beside the prototype's *Week* and *Month*: the week as a list by day. */
-  agenda: 'Agenda',
+  agenda: EN.agenda,
   /** The phone's one button for what the toolbar's row has no room for: compare, the legend, the switch. */
-  filters: 'Filters',
+  filters: EN.filters,
   /** A day of the agenda, or the day a month's tap shows, with nothing on it. */
-  noEvents: 'No events',
+  noEvents: EN.noEvents,
   /** After a month cell's date on a phone, where its lines are dots: how many it holds. */
-  eventCount: (n: number) => (n === 1 ? '1 event' : `${formatNumber(n)} events`),
+  eventCount: (n: number) => EN.eventCount({ n, count: formatNumber(n) }),
   /** A meeting link in *Location / notes*: on a Zoom host, and on any other. */
-  joinZoom: 'Join Zoom',
-  joinMeeting: 'Join meeting',
+  joinZoom: EN.joinZoom,
+  joinMeeting: EN.joinMeeting,
   /** After the link's words, read and not drawn: it opens in a new tab (WCAG G201). */
-  newTab: ', opens in a new tab',
+  newTab: EN.newTab,
 } as const;
 
 /*
@@ -484,8 +495,9 @@ export const OWN_COPY = {
 
 export const isBusy = (item: CalendarItem): item is CalendarBusy => 'busy' in item && item.busy === true;
 
-/** The title to draw: the prototype draws an empty one as `(untitled event)` (`:782`). */
-export const titleOf = (entry: { title: string }) => entry.title.trim() || PROTOTYPE_COPY.untitled;
+/** The title to draw, as typed: the prototype draws an empty one as `(untitled event)` (`:782`), in `language`. */
+export const titleOf = (entry: { title: string }, language: Language = SOURCE_LANGUAGE) =>
+  entry.title.trim() || calendarWordsIn(language).untitled;
 
 /** The office date an entry is on, or starts on: where the week holding it opens. */
 export const entryDate = (entry: CalendarItem): string => (entry.allDay ? entry.startsOn : entry.date) ?? '';
@@ -509,9 +521,11 @@ export function initialsOf(name: string): string {
  * matching the leader's name to the reader's: a name is a mutable attribute and two people can share
  * one (invariant §2), so a namesake's agent would have lost their *"· under"*.
  */
-export function personTag(person: { rung: CalendarRung; leaderName: string | null; direct: boolean }): string {
+export function personTag(
+  person: { rung: CalendarRung; leaderName: string | null; direct: boolean }, language: Language = SOURCE_LANGUAGE,
+): string {
   const rung = shortOfRung(person.rung);
-  return !person.direct && person.leaderName ? `${rung} · under ${person.leaderName}` : rung;
+  return !person.direct && person.leaderName ? calendarWordsIn(language).under({ rung, leader: person.leaderName }) : rung;
 }
 
 /**
@@ -524,12 +538,27 @@ export function peopleOn(...entries: ReadonlyArray<Pick<CalendarEntry, 'invitees
   return [...ids];
 }
 
-/** A pending invitation waits on this reader; a placed block was put on their calendar. */
-export function entryNameSuffix(entry: CalendarEntry): string {
-  if (entry.readerIs === 'invitee' && entry.myAnswer === 'pending') return OWN_COPY.waiting;
-  if (entry.readerIs === 'placed') return OWN_COPY.placed;
-  return '';
+/** What the reader owes an entry: a pending invitation waits on them; a placed block was put on their calendar. */
+export function owesOf(entry: CalendarEntry): 'waiting' | 'placed' | null {
+  if (entry.readerIs === 'invitee' && entry.myAnswer === 'pending') return 'waiting';
+  if (entry.readerIs === 'placed') return 'placed';
+  return null;
 }
+
+/** What the reader owes, said after an entry's name, in English: the catalogue's own sentence is `entryName`. */
+export function entryNameSuffix(entry: CalendarEntry): string {
+  const owes = owesOf(entry);
+  return owes ? OWN_COPY[owes] : '';
+}
+
+/**
+ * **An entry's accessible name** — *{type}: {title}, {time}* and what the reader owes it (WCAG 2.5.3; P12-T2 AC-11) —
+ * in `language`; `time` as the grid draws it, in the figures' language, `''` for a trip.
+ */
+export const entryName = (entry: CalendarEntry, time: string, language: Language = SOURCE_LANGUAGE) => {
+  const t = calendarWordsIn(language);
+  return t.entryName({ type: t.types[entry.type], title: titleOf(entry, language), time, owes: owesOf(entry) });
+};
 
 /** A `YYYY-MM-DD` that is a real calendar date, or `undefined`: an unreadable `date` is ignored (`:226`). */
 export function readableDate(value: unknown): string | undefined {
@@ -617,7 +646,8 @@ export function meetingUrl(raw: string): URL | null {
  * address itself stays the link's `title` and its `href`, so it is never hidden from whoever wants to
  * see where it goes.
  */
-export function notesParts(notes: string): NotesPart[] {
+export function notesParts(notes: string, language: Language = SOURCE_LANGUAGE): NotesPart[] {
+  const t = calendarWordsIn(language);
   const parts: NotesPart[] = [];
   let at = 0;
   for (const match of notes.matchAll(ADDRESS)) {
@@ -626,7 +656,7 @@ export function notesParts(notes: string): NotesPart[] {
     if (!url) continue;
     const start = (match.index ?? 0) + match[1].length;
     if (start > at) parts.push({ text: notes.slice(at, start) });
-    parts.push({ href: url.href, label: isZoomHost(url.hostname) ? OWN_COPY.joinZoom : OWN_COPY.joinMeeting });
+    parts.push({ href: url.href, label: isZoomHost(url.hostname) ? t.joinZoom : t.joinMeeting });
     at = start + raw.length;
   }
   if (at < notes.length) parts.push({ text: notes.slice(at) });

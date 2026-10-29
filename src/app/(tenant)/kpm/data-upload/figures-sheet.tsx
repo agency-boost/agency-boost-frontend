@@ -5,8 +5,12 @@ import { Dialog } from '@/components/ui/dialog';
 import { Button, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
 import { CONTROL_PHONE } from '@/components/ui/phone';
+import { messagesIn } from '@/i18n/catalogue';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { dataUploadMessages } from '@/i18n/messages/data-upload';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
-import { parseDecimal } from '@/lib/format';
+import { formatDecimalInput, moneyPrefix, parseDecimal } from '@/lib/format';
 import { groupDigits, parseDigits, toMajor, toMinor } from '@/lib/goals';
 import {
   CADENCE_GROUP_LABEL, CADENCES, correctCell, figureLabel, METRIC_LABEL, MONEY_METRICS, PRODUCTION_METRICS,
@@ -27,9 +31,9 @@ const keyOf = (metric: ProductionMetric, cadence: Cadence): FigureKey => `${metr
 const FIGURES = CADENCES.flatMap((cadence) => PRODUCTION_METRICS.map((metric) => ({ metric, cadence, key: keyOf(metric, cadence) })));
 
 /** A figure as its field holds it: rupiah grouped as typed, a decimal with a comma, nothing as empty. */
-function asTyped(metric: ProductionMetric, value: number | null): string {
+function asTyped(metric: ProductionMetric, value: number | null, figures: Language): string {
   if (value === null) return '';
-  return MONEY_METRICS.includes(metric) ? groupDigits(toMajor(value)) : String(value).replace('.', ',');
+  return MONEY_METRICS.includes(metric) ? groupDigits(toMajor(value), figures) : formatDecimalInput(value, figures);
 }
 
 /** What a field says, in the unit it is stored in — money in sen; `null` for an empty field; `NaN` for not a number. */
@@ -89,6 +93,9 @@ export function FiguresSheet({
   /** Closed, with every correction it saved — none if nothing was. */
   onClose: (saved: CorrectionResult[]) => void;
 }) {
+  const t = useMessages(dataUploadMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const formId = useId();
   const reasonId = useId();
   const fieldId = useId();
@@ -96,7 +103,7 @@ export function FiguresSheet({
     FIGURES.map(({ metric, cadence, key }) => [key, row.metrics[metric][cadence]]),
   ) as Record<FigureKey, MetricCell>);
   const [typed, setTyped] = useState<Record<FigureKey, string>>(() => Object.fromEntries(
-    FIGURES.map(({ metric, cadence, key }) => [key, asTyped(metric, row.metrics[metric][cadence].value)]),
+    FIGURES.map(({ metric, cadence, key }) => [key, asTyped(metric, row.metrics[metric][cadence].value, figures)]),
   ) as Record<FigureKey, string>);
   const [reason, setReason] = useState('');
   const [errors, setErrors] = useState<Partial<Record<FigureKey, string>>>({});
@@ -106,7 +113,7 @@ export function FiguresSheet({
   const [rev, setRev] = useState(revision);
   const [saved, setSaved] = useState<CorrectionResult[]>([]);
   const [clearing, setClearing] = useState<Change[] | null>(null);
-  const label = monthLabel(month);
+  const label = monthLabel(month, figures);
 
   /** The figures whose field no longer says what the server holds. */
   const changes: Change[] = FIGURES.flatMap(({ metric, cadence, key }) => {
@@ -157,9 +164,9 @@ export function FiguresSheet({
     setReasonError(undefined);
     const wrong = Object.fromEntries(changes
       .filter((c) => c.value !== null && Number.isNaN(c.value))
-      .map((c) => [c.key, `${figureLabel(c.metric, c.cadence)} is not a number.`]));
+      .map((c) => [c.key, t.notANumber({ label: figureLabel(c.metric, c.cadence, language) })]));
     const noReason = reason.trim() === '';
-    if (noReason) setReasonError('Say why the figure is being corrected.');
+    if (noReason) setReasonError(t.sayWhy);
     if (Object.keys(wrong).length > 0) setErrors(wrong);
     if (noReason || Object.keys(wrong).length > 0 || changes.length === 0) return;
     // Emptying is clearing, and clearing is asked first (ADR-0051), as the panel's *Clear figure* is.
@@ -168,23 +175,23 @@ export function FiguresSheet({
     else void send(changes);
   };
 
-  const clearedNames = (clearing ?? []).filter((c) => c.value === null).map((c) => figureLabel(c.metric, c.cadence));
+  const clearedNames = (clearing ?? []).filter((c) => c.value === null).map((c) => figureLabel(c.metric, c.cadence, language));
 
   return (
     <>
       <Modal
         open
         placement="sheet"
-        title={`Correct figures for ${row.name}`}
+        title={t.correctFiguresFor({ name: row.name })}
         description={`${row.agentCode} · ${label}`}
         focusDialog
         onClose={close}
         footer={(
           <div className="flex flex-wrap items-center gap-2.5">
             <Button type="submit" form={formId} disabled={busy || changes.length === 0} className={CONTROL_PHONE}>
-              {busy ? 'Saving…' : 'Save corrections'}
+              {busy ? t.saving : t.saveCorrections}
             </Button>
-            <Button variant="secondary" onClick={close} disabled={busy} className={CONTROL_PHONE}>Cancel</Button>
+            <Button variant="secondary" onClick={close} disabled={busy} className={CONTROL_PHONE}>{t.cancel}</Button>
           </div>
         )}
       >
@@ -196,18 +203,19 @@ export function FiguresSheet({
                 const key = keyOf(metric, cadence);
                 const cell = held[key];
                 const money = MONEY_METRICS.includes(metric);
+                // Named as a sentence names it — *APE this month* — where the legend says the group.
+                const named = (
+                  <>
+                    {METRIC_LABEL[metric]}
+                    <span className="sr-only">{cadence === 'monthly' ? t.thisMonth : t.yearToDate}</span>
+                  </>
+                );
                 return (
                   <Field
                     key={key}
-                    label={(
-                      <>
-                        {METRIC_LABEL[metric]}
-                        {/* Named as a sentence names it — *APE this month* — where the legend says the group. */}
-                        <span className="sr-only">{cadence === 'monthly' ? ' this month' : ' year to date'}</span>
-                      </>
-                    )}
+                    label={named}
                     htmlFor={`${fieldId}-${key}`}
-                    hint={cell.provenance === 'corrected' ? correctedNote(cell) : undefined}
+                    hint={cell.provenance === 'corrected' ? correctedNote(cell, figures, language) : undefined}
                     error={errors[key]}
                   >
                     <TextInput
@@ -215,7 +223,7 @@ export function FiguresSheet({
                       inputMode={money ? 'numeric' : 'decimal'}
                       autoComplete="off"
                       placeholder="—"
-                      prefix={money ? 'Rp' : undefined}
+                      prefix={money ? moneyPrefix(figures) : undefined}
                       suffix={metric === 'persistency' ? '%' : undefined}
                       invalid={!!errors[key]}
                       value={typed[key]}
@@ -225,7 +233,7 @@ export function FiguresSheet({
                         const v = e.target.value;
                         setTyped((now) => ({
                           ...now,
-                          [key]: money ? (v.replace(/\D/g, '') === '' ? '' : groupDigits(parseDigits(v))) : v,
+                          [key]: money ? (v.replace(/\D/g, '') === '' ? '' : groupDigits(parseDigits(v), figures)) : v,
                         }));
                       }}
                     />
@@ -234,12 +242,7 @@ export function FiguresSheet({
               })}
             </fieldset>
           ))}
-          <Field
-            label="Why is it being corrected?"
-            htmlFor={reasonId}
-            hint="Kept with the figure, and in the audit log."
-            error={reasonError}
-          >
+          <Field label={t.why} htmlFor={reasonId} hint={t.whyHint} error={reasonError}>
             <TextInput
               id={reasonId}
               maxLength={500}
@@ -255,10 +258,9 @@ export function FiguresSheet({
       </Modal>
       <Dialog
         open={clearing !== null}
-        message={`Clear ${clearedNames.join(' and ')} for ${row.name} in ${label}? `
-          + `${clearedNames.length === 1 ? 'The figure is' : 'The figures are'} emptied, as if nothing had been reported, `
-          + 'and your reason is kept with the change.'}
-        confirmLabel={clearedNames.length === 1 ? 'Clear figure' : 'Clear figures'}
+        message={t.clearSome({ labels: clearedNames, name: row.name, month: label })}
+        confirmLabel={clearedNames.length === 1 ? t.clearFigure : t.clearFigures}
+        cancelLabel={t.cancel}
         tone="danger"
         onConfirm={() => {
           const all = clearing ?? [];
@@ -273,19 +275,27 @@ export function FiguresSheet({
 
 /**
  * **What the sheet did, in a sentence** — the panel's own words for one figure (*"Corrected APE this month for Rina
- * Wijaya: Rp 1.500.000 → Rp 2.000.000."*), and for several each figure's change after a count of them.
+ * Wijaya: Rp 1.500.000 → Rp 2.000.000."*), and for several each figure's change after a count of them. Its figures in
+ * `figures`, its words in `language` (English when passed none, P18.98-T4).
  */
-export function correctedWords(who: string, results: readonly CorrectionResult[]): string {
+export function correctedWords(
+  who: string,
+  results: readonly CorrectionResult[],
+  figures: Language,
+  language: Language = SOURCE_LANGUAGE,
+): string {
+  const t = messagesIn(dataUploadMessages, language);
+  const label = (r: CorrectionResult) => figureLabel(r.metric, r.cadence, language);
+  const shown = (r: CorrectionResult, value: number | null) => showFigure(r.metric, value, figures, language);
   const changed = results.filter((r) => r.changed);
   if (changed.length === 0) {
     const [first] = results;
-    return `${figureLabel(first.metric, first.cadence)} for ${who} already reads ${showFigure(first.metric, first.after.value)} — nothing was changed.`;
+    return t.unchanged({ label: label(first), who, after: shown(first, first.after.value) });
   }
-  const each = (r: CorrectionResult) => `${showFigure(r.metric, r.before.value)} → ${showFigure(r.metric, r.after.value)}`;
   if (changed.length === 1) {
     const [r] = changed;
-    return `Corrected ${figureLabel(r.metric, r.cadence)} for ${who}: ${each(r)}.`;
+    return t.corrected({ label: label(r), who, before: shown(r, r.before.value), after: shown(r, r.after.value) });
   }
-  return `Corrected ${changed.length} figures for ${who}: `
-    + `${changed.map((r) => `${figureLabel(r.metric, r.cadence)} ${each(r)}`).join('; ')}.`;
+  const changes = changed.map((r) => `${label(r)} ${shown(r, r.before.value)} → ${shown(r, r.after.value)}`).join('; ');
+  return t.correctedMany({ n: changed.length, who, changes });
 }

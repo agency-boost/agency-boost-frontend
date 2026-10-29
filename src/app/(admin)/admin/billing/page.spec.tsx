@@ -80,14 +80,14 @@ describe('the quote tool (P13.2-T2)', () => {
       await screen.findByText('Estimate your price');
 
       expect(cards().map((c) => c.textContent)).toEqual([
-        '1–10 leadersRp 500.000/moRp 400.000 /leader/moSave 20%Your tier',
-        '11–20 leadersRp 475.000/moRp 375.000 /leader/moSave 21%',
-        '21–50 leadersRp 450.000/moRp 350.000 /leader/moSave 22%',
-        '51–100 leadersRp 425.000/moRp 300.000 /leader/moSave 29%',
+        '1–10 leadersIDR 500,000/moIDR 400,000 /leader/moSave 20%Your tier',
+        '11–20 leadersIDR 475,000/moIDR 375,000 /leader/moSave 21%',
+        '21–50 leadersIDR 450,000/moIDR 350,000 /leader/moSave 22%',
+        '51–100 leadersIDR 425,000/moIDR 300,000 /leader/moSave 29%',
         "101+ leadersCustom pricing based on your unit's structure.Talk to us",
       ]);
       // The 101+ tier's rates are never on a card.
-      expect(cards()[4]).not.toHaveTextContent('Rp');
+      expect(cards()[4]).not.toHaveTextContent(/Rp|IDR/);
     });
 
     it('keeps the six-month rate on the cards on Annual, and moves *Your tier* with the count', async () => {
@@ -95,7 +95,7 @@ describe('the quote tool (P13.2-T2)', () => {
       await screen.findByText('Estimate your price');
 
       await userEvent.click(screen.getByRole('button', { name: 'Annual' }));
-      expect(cards()[0]).toHaveTextContent('Rp 400.000 /leader/mo');
+      expect(cards()[0]).toHaveTextContent('IDR 400,000 /leader/mo');
 
       await setLeaders('21');
       expect(cards()[0]).not.toHaveTextContent('Your tier');
@@ -110,11 +110,11 @@ describe('the quote tool (P13.2-T2)', () => {
 
       expect(leaders()).toHaveValue(8);
       expect(screen.getByText(/falls in the/)).toHaveTextContent('8 leaders falls in the 1–10 tier.');
-      expect(row('Standard price / leader / mo')).toHaveTextContent('Rp 500.000');
-      expect(row('Offering price / leader / mo')).toHaveTextContent('Rp 400.000');
+      expect(row('Standard price / leader / mo')).toHaveTextContent('IDR 500,000');
+      expect(row('Offering price / leader / mo')).toHaveTextContent('IDR 400,000');
       expect(screen.queryByText('Offering price after discount / leader / mo')).not.toBeInTheDocument();
-      expect(row('Monthly total (all leaders)')).toHaveTextContent('Rp 3.200.000');
-      expect(row('6-month total (all leaders)')).toHaveTextContent('Rp 19.200.000');
+      expect(row('Monthly total (all leaders)')).toHaveTextContent('IDR 3,200,000');
+      expect(row('6-month total (all leaders)')).toHaveTextContent('IDR 19,200,000');
       expect(screen.getByRole('button', { name: '6-month' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.getByText('Discounts applied')).toBeInTheDocument();
       expect(screen.getByText('Prices shown in IDR, per leader. Agents under each leader are included at no extra cost.')).toBeInTheDocument();
@@ -128,13 +128,13 @@ describe('the quote tool (P13.2-T2)', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Annual' }));
 
       expect(screen.getByRole('button', { name: 'Annual' })).toHaveAttribute('aria-pressed', 'true');
-      expect(row('Offering price after discount / leader / mo')).toHaveTextContent('Rp 380.000');
+      expect(row('Offering price after discount / leader / mo')).toHaveTextContent('IDR 380,000');
       // The six-month offer is struck through whenever the row below it shows.
-      expect(row('Offering price / leader / mo').querySelector('s')).toHaveTextContent('Rp 400.000');
-      expect(row('Monthly total (all leaders)')).toHaveTextContent('Rp 3.040.000');
-      expect(row('Annual total (all leaders)')).toHaveTextContent('Rp 36.480.000');
+      expect(row('Offering price / leader / mo').querySelector('s')).toHaveTextContent('IDR 400,000');
+      expect(row('Monthly total (all leaders)')).toHaveTextContent('IDR 3,040,000');
+      expect(row('Annual total (all leaders)')).toHaveTextContent('IDR 36,480,000');
       expect(screen.getByText('Annual discount (extra 5% off 6-month rate)')).toBeInTheDocument();
-      expect(screen.getByText('-Rp 20.000/leader/mo')).toBeInTheDocument();
+      expect(screen.getByText('-IDR 20,000/leader/mo')).toBeInTheDocument();
     });
 
     it('says the annual discount is not applied on six months, with the toggle above (a Fix)', async () => {
@@ -154,14 +154,14 @@ describe('the quote tool (P13.2-T2)', () => {
       expect(screen.getByText(/falls in the/)).toHaveTextContent('1 leader falls in the 1–10 tier.');
       await setLeaders('');
       expect(screen.getByText(/falls in the/)).toHaveTextContent('1 leader falls in the 1–10 tier.');
-      expect(row('Monthly total (all leaders)')).toHaveTextContent('Rp 400.000');
+      expect(row('Monthly total (all leaders)')).toHaveTextContent('IDR 400,000');
 
       await setLeaders('120');
       expect(screen.getByText(/falls in the/)).toHaveTextContent(
         '120 leaders falls in the 101+ tier — shown as "custom pricing" publicly, real rate calculated below for your own quoting.',
       );
-      expect(row('Monthly total (all leaders)')).toHaveTextContent('Rp 30.000.000');
-      expect(row('6-month total (all leaders)')).toHaveTextContent('Rp 180.000.000');
+      expect(row('Monthly total (all leaders)')).toHaveTextContent('IDR 30,000,000');
+      expect(row('6-month total (all leaders)')).toHaveTextContent('IDR 180,000,000');
       expect(screen.getByRole('button', { name: 'Send custom quote' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Confirm plan' })).not.toBeInTheDocument();
     });
@@ -178,12 +178,12 @@ describe('the quote tool (P13.2-T2)', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Annual' }));
       await userEvent.clear(discount());
       await userEvent.type(discount(), '10');
-      expect(row('Offering price after discount / leader / mo')).toHaveTextContent('Rp 342.000');
-      expect(row('Annual total (all leaders)')).toHaveTextContent('Rp 32.832.000');
+      expect(row('Offering price after discount / leader / mo')).toHaveTextContent('IDR 342,000');
+      expect(row('Annual total (all leaders)')).toHaveTextContent('IDR 32,832,000');
 
       await userEvent.clear(discount());
       await userEvent.type(discount(), '10,5');
-      expect(row('Offering price after discount / leader / mo')).toHaveTextContent('Rp 340.100');
+      expect(row('Offering price after discount / leader / mo')).toHaveTextContent('IDR 340,100');
     });
 
     it('sets the value to 0 when the type changes, and groups an amount as it is typed', async () => {
@@ -193,16 +193,16 @@ describe('the quote tool (P13.2-T2)', () => {
 
       await userEvent.clear(discount());
       await userEvent.type(discount(), '50');
-      await userEvent.selectOptions(screen.getByLabelText('Discount type'), 'Rp/leader');
+      await userEvent.selectOptions(screen.getByLabelText('Discount type'), 'IDR/leader');
       expect(discount()).toHaveValue('0');
 
       await setLeaders('15');
       await userEvent.clear(discount());
       await userEvent.type(discount(), '25000');
-      expect(discount()).toHaveValue('25.000');
-      expect(row('Offering price after discount / leader / mo')).toHaveTextContent('Rp 350.000');
-      expect(row('Monthly total (all leaders)')).toHaveTextContent('Rp 5.250.000');
-      expect(row('6-month total (all leaders)')).toHaveTextContent('Rp 31.500.000');
+      expect(discount()).toHaveValue('25,000');
+      expect(row('Offering price after discount / leader / mo')).toHaveTextContent('IDR 350,000');
+      expect(row('Monthly total (all leaders)')).toHaveTextContent('IDR 5,250,000');
+      expect(row('6-month total (all leaders)')).toHaveTextContent('IDR 31,500,000');
     });
 
     it('refuses a percent above 100 with a sentence, prices without it, and generates nothing', async () => {
@@ -214,7 +214,7 @@ describe('the quote tool (P13.2-T2)', () => {
 
       expect(screen.getByRole('alert')).toHaveTextContent('Enter a percent from 0 to 100.');
       expect(discount()).toHaveAttribute('aria-invalid', 'true');
-      expect(row('Monthly total (all leaders)')).toHaveTextContent('Rp 3.200.000');
+      expect(row('Monthly total (all leaders)')).toHaveTextContent('IDR 3,200,000');
 
       // Close the disclosure, then press each way into the dialog: none opens it.
       await userEvent.click(screen.getByText('Manual override'));
@@ -231,11 +231,11 @@ describe('the quote tool (P13.2-T2)', () => {
       renderPage();
       await screen.findByText('Estimate your price');
       await userEvent.click(screen.getByText('Manual override'));
-      await userEvent.selectOptions(screen.getByLabelText('Discount type'), 'Rp/leader');
+      await userEvent.selectOptions(screen.getByLabelText('Discount type'), 'IDR/leader');
       await userEvent.clear(discount());
       await userEvent.type(discount(), '400001');
 
-      expect(screen.getByRole('alert')).toHaveTextContent('Enter an amount from Rp 0 to Rp 400.000.');
+      expect(screen.getByRole('alert')).toHaveTextContent('Enter an amount from IDR 0 to IDR 400,000.');
     });
 
     it.each(['Confirm plan', 'Send quote', 'Talk to us'])('%s opens the dialog (a Fix: two of them did nothing)', async (name) => {
@@ -381,9 +381,9 @@ describe('the quote tool (P13.2-T2)', () => {
       expect(screen.getByText('Estimate your price')).not.toBeVisible();
       expect(within(quote).getByRole('heading', { name: 'Subscription quote' })).toHaveFocus();
       // The paper writes its dates as every screen does (ADR-0167 §1); the dialog's fields keep DD/MM/YYYY.
-      expect(quote).toHaveTextContent('Generated 8 Okt 2026');
+      expect(quote).toHaveTextContent('Generated 8 Oct 2026');
       for (const [label, value] of [
-        ['KPM', 'Jakarta Selatan'], ['Person in charge (PIC)', 'Andi Wijaya'], ['Plan start date', '15 Okt 2026'],
+        ['KPM', 'Jakarta Selatan'], ['Person in charge (PIC)', 'Andi Wijaya'], ['Plan start date', '15 Oct 2026'],
         ['Plan end date', '14 Apr 2027'], ['Sales input by', 'Maya'],
       ]) {
         expect(within(quote).getByText(label).nextElementSibling).toHaveTextContent(value);
@@ -392,14 +392,14 @@ describe('the quote tool (P13.2-T2)', () => {
       expect(within(quote).getByText('Tier').nextElementSibling).toHaveTextContent('1–10 leaders');
       expect(within(quote).getByText('Leaders on plan').nextElementSibling).toHaveTextContent('8');
       expect(within(quote).getByText('Billing period').nextElementSibling).toHaveTextContent('6-month plan');
-      expect(within(quote).getByText('Standard price / leader / mo').nextElementSibling).toHaveTextContent('Rp 500.000');
-      expect(within(quote).getByText('Offering price / leader / mo').nextElementSibling).toHaveTextContent('Rp 400.000');
+      expect(within(quote).getByText('Standard price / leader / mo').nextElementSibling).toHaveTextContent('IDR 500,000');
+      expect(within(quote).getByText('Offering price / leader / mo').nextElementSibling).toHaveTextContent('IDR 400,000');
       expect(within(quote).queryByText('Discounts')).not.toBeInTheDocument();
       expect(within(quote).queryByText('Annual discount')).not.toBeInTheDocument();
-      expect(within(quote).getByText('Final price / leader / mo').nextElementSibling).toHaveTextContent('Rp 400.000');
+      expect(within(quote).getByText('Final price / leader / mo').nextElementSibling).toHaveTextContent('IDR 400,000');
       expect(within(quote).getByText('Total')).toBeInTheDocument();
-      expect(within(quote).getByText('Monthly total (all leaders)').nextElementSibling).toHaveTextContent('Rp 3.200.000');
-      expect(within(quote).getByText('6-month total (all leaders)').nextElementSibling).toHaveTextContent('Rp 19.200.000');
+      expect(within(quote).getByText('Monthly total (all leaders)').nextElementSibling).toHaveTextContent('IDR 3,200,000');
+      expect(within(quote).getByText('6-month total (all leaders)').nextElementSibling).toHaveTextContent('IDR 19,200,000');
       expect(quote).toHaveTextContent(
         "This quote is valid for the plan period shown above. Rate is locked for the duration of the subscription under AgencyBoost's launch pricing, valid for signups before Mar 2027.",
       );
@@ -417,12 +417,12 @@ describe('the quote tool (P13.2-T2)', () => {
       expect(within(quote).getByText('Discounts')).toBeInTheDocument();
       expect(within(quote).getByText('Tier').nextElementSibling).toHaveTextContent('11–20 leaders');
       expect(within(quote).getByText('Billing period').nextElementSibling).toHaveTextContent('Annual plan');
-      expect(within(quote).getByText('Annual discount').nextElementSibling).toHaveTextContent('-Rp 18.750/leader/mo');
-      expect(within(quote).getByText('Manual discount').nextElementSibling).toHaveTextContent('-Rp 24.937/leader/mo');
-      expect(within(quote).getByText('Final price / leader / mo').nextElementSibling).toHaveTextContent('Rp 331.313');
-      // 13 × Rp 331.313, exactly — the prototype printed Rp 4.307.063 (ADR-0111 §4).
-      expect(within(quote).getByText('Monthly total (all leaders)').nextElementSibling).toHaveTextContent('Rp 4.307.069');
-      expect(within(quote).getByText('Annual total (all leaders)').nextElementSibling).toHaveTextContent('Rp 51.684.828');
+      expect(within(quote).getByText('Annual discount').nextElementSibling).toHaveTextContent('-IDR 18,750/leader/mo');
+      expect(within(quote).getByText('Manual discount').nextElementSibling).toHaveTextContent('-IDR 24,937/leader/mo');
+      expect(within(quote).getByText('Final price / leader / mo').nextElementSibling).toHaveTextContent('IDR 331,313');
+      // 13 × IDR 331,313, exactly — the prototype printed IDR 4,307,063 (ADR-0111 §4).
+      expect(within(quote).getByText('Monthly total (all leaders)').nextElementSibling).toHaveTextContent('IDR 4,307,069');
+      expect(within(quote).getByText('Annual total (all leaders)').nextElementSibling).toHaveTextContent('IDR 51,684,828');
     });
 
     it('marks the 101+ tier custom on the quote', async () => {
@@ -470,7 +470,7 @@ describe('the quote tool (P13.2-T2)', () => {
       expect(paper).toHaveTextContent('Billing & subscription');
       expect(paper).toHaveTextContent('Launch pricing — locked in for signups before Mar 2027.');
       expect(paper).toHaveTextContent('Subscription quote');
-      expect(paper).toHaveTextContent('Rp 19.200.000');
+      expect(paper).toHaveTextContent('IDR 19,200,000');
       expect(within(paper).queryAllByRole('button', { hidden: true })).toEqual([]);
       // On the screen the two buttons are hidden from a print too.
       expect(screen.getByRole('button', { name: 'Print / save as PDF' }).parentElement).toHaveClass('print:hidden');
@@ -529,7 +529,7 @@ describe('the quote tool (P13.2-T2)', () => {
       expect(alert).toHaveTextContent("The prices couldn't be loaded, so nothing can be priced.");
       expect(alert).toHaveTextContent('INTERNAL_ERROR · req-9');
       expect(screen.queryByText('Estimate your price')).not.toBeInTheDocument();
-      expect(screen.queryByText(/Rp/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Rp|IDR/)).not.toBeInTheDocument();
       // The page's own title stays, so the reader knows where they are.
       expect(screen.getByRole('heading', { level: 1, name: 'Billing & subscription' })).toBeInTheDocument();
 

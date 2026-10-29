@@ -6,14 +6,17 @@ import { TAP_AREA } from '@/components/ui/phone';
 import { CardField, CardGroup } from '@/components/ui/row-cards';
 import { TermTip } from '@/components/ui/term-tip';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import type { Language } from '@/i18n/language';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
+import { campaignChasingMessages } from '@/i18n/messages/campaign-chasing';
 import { cn } from '@/lib/cn';
 import {
-  coachingTabHref, lastOneOnOneLine, lastOneOnOneOverdue, ROSTER_STATUS_LABEL, type RosterStatus,
+  coachingTabHref, lastOneOnOneLine, lastOneOnOneOverdue, rosterStatusLabel, type RosterStatus,
 } from '@/lib/coaching';
-import { PROTOTYPE_COPY as CAMPAIGN_COPY } from '@/lib/campaigns';
 import {
-  firstName, goalBar, goalWords, missingWords, namesMissing, namesNewHires, newHireWords, onPaceWords, OWN_COPY, PROTOTYPE_COPY,
-  provenanceWords, recruitLine, rowName, rowsOf, salesLine, STATUS_TOOLTIP, totalNote, totalRecruitLine, touchesWords,
+  firstName, goalBar, goalWords, missingWords, namesMissing, namesNewHires, newHireWords, onPaceWords,
+  provenanceWords, recruitLine, rowName, rowsOf, salesLine, totalNote, totalRecruitLine, touchesWords,
   type GoalWords, type LeadsCounts, type UnitDashboardView, type UnitGroup, type UnitPeriod, type UnitRow,
   type UnitTotal,
 } from '@/lib/unit-dashboard';
@@ -41,6 +44,9 @@ import { DetailTiles, UnitDetail, type ReadRatios } from './unit-detail';
  * UI-010 and UI-030): `RosterCards`, the same groups, totals, figures, drills and ⌄, in the same order. Asked of
  * the window (`usePhone`, by the screen, before the roster answers, so a phone never draws the table first), so a
  * tablet and a desktop draw the table they drew, to the byte (§12).
+ *
+ * **Its words are the catalogue's** (`messages/unit-dashboard.ts`, P18.98-T4), in the reader's language; every figure
+ * in `useFigureLanguage()`'s. *Chasing MDRT* and its sentences are the campaigns' (`lib/campaigns.ts`).
  */
 
 const CELL = 'px-3.5 py-3.5 align-middle';
@@ -64,9 +70,12 @@ export function UnitRoster({
   phone?: boolean;
 }) {
   const headingId = useId();
+  const t = useMessages(unitDashboardMessages);
+  // *Chasing MDRT*: the campaigns' words (`campaign-chasing.ts`), in the reader's language.
+  const chasing = useMessages(campaignChasingMessages);
   const own = view.head.isReader;
-  const unitName = own ? PROTOTYPE_COPY.yourUnitGroup : `${view.head.name}’s Unit`;
-  const unitTotal = own ? PROTOTYPE_COPY.yourUnitTotal : `${view.head.name}’s Unit — Total`;
+  const unitName = own ? t.prototype.yourUnitGroup : t.unitOf({ name: view.head.name });
+  const unitTotal = own ? t.prototype.yourUnitTotal : t.unitTotalOf({ name: view.head.name });
   const rowProps = { period, expanded, onToggle, readRatios };
 
   return (
@@ -74,7 +83,7 @@ export function UnitRoster({
       {/* `.table-card-header` (`:1624-1626`): the title, and the button beside it. */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline px-5 py-4">
         <span className="flex items-center gap-1">
-          <h2 id={headingId} className="font-display text-[0.9375rem] font-bold text-navy">{PROTOTYPE_COPY.roster}</h2>
+          <h2 id={headingId} className="font-display text-[0.9375rem] font-bold text-navy">{t.prototype.roster}</h2>
           {/* A card has no *Name* heading to carry the ✓'s ⓘ, so on a phone it is beside the roster's own (AC-4). */}
           {phone && <TermTip term="POTENTIAL_MAA" />}
         </span>
@@ -103,45 +112,45 @@ export function UnitRoster({
                 <th scope="col" className={HEAD}>
                   {/* What a row's ✓ means, once (P18.95-T9 AC-4; UI-028): it was every ✓'s own tooltip. */}
                   <span className="inline-flex items-center gap-1">
-                    Name
+                    {t.columns.name}
                     <TermTip term="POTENTIAL_MAA" className={STATUS_TIP} />
                   </span>
                 </th>
-                <th scope="col" className={HEAD}>Goal progress</th>
+                <th scope="col" className={HEAD}>{t.columns.goal}</th>
                 <th scope="col" className={cn(HEAD, 'text-center')}>
                   {/* `.c-mdrt-h` (`:3917-3922`): the words are the tooltip's trigger, as drawn, and the tooltip is the
                       server's sentence about the MDRT campaign (OD-152) — the heading's description, not its name. */}
                   <TippedGlyph
-                    glyph={CAMPAIGN_COPY.chasingMdrt}
-                    name={CAMPAIGN_COPY.chasingMdrt}
+                    glyph={chasing.chasingMdrt}
+                    name={chasing.chasingMdrt}
                     tip={view.mdrt.tooltip}
                     align="fit"
                     className={MDRT_TIP}
                     face="h-auto w-auto px-0.5 text-xs font-semibold uppercase tracking-wide text-muted hover:bg-transparent hover:text-navy"
                   />
                 </th>
-                <th scope="col" className={HEAD}>Leads</th>
+                <th scope="col" className={HEAD}>{t.columns.leads}</th>
                 <th scope="col" className={HEAD}>
                   {/* ADR-0165 §2: the figure is *goal activities*, and the tooltip names the three types it counts. */}
                   <span className="inline-flex items-center gap-1">
-                    Activity
+                    {t.columns.activity}
                     <TippedGlyph
                       glyph="ⓘ"
-                      name={OWN_COPY.activityInfo}
-                      tip={OWN_COPY.activityRule}
+                      name={t.own.activityInfo}
+                      tip={t.own.activityRule}
                       align="fit"
                       className={STATUS_TIP}
                     />
                   </span>
                 </th>
-                <th scope="col" className={HEAD}>Last 1:1</th>
+                <th scope="col" className={HEAD}>{t.columns.last}</th>
                 <th scope="col" className={HEAD}>
                   <span className="inline-flex items-center gap-1">
-                    Status
+                    {t.columns.status}
                     <TippedGlyph
                       glyph="ⓘ"
-                      name={PROTOTYPE_COPY.statusInfo}
-                      tip={PROTOTYPE_COPY.statusRules}
+                      name={t.prototype.statusInfo}
+                      tip={t.prototype.statusRules}
                       align="fit"
                       // The rules, as the prototype's 250px bubble lists them, opening **below** the heading:
                       // above it, the table's own scroll box would cut it off.
@@ -151,7 +160,7 @@ export function UnitRoster({
                 </th>
                 <th scope="col" className={cn(HEAD, 'text-center')}>
                   {/* The *Remarks* heading, blank on screen (OD-139): the column holds each row's ⌄. */}
-                  <span className="sr-only">{OWN_COPY.details}</span>
+                  <span className="sr-only">{t.own.details}</span>
                 </th>
               </tr>
             </thead>
@@ -168,7 +177,7 @@ export function UnitRoster({
 
             {view.units.length > 0 && (
               <tbody>
-                <GroupDivider label={PROTOTYPE_COPY.aabUnits} />
+                <GroupDivider label={t.prototype.aabUnits} />
               </tbody>
             )}
             {view.units.map((unit) => <UnitBodies key={unit.head.membershipId} unit={unit} level={1} {...rowProps} />)}
@@ -185,10 +194,11 @@ export function UnitRoster({
  * P18.95-T9 AC-4 (UI-028): each ✓ was a button whose tooltip said the whole sentence again.
  */
 function MaaMark() {
+  const t = useMessages(unitDashboardMessages).own;
   return (
     <span className="shrink-0 font-bold text-success">
       <span aria-hidden="true">✓</span>
-      <span className="sr-only">{OWN_COPY.maaMark}</span>
+      <span className="sr-only">{t.maaMark}</span>
     </span>
   );
 }
@@ -202,10 +212,11 @@ const TAG = 'shrink-0 rounded-pill border border-hairline bg-base px-[7px] py-0.
  * decides who (`newHireBeforeFirstSale`), and the tag goes on the first sale's day.
  */
 function NewHireTag() {
+  const t = useMessages(unitDashboardMessages);
   return (
     <span className={TAG}>
-      {PROTOTYPE_COPY.newHire}
-      <span className="sr-only">{OWN_COPY.newHireMark}</span>
+      {t.prototype.newHire}
+      <span className="sr-only">{t.own.newHireMark}</span>
     </span>
   );
 }
@@ -215,19 +226,20 @@ function NewHireTag() {
  * `of` no longer cover every row below, so the total says who it left out, in the ⓘ the goal's figure already uses.
  */
 function OnPace({ total, rows }: { total: UnitTotal; rows: readonly UnitRow[] }) {
-  const note = newHireWords(total.newHires, namesNewHires(rows));
+  const language = useLanguage();
+  const note = newHireWords(total.newHires, namesNewHires(rows, language), language);
   return (
     <span className="flex items-start gap-1">
-      <span className="text-sm font-semibold text-amber-ink">{onPaceWords(total.potentialActive)}</span>
+      <span className="text-sm font-semibold text-amber-ink">{onPaceWords(total.potentialActive, language)}</span>
       {note && <TippedGlyph glyph="ⓘ" name={note} tip={note} align="fit" className="-my-1" />}
     </span>
   );
 }
 
 /** A total's goal mark: who holds no figure, and who has no first sale yet (ADR-0165 §1, ADR-0172 §2). */
-const goalNote = (total: UnitTotal, rows: readonly UnitRow[]) => totalNote(
-  missingWords(total.goal.missing, namesMissing(rows)),
-  newHireWords(total.newHires, namesNewHires(rows)),
+const goalNote = (total: UnitTotal, rows: readonly UnitRow[], language: Language) => totalNote(
+  missingWords(total.goal.missing, namesMissing(rows, language), language),
+  newHireWords(total.newHires, namesNewHires(rows, language), language),
 );
 
 /** `table.roster-table thead th` (`:1650`): small grey capitals. */
@@ -271,11 +283,12 @@ function GroupDivider({ label, count }: { label: string; count?: number }) {
 
 /** A unit and every unit nested in it, each its own row group: the total, the head, the team. */
 function UnitBodies({ unit, level, ...rowProps }: { unit: UnitGroup; level: number } & Omit<RosterProps, 'view'>) {
+  const t = useMessages(unitDashboardMessages);
   return (
     <>
       <tbody>
         <TotalRow
-          label={`${unit.head.name}’s Unit — Total`}
+          label={t.unitTotalOf({ name: unit.head.name })}
           total={unit.total}
           rows={rowsOf(unit)}
           level={level - 1}
@@ -328,8 +341,10 @@ function TotalRow({
   /** A unit's total names its group for a screen reader, as the divider does *Your Unit*'s. */
   names?: boolean;
 }) {
-  const goal = goalWords(total.goal);
-  const missing = goalNote(total, rows);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const goal = goalWords(total.goal, language, figures);
+  const missing = goalNote(total, rows, language);
   return (
     <tr className="border-b border-hairline bg-navy/[0.045]">
       <th
@@ -349,9 +364,9 @@ function TotalRow({
       {/* A total chases nothing (`:7458`). */}
       <td className={cn(CELL, 'py-2 text-center')}><span className="text-sm text-muted">—</span></td>
       <td className={cn(CELL, 'py-2')}>
-        <LeadsText counts={total.leadsCounts} recruit={totalRecruitLine(total.leadsCounts)} />
+        <LeadsText counts={total.leadsCounts} recruit={totalRecruitLine(total.leadsCounts, language)} />
       </td>
-      <td className={cn(CELL, 'py-2 pl-1.5')}><Touches touches={touchesWords(total.touches, period)} /></td>
+      <td className={cn(CELL, 'py-2 pl-1.5')}><Touches touches={touchesWords(total.touches, period, language)} /></td>
       <td className={cn(CELL, 'py-2')}><span className="text-sm text-muted">—</span></td>
       <td className={cn(CELL, 'py-2')}>
         <OnPace total={total} rows={rows} />
@@ -362,6 +377,7 @@ function TotalRow({
 }
 
 function GoalText({ goal, period }: { goal: GoalWords; period: UnitPeriod }) {
+  const t = useMessages(unitDashboardMessages).own;
   return (
     <span className="block min-w-0">
       <span className={cn('block text-base font-bold', GOAL_TONE[goal.tone])}>{goal.line}</span>
@@ -369,7 +385,7 @@ function GoalText({ goal, period }: { goal: GoalWords; period: UnitPeriod }) {
         <span className="mt-0.5 block text-xs text-muted">
           {goal.sub}
           {/* Under *Last 7 days* the figures are this month's, and the line says so (D-period). */}
-          {period === '7d' && ` · ${OWN_COPY.thisMonth}`}
+          {period === '7d' && ` · ${t.thisMonth}`}
         </span>
       )}
     </span>
@@ -377,15 +393,17 @@ function GoalText({ goal, period }: { goal: GoalWords; period: UnitPeriod }) {
 }
 
 function LeadsText({ counts, recruit }: { counts: LeadsCounts; recruit: { count: number; rest: string } | null }) {
-  const sales = salesLine(counts);
+  const language = useLanguage();
+  const t = useMessages(unitDashboardMessages).leads;
+  const sales = salesLine(counts, language);
   return (
     <span className="block text-sm leading-[1.7]">
       <span className="block whitespace-nowrap">
-        <span className="text-muted">Sales:</span> <strong className="font-bold text-navy">{sales.count}</strong>{' '}
+        <span className="text-muted">{t.sales}</span> <strong className="font-bold text-navy">{sales.count}</strong>{' '}
         <span className="text-navy">{sales.rest}</span>
       </span>
       <span className="block whitespace-nowrap">
-        <span className="text-muted">Recruit:</span>{' '}
+        <span className="text-muted">{t.recruit}</span>{' '}
         {recruit ? (
           <>
             <strong className="font-bold text-navy">{recruit.count}</strong> <span className="text-navy">{recruit.rest}</span>
@@ -457,10 +475,12 @@ function Drill({ href, children }: { href: string | undefined; children: ReactNo
  * nothing.
  */
 function MdrtCell({ row }: { row: UnitRow }) {
+  // *Chasing MDRT*'s words are the campaigns' (`campaign-chasing.ts`), in the reader's language.
+  const chasing = useMessages(campaignChasingMessages);
   if (row.chasingMdrt === null) return <span className="text-sm text-muted">—</span>;
   const words = row.chasingMdrt
-    ? CAMPAIGN_COPY.mdrtChasing(row.isReader ? firstName(row.name) : row.name)
-    : CAMPAIGN_COPY.mdrtNot;
+    ? chasing.mdrtChasing({ name: row.isReader ? firstName(row.name) : row.name })
+    : chasing.mdrtNot;
   return (
     <TippedGlyph
       glyph={row.chasingMdrt ? '✓' : '—'}
@@ -476,12 +496,15 @@ function MdrtCell({ row }: { row: UnitRow }) {
 function PersonRow({
   row, level, period, expanded, onToggle, readRatios,
 }: { row: UnitRow; level: number } & Omit<RosterProps, 'view'>) {
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const t = useMessages(unitDashboardMessages);
   const detailId = useId();
   const open = expanded.has(row.membershipId);
-  const name = rowName(row);
+  const name = rowName(row, language);
   const drills = drillsOf(row);
-  const goal = goalWords(row.goal);
-  const marker = provenanceWords(row.goal.source, row.goal.period, row.isReader);
+  const goal = goalWords(row.goal, language, figures);
+  const marker = provenanceWords(row.goal.source, row.goal.period, row.isReader, language, figures);
   const last = row.lastOneOnOne;
   const overdue = lastOneOnOneOverdue(last);
   // A unit's head on their own row, apart from the unit's total above it (`:7384`). The reader's own row
@@ -528,7 +551,7 @@ function PersonRow({
               <span className="min-w-[5.5rem] truncate text-[0.84375rem] font-semibold text-navy">{name}</span>
             )}
             {row.pacingToMaa && <MaaMark />}
-            {personal && <span className={TAG}>{PROTOTYPE_COPY.personal}</span>}
+            {personal && <span className={TAG}>{t.prototype.personal}</span>}
             {row.newHireBeforeFirstSale && <NewHireTag />}
           </Indented>
         </th>
@@ -543,10 +566,10 @@ function PersonRow({
         <td className={cn(CELL, 'text-center')}><MdrtCell row={row} /></td>
         <td className={CELL}>
           <Drill href={drills?.leads}>
-            <LeadsText counts={row.leadsCounts} recruit={recruitLine(row.leadsCounts)} />
+            <LeadsText counts={row.leadsCounts} recruit={recruitLine(row.leadsCounts, language)} />
           </Drill>
         </td>
-        <td className={cn(CELL, 'pl-1.5')}><Touches touches={touchesWords(row.activity.touches, period)} /></td>
+        <td className={cn(CELL, 'pl-1.5')}><Touches touches={touchesWords(row.activity.touches, period, language)} /></td>
         <td className={CELL}>
           {row.isReader ? (
             <span className="text-sm text-muted">—</span>
@@ -554,17 +577,17 @@ function PersonRow({
             <>
               <span className={cn('text-sm font-semibold', overdue ? 'text-alert' : 'text-success')}>
                 {/* *Overdue* in words, not by colour alone (P18.8-T15 AC-7). */}
-                {last === null ? PROTOTYPE_COPY.noOneOnOne : lastOneOnOneLine(last)}
+                {last === null ? t.prototype.noOneOnOne : lastOneOnOneLine(last, language)}
               </span>
-              {last?.coach && <span className="mt-0.5 block text-xs text-muted">by {last.coach.name}</span>}
+              {last?.coach && <span className="mt-0.5 block text-xs text-muted">{t.by({ name: last.coach.name })}</span>}
             </>
           )}
         </td>
         <td className={CELL}>
           <TippedGlyph
-            glyph={ROSTER_STATUS_LABEL[row.status]}
-            name={ROSTER_STATUS_LABEL[row.status]}
-            tip={STATUS_TOOLTIP[row.status]}
+            glyph={rosterStatusLabel(row.status, language)}
+            name={rosterStatusLabel(row.status, language)}
+            tip={t.statusTooltip[row.status]}
             align="fit"
             face={cn('h-auto w-[126px] rounded-pill px-2.5 py-1 text-xs font-semibold leading-normal', PILL_TONE[row.status])}
           />
@@ -579,7 +602,7 @@ function PersonRow({
             type="button"
             aria-expanded={open}
             aria-controls={open ? detailId : undefined}
-            aria-label={`View details for ${row.isReader ? 'you' : row.name}`}
+            aria-label={t.viewDetails({ name: row.isReader ? null : row.name })}
             onClick={() => onToggle(row.membershipId)}
             className={cn(
               'mx-auto flex h-7 w-7 items-center justify-center rounded-[6px] border border-hairline bg-transparent text-sm text-muted hover:bg-navy/[0.05] hover:text-navy',
@@ -593,6 +616,32 @@ function PersonRow({
       </tr>
       {open && <UnitDetail id={detailId} row={row} period={period} readRatios={readRatios} />}
     </>
+  );
+}
+
+/** A card's *Activity* label, with the heading's ⓘ: what counts as a goal activity (ADR-0165 §2). */
+function ActivityHeading() {
+  const t = useMessages(unitDashboardMessages);
+  return (
+    <span className="inline-flex items-center gap-1">
+      {t.columns.activity}
+      <TippedGlyph glyph="ⓘ" name={t.own.activityInfo} tip={t.own.activityRule} align="fit" className={STATUS_TIP} />
+    </span>
+  );
+}
+
+/** A card's *Chasing MDRT* label, its words the trigger of the server's sentence about the campaign (OD-152). */
+function MdrtHeading({ tip }: { tip: string }) {
+  const chasing = useMessages(campaignChasingMessages);
+  return (
+    <TippedGlyph
+      glyph={chasing.chasingMdrt}
+      name={chasing.chasingMdrt}
+      tip={tip}
+      align="fit"
+      className={MDRT_TIP}
+      face="h-auto w-auto px-0 text-xs font-semibold uppercase tracking-wide text-muted hover:bg-transparent hover:text-navy"
+    />
   );
 }
 
@@ -624,6 +673,7 @@ type CardProps = Omit<RosterProps, 'view'> & { mdrtTip: string };
 function RosterCards({
   view, unitName, unitTotal, ...rowProps
 }: Omit<RosterProps, 'view'> & { view: UnitDashboardView; unitName: string; unitTotal: string }) {
+  const aabUnits = useMessages(unitDashboardMessages).prototype.aabUnits;
   const cardProps: CardProps = { ...rowProps, mdrtTip: view.mdrt.tooltip };
   return (
     <div>
@@ -636,7 +686,7 @@ function RosterCards({
         </CardGroup>
       )}
       {view.units.length > 0 && (
-        <CardGroup label={PROTOTYPE_COPY.aabUnits}>
+        <CardGroup label={aabUnits}>
           {view.units.map((unit) => <UnitCards key={unit.head.membershipId} unit={unit} level={1} {...cardProps} />)}
         </CardGroup>
       )}
@@ -646,11 +696,12 @@ function RosterCards({
 
 /** A unit and every unit nested in it, each its own list: the total, the head, the team (`UnitBodies`). */
 function UnitCards({ unit, level, ...rowProps }: { unit: UnitGroup; level: number } & CardProps) {
+  const t = useMessages(unitDashboardMessages);
   return (
     <>
-      <ul role="list" aria-label={`${unit.head.name}’s Unit`}>
+      <ul role="list" aria-label={t.unitOf({ name: unit.head.name })}>
         <TotalCard
-          label={`${unit.head.name}’s Unit — Total`}
+          label={t.unitTotalOf({ name: unit.head.name })}
           total={unit.total}
           rows={rowsOf(unit)}
           level={level - 1}
@@ -687,8 +738,11 @@ function GoalWithBar({ goal, bar, period }: { goal: GoalWords; bar: number | nul
 function TotalCard({
   label, total, rows, level, period,
 }: { label: string; total: UnitTotal; rows: readonly UnitRow[]; level: number; period: UnitPeriod }) {
-  const goal = goalWords(total.goal);
-  const missing = goalNote(total, rows);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const { columns } = useMessages(unitDashboardMessages);
+  const goal = goalWords(total.goal, language, figures);
+  const missing = goalNote(total, rows, language);
   return (
     <li
       className="border-b border-hairline bg-navy/[0.045] px-4 py-3 shadow-[inset_3px_0_0_var(--color-navy)]"
@@ -696,7 +750,7 @@ function TotalCard({
     >
       <p className="break-words text-base font-bold text-navy">{label}</p>
       <dl className="mt-2 flex flex-col gap-2.5">
-        <CardField label="Goal progress">
+        <CardField label={columns.goal}>
           <div className="flex items-start gap-1">
             <span className="block min-w-0 flex-1">
               <GoalWithBar goal={goal} bar={goalBar(total.goal)} period={period} />
@@ -704,11 +758,11 @@ function TotalCard({
             {missing && <TippedGlyph glyph="ⓘ" name={missing} tip={missing} align="fit" className="-my-1" />}
           </div>
         </CardField>
-        <CardField label="Leads">
-          <LeadsText counts={total.leadsCounts} recruit={totalRecruitLine(total.leadsCounts)} />
+        <CardField label={columns.leads}>
+          <LeadsText counts={total.leadsCounts} recruit={totalRecruitLine(total.leadsCounts, language)} />
         </CardField>
-        <CardField label="Activity"><Touches touches={touchesWords(total.touches, period)} /></CardField>
-        <CardField label="Status">
+        <CardField label={columns.activity}><Touches touches={touchesWords(total.touches, period, language)} /></CardField>
+        <CardField label={columns.status}>
           <OnPace total={total} rows={rows} />
         </CardField>
       </dl>
@@ -729,12 +783,15 @@ function TotalCard({
 function PersonCard({
   row, level, period, expanded, onToggle, readRatios, mdrtTip,
 }: { row: UnitRow; level: number } & CardProps) {
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const t = useMessages(unitDashboardMessages);
   const detailId = useId();
   const open = expanded.has(row.membershipId);
-  const name = rowName(row);
+  const name = rowName(row, language);
   const drills = drillsOf(row);
-  const goal = goalWords(row.goal);
-  const marker = provenanceWords(row.goal.source, row.goal.period, row.isReader);
+  const goal = goalWords(row.goal, language, figures);
+  const marker = provenanceWords(row.goal.source, row.goal.period, row.isReader, language, figures);
   const last = row.lastOneOnOne;
   const overdue = lastOneOnOneOverdue(last);
   const personal = row.leads && !row.isReader;
@@ -770,7 +827,7 @@ function PersonCard({
             <span className="min-w-0 break-words text-md font-semibold text-navy">{name}</span>
           )}
           {row.pacingToMaa && <MaaMark />}
-          {personal && <span className={TAG}>{PROTOTYPE_COPY.personal}</span>}
+          {personal && <span className={TAG}>{t.prototype.personal}</span>}
           {row.newHireBeforeFirstSale && <NewHireTag />}
         </p>
         {/* The table's ⌄, in the card's corner: the outlined 28px box, a 44px square taking the tap (UI-029). */}
@@ -778,7 +835,7 @@ function PersonCard({
           type="button"
           aria-expanded={open}
           aria-controls={open ? detailId : undefined}
-          aria-label={`View details for ${row.isReader ? 'you' : row.name}`}
+          aria-label={t.viewDetails({ name: row.isReader ? null : row.name })}
           onClick={() => onToggle(row.membershipId)}
           className={cn(
             'relative flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border border-hairline bg-transparent text-sm text-muted hover:bg-navy/[0.05] hover:text-navy',
@@ -791,18 +848,18 @@ function PersonCard({
 
       <div className="mt-2 flex items-center gap-1">
         <TippedGlyph
-          glyph={ROSTER_STATUS_LABEL[row.status]}
-          name={ROSTER_STATUS_LABEL[row.status]}
-          tip={STATUS_TOOLTIP[row.status]}
+          glyph={rosterStatusLabel(row.status, language)}
+          name={rosterStatusLabel(row.status, language)}
+          tip={t.statusTooltip[row.status]}
           align="fit"
           face={cn('h-auto w-[126px] rounded-pill px-2.5 py-1 text-xs font-semibold leading-normal', PILL_TONE[row.status])}
         />
         {/* The *Status* heading's rules, beside the pill they decide, as there is no heading on a card. */}
-        <TippedGlyph glyph="ⓘ" name={PROTOTYPE_COPY.statusInfo} tip={PROTOTYPE_COPY.statusRules} align="fit" className={STATUS_TIP} />
+        <TippedGlyph glyph="ⓘ" name={t.prototype.statusInfo} tip={t.prototype.statusRules} align="fit" className={STATUS_TIP} />
       </div>
 
       <dl className="mt-3 flex flex-col gap-2.5">
-        <CardField label="Goal progress">
+        <CardField label={t.columns.goal}>
           <div className="flex items-start gap-1">
             <span className="block min-w-0 flex-1">
               <Drill href={drills?.goal}>
@@ -814,12 +871,12 @@ function PersonCard({
         </CardField>
         {/* The reader's own row has no *Last 1:1* (the table's —): a line with nothing in it is not drawn. */}
         {!row.isReader && (
-          <CardField label="Last 1:1">
+          <CardField label={t.columns.last}>
             <span className={cn('text-sm font-semibold', overdue ? 'text-alert' : 'text-success')}>
               {/* *Overdue* in words, not by colour alone (P18.8-T15 AC-7). */}
-              {last === null ? PROTOTYPE_COPY.noOneOnOne : lastOneOnOneLine(last)}
+              {last === null ? t.prototype.noOneOnOne : lastOneOnOneLine(last, language)}
             </span>
-            {last?.coach && <span className="mt-0.5 block text-xs text-muted">by {last.coach.name}</span>}
+            {last?.coach && <span className="mt-0.5 block text-xs text-muted">{t.by({ name: last.coach.name })}</span>}
           </CardField>
         )}
       </dl>
@@ -827,33 +884,15 @@ function PersonCard({
       {open && (
         <div id={detailId} className="-mx-4 mt-3 border-t border-hairline bg-base px-4 pb-1 pt-3">
           <dl className="flex flex-col gap-2.5">
-            <CardField label="Leads">
+            <CardField label={t.columns.leads}>
               <Drill href={drills?.leads}>
-                <LeadsText counts={row.leadsCounts} recruit={recruitLine(row.leadsCounts)} />
+                <LeadsText counts={row.leadsCounts} recruit={recruitLine(row.leadsCounts, language)} />
               </Drill>
             </CardField>
-            <CardField
-              label={(
-                <span className="inline-flex items-center gap-1">
-                  Activity
-                  <TippedGlyph glyph="ⓘ" name={OWN_COPY.activityInfo} tip={OWN_COPY.activityRule} align="fit" className={STATUS_TIP} />
-                </span>
-              )}
-            >
-              <Touches touches={touchesWords(row.activity.touches, period)} />
+            <CardField label={<ActivityHeading />}>
+              <Touches touches={touchesWords(row.activity.touches, period, language)} />
             </CardField>
-            <CardField
-              label={(
-                <TippedGlyph
-                  glyph={CAMPAIGN_COPY.chasingMdrt}
-                  name={CAMPAIGN_COPY.chasingMdrt}
-                  tip={mdrtTip}
-                  align="fit"
-                  className={MDRT_TIP}
-                  face="h-auto w-auto px-0 text-xs font-semibold uppercase tracking-wide text-muted hover:bg-transparent hover:text-navy"
-                />
-              )}
-            >
+            <CardField label={<MdrtHeading tip={mdrtTip} />}>
               <MdrtCell row={row} />
             </CardField>
           </dl>

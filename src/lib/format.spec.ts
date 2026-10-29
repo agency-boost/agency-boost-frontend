@@ -1,13 +1,16 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DEFAULT_LANGUAGE, LANGUAGES, type Language } from '@/i18n/language';
 import {
   clockMinutes, endMinutes, formatCalendarDay, formatCalendarDayLong, formatClock, formatDateTime, formatDay, formatDayClock, formatDayHeader,
-  formatDayLong, formatHour, formatMonth, formatMonthName, formatMonthSpan, formatNoticeFull, formatNoticeShort, formatNumber,
-  formatOfficeDay, formatOfficeMonth, formatOfficeTime, formatPercent, formatRupiah, formatRupiahCompact, formatRupiahCompactPair, formatShortDay, formatTimeSpan, formatTripWhen,
-  formatWeekday, formatWeekdayDay, formatWeekRange, formatWhen, MINOR_UNITS_PER_MAJOR, monthInZone, OFFICE_TIME_ZONE, parseDecimal,
-  PERCENT_LOSSLESS_MAX_DECIMALS, percentOf, RUPIAH_PER_UNIT, toMajor, toMinor,
+  formatDayLong, formatDecimalInput, formatHour, formatMoneyUnit, formatMonth, formatMonthName, formatMonthSpan, formatNoticeFull,
+  formatNoticeShort, formatNumber, formatOfficeDay, formatOfficeMonth, formatOfficeTime, formatPercent, formatRupiah, formatRupiahCompact,
+  formatRupiahCompactPair, formatShortDay, formatTimeSpan, formatTripWhen, formatWeekday, formatWeekdayDay, formatWeekRange, formatWhen,
+  MINOR_UNITS_PER_MAJOR, moneyPrefix, monthInZone, OFFICE_TIME_ZONE, parseDecimal, PERCENT_LOSSLESS_MAX_DECIMALS, percentOf,
+  RUPIAH_PER_UNIT, toMajor, toMinor, weekdayHeadings,
 } from './format';
+import { groupDigits, parseDigits } from './goals';
 
 describe('formatDay', () => {
   it('P18.95-T1 AC-1 writes a date in id-ID, `4 Sep 2026`', () => {
@@ -143,7 +146,7 @@ describe.each(['UTC', 'Asia/Jakarta', 'America/New_York'])('the calendar’s for
   });
 
   it('P18.95-T1 AC-1 labels the hours `00.00` … `23.00`, 24-hour (`:590`)', () => {
-    expect([0, 1, 11, 12, 13, 23, 24].map(formatHour)).toEqual(['00.00', '01.00', '11.00', '12.00', '13.00', '23.00', '00.00']);
+    expect([0, 1, 11, 12, 13, 23, 24].map((hour) => formatHour(hour))).toEqual(['00.00', '01.00', '11.00', '12.00', '13.00', '23.00', '00.00']);
   });
 
   it('P18.95-T1 AC-1 writes the week’s time `09.00–09.30`, an en dash with no spaces (`:611`)', () => {
@@ -579,27 +582,475 @@ describe('formatDayClock, formatOfficeMonth and formatRupiahCompactPair (P18.95-
 /**
  * **One rule in two places, pinned to each other** (ADR-0167 §1, invariant §7): the API writes its own sentences
  * through `backend/src/common/format/format.ts`, which shares this module's forms. Read from its source, as
- * `OFFICE_TIME_ZONE` is, so the month names and the compact units cannot drift between a refusal and a screen.
+ * `OFFICE_TIME_ZONE` is, so the month names and the compact units cannot drift between a refusal and a screen —
+ * **in either language** since P18.98-T3: its tables hold one row per language.
  */
-describe('the backend formatter writes what this one writes (P18.95-T1 AC-4)', () => {
+describe('the backend formatter writes what this one writes (P18.95-T1 AC-4; P18.98-T3 AC-1)', () => {
   const source = readFileSync(
     join(__dirname, '..', '..', '..', 'backend', 'src', 'common', 'format', 'format.ts'), 'utf8',
   );
+  /** One language's row of one of the backend's tables: `const MONTHS = { id: [...], en: [...] } as const …`. */
+  const row = (table: string, language: Language) => {
+    const block = new RegExp(`const ${table} = \\{([\\s\\S]*?)\\} as const`).exec(source)?.[1] ?? '';
+    return new RegExp(`\\b${language}: \\[([^\\]]+)\\]`).exec(block)?.[1].match(/'([^']+)'/g)?.map((m) => m.slice(1, -1));
+  };
 
-  it('names the months as this module does', () => {
-    const months = /const MONTHS = \[([^\]]+)\]/.exec(source)?.[1].match(/'([^']+)'/g)?.map((m) => m.slice(1, -1));
-    expect(months).toEqual(Array.from({ length: 12 }, (_, i) => formatMonthName(`2026-${String(i + 1).padStart(2, '0')}`)));
+  it.each(LANGUAGES)('P18.98-T3 AC-1 names the months as this module does, in %s', (language) => {
+    expect(row('MONTHS', language)).toEqual(
+      Array.from({ length: 12 }, (_, i) => formatMonthName(`2026-${String(i + 1).padStart(2, '0')}`, language)),
+    );
   });
 
-  it('names the weekdays as this module does', () => {
-    const days = /const WEEKDAYS = \[([^\]]+)\]/.exec(source)?.[1].match(/'([^']+)'/g)?.map((d) => d.slice(1, -1));
+  it.each(LANGUAGES)('P18.98-T3 AC-1 names the weekdays as this module does, in %s', (language) => {
     // 2026-10-25 is a Sunday, the first in both tables.
-    expect(days).toEqual(['25', '26', '27', '28', '29', '30', '31'].map((d) => formatCalendarDayLong(`2026-10-${d}`).split(',')[0]));
+    expect(row('WEEKDAYS', language)).toEqual(
+      ['25', '26', '27', '28', '29', '30', '31'].map((d) => formatCalendarDayLong(`2026-10-${d}`, language).split(',')[0]),
+    );
   });
 
-  it('holds the same compact units, each written as this module writes it', () => {
-    const units = [...source.matchAll(/\{ value: ([\d_]+), suffix: '([^']+)' \}/g)].map((m) => ({ size: Number(m[1].replace(/_/g, '')), mark: m[2] }));
-    expect(units.map((u) => u.mark)).toEqual(['M', 'jt', 'rb']);
-    for (const { size, mark } of units) expect(formatRupiahCompact(rp(size))).toBe(`Rp 1 ${mark}`);
+  it('P18.98-T3 AC-1 holds the same compact units, each written as this module writes it in both languages', () => {
+    const units = [...source.matchAll(/\{ value: ([\d_]+), suffix: \{ id: '([^']+)', en: '([^']+)' \} \}/g)]
+      .map((m) => ({ size: Number(m[1].replace(/_/g, '')), id: m[2], en: m[3] }));
+    expect(units.map((u) => u.id)).toEqual(['M', 'jt', 'rb']);
+    expect(units.map((u) => u.en)).toEqual(['B', 'M', 'K']);
+    for (const { size, id, en } of units) {
+      expect(formatRupiahCompact(rp(size))).toBe(`Rp 1 ${id}`);
+      expect(formatRupiahCompact(rp(size), {}, 'en')).toBe(`IDR 1${en}`);
+    }
+  });
+
+  it.each(LANGUAGES)('P18.98-T3 AC-1 writes the same marks as this module does, in %s', (language) => {
+    const marks = new RegExp(`\\b${language}: \\{ group: '(.)', decimal: '(.)', clock: '(.)', currency: '([^']+)' \\}`).exec(source);
+    expect(marks?.slice(1)).toEqual([
+      formatNumber(1_000, {}, language).charAt(1),
+      formatNumber(0.5, { decimals: 1 }, language).charAt(1),
+      formatClock('13:05', language).charAt(2),
+      moneyPrefix(language),
+    ]);
+  });
+});
+
+/*
+ * ════ P18.98-T3: the formats in each language (ADR-0174 §6, ADR-0179 §6; the approved glossary's §E, OD-237) ════
+ *
+ * Every Indonesian case above is unchanged and passes no language: a caller that passes none writes Indonesian, as
+ * every screen did. Below, each shape is pinned in English — at every threshold the Indonesian ones are, the
+ * thresholds unchanged — and the same cases in `backend/src/common/format/format.spec.ts`.
+ */
+
+describe('P18.98-T3 AC-1 a caller that passes no language writes Indonesian', () => {
+  it('P18.98-T3 AC-1 the default is the product’s, Indonesian, and an explicit id writes what no language writes', () => {
+    expect(DEFAULT_LANGUAGE).toBe('id');
+    expect(formatCalendarDay('2026-10-26', 'id')).toBe(formatCalendarDay('2026-10-26'));
+    expect(formatCalendarDayLong('2026-10-26', 'id')).toBe('Senin, 26 Okt 2026');
+    expect(formatMonth('2026-10', 'id')).toBe('Okt 2026');
+    expect(formatWeekRange('2026-09-28', '2026-10-04', 'id')).toBe('28 Sep – 4 Okt 2026');
+    expect(formatWeekday('2026-09-28', 'id')).toBe('Sen');
+    expect(formatClock('13:05', 'id')).toBe('13.05');
+    expect(formatDateTime('2026-10-26T06:05:00Z', OFFICE_TIME_ZONE, 'id')).toBe('26 Okt 2026, 13.05');
+    expect(formatNumber(1_250, {}, 'id')).toBe('1.250');
+    expect(formatNumber(17.6, { decimals: 1 }, 'id')).toBe('17,6');
+    expect(formatPercent(29.6, { decimals: 1 }, 'id')).toBe('29,6%');
+    expect(formatRupiah(rp(45_000_000), 'id')).toBe('Rp 45.000.000');
+    expect(formatRupiahCompact(rp(5_800_000_000), {}, 'id')).toBe('Rp 5,8 M');
+    expect(formatRupiahCompactPair(rp(357_500_000), rp(712_666_667), '/', 'id')).toBe('Rp 357,5 jt / 712,7 jt');
+    expect(moneyPrefix()).toBe('Rp');
+    expect(weekdayHeadings()).toEqual(weekdayHeadings('id'));
+  });
+});
+
+describe('P18.98-T3 AC-1 English dates (§E)', () => {
+  it('P18.98-T3 AC-1 writes a date 26 Oct 2026, from an instant or an office day, in every month', () => {
+    expect(formatDay('2026-09-04', 'en')).toBe('4 Sep 2026');
+    expect(formatDayLong('2026-12-01', 'en')).toBe('1 Dec 2026');
+    expect(formatCalendarDay('2026-10-26', 'en')).toBe('26 Oct 2026');
+    expect(Array.from({ length: 12 }, (_, i) => formatMonthName(`2026-${String(i + 1).padStart(2, '0')}`, 'en')))
+      .toEqual(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']);
+    expect(formatCalendarDay('soon', 'en')).toBe('');
+    expect(formatDay('not a date', 'en')).toBe('');
+  });
+
+  it('P18.98-T3 AC-1 writes a date with its weekday Monday, 26 Oct 2026, every weekday in English', () => {
+    expect(formatCalendarDayLong('2026-10-26', 'en')).toBe('Monday, 26 Oct 2026');
+    expect(['2026-10-25', '2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31']
+      .map((d) => formatCalendarDayLong(d, 'en').split(',')[0]))
+      .toEqual(['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']);
+  });
+
+  it('P18.98-T3 AC-1 writes a month Oct 2026, a month alone Oct, a column’s day 22 Sep and its weekday Mon', () => {
+    expect(formatMonth('2026-10', 'en')).toBe('Oct 2026');
+    expect(formatMonth('soon', 'en')).toBe('soon');
+    expect(formatMonthName('2026-05', 'en')).toBe('May');
+    expect(formatShortDay('2026-08-22', {}, 'en')).toBe('22 Aug');
+    expect(formatShortDay('2026-09-28', { year: true }, 'en')).toBe('28 Sep 2026');
+    expect(formatWeekday('2026-09-28', 'en')).toBe('Mon');
+    expect(formatWeekday('2026-03-01', 'en')).toBe('Sun');
+  });
+});
+
+/** P18.98-T3 AC-5: the calendar's shapes in English, the same in every zone the browser could be in. */
+describe.each(['UTC', 'Asia/Jakarta', 'America/New_York'])('P18.98-T3 AC-5 the calendar in English, with the clock in %s', (zone) => {
+  const original = process.env.TZ;
+  beforeAll(() => { process.env.TZ = zone; });
+  afterAll(() => { process.env.TZ = original; });
+
+  it('P18.98-T3 AC-5 labels a week 28 Sep – 4 Oct 2026, and one across a year with both years', () => {
+    expect(formatWeekRange('2026-09-28', '2026-10-04', 'en')).toBe('28 Sep – 4 Oct 2026');
+    expect(formatWeekRange('2026-12-28', '2027-01-03', 'en')).toBe('28 Dec 2026 – 3 Jan 2027');
+    expect(formatWeekRange('2026-08-31', '2026-09-06', 'en')).toBe('31 Aug – 6 Sep 2026');
+    expect(formatWeekRange('nope', '2026-09-06', 'en')).toBe('');
+  });
+
+  it('P18.98-T3 AC-5 starts the week on Monday in both languages: Sen … Min, Mon … Sun', () => {
+    expect(weekdayHeadings('id')).toEqual(['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min']);
+    expect(weekdayHeadings('en')).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
+    // A week the office serves from Monday 28 September reads its headings in that order, in either language.
+    const week = ['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'];
+    for (const language of LANGUAGES) expect(week.map((day) => formatWeekday(day, language))).toEqual(weekdayHeadings(language));
+  });
+
+  it('P18.98-T3 AC-5 heads a column Mon over 28, and 1 Oct on the first', () => {
+    expect(formatDayHeader('2026-09-28', 'en')).toEqual({ weekday: 'Mon', number: '28' });
+    expect(formatDayHeader('2026-10-01', 'en')).toEqual({ weekday: 'Thu', number: '1 Oct' });
+    expect(formatDayHeader('', 'en')).toEqual({ weekday: '', number: '' });
+  });
+
+  it('P18.98-T3 AC-1 writes a time 13:05, 24-hour with a colon: the gutter, a span, a clock', () => {
+    expect([0, 1, 11, 12, 13, 23, 24].map((hour) => formatHour(hour, 'en')))
+      .toEqual(['00:00', '01:00', '11:00', '12:00', '13:00', '23:00', '00:00']);
+    expect(formatTimeSpan('09:00', '09:30', 'en')).toBe('09:00–09:30');
+    expect(formatTimeSpan('23:00', '00:00', 'en')).toBe('23:00–00:00');
+    expect(formatClock('13:05', 'en')).toBe('13:05');
+    expect(formatClock('nope', 'en')).toBe('');
+  });
+
+  it('P18.98-T3 AC-5 writes the detail’s When and a trip in English', () => {
+    expect(formatWhen('2026-09-28', '09:00', '09:30', 'en')).toBe('Monday, 28 Sep 2026 · 09:00 – 09:30');
+    expect(formatWeekdayDay('2026-10-02', 'en')).toBe('Friday, 2 Oct 2026');
+    expect(formatTripWhen('2026-09-28', '2026-09-29', 'en')).toBe('Monday, 28 Sep 2026 – Tuesday, 29 Sep 2026');
+    expect(formatTripWhen('2026-10-02', '2026-10-02', 'en')).toBe('Friday, 2 Oct 2026');
+  });
+
+  it('P18.98-T3 AC-5 writes the month’s time 9-9:30, 14-15, its minutes after a colon', () => {
+    expect(formatMonthSpan('09:00', '09:30', 'en')).toBe('9-9:30');
+    expect(formatMonthSpan('14:00', '15:00', 'en')).toBe('14-15');
+    expect(formatMonthSpan('09:05', '09:30', 'en')).toBe('9:05-9:30');
+    expect(formatMonthSpan('23:00', '00:00', 'en')).toBe('23-24');
+  });
+});
+
+/** P18.98-T3 AC-1: a notification's and an instant's time in English, on the office's calendar (ADR-0016). */
+describe.each(['UTC', 'Asia/Jakarta', 'America/New_York'])('P18.98-T3 AC-1 instants in English, with the clock in %s', (zone) => {
+  const original = process.env.TZ;
+  beforeAll(() => { process.env.TZ = zone; });
+  afterAll(() => { process.env.TZ = original; });
+  const now = new Date('2026-10-03T03:00:00Z');
+
+  it('P18.98-T3 AC-1 gives a notice’s time 07:05 today, and its day 2 Oct, with the year when it is not this one', () => {
+    expect(formatNoticeShort('2026-10-03T00:05:00Z', now, OFFICE_TIME_ZONE, 'en')).toBe('07:05');
+    expect(formatNoticeShort('2026-10-02T16:30:00Z', now, OFFICE_TIME_ZONE, 'en')).toBe('2 Oct');
+    expect(formatNoticeShort('2025-10-03T03:00:00Z', now, OFFICE_TIME_ZONE, 'en')).toBe('3 Oct 2025');
+    expect(formatNoticeShort('not a date', now, OFFICE_TIME_ZONE, 'en')).toBe('');
+  });
+
+  it('P18.98-T3 AC-1 writes a date and a time 26 Oct 2026, 13:05, in the office’s zone', () => {
+    expect(formatDateTime('2026-10-26T06:05:00Z', OFFICE_TIME_ZONE, 'en')).toBe('26 Oct 2026, 13:05');
+    expect(formatNoticeFull('2026-09-30T18:05:00Z', OFFICE_TIME_ZONE, 'en')).toBe('1 Oct 2026, 01:05');
+    expect(formatOfficeTime('2026-10-26T06:05:00Z', OFFICE_TIME_ZONE, 'en')).toBe('13:05');
+    expect(formatOfficeDay('2026-09-30T23:30:00Z', OFFICE_TIME_ZONE, 'en')).toBe('1 Oct 2026');
+    expect(formatOfficeMonth('2026-09-30T18:00:00Z', OFFICE_TIME_ZONE, 'en')).toBe('Oct 2026');
+    expect(formatDayClock('2026-09-20', '18:00', 'en')).toBe('20 Sep 2026, 18:00');
+    expect(formatDayClock('soon', '18:00', 'en')).toBe('18:00');
+    expect(formatDateTime('nope', OFFICE_TIME_ZONE, 'en')).toBe('');
+    expect(formatOfficeTime('', OFFICE_TIME_ZONE, 'en')).toBe('');
+    expect(formatOfficeDay('nope', OFFICE_TIME_ZONE, 'en')).toBe('');
+    expect(formatOfficeMonth('nope', OFFICE_TIME_ZONE, 'en')).toBe('');
+  });
+});
+
+describe('P18.98-T3 AC-1 English numbers and percentages (§E, UI-012)', () => {
+  it('P18.98-T3 AC-1 groups a thousand with a comma and writes a decimal with a point: 1,250 and 17.6', () => {
+    expect(formatNumber(1_250, {}, 'en')).toBe('1,250');
+    expect(formatNumber(1_250_000, {}, 'en')).toBe('1,250,000');
+    expect(formatNumber(999, {}, 'en')).toBe('999');
+    expect(formatNumber(17.6, { decimals: 1 }, 'en')).toBe('17.6');
+    expect(formatNumber(2.13, { decimals: 2 }, 'en')).toBe('2.13');
+    expect(formatNumber(2.1, { decimals: 2 }, 'en')).toBe('2.10');
+    expect(formatNumber(1.4, { maxDecimals: 1 }, 'en')).toBe('1.4');
+    expect(formatNumber(2, { maxDecimals: 1 }, 'en')).toBe('2');
+    expect(formatNumber(1_234.56, { maxDecimals: 1 }, 'en')).toBe('1,234.6');
+    expect(formatNumber(-0.04, { maxDecimals: 1 }, 'en')).toBe('0');
+    expect(formatNumber(Number.NaN, {}, 'en')).toBe('');
+  });
+
+  it.each([
+    [0, '0%'], [0.04, '0%'], [0.5, '1%'], [15, '15%'], [57.4, '57%'], [57.5, '58%'], [96.4, '96%'], [99.5, '100%'],
+    [100, '100%'], [999, '999%'], [1_250, '1,250%'], [-12.5, '-13%'], [-0.4, '0%'],
+  ])('P18.98-T3 AC-1 writes %d%% whole in English, at the same thresholds: %s', (value, text) => {
+    expect(formatPercent(value, {}, 'en')).toBe(text);
+  });
+
+  it.each([
+    [0, '0.0%'], [0.04, '0.0%'], [0.05, '0.1%'], [9.14, '9.1%'], [29.6, '29.6%'], [30, '30.0%'], [99.96, '100.0%'],
+  ])('P18.98-T3 AC-1 keeps a ratio’s tenth in English, `{ decimals: 1 }`: %d is %s', (value, text) => {
+    expect(formatPercent(value, { decimals: 1 }, 'en')).toBe(text);
+  });
+
+  it('P18.98-T3 AC-1 keeps a second place, and a rule’s or a record’s places, with a point', () => {
+    expect(formatPercent(65.04, { decimals: 1, maxDecimals: 2 }, 'en')).toBe('65.04%');
+    expect(formatPercent(40, { decimals: 1, maxDecimals: 2 }, 'en')).toBe('40.0%');
+    expect(formatPercent(7.25, { lossless: true }, 'en')).toBe('7.25%');
+    expect(formatPercent(87.35, { lossless: true }, 'en')).toBe('87.35%');
+    expect(formatPercent(0.0725 * 100, { lossless: true }, 'en')).toBe('7.25%');
+    expect(formatPercent(30, { lossless: true }, 'en')).toBe('30%');
+    expect(formatPercent(-0.01, { decimals: 1 }, 'en')).toBe('0.0%');
+    expect(formatPercent(Number.NaN, {}, 'en')).toBe('');
+  });
+});
+
+describe('P18.98-T3 AC-1 English money (§E, UI-019)', () => {
+  it('P18.98-T3 AC-1 writes a sum in full as IDR 45,000,000, where precision matters', () => {
+    expect(formatRupiah(rp(45_000_000), 'en')).toBe('IDR 45,000,000');
+    expect(formatRupiah(rp(1_250), 'en')).toBe('IDR 1,250');
+    expect(formatRupiah(rp(999), 'en')).toBe('IDR 999');
+    expect(formatRupiah(0, 'en')).toBe('IDR 0');
+    expect(formatRupiah(rp(-20_000), 'en')).toBe('-IDR 20,000');
+    expect(formatRupiah(-10, 'en')).toBe('IDR 0');
+    expect(formatRupiah(Number.NaN, 'en')).toBe('');
+  });
+
+  it.each([
+    [0, 'Rp 0', 'IDR 0'],
+    [999, 'Rp 999', 'IDR 999'],
+    [1_000, 'Rp 1 rb', 'IDR 1K'],
+    [750_000, 'Rp 750 rb', 'IDR 750K'],
+    [999_949, 'Rp 999,9 rb', 'IDR 999.9K'],
+    [999_950, 'Rp 1 jt', 'IDR 1M'],
+    [1_000_000, 'Rp 1 jt', 'IDR 1M'],
+    [150_000_000, 'Rp 150 jt', 'IDR 150M'],
+    [357_500_000, 'Rp 357,5 jt', 'IDR 357.5M'],
+    [712_666_667, 'Rp 712,7 jt', 'IDR 712.7M'],
+    [999_949_999, 'Rp 999,9 jt', 'IDR 999.9M'],
+    [999_950_000, 'Rp 1 M', 'IDR 1B'],
+    [1_000_000_000, 'Rp 1 M', 'IDR 1B'],
+    [1_200_000_000, 'Rp 1,2 M', 'IDR 1.2B'],
+    [2_450_000_000, 'Rp 2,5 M', 'IDR 2.5B'],
+    [5_672_500_000, 'Rp 5,7 M', 'IDR 5.7B'],
+    [5_800_000_000, 'Rp 5,8 M', 'IDR 5.8B'],
+    [999_949_999_999, 'Rp 999,9 M', 'IDR 999.9B'],
+    [1_000_000_000_000, 'Rp 1.000 M', 'IDR 1,000B'],
+    [1_500_000_000_000, 'Rp 1.500 M', 'IDR 1,500B'],
+    [2_345_600_000_000, 'Rp 2.345,6 M', 'IDR 2,345.6B'],
+  ])('P18.98-T3 AC-1 writes Rp %i compact as %s, and IDR as %s, at the same thresholds', (rupiah, id, en) => {
+    expect(formatRupiahCompact(rp(rupiah), {}, 'id')).toBe(id);
+    expect(formatRupiahCompact(rp(rupiah), {}, 'en')).toBe(en);
+  });
+
+  it('P18.98-T3 AC-2 rounds half up on the digit shown, in integers, in English too — 1,150 is IDR 1.2K', () => {
+    expect(formatRupiahCompact(rp(1_150), {}, 'en')).toBe('IDR 1.2K');
+    expect(formatRupiahCompact(rp(1_149), {}, 'en')).toBe('IDR 1.1K');
+    expect(formatRupiahCompact(rp(1_050_000), {}, 'en')).toBe('IDR 1.1M');
+    expect(formatRupiahCompact(rp(2_040_000), {}, 'en')).toBe('IDR 2M');
+  });
+
+  it('P18.98-T3 AC-1 keeps a negative’s minus before IDR, and lossless writes a rule in full where compact would round', () => {
+    expect(formatRupiahCompact(rp(-750_000), {}, 'en')).toBe('-IDR 750K');
+    expect(formatRupiahCompact(rp(-1_200_000_000), {}, 'en')).toBe('-IDR 1.2B');
+    expect(formatRupiahCompact(rp(2_400_000_000), { lossless: true }, 'en')).toBe('IDR 2.4B');
+    expect(formatRupiahCompact(rp(2_450_000_000), { lossless: true }, 'en')).toBe('IDR 2,450,000,000');
+    expect(formatRupiahCompact(rp(999_950_000), { lossless: true }, 'en')).toBe('IDR 999,950,000');
+    expect(formatRupiahCompact(Number.POSITIVE_INFINITY, {}, 'en')).toBe('');
+  });
+
+  it('P18.98-T3 AC-1 writes two sums as one figure with one IDR between them: IDR 357.5M / 712.7M', () => {
+    expect(formatRupiahCompactPair(rp(357_500_000), rp(712_666_667), '/', 'en')).toBe('IDR 357.5M / 712.7M');
+    expect(formatRupiahCompactPair(rp(5_672_500_000), rp(6_000_000_000), 'of', 'en')).toBe('IDR 5.7B of 6B');
+    expect(formatRupiahCompactPair(rp(-5_000), rp(-750_000), '/', 'en')).toBe('-IDR 5K / -750K');
+    expect(formatRupiahCompactPair(rp(620_000_000), rp(999), '/', 'en')).toBe('IDR 620M / 999');
+  });
+
+  it('P18.98-T3 AC-1 writes a header’s unit Rp M · Rp jt, and IDR B · IDR M: the forum’s APE (IDR B) and Avg. Case Size (IDR M)', () => {
+    expect(formatMoneyUnit('M')).toBe('Rp M');
+    expect(formatMoneyUnit('jt', 'id')).toBe('Rp jt');
+    expect(formatMoneyUnit('rb', 'id')).toBe('Rp rb');
+    expect(formatMoneyUnit('M', 'en')).toBe('IDR B');
+    expect(formatMoneyUnit('jt', 'en')).toBe('IDR M');
+    expect(formatMoneyUnit('rb', 'en')).toBe('IDR K');
+    expect(`APE (${formatMoneyUnit('M', 'en')})`).toBe('APE (IDR B)');
+    expect(`Avg. Case Size (${formatMoneyUnit('jt', 'en')})`).toBe('Avg. Case Size (IDR M)');
+    // The unit's size is the same in both languages: one figure, two ways of writing it.
+    for (const unit of Object.keys(RUPIAH_PER_UNIT) as (keyof typeof RUPIAH_PER_UNIT)[]) {
+      expect(formatRupiahCompact(rp(RUPIAH_PER_UNIT[unit]), {}, 'en')).toBe(`IDR 1${formatMoneyUnit(unit, 'en').slice(4)}`);
+    }
+  });
+});
+
+/**
+ * **P18.98-T3 AC-2, one rounding** (ADR-0174 §1): the language changes the characters, never the figure. Over a sweep
+ * at and around every threshold, the English text read back into Indonesian's marks and units is the Indonesian text,
+ * character for character — so no figure is rounded once per language — and a share is rounded once, by the server's
+ * rule (`percentOf`), into a number that reads the same in both.
+ */
+describe('P18.98-T3 AC-2 one rounding: the language changes the characters, never the figure', () => {
+  /** English's marks, currency and units back into Indonesian's. */
+  const asIndonesian = (en: string) => en
+    .replace(/[.,:]/g, (mark) => (mark === '.' ? ',' : '.'))
+    .replace(/^(-?)IDR /, '$1Rp ')
+    .replace(/(\d)(B|M|K)( |$)/, (_, digit: string, unit: string, after: string) => `${digit} ${{ B: 'M', M: 'jt', K: 'rb' }[unit]}${after}`);
+
+  it.each([
+    0, 999, 1_000, 1_049, 1_050, 1_149, 1_150, 99_950, 999_949, 999_950, 1_049_999, 1_050_000, 2_345_678, 357_500_000,
+    712_666_667, 999_949_999, 999_950_000, 2_450_000_000, 5_672_500_000, 999_949_999_999, 2_345_600_000_000,
+  ])('P18.98-T3 AC-2 Rp %i reads the same figure in both languages, compact and in full', (rupiah) => {
+    for (const minor of [rp(rupiah), -rp(rupiah), rp(rupiah) + 49, rp(rupiah) + 50]) {
+      expect(asIndonesian(formatRupiahCompact(minor, {}, 'en'))).toBe(formatRupiahCompact(minor));
+      expect(asIndonesian(formatRupiahCompact(minor, { lossless: true }, 'en'))).toBe(formatRupiahCompact(minor, { lossless: true }));
+      expect(asIndonesian(formatRupiah(minor, 'en'))).toBe(formatRupiah(minor));
+    }
+  });
+
+  it.each([0, 0.04, 0.05, 0.5, 9.14, 12.5, 29.6, 50.45, 57.5, 65.04, 87.3456, 96.43, 99.96, 1_250, -12.5, -0.01])(
+    'P18.98-T3 AC-2 %d reads the same figure in both languages, as a number and as a percentage',
+    (value) => {
+      for (const options of [{}, { decimals: 1 }, { decimals: 2 }, { maxDecimals: 1 }, { decimals: 1, maxDecimals: 2 }]) {
+        expect(asIndonesian(formatNumber(value, options, 'en'))).toBe(formatNumber(value, options));
+        expect(asIndonesian(formatPercent(value, options, 'en'))).toBe(formatPercent(value, options));
+      }
+      expect(asIndonesian(formatPercent(value, { lossless: true }, 'en'))).toBe(formatPercent(value, { lossless: true }));
+    },
+  );
+
+  it('P18.98-T3 AC-2 a share is rounded once, into a number in no language, and reads the same in both (UI-018)', () => {
+    // 23 of 40 is 57,5%: half up in integers, 58, whichever language writes it — never 57 in one and 58 in the other.
+    expect(percentOf(23, 40)).toBe(58);
+    expect(formatPercent(percentOf(23, 40)!, {}, 'id')).toBe('58%');
+    expect(formatPercent(percentOf(23, 40)!, {}, 'en')).toBe('58%');
+    expect(formatPercent(percentOf(27, 28)!, {}, 'en')).toBe(formatPercent(percentOf(27, 28)!));
+  });
+
+  it('P18.98-T3 AC-2 a time and a date carry the same day and minute in both languages', () => {
+    for (const iso of ['2026-09-30T18:05:00Z', '2026-12-31T16:59:00Z', '2027-01-01T00:00:00Z']) {
+      expect(asIndonesian(formatOfficeTime(iso, OFFICE_TIME_ZONE, 'en'))).toBe(formatOfficeTime(iso));
+      expect(formatOfficeDay(iso, OFFICE_TIME_ZONE, 'en').split(' ')[0]).toBe(formatOfficeDay(iso).split(' ')[0]);
+    }
+  });
+});
+
+/** P18.98-T3 AC-3: what a reader types is read with either separator, in either language. */
+describe('P18.98-T3 AC-3 input in each language', () => {
+  it('P18.98-T3 AC-3 parseDecimal reads 17,6 and 17.6 alike, whatever language the screen is in', () => {
+    // It takes no language: a field never asks which one its reader is in.
+    expect(parseDecimal.length).toBe(1);
+    for (const typed of ['17,6', '17.6', ' 17,6 ']) expect(parseDecimal(typed)).toBe(17.6);
+    expect(parseDecimal('1,250.5')).toBeNaN();
+    expect(parseDecimal('1.250,5')).toBe(1250.5);
+  });
+
+  it('P18.98-T3 AC-3 a decimal field holds its value in the reader’s mark, read back in either language', () => {
+    expect(formatDecimalInput(3.5)).toBe('3,5');
+    expect(formatDecimalInput(3.5, 'id')).toBe('3,5');
+    expect(formatDecimalInput(3.5, 'en')).toBe('3.5');
+    expect(formatDecimalInput(15, 'en')).toBe('15');
+    expect(formatDecimalInput(null, 'en')).toBe('');
+    expect(formatDecimalInput(Number.NaN, 'id')).toBe('');
+    for (const language of LANGUAGES) expect(parseDecimal(formatDecimalInput(0.3, language))).toBe(0.3);
+  });
+
+  it('P18.98-T3 AC-3 a money field’s prefix follows the language, Rp and IDR, and its digits are grouped in its marks', () => {
+    expect(moneyPrefix('id')).toBe('Rp');
+    expect(moneyPrefix('en')).toBe('IDR');
+    expect(groupDigits(1_250_000)).toBe('1.250.000');
+    expect(groupDigits(1_250_000, 'en')).toBe('1,250,000');
+    // Digits only, whichever language grouped them.
+    expect(parseDigits('1.250.000')).toBe(1_250_000);
+    expect(parseDigits('1,250,000')).toBe(1_250_000);
+    expect(parseDigits('IDR 45,000,000')).toBe(45_000_000);
+  });
+});
+
+/**
+ * **P18.98-T3 AC-6: no screen calls `Intl` or `toLocale*` to write a figure** (`components-and-patterns.md`,
+ * *Formats*): `lib/format.ts` is the one module that does, so a figure is written in the reader's language by one
+ * table, and the same characters in every browser. Folding case (`toLocaleLowerCase`) is not writing a figure.
+ */
+describe('P18.98-T3 AC-6 the guard: one module writes figures', () => {
+  const SRC = join(__dirname, '..');
+  /** Reads a zone's wall clock into a field's own `YYYY-MM-DDTHH:mm` (`officeWallClock`): parts, not words. */
+  const ALLOWED = new Set(['lib/format.ts', 'lib/events-admin.ts']);
+  const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    return statSync(path).isDirectory() ? files(path) : /\.tsx?$/.test(name) && !/\.spec\.tsx?$/.test(name) ? [path] : [];
+  });
+
+  it('P18.98-T3 AC-6 no module but lib/format.ts calls Intl or toLocale(Date|Time)String to write a figure', () => {
+    const offenders = files(SRC)
+      .map((path) => ({ path: relative(SRC, path).split('\\').join('/'), source: readFileSync(path, 'utf8') }))
+      .filter(({ path }) => !ALLOWED.has(path))
+      .flatMap(({ path, source }) => [
+        /\bIntl\.(NumberFormat|DateTimeFormat|RelativeTimeFormat|ListFormat|PluralRules)\b/,
+        /\.toLocale(Date|Time)?String\(/,
+      ].filter((pattern) => pattern.test(source)).map((pattern) => `${path}: ${pattern}`));
+    expect(offenders).toEqual([]);
+  });
+
+  it('P18.98-T3 AC-6 the one other module that reads Intl reads a zone’s parts, never a figure for a reader', () => {
+    const source = readFileSync(join(SRC, 'lib', 'events-admin.ts'), 'utf8');
+    expect(source.match(/Intl\.[A-Za-z]+/g)).toEqual(['Intl.DateTimeFormat']);
+    expect(source).toMatch(/\.formatToParts\(/);
+    expect(source).not.toMatch(/\.toLocale(Date|Time)?String\(/);
+  });
+});
+
+/**
+ * **P18.98-T3 figures: a formatter is handed the figures' language, never the words'.** A figure is written in
+ * `useFigureLanguage()`'s language — the reader's choice, Indonesian with none, whether or not the switch is live — and
+ * `useLanguage()` is the words', English for a reader with no choice until the switch is live: handed to a formatter it
+ * writes *IDR 5.8B* on a staging of *Rp 5,8 M* (the client's UI-019). Read from the source, as the guard above is: a
+ * call to a function of `lib/format.ts`, or to `groupDigits`, whose arguments hold `useLanguage()` or a name bound to it.
+ * A file that needs both names them apart. What a helper does with a language it is handed is its own spec's.
+ */
+describe('P18.98-T3 figures the guard: a formatter is handed the figures’ language', () => {
+  const SRC = join(__dirname, '..');
+  const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    return statSync(path).isDirectory() ? files(path) : /\.tsx?$/.test(name) && !/\.spec\.tsx?$/.test(name) ? [path] : [];
+  });
+  const sources = files(SRC).map((path) => ({ path: relative(SRC, path).split('\\').join('/'), source: readFileSync(path, 'utf8') }));
+  /** Every function `lib/format.ts` exports writes a figure, and so does a money field's grouping. */
+  const FORMATTERS = [...readFileSync(join(SRC, 'lib', 'format.ts'), 'utf8').matchAll(/^export function (\w+)/gm)]
+    .map((m) => m[1]).concat('groupDigits');
+
+  /** The text between each `name(` and the parenthesis that closes it. */
+  const argumentsOf = (source: string, name: string): string[] => [...source.matchAll(new RegExp(`\\b${name}\\(`, 'g'))]
+    .map((call) => {
+      const from = call.index! + call[0].length;
+      let [depth, at] = [1, from];
+      for (; at < source.length && depth > 0; at += 1) depth += source[at] === '(' ? 1 : source[at] === ')' ? -1 : 0;
+      return source.slice(from, at - 1);
+    });
+
+  it('P18.98-T3 figures reads every formatter there is, so a silent zero cannot pass', () => {
+    expect(FORMATTERS).toEqual(expect.arrayContaining(['formatCalendarDay', 'formatRupiahCompact', 'formatNumber', 'moneyPrefix', 'groupDigits']));
+    expect(FORMATTERS.length).toBeGreaterThan(35);
+  });
+
+  it('P18.98-T3 figures no module hands useLanguage() to a formatter: every wired one hands useFigureLanguage()', () => {
+    const offenders = sources
+      .filter(({ source }) => /\buseLanguage\(\)/.test(source))
+      .flatMap(({ path, source }) => {
+        const words = [...source.matchAll(/\bconst (\w+) = useLanguage\(\)/g)].map((m) => m[1]);
+        const isWords = (args: string) => /\buseLanguage\(\)/.test(args) || words.some((w) => new RegExp(`\\b${w}\\b`).test(args));
+        return FORMATTERS.flatMap((name) => argumentsOf(source, name).filter(isWords).map((args) => `${path}: ${name}(${args})`));
+      });
+    expect(offenders).toEqual([]);
+  });
+
+  it('P18.98-T3 figures finds the wired screens at all: the shared fields, Data upload, coaching, the forum, the calendar', () => {
+    const wired = sources.filter(({ source }) => /\buseFigureLanguage\(\)/.test(source)).map(({ path }) => path);
+    expect(wired).toEqual(expect.arrayContaining([
+      'components/ui/date-field.tsx', 'components/ui/decimal-input.tsx', 'components/ui/progress-bar.tsx',
+      'components/notification-list.tsx', 'app/(tenant)/kpm/data-upload/page.tsx', 'components/coaching-session.tsx',
+      'components/goal-calculator.tsx', 'components/leader-forum/scorecard.tsx', 'components/calendar/month-grid.tsx',
+    ]));
   });
 });

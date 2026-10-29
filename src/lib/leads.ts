@@ -1,3 +1,6 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { leadsMessages } from '@/i18n/messages/leads';
 import { api } from '@/lib/api-client';
 
 export type LeadType = 'sales' | 'recruitment';
@@ -91,11 +94,17 @@ export interface LeadQuery {
   owner?: string;
 }
 
-/** What each attention flag is called on screen. One place, so two screens cannot disagree. */
+/** The flags' words in English, the catalogue's source (`messages/leads.ts`). */
+const EN = leadsMessages.en;
+
+/**
+ * What each attention flag is called on screen, **in English**: one place, so two screens cannot disagree. A screen
+ * reads it in the reader's language through `flagLabel(flag, overdueDays, language)` (P18.98-T4).
+ */
 export const FLAG_LABEL: Record<LeadFlag, string> = {
-  overdue: 'Overdue',
-  'no-next-action': 'No next action',
-  'no-remarks': 'No remarks',
+  overdue: EN.flags.overdue,
+  'no-next-action': EN.flags.noNextAction,
+  'no-remarks': EN.flags.noRemarks,
 };
 
 /**
@@ -106,10 +115,13 @@ export const FLAG_LABEL: Record<LeadFlag, string> = {
  * calendar days in the **office's** timezone; a screen subtracting two dates itself would be
  * wrong for anybody whose device is in another zone, which is the defect the whole day-boundary
  * rule exists to stop (invariant §9).
+ *
+ * In the reader's words' `language` (P18.98-T4), English when none is passed: *Terlambat 14 hari*.
  */
-export const flagLabel = (flag: LeadFlag, overdueDays: number | null): string => {
-  if (flag !== 'overdue' || overdueDays === null) return FLAG_LABEL[flag];
-  return `Overdue ${overdueDays} ${overdueDays === 1 ? 'day' : 'days'}`;
+export const flagLabel = (flag: LeadFlag, overdueDays: number | null, language: Language = SOURCE_LANGUAGE): string => {
+  const t = messagesIn(leadsMessages, language).flags;
+  if (flag === 'overdue') return overdueDays === null ? t.overdue : t.overdueDays({ days: overdueDays });
+  return flag === 'no-next-action' ? t.noNextAction : t.noRemarks;
 };
 
 /**
@@ -169,22 +181,21 @@ export function callLink(phone: string | null | undefined): string | null {
 
 /**
  * Why the 📞 and WhatsApp are held on a lead, in the reader's words — and where to put it right, which on a
- * phone is the ⋮'s *Lead details*. (P18.95-T4 AC-3.)
+ * phone is the ⋮'s *Lead details*. (P18.95-T4 AC-3.) In English, the catalogue's source (`messages/leads.ts`).
  */
-export const PHONE_HELD = {
-  missing: 'No phone number yet — add one in Lead details.',
-  unusable: 'This number can’t be dialled — check it in Lead details.',
-} as const;
+export const PHONE_HELD = EN.phoneHeld;
 
 /**
  * Why a lead's phone can be neither called nor opened in WhatsApp, or `null` when it can (P18.95-T4 AC-3).
  *
  * **One reason for both actions**, because one rule (`whatsAppNumber`) decides both: nothing saved, or
- * something saved that is not 10 to 15 digits once read — `123`, a name typed in the wrong box.
+ * something saved that is not 10 to 15 digits once read — `123`, a name typed in the wrong box. In the reader's
+ * words' `language` (P18.98-T4), English when none is passed.
  */
-export function phoneHeld(phone: string | null | undefined): string | null {
+export function phoneHeld(phone: string | null | undefined, language: Language = SOURCE_LANGUAGE): string | null {
   if (whatsAppNumber(phone)) return null;
-  return (phone ?? '').trim() === '' ? PHONE_HELD.missing : PHONE_HELD.unusable;
+  const t = messagesIn(leadsMessages, language).phoneHeld;
+  return (phone ?? '').trim() === '' ? t.missing : t.unusable;
 }
 
 /**

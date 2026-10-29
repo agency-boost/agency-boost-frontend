@@ -4,10 +4,12 @@ import { useEffect, useId, useState } from 'react';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { eventsOfficeMessages } from '@/i18n/messages/events-office';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  ADMIN_COPY, awaitingLine, npsFigure, npsFormula, OWNER_PROTOTYPE_COPY, readFeedbackSummary, responsesLine, scoreOutOf,
+  awaitingLine, npsFigure, npsFormula, readFeedbackSummary, responsesLine, scoreOutOf,
   summaryTitle, type FeedbackRow, type FeedbackSummary, type NpsBucket,
 } from '@/lib/events-admin';
 
@@ -39,22 +41,24 @@ const BUCKET: Record<NpsBucket, string> = {
  * Every word a member wrote is rendered as text (contradiction 25).
  */
 export function FeedbackSummaryCard({ summary }: { summary: FeedbackSummary }) {
+  const t = useMessages(eventsOfficeMessages);
+  const language = useLanguage();
   const titleId = useId();
   const c = summary.constants;
   return (
     <section aria-labelledby={titleId} className="overflow-hidden rounded-lg border border-hairline bg-card" data-part="feedback-summary">
       <div className="flex flex-wrap items-center gap-2.5 border-b border-hairline bg-base px-[18px] py-3.5">
-        <h3 id={titleId} className="min-w-0 break-words font-display text-md font-bold text-navy">{summaryTitle(summary.title)}</h3>
+        <h3 id={titleId} className="min-w-0 break-words font-display text-md font-bold text-navy">{summaryTitle(summary.title, language)}</h3>
         <p className="ml-auto text-right text-base text-muted" data-part="nps">
           <strong className="mr-1 text-xl text-navy">{npsFigure(summary.nps)}</strong>
-          {' NPS '}
-          <span className="block text-2xs font-normal">{npsFormula(c)}</span>
-          {' '}{responsesLine(summary.counted)}
-          {summary.awaitingConfirmation > 0 && <> {awaitingLine(summary.awaitingConfirmation)}</>}
+          {' '}{t.nps}{' '}
+          <span className="block text-2xs font-normal">{npsFormula(c, language)}</span>
+          {' '}{responsesLine(summary.counted, language)}
+          {summary.awaitingConfirmation > 0 && <> {awaitingLine(summary.awaitingConfirmation, language)}</>}
         </p>
       </div>
       {summary.rows.length === 0 ? (
-        <p className="px-[18px] py-4 text-base text-muted">{ADMIN_COPY.noFeedback}</p>
+        <p className="px-[18px] py-4 text-base text-muted">{t.noFeedback}</p>
       ) : (
         <ul className="m-0 list-none p-0">
           {summary.rows.map((row) => <FeedbackItem key={row.membershipId} row={row} c={c} />)}
@@ -65,7 +69,8 @@ export function FeedbackSummaryCard({ summary }: { summary: FeedbackSummary }) {
 }
 
 function FeedbackItem({ row, c }: { row: FeedbackRow; c: FeedbackSummary['constants'] }) {
-  const tip = row.attendance === 'absent' ? ADMIN_COPY.absentTip : ADMIN_COPY.unconfirmedTip;
+  const t = useMessages(eventsOfficeMessages);
+  const tip = row.attendance === 'absent' ? t.absentTip : t.unconfirmedTip;
   return (
     <li className="border-b border-hairline px-[18px] py-[11px] last:border-b-0" data-row={row.membershipId} data-counted={row.counted}>
       <div className="mb-1 flex items-center gap-2.5">
@@ -75,12 +80,12 @@ function FeedbackItem({ row, c }: { row: FeedbackRow; c: FeedbackSummary['consta
       </div>
       {row.why && (
         <p className="break-words text-base leading-snug text-muted">
-          <strong className="font-semibold text-navy">{OWNER_PROTOTYPE_COPY.why}</strong> {row.why}
+          <strong className="font-semibold text-navy">{t.why}</strong> {row.why}
         </p>
       )}
       {row.improve && (
         <p className="mt-0.5 break-words text-base leading-snug text-muted">
-          <strong className="font-semibold text-navy">{OWNER_PROTOTYPE_COPY.improve}</strong> {row.improve}
+          <strong className="font-semibold text-navy">{t.improve}</strong> {row.improve}
         </p>
       )}
     </li>
@@ -89,6 +94,7 @@ function FeedbackItem({ row, c }: { row: FeedbackRow; c: FeedbackSummary['consta
 
 /** The card, read: a skeleton, an error with a retry, then the card. `version` reads it again. */
 export function FeedbackSummarySection({ eventId, version }: { eventId: string; version: number }) {
+  const t = useMessages(eventsOfficeMessages);
   const [summary, setSummary] = useState<FeedbackSummary | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -106,13 +112,13 @@ export function FeedbackSummarySection({ eventId, version }: { eventId: string; 
     return (
       <div>
         <ErrorBanner {...error} />
-        <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{ADMIN_COPY.tryAgain}</Button>
+        <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
       </div>
     );
   }
   if (!summary) {
     return (
-      <Skeleton label={ADMIN_COPY.loadingSummary}>
+      <Skeleton label={t.loadingSummary}>
         <div className="rounded-lg border border-hairline bg-card p-4">
           <SkeletonBar className="h-4 w-2/3" />
           <SkeletonBar className="mt-3 w-full" />

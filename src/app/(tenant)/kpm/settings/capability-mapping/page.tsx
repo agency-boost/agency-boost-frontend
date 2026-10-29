@@ -12,6 +12,10 @@ import {
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SHOWN_FROM_DESKTOP } from '@/components/ui/tablet';
+import { kept } from '@/i18n/kept';
+import { useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
+import { capabilityMessages } from '@/i18n/messages/settings-capability';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { useHashTab } from '@/lib/use-hash-tab';
@@ -54,18 +58,22 @@ const move = <T,>(rows: T[], from: number, to: number): T[] => {
  * both sides, so nobody has to learn that one screen is the other under a different name.
  */
 const TABS = [
-  { label: 'Ladder', href: '#ladder' },
-  { label: 'Skills', href: '#skills' },
+  { label: kept('Ladder'), href: '#ladder' },
+  { label: kept('Skills'), href: '#skills' },
 ];
 
-/**
+/** The screen's title, its nav item (§A.1): the same in both languages. */
+const TITLE = kept('Capability Mapping');
+
+/*
  * **The ladder's grey sentence, in the client's words** (P18.97-T4 AC-6, ADR-0176 §6; the grey-text table of 2026-10-27,
  * UI-027 — 27 words on how a stage is decided, *ⓘ · ⓘ · Show*): shown from 1024px, behind an ⓘ beside *The ladder*
- * below it.
+ * below it, in both languages (`ladderNote`, `messages/settings-capability.ts`).
  */
-const LADDER_NOTE = 'A person’s stage = highest stage with all milestones ticked.';
 
 export default function CapabilityMappingPage() {
+  const t = useMessages(capabilityMessages);
+  const s = useMessages(settingsMessages);
   const canWrite = useCan('tenant_config:write');
   const [tab, setTab] = useHashTab(TABS);
   const [catalog, setCatalog] = useState<CapabilityCatalog | null>(null);
@@ -105,7 +113,7 @@ export default function CapabilityMappingPage() {
   if (catalog === null) {
     return (
       <SettingsScreen
-        title="Capability Mapping"
+        title={TITLE}
         permission="tenant_config:read"
         error={error}
         bars={<PublishBar />}
@@ -142,13 +150,13 @@ export default function CapabilityMappingPage() {
         <div className="min-w-0 flex-1">
           {open ? (
             <Field
-              label="Name"
+              label={s.name}
               htmlFor={`label-${key}`}
               /* The code, where a reader is acting on the row — so it is visible exactly when it
                  matters, that renaming is not touching the identity a tick binds to. It used to
                  be under every row of every list, which is the noise the client asked us to
                  take out. */
-              hint={`Code ${item.code} — a tick names this, and renaming never moves it.`}
+              hint={t.codeHint({ code: item.code })}
             >
               <TextInput
                 id={`label-${key}`}
@@ -161,7 +169,7 @@ export default function CapabilityMappingPage() {
             <p className="text-md text-navy">{item.label}</p>
           )}
           <p className="mt-1 flex flex-wrap items-center gap-2">
-            {item.status === 'archived' && <ConfigBadge tone="open">Archived</ConfigBadge>}
+            {item.status === 'archived' && <ConfigBadge tone="open">{s.archivedBadge}</ConfigBadge>}
             {extra}
           </p>
         </div>
@@ -179,10 +187,10 @@ export default function CapabilityMappingPage() {
                     return next;
                   })}
                 >
-                  Save
+                  {s.save}
                 </Button>
                 <Button variant="secondary" disabled={busy} onClick={() => setEditing(null)}>
-                  Cancel
+                  {s.cancel}
                 </Button>
               </>
             ) : (
@@ -192,14 +200,12 @@ export default function CapabilityMappingPage() {
                   disabled={busy}
                   onClick={() => { setEditing(key); setLabel(item.label); }}
                 >
-                  Rename
+                  {s.rename}
                 </Button>
                 <Button
                   variant="inlineDanger"
                   disabled={busy}
-                  title={item.status === 'archived'
-                    ? undefined
-                    : 'Keeps it on assessments that already tick it, and offers it on no new one.'}
+                  title={item.status === 'archived' ? undefined : t.archiveTip}
                   onClick={() => void run(() => setCapabilityStatus({
                     part,
                     code: item.code,
@@ -207,7 +213,7 @@ export default function CapabilityMappingPage() {
                     gridCode,
                   }))}
                 >
-                  {item.status === 'archived' ? 'Restore' : 'Archive'}
+                  {item.status === 'archived' ? s.restore : s.archive}
                 </Button>
               </>
             )}
@@ -219,7 +225,7 @@ export default function CapabilityMappingPage() {
 
   const addPanel = (part: 'milestone' | 'item', gridCode?: string) => (
     <FieldRow className="px-4 pb-4 pt-2 sm:px-5">
-      <Field label="Name" htmlFor={`add-label-${gridCode ?? part}`} className="min-w-48 flex-1">
+      <Field label={s.name} htmlFor={`add-label-${gridCode ?? part}`} className="min-w-48 flex-1">
         <TextInput
           id={`add-label-${gridCode ?? part}`}
           value={entry.label}
@@ -230,9 +236,9 @@ export default function CapabilityMappingPage() {
         />
       </Field>
       <Field
-        label="Code"
+        label={s.code}
         htmlFor={`add-code-${gridCode ?? part}`}
-        hint="Chosen once. Never reused."
+        hint={t.addCodeHint}
         className="min-w-40"
       >
         <TextInput
@@ -256,9 +262,9 @@ export default function CapabilityMappingPage() {
             return next;
           })}
         >
-          Add
+          {s.add}
         </Button>
-        <Button variant="secondary" disabled={busy} onClick={() => setAddingTo(null)}>Cancel</Button>
+        <Button variant="secondary" disabled={busy} onClick={() => setAddingTo(null)}>{s.cancel}</Button>
       </FieldRow.Actions>
     </FieldRow>
   );
@@ -271,10 +277,10 @@ export default function CapabilityMappingPage() {
 
   return (
     <SettingsScreen
-      title="Capability Mapping"
-      subtitle="The ladder and the skill grids your leaders assess people against."
+      title={TITLE}
+      subtitle={t.subtitle}
       permission="tenant_config:read"
-      tabsLabel="Capability Mapping sections"
+      tabsLabel={s.sections({ title: TITLE })}
       tabs={TABS}
       activeHref={tab}
       onSelectTab={setTab}
@@ -294,7 +300,7 @@ export default function CapabilityMappingPage() {
             checked={showArchived}
             onChange={(e) => setShowArchived(e.target.checked)}
           />
-          Show archived
+          {s.showArchived}
         </label>
 
         {tab === '#ladder' && (
@@ -302,11 +308,11 @@ export default function CapabilityMappingPage() {
         <Card className="p-0">
           <div className="border-b border-hairline px-4 py-3 sm:px-5">
             <div className="flex items-center gap-1">
-              <h2 className="font-display text-lg font-bold text-navy">The ladder</h2>
-              {catalog.stages.length > 0 && <BelowDesktopTip text={LADDER_NOTE} />}
+              <h2 className="font-display text-lg font-bold text-navy">{t.theLadder}</h2>
+              {catalog.stages.length > 0 && <BelowDesktopTip text={t.ladderNote} />}
             </div>
             {catalog.stages.length > 0 && (
-              <p className={cn('mt-1 text-sm text-muted', SHOWN_FROM_DESKTOP)}>{LADDER_NOTE}</p>
+              <p className={cn('mt-1 text-sm text-muted', SHOWN_FROM_DESKTOP)}>{t.ladderNote}</p>
             )}
           </div>
           {/*
@@ -314,22 +320,19 @@ export default function CapabilityMappingPage() {
             * platform ladder where its source has none, so provisioning no longer makes one; an office
             * started Empty before then still could be.
             */}
-          {catalog.stages.length === 0 && <EmptyState title="No stages yet." />}
+          {catalog.stages.length === 0 && <EmptyState title={t.noStages} />}
           <ul className="flex flex-col divide-y divide-hairline">
             {visible(catalog.stages).map((stage, index) => row(
               stage, 'stage', undefined,
               (by) => void reorder('stage', stageCodes, index, by),
-              <ConfigBadge tone="won">
-                Needs {stage.requiredMilestoneCodes.length}{' '}
-                {stage.requiredMilestoneCodes.length === 1 ? 'milestone' : 'milestones'}
-              </ConfigBadge>,
+              <ConfigBadge tone="won">{t.needs({ n: stage.requiredMilestoneCodes.length })}</ConfigBadge>,
             ))}
           </ul>
         </Card>
 
         <Card className="p-0">
           <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
-            <h2 className="font-display text-lg font-bold text-navy">Milestones</h2>
+            <h2 className="font-display text-lg font-bold text-navy">{t.milestones}</h2>
             {canWrite && (
               <Button
                 variant="secondary"
@@ -337,12 +340,12 @@ export default function CapabilityMappingPage() {
                 disabled={busy || addingTo === 'milestone'}
                 onClick={() => { setEntry({ label: '', code: '', touched: false }); setAddingTo('milestone'); }}
               >
-                Add a milestone
+                {t.addMilestone}
               </Button>
             )}
           </div>
           {catalog.milestones.length === 0 && addingTo !== 'milestone' && (
-            <EmptyState title="No milestones yet." />
+            <EmptyState title={t.noMilestones} />
           )}
           <ul className="flex flex-col divide-y divide-hairline">
             {visible(catalog.milestones).map((milestone, index) => row(
@@ -356,14 +359,14 @@ export default function CapabilityMappingPage() {
         )}
 
         {tab === '#skills' && catalog.grids.length === 0 && (
-          <Card><EmptyState title="No skill grids yet." /></Card>
+          <Card><EmptyState title={t.noGrids} /></Card>
         )}
         {tab === '#skills' && catalog.grids.map((grid) => (
           <Card key={grid.code} className="p-0">
             <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
               <h2 className="font-display text-lg font-bold text-navy">{grid.label}</h2>
               {grid.requiresDownline && (
-                <ConfigBadge tone="open">Only for somebody with a downline</ConfigBadge>
+                <ConfigBadge tone="open">{t.downlineOnly}</ConfigBadge>
               )}
               {canWrite && (
                 <Button
@@ -372,7 +375,7 @@ export default function CapabilityMappingPage() {
                   disabled={busy || addingTo === grid.code}
                   onClick={() => { setEntry({ label: '', code: '', touched: false }); setAddingTo(grid.code); }}
                 >
-                  Add an item
+                  {t.addItem}
                 </Button>
               )}
             </div>

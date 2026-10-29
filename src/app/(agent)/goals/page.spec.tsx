@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLayout from '@/app/(agent)/layout';
 import { ACTION_BAR_PHONE, SEGMENT_WRAP_PHONE } from '@/components/ui/phone';
-import { makeMe, renderInLayout, stubFetch } from '@test/harness';
+import { InLanguage, makeMe, renderInLayout, renderWithSession, stubFetch } from '@test/harness';
 import GoalSettingsPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -140,10 +140,10 @@ describe('Goal Settings (P8-T3)', () => {
 
       // The server's 1.4, with a decimal point — not *≈ 2*.
       const tile = (await screen.findByText('Policies per week')).closest('[data-variant]')!;
-      expect(tile).toHaveTextContent('≈ 1,4');
+      expect(tile).toHaveTextContent('≈ 1.4');
       const hero = document.querySelector('[data-hero="true"]')!;
       expect(hero).toHaveTextContent('6/month');
-      expect(hero).toHaveTextContent('≈ 1,4/week');
+      expect(hero).toHaveTextContent('≈ 1.4/week');
       // The two counts to do stay whole.
       expect(screen.getByText('≈ 5/week')).toBeInTheDocument();
     });
@@ -210,10 +210,10 @@ describe('Goal Settings (P8-T3)', () => {
 
       // Grouped in the box as well as beside it: nine digits in a row is a figure you have to
       // count rather than read, and a number input cannot carry a separator at all.
-      expect(await screen.findByLabelText('Annual APE target')).toHaveValue('500.000.000');
+      expect(await screen.findByLabelText('Annual APE target')).toHaveValue('500,000,000');
       // Beside the box the figure is compact (ADR-0167 §1): the remaining-needed tile and the commitment
-      // sentence say *Rp 500 jt*; the box itself keeps every digit.
-      expect(screen.getAllByText('Rp 500 jt').length).toBeGreaterThan(0);
+      // sentence say *IDR 500M* (*Rp 500 jt* in Indonesian); the box itself keeps every digit.
+      expect(screen.getAllByText('IDR 500M').length).toBeGreaterThan(0);
     });
 
     it('converts on the way out, so nobody types twelve digits for a nine-digit figure', async () => {
@@ -470,7 +470,7 @@ describe('Goal Settings (P8-T3)', () => {
       const field = await screen.findByLabelText(/Months left this year/);
       // A text box with a decimal keypad, so a comma can be typed (ADR-0167 §1): empty is `''`.
       expect(field).toHaveValue('');
-      expect(field).toHaveAttribute('placeholder', '3,1');
+      expect(field).toHaveAttribute('placeholder', '3.1');
     });
 
     it('sends the number once the agent types over it', async () => {
@@ -566,9 +566,10 @@ describe('Goal Settings (P8-T3)', () => {
       render({ '/goals': { body: goal() } });
 
       await screen.findByLabelText('Annual APE target');
-      // Visible, and out of the accessible name — the label is the question.
-      const rp = screen.getAllByText('Rp').find((el) => el.getAttribute('aria-hidden') === 'true');
-      expect(rp).toBeDefined();
+      // Visible, and out of the accessible name — the label is the question. The language's mark: *IDR* in English,
+      // *Rp* in Indonesian (P18.98-T3 AC-3).
+      const prefix = screen.getAllByText('IDR').find((el) => el.getAttribute('aria-hidden') === 'true');
+      expect(prefix).toBeDefined();
       expect(screen.getByText('months')).toHaveAttribute('aria-hidden', 'true');
     });
 
@@ -621,7 +622,7 @@ describe('Goal Settings (P8-T3)', () => {
       expect(panels.map((p) => p.textContent)).toEqual([
         expect.stringMatching(/Set appointment.*67\/month≈ 16\/week$/),
         expect.stringMatching(/Sales meeting.*20\/month≈ 5\/week$/),
-        expect.stringMatching(/Submission polis.*6\/month≈ 1,4\/week$/),
+        expect.stringMatching(/Submission polis.*6\/month≈ 1\.4\/week$/),
       ]);
     });
 
@@ -671,7 +672,7 @@ describe('Goal Settings (P8-T3)', () => {
       const field = await screen.findByLabelText('Annual APE target');
       await userEvent.clear(field);
       await userEvent.type(field, '750000000');
-      expect(field).toHaveValue('750.000.000');
+      expect(field).toHaveValue('750,000,000');
 
       await userEvent.click(screen.getByRole('button', { name: 'Save goal' }));
       await waitFor(() => {
@@ -686,7 +687,7 @@ describe('Goal Settings (P8-T3)', () => {
     it('leaves the unit in the affix rather than inside the value', async () => {
       // `Rp` is the field's prefix. Putting it in the value too would print it twice in one box.
       render({ '/goals': { body: goal() } });
-      expect(await screen.findByLabelText('Annual APE target')).not.toHaveValue('Rp 500.000.000');
+      expect(await screen.findByLabelText('Annual APE target')).not.toHaveValue('IDR 500,000,000');
     });
 
     it('pads a field whose affix is on the other side', async () => {
@@ -745,29 +746,29 @@ describe('Goal settings — the APE already produced, once the office holds prod
 
     const shown = (await screen.findByText('APE already produced this year')).closest('dl')!;
     // The label, its marker (on the field since P18.95-T5 AC-5), and the figure.
-    expect(shown).toHaveTextContent(/^APE already produced this year.*Rp 120\.000\.000$/);
+    expect(shown).toHaveTextContent(/^APE already produced this year.*IDR 120,000,000$/);
     // The reason sentence went in P10.1-T6: whose figure it is, is the marker's to say.
     expect(shown.querySelectorAll('dd')).toHaveLength(1);
     expect(screen.queryByText(/typed on this plan is kept/)).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'APE already produced this year' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'As of Agu 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'As of Aug 2026' })).toBeInTheDocument();
   });
 
   it('keeps the marker, on the field, when the plan cannot be worked out and there is no tile to carry it', async () => {
     render({ '/goals': { body: imported({ projected: null }) } });
     await screen.findByText(/cannot be worked out/);
 
-    const marker = screen.getByRole('button', { name: 'As of Agu 2026' });
+    const marker = screen.getByRole('button', { name: 'As of Aug 2026' });
     expect(marker.closest('dl')).toHaveTextContent('APE already produced this year');
     // Once: the tile it would otherwise sit on is not drawn.
-    expect(screen.getAllByRole('button', { name: /^As of Agu 2026$/ })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /^As of Aug 2026$/ })).toHaveLength(1);
   });
 
   /* **Was** *marks the figure once, on the tile*: the *Already produced* tile carried it, and went (P18.95-T5 AC-5). */
   it('P18.95-T5 AC-5: marks the figure once, on the field — the one place it is shown — when the plan is worked out', async () => {
     render({ '/goals': { body: imported() } });
     await screen.findByText('APE already produced this year');
-    expect(screen.getAllByRole('button', { name: /^As of Agu 2026$/ })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /^As of Aug 2026$/ })).toHaveLength(1);
     expect(screen.getByText('APE already produced this year').closest('dl')!.querySelector('button')).not.toBeNull();
   });
 
@@ -775,9 +776,10 @@ describe('Goal settings — the APE already produced, once the office holds prod
     render({ '/goals': { body: imported() } });
     await screen.findByText('Remaining needed');
     expect(screen.queryByText('Already produced')).not.toBeInTheDocument();
-    // Rp 120.000.000 in the field, and nowhere else: not again as *Rp 120 jt* in a tile beneath it.
-    expect(screen.getAllByText(/^Rp 120(\.000\.000| jt)$/)).toHaveLength(1);
-    expect(screen.getByText('Remaining needed').closest('[data-variant]')).toHaveTextContent('Rp 380 jt');
+    // IDR 120,000,000 in the field, and nowhere else: not again as *IDR 120M* in a tile beneath it (the specs read
+    // English, P18.98-T3: *Rp 120.000.000* and *Rp 120 jt* in Indonesian).
+    expect(screen.getAllByText(/^IDR 120(,000,000|M)$/)).toHaveLength(1);
+    expect(screen.getByText('Remaining needed').closest('[data-variant]')).toHaveTextContent('IDR 380M');
   });
 
   it('P18.97-T3 AC-3: keeps the figure that stands in a field in full, and writes every other sum compact', async () => {
@@ -785,15 +787,15 @@ describe('Goal settings — the APE already produced, once the office holds prod
     // year* stands in the box, so it reads to the rupiah; the tile beside the plan is a summary, so it is short.
     render({ '/goals': { body: imported() } });
     await screen.findByText('Remaining needed');
-    expect(screen.getByText('Rp 120.000.000')).toBeInTheDocument();
-    expect(screen.getByText('Remaining needed').closest('[data-variant]')).toHaveTextContent('Rp 380 jt');
-    expect(screen.getByText('Remaining needed').closest('[data-variant]')).not.toHaveTextContent('Rp 380.000.000');
+    expect(screen.getByText('IDR 120,000,000')).toBeInTheDocument();
+    expect(screen.getByText('Remaining needed').closest('[data-variant]')).toHaveTextContent('IDR 380M');
+    expect(screen.getByText('Remaining needed').closest('[data-variant]')).not.toHaveTextContent('IDR 380,000,000');
   });
 
   it('says so when the office corrected it by hand', async () => {
     render({ '/goals': { body: imported({ achieved: { minor: 120_000_000_00, provenance: 'corrected', month: '2026-08' } }) } });
     await screen.findByText('APE already produced this year');
-    expect(screen.getByRole('button', { name: 'Corrected by hand, year to date as of Agu 2026' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Corrected by hand, year to date as of Aug 2026' })).toBeInTheDocument();
   });
 
   it('keeps the typed figure on save, untouched — it is the agent’s own', async () => {
@@ -828,7 +830,7 @@ describe('Goal settings — the APE already produced, once the office holds prod
     expect(field.parentElement).toBe(months.parentElement!.parentElement);
     expect(field).toHaveClass('grow', 'basis-56');
     expect(field).not.toHaveClass('p-3');
-    expect(within(field).getByText('Rp 120.000.000')).toHaveClass('h-10');
+    expect(within(field).getByText('IDR 120,000,000')).toHaveClass('h-10');
     // The auto badge gives back its padding, so the months label is no taller than this one.
     expect(within(months).getByText('auto')).toHaveClass('-my-0.5');
   });
@@ -866,7 +868,7 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
       expect(screen.queryByText(/office’s calendar says/)).not.toBeInTheDocument();
       expect(screen.queryByText(/By your own count/)).not.toBeInTheDocument();
       // The override still works: the office's figure in the placeholder, the auto badge beside the name.
-      expect(months).toHaveAttribute('placeholder', '3,1');
+      expect(months).toHaveAttribute('placeholder', '3.1');
       expect(screen.getByText('auto')).toBeInTheDocument();
     });
 
@@ -880,12 +882,12 @@ describe('Goal Settings, trimmed to the prototype (P10.1-T6)', () => {
         },
       });
 
-      const marker = await screen.findByRole('button', { name: 'As of Agu 2026' });
+      const marker = await screen.findByRole('button', { name: 'As of Aug 2026' });
       // On the field, since its tile went (P18.95-T5 AC-5).
       const field = marker.closest('dl')!;
       expect(field).toHaveTextContent('APE already produced this year');
-      expect(field).toHaveTextContent('Rp 120.000.000');
-      const tip = screen.getByText('As of Agu 2026', { selector: '[role="tooltip"]' });
+      expect(field).toHaveTextContent('IDR 120,000,000');
+      const tip = screen.getByText('As of Aug 2026', { selector: '[role="tooltip"]' });
       fireEvent.click(marker);
       expect(tip).toBeVisible();
     });
@@ -1108,7 +1110,7 @@ describe('Goal Settings on the client’s UI review (P18.95-T5)', () => {
     expect(sentence).toHaveTextContent('(about 2 months left)');
     expect(sentence).not.toHaveTextContent(/2[.,]2 months/);
     // The box keeps the figure the plan divides by: it is an input, and it is what is used.
-    expect(screen.getByLabelText(/Months left this year/)).toHaveAttribute('placeholder', '2,2');
+    expect(screen.getByLabelText(/Months left this year/)).toHaveAttribute('placeholder', '2.2');
   });
 
   it.each([
@@ -1135,5 +1137,33 @@ describe('Goal Settings on the client’s UI review (P18.95-T5)', () => {
     }
     // The words are the same at every size: nothing shortened for a phone.
     expect(wider(list)).toEqual(['flex', 'w-full', 'rounded-lg', 'border', 'border-hairline', 'bg-base', 'p-[3px]']);
+  });
+});
+
+/**
+ * **P18.98-T3: the screen's figures follow the reader's language** (AC-1, AC-3). Every spec above reads English, the
+ * harness's default (ADR-0179 §9); an Indonesian reader sees the same figures in Indonesian, the field's prefix *Rp*.
+ */
+describe('P18.98-T3 Goal Settings in each language', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('P18.98-T3 AC-3 in Indonesian: the field’s prefix is Rp, its digits 500.000.000, and the sums in juta', async () => {
+    stubFetch({ ...base, '/goals': { body: goal() } } as Parameters<typeof stubFetch>[0]);
+    renderWithSession(<InLanguage language="id"><AgentLayout><GoalSettingsPage /></AgentLayout></InLanguage>, { me: AGENT });
+
+    expect(await screen.findByLabelText('Annual APE target')).toHaveValue('500.000.000');
+    expect(screen.getAllByText('Rp').find((el) => el.getAttribute('aria-hidden') === 'true')).toBeDefined();
+    expect(screen.queryAllByText('IDR')).toHaveLength(0);
+    expect(screen.getAllByText('Rp 500 jt').length).toBeGreaterThan(0);
+    expect((await screen.findByText('Policies per week')).closest('[data-variant]')).toHaveTextContent('≈ 1,4');
+  });
+
+  it('P18.98-T3 AC-3 in English: the field’s prefix is IDR, its digits 500,000,000, and the sums in millions', async () => {
+    render({ '/goals': { body: goal() } });
+
+    expect(await screen.findByLabelText('Annual APE target')).toHaveValue('500,000,000');
+    expect(screen.getAllByText('IDR').find((el) => el.getAttribute('aria-hidden') === 'true')).toBeDefined();
+    expect(screen.queryAllByText('Rp')).toHaveLength(0);
+    expect(screen.getAllByText('IDR 500M').length).toBeGreaterThan(0);
   });
 });

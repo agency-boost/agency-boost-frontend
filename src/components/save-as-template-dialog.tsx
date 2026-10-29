@@ -9,6 +9,8 @@ import {
 } from '@/lib/admin';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { TEMPLATE_NAME_MAX } from '@/lib/templates';
+import { useMessages } from '@/i18n/language-provider';
+import { adminTemplateMessages } from '@/i18n/messages/admin-template';
 
 /**
  * **Save as template** (ADR-0115 §5, §6; P13.2-T7 AC-7), from an office's page: what its agents read
@@ -39,6 +41,7 @@ export function SaveAsTemplateDialog({
   /** The template as made — with `dropped`, what it left out — and the company it is a template of. */
   onSaved: (template: SavedOfficeTemplate, company: Company | null) => void;
 }) {
+  const t = useMessages(adminTemplateMessages);
   const id = useId();
   const [companies, setCompanies] = useState<Company[] | null>(null);
   const [companyId, setCompanyId] = useState(kpm.companyId);
@@ -73,7 +76,7 @@ export function SaveAsTemplateDialog({
     setNameError(undefined);
     setError(null);
     if (!name.trim()) {
-      setNameError('Give the template a name.');
+      setNameError(t.nameMissing);
       return;
     }
     setSaving(true);
@@ -94,23 +97,23 @@ export function SaveAsTemplateDialog({
   return (
     <Modal
       open={open}
-      title="Save as template"
-      description={`What KPM ${kpm.code}’s agents read now becomes a new template: its published settings, never unpublished edits or anything archived. No member, log or lead is copied.`}
+      title={t.saveAs.title}
+      description={t.saveAs.lead({ code: kpm.code })}
       onClose={onClose}
       className="max-w-[30rem]"
       footer={(
         <div className="flex flex-wrap gap-2">
           <Button type="submit" form={`${id}-form`} disabled={saving || companies === null}>
-            {saving ? 'Saving…' : 'Save template'}
+            {saving ? t.saving : t.saveAs.submit}
           </Button>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="secondary" onClick={onClose} disabled={saving}>{t.cancel}</Button>
         </div>
       )}
     >
       <form id={`${id}-form`} onSubmit={submit} className="flex flex-col gap-4" noValidate>
         {loadError && <ErrorBanner {...loadError} />}
         {error && <ErrorBanner {...error} />}
-        <Field label="Name" htmlFor={`${id}-name`} error={nameError}>
+        <Field label={t.name} htmlFor={`${id}-name`} error={nameError}>
           <TextInput
             id={`${id}-name`}
             value={name}
@@ -119,12 +122,12 @@ export function SaveAsTemplateDialog({
             onChange={(e) => setName(e.target.value)}
           />
         </Field>
-        {companies === null && !loadError && <FieldSkeleton label="Loading companies…" />}
+        {companies === null && !loadError && <FieldSkeleton label={t.loadingCompanies} />}
         {companies !== null && (
           <Field
-            label="Company"
+            label={t.company}
             htmlFor={`${id}-company`}
-            hint="Into another company, every training file is copied, and every role the settings name must be on its ladder."
+            hint={t.saveAs.companyHint}
           >
             <Select id={`${id}-company`} value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
               {companies.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}

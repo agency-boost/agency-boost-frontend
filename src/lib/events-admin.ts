@@ -1,3 +1,6 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { eventsOfficeMessages } from '@/i18n/messages/events-office';
 import { api } from './api-client';
 import type { EventPhase, NpsConstants } from './events';
 import { OFFICE_TIME_ZONE, zoneOffsetMs } from './format';
@@ -128,87 +131,100 @@ export const readInvitees = () => api<EventInviteeList>('/kpm/settings/events/in
  * ── The words ───────────────────────────────────────────────────────────────────────────────────
  */
 
-/** The Owner's prototype, verbatim (`KPM_Owner.html`). */
+/** The office's events' words in a language (`i18n/messages/events-office.ts`; P18.98-T4), English when none is passed. */
+export const officeWordsIn = (language: Language = SOURCE_LANGUAGE) => messagesIn(eventsOfficeMessages, language);
+
+const EN = officeWordsIn(SOURCE_LANGUAGE);
+
+/**
+ * The Owner's prototype, verbatim (`KPM_Owner.html`), in English, the catalogue's source: a screen reads the reader's
+ * language, `useMessages(eventsOfficeMessages)`, and each function below takes it last.
+ */
 export const OWNER_PROTOTYPE_COPY = {
   /** `:1655`. */
-  viewFeedback: 'View feedback',
+  viewFeedback: EN.viewFeedback,
   /** `:3767-3768`. */
-  why: 'Why:',
-  improve: 'How to improve:',
+  why: EN.why,
+  improve: EN.improve,
 } as const;
 
-/** *"{title} — Feedback Summary"* (`:3773`). */
-export const summaryTitle = (title: string) => `${title} — Feedback Summary`;
+/** *"{title} — Feedback Summary"* (`:3773`), the title as the office typed it. */
+export const summaryTitle = (title: string, language: Language = SOURCE_LANGUAGE) => officeWordsIn(language).summaryTitle({ title });
 
 /** *"= % Promoters (9–10) − % Detractors (0–6)"* (`:3774`), its numbers the served constants'. */
-export const npsFormula = (c: NpsConstants) =>
-  `= % Promoters (${c.promoterMin}–${c.scaleMax}) − % Detractors (${c.scaleMin}–${c.detractorMax})`;
+export const npsFormula = (c: NpsConstants, language: Language = SOURCE_LANGUAGE) => officeWordsIn(language).npsFormula({
+  promoterMin: String(c.promoterMin), scaleMax: String(c.scaleMax), scaleMin: String(c.scaleMin), detractorMax: String(c.detractorMax),
+});
 
 /** *"· {n} responses"* (`:3774`), and *"· 1 response"* for one (`functional/events.md`, *The module's own strings*). */
-export const responsesLine = (n: number) => `· ${n} ${n === 1 ? 'response' : 'responses'}`;
+export const responsesLine = (n: number, language: Language = SOURCE_LANGUAGE) => officeWordsIn(language).responses({ n });
 
-/** *"{s}/10"* (`:3765`). */
+/** *"{s}/10"* (`:3765`): figures, in no language. */
 export const scoreOutOf = (score: number, c: NpsConstants) => `${score}/${c.scaleMax}`;
 
 /** The NPS figure, *—* when nobody confirmed answered (contradiction 22): 0 is a reading, not an absence. */
 export const npsFigure = (nps: number | null) => (nps === null ? '—' : String(nps));
 
 /**
- * **Our own words.** The roll call and the picker are ours to draw (D-rollcall, D-picker; Fills in the
+ * **Our own words**, in English. The roll call and the picker are ours to draw (D-rollcall, D-picker; Fills in the
  * console's idiom); the summary's three additions are data honesty (contradictions 22, 23). None of OD-39's
  * six words, no phase, no internal id (`components/events/copy.spec.ts`).
  */
 export const ADMIN_COPY = {
-  rollCall: 'Roll call',
+  rollCall: EN.rollCall,
   // *View feedback*'s two tabs (P18.8-T13, ADR-0161 §6): *Roll call* above, and this; the strip's name.
-  feedbackSummaryTab: 'Feedback summary',
-  feedbackParts: 'Roll call and feedback',
-  name: 'Name',
-  role: 'Role',
-  response: 'Response',
-  attendance: 'Attendance',
-  said: { rsvp: 'RSVP’d', claimed: 'Said they came' },
-  attended: 'Attended',
-  absent: 'Absent',
+  feedbackSummaryTab: EN.feedbackSummaryTab,
+  feedbackParts: EN.feedbackParts,
+  name: EN.name,
+  role: EN.role,
+  response: EN.response,
+  attendance: EN.attendance,
+  said: EN.said,
+  attended: EN.attended,
+  absent: EN.absent,
   notConfirmed: '—',
-  ownRow: 'You can’t confirm your own attendance.',
-  saveAttendance: 'Save attendance',
-  saved: 'Attendance saved.',
-  nobodyInvited: 'Nobody was invited to this event.',
-  loadingRollCall: 'Loading the roll call…',
-  loadingSummary: 'Loading feedback…',
-  noFeedback: 'No feedback yet.',
-  unconfirmedTip: 'Attendance not confirmed — not counted in the NPS',
-  absentTip: 'Marked absent — not counted in the NPS',
-  tryAgain: 'Try again',
-  close: 'Close',
+  ownRow: EN.ownRow,
+  saveAttendance: EN.saveAttendance,
+  saved: EN.saved,
+  nobodyInvited: EN.nobodyInvited,
+  loadingRollCall: EN.loadingRollCall,
+  loadingSummary: EN.loadingSummary,
+  noFeedback: EN.noFeedback,
+  unconfirmedTip: EN.unconfirmedTip,
+  absentTip: EN.absentTip,
+  tryAgain: EN.tryAgain,
+  close: EN.close,
   // The picker (D-picker).
-  searchPeople: 'Search people',
-  noMatches: 'Nobody matches.',
-  nobodyLeads: 'Nobody leads anyone yet.',
-  loadingPeople: 'Loading people…',
+  searchPeople: EN.searchPeople,
+  noMatches: EN.noMatches,
+  nobodyLeads: EN.nobodyLeads,
+  loadingPeople: EN.loadingPeople,
   /** A chosen leader the graph no longer shows leading anybody: kept, never dropped. */
-  leadsNobodyNow: 'Leads nobody now',
+  leadsNobodyNow: EN.leadsNobodyNow,
   // The settings panel (P18.5-T5 AC-9), the spec's own words for `EVENT_HAS_RESPONSES`.
-  hasResponses: 'People have already responded to this event, so its start can’t move and it can’t end in the future.',
+  hasResponses: EN.hasResponses,
 } as const;
 
 /** The chosen people the picker cannot list because they have left: one row for all of them, kept. */
-export const leftRow = (n: number) => (n === 1 ? 'Somebody who has left' : `${n} people who have left`);
+export const leftRow = (n: number, language: Language = SOURCE_LANGUAGE) => officeWordsIn(language).left({ n });
 
 /** *"· {k} awaiting attendance confirmation"*, when there are any (contradiction 23; form 5). */
-export const awaitingLine = (k: number) => `· ${k} awaiting attendance confirmation`;
+export const awaitingLine = (k: number, language: Language = SOURCE_LANGUAGE) => officeWordsIn(language).awaiting({ n: k });
 
 /** The confirmation of one row, in words, for a reader who cannot change it. */
-export const attendedWords = (attended: boolean | null) =>
-  attended === true ? ADMIN_COPY.attended : attended === false ? ADMIN_COPY.absent : ADMIN_COPY.notConfirmed;
+export const attendedWords = (attended: boolean | null, language: Language = SOURCE_LANGUAGE) => {
+  const t = officeWordsIn(language);
+  return attended === true ? t.attended : attended === false ? t.absent : ADMIN_COPY.notConfirmed;
+};
 
 /** *"{n} chosen"*, the picker's count. */
-export const chosenCount = (n: number) => `${n} chosen`;
+export const chosenCount = (n: number, language: Language = SOURCE_LANGUAGE) => officeWordsIn(language).chosen({ n });
 
 /** *"Attended — {name}"*: each row's two controls, named for the person they are about. */
-export const markLabel = (mark: 'attended' | 'absent', name: string) =>
-  `${mark === 'attended' ? ADMIN_COPY.attended : ADMIN_COPY.absent} — ${name}`;
+export const markLabel = (mark: 'attended' | 'absent', name: string, language: Language = SOURCE_LANGUAGE) => {
+  const t = officeWordsIn(language);
+  return t.mark({ mark: mark === 'attended' ? t.attended : t.absent, name });
+};
 
 /*
  * ── The panel's times, in the office's zone (invariant §9, ADR-0016) ─────────────────────────────

@@ -149,7 +149,7 @@ describe('tenant detail', () => {
     ['none', null, 'No end date', 'Active'],
     ['active', '2027-01-05', 'Active until 5 Jan 2027', 'Active'],
     ['ended', '2026-09-25', 'Ended 25 Sep 2026', 'Ended'],
-    ['ended_kept_active', '2026-10-02', 'Ended 2 Okt 2026 — kept active', 'Ended — kept active'],
+    ['ended_kept_active', '2026-10-02', 'Ended 2 Oct 2026 — kept active', 'Ended — kept active'],
   ])('P13.2-T3 AC-8: the Lifecycle card shows a %s subscription beside the office’s status', async (state, endDate, line, word) => {
     stubFetch({
       '/admin/tenants/kpm-1': {

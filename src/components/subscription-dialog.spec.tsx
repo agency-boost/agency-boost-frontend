@@ -62,9 +62,9 @@ describe('SubscriptionDialog: the subscription’s cost (P18.8-T3)', () => {
   it('AC-2 shows the month for the whole quota, the duration and the cost over it', () => {
     render(<SubscriptionDialog row={ROW} open onClose={vi.fn()} onSaved={vi.fn()} />);
     const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
-    expect(line(dialog, 'Per month for 10 leaders')).toBe('Rp 3.500.000');
+    expect(line(dialog, 'Per month for 10 leaders')).toBe('IDR 3,500,000');
     expect(line(dialog, 'Duration')).toBe('12 months');
-    expect(line(dialog, 'Over the duration')).toBe('Rp 42.000.000');
+    expect(line(dialog, 'Over the duration')).toBe('IDR 42,000,000');
   });
 
   it('AC-2 recomputes as the fields change', async () => {
@@ -73,12 +73,12 @@ describe('SubscriptionDialog: the subscription’s cost (P18.8-T3)', () => {
     const max = within(dialog).getByLabelText('Maximum leaders');
     await userEvent.clear(max);
     await userEvent.type(max, '13');
-    expect(line(dialog, 'Per month for 13 leaders')).toBe('Rp 4.550.000');
+    expect(line(dialog, 'Per month for 13 leaders')).toBe('IDR 4,550,000');
     const end = within(dialog).getByLabelText('End date');
     await userEvent.clear(end);
     await userEvent.type(end, '2026-03-20');
     expect(line(dialog, 'Duration')).toBe('3 months');
-    expect(line(dialog, 'Over the duration')).toBe('Rp 13.650.000');
+    expect(line(dialog, 'Over the duration')).toBe('IDR 13,650,000');
   });
 
   it('AC-2 reads — naming what is missing: no limit, no price, no dates', async () => {

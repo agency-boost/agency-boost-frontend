@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useMessages } from '@/i18n/language-provider';
+import { supportBannerMessages } from '@/i18n/messages/support-banner';
 import { endImpersonation } from '@/lib/admin';
 import { setAccessToken, setImpersonating, tryRefresh } from '@/lib/api-client';
 import { displayName } from '@/lib/display-name';
@@ -15,6 +17,8 @@ import { useSession } from '@/lib/session';
  */
 export function ImpersonationBanner() {
   const { me, reload } = useSession();
+  // The Super Admin's own language: a support session never follows the person's (`LanguageProvider`'s `follow`).
+  const t = useMessages(supportBannerMessages);
   const [busy, setBusy] = useState(false);
 
   if (!me?.isImpersonating) return null;
@@ -41,7 +45,7 @@ export function ImpersonationBanner() {
       className="flex flex-wrap items-center justify-between gap-2 bg-alert px-4 py-2 text-md font-semibold text-card"
     >
       <span>
-        You are acting as {displayName(me.user)}.{' '}
+        {t.actingAs({ name: displayName(me.user) })}{' '}
         {/*
           * The half that matters most to the operator (P4-T10, §3.13). Discovering the
           * session is read-only from a 403 halfway through a fix is the worst moment to
@@ -53,12 +57,11 @@ export function ImpersonationBanner() {
           * else, so neither of the other two sentences is true of it.
           */}
         {!me.impersonationReadOnly
-          ? 'This session can make changes. It was approved by a second Super Admin.'
+          ? t.canWrite
           : me.impersonationPurpose === 'setup'
-            ? 'This is a setup session: you can change the office’s settings, import people and upload '
-              + 'production files, and nothing else.'
-            : 'You can look but not change anything — a second Super Admin has to approve that.'}{' '}
-        Everything you do is recorded against you as well.
+            ? t.setup
+            : t.lookOnly}{' '}
+        {t.recorded}
       </span>
       <button
         type="button"
@@ -66,7 +69,7 @@ export function ImpersonationBanner() {
         disabled={busy}
         className="rounded-md border border-card/40 px-3 py-1 text-md font-semibold hover:bg-card/10 disabled:opacity-50"
       >
-        {busy ? 'Ending…' : 'Stop acting as them'}
+        {busy ? t.ending : t.stop}
       </button>
     </div>
   );

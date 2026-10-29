@@ -7,6 +7,10 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/format';
 import { listSessions, logoutEverywhere, revokeSession, type Session } from '@/lib/sessions';
 import { useSignOut } from '@/lib/use-sign-out';
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { accountMessages } from '@/i18n/messages/account';
 
 /**
  * A device name a person would recognise, out of a user agent string.
@@ -15,11 +19,15 @@ import { useSignOut } from '@/lib/use-sign-out';
  * UA string on screen is the kind of thing that makes somebody close the page rather than
  * act on it. Unknown stays unknown: a wrong guess is worse than none when the question is
  * whether to sign a device out.
+ *
+ * In the reader's words' language, its last parameter (English when none is passed); a browser's and a system's names
+ * are their own in both.
  */
-export function describeDevice(userAgent: string | null): string {
-  if (!userAgent) return 'Unknown device';
+export function describeDevice(userAgent: string | null, language: Language = SOURCE_LANGUAGE): string {
+  const t = messagesIn(accountMessages, language).sessions;
+  if (!userAgent) return t.unknownDevice;
   const platform = /Android/i.test(userAgent) ? 'Android'
-    : /iPhone|iPad|iPod/i.test(userAgent) ? 'iPhone or iPad'
+    : /iPhone|iPad|iPod/i.test(userAgent) ? t.iPhoneOrIPad
       : /Macintosh/i.test(userAgent) ? 'Mac'
         : /Windows/i.test(userAgent) ? 'Windows'
           : /Linux/i.test(userAgent) ? 'Linux'
@@ -29,13 +37,14 @@ export function describeDevice(userAgent: string | null): string {
       : /Firefox\//i.test(userAgent) ? 'Firefox'
         : /Safari\//i.test(userAgent) ? 'Safari'
           : null;
-  if (!platform && !browser) return 'Unknown device';
-  return [browser, platform].filter(Boolean).join(' on ');
+  if (!platform && !browser) return t.unknownDevice;
+  return browser && platform ? t.browserOn({ browser, platform }) : (browser ?? platform)!;
 }
 
-function when(iso: string | null): string {
-  if (!iso) return 'unknown';
-  return formatDateTime(iso) || 'unknown';
+/** When a session was last used: a moment in the figures' language, or the words' *unknown*. */
+function when(iso: string | null, unknown: string, figures: Language): string {
+  if (!iso) return unknown;
+  return formatDateTime(iso, undefined, figures) || unknown;
 }
 
 /**
@@ -51,6 +60,9 @@ export function SessionList() {
   const [sessions, setSessions] = useState<Session[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const t = useMessages(accountMessages).sessions;
+  const language = useLanguage();
+  const figures = useFigureLanguage();
 
   const load = useCallback(async () => {
     try {
@@ -64,10 +76,8 @@ export function SessionList() {
 
   return (
     <Card>
-      <h2 className="font-display text-lg font-bold text-navy">Where you are signed in</h2>
-      <p className="mt-1 text-md text-muted">
-        One row per device. If you do not recognise one, sign it out.
-      </p>
+      <h2 className="font-display text-lg font-bold text-navy">{t.heading}</h2>
+      <p className="mt-1 text-md text-muted">{t.line}</p>
 
       {error && <ErrorBanner {...error} />}
 
@@ -79,15 +89,15 @@ export function SessionList() {
             <li key={session.sessionId} className="flex flex-wrap items-center gap-3 py-3">
               <div className="min-w-0 flex-1">
                 <p className="text-md text-navy">
-                  {describeDevice(session.userAgent)}
+                  {describeDevice(session.userAgent, language)}
                   {session.current && (
                     <span className="ml-2 rounded-full bg-amber px-2 py-0.5 text-sm font-semibold text-navy">
-                      This device
+                      {t.thisDevice}
                     </span>
                   )}
                 </p>
                 <p className="text-sm text-muted">
-                  {session.ip ?? 'Unknown address'} · last used {when(session.lastUsedAt)}
+                  {t.lastUsed({ address: session.ip ?? t.unknownAddress, when: when(session.lastUsedAt, t.unknownWhen, figures) })}
                 </p>
               </div>
               {!session.current && (
@@ -107,7 +117,7 @@ export function SessionList() {
                     }
                   }}
                 >
-                  Sign this one out
+                  {t.signOutOne}
                 </Button>
               )}
             </li>
@@ -137,11 +147,11 @@ export function SessionList() {
             }
           }}
         >
-          Sign out everywhere
+          {t.signOutEverywhere}
         </Button>
         <p className="mt-2 text-sm text-muted">
           {/* The client's words for the lost device (P18.95-T7 AC-5; UI-030), at every size. */}
-          Ends every session including this one. Use this if you lose your phone.
+          {t.everywhereLine}
         </p>
       </div>
     </Card>

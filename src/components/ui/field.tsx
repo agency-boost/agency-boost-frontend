@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/cn';
 import { REMOVED_ON_PHONE, SWITCH_LINE_PHONE, SWITCH_TAP_PHONE, TAP_TARGET } from '@/components/ui/phone';
 import { ConsoleCode } from '@/components/ui/console-code';
+import { CodeWord, ErrorWords } from '@/components/ui/ui-words';
 import { errorReference } from '@/lib/browser-errors';
 
 /** One place, so `FieldRow.Actions`'s spacer is the same height as a label by construction. */
@@ -46,7 +47,7 @@ FieldRow.Actions = function FieldRowActions({
 }) {
   return (
     <div className={cn('flex flex-col gap-1', className)}>
-      <span aria-hidden="true" className={LABEL_CLASS}>&nbsp;</span>
+      <span aria-hidden="true" className={LABEL_CLASS}>{'\u00a0'}</span>
       <div className="flex flex-wrap items-center gap-2">{children}</div>
     </div>
   );
@@ -153,7 +154,7 @@ export function CodeField({
   inputClassName?: string;
 }) {
   return (
-    <Field label="Code" htmlFor={id} hint={reason} className={className}>
+    <Field label={<CodeWord />} htmlFor={id} hint={reason} className={className}>
       <TextInput id={id} value={value} readOnly className={cn('bg-base text-muted', inputClassName)} />
     </Field>
   );
@@ -761,7 +762,7 @@ export function ErrorBanner({ code, message, requestId }: { code: string; messag
   const reference = errorReference({ code, requestId });
   return (
     <div role="alert" className="rounded-md border border-alert/30 bg-alert/5 p-3">
-      <p className="text-md font-semibold text-alert">{message}</p>
+      <p className="text-md font-semibold text-alert"><ErrorWords code={code} message={message} /></p>
       {reference === null
         ? <ConsoleCode code={code} message={message} />
         : <p className="mt-1 text-2xs text-muted">{reference}</p>}

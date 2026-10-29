@@ -2,6 +2,9 @@ import { act, render, type RenderResult } from '@testing-library/react';
 import { createHash } from 'node:crypto';
 import { Suspense } from 'react';
 import { vi } from 'vitest';
+import { LANGUAGE_COOKIE, LANGUAGE_PENDING, LANGUAGE_UNCHOSEN, type Language } from '@/i18n/language';
+import { FigureLanguageContext, LanguageContext, LanguageProvider } from '@/i18n/language-provider';
+import { setRequestLanguage } from '@/lib/api-client';
 import { SessionContext, type Me, type SessionValue } from '@/lib/session';
 
 /**
@@ -163,6 +166,115 @@ export function renderWithSession(
     ),
     session: value,
   };
+}
+
+/**
+ * **A screen in a language** (P18.98-T1 AC-5; ADR-0179 §9). Every spec reads **English** unless it asks — outside a
+ * `LanguageProvider` the catalogue answers in its source language — so the suites written before the catalogue keep
+ * their assertions. Wrap what a spec renders in this to read it in Indonesian: for `render`, `renderInLayout` or
+ * anything `renderWithSession` does not cover.
+ *
+ * **Its words and its figures** (P18.98-T3): a language a spec asks for is one the reader chose, so a figure is written
+ * in it too (`useFigureLanguage`) — inside the app's provider as well, where it stands for a reader's choice. To read a
+ * screen as a reader who chose nothing reads it, render the app's provider instead: `renderWithLanguage`.
+ */
+export function InLanguage({ language, children }: { language: Language; children: React.ReactNode }) {
+  return (
+    <LanguageContext.Provider value={language}>
+      <FigureLanguageContext.Provider value={language}>{children}</FigureLanguageContext.Provider>
+    </LanguageContext.Provider>
+  );
+}
+
+/**
+ * **An element in a language, for a helper that builds what it renders without JSX** (`renderTab`): a language a spec
+ * asks for (`InLanguage`), or `{ live }`, the app's own `LanguageProvider`, where nothing is chosen but what the browser
+ * chose (`browserChose`); the element as it is when neither is given — English, every spec's default.
+ */
+export function withLanguage(ui: React.ReactElement, language?: Language | { live: boolean }): React.ReactElement {
+  if (language === undefined) return ui;
+  return typeof language === 'string'
+    ? <InLanguage language={language}>{ui}</InLanguage>
+    : <LanguageProvider live={language.live}>{ui}</LanguageProvider>;
+}
+
+/**
+ * **`renderWithSession`, in Indonesian**: how a spec proves a moved module's ID mode — its words the approved
+ * glossary's, and each kept term still English.
+ */
+export function renderInIndonesian(
+  ui: React.ReactElement,
+  session: Partial<SessionValue> = {},
+): RenderResult & { session: SessionValue } {
+  return renderWithSession(<InLanguage language="id">{ui}</InLanguage>, session);
+}
+
+/**
+ * **A screen with the language switch live** (P18.98-T2): `LANGUAGE_LIVE` overridden for one render, as the release at
+ * P18.98-T4's exit will turn it on for everybody. The app's own `LanguageProvider`, `live`, around `renderWithSession`'s
+ * session: the switch and *Language* on *Your account* are drawn, a reader who has chosen nothing reads Indonesian
+ * (`DEFAULT_LANGUAGE`), a choice writes the cookie and `<html lang>`, and the API client is told it.
+ *
+ * Every spec renders **not live** unless it asks — no switch, English — as every screen does until the release, so no
+ * suite written before it changes. Pair with `resetLanguage` in an `afterEach`.
+ */
+export function renderLive(
+  ui: React.ReactElement,
+  session: Partial<SessionValue> = {},
+): RenderResult & { session: SessionValue } {
+  return renderWithLanguage(ui, session, { live: true });
+}
+
+/**
+ * **A screen as a reader reads it, under the app's own `LanguageProvider`** (P18.98-T3), with `LANGUAGE_LIVE` set for
+ * the render — `live: true` as `renderLive`, `live: false` as the product is shipped until P18.98-T4's exit — around
+ * `renderWithSession`'s session. Nothing is chosen but what the browser chose (`browserChose`, before it) or the
+ * screen chooses: so not live, a reader with no choice reads **English words and Indonesian figures**
+ * (`useFigureLanguage`), the product before the phase; live, Indonesian both. Pair with `resetLanguage`.
+ */
+export function renderWithLanguage(
+  ui: React.ReactElement,
+  session: Partial<SessionValue> = {},
+  { live }: { live: boolean },
+): RenderResult & { session: SessionValue } {
+  const value = makeSession(session);
+  return {
+    ...render(
+      <LanguageProvider live={live}>
+        <SessionContext.Provider value={value}>
+          <Suspense fallback={null}>{ui}</Suspense>
+        </SessionContext.Provider>
+      </LanguageProvider>,
+    ),
+    session: value,
+  };
+}
+
+/**
+ * **A browser that chose `language` on an earlier visit**, for the app's provider to find on its first commit: the
+ * `ab_lang` cookie, and `<html lang>` as the page then carries it — the pre-paint script's where the page was
+ * prerendered in the other language, the prerender's own where the two agree. Pair with `resetLanguage`.
+ */
+export function browserChose(language: Language): void {
+  document.cookie = `${LANGUAGE_COOKIE}=${language}; Path=/`;
+  document.documentElement.lang = language;
+}
+
+/**
+ * **A browser that has chosen no language**, for a spec that chose one: no `ab_lang` cookie, no `<html lang>`, nothing
+ * held back, and the API client back on the language the pages are prerendered in. `test/setup.ts` clears the first
+ * three after every test as well.
+ */
+export function resetLanguage(): void {
+  document.cookie = `${LANGUAGE_COOKIE}=; Max-Age=0; Path=/`;
+  document.documentElement.lang = '';
+  document.documentElement.removeAttribute(LANGUAGE_PENDING);
+  setRequestLanguage(LANGUAGE_UNCHOSEN);
+}
+
+/** The `ab_lang` cookie as the browser holds it: `id`, `en`, or `null` for none. */
+export function languageCookie(): string | null {
+  return new RegExp(`(?:^|;\\s*)${LANGUAGE_COOKIE}=([^;]*)`).exec(document.cookie)?.[1] ?? null;
 }
 
 /**

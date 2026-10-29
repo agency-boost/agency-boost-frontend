@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 import { TEXT_TAP } from '@/components/ui/phone';
+import { useMessages } from '@/i18n/language-provider';
+import { inlineSaveMessages } from '@/i18n/messages/inline-save';
 
 /**
  * **A field that saves itself says so** (P18.95-T1 AC-5; ADR-0167 §5, OD-200; the client's UI review of
@@ -24,14 +26,11 @@ export type InlineSaveState = 'idle' | 'saving' | 'saved' | 'failed';
 /** How long *Saved ✓* stays beside the field: two seconds (AC-5). */
 export const INLINE_SAVED_MS = 2000;
 
-/** The words, once (ADR-0167 §5). The client's own: *Saving… → Saved ✓*, *Couldn't save — retry*. */
-export const INLINE_SAVE_COPY = {
-  saving: 'Saving…',
-  saved: 'Saved ✓',
-  failed: "Couldn't save — retry",
-  /** A failure with nothing to send again: what the field held is no longer on the screen. */
-  failedFinal: "Couldn't save",
-} as const;
+/**
+ * The words, once (ADR-0167 §5). The client's own: *Saving… → Saved ✓*, *Couldn't save — retry* — in the catalogue
+ * since P18.98-T2 (`messages/inline-save.ts`), in the reader's language; this is their English, the source.
+ */
+export const INLINE_SAVE_COPY = inlineSaveMessages.en;
 
 /**
  * What one attempt answers: `true` it landed; `false` it failed and may be sent again; `null` it failed
@@ -183,6 +182,7 @@ export function InlineSaveStatus({
   className?: string;
 }) {
   const [said, setSaid] = useState<InlineSaveState>('idle');
+  const t = useMessages(inlineSaveMessages);
   useEffect(() => {
     setSaid(state);
   }, [state]);
@@ -199,18 +199,18 @@ export function InlineSaveStatus({
         className,
       )}
     >
-      {said === 'saving' && INLINE_SAVE_COPY.saving}
-      {said === 'saved' && INLINE_SAVE_COPY.saved}
+      {said === 'saving' && t.saving}
+      {said === 'saved' && t.saved}
       {said === 'failed' && (onRetry ? (
         <button
           type="button"
           onClick={onRetry}
-          aria-label={label ? `${INLINE_SAVE_COPY.failed}: ${label}` : undefined}
+          aria-label={label ? t.retryField({ field: label }) : undefined}
           className={cn('font-semibold text-alert underline underline-offset-2 hover:no-underline', TEXT_TAP)}
         >
-          {INLINE_SAVE_COPY.failed}
+          {t.failed}
         </button>
-      ) : INLINE_SAVE_COPY.failedFinal)}
+      ) : t.failedFinal)}
     </span>
   );
 }

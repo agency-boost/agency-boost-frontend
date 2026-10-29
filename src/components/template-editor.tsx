@@ -5,19 +5,28 @@ import {
   Button, Card, CodeField, ColorInput, Field, FieldRow, Select, Switch, TextInput,
 } from '@/components/ui/field';
 import {
-  benchmarkFromInput, benchmarkToInput, DISPLAY_UNIT_LABEL, formatBenchmark, reexpress, unitFor,
+  benchmarkFromInput, benchmarkToInput, displayUnitLabels, formatBenchmark, reexpress, unitFor,
   type RatioDisplayUnit,
 } from '@/lib/ratio-format';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { DragHandle } from '@/components/ui/drag-handle';
 import { suggestCode } from '@/lib/config-code';
-import { formatNumber, formatRupiahCompact, parseDecimal } from '@/lib/format';
+import { formatNumber, formatPercent, formatRupiah, formatRupiahCompact, parseDecimal } from '@/lib/format';
 import { planSummaryTile, summaryGroups, summaryTileName } from '@/lib/summary-tiles';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
-import { OWN_COPY as LINK_OWN_COPY, PROTOTYPE_COPY as LINK_PROTOTYPE_COPY } from '@/lib/activation';
+import { autoBadge, byHandBadge } from '@/lib/activation';
 import type { TemplateLinkKind, TemplateLinkKinds } from '@/lib/admin';
 import { ActivityBindingFields } from '@/components/activity-binding-fields';
 import { BINDING_ROLE_LABEL, BINDING_ROLES, type ActivityBinding } from '@/lib/activity-binding';
+import { kept } from '@/i18n/kept';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { adminTemplateEditorMessages } from '@/i18n/messages/admin-template-editor';
+import { activityTypesMessages } from '@/i18n/messages/settings-activity-types';
+import { capabilityMessages } from '@/i18n/messages/settings-capability';
+import { checklistMessages } from '@/i18n/messages/settings-checklist';
+import { leadStatusesMessages } from '@/i18n/messages/settings-lead-statuses';
+import { ratioBenchmarksMessages } from '@/i18n/messages/settings-ratio-benchmarks';
+import { settingsMessages } from '@/i18n/messages/settings';
 
 export interface TaxonomyPayload {
   categories: {
@@ -272,6 +281,8 @@ function EditableRow({
   /** Row controls that stay available either way. */
   actions?: React.ReactNode;
 }) {
+  const settings = useMessages(settingsMessages);
+  const t = useMessages(adminTemplateEditorMessages);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(values);
   const [refusal, setRefusal] = useState<{ field: string; error: string } | null>(null);
@@ -293,7 +304,7 @@ function EditableRow({
             disabled={disabled}
             onClick={() => { setDraft(values); setRefusal(null); setEditing(true); }}
           >
-            Edit
+            {settings.edit}
           </Button>
           {actions}
         </span>
@@ -309,7 +320,7 @@ function EditableRow({
         <CodeField
           id={id('code')}
           value={code}
-          reason="Permanent. Everything that refers to this row refers to its code."
+          reason={t.codeReason}
         />
       )}
       {fields.map((field) => {
@@ -369,10 +380,10 @@ function EditableRow({
             setEditing(false);
           }}
         >
-          Save
+          {settings.save}
         </Button>
         <Button variant="secondary" disabled={disabled} onClick={() => setEditing(false)}>
-          Cancel
+          {settings.cancel}
         </Button>
       </span>
     </div>
@@ -396,17 +407,21 @@ export function TaxonomyEditor({
    * unauthored preset took the whole screen down on `.filter of undefined` rather than
    * rendering as the empty thing it is. Empty is a real state for every one of these.
    */
+  const t = useMessages(adminTemplateEditorMessages);
+  const settings = useMessages(settingsMessages);
+  const office = useMessages(activityTypesMessages);
+  const language = useLanguage();
   const categories = payload.categories ?? [];
   const types = payload.types ?? [];
 
   const patchType = (code: string, fields: Partial<TaxonomyPayload['types'][number]>) => onChange({
     ...payload,
-    types: types.map((t) => (t.code === code ? { ...t, ...fields } : t)),
+    types: types.map((row) => (row.code === code ? { ...row, ...fields } : row)),
   });
 
   const drag = useRowDrag(
     types,
-    (t) => t.code,
+    (row) => row.code,
     (next) => onChange({ ...payload, types: next }),
     // 1–12 across every section, not 1–n within each: the seeded taxonomy is numbered
     // that way and `activity-taxonomy.spec.ts` pins it.
@@ -433,13 +448,12 @@ export function TaxonomyEditor({
         */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">
-          {types.length} activity {types.length === 1 ? 'type' : 'types'} across
-          {' '}{categories.length} {categories.length === 1 ? 'section' : 'sections'}
+          {t.taxonomyCount({ types: types.length, sections: categories.length })}
         </p>
         <AddRow
           bare
           disabled={disabled}
-          what="section"
+          noun="section"
           onAdd={(code, label) => onChange({
             ...payload,
             categories: withOrdinals(
@@ -486,11 +500,11 @@ export function TaxonomyEditor({
                   disabled={disabled}
                   code={category.code}
                   fields={[
-                    { key: 'label', label: 'Name' },
+                    { key: 'label', label: settings.name },
                     {
                       key: 'tile',
-                      label: 'Summary tile',
-                      hint: 'Sections with the same tile are counted together. Empty gives it a tile of its own.',
+                      label: office.summaryTile,
+                      hint: office.summaryTileHint,
                       list: 'template-summary-tile-names',
                       maxLength: 80,
                     },
@@ -498,7 +512,7 @@ export function TaxonomyEditor({
                   values={{ label: category.label, tile: summaryTileName(category) }}
                   onSave={(next) => {
                     const label = next.label.trim();
-                    const plan = planSummaryTile(next.tile ?? '', { ...category, label }, categories);
+                    const plan = planSummaryTile(next.tile ?? '', { ...category, label }, categories, language);
                     if ('refused' in plan) return { field: 'tile', error: plan.refused };
                     // Every section the name changes — joined, renamed with the tile, or left alone
                     // in it — in one draft, so the save sends one consistent state.
@@ -517,7 +531,7 @@ export function TaxonomyEditor({
                   }}
                   badge={(
                     <ConfigBadge tone={mine.length > 0 ? 'won' : 'open'}>
-                      {mine.length} {mine.length === 1 ? 'item' : 'items'}
+                      {settings.items({ n: mine.length })}
                     </ConfigBadge>
                   )}
                 >
@@ -553,11 +567,11 @@ export function TaxonomyEditor({
                       disabled={disabled}
                       code={type.code}
                       fields={[
-                        { key: 'label', label: 'Name' },
+                        { key: 'label', label: settings.name },
                         {
                           key: 'description',
-                          label: 'Description',
-                          hint: "Optional. Shown under the name on the agent's screen.",
+                          label: settings.description,
+                          hint: office.descriptionHint,
                         },
                       ]}
                       values={{ label: type.label, description: type.description ?? '' }}
@@ -572,14 +586,14 @@ export function TaxonomyEditor({
                           onClick={() => onChange({
                             ...payload,
                             types: withOrdinals(
-                              types.filter((t) => t.code !== type.code),
+                              types.filter((row) => row.code !== type.code),
                               'displayOrder',
                             ),
                             // A removed type is no longer the template's to count (ADR-0163).
                             ...(payload.bindings ? { bindings: unbound(payload.bindings, type.code) } : {}),
                           })}
                         >
-                          Remove
+                          {settings.remove}
                         </Button>
                       )}
                     >
@@ -596,11 +610,11 @@ export function TaxonomyEditor({
 
             <AddRow
               disabled={disabled}
-              what="activity type"
+              noun="activityType"
               fields={[{
                 key: 'description',
-                label: 'Description',
-                hint: "Optional. Shown under the name on the agent's screen.",
+                label: settings.description,
+                hint: office.descriptionHint,
                 wide: true,
               }]}
               onAdd={(code, label, extra) => onChange({
@@ -643,22 +657,19 @@ function TemplateBinding({
   onChange: (next: TaxonomyPayload) => void;
   disabled?: boolean;
 }) {
+  const t = useMessages(adminTemplateEditorMessages).binding;
   const [editing, setEditing] = useState(false);
   const binding = payload.bindings;
   const name = (code: string) => types.find((type) => type.code === code)?.label ?? code;
   return (
     <Card>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-lg font-bold text-navy">Activity binding</h2>
+        <h2 className="font-display text-lg font-bold text-navy">{t.title}</h2>
         {!editing && (
-          <Button variant="inline" disabled={disabled} onClick={() => setEditing(true)}>Edit binding</Button>
+          <Button variant="inline" disabled={disabled} onClick={() => setEditing(true)}>{t.edit}</Button>
         )}
       </div>
-      <p className="mt-1 text-sm text-muted">
-        {binding
-          ? 'Which activities the summary and the goal plan count at each stage, in every office made from this template.'
-          : 'Not set: offices made from this template count the platform\u2019s default activities.'}
-      </p>
+      <p className="mt-1 text-sm text-muted">{binding ? t.set : t.notSet}</p>
       {editing ? (
         <div className="mt-3 flex flex-col gap-3">
           <ActivityBindingFields
@@ -668,7 +679,7 @@ function TemplateBinding({
             disabled={disabled}
             onChange={(next) => onChange({ ...payload, bindings: next })}
           />
-          <Button variant="secondary" className="self-start" onClick={() => setEditing(false)}>Done</Button>
+          <Button variant="secondary" className="self-start" onClick={() => setEditing(false)}>{t.done}</Button>
         </div>
       ) : binding && (
         <ul className="mt-2 flex flex-col gap-0.5 text-sm text-navy">
@@ -688,6 +699,40 @@ function unbound(binding: ActivityBinding, code: string): ActivityBinding {
   ) as unknown as ActivityBinding;
 }
 
+/** **The kinds of row *Add …* adds**, each named in its own words in both languages (`add`, the catalogue's). */
+type AddNoun = keyof typeof adminTemplateEditorMessages.en.add;
+
+/**
+ * **The slug a new row's field ids are built from**, one per kind — the English noun the button names, as it always was
+ * (`add-code-activity-type`), so a hint points at an id that exists and no id moves with the reader's language.
+ */
+const NOUN_SLUG: Record<AddNoun, string> = {
+  section: 'section',
+  activityType: 'activity-type',
+  salesStage: 'sales-stage',
+  recruitmentStage: 'recruitment-stage',
+  ratio: 'ratio',
+  category: 'category',
+  skill: 'skill',
+  module: 'module',
+  aspect: 'aspect',
+  item: 'item',
+  eventType: 'event-type',
+  productionClubRule: 'production-clubs-rule',
+  mocRule: 'maintenance-of-contract-rule',
+  promotionPathRule: 'promotion-paths-rule',
+  milestone: 'milestone',
+  stage: 'stage',
+  grid: 'grid',
+};
+
+/** The carrier rules' *Add …*, by their kind. */
+const RULE_NOUN: Record<string, AddNoun> = {
+  production_club: 'productionClubRule',
+  moc: 'mocRule',
+  promotion_path: 'promotionPathRule',
+};
+
 /**
  * Add one row to a template payload.
  *
@@ -698,18 +743,22 @@ function unbound(binding: ActivityBinding, code: string): ActivityBinding {
  * is what gets stored. It is also the only field they can never change afterwards: an
  * office records the codes it was seeded with, and every activity logged against them
  * holds one.
+ *
+ * **What it adds is a `noun`, not a phrase** (P18.98-T6): the button and the refusal of a taken code are whole messages
+ * per kind of row (`add`), so each language names the row in its own words — the article *a* or *an* was chosen here,
+ * from the English noun.
  */
 function AddRow({
-  what,
+  noun,
   onAdd,
   disabled,
   bare,
   suggest,
   taken,
-  nameLabel = 'Name',
+  nameLabel,
   fields = [],
 }: {
-  what: string;
+  noun: AddNoun;
   onAdd: (code: string, label: string, extra: Record<string, string>) => void;
   disabled?: boolean;
   /** Drops the divider and top margin, for a row that already sits in a toolbar. */
@@ -725,6 +774,7 @@ function AddRow({
    * twice; saying so beside the field is the same answer, sooner.
    */
   taken?: (code: string) => boolean;
+  /** The name field's label, *Name* where none is given. */
   nameLabel?: string;
   /**
    * Anything beyond the code and the name.
@@ -738,6 +788,9 @@ function AddRow({
     options?: { value: string; label: string }[];
   }[];
 }) {
+  const settings = useMessages(settingsMessages);
+  const t = useMessages(adminTemplateEditorMessages);
+  const named = t.add[noun];
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
   const [touched, setTouched] = useState(false);
@@ -745,13 +798,10 @@ function AddRow({
   const [extra, setExtra] = useState<Record<string, string>>({});
   const clash = code.trim() !== '' && (taken?.(code.trim().toUpperCase()) ?? false);
   /*
-   * `what` is prose — *"activity type"* — and it was going straight into a DOM id, so the
-   * field's id was `add-code-activity type`. A space is a separator in `aria-describedby`
-   * and in `for`, which makes the hint point at two ids that do not exist.
+   * The noun went straight into a DOM id once, as prose — `add-code-activity type` — and a space is a separator in
+   * `aria-describedby` and in `for`, which made the hint point at two ids that did not exist. Its slug, now.
    */
-  const slug = what.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-  /** *an aspect*, *an item*, *a category* — the button said it correctly and the refusal did not. */
-  const article = /^[aeiou]/i.test(what) ? 'an' : 'a';
+  const slug = NOUN_SLUG[noun];
 
   if (!open) {
     return (
@@ -761,13 +811,13 @@ function AddRow({
         disabled={disabled}
         onClick={() => setOpen(true)}
       >
-        Add {article} {what}
+        {named.open}
       </Button>
     );
   }
 
   const name = (
-    <Field label={nameLabel} htmlFor={`add-label-${slug}`} className="min-w-60 flex-1">
+    <Field label={nameLabel ?? settings.name} htmlFor={`add-label-${slug}`} className="min-w-60 flex-1">
       <TextInput
         id={`add-label-${slug}`}
         value={label}
@@ -784,10 +834,10 @@ function AddRow({
     <FieldRow className={bare ? undefined : 'mt-3 border-t border-hairline pt-3'}>
       {suggest && name}
       <Field
-        label="Code"
+        label={settings.code}
         htmlFor={`add-code-${slug}`}
-        hint={suggest ? 'Filled in from the name. Permanent once published.' : 'Permanent once published.'}
-        error={clash ? `This template already has ${article} ${what} with this code.` : undefined}
+        hint={suggest ? t.codeHintSuggested : t.codeHint}
+        error={clash ? named.clash : undefined}
         className="min-w-48"
       >
         <TextInput
@@ -845,9 +895,9 @@ function AddRow({
             setOpen(false);
           }}
         >
-          Add
+          {settings.add}
         </Button>
-        <Button variant="secondary" disabled={disabled} onClick={() => setOpen(false)}>Cancel</Button>
+        <Button variant="secondary" disabled={disabled} onClick={() => setOpen(false)}>{settings.cancel}</Button>
       </FieldRow.Actions>
     </FieldRow>
   );
@@ -886,6 +936,9 @@ export function PipelineEditor({
    * unauthored preset took the whole screen down on `.filter of undefined` rather than
    * rendering as the empty thing it is. Empty is a real state for every one of these.
    */
+  const t = useMessages(adminTemplateEditorMessages);
+  const settings = useMessages(settingsMessages);
+  const ladder = useMessages(leadStatusesMessages);
   const allStatuses = payload.statuses ?? [];
   const mine = allStatuses.filter((s) => s.pipeline === pipeline);
 
@@ -902,10 +955,7 @@ export function PipelineEditor({
 
   return (
     <div>
-      <p className="mb-4 text-sm text-muted">
-        {mine.length} {mine.length === 1 ? 'status' : 'statuses'} — order determines the
-        pipeline stage sequence.
-      </p>
+      <p className="mb-4 text-sm text-muted">{t.pipeline.count({ n: mine.length })}</p>
 
       <Card>
         <ul className="flex flex-col divide-y divide-hairline">
@@ -934,11 +984,11 @@ export function PipelineEditor({
                   rowKey={stage.code}
                   disabled={disabled}
                   code={stage.code}
-                  fields={[{ key: 'label', label: 'Name' }]}
+                  fields={[{ key: 'label', label: settings.name }]}
                   badge={stage.isTerminal ? (
-                    <ConfigBadge tone="won">Closes the pipeline</ConfigBadge>
+                    <ConfigBadge tone="won">{ladder.closesPipeline}</ConfigBadge>
                   ) : (
-                    <ConfigBadge tone="open">Open</ConfigBadge>
+                    <ConfigBadge tone="open">{ladder.open}</ConfigBadge>
                   )}
                   values={{ label: stage.label }}
                   onSave={(next) => onChange({
@@ -960,7 +1010,7 @@ export function PipelineEditor({
                 {!stage.isTerminal && (
                   <Switch
                     id={`tpl-late-${stage.code}`}
-                    label="Expected to close"
+                    label={kept('Expected to close')}
                     checked={stage.isLateStage ?? false}
                     disabled={disabled}
                     onChange={(next) => onChange({
@@ -982,13 +1032,13 @@ export function PipelineEditor({
                         : s)),
                     })}
                   >
-                    Make this close it
+                    {t.pipeline.makeClose}
                   </Button>
                 )}
                 <Button
                   variant="inlineDanger"
                   disabled={disabled || stage.isTerminal}
-                  title={stage.isTerminal ? 'Make another stage close the pipeline first.' : undefined}
+                  title={stage.isTerminal ? ladder.closingKept : undefined}
                   onClick={() => onChange({
                     statuses: withOrdinals(
                       allStatuses.filter((s) => s.code !== stage.code),
@@ -997,7 +1047,7 @@ export function PipelineEditor({
                     ),
                   })}
                 >
-                  Remove
+                  {settings.remove}
                 </Button>
               </span>
             </li>
@@ -1007,7 +1057,7 @@ export function PipelineEditor({
 
         <AddRow
           disabled={disabled}
-          what={`${pipeline} stage`}
+          noun={pipeline === 'sales' ? 'salesStage' : 'recruitmentStage'}
           onAdd={(code, label) => onChange({
             // Appended, and never terminal: exactly one stage closes each pipeline, and
             // moving that is a deliberate second act rather than a side effect of adding.
@@ -1058,16 +1108,14 @@ function FormulaSide({
   disabled?: boolean;
   onChange: (next: string[]) => void;
 }) {
+  const t = useMessages(adminTemplateEditorMessages).ratios;
   return (
     <fieldset className="min-w-0 flex-1">
       <legend className="text-sm font-semibold text-navy">{heading}</legend>
       {available.length === 0 ? (
         // The taxonomy tab has nothing yet, or could not be read. Showing the codes it
         // already holds beats an empty box that looks like a broken control.
-        <p className="mt-1 text-sm text-muted">
-          {codes.length ? codes.join(' + ') : 'Nothing yet.'} — add activity types on the
-          Activity types tab first.
-        </p>
+        <p className="mt-1 text-sm text-muted">{t.formulaEmpty({ codes: codes.join(' + ') })}</p>
       ) : (
         <ul className="mt-1 flex flex-wrap gap-3">
           {available.map((type) => (
@@ -1127,6 +1175,12 @@ export function RatioSetEditor({
    * unauthored preset took the whole screen down on `.filter of undefined` rather than
    * rendering as the empty thing it is. Empty is a real state for every one of these.
    */
+  const t = useMessages(adminTemplateEditorMessages).ratios;
+  const settings = useMessages(settingsMessages);
+  const office = useMessages(ratioBenchmarksMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const units = displayUnitLabels(language, figures);
   const allRatios = payload.ratios ?? [];
 
   const patch = (code: string, fields: Partial<RatioSetPayload['ratios'][number]>) => onChange({
@@ -1157,27 +1211,31 @@ export function RatioSetEditor({
             disabled={disabled}
             code={ratio.code}
             fields={[
-              { key: 'label', label: 'Name' },
+              { key: 'label', label: settings.name },
               {
                 key: 'benchmark',
-                label: ratio.comparison === 'band' ? 'Within, either side' : 'On track at or above',
+                label: ratio.comparison === 'band' ? office.withinEitherSide : office.atOrAbove,
                 hint: ratio.comparison === 'band'
-                  ? 'Percentage points either side of an even split.'
-                  : 'Typed the way it is shown — 15 for 15% as a percentage, 0,30 as a number.',
+                  ? office.bandHintEmpty
+                  // The units' examples are figures, in the reader's (P18.98-T3): *0,30*, *0.30* in English.
+                  : t.typedAsShown({
+                    percent: formatPercent(15, {}, figures),
+                    decimal: formatNumber(0.3, { decimals: 2 }, figures),
+                  }),
               },
               // A band is points and has no other way to be written, so it gets no choice.
               ...(ratio.comparison === 'band' ? [] : [{
                 key: 'displayUnit',
-                label: 'Shown as',
+                label: office.shownAs,
                 options: [
-                  { value: 'percent', label: DISPLAY_UNIT_LABEL.percent },
-                  { value: 'decimal', label: DISPLAY_UNIT_LABEL.decimal },
+                  { value: 'percent', label: units.percent },
+                  { value: 'decimal', label: units.decimal },
                 ],
               }]),
             ]}
             values={{
               label: ratio.label,
-              benchmark: benchmarkToInput(ratio.benchmark, unitFor(ratio)),
+              benchmark: benchmarkToInput(ratio.benchmark, unitFor(ratio), figures),
               displayUnit: unitFor(ratio),
             }}
             reshape={(next, changed, previous) => (changed === 'displayUnit'
@@ -1187,6 +1245,7 @@ export function RatioSetEditor({
                   previous.benchmark,
                   previous.displayUnit as RatioDisplayUnit,
                   next.displayUnit as RatioDisplayUnit,
+                  figures,
                 ),
               }
               : next)}
@@ -1212,27 +1271,27 @@ export function RatioSetEditor({
                   ),
                 })}
               >
-                Remove
+                {settings.remove}
               </Button>
             )}
           >
             <p className="text-md font-semibold text-navy">{ratio.label}</p>
             <p className="text-sm text-muted">
-              {ratio.comparison === 'band' ? 'On track within ' : 'On track at or above '}
-              <strong>{formatBenchmark(ratio.benchmark, unitFor(ratio))}</strong>
+              {ratio.comparison === 'band' ? office.onTrackWithin : office.onTrackAtOrAbove}
+              <strong>{formatBenchmark(ratio.benchmark, unitFor(ratio), figures, language)}</strong>
             </p>
           </EditableRow>
 
           <div className="mt-3 flex flex-wrap gap-4 border-t border-hairline pt-3">
             <FormulaSide
-              heading="Counts"
+              heading={office.counts}
               codes={ratio.numerator}
               available={available}
               disabled={disabled}
               onChange={(numerator) => patch(ratio.code, { numerator })}
             />
             <FormulaSide
-              heading="Out of"
+              heading={office.outOf}
               codes={ratio.denominator}
               available={available}
               disabled={disabled}
@@ -1240,11 +1299,7 @@ export function RatioSetEditor({
             />
           </div>
           <p className="mt-2 text-sm text-muted">
-            This is what every new office of this company starts from, and what a comparison
-            across offices is computed with. An office may change its own copy afterwards
-            (ADR-0024) — its screen says so when it has, and the comparison still uses this.
-            Changing it here changes what the <strong>next</strong> office starts from;
-            offices already created keep the copy they were built with.
+            {t.startsFrom({ strong: (words) => <strong>{words}</strong> })}
           </p>
 
           <Button
@@ -1258,7 +1313,7 @@ export function RatioSetEditor({
               ),
             })}
           >
-            Remove
+            {settings.remove}
           </Button>
         </Card>
         );
@@ -1266,7 +1321,7 @@ export function RatioSetEditor({
 
       <AddRow
         disabled={disabled}
-        what="ratio"
+        noun="ratio"
         onAdd={(code, label) => onChange({
           ratios: withOrdinals(
             [...allRatios, {
@@ -1296,8 +1351,6 @@ export interface TrainingTaxonomyPayload {
 
 type TrainingTab = 'categories' | 'skills' | 'modules';
 
-const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
 /**
  * The training taxonomy of a company template (P5-T1, ADR-0029).
  *
@@ -1326,6 +1379,9 @@ export function TrainingEditor({
   disabled?: boolean;
 }) {
   const tab = section;
+  const all = useMessages(adminTemplateEditorMessages);
+  const t = all.training;
+  const settings = useMessages(settingsMessages);
   const [skillsCategory, setSkillsCategory] = useState('');
   const [modulesCategory, setModulesCategory] = useState('');
   const [modulesSkill, setModulesSkill] = useState('all');
@@ -1357,16 +1413,16 @@ export function TrainingEditor({
     return (
       <>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm text-muted">{count(categories.length, 'category', 'categories')}</p>
+          <p className="text-sm text-muted">{t.categories({ n: categories.length })}</p>
           <AddRow
             bare
             suggest
             disabled={disabled}
-            what="category"
+            noun="category"
             fields={[{
               key: 'description',
-              label: 'Description',
-              hint: 'Optional. Agents read it under the category.',
+              label: settings.description,
+              hint: t.categoryHint,
               wide: true,
             }]}
             taken={(code) => categories.some((c) => c.code === code)}
@@ -1379,7 +1435,7 @@ export function TrainingEditor({
           />
         </div>
         <Card className="p-0">
-          {categories.length === 0 ? empty('No training categories yet.') : (
+          {categories.length === 0 ? empty(t.noCategories) : (
             <ul className="flex flex-col divide-y divide-hairline">
               {categories.map((category) => {
                 const mine = skills.filter((s) => s.categoryCode === category.code);
@@ -1393,11 +1449,11 @@ export function TrainingEditor({
                       disabled={disabled}
                       code={category.code}
                       fields={[
-                        { key: 'label', label: 'Name' },
+                        { key: 'label', label: settings.name },
                         {
                           key: 'description',
-                          label: 'Description',
-                          hint: "Optional. Shown under the name on the agent's training screen.",
+                          label: settings.description,
+                          hint: t.categoryEditHint,
                         },
                       ]}
                       values={{ label: category.label, description: category.description ?? '' }}
@@ -1410,17 +1466,17 @@ export function TrainingEditor({
                         <Button
                           variant="inlineDanger"
                           disabled={disabled || mine.length > 0}
-                          title={mine.length > 0 ? 'Remove its skills first.' : undefined}
+                          title={mine.length > 0 ? t.removeSkillsFirst : undefined}
                           onClick={() => put({ categories: categories.filter((c) => c.code !== category.code) })}
                         >
-                          Remove
+                          {settings.remove}
                         </Button>
                       )}
                       badge={mine.length === 0
-                        ? <ConfigBadge tone="open">Empty</ConfigBadge>
+                        ? <ConfigBadge tone="open">{t.empty}</ConfigBadge>
                         : (
                           <ConfigBadge tone={offered > 0 ? 'won' : 'open'}>
-                            {count(mine.length, 'skill', 'skills')} · {count(offered, 'module', 'modules')} published
+                            {t.categoryBadge({ skills: mine.length, modules: offered })}
                           </ConfigBadge>
                         )}
                     >
@@ -1443,7 +1499,7 @@ export function TrainingEditor({
       <>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className={filter}>
-            <label htmlFor="template-training-skills-category" className={filterLabel}>Category</label>
+            <label htmlFor="template-training-skills-category" className={filterLabel}>{t.category}</label>
             <Select
               id="template-training-skills-category"
               value={skillsTabCategory?.code ?? ''}
@@ -1457,7 +1513,7 @@ export function TrainingEditor({
               bare
               suggest
               disabled={disabled}
-              what="skill"
+              noun="skill"
               taken={(code) => skills.some((s) => s.code === code)}
               onAdd={(code, label) => put({
                 skills: [...skills, { code, categoryCode: skillsTabCategory.code, label }],
@@ -1466,8 +1522,8 @@ export function TrainingEditor({
           )}
         </div>
         <Card className="p-0">
-          {!skillsTabCategory ? empty('Add a category first — a skill always sits in one.')
-            : mine.length === 0 ? empty('No skills for this category yet.') : (
+          {!skillsTabCategory ? empty(t.categoryFirst)
+            : mine.length === 0 ? empty(t.noSkills) : (
               <ul className="flex flex-col divide-y divide-hairline">
                 {mine.map((skill) => {
                   const teaching = modules.filter((m) => m.skillCode === skill.code);
@@ -1478,11 +1534,11 @@ export function TrainingEditor({
                         disabled={disabled}
                         code={skill.code}
                         fields={[
-                          { key: 'label', label: 'Name' },
+                          { key: 'label', label: settings.name },
                           {
                             key: 'categoryCode',
-                            label: 'Category',
-                            hint: 'Its modules move with it.',
+                            label: t.category,
+                            hint: t.modulesMove,
                             options: categories.map((c) => ({ value: c.code, label: c.label })),
                           },
                         ]}
@@ -1496,15 +1552,15 @@ export function TrainingEditor({
                           <Button
                             variant="inlineDanger"
                             disabled={disabled || teaching.length > 0}
-                            title={teaching.length > 0 ? 'Remove its modules first.' : undefined}
+                            title={teaching.length > 0 ? t.removeModulesFirst : undefined}
                             onClick={() => put({ skills: skills.filter((s) => s.code !== skill.code) })}
                           >
-                            Remove
+                            {settings.remove}
                           </Button>
                         )}
                         badge={(
                           <ConfigBadge tone={teaching.length > 0 ? 'won' : 'open'}>
-                            {count(teaching.length, 'module', 'modules')}
+                            {t.modules({ n: teaching.length })}
                           </ConfigBadge>
                         )}
                       >
@@ -1529,7 +1585,7 @@ export function TrainingEditor({
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className={filter}>
             <span className={pair}>
-              <label htmlFor="template-training-modules-category" className={filterLabel}>Category</label>
+              <label htmlFor="template-training-modules-category" className={filterLabel}>{t.category}</label>
               <Select
                 id="template-training-modules-category"
                 value={modulesTabCategory?.code ?? ''}
@@ -1539,27 +1595,27 @@ export function TrainingEditor({
               </Select>
             </span>
             <span className={pair}>
-              <label htmlFor="template-training-modules-skill" className={filterLabel}>Skill</label>
+              <label htmlFor="template-training-modules-skill" className={filterLabel}>{t.skill}</label>
               <Select
                 id="template-training-modules-skill"
                 value={modulesTabSkill}
                 onChange={(e) => setModulesSkill(e.target.value)}
               >
-                <option value="all">All skills</option>
+                <option value="all">{t.allSkills}</option>
                 {modulesTabSkills.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
               </Select>
             </span>
           </div>
           {/* A module teaches one skill, so it is added to the one chosen — "All skills" names none. */}
           {modulesTabSkill === 'all' ? (
-            <p className="text-sm text-muted">Choose a skill to add a module to it.</p>
+            <p className="text-sm text-muted">{t.chooseSkill}</p>
           ) : (
             <AddRow
               bare
               suggest
               disabled={disabled}
-              what="module"
-              nameLabel="Title"
+              noun="module"
+              nameLabel={all.title}
               taken={(code) => modules.some((m) => m.code === code)}
               onAdd={(code, title) => put({
                 // A draft, as an office's new module is: publishing is a decision about content,
@@ -1570,7 +1626,7 @@ export function TrainingEditor({
           )}
         </div>
         <Card className="p-0">
-          {rows.length === 0 ? empty('No modules for this category/skill yet.') : (
+          {rows.length === 0 ? empty(t.noModules) : (
             <ul className="flex flex-col divide-y divide-hairline">
               {rows.map((module) => {
                 const isPublished = module.publishState === 'published';
@@ -1581,21 +1637,21 @@ export function TrainingEditor({
                       disabled={disabled}
                       code={module.code}
                       fields={[
-                        { key: 'title', label: 'Title' },
+                        { key: 'title', label: all.title },
                         {
                           key: 'skillCode',
-                          label: 'Skill',
+                          label: t.skill,
                           options: skills.map((s) => ({
                             value: s.code, label: `${categoryLabel(s.categoryCode)} › ${s.label}`,
                           })),
                         },
                         {
                           key: 'publishState',
-                          label: 'Publish state',
-                          hint: 'Whether an office made from this template offers it to agents.',
+                          label: t.publishState,
+                          hint: t.publishStateHint,
                           options: [
-                            { value: 'draft', label: 'Draft' },
-                            { value: 'published', label: 'Published' },
+                            { value: 'draft', label: t.draft },
+                            { value: 'published', label: t.published },
                           ],
                         },
                       ]}
@@ -1616,7 +1672,7 @@ export function TrainingEditor({
                       })}
                       badge={(
                         <ConfigBadge tone={isPublished ? 'won' : 'open'}>
-                          {isPublished ? 'Published' : 'Draft'}
+                          {isPublished ? t.published : t.draft}
                         </ConfigBadge>
                       )}
                       actions={(
@@ -1625,7 +1681,7 @@ export function TrainingEditor({
                           disabled={disabled}
                           onClick={() => put({ modules: modules.filter((m) => m.code !== module.code) })}
                         >
-                          Remove
+                          {settings.remove}
                         </Button>
                       )}
                     >
@@ -1659,20 +1715,15 @@ export interface ActivationChecklistPayload {
   }[];
 }
 
-/** The three feature links, which exist for every company. Training links name a module code. */
-const ACTIVATION_FEATURE_OPTIONS = [
-  { value: '', label: 'No link (manual)' },
-  { value: 'feature:goals', label: 'Goal Settings' },
-  { value: 'feature:leads', label: 'Leads Management' },
-  { value: 'feature:activity', label: 'Activity Management' },
-];
-
 /**
- * What a link does, in the prototype's sense — *"auto-complete when the agent does that action"*
- * (`KPM_Owner.html:1528`) — and in the future tense, because nothing completes an item yet. It read
- * *"…once the evaluator for that link ships"*: our build, in a developer's words (P10.1-T2).
+ * The three feature links, which exist for every company — each a page's title, kept English (§A.2). Training links
+ * name a module code. *No link (manual)* comes first, in the office's checklist's words (`settings-checklist.ts`).
  */
-const ACTIVATION_LINK_HINT = 'A linked item will complete on its own when the agent does that action.';
+const ACTIVATION_FEATURES = [
+  { value: 'feature:goals', label: kept('Goal Settings') },
+  { value: 'feature:leads', label: kept('Leads Management') },
+  { value: 'feature:activity', label: kept('Activity Management') },
+];
 
 /** `ConfigBadge`'s pill, painted on the button that carries the badge's words (ADR-0062 §2, form 2). */
 const LINK_BADGE_FACE = 'h-auto w-auto whitespace-nowrap rounded-pill px-2 py-0.5 text-2xs font-bold uppercase tracking-wide';
@@ -1686,21 +1737,19 @@ const LINK_BADGE_FACE = 'h-auto w-auto whitespace-nowrap rounded-pill px-2 py-0.
  * chosen and not saved — claims neither.
  */
 function TemplateLinkBadge({ link }: { link: TemplateLinkKind }) {
-  return link.live ? (
+  // The activation's own words, in the reader's language (`activation.ts`; P18.98-T6): `completesWhen` is the
+  // registry's sentence, as the server sends it.
+  const language = useLanguage();
+  const badge = link.live ? autoBadge(link.completesWhen, language) : byHandBadge(language);
+  return (
     <TippedGlyph
-      glyph={LINK_PROTOTYPE_COPY.auto}
-      name={LINK_OWN_COPY.autoName(link.completesWhen)}
-      tip={LINK_OWN_COPY.autoTip(link.completesWhen)}
+      glyph={badge.glyph}
+      name={badge.name}
+      tip={badge.tip}
       align="fit"
-      face={`${LINK_BADGE_FACE} bg-success/10 text-success hover:bg-success/15 hover:text-success`}
-    />
-  ) : (
-    <TippedGlyph
-      glyph={LINK_OWN_COPY.byHand}
-      name={LINK_OWN_COPY.byHandName}
-      tip={LINK_OWN_COPY.byHandTip}
-      align="fit"
-      face={`${LINK_BADGE_FACE} border border-hairline bg-base text-muted hover:bg-base hover:text-navy`}
+      face={link.live
+        ? `${LINK_BADGE_FACE} bg-success/10 text-success hover:bg-success/15 hover:text-success`
+        : `${LINK_BADGE_FACE} border border-hairline bg-base text-muted hover:bg-base hover:text-navy`}
     />
   );
 }
@@ -1733,18 +1782,23 @@ export function ActivationChecklistEditor({
   onChange: (next: ActivationChecklistPayload) => void;
   disabled?: boolean;
 }) {
+  const t = useMessages(adminTemplateEditorMessages).checklist;
+  const settings = useMessages(settingsMessages);
+  const office = useMessages(checklistMessages);
   // A template nobody has authored yet arrives as `payload: {}`; empty is a real state.
   const aspects = payload.aspects ?? [];
   const put = (next: ActivationChecklistPayload['aspects']) => onChange({ aspects: next });
 
+  // A module's title is the company's, as typed; *Training* is the menu's, kept (§A.1).
   const linkOptions = [
-    ...ACTIVATION_FEATURE_OPTIONS,
-    ...modules.map((m) => ({ value: `training:${m.code}`, label: `Training · ${m.title}` })),
+    { value: '', label: office.noLink },
+    ...ACTIVATION_FEATURES,
+    ...modules.map((m) => ({ value: `training:${m.code}`, label: `${kept('Training')} · ${m.title}` })),
   ];
   const linkLabel = (link: string | null | undefined) =>
     linkOptions.find((o) => o.value === (link ?? ''))?.label
     // A module this company's taxonomy no longer defines still has to render as something.
-    ?? `Training · ${String(link).replace(/^training:/, '')}`;
+    ?? `${kept('Training')} · ${String(link).replace(/^training:/, '')}`;
 
   const patchAspect = (code: string, fields: Partial<ActivationChecklistPayload['aspects'][number]>) =>
     put(aspects.map((a) => (a.code === code ? { ...a, ...fields } : a)));
@@ -1791,21 +1845,20 @@ export function ActivationChecklistEditor({
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">
-          {count(aspects.flatMap((a) => a.items).length, 'item', 'items')} across
-          {' '}{count(aspects.length, 'aspect', 'aspects')}
+          {t.count({ items: aspects.flatMap((a) => a.items).length, aspects: aspects.length })}
         </p>
         <AddRow
           bare
           suggest
           disabled={disabled}
-          what="aspect"
+          noun="aspect"
           taken={(code) => aspects.some((a) => a.code === code)}
           onAdd={(code, label) => put([...aspects, { code, label, items: [] }])}
         />
       </div>
 
       {aspects.length === 0 ? (
-        <Card><p className="text-md text-muted">No aspects yet.</p></Card>
+        <Card><p className="text-md text-muted">{t.noAspects}</p></Card>
       ) : aspects.map((aspect) => {
         const { className: aspectCls, ...aspectRow } = aspectDrag.rowProps(aspect.code);
         return (
@@ -1824,16 +1877,18 @@ export function ActivationChecklistEditor({
                 rowKey={`aspect-${aspect.code}`}
                 disabled={disabled}
                 code={aspect.code}
-                fields={[{ key: 'label', label: 'Name' }]}
+                fields={[{ key: 'label', label: settings.name }]}
                 values={{ label: aspect.label }}
                 onSave={(next) => patchAspect(aspect.code, { label: next.label.trim() })}
                 badge={(
                   <ConfigBadge tone={aspect.items.length > 0 ? 'won' : 'open'}>
-                    {count(aspect.items.length, 'item', 'items')}
+                    {settings.items({ n: aspect.items.length })}
                   </ConfigBadge>
                 )}
               >
-                <h3 className="font-display text-lg font-bold text-navy">{aspect.label}</h3>
+                {/* An `h2`, as the office's own checklist and this screen's other editors head theirs: an `h3` under the
+                    page's `h1` skipped a level (axe's heading-order, found walking it in P18.98-T6). */}
+                <h2 className="font-display text-lg font-bold text-navy">{aspect.label}</h2>
               </EditableRow>
             </div>
             <span className="flex flex-wrap items-center gap-2">
@@ -1842,11 +1897,10 @@ export function ActivationChecklistEditor({
               <Button
                 variant="inlineDanger"
                 disabled={disabled}
-                title={`Removes ${aspect.label} and its ${aspect.items.length} `
-                  + `${aspect.items.length === 1 ? 'item' : 'items'}.`}
+                title={t.removesAspect({ name: aspect.label, n: aspect.items.length })}
                 onClick={() => put(aspects.filter((a) => a.code !== aspect.code))}
               >
-                Remove
+                {settings.remove}
               </Button>
             </span>
           </div>
@@ -1869,11 +1923,11 @@ export function ActivationChecklistEditor({
                   disabled={disabled}
                   code={item.code}
                   fields={[
-                    { key: 'label', label: 'Item' },
+                    { key: 'label', label: settings.item },
                     {
                       key: 'autoLink',
-                      label: 'Completes from',
-                      hint: ACTIVATION_LINK_HINT,
+                      label: office.completesFrom,
+                      hint: t.linkHint,
                       options: linkOptions,
                     },
                   ]}
@@ -1891,7 +1945,7 @@ export function ActivationChecklistEditor({
                         items: aspect.items.filter((i) => i.code !== item.code),
                       })}
                     >
-                      Remove
+                      {settings.remove}
                     </Button>
                   )}
                 >
@@ -1917,12 +1971,12 @@ export function ActivationChecklistEditor({
             <AddRow
               suggest
               disabled={disabled}
-              what="item"
-              nameLabel="Item"
+              noun="item"
+              nameLabel={settings.item}
               fields={[{
                 key: 'autoLink',
-                label: 'Completes from',
-                hint: ACTIVATION_LINK_HINT,
+                label: office.completesFrom,
+                hint: t.linkHint,
                 options: linkOptions,
                 wide: true,
               }]}
@@ -1974,27 +2028,27 @@ export function EventTypesEditor({
   onChange: (next: EventTypesPayload) => void;
   disabled?: boolean;
 }) {
+  const t = useMessages(adminTemplateEditorMessages).events;
+  const settings = useMessages(settingsMessages);
   // A template nobody has authored yet arrives as `payload: {}`; empty is a real state.
   const types = payload.types ?? [];
   const put = (next: EventTypesPayload['types']) => onChange({ types: next });
-  const drag = useRowDrag(types, (t) => t.code, put, { field: 'displayOrder' });
+  const drag = useRowDrag(types, (row) => row.code, put, { field: 'displayOrder' });
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted">
-          {count(types.length, 'type', 'types')} every new office of this company starts with
-        </p>
+        <p className="text-sm text-muted">{t.count({ n: types.length })}</p>
         <AddRow
           bare
           suggest
           disabled={disabled}
-          what="event type"
+          noun="eventType"
           fields={[
-            { key: 'description', label: 'Description', hint: 'Optional.', wide: true },
-            { key: 'emoji', label: 'Emoji', hint: 'Optional. One character.' },
+            { key: 'description', label: settings.description, hint: settings.optional, wide: true },
+            { key: 'emoji', label: t.emoji, hint: t.emojiAddHint },
           ]}
-          taken={(code) => types.some((t) => t.code === code)}
+          taken={(code) => types.some((row) => row.code === code)}
           onAdd={(code, label, extra) => put([
             ...types, {
               code,
@@ -2011,10 +2065,7 @@ export function EventTypesEditor({
 
       {types.length === 0 ? (
         <Card>
-          <p className="text-md text-muted">
-            No types yet. An office with none has nothing to file an event under, so publishing
-            an empty list is refused.
-          </p>
+          <p className="text-md text-muted">{t.none}</p>
         </Card>
       ) : (
         <Card className="p-0">
@@ -2036,18 +2087,18 @@ export function EventTypesEditor({
                   disabled={disabled}
                   code={type.code}
                   fields={[
-                    { key: 'label', label: 'Name' },
+                    { key: 'label', label: settings.name },
                     {
                       key: 'description',
-                      label: 'Description',
-                      hint: 'Optional. Shown under the name on the office’s own settings screen.',
+                      label: settings.description,
+                      hint: t.descriptionHint,
                     },
-                    { key: 'emoji', label: 'Emoji', hint: 'Optional. One character, for the list.' },
+                    { key: 'emoji', label: t.emoji, hint: t.emojiHint },
                     {
                       key: 'color',
-                      label: 'Color',
+                      label: t.color,
                       kind: 'color',
-                      hint: 'Optional. Pick one, or paste a colour your company already uses.',
+                      hint: t.colorHint,
                     },
                   ]}
                   values={{
@@ -2056,20 +2107,20 @@ export function EventTypesEditor({
                     emoji: type.emoji ?? '',
                     color: type.color ?? '',
                   }}
-                  onSave={(next) => put(types.map((t) => (t.code === type.code ? {
-                    ...t,
+                  onSave={(next) => put(types.map((row) => (row.code === type.code ? {
+                    ...row,
                     label: next.label.trim(),
                     description: next.description.trim() || null,
                     emoji: next.emoji.trim() || null,
                     color: next.color.trim() || null,
-                  } : t)))}
+                  } : row)))}
                   actions={(
                     <Button
                       variant="inlineDanger"
                       disabled={disabled}
-                      onClick={() => put(types.filter((t) => t.code !== type.code))}
+                      onClick={() => put(types.filter((row) => row.code !== type.code))}
                     >
-                      Remove
+                      {settings.remove}
                     </Button>
                   )}
                 >
@@ -2123,20 +2174,13 @@ export interface CampaignKindsPayload {
   }[];
 }
 
-/** The three kinds a carrier rule can be, in the order a Super Admin thinks about them. */
-const RULE_KINDS = [
-  { code: 'production_club', label: 'Production clubs', blurb: 'Annual recognition tiers.' },
-  { code: 'moc', label: 'Maintenance of Contract', blurb: 'What a contract has to keep meeting.' },
-  { code: 'promotion_path', label: 'Promotion paths', blurb: 'What a promotion asks for.' },
-];
+/** The three kinds a carrier rule can be, in the order a Super Admin thinks about them; their words are `rules.kinds`. */
+const RULE_KINDS = ['production_club', 'moc', 'promotion_path'] as const;
 
-const COMPARATORS = [
-  { value: 'gte', label: 'at least (≥)' },
-  { value: 'gt', label: 'more than (>)' },
-  { value: 'lte', label: 'at most (≤)' },
-  { value: 'lt', label: 'less than (<)' },
-  { value: 'eq', label: 'exactly (=)' },
-];
+/** The comparators a criterion offers, in order; their words are `rules.comparators`. */
+const COMPARATORS = ['gte', 'gt', 'lte', 'lt', 'eq'] as const;
+const isComparator = (value: string): value is (typeof COMPARATORS)[number] =>
+  (COMPARATORS as readonly string[]).includes(value);
 
 /**
  * A company's carrier rules (ADR-0026, ADR-0034, P5-T9 AC-4).
@@ -2169,6 +2213,11 @@ export function CampaignKindsEditor({
   onChange: (next: CampaignKindsPayload) => void;
   disabled?: boolean;
 }) {
+  const t = useMessages(adminTemplateEditorMessages).rules;
+  const settings = useMessages(settingsMessages);
+  const figures = useFigureLanguage();
+  const comparators = COMPARATORS.map((value) => ({ value, label: t.comparators[value] }));
+  const comparatorLabel = (value: string) => (isComparator(value) ? t.comparators[value] : value);
   const rules = payload.rules ?? [];
   const put = (next: CampaignKindsPayload['rules']) => onChange({ rules: next });
   const patch = (code: string, kind: string, fields: Partial<CampaignKindsPayload['rules'][number]>) =>
@@ -2194,10 +2243,10 @@ export function CampaignKindsEditor({
       <>
         {key}
         {' '}
-        <span title="Not measured yet">
-          <ConfigBadge tone="navy" className="text-muted">Soon</ConfigBadge>
+        <span title={t.notMeasured}>
+          <ConfigBadge tone="navy" className="text-muted">{t.soon}</ConfigBadge>
         </span>
-        <span className="sr-only">, not measured yet,</span>
+        <span className="sr-only">{t.notMeasuredSpoken}</span>
       </>
     );
   };
@@ -2206,17 +2255,14 @@ export function CampaignKindsEditor({
     <div className="flex flex-col gap-4">
       <Card>
         <p className="text-md text-navy">
-          These are the insurer&rsquo;s own rules, and every office of this company reads them.
+          {t.lead}
           {' '}
-          <span className="text-muted">
-            An office cannot edit or delete one. Publishing here reaches the offices that already
-            exist, not only the ones created afterwards — so a threshold you change today is the
-            one every standing is measured against tomorrow.
-          </span>
+          <span className="text-muted">{t.detail}</span>
         </p>
       </Card>
 
-      {RULE_KINDS.filter((kind) => kind.code === section).map((kind) => {
+      {RULE_KINDS.filter((code) => code === section).map((code) => {
+        const kind = { code, ...t.kinds[code] };
         const mine = rules.filter((r) => r.kind === kind.code)
           .sort((a, b) => a.rank - b.rank);
         return (
@@ -2226,7 +2272,7 @@ export function CampaignKindsEditor({
               <span className="text-sm text-muted">{kind.blurb}</span>
               <span className="ml-auto">
                 <ConfigBadge tone={mine.length > 0 ? 'won' : 'open'}>
-                  {count(mine.length, 'rule', 'rules')}
+                  {t.count({ n: mine.length })}
                 </ConfigBadge>
               </span>
             </div>
@@ -2239,13 +2285,13 @@ export function CampaignKindsEditor({
                     disabled={disabled}
                     code={rule.code}
                     fields={[
-                      { key: 'name', label: 'Name' },
+                      { key: 'name', label: settings.name },
                       {
                         key: 'rank',
-                        label: 'Rank',
-                        hint: 'The order the tiers are climbed in. Two rules at one rank is refused.',
+                        label: t.rank,
+                        hint: t.rankHint,
                       },
-                      { key: 'reward', label: 'Reward', hint: 'Optional. What qualifying earns.' },
+                      { key: 'reward', label: t.reward, hint: t.rewardHint },
                     ]}
                     values={{
                       name: rule.name, rank: String(rule.rank), reward: rule.reward ?? '',
@@ -2259,18 +2305,18 @@ export function CampaignKindsEditor({
                       <Button
                         variant="inlineDanger"
                         disabled={disabled}
-                        title="Removing it here retires it on publish. Standings that qualified under it stay readable."
+                        title={t.removeTip}
                         onClick={() => put(rules.filter(
                           (r) => !(r.code === rule.code && r.kind === rule.kind),
                         ))}
                       >
-                        Remove
+                        {settings.remove}
                       </Button>
                     )}
                   >
                     <p className="text-md text-navy">{rule.name}</p>
                     <p className="mt-1 flex flex-wrap items-center gap-2">
-                      <ConfigBadge tone="open">Rank {rule.rank}</ConfigBadge>
+                      <ConfigBadge tone="open">{t.rankBadge({ n: rule.rank })}</ConfigBadge>
                       {rule.reward && <span className="text-sm text-muted">{rule.reward}</span>}
                     </p>
                   </EditableRow>
@@ -2280,8 +2326,11 @@ export function CampaignKindsEditor({
                       // eslint-disable-next-line react/no-array-index-key
                       <div key={g} className="rounded-sm border border-hairline p-3">
                         <p className="text-sm text-muted">
-                          {g > 0 && <strong>{rule.groupMode === 'any' ? 'or ' : 'and '}</strong>}
-                          {group.mode === 'any' ? 'any one of these' : 'all of these'}
+                          {t.group({
+                            join: g > 0 ? (rule.groupMode === 'any' ? 'or' : 'and') : null,
+                            mode: group.mode === 'any' ? 'any' : 'all',
+                            strong: (words) => <strong>{words}</strong>,
+                          })}
                         </p>
                         <ul className="mt-2 flex flex-col divide-y divide-hairline">
                           {group.criteria.map((criterion, c) => (
@@ -2291,12 +2340,13 @@ export function CampaignKindsEditor({
                                 rowKey={`${rule.kind}-${rule.code}-${g}-${c}`}
                                 disabled={disabled}
                                 fields={[
-                                  { key: 'metricKey', label: 'Metric', options: metricOptions },
-                                  { key: 'comparator', label: 'Comparison', options: COMPARATORS },
+                                  { key: 'metricKey', label: t.metric, options: metricOptions },
+                                  { key: 'comparator', label: t.comparison, options: comparators },
                                   {
                                     key: 'value',
-                                    label: 'Value',
-                                    hint: 'Money is in sen — Rp 1.200.000.000 is 120000000000.',
+                                    label: t.value,
+                                    // Rp 1.200.000.000 in the reader's figures; the digits after it are what is typed.
+                                    hint: t.moneyInSen({ sum: formatRupiah(120_000_000_000, figures) }),
                                   },
                                 ]}
                                 values={{
@@ -2319,15 +2369,15 @@ export function CampaignKindsEditor({
                                 })}
                               >
                                 <p className="text-md text-navy">
-                                  {metricLabel(criterion.metricKey)}
-                                  {' '}
-                                  {COMPARATORS.find((o) => o.value === criterion.comparator)?.label
-                                    ?? criterion.comparator}
-                                  {' '}
-                                  {/* A rule in words: compact where that loses nothing (ADR-0167 §1). */}
-                                  {metrics.find((m) => m.key === criterion.metricKey)?.unit === 'idr_minor'
-                                    ? formatRupiahCompact(criterion.value, { lossless: true })
-                                    : formatNumber(criterion.value, { maxDecimals: 2 })}
+                                  {t.criterion({
+                                    metric: metricLabel(criterion.metricKey),
+                                    comparator: comparatorLabel(criterion.comparator),
+                                    // A rule in words: compact where that loses nothing (ADR-0167 §1), in the
+                                    // reader's figures (P18.98-T3).
+                                    value: metrics.find((m) => m.key === criterion.metricKey)?.unit === 'idr_minor'
+                                      ? formatRupiahCompact(criterion.value, { lossless: true }, figures)
+                                      : formatNumber(criterion.value, { maxDecimals: 2 }, figures),
+                                  })}
                                 </p>
                               </EditableRow>
                             </li>
@@ -2344,10 +2394,10 @@ export function CampaignKindsEditor({
               <AddRow
                 suggest
                 disabled={disabled}
-                what={`${kind.label.toLowerCase()} rule`}
+                noun={RULE_NOUN[kind.code]}
                 fields={[
-                  { key: 'rank', label: 'Rank', hint: 'The order the tiers are climbed in.' },
-                  { key: 'reward', label: 'Reward', hint: 'Optional.', wide: true },
+                  { key: 'rank', label: t.rank, hint: t.rankAddHint },
+                  { key: 'reward', label: t.reward, hint: settings.optional, wide: true },
                 ]}
                 taken={(code) => rules.some((r) => r.kind === kind.code && r.code === code)}
                 onAdd={(code, label, extra) => put([...rules, {
@@ -2415,6 +2465,10 @@ export function CapabilityLadderEditor({
   onChange: (next: CapabilityLadderPayload) => void;
   disabled?: boolean;
 }) {
+  const t = useMessages(adminTemplateEditorMessages).capability;
+  const settings = useMessages(settingsMessages);
+  const office = useMessages(capabilityMessages);
+  const rules = useMessages(adminTemplateEditorMessages).rules;
   const stages = payload.stages ?? [];
   const milestones = payload.milestones ?? [];
   const grids = payload.grids ?? [];
@@ -2425,7 +2479,7 @@ export function CapabilityLadderEditor({
     milestones.find((m) => m.code === code)?.label
     // A stage requiring a milestone nobody defines is refused at publish; until then it has to
     // render as what it is rather than vanish, or the refusal will read as coming from nowhere.
-    ?? `${code} — no milestone defines this`;
+    ?? t.undefinedMilestone({ code });
 
   /*
    * **Three lists, three different answers to "what is the order".**
@@ -2463,17 +2517,17 @@ export function CapabilityLadderEditor({
         <>
         <Card className="p-0">
           <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
-            <h2 className="font-display text-lg font-bold text-navy">Milestones</h2>
-            <span className="text-sm text-muted">What a stage is reached by.</span>
+            <h2 className="font-display text-lg font-bold text-navy">{office.milestones}</h2>
+            <span className="text-sm text-muted">{t.milestonesLead}</span>
             <span className="ml-auto flex items-center gap-2">
               <ConfigBadge tone={milestones.length > 0 ? 'won' : 'open'}>
-                {count(milestones.length, 'milestone', 'milestones')}
+                {t.milestones({ n: milestones.length })}
               </ConfigBadge>
               <AddRow
                 bare
                 suggest
                 disabled={disabled}
-                what="milestone"
+                noun="milestone"
                 taken={(code) => milestones.some((m) => m.code === code)}
                 onAdd={(code, label) => put({ milestones: [...milestones, { code, label }] })}
               />
@@ -2496,7 +2550,7 @@ export function CapabilityLadderEditor({
                   rowKey={milestone.code}
                   disabled={disabled}
                   code={milestone.code}
-                  fields={[{ key: 'label', label: 'Name' }]}
+                  fields={[{ key: 'label', label: settings.name }]}
                   values={{ label: milestone.label }}
                   onSave={(next) => put({
                     milestones: milestones.map((m) => (m.code === milestone.code
@@ -2506,12 +2560,12 @@ export function CapabilityLadderEditor({
                     <Button
                       variant="inlineDanger"
                       disabled={disabled}
-                      title="A stage that requires it will be refused at publish until you change that too."
+                      title={t.milestoneRemoveTip}
                       onClick={() => put({
                         milestones: milestones.filter((m) => m.code !== milestone.code),
                       })}
                     >
-                      Remove
+                      {settings.remove}
                     </Button>
                   )}
                 >
@@ -2527,23 +2581,21 @@ export function CapabilityLadderEditor({
 
         <Card className="p-0">
           <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
-            <h2 className="font-display text-lg font-bold text-navy">Stages</h2>
-            <span className="text-sm text-muted">
-              Seniority is the rank, not the position on this page.
-            </span>
+            <h2 className="font-display text-lg font-bold text-navy">{t.stages}</h2>
+            <span className="text-sm text-muted">{t.stagesLead}</span>
             <span className="ml-auto flex items-center gap-2">
               <ConfigBadge tone={stages.length > 0 ? 'won' : 'open'}>
-                {count(stages.length, 'stage', 'stages')}
+                {t.stageCount({ n: stages.length })}
               </ConfigBadge>
               <AddRow
                 bare
                 suggest
                 disabled={disabled}
-                what="stage"
+                noun="stage"
                 fields={[{
                   key: 'stageOrder',
-                  label: 'Rank',
-                  hint: 'How senior the stage is. Two stages at one rank is refused.',
+                  label: rules.rank,
+                  hint: t.stageRankAddHint,
                 }]}
                 taken={(code) => stages.some((s) => s.code === code)}
                 onAdd={(code, label, extra) => put({
@@ -2575,11 +2627,11 @@ export function CapabilityLadderEditor({
                   disabled={disabled}
                   code={stage.code}
                   fields={[
-                    { key: 'label', label: 'Name' },
+                    { key: 'label', label: settings.name },
                     {
                       key: 'stageOrder',
-                      label: 'Rank',
-                      hint: 'How senior the stage is. Two stages at one rank is refused at publish.',
+                      label: rules.rank,
+                      hint: t.stageRankHint,
                     },
                   ]}
                   values={{ label: stage.label, stageOrder: String(stage.stageOrder) }}
@@ -2596,22 +2648,20 @@ export function CapabilityLadderEditor({
                       disabled={disabled}
                       onClick={() => put({ stages: stages.filter((s) => s.code !== stage.code) })}
                     >
-                      Remove
+                      {settings.remove}
                     </Button>
                   )}
                 >
                   <p className="text-md text-navy">{stage.label}</p>
                   <p className="mt-1 flex flex-wrap items-center gap-2">
-                    <ConfigBadge tone="open">Rank {stage.stageOrder}</ConfigBadge>
+                    <ConfigBadge tone="open">{rules.rankBadge({ n: stage.stageOrder })}</ConfigBadge>
                   </p>
                 </EditableRow>
 
                 <fieldset className="mt-2 rounded-sm border border-hairline p-3">
-                  <legend className="px-1 text-sm text-muted">Reached by</legend>
+                  <legend className="px-1 text-sm text-muted">{t.reachedBy}</legend>
                   {milestones.length === 0 ? (
-                    <p className="text-sm text-muted">
-                      Add a milestone first — a stage requiring none is one everybody is already on.
-                    </p>
+                    <p className="text-sm text-muted">{t.milestoneFirst}</p>
                   ) : milestones.map((milestone) => (
                     <label
                       key={milestone.code}
@@ -2651,18 +2701,18 @@ export function CapabilityLadderEditor({
             <div className="flex flex-wrap items-center gap-3 border-b border-hairline px-4 py-3 sm:px-5">
               <h2 className="font-display text-lg font-bold text-navy">{grid.label}</h2>
               {grid.requiresDownline && (
-                <ConfigBadge tone="open">Only for somebody with a downline</ConfigBadge>
+                <ConfigBadge tone="open">{office.downlineOnly}</ConfigBadge>
               )}
               <span className="ml-auto flex items-center gap-2">
                 <ConfigBadge tone={grid.items.length > 0 ? 'won' : 'open'}>
-                  {count(grid.items.length, 'item', 'items')}
+                  {settings.items({ n: grid.items.length })}
                 </ConfigBadge>
                 <Button
                   variant="inlineDanger"
                   disabled={disabled}
                   onClick={() => put({ grids: grids.filter((g) => g.code !== grid.code) })}
                 >
-                  Remove
+                  {settings.remove}
                 </Button>
               </span>
           </div>
@@ -2683,7 +2733,7 @@ export function CapabilityLadderEditor({
                   rowKey={`${grid.code}-${item.code}`}
                   disabled={disabled}
                   code={item.code}
-                  fields={[{ key: 'label', label: 'Item' }]}
+                  fields={[{ key: 'label', label: settings.item }]}
                   values={{ label: item.label }}
                   onSave={(next) => put({
                     grids: grids.map((g) => (g.code === grid.code ? {
@@ -2701,7 +2751,7 @@ export function CapabilityLadderEditor({
                           ? { ...g, items: g.items.filter((i) => i.code !== item.code) } : g)),
                       })}
                     >
-                      Remove
+                      {settings.remove}
                     </Button>
                   )}
                 >
@@ -2717,8 +2767,8 @@ export function CapabilityLadderEditor({
             <AddRow
               suggest
               disabled={disabled}
-              what="item"
-              nameLabel="Item"
+              noun="item"
+              nameLabel={settings.item}
               // Across the whole catalog: a tick names a code, not a code within a grid.
               taken={(code) => grids.some((g) => g.items.some((i) => i.code === code))}
               onAdd={(code, label) => put({
@@ -2733,13 +2783,13 @@ export function CapabilityLadderEditor({
       <AddRow
         suggest
         disabled={disabled}
-        what="grid"
+        noun="grid"
         fields={[{
           key: 'requiresDownline',
-          label: 'Who it applies to',
+          label: t.whoItAppliesTo,
           options: [
-            { value: '', label: 'Everybody' },
-            { value: 'downline', label: 'Only somebody with a downline' },
+            { value: '', label: t.everybody },
+            { value: 'downline', label: office.downlineOnly },
           ],
           wide: true,
         }]}

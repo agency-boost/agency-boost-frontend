@@ -1,7 +1,7 @@
 import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
-import { makeMe, makeSession, renderWithSession, stubFetch } from '@test/harness';
+import { InLanguage, makeMe, makeSession, renderWithSession, stubFetch } from '@test/harness';
 import { SessionContext } from '@/lib/session';
 import { announceInboxChanged, INBOX_CHANGED, type InboxChange } from '@/lib/notifications';
 import NotificationsPage from './page';
@@ -102,7 +102,7 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     const modal = screen.getByRole('dialog', { name: 'You are in' });
     expect(within(modal).getByText('Your request was approved. You now have a leader.')).toBeInTheDocument();
     // Its date and time in full, in the office's timezone: 01:05 UTC is 8:05 in Jakarta.
-    expect(within(modal).getByText('3 Okt 2026, 08.05')).toBeInTheDocument();
+    expect(within(modal).getByText('3 Oct 2026, 08:05')).toBeInTheDocument();
     expect(calls.filter((c) => c.init.method === 'POST').map((c) => c.url))
       .toEqual(['http://api.test/api/v1/notifications/n-1/read']);
 
@@ -110,6 +110,21 @@ describe('the notifications inbox (P3.5-T10, P12.1)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     // Read now, and the focus is back where it was.
     expect(screen.getByRole('button', { name: 'You are in' })).toHaveFocus();
+  });
+
+  it('P18.98-T3 AC-1 writes a row’s time and its modal’s date and time in the reader’s language: 08.05 and 08:05', async () => {
+    const page = { body: pageOf([item({ createdAt: '2026-10-03T01:05:00.000Z' })]) };
+    stubFetch({ '/notifications': [page, page] });
+    const { unmount } = renderWithSession(<InLanguage language="id"><NotificationsPage /></InLanguage>, { me: READER });
+    // Today's notice by its time, on the office's clock; its modal the day and the time in full.
+    expect(await screen.findByText('08.05')).toHaveAttribute('dateTime', '2026-10-03T01:05:00.000Z');
+    // The row's own words are Indonesian too since P18.98-T4 (the shared pieces); the notice's title is the API's.
+    await userEvent.click(screen.getByRole('button', { name: 'Belum dibaca: You are in' }));
+    expect(within(screen.getByRole('dialog', { name: 'You are in' })).getByText('3 Okt 2026, 08.05')).toBeInTheDocument();
+    unmount();
+
+    renderWithSession(<NotificationsPage />, { me: READER });
+    expect(await screen.findByText('08:05')).toHaveAttribute('dateTime', '2026-10-03T01:05:00.000Z');
   });
 
   it('P12.1-T3 AC-4: Escape and the backdrop close the modal too', async () => {

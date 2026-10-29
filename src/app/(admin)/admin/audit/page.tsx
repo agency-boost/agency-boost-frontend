@@ -8,14 +8,15 @@ import { Button, ErrorBanner, Field, Select } from '@/components/ui/field';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { listTenants, readAudit, type AuditEntry, type Kpm } from '@/lib/admin';
 import { toDisplayError } from '@/lib/api-client';
-import { formatDateTime } from '@/lib/format';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { adminAuditMessages } from '@/i18n/messages/admin-audit';
+import { formatDateTime, OFFICE_TIME_ZONE } from '@/lib/format';
 
 /**
  * The skeleton and the table read the same array, so a column added to one cannot
  * be missing from the other — which is what keeps the placeholder the same width as
  * the thing it stands in for.
  */
-const COLUMNS = ['When', 'Action', 'Target', 'Actor'] as const;
 
 /** The append-only record. Read-only by construction — there is no edit or delete. */
 /**
@@ -35,6 +36,9 @@ const RENAMED = new Map([
 const renamed = (value: string) => RENAMED.get(value) ?? value;
 
 export default function AuditPage() {
+  const t = useMessages(adminAuditMessages);
+  const figures = useFigureLanguage();
+  const COLUMNS = [t.columns.when, t.columns.action, t.columns.target, t.columns.actor];
   const [entries, setEntries] = useState<AuditEntry[] | null>(null);
   const [tenants, setTenants] = useState<Kpm[]>([]);
   const [scope, setScope] = useState('');
@@ -57,15 +61,15 @@ export default function AuditPage() {
   return (
     // The nav item's words (P18.95-T9 AC-2; UI-027): *Audit / role change log* (`Superadmin.html:197`).
     <Page
-      title="Audit / Role Change Log"
-      subtitle="Append-only. Provisioning, ownership changes and impersonation are recorded without exception."
+      title={t.title}
+      subtitle={t.subtitle}
       actions={
-        <Field label="Scope" htmlFor="scope" className="w-64">
+        <Field label={t.scope} htmlFor="scope" className="w-64">
           <Select id="scope" value={scope} onChange={(e) => setScope(e.target.value)}>
-            <option value="">Platform level (no KPM)</option>
-            {tenants.map((t) => (
-              <option key={t._id} value={t._id}>
-                {t.code} · {t.branchName}
+            <option value="">{t.platformLevel}</option>
+            {tenants.map((tenant) => (
+              <option key={tenant._id} value={tenant._id}>
+                {tenant.code} · {tenant.branchName}
               </option>
             ))}
           </Select>
@@ -75,29 +79,27 @@ export default function AuditPage() {
       {error && <ErrorBanner {...error} />}
 
       {entries === null && (
-        <SkeletonTable caption="Audit entries, newest first" columns={COLUMNS} rows={8} />
+        <SkeletonTable caption={t.caption} columns={COLUMNS} rows={8} />
       )}
 
       {entries?.length === 0 && !error && (
         <div className="rounded-lg border border-hairline bg-card">
           <EmptyState
             title={
-              scope
-                ? 'Nothing recorded for this office yet.'
-                : 'Nothing recorded at platform level yet — create an office and it will appear here.'
+              scope ? t.emptyOffice : t.emptyPlatform
             }
             variant={scope ? 'filtered' : 'empty'}
-            action={scope ? <Button variant="secondary" onClick={() => setScope('')}>Show platform level</Button> : undefined}
+            action={scope ? <Button variant="secondary" onClick={() => setScope('')}>{t.showPlatform}</Button> : undefined}
           />
         </div>
       )}
 
       {entries && entries.length > 0 && (
-        <DataTable caption="Audit entries, newest first" columns={COLUMNS}>
+        <DataTable caption={t.caption} columns={COLUMNS}>
           {entries.map((e) => (
             <Row key={e._id}>
               <Cell className="whitespace-nowrap text-muted">
-                <time dateTime={e.createdAt}>{formatDateTime(e.createdAt)}</time>
+                <time dateTime={e.createdAt}>{formatDateTime(e.createdAt, OFFICE_TIME_ZONE, figures)}</time>
               </Cell>
               <Cell className="font-semibold">{renamed(e.action)}</Cell>
               <Cell>
@@ -125,7 +127,7 @@ export default function AuditPage() {
                   // Under impersonation both are recorded. Showing only one would
                   // attribute the action to the wrong person.
                   <span className="ml-1 text-sm text-alert">
-                    as {e.effectiveName ?? e.effectiveUserId}
+                    {t.actingAs({ name: e.effectiveName ?? e.effectiveUserId })}
                   </span>
                 )}
               </Cell>

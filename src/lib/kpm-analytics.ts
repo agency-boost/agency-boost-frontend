@@ -1,9 +1,12 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { kpmAnalyticsMessages } from '@/i18n/messages/kpm-analytics';
 import { api } from './api-client';
 import {
   formatMonth, formatMonthName, formatNumber, formatPercent, formatRupiahCompact,
 } from './format';
 import type { Me } from './session';
-import { firstMentions, termQuestion, TERMS, type TermKey } from './terms';
+import { firstMentions, termDefinition, termQuestion, type TermKey } from './terms';
 
 /**
  * KPM analytics (Phase 18, P18-T2; `docs/02-specs/functional/kpm-analytics.md`): the console's *Unit
@@ -21,22 +24,25 @@ import { firstMentions, termQuestion, TERMS, type TermKey } from './terms';
  *
  * Each interface is spelled out with named nested types and no `extends`, so `contract.spec.ts` can read
  * its fields against `backend/openapi.json`: it reads an interface's body up to the first `}`.
+ *
+ * **Its words are the catalogue's** (P18.98-T4; `i18n/messages/kpm-analytics.ts`): each function that writes words
+ * takes the reader's `language` — English, the source, when passed none, which its spec reads — and one that writes a
+ * figure takes the figures' language after it (`figures`, `useFigureLanguage()`; Indonesian when passed none, as every
+ * figure was before the phase). Its caller passes `useLanguage()` and `useFigureLanguage()`.
  */
 
 /** *This month* · *Previous month* (`:1240-1245`), as the address carries them (`?period=`). */
 export type AnalyticsPeriod = 'this_month' | 'previous_month';
 
-export const ANALYTICS_PERIODS: readonly { id: AnalyticsPeriod; label: string }[] = [
-  { id: 'this_month', label: 'This month' },
-  { id: 'previous_month', label: 'Previous month' },
-];
+/** The two, in the select's order; each one's words are the catalogue's (`periods`). */
+export const ANALYTICS_PERIODS: readonly AnalyticsPeriod[] = ['this_month', 'previous_month'];
 
 /** *This month* is selected first (`:1242`); an address naming no period, or one it does not know, reads it. */
 export const DEFAULT_ANALYTICS_PERIOD: AnalyticsPeriod = 'this_month';
 
 export function analyticsPeriodFrom(value: string | string[] | null | undefined): AnalyticsPeriod {
   const one = Array.isArray(value) ? value[0] : value;
-  return ANALYTICS_PERIODS.some((p) => p.id === one) ? (one as AnalyticsPeriod) : DEFAULT_ANALYTICS_PERIOD;
+  return ANALYTICS_PERIODS.some((p) => p === one) ? (one as AnalyticsPeriod) : DEFAULT_ANALYTICS_PERIOD;
 }
 
 /** A row's head: the AB, or the AAB who leads the unit. `isReader` is the reader's own row, *(you)*. */
@@ -125,8 +131,16 @@ export interface UnitFigures {
   coached7d: AnalyticsRate;
   /** `MAA_COUNT_IN_UNIT` for the period's month; `null` is *Not uploaded yet*. */
   activeAgents: number | null;
-  /** Its share of `manpower.total`, the server's whole percent (P18.97-T3 AC-10); `null` not uploaded, or over nobody. */
+  /**
+   * Its share of the members it counts from, the server's whole percent (P18.97-T3 AC-10; OD-235): this month's of
+   * `manpower.total`, a past month's of that month's members. `null` not uploaded, or over nobody.
+   */
   activePct: number | null;
+  /**
+   * **The members `activePct` is over** (OD-235, clarified 2026-10-29), served beside it so the cell writes its count
+   * over the same members as its percent — *4 / 5 · 80%*, never *4 / 3 · 80%*. *Manpower* stays today's.
+   */
+  activeOf: number;
   leads: AnalyticsLeads;
   manpower: AnalyticsManpower;
 }
@@ -139,6 +153,7 @@ export interface AabUnitRow {
   coached7d: AnalyticsRate;
   activeAgents: number | null;
   activePct: number | null;
+  activeOf: number;
   leads: AnalyticsLeads;
   manpower: AnalyticsManpower;
   moc: Moc | null;
@@ -152,6 +167,7 @@ export interface AgencyRow {
   coached7d: AnalyticsRate;
   activeAgents: number | null;
   activePct: number | null;
+  activeOf: number;
   leads: AnalyticsLeads;
   manpower: AnalyticsManpower;
   club: AnalyticsClub | null;
@@ -173,6 +189,7 @@ export interface AnalyticsTotal {
   coached7d: AnalyticsRate;
   activeAgents: number | null;
   activePct: number | null;
+  activeOf: number;
   leads: AnalyticsLeads;
   manpower: AnalyticsManpower;
   abCount: number;
@@ -219,84 +236,79 @@ export const readKpmAnalytics = (period: AnalyticsPeriod = DEFAULT_ANALYTICS_PER
  * ── The prototype's words ───────────────────────────────────────────────────────────────────────
  */
 
-/** The ABs counted: *"ABs"*, and *"AB"* for one. */
-const abs = (n: number) => `${n} AB${n === 1 ? '' : 's'}`;
+/** The module's words in English, the catalogue's source. */
+const EN = messagesIn(kpmAnalyticsMessages, SOURCE_LANGUAGE);
 
-/** The strings `KPM_Owner.html` draws, verbatim (D-copy), its literal counts computed (contradiction 11). */
+/**
+ * **The strings `KPM_Owner.html` draws, in English** (D-copy), its literal counts computed (contradiction 11) — the
+ * catalogue's source (`i18n/messages/kpm-analytics.ts`, P18.98-T4), in the shapes this module has always handed its
+ * callers and its spec. **A screen reads the reader's language instead**: `useMessages(kpmAnalyticsMessages)`.
+ *
+ * - `headApeMonth`: `:3337` keeps *This Month* under *Previous month* while the column reads last month's file; the
+ *   header says which month it is (a Fix, data honesty — parity F-174), as *Producing this month* does.
+ * - `headActive`: the prototype's *Active this month* / *Active last month* (`:1248`, `:3367`), **named for what it
+ *   counts since P18.97-T3 AC-9** (ADR-0176 §3, UI-021; parity I-508): production, apart from the Overview's *Agents
+ *   who logged activity this month*, which counts logging (ADR-0127). The same `MAA_COUNT_IN_UNIT`.
+ */
 export const PROTOTYPE_COPY = {
-  title: 'KPM Analytics',
-  subtitle: 'Unit comparisons, club qualification, and trends',
-  tabOverview: 'Overview',
-  tabCompliance: 'Compliance, Events, and Campaigns',
-  unitComparison: 'Unit comparison',
-  unitComparisonSub: (n: number) => `All ${abs(n)}, this year — peer benchmark, always shown at group level`,
-  period: 'Period',
-  headAb: 'AB',
-  headManpower: 'Manpower',
-  /**
-   * `:3337` keeps *This Month* under *Previous month* while the column reads last month's file; the header
-   * says which month it is (a Fix, data honesty — parity F-174), as *Active this month* already does.
-   */
-  headApeMonth: (period: AnalyticsPeriod) => (period === 'this_month' ? 'APE — This Month' : 'APE — Last Month'),
-  headApeAnnual: 'APE — Annual',
-  headCoached: 'Coached (7d)',
-  /**
-   * The prototype's *Active this month* / *Active last month* (`:1248`, `:3367`), **named for what it counts since
-   * P18.97-T3 AC-9** (ADR-0176 §3, UI-021; parity I-508): production, apart from the Overview's *Agents who logged
-   * activity this month*, which counts logging (ADR-0127). The same `MAA_COUNT_IN_UNIT`, the header still the period's.
-   */
-  headActive: (period: AnalyticsPeriod) => (period === 'this_month' ? 'Producing this month' : 'Producing last month'),
-  headLeads: 'Total leads',
-  headMoc: 'MOC',
-  /** The MOC header's tooltip (`:3247`), its two lines kept. */
-  you: '(you)',
-  direct: (name: string) => `${name} (Direct)`,
-  tagAb: 'AB',
-  tagAab: 'AAB',
-  seeAbove: (name: string) => `See ${name} above`,
-  total: (n: number) => `Total — all ${abs(n)}`,
-  absMeetingMoc: 'ABs meeting MOC',
-  mocMet: 'MOC requirements met',
-  mocNotMet: 'MOC requirements not yet met',
-  mocDialog: (name: string) => `${name} — Maintenance of Contract`,
-  requirementsMet: 'Requirements met',
-  notYetMet: 'Not yet met',
-  met: 'Met',
-  gap: 'Gap',
-  monthlyProduction: 'Monthly production',
-  monthlySub: 'Last 6 months, combined APE — whole group',
+  title: EN.title,
+  subtitle: EN.subtitle,
+  tabOverview: EN.tabOverview,
+  tabCompliance: EN.tabCompliance,
+  unitComparison: EN.unitComparison,
+  unitComparisonSub: (n: number) => EN.unitComparisonSub({ n }),
+  period: EN.period,
+  headAb: EN.headAb,
+  headManpower: EN.headManpower,
+  headApeMonth: (period: AnalyticsPeriod) => EN.headApeMonth({ period }),
+  headApeAnnual: EN.headApeAnnual,
+  headCoached: EN.headCoached,
+  headActive: (period: AnalyticsPeriod) => EN.headActive({ period }),
+  headLeads: EN.headLeads,
+  headMoc: EN.headMoc,
+  you: EN.you,
+  direct: (name: string) => EN.direct({ name }),
+  tagAb: EN.tagAb,
+  tagAab: EN.tagAab,
+  seeAbove: (name: string) => EN.seeAbove({ name }),
+  total: (n: number) => EN.total({ n }),
+  absMeetingMoc: EN.absMeetingMoc,
+  mocMet: EN.mocMet,
+  mocNotMet: EN.mocNotMet,
+  mocDialog: (name: string) => EN.mocDialog({ name }),
+  requirementsMet: EN.requirementsMet,
+  notYetMet: EN.notYetMet,
+  met: EN.met,
+  gap: EN.gap,
+  monthlyProduction: EN.monthlyProduction,
+  monthlySub: EN.monthlySub,
 } as const;
 
 /**
- * The module's own strings — the states the prototype lacks and the names a screen reader needs. None of
- * OD-39's six words (*office*, *KPM*, *reports to*, *tagged to*, *untagged*, *unassigned*), no phase, no
- * code (ADR-0084's rule, as Phases 14 to 17 applied it).
+ * **The module's own strings, in English** — the states the prototype lacks and the names a screen reader needs, from
+ * the catalogue's source as `PROTOTYPE_COPY` is. None of OD-39's six words (*office*, *KPM*, *reports to*, *tagged
+ * to*, *untagged*, *unassigned*), no phase, no code (ADR-0084's rule, as Phases 14 to 17 applied it).
+ *
+ * `currentMembersOnly` is the line under the total's *APE — Annual* (P18.97-T3 AC-4; ADR-0176 §1, UI-016; parity
+ * I-503): the agencies' sum, today's members — where the Overview's *Production — this year* keeps a leaver's
+ * production (OD-74). Its ⓘ, beside the row's name, still names the sum it leaves out (`leaversLeftOut`).
  */
 export const OWN_COPY = {
-  /** The total's mark when people who left this year produced APE the rows no longer carry (ADR-0136). */
-  leaversLeftOut: (amount: string) =>
-    `Leaves out ${amount} produced this year by members who have since left; the Overview’s year counts it.`,
-  loading: 'Loading the unit comparison…',
-  tryAgain: 'Try again',
-  notUploaded: 'Not uploaded yet',
-  noGoal: 'No goal set',
-  noAbTitle: 'There are no ABs to compare yet.',
-  noAbLine: 'Each AB’s agency gets a row here, with its people and its figures.',
-  /**
-   * The line under the total's *APE — Annual* (P18.97-T3 AC-4; ADR-0176 §1, UI-016; parity I-503): the agencies' sum,
-   * today's members — where the Overview's *Production — this year* keeps a leaver's production (OD-74). Its ⓘ, beside
-   * the row's name, still names the sum it leaves out (`leaversLeftOut`).
-   */
-  currentMembersOnly: 'Current members only',
-  expand: (name: string) => `Units in ${name}’s agency`,
-  /** After the manpower figure, which is the toggle's visible name: *"31 people in Hendra Wibowo’s agency"*. */
-  members: (name: string, n: number) => ` ${n === 1 ? 'person' : 'people'} in ${name}’s agency`,
-  /** After a leader's name, which is the link's visible name (WCAG 2.5.3): the drill opens a new tab. */
-  newTab: ' (opens their Unit Dashboard in a new tab)',
-  newTabOwn: ' (opens your Unit Dashboard in a new tab)',
-  mocFor: (verdict: string, name: string) => `${verdict} for ${name}`,
-  mocUnknown: (name: string, missing: string) => `MOC for ${name} — ${missing}`,
-  close: 'Close',
+  leaversLeftOut: (amount: string) => EN.leaversLeftOut({ amount }),
+  loading: EN.loading,
+  tryAgain: EN.tryAgain,
+  notUploaded: EN.notUploaded,
+  noGoal: EN.noGoal,
+  noAbTitle: EN.noAbTitle,
+  noAbLine: EN.noAbLine,
+  currentMembersOnly: EN.currentMembersOnly,
+  expand: (name: string) => EN.expand({ name }),
+  members: (name: string, n: number) => EN.members({ name, n }),
+  newTab: EN.newTab,
+  newTabOwn: EN.newTabOwn,
+  mocFor: (verdict: string, name: string) => EN.mocFor({ verdict, name }),
+  mocUnknown: (name: string, missing: string) => EN.mocUnknown({ name, missing }),
+  close: EN.close,
 } as const;
 
 /*
@@ -317,49 +329,66 @@ export interface MoneyWords {
 /**
  * An APE cell (`apeCellHtml`, `:3229-3231`): the figure, *"of {target} target"* and the pill — *success* at or
  * above the server's split, *alert* below it (`:3150`, `:3220`). **Compact, in a table too** (ADR-0174 §4, UI-019):
- * *Rp 5,7 M of Rp 6 M target*, where it read *Rp 5.672.500.000*; the pill a whole percent (§1).
+ * *Rp 5,7 M of Rp 6 M target*, where it read *Rp 5.672.500.000*; the pill a whole percent (§1). Its words in
+ * `language`, its figures in `figures`.
  */
-export function moneyWords(money: AnalyticsMoney, splitPct: number): MoneyWords {
+export function moneyWords(
+  money: AnalyticsMoney,
+  splitPct: number,
+  language: Language = SOURCE_LANGUAGE,
+  figures?: Language,
+): MoneyWords {
+  const t = messagesIn(kpmAnalyticsMessages, language);
   return {
-    actual: money.achievedMinor === null ? OWN_COPY.notUploaded : formatRupiahCompact(money.achievedMinor),
+    actual: money.achievedMinor === null ? t.notUploaded : formatRupiahCompact(money.achievedMinor, {}, figures),
     uploaded: money.achievedMinor !== null,
-    of: money.targetMinor === null ? OWN_COPY.noGoal : `of ${formatRupiahCompact(money.targetMinor)} target`,
+    of: money.targetMinor === null ? t.noGoal : t.ofTarget({ target: formatRupiahCompact(money.targetMinor, {}, figures) }),
     pill: money.pct === null
       ? null
-      : { text: formatPercent(money.pct), tone: money.pct >= splitPct ? 'success' : 'alert' },
+      : { text: formatPercent(money.pct, {}, figures), tone: money.pct >= splitPct ? 'success' : 'alert' },
   };
 }
 
-/** *Coached (7d)*: *"{n} / {m}"* and its percentage, *—* over nobody. */
-export const rateWords = (rate: AnalyticsRate) => ({
+/** *Coached (7d)*: *"{n} / {m}"* and its percentage, *—* over nobody — figures only, in `figures`. */
+export const rateWords = (rate: AnalyticsRate, figures?: Language) => ({
   main: `${rate.count} / ${rate.of}`,
-  pct: rate.pct === null ? '—' : formatPercent(rate.pct),
+  pct: rate.pct === null ? '—' : formatPercent(rate.pct, {}, figures),
 });
 
 /**
- * *Producing this month* (`:3342`): *"{n} / {manpower}"* and its share of the row's manpower, as the prototype
- * writes it; *Not uploaded yet* for a month with no file, and *—* over nobody. **The share is the server's**
- * (`activePct`, `rateOver`; P18.97-T3 AC-10, invariant §7): this writes it and divides nothing.
+ * *Producing this month* (`:3342`): *"{n} / {of}"* and its share, as the prototype writes it; *Not uploaded yet* for a
+ * month with no file, and *—* over nobody. **The share is the server's** (`activePct`, `rateOver`; P18.97-T3 AC-10,
+ * invariant §7): this writes it and divides nothing.
+ *
+ * **The count is over the share's own base** (OD-235, clarified 2026-10-29): `activeOf`, the members the share is over
+ * — this month's manpower, a past month's members on its last day — so *4 / 5 · 80%*, never *4 / 3 · 80%*. A row that
+ * carries none (written before the base was served) reads its manpower, as the cell did.
  */
 export function activeWords(
-  row: Pick<UnitFigures, 'activeAgents' | 'activePct' | 'manpower'>,
+  row: Pick<UnitFigures, 'activeAgents' | 'activePct' | 'manpower'> & { activeOf?: number },
+  language: Language = SOURCE_LANGUAGE,
+  figures?: Language,
 ): { main: string; pct: string | null } {
-  if (row.activeAgents === null) return { main: OWN_COPY.notUploaded, pct: null };
-  return { main: `${row.activeAgents} / ${row.manpower.total}`, pct: row.activePct === null ? '—' : formatPercent(row.activePct) };
+  if (row.activeAgents === null) return { main: messagesIn(kpmAnalyticsMessages, language).notUploaded, pct: null };
+  const of = row.activeOf ?? row.manpower.total;
+  return { main: `${row.activeAgents} / ${of}`, pct: row.activePct === null ? '—' : formatPercent(row.activePct, {}, figures) };
 }
 
 /** *Total leads* (`:3343`): the open sales and recruitment leads, and the line under them. */
-export const leadsWords = (leads: AnalyticsLeads) => ({
+export const leadsWords = (leads: AnalyticsLeads, language: Language = SOURCE_LANGUAGE) => ({
   total: leads.sales + leads.recruit,
-  sub: `${leads.sales} sales (${leads.salesPotential} potential) · ${leads.recruit} recruit (${leads.recruitPotential} potential)`,
+  sub: messagesIn(kpmAnalyticsMessages, language).leadsSub(leads),
 });
 
 /** *"{n} AAB · {m} Agents"* under an agency's manpower (`:3240`); an AAB's own row says its agents alone (`:3357`). */
-export const manpowerSub = (manpower: AnalyticsManpower) => `${manpower.aab} AAB · ${manpower.agents} Agents`;
-export const agentsSub = (manpower: AnalyticsManpower) => `${manpower.agents} Agents`;
+export const manpowerSub = (manpower: AnalyticsManpower, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(kpmAnalyticsMessages, language).manpowerSub(manpower);
+export const agentsSub = (manpower: AnalyticsManpower, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(kpmAnalyticsMessages, language).agentsSub(manpower);
 
 /** An AB row's name (`:3108`): the reader's own carries *(you)*. */
-export const headName = (head: AnalyticsHead) => (head.isReader ? `${head.name} ${PROTOTYPE_COPY.you}` : head.name);
+export const headName = (head: AnalyticsHead, language: Language = SOURCE_LANGUAGE) =>
+  (head.isReader ? `${head.name} ${messagesIn(kpmAnalyticsMessages, language).you}` : head.name);
 
 /*
  * ── Drills (D-drill) ────────────────────────────────────────────────────────────────────────────
@@ -402,7 +431,9 @@ export function orgTreeHref(node: { membershipId: string; directCount: number; i
  * decided, rather than a second glyph beside it.
  */
 export const mocTermName = termQuestion('MOC');
-export const mocTip = (rulesText: string) => [TERMS.MOC.definition, rulesText].filter((line) => line !== '').join('\n\n');
+/** The ⓘ's line above the company's rules, in the words' `language` (P18.98-T4, the shared pieces' tips); English by default. */
+export const mocTip = (rulesText: string, language: Language = SOURCE_LANGUAGE) =>
+  [termDefinition('MOC', language), rulesText].filter((line) => line !== '').join('\n\n');
 
 /** The three production clubs the glossary explains, each by the term its badge's words name. */
 export const CLUB_TERM_KEYS: readonly TermKey[] = ['STAR_CLUB', 'ELITE_CLUB', 'CHAIRMANS_CLUB'];
@@ -417,55 +448,61 @@ export function clubTermFirsts(agencies: readonly Pick<AgencyRow, 'head' | 'club
   return new Map(agencies.flatMap((a, i) => (found[i].length > 0 ? [[a.head.membershipId, found[i][0]] as const] : [])));
 }
 
-/** The cell's button, named for its leader (`:3283`): *"MOC requirements met"* or *"… not yet met"*. */
-export function mocButtonName(moc: Moc, name: string): string {
-  if (moc.status === 'unknown') return OWN_COPY.mocUnknown(name, moc.missing ?? OWN_COPY.notUploaded);
-  return OWN_COPY.mocFor(moc.status === 'met' ? PROTOTYPE_COPY.mocMet : PROTOTYPE_COPY.mocNotMet, name);
+/**
+ * The cell's button, named for its leader (`:3283`): *"MOC requirements met"* or *"… not yet met"*; an unknown one with
+ * the server's sentence saying which input is missing.
+ */
+export function mocButtonName(moc: Moc, name: string, language: Language = SOURCE_LANGUAGE): string {
+  const t = messagesIn(kpmAnalyticsMessages, language);
+  if (moc.status === 'unknown') return t.mocUnknown({ name, missing: moc.missing ?? t.notUploaded });
+  return t.mocFor({ verdict: moc.status === 'met' ? t.mocMet : t.mocNotMet, name });
 }
 
 /**
  * A criterion's figure or threshold, in the criterion's own unit: rupiah for Net APE, a percentage for
- * persistency, a count for the rest (`:3301-3313`). *—* for an input not uploaded.
+ * persistency, a count for the rest (`:3301-3313`). *—* for an input not uploaded. A figure, in `figures`.
  *
  * **Compact, and lossless** (ADR-0167 §1, ADR-0174 §3): *Rp 200 jt*; but a figure that compact writing would round
  * is written in full, so *Rp 199.960.000 / Rp 200 jt — Gap* can never read *Rp 200 jt / Rp 200 jt — Gap*. A
  * persistency — the carrier's figure and the rule's threshold — keeps the places it has and no *,0*: *74,96% / 75%*.
  */
-export function criterionValue(code: string, value: number | null): string {
+export function criterionValue(code: string, value: number | null, figures?: Language): string {
   if (value === null) return '—';
-  if (/APE/.test(code)) return formatRupiahCompact(value, { lossless: true });
-  if (/PERSISTENCY/.test(code)) return formatPercent(value, { lossless: true });
-  return formatNumber(value, { maxDecimals: 2 });
+  if (/APE/.test(code)) return formatRupiahCompact(value, { lossless: true }, figures);
+  if (/PERSISTENCY/.test(code)) return formatPercent(value, { lossless: true }, figures);
+  return formatNumber(value, { maxDecimals: 2 }, figures);
 }
 
 /** *Met*, *Gap*, or *Not uploaded yet* — never *Gap* for a figure nobody has (D-moc). */
-export const criterionVerdict = (met: boolean | null) =>
-  (met === null ? OWN_COPY.notUploaded : met ? PROTOTYPE_COPY.met : PROTOTYPE_COPY.gap);
+export function criterionVerdict(met: boolean | null, language: Language = SOURCE_LANGUAGE): string {
+  const t = messagesIn(kpmAnalyticsMessages, language);
+  return met === null ? t.notUploaded : met ? t.met : t.gap;
+}
 
 const MONTH = /^(\d{4})-(\d{2})$/;
 
 /**
  * The period a criterion was read over, as a sentence names it: a month (*Sep 2026*), a run of them
- * (*Agu – Sep 2026*, *Des 2025 – Jan 2026*), or the server's words as they came.
+ * (*Agu – Sep 2026*, *Des 2025 – Jan 2026*), or the server's words as they came. Months, in `figures`.
  */
-export function periodWords(period: string): string {
-  if (MONTH.test(period)) return formatMonth(period);
+export function periodWords(period: string, figures?: Language): string {
+  if (MONTH.test(period)) return formatMonth(period, figures);
   const run = /^(\d{4}-\d{2})\s*(?:\.\.|\/|–|—)\s*(\d{4}-\d{2})$/.exec(period);
   if (!run) return period;
   const [from, to] = [run[1], run[2]];
-  if (from === to) return formatMonth(from);
+  if (from === to) return formatMonth(from, figures);
   const sameYear = from.slice(0, 4) === to.slice(0, 4);
-  const first = sameYear ? formatMonth(from).replace(/\s\d{4}$/, '') : formatMonth(from);
-  return `${first} – ${formatMonth(to)}`;
+  const first = sameYear ? formatMonth(from, figures).replace(/\s\d{4}$/, '') : formatMonth(from, figures);
+  return `${first} – ${formatMonth(to, figures)}`;
 }
 
 /*
  * ── Monthly production ──────────────────────────────────────────────────────────────────────────
  */
 
-/** A bar's label under it: *Mar*, *Okt* (`:3433`; `id-ID`, ADR-0167 §1). */
-export function shortMonth(month: string): string {
-  return MONTH.test(month) ? formatMonthName(month) : month;
+/** A bar's label under it: *Mar*, *Okt* (`:3433`; `id-ID`, ADR-0167 §1); *Oct* in English. */
+export function shortMonth(month: string, figures?: Language): string {
+  return MONTH.test(month) ? formatMonthName(month, figures) : month;
 }
 
 export interface ChartBar {
@@ -475,14 +512,19 @@ export interface ChartBar {
   value: string;
 }
 
-/** The six bars' heights against the tallest month held, and each value in words. */
-export function chartBars(monthly: readonly MonthlyProduction[]): ChartBar[] {
+/** The six bars' heights against the tallest month held, and each value: its figure in `figures`, a gap in words. */
+export function chartBars(
+  monthly: readonly MonthlyProduction[],
+  language: Language = SOURCE_LANGUAGE,
+  figures?: Language,
+): ChartBar[] {
   const held = monthly.map((m) => m.apeMinor).filter((v): v is number => v !== null);
   const top = Math.max(0, ...held);
+  const t = messagesIn(kpmAnalyticsMessages, language);
   return monthly.map(({ month, apeMinor }) => ({
     month,
     height: apeMinor === null ? null : top > 0 ? Math.round((apeMinor / top) * 100) : 0,
     // A bar's label is a chart's, compact (ADR-0167 §1): `Rp 1,2 M` fits over a bar where a full figure ran on.
-    value: apeMinor === null ? OWN_COPY.notUploaded : formatRupiahCompact(apeMinor),
+    value: apeMinor === null ? t.notUploaded : formatRupiahCompact(apeMinor, {}, figures),
   }));
 }

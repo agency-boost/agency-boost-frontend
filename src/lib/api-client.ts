@@ -1,5 +1,7 @@
 'use client';
 
+import { LANGUAGE_UNCHOSEN, type Language } from '@/i18n/language';
+import { uiMessages } from '@/i18n/messages/ui';
 import { ApiConfigError, apiUrl } from './api';
 
 /**
@@ -31,8 +33,13 @@ export interface ApiError {
  * That last one was not hypothetical. The activation checklist dereferenced a version an office
  * did not have, threw a `TypeError`, and this function reported it as *"Could not reach the
  * server"* — which is what the office's Owner saw, and what they went looking for.
+ *
+ * **The browser's own sentences are the catalogue's English** (`uiMessages.errors`, P18.98-T4): composed here, outside
+ * React and with no language to hand, and written in the reader's language where `ErrorBanner` shows them
+ * (`ErrorWords`), so no caller changes. A server's sentence arrives in the reader's language already (P18.98-T5).
  */
 export function toDisplayError(err: unknown): ApiError {
+  const BROWSER_SAID = uiMessages.en.errors;
   if (err instanceof ApiRequestError) return err.error;
   if (err instanceof ApiConfigError) {
     return { code: 'CONFIG', message: err.message, requestId: 'unknown' };
@@ -51,7 +58,7 @@ export function toDisplayError(err: unknown): ApiError {
   if (failedToFetch) {
     return {
       code: 'NETWORK',
-      message: 'Could not reach the server. Check your connection and try again.',
+      message: BROWSER_SAID.network,
       requestId: 'unknown',
     };
   }
@@ -65,8 +72,7 @@ export function toDisplayError(err: unknown): ApiError {
   console.error('Unexpected error on this screen:', err);
   return {
     code: 'UNEXPECTED',
-    message: 'Something went wrong on this screen. Reload the page — if it keeps happening, tell '
-      + 'your administrator, and quote this screen’s address.',
+    message: BROWSER_SAID.unexpected,
     requestId: 'unknown',
   };
 }
@@ -83,6 +89,25 @@ export class ApiRequestError extends Error {
 
 let accessToken: string | null = null;
 let impersonating = false;
+
+/**
+ * **The language the screen is written in, told to the API on every request** (ADR-0179 §7; P18.98-T2 AC-6):
+ * `Accept-Language: id` or `en`. Held here, beside the token, and set by `LanguageProvider` whenever the screen's
+ * language changes — before the request that follows a choice, so the choice's own save carries it. From P18.98-T5 the
+ * API writes its refusals, notices and validation messages in it; until then it reads nothing from it.
+ *
+ * Starts as the language the pages are prerendered in (`LANGUAGE_UNCHOSEN`): what a request made before the provider
+ * has run — none is, today — would be written in.
+ */
+let requestLanguage: Language = LANGUAGE_UNCHOSEN;
+
+export function setRequestLanguage(language: Language): void {
+  requestLanguage = language;
+}
+
+export function getRequestLanguage(): Language {
+  return requestLanguage;
+}
 
 export function setAccessToken(token: string | null): void {
   accessToken = token;
@@ -129,6 +154,8 @@ async function raw(path: string, options: RequestOptions = {}): Promise<Response
     headers: {
       ...(form ? {} : { 'Content-Type': 'application/json' }),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      // The screen's language (AC-6). CORS-safelisted for these two values: the API's allowed headers need not name it.
+      'Accept-Language': requestLanguage,
     },
     // Sends and receives the httpOnly refresh cookie.
     credentials: 'include',
@@ -164,7 +191,8 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
   if (!response.ok) {
     const error = (payload as { error?: ApiError } | null)?.error ?? {
       code: 'INTERNAL_ERROR',
-      message: 'Something went wrong. Please try again.',
+      // The catalogue's English, written in the reader's language where it is shown (`ErrorWords`, P18.98-T4).
+      message: uiMessages.en.errors.noAnswer,
       requestId: 'unknown',
     };
     // The office cannot be used at all (ADR-0112 §4): the app is replaced, whichever request met it.

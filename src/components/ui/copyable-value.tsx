@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
 import { cn } from '@/lib/cn';
 import { TEXT_TAP } from '@/components/ui/phone';
 import { Toast, useToast } from '@/components/ui/toast';
@@ -28,13 +30,13 @@ export function CopyableValue({
   label,
   value,
   mono,
-  action = 'Copy',
+  action,
   border = 'solid',
   copied,
 }: {
   label: string;
   value: string;
-  /** The toast once the copy has worked: `CONFIRMED.linkCopied` or `CONFIRMED.codeCopied` (`lib/confirmations.ts`). */
+  /** The toast once the copy has worked: *Link copied ✓* or *Code copied ✓* (`confirmationMessages`), in the reader's language. */
   copied: string;
   mono?: boolean;
   /**
@@ -46,6 +48,7 @@ export function CopyableValue({
   /** The prototype dashes the link box and leaves the code box solid (`:181`, `:190`). */
   border?: 'solid' | 'dashed';
 }) {
+  const t = useMessages(uiMessages).copy;
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const { toast, show } = useToast();
 
@@ -89,13 +92,11 @@ export function CopyableValue({
         onClick={() => void copy()}
         className={cn('mt-2 text-md font-semibold text-navy underline', TEXT_TAP)}
       >
-        {action}
+        {action ?? t.action}
       </button>
       {state !== 'idle' && (
         <p role="status" className={cn('mt-1 text-sm', state === 'copied' ? 'text-success' : 'text-alert')}>
-          {state === 'copied'
-            ? 'Copied.'
-            : 'Could not copy — select the text above and copy it yourself.'}
+          {state === 'copied' ? t.copied : t.failed}
         </p>
       )}
       <Toast toast={toast} />

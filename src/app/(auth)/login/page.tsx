@@ -12,9 +12,13 @@ import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/fie
 import { resendVerification } from '@/lib/sessions';
 import { destinationAfterSignIn, sessionEndedIn } from '@/lib/return-path';
 import { PasswordInput } from '@/components/ui/password-input';
+import { PublicTitle } from '@/components/public-title';
+import { useMessages } from '@/i18n/language-provider';
+import { authMessages } from '@/i18n/messages/auth';
 
 export default function LoginPage() {
   const { signIn } = useSession();
+  const t = useMessages(authMessages).signIn;
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -68,7 +72,9 @@ export default function LoginPage() {
 
   return (
     <main className={AUTH_PAGE}>
-      <h1 className="font-display text-3xl font-bold text-navy">AgencyBoost</h1>
+      <PublicTitle>
+        <h1 className="font-display text-3xl font-bold text-navy">{t.title}</h1>
+      </PublicTitle>
       {/* `useSearchParams` needs a boundary; until the address is read, the sentence everybody else reads. */}
       <Suspense fallback={<Lede ended={false} />}>
         <LedeFromAddress />
@@ -91,17 +97,17 @@ export default function LoginPage() {
                   }
                 }}
               >
-                Send the verification email again
+                {t.resend}
               </Button>
               {resent && (
                 <p role="status" className="text-md text-muted">
-                  On its way, if that address has an account waiting.
+                  {t.resent}
                 </p>
               )}
             </div>
           )}
 
-          <Field label="Email" htmlFor="email">
+          <Field label={t.email} htmlFor="email">
             <TextInput
               id="email"
               name="email"
@@ -114,7 +120,7 @@ export default function LoginPage() {
             />
           </Field>
 
-          <Field label="Password" htmlFor="password">
+          <Field label={t.password} htmlFor="password">
             <PasswordInput
               id="password"
               name="password"
@@ -127,15 +133,15 @@ export default function LoginPage() {
           </Field>
 
           <Button type="submit" disabled={busy}>
-            {busy ? 'Signing in…' : 'Sign in'}
+            {busy ? t.signingIn : t.signIn}
           </Button>
 
           <Link href="/forgot-password" className="text-center text-sm text-muted underline">
-            Forgot your password?
+            {t.forgot}
           </Link>
 
           <Link href="/register" className="text-center text-sm text-muted underline">
-            Create an account
+            {t.createAccount}
           </Link>
         </form>
       </Card>
@@ -155,9 +161,10 @@ function LedeFromAddress() {
 }
 
 function Lede({ ended }: { ended: boolean }) {
+  const t = useMessages(authMessages).signIn;
   return (
     <p className="mb-6 mt-1 text-md text-muted">
-      {ended ? 'Your session ended. Sign in again.' : 'Sign in to continue.'}
+      {ended ? t.sessionEnded : t.toContinue}
     </p>
   );
 }

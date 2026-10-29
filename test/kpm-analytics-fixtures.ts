@@ -29,10 +29,12 @@ function figures(over: Partial<Figures> = {}): Figures {
     manpower: { aab: 0, agents: 3, total: 4 },
     ...over,
   };
-  // The share the server serves beside the count (P18.97-T3 AC-10): its `rateOver` over the row's manpower.
+  // The share's base (OD-235): this month's manpower, unless a case says otherwise — a past month's members.
+  const activeOf = over.activeOf ?? row.manpower.total;
+  // The share the server serves beside the count (P18.97-T3 AC-10): its `rateOver` over that base.
   const activePct = 'activePct' in over ? (over.activePct as number | null)
-    : row.activeAgents === null ? null : percentOf(row.activeAgents, row.manpower.total);
-  return { ...row, activePct };
+    : row.activeAgents === null ? null : percentOf(row.activeAgents, activeOf);
+  return { ...row, activePct, activeOf };
 }
 
 export const MOC_MET: Moc = {
@@ -189,8 +191,9 @@ export function analyticsView(period: AnalyticsPeriod = 'this_month', over: Part
       apeAnnual: { achievedMinor: rp(5780), targetMinor: rp(5200), pct: 111 },
       coached7d: { count: 31, of: 68, pct: 46 },
       activeAgents: period === 'this_month' ? 54 : 47,
-      // 54 of 68 and 47 of 68, as the server serves them (P18.97-T3 AC-10).
+      // 54 of 68 and 47 of 68, as the server serves them (P18.97-T3 AC-10), over the 68 it serves as their base (OD-235).
       activePct: period === 'this_month' ? 79 : 69,
+      activeOf: 68,
       leads: { sales: 27, salesPotential: 15, recruit: 11, recruitPotential: 8 },
       manpower: { aab: 2, agents: 62, total: 68 },
       abCount: 4,
@@ -219,6 +222,7 @@ export const NO_AB = analyticsView('this_month', {
     coached7d: { count: 0, of: 0, pct: null },
     activeAgents: null,
     activePct: null,
+    activeOf: 0,
     leads: { sales: 0, salesPotential: 0, recruit: 0, recruitPotential: 0 },
     manpower: { aab: 0, agents: 0, total: 0 },
     abCount: 0,

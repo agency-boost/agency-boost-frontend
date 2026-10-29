@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/field';
+import { useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
 import { publishConfig, readPublishState, type PublishState } from '@/lib/tenant-config';
@@ -20,6 +22,7 @@ import { publishConfig, readPublishState, type PublishState } from '@/lib/tenant
  * matters.
  */
 export function PublishBar({ refreshKey }: { refreshKey?: number }) {
+  const t = useMessages(settingsMessages).publish;
   const canPublish = useCan('tenant_config:write');
   const [state, setState] = useState<PublishState | null>(null);
   /*
@@ -56,11 +59,11 @@ export function PublishBar({ refreshKey }: { refreshKey?: number }) {
     return (
       <div role="alert" className="mb-4 rounded-md border border-alert bg-card p-3">
         <p className="text-md text-navy">
-          <strong>Could not check what your agents are seeing.</strong>{' '}
+          <strong>{t.cannotCheck}</strong>{' '}
           <span className="text-muted">{loadError.message}</span>
         </p>
         <Button variant="secondary" className="mt-2" onClick={() => { setLoadError(null); void load(); }}>
-          Try again
+          {t.tryAgain}
         </Button>
       </div>
     );
@@ -74,10 +77,8 @@ export function PublishBar({ refreshKey }: { refreshKey?: number }) {
       className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber bg-amber/10 p-3"
     >
       <p className="text-md text-navy">
-        <strong>Your agents are not seeing these changes yet.</strong>{' '}
-        {state.publishedVersion === 0
-          ? 'Nothing has been published for this office.'
-          : `They are on version ${state.publishedVersion}.`}
+        <strong>{t.notSeeing}</strong>{' '}
+        {state.publishedVersion === 0 ? t.nothingPublished : t.onVersion({ version: state.publishedVersion })}
       </p>
       {canPublish && (
         <Button
@@ -94,7 +95,7 @@ export function PublishBar({ refreshKey }: { refreshKey?: number }) {
             }
           }}
         >
-          {busy ? 'Publishing…' : 'Publish to agents'}
+          {busy ? t.publishing : t.publishToAgents}
         </Button>
       )}
       {error && <p className="text-md text-alert">{error.message}</p>}

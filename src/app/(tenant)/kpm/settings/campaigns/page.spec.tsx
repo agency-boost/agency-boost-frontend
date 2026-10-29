@@ -121,7 +121,7 @@ describe('the office’s Campaigns screen', () => {
     // The prototype stores "Rp 600,000,000" as a display string and one campaign's reward in pesos.
     render();
 
-    expect(await screen.findByText(/APE achieved at least Rp 500 jt/)).toBeInTheDocument();
+    expect(await screen.findByText(/APE achieved at least IDR 500M/)).toBeInTheDocument();
   });
 
   it('shows the phase worked out from the dates', async () => {
@@ -181,7 +181,7 @@ describe('the office’s Campaigns screen', () => {
     await userEvent.type(screen.getByLabelText('Ends'), '2026-12-31');
     await userEvent.click(screen.getByRole('button', { name: '+ Add requirement' }));
     await userEvent.selectOptions(screen.getByLabelText('Requirement 1'), 'APE_ACHIEVED');
-    await userEvent.type(screen.getByLabelText('Requirement 1 Target (Rp)'), '500000000');
+    await userEvent.type(screen.getByLabelText('Requirement 1 Target (IDR)'), '500000000');
     await userEvent.click(screen.getByRole('button', { name: 'Add the campaign' }));
 
     await waitFor(() => expect(stub.calls.some((c) => c.init.method === 'POST')).toBe(true));
@@ -370,7 +370,7 @@ describe('the office’s Campaigns screen', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
       expect(screen.getByLabelText('Requirement 1')).toHaveValue('APE_ACHIEVED');
       expect(screen.getByLabelText('Requirement 1 Comparison')).toHaveValue('gte');
-      expect(screen.getByLabelText('Requirement 1 Target (Rp)')).toHaveValue('500000000');
+      expect(screen.getByLabelText('Requirement 1 Target (IDR)')).toHaveValue('500000000');
       expect(screen.getByLabelText('Requirement 2')).toHaveValue('NEW_HIRES');
       expect(screen.getByLabelText('Requirement 2 Comparison')).toHaveValue('gt');
       expect(screen.getByLabelText('Requirement 2 Target')).toHaveValue('1');
@@ -503,14 +503,14 @@ describe('P18.97-T4 AC-8 the campaigns settings: order, This office, rates', () 
       ],
     })]);
     expect(await screen.findByText('Recruitment success rate at least 30%')).toBeInTheDocument();
-    expect(screen.getByText('Leads per activity at least 1,50')).toBeInTheDocument();
-    expect(screen.queryByText(/at least 0,30/)).toBeNull();
+    expect(screen.getByText('Leads per activity at least 1.50')).toBeInTheDocument();
+    expect(screen.queryByText(/at least 0.30/)).toBeNull();
   });
 
   it('P18.97-T4 AC-8 writes a ratio the office does not hold as the number, as before', async () => {
     renderWithConfig([campaign({
       requirements: [{ metricKey: 'MEETING_PER_APPROACH', metricName: 'Set appointment to meeting', comparator: 'gte', value: 0.3, unit: 'ratio', measured: true }],
     })]);
-    expect(await screen.findByText('Set appointment to meeting at least 0,30')).toBeInTheDocument();
+    expect(await screen.findByText('Set appointment to meeting at least 0.30')).toBeInTheDocument();
   });
 });

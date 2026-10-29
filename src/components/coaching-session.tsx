@@ -9,25 +9,30 @@ import {
 } from '@/components/coaching-parts';
 import { useSessionHistoryPrefetch } from '@/components/coaching-person';
 import { LeadsTable } from '@/components/leads-table';
-import { SummaryCard } from '@/components/personal-summary';
+import { SummaryCard } from '@/components/summary-card';
 import { DateField } from '@/components/ui/date-field';
 import { Button, ErrorBanner, TextInput } from '@/components/ui/field';
 import { REMOVED_ON_PHONE, TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { InlineSaveField, InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Toast, useToast } from '@/components/ui/toast';
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { coachingSessionMessages } from '@/i18n/messages/coaching-session';
 import {
   readActivityRatios, readActivitySummary, type ActivityRatios, type ActivitySummary,
 } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { CONFIRMED, withDetail } from '@/lib/confirmations';
+import { confirmationMessages } from '@/i18n/messages/confirmations';
+import { withDetail } from '@/lib/confirmations';
 import { cn } from '@/lib/cn';
 import {
-  capitalized, coachingArchiveHref, finalizeRefusal, finalizeSession, pastSessionSummary, PRONOUN_FORMS,
+  coachingArchiveHref, finalizeRefusal, finalizeSession, leadActionText, pastSessionSummary,
   readSession, readSessionHistory, reopenWindowClosed, saveSessionDraft, startSession,
   type Coachee, type CoachingSession, type LeadAction, type SessionDraftBody, type SessionHistory,
 } from '@/lib/coaching';
-import { formatCalendarDayLong, formatRupiahCompact, formatShortDay } from '@/lib/format';
+import { formatCalendarDayLong, formatRupiahCompact, formatShortDay, moneyPrefix } from '@/lib/format';
 import {
   goalInputsOf, groupDigits, parseDigits, readGoal, saveGoal, toMajor, toMinor,
 } from '@/lib/goals';
@@ -71,7 +76,9 @@ import { readSummary, type Summary } from '@/lib/summary';
  * controls go inert. Past sessions, the closed leads and the Activity drill still open, and
  * *⬇ Download as PDF* prints the frozen session (ADR-0077).
  *
- * Coaching's own strings use none of ADR-0084's six words, and none names a phase, an id or a code.
+ * Coaching's own strings use none of ADR-0084's six words, and none names a phase, an id or a code. They are the
+ * catalogue's (`messages/coaching-session.tsx`, P18.98-T4), in the reader's language; every figure is written in
+ * `useFigureLanguage()`'s.
  */
 export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; opening?: string }) {
   const { me } = useSession();
@@ -82,6 +89,8 @@ export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; openi
   const canReopen = useCan('coaching_session:reopen');
   const canSetGoal = useCan('goal:update');
   const { toast, show } = useToast();
+  const t = useMessages(coachingSessionMessages);
+  const confirmed = useMessages(confirmationMessages);
   const takePrefetched = useSessionHistoryPrefetch();
   const { membershipId } = coachee;
 
@@ -159,10 +168,7 @@ export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; openi
        * *Session started ✓* (P18.95-T1 AC-6, ADR-0167 §5; UI-008), and the prototype's own sentence after it
        * for what was carried; with no session before this one, nothing was.
        */
-      show(withDetail(
-        CONFIRMED.sessionStarted,
-        started.lastWeek ? 'unfinished items and tips from last week carried forward.' : null,
-      ));
+      show(withDetail(confirmed.sessionStarted, started.lastWeek ? t.carried : null));
     } catch (err) {
       setStartError(toDisplayError(err));
     } finally {
@@ -205,7 +211,7 @@ export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; openi
         <>
           {reloaded && (
             <p role="status" className="rounded-md border border-hairline bg-base px-3.5 py-2.5 text-sm text-navy">
-              This session was changed somewhere else, so it has been read again.
+              {t.reloaded}
             </p>
           )}
           {draft.error && <ErrorBanner {...draft.error} />}
@@ -222,7 +228,7 @@ export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; openi
               editable={!locked && canSetGoal}
               onSaved={() => {
                 setGoalSaves((n) => n + 1);
-                show('Goal updated — reflected across both tabs.');
+                show(t.goalUpdated);
               }}
             />
             <RatiosCard coachee={coachee} />
@@ -230,13 +236,13 @@ export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; openi
 
           <ActivityCard coachee={coachee} refresh={goalSaves} />
 
-          <SummaryCard id="session-leads" title="Leads" className="min-w-0">
+          <SummaryCard id="session-leads" title={t.leads} className="min-w-0">
             <LeadsTable
               filters
               offerDelete={false}
               owner={membershipId}
               readOnly={locked}
-              caption={`${capitalized(PRONOUN_FORMS[coachee.pronoun].possessive)} leads`}
+              caption={t.theirLeads({ pronoun: coachee.pronoun })}
               onNotice={show}
               onWrite={(lead) => void leadWritten(lead)}
             />
@@ -258,13 +264,13 @@ export function SessionWorkspace({ coachee, opening }: { coachee: Coachee; openi
                 onFinalized={async (next) => {
                   open(next);
                   setReloaded(false);
-                  show('Session finalized — this coaching is now marked done, and locked to view-only.');
+                  show(t.finalizedToast);
                   await refreshHistory().catch(() => undefined);
                 }}
                 onReopened={async (next) => {
                   open(next);
                   setReloaded(false);
-                  show('Reopened for editing — finalize again when you’re done.');
+                  show(t.reopenedToast);
                   await refreshHistory().catch(() => undefined);
                 }}
                 onConflict={reload}
@@ -499,6 +505,9 @@ function useSessionDraft(): SessionDraft {
  * prototype toasted that the archive was *"coming next"* (`:10712-10715`, contradiction #5).
  */
 function SessionHeader({ coachee, history, session }: { coachee: Coachee; history: SessionHistory | null; session: CoachingSession | null }) {
+  const figures = useFigureLanguage();
+  const language = useLanguage();
+  const t = useMessages(coachingSessionMessages);
   const [showPast, setShowPast] = useState(false);
   const listId = useId();
   const day = session?.date ?? history?.today ?? null;
@@ -508,7 +517,7 @@ function SessionHeader({ coachee, history, session }: { coachee: Coachee; histor
     <div className="rounded-lg border border-hairline bg-card px-5 py-3">
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <p className="text-base text-muted">
-          {"Today's session — "}<strong className="text-navy">{day ? formatCalendarDayLong(day) : ''}</strong>
+          {t.today({ day: <strong className="text-navy">{day ? formatCalendarDayLong(day, figures) : ''}</strong> })}
           {' '}
           <span
             className={cn(
@@ -516,7 +525,7 @@ function SessionHeader({ coachee, history, session }: { coachee: Coachee; histor
               finalized ? 'bg-success/10 text-success' : 'bg-base text-muted',
             )}
           >
-            {sessionTag(session)}
+            {sessionTag(session, language)}
           </span>
         </p>
         <button
@@ -526,13 +535,13 @@ function SessionHeader({ coachee, history, session }: { coachee: Coachee; histor
           onClick={() => setShowPast((v) => !v)}
           className={cn('rounded-sm text-sm font-semibold text-navy-soft hover:underline', TEXT_TAP)}
         >
-          {showPast ? 'Hide past sessions' : 'View past sessions'}
+          {showPast ? t.past.hide : t.past.show}
           <span aria-hidden="true">{showPast ? ' ▴' : ' ▾'}</span>
         </button>
       </div>
       <div id={listId} hidden={!showPast} className="mt-3 border-t border-hairline pt-3">
         {!history ? null : history.sessions.length === 0 ? (
-          <p className="py-1.5 text-sm text-muted">No past sessions yet.</p>
+          <p className="py-1.5 text-sm text-muted">{t.past.none}</p>
         ) : (
           <ul>
             {history.sessions.map((past) => (
@@ -542,9 +551,9 @@ function SessionHeader({ coachee, history, session }: { coachee: Coachee; histor
                   className={cn('flex items-center justify-between gap-3 rounded-sm py-[7px] text-sm text-muted hover:text-navy', TAP_HEIGHT)}
                 >
                   <span>
-                    <strong className="text-navy">{formatShortDay(past.date, { year: true })}</strong> — {pastSessionSummary(past)}
+                    <strong className="text-navy">{formatShortDay(past.date, { year: true }, figures)}</strong> — {pastSessionSummary(past, language)}
                   </span>
-                  <span className="whitespace-nowrap">View →</span>
+                  <span className="whitespace-nowrap">{t.past.view}</span>
                 </Link>
               </li>
             ))}
@@ -558,23 +567,26 @@ function SessionHeader({ coachee, history, session }: { coachee: Coachee; histor
 /**
  * **The session's tag**: *Not started* before *Start coaching session* has opened one (P18.95-T7 AC-2; the client's
  * UI review, UI-021), *Draft* while it is open, *Finalized* once it is. The prototype's tag reads *Draft* from the
- * start (`Overall.html:4171`), before there is anything to be a draft of.
+ * start (`Overall.html:4171`), before there is anything to be a draft of. In the reader's `language`, English when
+ * passed none (P18.98-T4).
  */
-export function sessionTag(session: Pick<CoachingSession, 'status'> | null): 'Not started' | 'Draft' | 'Finalized' {
-  if (session === null) return 'Not started';
-  return session.status === 'finalized' ? 'Finalized' : 'Draft';
+export function sessionTag(session: Pick<CoachingSession, 'status'> | null, language: Language = SOURCE_LANGUAGE): string {
+  const t = messagesIn(coachingSessionMessages, language).tag;
+  if (session === null) return t.notStarted;
+  return session.status === 'finalized' ? t.finalized : t.draft;
 }
 
 function StartCard({ starting, error, onStart }: { starting: boolean; error: ApiError | null; onStart: () => void }) {
+  const t = useMessages(coachingSessionMessages).start;
   return (
     <div className="rounded-lg border border-hairline bg-card px-[22px] py-[18px] text-center">
       <div className="py-3.5">
         <Button onClick={onStart} disabled={starting} className="h-auto px-[22px] py-[11px]">
-          <span aria-hidden="true">▶&nbsp;</span>Start coaching session
+          <span aria-hidden="true">{'▶\u00a0'}</span>{t.button}
         </Button>
         {/* The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 24): from 768px it reads as before. */}
         <p className={cn('mt-2.5 text-sm text-muted', REMOVED_ON_PHONE)}>
-          {"Opens last week's items, goals, leads, and everything else for today's 1-on-1."}
+          {t.line}
         </p>
       </div>
       {error && <div className="text-left"><ErrorBanner {...error} /></div>}
@@ -583,8 +595,9 @@ function StartCard({ starting, error, onStart }: { starting: boolean; error: Api
 }
 
 function SessionSkeleton() {
+  const t = useMessages(coachingSessionMessages);
   return (
-    <Skeleton label="Opening the session…" className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
+    <Skeleton label={t.opening} className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
       <SkeletonBar className="mx-auto h-10 w-56" />
       <SkeletonText lines={1} className="mx-auto mt-3 w-2/3" />
     </Skeleton>
@@ -593,8 +606,9 @@ function SessionSkeleton() {
 
 /** Where last week's items will be, while the session is read beside the cards below it. */
 function AgreementSkeleton() {
+  const t = useMessages(coachingSessionMessages);
   return (
-    <Skeleton label="Opening the session…" className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
+    <Skeleton label={t.opening} className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
       <SkeletonBar className="h-4 w-1/3" />
       <SkeletonText lines={2} className="mt-3" />
     </Skeleton>
@@ -612,13 +626,15 @@ function AgreementSkeleton() {
  * Fill): the prototype's card always has rows.
  */
 function LastWeekCard({ session, draft, locked }: { session: CoachingSession; draft: SessionDraft; locked: boolean }) {
+  const figures = useFigureLanguage();
+  const t = useMessages(coachingSessionMessages).agreement;
   const rows = draft.state?.lastWeek ?? [];
   const uid = useId();
   return (
     <SummaryCard
       id="session-last-week"
-      title="Last week's action items"
-      tag={session.lastWeek ? `From ${formatShortDay(session.lastWeek.date)} session` : undefined}
+      title={t.lastWeek}
+      tag={session.lastWeek ? t.fromSession({ day: formatShortDay(session.lastWeek.date, {}, figures), coach: null }) : undefined}
     >
       <ul>
         {session.lastWeekItems.map((item, i) => {
@@ -642,7 +658,7 @@ function LastWeekCard({ session, draft, locked }: { session: CoachingSession; dr
               ) : (
                 <DateField
                   density="compact"
-                  aria-label={`Date, ${item.text || `item ${i + 1}`}`}
+                  aria-label={t.date({ item: item.text || t.item({ n: i + 1 }) })}
                   className="w-[9.5rem]"
                   value={row.dueDate}
                   onChange={(next) => {
@@ -657,7 +673,7 @@ function LastWeekCard({ session, draft, locked }: { session: CoachingSession; dr
                 {item.text}
               </span>
               {/* The row's tick and date say their save at its end (P18.95-T1 AC-5). */}
-              <InlineSaveStatus {...draft.status(`lastWeek:${item.itemId}`)} label={item.text || `item ${i + 1}`} />
+              <InlineSaveStatus {...draft.status(`lastWeek:${item.itemId}`)} label={item.text || t.item({ n: i + 1 })} />
             </li>
           );
         })}
@@ -693,6 +709,8 @@ function LastWeekCard({ session, draft, locked }: { session: CoachingSession; dr
 function GoalCard({
   coachee, sessionId, editable, onSaved,
 }: { coachee: Coachee; sessionId: string; editable: boolean; onSaved: () => void }) {
+  const figures = useFigureLanguage();
+  const t = useMessages(coachingSessionMessages).goal;
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [editing, setEditing] = useState(false);
@@ -768,11 +786,11 @@ function GoalCard({
     <form onSubmit={(e) => void save(e)} className="flex flex-wrap items-center gap-2">
       <TextInput
         id={inputId}
-        prefix="Rp"
-        aria-label="Annual APE target"
+        prefix={moneyPrefix(figures)}
+        aria-label={t.annualTarget}
         inputMode="numeric"
         className="w-48"
-        value={typed === '' ? '' : groupDigits(parseDigits(typed))}
+        value={typed === '' ? '' : groupDigits(parseDigits(typed), figures)}
         readOnly={saving}
         onChange={(e) => setTyped(e.target.value)}
         onKeyDown={(e) => {
@@ -782,23 +800,23 @@ function GoalCard({
           }
         }}
       />
-      <Button type="submit" disabled={saving}>Save</Button>
-      <Button variant="secondary" onClick={cancel} disabled={saving}>Cancel</Button>
+      <Button type="submit" disabled={saving}>{t.save}</Button>
+      <Button variant="secondary" onClick={cancel} disabled={saving}>{t.cancel}</Button>
     </form>
   );
 
   return (
     <SummaryCard
       id="session-goal"
-      title="Goal"
+      title={t.title}
       className="min-w-0"
       aside={editable && !noGoal && summary && !editing
-        ? <span className="text-xs text-muted">Tap this year’s target to edit</span>
+        ? <span className="text-xs text-muted">{t.tapToEdit}</span>
         : undefined}
     >
       {error && <ErrorBanner {...error} />}
       {!summary && !error && (
-        <Skeleton label="Reading the goal…">
+        <Skeleton label={t.reading}>
           <SkeletonBar className="h-6 w-2/3" />
           <SkeletonBar className="mt-3 h-1.5 w-full" />
           <SkeletonBar className="mt-6 h-6 w-2/3" />
@@ -807,15 +825,15 @@ function GoalCard({
       )}
       {summary && (noGoal ? (
         <div className="flex flex-col gap-3">
-          <p className="font-body text-[1.1875rem] font-bold text-navy">No goal set</p>
+          <p className="font-body text-[1.1875rem] font-bold text-navy">{t.none}</p>
           {editable && (editing ? editor : (
-            <Button ref={trigger} variant="inline" className="self-start" onClick={edit}>Set this year’s target</Button>
+            <Button ref={trigger} variant="inline" className="self-start" onClick={edit}>{t.set}</Button>
           ))}
         </div>
       ) : (
         <>
           <GoalRow figures={summary.monthly} period="month" target={
-            summary.monthly.targetMinor === null ? '—' : formatRupiahCompact(summary.monthly.targetMinor)
+            summary.monthly.targetMinor === null ? '—' : formatRupiahCompact(summary.monthly.targetMinor, {}, figures)
           } />
           <GoalRow
             figures={summary.yearly}
@@ -828,10 +846,10 @@ function GoalCard({
                 onClick={edit}
                 className="rounded-[3px] border-b-[1.5px] border-dashed border-hairline px-px hover:border-amber focus:border-amber"
               >
-                {formatRupiahCompact(summary.yearly.targetMinor!)}
-                <span className="sr-only">, this year’s target — edit</span>
+                {formatRupiahCompact(summary.yearly.targetMinor!, {}, figures)}
+                <span className="sr-only">{t.editTarget}</span>
               </button>
-            ) : formatRupiahCompact(summary.yearly.targetMinor!)}
+            ) : formatRupiahCompact(summary.yearly.targetMinor!, {}, figures)}
             editor={editing ? editor : null}
           />
         </>
@@ -851,6 +869,7 @@ function GoalCard({
  * benchmark and says it; the balance says which way it leans, in points, and its band.
  */
 function RatiosCard({ coachee }: { coachee: Coachee }) {
+  const t = useMessages(coachingSessionMessages).ratios;
   const [ratios, setRatios] = useState<ActivityRatios | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -866,7 +885,7 @@ function RatiosCard({ coachee }: { coachee: Coachee }) {
     <RatiosPanel
       rows={ratios?.ratios ?? null}
       error={error}
-      emptyLine={`There are no ratios for ${PRONOUN_FORMS[coachee.pronoun].possessive} role yet.`}
+      emptyLine={t.none({ pronoun: coachee.pronoun })}
     />
   );
 }
@@ -958,15 +977,16 @@ function useFocusNew() {
  * it — the prototype's pointed below (contradiction #14, a Fix in its sibling's words).
  */
 function TipsCard({ draft, locked }: { draft: SessionDraft; locked: boolean }) {
+  const { agreement, tips: t } = useMessages(coachingSessionMessages);
   const tips = draft.state?.tips ?? [];
   const { focus, idOf } = useFocusNew();
   return (
     <SummaryCard
       id="session-tips"
-      title="Coaching tips"
+      title={agreement.tips}
       aside={locked ? undefined : (
         <AddButton
-          label="Add tip"
+          label={t.add}
           onClick={() => {
             const key = newKey();
             draft.change((d) => ({ ...d, tips: [...d.tips, { key, text: '' }] }));
@@ -977,7 +997,7 @@ function TipsCard({ draft, locked }: { draft: SessionDraft; locked: boolean }) {
     >
       {tips.length === 0 ? (
         <p className={EMPTY_LINE}>
-          {locked ? 'No tips were added this session.' : 'No tips added yet — tap + above to add one.'}
+          {locked ? agreement.noTips : t.emptyOpen}
         </p>
       ) : (
         <ol>
@@ -988,11 +1008,11 @@ function TipsCard({ draft, locked }: { draft: SessionDraft; locked: boolean }) {
                 <span className="min-w-0 flex-1">{tip.text}</span>
               ) : (
                 <>
-                  <InlineSaveField status={draft.status(`tip:${tip.key}`)} label={`Tip ${i + 1}`} className="min-w-0 flex-1">
+                  <InlineSaveField status={draft.status(`tip:${tip.key}`)} label={t.tip({ n: i + 1 })} className="min-w-0 flex-1">
                     <TextInput
                       id={idOf(tip.key)}
-                      aria-label={`Tip ${i + 1}`}
-                      placeholder="Type the tip…"
+                      aria-label={t.tip({ n: i + 1 })}
+                      placeholder={t.placeholder}
                       className="h-8 w-full min-w-0"
                       value={tip.text}
                       onChange={(e) => {
@@ -1003,7 +1023,7 @@ function TipsCard({ draft, locked }: { draft: SessionDraft; locked: boolean }) {
                     />
                   </InlineSaveField>
                   <RemoveButton
-                    label={`Remove tip ${i + 1}`}
+                    label={t.remove({ n: i + 1 })}
                     onClick={() => draft.commit((d) => ({ ...d, tips: d.tips.filter((t) => t.key !== tip.key) }))}
                   />
                 </>
@@ -1032,6 +1052,8 @@ function TipsCard({ draft, locked }: { draft: SessionDraft; locked: boolean }) {
 function NextActionsCard({
   draft, leadActions, locked, today,
 }: { draft: SessionDraft; leadActions: readonly LeadAction[]; locked: boolean; today: string }) {
+  const language = useLanguage();
+  const { agreement, actions: t } = useMessages(coachingSessionMessages);
   const actions = [...(draft.state?.actions ?? [])].sort(byDueDate);
   const { focus, idOf } = useFocusNew();
   const [guard, setGuard] = useState(false);
@@ -1053,28 +1075,28 @@ function NextActionsCard({
   return (
     <SummaryCard
       id="session-next"
-      title="Next action items"
-      aside={locked ? undefined : <AddButton label="Add action" onClick={add} />}
+      title={agreement.next}
+      aside={locked ? undefined : <AddButton label={t.add} onClick={add} />}
     >
-      <h3 className={label}>From leads (automatic)</h3>
+      <h3 className={label}>{agreement.fromLeads}</h3>
       {leadActions.length === 0 ? (
-        <p className={EMPTY_LINE}>No leads have a next action date set yet.</p>
+        <p className={EMPTY_LINE}>{agreement.noLeadDates}</p>
       ) : (
         <ul>
           {leadActions.map((a) => (
             <li key={a.leadId} className="flex min-h-10 flex-wrap items-center gap-2.5 border-b border-hairline py-[9px] last:border-b-0">
               <DateTag day={a.dueDate} />
               <FromLeadTag name={a.leadName} />
-              <span className="min-w-[10rem] flex-1 text-md text-navy">{a.text || `Follow up with ${a.leadName}`}</span>
+              <span className="min-w-[10rem] flex-1 text-md text-navy">{leadActionText(a, language)}</span>
             </li>
           ))}
         </ul>
       )}
 
-      <h3 className={label}>Other action items</h3>
+      <h3 className={label}>{agreement.other}</h3>
       {actions.length === 0 ? (
         <p className={EMPTY_LINE}>
-          {locked ? 'No other action items were added this session.' : 'No other action items yet — tap + above to add one.'}
+          {locked ? agreement.noOther : t.emptyOpen}
         </p>
       ) : (
         <ol>
@@ -1090,7 +1112,7 @@ function NextActionsCard({
                 <>
                   <DateField
                     density="compact"
-                    aria-label={`Date, action item ${i + 1}`}
+                    aria-label={t.date({ n: i + 1 })}
                     className="w-[9.5rem]"
                     value={item.dueDate}
                     onChange={(next) => {
@@ -1099,11 +1121,11 @@ function NextActionsCard({
                     }}
                   />
                   {/* The row's date and words say their save under the words (P18.95-T1 AC-5). */}
-                  <InlineSaveField status={draft.status(`action:${item.key}`)} label={`Action item ${i + 1}`} className="min-w-[140px] flex-1">
+                  <InlineSaveField status={draft.status(`action:${item.key}`)} label={t.item({ n: i + 1 })} className="min-w-[140px] flex-1">
                     <TextInput
                       id={idOf(item.key)}
-                      aria-label={`Action item ${i + 1}`}
-                      placeholder="What needs to happen…"
+                      aria-label={t.item({ n: i + 1 })}
+                      placeholder={t.placeholder}
                       className="h-8 w-full"
                       value={item.text}
                       onChange={(e) => {
@@ -1115,7 +1137,7 @@ function NextActionsCard({
                     />
                   </InlineSaveField>
                   <RemoveButton
-                    label={`Remove action item ${i + 1}`}
+                    label={t.remove({ n: i + 1 })}
                     onClick={() => {
                       setGuard(false);
                       draft.commit((d) => ({ ...d, actions: d.actions.filter((a) => a.key !== item.key) }));
@@ -1129,7 +1151,7 @@ function NextActionsCard({
       )}
       {guard && !locked && (
         <p role="alert" className="mt-2 text-sm font-semibold text-alert">
-          Fill in the action item you already started before adding another.
+          {t.guard}
         </p>
       )}
     </SummaryCard>
@@ -1168,6 +1190,9 @@ function FinalizeCard({
   onReopened: (session: CoachingSession) => Promise<void>;
   onConflict: () => void;
 }) {
+  const figures = useFigureLanguage();
+  const language = useLanguage();
+  const t = useMessages(coachingSessionMessages).finalize;
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -1184,7 +1209,7 @@ function FinalizeCard({
       await onFinalized(next);
     } catch (err) {
       const shown = toDisplayError(err);
-      const sentence = shown.code === 'COACHING_SESSION_INCOMPLETE' ? finalizeRefusal(shown.details) : null;
+      const sentence = shown.code === 'COACHING_SESSION_INCOMPLETE' ? finalizeRefusal(shown.details, language) : null;
       if (sentence) setRefusal(sentence);
       else if (shown.code === 'VERSION_CONFLICT' || shown.code === 'COACHING_SESSION_FINALIZED') onConflict();
       else setError(shown);
@@ -1198,10 +1223,10 @@ function FinalizeCard({
     return (
       <div className="rounded-lg border border-hairline bg-card px-[22px] py-[18px] text-center">
         <Button onClick={() => void finalize()} disabled={busy}>
-          <span aria-hidden="true">✓&nbsp;</span>Finalize this session
+          <span aria-hidden="true">{'✓\u00a0'}</span>{t.button}
         </Button>
         <p className="mt-2.5 text-sm text-muted">
-          Coaching is only counted as done once finalized. You can keep editing everything until then.
+          {t.line}
         </p>
         {refusal && <p role="alert" className="mt-2.5 text-sm font-semibold text-alert">{refusal}</p>}
         {error && <div className="mt-3 text-left"><ErrorBanner {...error} /></div>}
@@ -1210,7 +1235,7 @@ function FinalizeCard({
   }
 
   const closed = reopenWindowClosed(today, session.reopenableUntil);
-  const until = session.reopenableUntil ? formatShortDay(session.reopenableUntil, { year: true }) : '';
+  const until = session.reopenableUntil ? formatShortDay(session.reopenableUntil, { year: true }, figures) : '';
   return (
     <div className="rounded-lg border border-hairline bg-card px-[22px] py-[18px] text-center">
       <FinalizedBadge date={session.date} />

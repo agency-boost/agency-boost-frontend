@@ -9,6 +9,8 @@ import {
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
+import { useMessages } from '@/i18n/language-provider';
+import { adminRequestsMessages } from '@/i18n/messages/admin-requests';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   approveKpmRequest,
@@ -31,6 +33,7 @@ import {
  * name` column is a branch name and the number is ours to issue.
  */
 export default function KpmRequestsPage() {
+  const t = useMessages(adminRequestsMessages);
   const [rows, setRows] = useState<KpmRequestRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -72,18 +75,18 @@ export default function KpmRequestsPage() {
   return (
     // The nav item's words (P18.95-T9 AC-2; UI-027): *Pending KPM requests* (`Superadmin.html:189`).
     <Page
-      title="Pending KPM Requests"
-      subtitle="New registrations, awaiting Superadmin sign-off"
+      title={t.kpm.title}
+      subtitle={t.kpm.subtitle}
     >
       {error && <ErrorBanner {...error} />}
 
       {rows === null && !error && (
-        <SkeletonCards count={3} label="Loading registrations…" className="mb-3" />
+        <SkeletonCards count={3} label={t.kpm.loading} className="mb-3" />
       )}
 
       {rows && pending.length === 0 && (
         <Card>
-          <EmptyState title="Nobody is waiting for an office." />
+          <EmptyState title={t.kpm.empty} />
         </Card>
       )}
 
@@ -95,16 +98,17 @@ export default function KpmRequestsPage() {
                 {row.branchName}
               </span>
               <span className="block text-sm text-muted">
-                {row.companyName} · asked by <strong>{row.requestedByName}</strong> (proposed KPM
-                Owner) · {row.requestedByEmail}
+                {t.kpm.meta({
+                  company: row.companyName, name: <strong>{row.requestedByName}</strong>, email: row.requestedByEmail,
+                })}
               </span>
               {row.note && <span className="mt-1 block text-md text-navy">{row.note}</span>}
             </span>
-            <StatusPill status="alert" label="Pending" />
+            <StatusPill status="alert" label={t.status.pending} />
           </div>
 
           <FieldRow className="mt-3">
-            <Field label="KPM code" htmlFor={`code-${row.requestId}`} className="w-32">
+            <Field label={t.kpm.code} htmlFor={`code-${row.requestId}`} className="w-32">
               <TextInput
                 id={`code-${row.requestId}`}
                 inputMode="numeric"
@@ -118,13 +122,13 @@ export default function KpmRequestsPage() {
                 disabled={busy !== null || !(code[row.requestId] ?? '').trim()}
                 onClick={() => void decide(row, 'approve')}
               >
-                {busy === row.requestId ? 'Approving…' : 'Approve'}
+                {busy === row.requestId ? t.approving : t.approve}
               </Button>
             </FieldRow.Actions>
-            <Field label="Why not?" htmlFor={`why-${row.requestId}`} className="min-w-[16rem] flex-1">
+            <Field label={t.whyNot} htmlFor={`why-${row.requestId}`} className="min-w-[16rem] flex-1">
               <TextInput
                 id={`why-${row.requestId}`}
-                placeholder="Sent back to whoever asked"
+                placeholder={t.sentBack}
                 value={reason[row.requestId] ?? ''}
                 onChange={(e) => setReason({ ...reason, [row.requestId]: e.target.value })}
               />
@@ -135,37 +139,37 @@ export default function KpmRequestsPage() {
                 disabled={busy !== null}
                 onClick={() => void decide(row, 'decline')}
               >
-                Decline
+                {t.decline}
               </Button>
             </FieldRow.Actions>
           </FieldRow>
           {/* Approving provisions an office and hands somebody the keys to it, so the
               button says what it will do before it does it. */}
           <p className="mt-2 text-sm text-muted">
-            Approving creates the office and makes {row.requestedByName} its Owner.
+            {t.kpm.approvingMeans({ name: row.requestedByName })}
           </p>
         </Card>
       ))}
 
       {decided.length > 0 && (
         <>
-          <h2 className="mb-3 mt-6 font-display text-lg font-bold text-navy">Already decided</h2>
+          <h2 className="mb-3 mt-6 font-display text-lg font-bold text-navy">{t.decided}</h2>
           <DataTable
-            caption="Decided registrations"
-            columns={['KPM name', 'Company', 'Requested by', 'Status']}
+            caption={t.kpm.caption}
+            columns={[t.kpm.columns.name, t.kpm.columns.company, t.kpm.columns.requestedBy, t.kpm.columns.status]}
           >
             {decided.map((row) => (
               <Row key={row.requestId}>
                 <Cell className="font-semibold">{row.branchName}</Cell>
                 <Cell className="text-muted">{row.companyName}</Cell>
                 <Cell className="text-muted">
-                  {row.requestedByName} (proposed KPM Owner)
+                  {t.kpm.proposedOwner({ name: row.requestedByName })}
                   {row.reason && <span className="block text-sm">{row.reason}</span>}
                 </Cell>
                 <Cell>
                   <StatusPill
                     status={row.status === 'approved' ? 'success' : 'neutral'}
-                    label={row.status === 'approved' ? 'Approved' : 'Declined'}
+                    label={row.status === 'approved' ? t.status.approved : t.status.declined}
                   />
                 </Cell>
               </Row>

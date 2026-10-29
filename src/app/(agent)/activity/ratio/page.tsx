@@ -6,7 +6,11 @@ import { Page } from '@/components/page';
 import { Card, ErrorBanner } from '@/components/ui/field';
 import { NumberBadge } from '@/components/ui/number-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
-import { StatusPill, STATUS_LABEL } from '@/components/ui/status-pill';
+import { StatusPill } from '@/components/ui/status-pill';
+import type { MessagesOf } from '@/i18n/catalogue';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { activityMessages } from '@/i18n/messages/activity';
+import { uiMessages } from '@/i18n/messages/ui';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readActivityRatios, type ActivityRatio, type ActivityRatios, type RatioTerm } from '@/lib/activity';
 import { cn } from '@/lib/cn';
@@ -30,6 +34,7 @@ import { formatBenchmark, formatRatioForStatus } from '@/lib/ratio-format';
  * session's Ratios card still shows it. When every ratio is too thin, the page says so in its empty card.
  */
 export default function ActivityRatioPage() {
+  const t = useMessages(activityMessages);
   const [view, setView] = useState<ActivityRatios | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -42,16 +47,18 @@ export default function ActivityRatioPage() {
   }, []);
 
   return (
-    <Page title={ACTIVITY_TITLE} subtitle="How your activity is converting." subtitleOnPhone={false}>
+    <Page title={ACTIVITY_TITLE} subtitle={t.ratio.subtitle} subtitleOnPhone={false}>
       <ActivityTabs />
       {error && <ErrorBanner {...error} />}
-      {!view && !error && <SkeletonCards count={4} label="Working out your ratios…" />}
+      {!view && !error && <SkeletonCards count={4} label={t.ratio.working} />}
       {view && <Ratios view={view} />}
     </Page>
   );
 }
 
 function Ratios({ view }: { view: ActivityRatios }) {
+  const t = useMessages(activityMessages);
+  const figures = useFigureLanguage();
   /** The ratios there is data enough to read: `null` is *not enough data* (`ratios.md`), never a zero. */
   const readable = view.ratios.filter((ratio) => ratio.value !== null);
   return (
@@ -63,23 +70,22 @@ function Ratios({ view }: { view: ActivityRatios }) {
       <p className="mb-5 flex items-center gap-2 text-sm text-muted">
         <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-amber" />
         <span>
-          Calculated on the <strong className="text-navy">last {view.days} days</strong> of activity
-          {' · '}
-          {formatShortDay(view.from)} – {formatShortDay(view.to, { year: true })}.
+          {t.ratio.calculatedOn({
+            days: view.days,
+            from: formatShortDay(view.from, {}, figures),
+            to: formatShortDay(view.to, { year: true }, figures),
+            strong: (words) => <strong className="text-navy">{words}</strong>,
+          })}
         </span>
       </p>
 
       {view.ratios.length === 0 ? (
         <Card>
-          <p className="text-md text-navy">
-            Your office has no ratios for your role yet. Ratios are your KPM Owner&apos;s to set up.
-          </p>
+          <p className="text-md text-navy">{t.ratio.none}</p>
         </Card>
       ) : readable.length === 0 ? (
         <Card>
-          <p className="text-md text-navy">
-            Not enough activity in the last {view.days} days to work out your ratios yet.
-          </p>
+          <p className="text-md text-navy">{t.ratio.notEnough({ days: view.days })}</p>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
@@ -105,7 +111,17 @@ const VALUE_CLASS: Record<ActivityRatio['status'], string> = {
   neutral: 'text-navy',
 };
 
+/** The module's words, in the reader's language (`messages/activity.tsx`; P18.98-T4). */
+type ActivityWords = MessagesOf<typeof activityMessages.en>;
+
+/**
+ * A rate against its benchmark: its figure and its benchmark in the reader's figures, a unit's words in the reader's
+ * (`ratio-words.ts`, P18.98-T4).
+ */
 function RateCard({ ratio }: { ratio: ActivityRatio }) {
+  const t = useMessages(activityMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const id = `ratio-${ratio.code}`;
   return (
     <article
@@ -117,10 +133,11 @@ function RateCard({ ratio }: { ratio: ActivityRatio }) {
     >
       <Head ratio={ratio} id={id} />
       <p className={cn('font-body text-3xl font-bold leading-tight', VALUE_CLASS[ratio.status])}>
-        {formatRatioForStatus(ratio.value, ratio.displayUnit, ratio.benchmark, ratio.status)}
+        {formatRatioForStatus(ratio.value, ratio.displayUnit, ratio.benchmark, ratio.status, figures, language)}
       </p>
       <p className="mb-2.5 mt-1 text-sm text-muted">
-        Benchmark: <strong className="text-navy">{formatBenchmark(ratio.benchmark, ratio.displayUnit)}</strong>
+        {t.ratio.benchmark}:{' '}
+        <strong className="text-navy">{formatBenchmark(ratio.benchmark, ratio.displayUnit, figures, language)}</strong>
       </p>
       <StatusPill status={ratio.status} />
       <Explain ratio={ratio} />
@@ -148,14 +165,18 @@ function RateCard({ ratio }: { ratio: ActivityRatio }) {
  * benchmark*; in the band it still reads *On track*. The band is the ratio's own benchmark (`balanceAdvice`).
  */
 function BalanceCard({ ratio }: { ratio: ActivityRatio }) {
+  const t = useMessages(activityMessages);
+  const states = useMessages(uiMessages).status;
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const id = `ratio-${ratio.code}`;
-  const { first, second } = balanceSideNames(ratio.sides);
+  const { first, second } = balanceSideNames(ratio.sides, language);
   const split = ratio.value === null || ratio.share === null
     ? null
-    : formatBalanceSplit(ratio.share, ratio.benchmark, ratio.status);
-  const band = formatBalanceBand(ratio.benchmark);
+    : formatBalanceSplit(ratio.share, ratio.benchmark, ratio.status, figures);
+  const band = formatBalanceBand(ratio.benchmark, figures);
   // Off the band, what to do about it (P18.95-T5 AC-6); in it, today's words.
-  const advice = balanceAdvice(ratio.share, ratio.benchmark, ratio.status, ratio.sides);
+  const advice = balanceAdvice(ratio.share, ratio.benchmark, ratio.status, ratio.sides, figures, language);
   // The marker sits at the second side's share, from the first side's end — the prototype's `recruitmentPct`.
   const position = ratio.share === null ? null : 100 - ratio.share;
 
@@ -164,8 +185,8 @@ function BalanceCard({ ratio }: { ratio: ActivityRatio }) {
       <Head ratio={ratio} id={id} />
       <div className="mt-1.5">
         <div className="mb-2.5 flex justify-between text-sm font-semibold text-muted" aria-hidden="true">
-          <span>More {first}</span>
-          <span>More {second}</span>
+          <span>{t.ratio.more({ side: first })}</span>
+          <span>{t.ratio.more({ side: second })}</span>
         </div>
         <div className="relative mx-2 mb-4 h-2 rounded-md bg-gradient-to-r from-amber-dark via-hairline to-navy-soft" aria-hidden="true">
           <span className="absolute -top-1 left-1/2 h-4 w-px -translate-x-1/2 bg-muted" />
@@ -178,19 +199,17 @@ function BalanceCard({ ratio }: { ratio: ActivityRatio }) {
           )}
         </div>
         <p className="text-center text-sm text-muted">
-          {split === null ? 'Not enough data yet.' : (
+          {split === null ? t.ratio.notEnoughData : (
             <>
               <strong className="text-navy">{split.first}</strong> {first}
               {' · '}
               <strong className="text-navy">{split.second}</strong> {second}
               {' · '}
-              {advice ?? STATUS_LABEL[ratio.status]}
+              {advice ?? states[ratio.status]}
             </>
           )}
         </p>
-        <p className="mt-1 text-center text-xs text-muted">
-          On track while each side is between {band.low} and {band.high}.
-        </p>
+        <p className="mt-1 text-center text-xs text-muted">{t.ratio.band({ low: band.low, high: band.high })}</p>
       </div>
       <Explain ratio={ratio} />
     </article>
@@ -218,19 +237,20 @@ function Head({ ratio, id }: { ratio: ActivityRatio; id: string }) {
  * measures only where the formula is still the platform's.
  */
 function Explain({ ratio }: { ratio: ActivityRatio }) {
+  const t = useMessages(activityMessages);
   const terms = [...ratio.numerator, ...ratio.denominator].filter(
     (term, i, all) => all.findIndex((t) => t.code === term.code) === i,
   );
   return (
     <details className="group mt-3 text-sm">
       <summary className="cursor-pointer text-muted underline-offset-2 hover:text-navy hover:underline">
-        What is this ratio?
+        {t.ratio.whatIs}
       </summary>
       <div className="mt-2 rounded-md bg-navy/[0.04] p-3">
         <p className="flex flex-wrap items-center gap-1.5">
-          <span className="sr-only">{sentence(ratio)}</span>
+          <span className="sr-only">{sentence(ratio, t)}</span>
           <Side terms={ratio.numerator} />
-          <span aria-hidden="true" className="font-semibold text-muted">{ratio.comparison === 'band' ? 'vs' : '÷'}</span>
+          <span aria-hidden="true" className="font-semibold text-muted">{ratio.comparison === 'band' ? t.ratio.versus : '÷'}</span>
           <Side terms={ratio.denominator} />
         </p>
         <ul className="mt-2 space-y-0.5 text-xs text-muted">
@@ -242,7 +262,7 @@ function Explain({ ratio }: { ratio: ActivityRatio }) {
         </ul>
         {ratio.purpose && <p className="mt-2 text-xs italic text-muted">{ratio.purpose}</p>}
         {ratio.divergesFromStandard && (
-          <p className="mt-2 text-xs text-muted">Your office has set its own formula for this ratio.</p>
+          <p className="mt-2 text-xs text-muted">{t.ratio.ownFormula}</p>
         )}
       </div>
     </details>
@@ -265,10 +285,10 @@ function Side({ terms }: { terms: RatioTerm[] }) {
   );
 }
 
-/** The formula in words, for a screen reader: `Submission polis divided by …`. */
-function sentence(ratio: ActivityRatio): string {
-  const side = (terms: RatioTerm[]) => terms.map((t) => t.label).join(' plus ');
+/** The formula in words, for a screen reader: `Submission polis divided by …` — the types' names as the office typed them. */
+function sentence(ratio: ActivityRatio, t: ActivityWords): string {
+  const side = (terms: RatioTerm[]) => t.ratio.sum({ labels: terms.map((term) => term.label) });
   return ratio.comparison === 'band'
-    ? `${side(ratio.numerator)}, against ${side(ratio.denominator)}`
-    : `${side(ratio.numerator)}, divided by ${side(ratio.denominator)}`;
+    ? t.ratio.against({ a: side(ratio.numerator), b: side(ratio.denominator) })
+    : t.ratio.dividedBy({ a: side(ratio.numerator), b: side(ratio.denominator) });
 }

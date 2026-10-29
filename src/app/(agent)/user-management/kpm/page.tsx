@@ -6,6 +6,8 @@ import { USER_MANAGEMENT_TITLE, UserManagementTabs } from '@/components/user-man
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { userManagementMessages } from '@/i18n/messages/user-management';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   askForKpm,
@@ -26,8 +28,13 @@ import {
  * office; here the state is written and re-read. And *Switch KPM* there is a pure
  * show/hide with no un-register step — the real thing refuses a second registration
  * rather than appearing to move you.
+ *
+ * Its words are the catalogue's (`user-management.ts`; P18.98-T4): *office* is *KPM* in Indonesian (§B.9). An office's
+ * company, code and branch are shown as stored.
  */
 export default function RegisterKpmPage() {
+  const words = useMessages(userManagementMessages);
+  const t = words.kpm;
   const [state, setState] = useState<JoinState | null>(null);
   const [q, setQ] = useState('');
   const [results, setResults] = useState<KpmDirectoryEntry[] | null>(null);
@@ -74,34 +81,29 @@ export default function RegisterKpmPage() {
   return (
     <Page
       title={USER_MANAGEMENT_TITLE}
-      subtitle="Find the Prudential KPM your branch belongs to."
+      subtitle={t.subtitle}
     >
       <UserManagementTabs leaderLocked={!registered} />
       {error && <ErrorBanner {...error} />}
 
       {state === null && (
-        <SkeletonCards count={2} label="Loading your office…" />
+        <SkeletonCards count={2} label={t.loading} />
       )}
 
       {state && registered && (
         <Card className="border-l-4 border-l-amber">
-          <p className="text-sm font-semibold uppercase tracking-wide text-muted">Registered office</p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-muted">{t.registered}</p>
           <p className="mt-1 font-display text-xl font-bold text-navy">{state.kpmLabel}</p>
           <p className="mt-1 text-md text-muted">
-            {state.status === 'pending'
-              ? 'You are in the office and waiting for a leader to take you on.'
-              : 'You are an active member of this office.'}
+            {state.status === 'pending' ? t.pendingLine : t.activeLine}
           </p>
           {/* No "Switch KPM". The prototype's button only hides a card; moving between
               offices is a real operation with real consequences for your history, and it
               is not one you do to yourself from here. */}
-          <p className="mt-3 text-sm text-muted">
-            Moving to a different office is not something you can do yourself — ask
-            whoever administers your office.
-          </p>
+          <p className="mt-3 text-sm text-muted">{t.moving}</p>
           {state.status === 'pending' && (
             <ButtonLink href="/user-management/leader" className="mt-4">
-              Find Your Leader
+              {words.tabs.leader}
             </ButtonLink>
           )}
         </Card>
@@ -113,24 +115,18 @@ export default function RegisterKpmPage() {
             <p className="text-3xl" aria-hidden>
               🏢
             </p>
-            <h2 className="mt-1 font-display text-xl font-bold text-navy">No office registered yet</h2>
-            <p className="mt-1 text-md text-muted">
-              Find the office your branch belongs to. You will need this before you can find a
-              leader.
-            </p>
+            <h2 className="mt-1 font-display text-xl font-bold text-navy">{t.noneTitle}</h2>
+            <p className="mt-1 text-md text-muted">{t.noneLine}</p>
           </Card>
 
           <Card>
-            <h2 className="font-display text-lg font-bold text-navy">Search for your office</h2>
-            <p className="mt-1 text-md text-muted">
-              Select the one your branch belongs to. Registering does not make you a member yet —
-              a leader still has to take you on.
-            </p>
+            <h2 className="font-display text-lg font-bold text-navy">{t.searchTitle}</h2>
+            <p className="mt-1 text-md text-muted">{t.searchLine}</p>
 
-            <Field label="Search" htmlFor="kpm-search" className="mt-3">
+            <Field label={t.search} htmlFor="kpm-search" className="mt-3">
               <TextInput
                 id="kpm-search"
-                placeholder="Office code or branch name"
+                placeholder={t.searchExample}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
@@ -147,7 +143,7 @@ export default function RegisterKpmPage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-md font-semibold text-navy">
-                      {k.companyName} — KPM {k.code}
+                      {t.office({ company: k.companyName, code: k.code })}
                     </span>
                     <span className="block text-sm text-muted">
                       {k.branchName}
@@ -155,7 +151,7 @@ export default function RegisterKpmPage() {
                     </span>
                   </span>
                   <Button disabled={busy !== null} onClick={() => void choose(k.kpmId)}>
-                    {busy === k.kpmId ? 'Registering…' : 'Select'}
+                    {busy === k.kpmId ? t.registering : t.select}
                   </Button>
                 </li>
               ))}
@@ -164,7 +160,7 @@ export default function RegisterKpmPage() {
             {results?.length === 0 && (
               <EmptyState
                 variant={q ? 'filtered' : 'empty'}
-                title={q ? 'No offices match that search.' : 'No offices are available to join.'}
+                title={q ? t.noMatch : t.noneAvailable}
               />
             )}
           </Card>
@@ -200,6 +196,7 @@ function AskForKpm({
   companies: KpmDirectoryEntry[] | null;
   onAsked: (r: MyKpmRequest) => void;
 }) {
+  const t = useMessages(userManagementMessages).kpm;
   const [open, setOpen] = useState(false);
   const [branchName, setBranchName] = useState('');
   const [note, setNote] = useState('');
@@ -213,14 +210,9 @@ function AskForKpm({
   if (mine && mine.status === 'pending') {
     return (
       <Card className="mt-4 border-l-4 border-l-amber">
-        <p className="text-sm font-semibold uppercase tracking-wide text-muted">
-          You asked for an office
-        </p>
+        <p className="text-sm font-semibold uppercase tracking-wide text-muted">{t.askedTitle}</p>
         <p className="mt-1 font-display text-xl font-bold text-navy">{mine.branchName}</p>
-        <p className="mt-1 text-md text-muted">
-          {mine.companyName} · waiting on AgencyBoost. You will be told either way, and if it is
-          approved the office is yours to run.
-        </p>
+        <p className="mt-1 text-md text-muted">{t.askedLine({ company: mine.companyName })}</p>
       </Card>
     );
   }
@@ -228,15 +220,9 @@ function AskForKpm({
   if (mine && mine.status === 'declined') {
     return (
       <Card className="mt-4">
-        <h2 className="font-display text-lg font-bold text-navy">
-          Your request for {mine.branchName} was declined
-        </h2>
-        <p className="mt-1 text-md text-navy">
-          {mine.reason ?? 'No reason was given. Ask whoever manages your region.'}
-        </p>
-        <p className="mt-1 text-sm text-muted">
-          You can search again above, or ask for a different office.
-        </p>
+        <h2 className="font-display text-lg font-bold text-navy">{t.declinedTitle({ branch: mine.branchName })}</h2>
+        <p className="mt-1 text-md text-navy">{mine.reason ?? t.noReason}</p>
+        <p className="mt-1 text-sm text-muted">{t.declinedLine}</p>
       </Card>
     );
   }
@@ -256,33 +242,30 @@ function AskForKpm({
 
   return (
     <Card className="mt-4">
-      <h2 className="font-display text-lg font-bold text-navy">Cannot find your office?</h2>
-      <p className="mt-1 text-md text-muted">
-        If your branch is not on AgencyBoost yet, ask for it. Somebody at AgencyBoost decides, and
-        if they agree the office is created and you become its Owner.
-      </p>
+      <h2 className="font-display text-lg font-bold text-navy">{t.cannotFind}</h2>
+      <p className="mt-1 text-md text-muted">{t.cannotFindLine}</p>
 
       {!open && (
         <Button variant="secondary" className="mt-3" onClick={() => setOpen(true)}>
-          Ask for an office
+          {t.ask}
         </Button>
       )}
 
       {open && (
         <>
           {error && <ErrorBanner {...error} />}
-          <Field label="What is your branch called?" htmlFor="branch" className="mt-3">
+          <Field label={t.branch} htmlFor="branch" className="mt-3">
             <TextInput
               id="branch"
-              placeholder="Surabaya Branch"
+              placeholder={t.branchExample}
               value={branchName}
               onChange={(e) => setBranchName(e.target.value)}
             />
           </Field>
-          <Field label="Anything they should know?" htmlFor="note" className="mt-3">
+          <Field label={t.note} htmlFor="note" className="mt-3">
             <TextInput
               id="note"
-              placeholder="Twelve agents already working this area"
+              placeholder={t.noteExample}
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
@@ -292,7 +275,7 @@ function AskForKpm({
             disabled={busy || !branchName.trim() || !companyId}
             onClick={() => void ask()}
           >
-            {busy ? 'Sending…' : 'Send the request'}
+            {busy ? t.sending : t.send}
           </Button>
         </>
       )}

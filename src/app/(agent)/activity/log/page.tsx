@@ -16,9 +16,11 @@ import { SectionCard } from '@/components/ui/section-card';
 import { Stepper } from '@/components/ui/stepper';
 import { Toast, useToast } from '@/components/ui/toast';
 import { ACTION_BAR_PHONE, ACTION_BAR_ROOM_PHONE } from '@/components/ui/phone';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { activityMessages } from '@/i18n/messages/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { CONFIRMED } from '@/lib/confirmations';
+import { confirmationMessages } from '@/i18n/messages/confirmations';
 import { formatCalendarDay, formatNumber } from '@/lib/format';
 import { activityTermMentions } from '@/lib/terms';
 import { useSession } from '@/lib/session';
@@ -52,6 +54,9 @@ import {
  * nothing changes (ADR-0167 §12). **At every size the tiles are the sections below them** (AC-2), one each.
  */
 export default function LogActivityPage() {
+  const t = useMessages(activityMessages).log;
+  const confirmed = useMessages(confirmationMessages);
+  const figures = useFigureLanguage();
   const { config, loading: configLoading, error: configError } = useTenantConfig();
   const { me } = useSession();
   const phone = usePhone();
@@ -119,7 +124,7 @@ export default function LogActivityPage() {
       setCounts(Object.fromEntries(next.entries.map((e) => [e.activityTypeCode, e.count])));
       setDirty(false);
       setReason('');
-      show(CONFIRMED.activityLogged);
+      show(confirmed.activityLogged);
     } catch (err) {
       setError(toDisplayError(err));
     } finally {
@@ -129,9 +134,9 @@ export default function LogActivityPage() {
 
   if (configLoading || (day === null && error === null)) {
     return (
-      <Page title={ACTIVITY_TITLE} subtitle="Enter today's activities in 1 minute." subtitleOnPhone={false}>
+      <Page title={ACTIVITY_TITLE} subtitle={t.subtitle} subtitleOnPhone={false}>
         <ActivityTabs />
-        <SkeletonCards count={3} label="Loading your day…" />
+        <SkeletonCards count={3} label={t.loading} />
       </Page>
     );
   }
@@ -185,9 +190,9 @@ export default function LogActivityPage() {
    * on a phone in the bar, beside the button it answers for. Never both: it is the screen's live region.
    */
   const saveStatus = savedTotal !== null ? (
-    <SaveStatus state="saved">Saved · {savedTotal} touches</SaveStatus>
+    <SaveStatus state="saved">{t.saved({ n: savedTotal })}</SaveStatus>
   ) : (
-    <SaveStatus state="unsaved">Not yet saved</SaveStatus>
+    <SaveStatus state="unsaved">{t.notSaved}</SaveStatus>
   );
   const statusInBar = phone && saving;
   /*
@@ -203,7 +208,7 @@ export default function LogActivityPage() {
   return (
     <Page
       title={ACTIVITY_TITLE}
-      subtitle="Enter today's activities in 1 minute."
+      subtitle={t.subtitle}
       // The client's *Remove* on a phone, as every reviewed sub-line (P18.95-T7 AC-1, grey text row 25).
       subtitleOnPhone={false}
       actions={
@@ -213,7 +218,7 @@ export default function LogActivityPage() {
          * screen is about, not one field of the form.
          */
         <div className="flex flex-col gap-1.5">
-          <Field label="Date" htmlFor="activity-date" className="w-44">
+          <Field label={t.date} htmlFor="activity-date" className="w-44">
             {/* The shared date field (P18.96-T2 AC-4): the day as the app writes it, the device's picker to choose. */}
             <DateField id="activity-date" value={date} onChange={goTo} />
           </Field>
@@ -234,7 +239,7 @@ export default function LogActivityPage() {
         <SummaryStrip
           className="max-md:hidden"
           tiles={sectionTiles(sections, sectionTotal, {
-            label: 'Total touches today',
+            label: t.totalToday,
             value: total,
             // What a touch is, once (P18.95-T9 AC-3; UI-028): the strip is where the word first shows.
             term: 'TOUCHES',
@@ -248,9 +253,11 @@ export default function LogActivityPage() {
         */}
       {sections.length > 0 && (
         <p className="mb-4 text-md text-navy md:hidden">
-          {date === today ? 'Today' : formatCalendarDay(date)}:{' '}
-          <strong className="font-bold">{formatNumber(total)}</strong>{' '}
-          {total === 1 ? 'touch' : 'touches'}{' '}
+          {t.dayLine({
+            day: date === today ? t.today : formatCalendarDay(date, figures),
+            count: <strong className="font-bold">{formatNumber(total, {}, figures)}</strong>,
+            n: total,
+          })}{' '}
           {/* Below 768px this line stands where the strip is, so the word's ⓘ is here (P18.95-T9 AC-3). */}
           <TermTip term="TOUCHES" />
         </p>
@@ -258,10 +265,7 @@ export default function LogActivityPage() {
 
       {sections.length === 0 && !configFailed && (
         <Card>
-          <p className="text-md text-navy">
-            Your office has not set up its activity types yet. Ask your KPM Owner — the list on this
-            screen is theirs to define.
-          </p>
+          <p className="text-md text-navy">{t.notSetUp}</p>
         </Card>
       )}
 
@@ -280,7 +284,7 @@ export default function LogActivityPage() {
               title={section.label}
               meta={
                 <ConfigBadge tone="navy" className="normal-case tracking-normal">
-                  {types.length === 1 ? '1 item' : `${types.length} items`}
+                  {t.items({ n: types.length })}
                 </ConfigBadge>
               }
             >
@@ -331,15 +335,13 @@ export default function LogActivityPage() {
         * day is closed, and how often it has been corrected — a corrected record says so.
         */}
       {sections.length > 0 && unloggedAndClosed && (
-        <p role="status" className="mb-4 text-sm text-muted">This day is closed, and nothing was logged for it.</p>
+        <p role="status" className="mb-4 text-sm text-muted">{t.closedNothing}</p>
       )}
       {reasonShown && (
         <Field
-          label="Why is this being corrected?"
+          label={t.why}
           htmlFor="correction-reason"
-          hint={corrections > 0
-            ? `This day is closed, and has been corrected ${corrections === 1 ? 'once' : `${corrections} times`}.`
-            : 'This day is closed.'}
+          hint={corrections > 0 ? t.closedCorrected({ n: corrections }) : t.closed}
           className={cn('mb-4 max-w-xl', ACTION_BAR_ROOM_PHONE)}
         >
           {/* Required, and capped where the API caps it (`activity.dto.ts`, 500), so a reason is never
@@ -371,7 +373,7 @@ export default function LogActivityPage() {
         >
           {statusInBar && <span className="mr-auto min-w-0">{saveStatus}</span>}
           <Button variant="secondary" disabled={busy} onClick={() => void load(date)}>
-            Cancel
+            {t.cancel}
           </Button>
           {frozen ? (
             <Button
@@ -380,14 +382,14 @@ export default function LogActivityPage() {
                 () => correctActivityDay({ date, counts, reason: reason.trim() }),
               )}
             >
-              {busy ? 'Saving…' : 'Save the correction'}
+              {busy ? t.saving : t.saveCorrection}
             </Button>
           ) : (
             <Button
               disabled={busy}
               onClick={() => void run(() => saveActivityDay({ date, counts }))}
             >
-              {busy ? 'Saving…' : 'Save activity'}
+              {busy ? t.saving : t.saveActivity}
             </Button>
           )}
         </div>
@@ -395,8 +397,8 @@ export default function LogActivityPage() {
 
       <Dialog
         open={confirmDate !== null}
-        message="You have unsaved counts for this day. Discard them and open another day?"
-        confirmLabel="Discard counts"
+        message={t.unsaved}
+        confirmLabel={t.discard}
         tone="danger"
         onConfirm={() => {
           const next = confirmDate!;

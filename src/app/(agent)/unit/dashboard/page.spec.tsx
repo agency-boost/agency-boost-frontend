@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import userEvent from '@testing-library/user-event';
 import { createHash } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeMe, renderInLayout, renderWithSession, stubFetch, type StubReply } from '@test/harness';
+import { makeMe, renderInLayout, renderWithLanguage, renderWithSession, resetLanguage, stubFetch, type StubReply } from '@test/harness';
 import {
   AGUS_ME, dashboard, EMPTY, goalCell, NEW_HIRE_VIEW, RATIOS, ratio, rp, total, unitRow, UNITS,
 } from '@test/unit-dashboard-fixtures';
@@ -94,7 +94,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       expect(screen.getByText('4 direct · 12 under AABs')).toBeInTheDocument();
       expect(screen.queryByText(/direct agents \(including/)).not.toBeInTheDocument();
       expect(screen.getByText('Direct Group production')).toBeInTheDocument();
-      expect(screen.getByText('Rp 1 M / 1,3 M')).toBeInTheDocument();
+      expect(screen.getByText('IDR 1B / 1.3B')).toBeInTheDocument();
       expect(screen.getByText('78%')).toBeInTheDocument();
       // P18.95-T9 AC-4: the prototype's *Potential Monthly Active Agents (Group)*, in plain words — on pace, not active.
       expect(screen.getByText('On pace to be active (Group)')).toBeInTheDocument();
@@ -117,9 +117,9 @@ describe('the Unit Dashboard (P15-T2)', () => {
       await table();
       const tile = screen.getByText('Direct Group production').parentElement!;
       expect(within(tile).getByText('Not uploaded yet')).toBeInTheDocument();
-      expect(within(tile).getByText('of Rp 320 jt target')).toBeInTheDocument();
+      expect(within(tile).getByText('of IDR 320M target')).toBeInTheDocument();
       expect(within(tile).getByRole('button', { name: /^Not uploaded yet for 16 people/ })).toBeInTheDocument();
-      expect(tile.textContent).not.toMatch(/Rp 0\b|0%/);
+      expect(tile.textContent).not.toMatch(/(Rp|IDR) 0\b|0%/);
     });
 
     it('P15-T2 AC-2, P18.95-T7 AC-1 names Siti and Yanti in the production tile’s ⓘ, the two the rows hold no figure for', async () => {
@@ -139,9 +139,9 @@ describe('the Unit Dashboard (P15-T2)', () => {
       }));
       await table();
       const tile = screen.getByText('Direct Group production').parentElement!;
-      expect(tile).toHaveTextContent('Rp 10 jt');
+      expect(tile).toHaveTextContent('IDR 10M');
       expect(within(tile).getByText('Year’s target made')).toBeInTheDocument();
-      expect(tile.textContent).not.toMatch(/\/ Rp 0|of Rp 0|0%/);
+      expect(tile.textContent).not.toMatch(/\/ (Rp|IDR) 0|of (Rp|IDR) 0|0%/);
     });
 
     it('P15-T2 AC-2 says No goal set in the production tile when nobody has a target', async () => {
@@ -150,7 +150,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       }));
       await table();
       const tile = screen.getByText('Direct Group production').parentElement!;
-      expect(tile).toHaveTextContent('Rp 10 jt');
+      expect(tile).toHaveTextContent('IDR 10M');
       expect(tile).toHaveTextContent('No goal set');
     });
 
@@ -254,17 +254,17 @@ describe('the Unit Dashboard (P15-T2)', () => {
     it('P15-T2 AC-3, P18.97-T3 AC-1 writes the goal over or short, its percentage whole, over achieved of target', async () => {
       render();
       await table();
-      expect(rowOf('You (Agus)')).toHaveTextContent('135% · +Rp 28 jt overRp 108 jt of 80 jt');
-      expect(rowOf('Dimas Pratama')).toHaveTextContent('82% · Rp 14,4 jt shortRp 65,6 jt of 80 jt');
-      expect(within(rowOf('You (Agus)')).getByText('135% · +Rp 28 jt over')).toHaveClass('text-success');
-      expect(within(rowOf('Dimas Pratama')).getByText('82% · Rp 14,4 jt short')).toHaveClass('text-alert');
+      expect(rowOf('You (Agus)')).toHaveTextContent('135% · +IDR 28M overIDR 108M of 80M');
+      expect(rowOf('Dimas Pratama')).toHaveTextContent('82% · IDR 14.4M shortIDR 65.6M of 80M');
+      expect(within(rowOf('You (Agus)')).getByText('135% · +IDR 28M over')).toHaveClass('text-success');
+      expect(within(rowOf('Dimas Pratama')).getByText('82% · IDR 14.4M short')).toHaveClass('text-alert');
     });
 
     it('P15-T2 AC-3 says Not uploaded yet and No goal set, never 0', async () => {
       render();
       await table();
-      expect(within(rowOf('Siti Rahma')).getAllByRole('cell')[0]).toHaveTextContent(/^Not uploaded yetof Rp 80 jt target$/);
-      expect(within(rowOf('Sari Wulandari')).getAllByRole('cell')[0]).toHaveTextContent(/^No goal setproduced Rp 65,6 jt$/);
+      expect(within(rowOf('Siti Rahma')).getAllByRole('cell')[0]).toHaveTextContent(/^Not uploaded yetof IDR 80M target$/);
+      expect(within(rowOf('Sari Wulandari')).getAllByRole('cell')[0]).toHaveTextContent(/^No goal setproduced IDR 65.6M$/);
     });
 
     it('P15-T2 AC-3 writes the leads lines, the recruit line a dash with nothing to recruit', async () => {
@@ -335,7 +335,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       await table();
       const goal = within(rowOf('Indah Lestari')).getAllByRole('cell')[0];
       expect(within(goal).getByRole('button', {
-        name: 'Corrected after the production upload, Okt 2026, by Ibu Ratna on 6 Okt 2026',
+        name: 'Corrected after the production upload, Oct 2026, by Ibu Ratna on 6 Oct 2026',
       })).toHaveTextContent('ⓘ');
       expect(within(within(rowOf('Dimas Pratama')).getAllByRole('cell')[0]).queryByRole('button')).not.toBeInTheDocument();
     });
@@ -388,7 +388,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       await table();
       const totalRow = screen.getByRole('rowheader', { name: 'Your Unit — Total' }).closest('tr')!;
       const cells = within(totalRow).getAllByRole('cell');
-      expect(cells[0]).toHaveTextContent('82% · Rp 57,6 jt shortRp 262,4 jt of 320 jt');
+      expect(cells[0]).toHaveTextContent('82% · IDR 57.6M shortIDR 262.4M of 320M');
       // A total chases nothing (`:7458`, P18.5-T7 AC-7).
       expect(cells[1]).toHaveTextContent(/^—$/);
       expect(within(cells[1]).queryByRole('button')).not.toBeInTheDocument();
@@ -421,8 +421,8 @@ describe('the Unit Dashboard (P15-T2)', () => {
       render(paired);
       await table();
       const cells = within(screen.getByRole('rowheader', { name: 'Your Unit — Total' }).closest('tr')!).getAllByRole('cell');
-      expect(cells[0]).toHaveTextContent('9% · Rp 129,7 jt short');
-      expect(cells[0]).toHaveTextContent('Rp 13 jt of 142,7 jt');
+      expect(cells[0]).toHaveTextContent('9% · IDR 129.7M short');
+      expect(cells[0]).toHaveTextContent('IDR 13M of 142.7M');
     });
 
     it('P18.8-T15 AC-6 a total with nobody’s production held reads Not uploaded yet, beside its target, as a row does', async () => {
@@ -435,7 +435,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       await table();
       const cells = within(screen.getByRole('rowheader', { name: 'Your Unit — Total' }).closest('tr')!).getAllByRole('cell');
       expect(cells[0]).toHaveTextContent('Not uploaded yet');
-      expect(cells[0]).toHaveTextContent('of Rp 135 jt target');
+      expect(cells[0]).toHaveTextContent('of IDR 135M target');
       expect(cells[0]).not.toHaveTextContent('short');
     });
 
@@ -474,8 +474,8 @@ describe('the Unit Dashboard (P15-T2)', () => {
       const detail = document.getElementById(button.getAttribute('aria-controls')!)!;
       expect(detail.tagName).toBe('TD');
       expect(within(detail).getByRole('heading', { name: 'Gap' })).toBeInTheDocument();
-      expect(detail).toHaveTextContent('Rp 14,4 jt remaining');
-      expect(detail).toHaveTextContent('≈ 1 policy needed at their avg case size of Rp 18 jt.');
+      expect(detail).toHaveTextContent('IDR 14.4M remaining');
+      expect(detail).toHaveTextContent('≈ 1 policy needed at their avg case size of IDR 18M.');
       expect(detail).toHaveTextContent('Activity breakdownSet appointment63/70Sales meeting18/20Submission polis4/5');
       // P18.5-T7 AC-8: the last tile opens with the chases, the follow-up beneath them.
       expect(detail).toHaveTextContent(
@@ -485,9 +485,9 @@ describe('the Unit Dashboard (P15-T2)', () => {
       await within(detail).findByText('Selling success rate');
       expect(calls.filter((c) => c.url.includes('/activity/ratios')).map((c) => c.url))
         .toEqual(['http://api.test/api/v1/activity/ratios?for=mem-dimas']);
-      expect(detail).toHaveTextContent('Selling success rate18,0%');
+      expect(detail).toHaveTextContent('Selling success rate18.0%');
       expect(detail).toHaveTextContent('Recruitment success rate–');
-      expect(detail).toHaveTextContent('Selling vs Recruitment70,0% Selling · 30,0% Recruitment');
+      expect(detail).toHaveTextContent('Selling vs Recruitment70.0% Selling · 30.0% Recruitment');
     });
 
     it('P15-T2 AC-5 reads no ratios for somebody the reader does not coach, and draws no drill for them', async () => {
@@ -526,7 +526,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       const detail = document.getElementById(
         screen.getByRole('button', { name: 'View details for Indah Lestari' }).getAttribute('aria-controls')!,
       )!;
-      expect(detail).toHaveTextContent('12 OktSend the illustration to Pak Hendra');
+      expect(detail).toHaveTextContent('12 OctSend the illustration to Pak Hendra');
     });
 
     it('P15-T2 AC-5 draws no follow-up tile when there is none, and the gap’s own words without a goal', async () => {
@@ -559,7 +559,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       expect(within(detail).getByText('Working out the ratios…')).toBeInTheDocument();
       expect(await within(detail).findByRole('alert')).toHaveTextContent('The ratios could not be read.');
       // The rest of the detail is there all the same.
-      expect(detail).toHaveTextContent('Rp 14,4 jt remaining');
+      expect(detail).toHaveTextContent('IDR 14.4M remaining');
       await userEvent.click(within(detail).getByRole('button', { name: 'Try again' }));
       expect(await within(detail).findByText('Selling success rate')).toBeInTheDocument();
     });
@@ -586,7 +586,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
       await table();
       await userEvent.click(screen.getByRole('button', { name: 'View details for Dimas Pratama' }));
       expect(await screen.findByText('Sales-only')).toHaveClass('text-muted');
-      expect(screen.getByText('0,40')).toHaveClass('text-success');
+      expect(screen.getByText('0.40')).toHaveClass('text-success');
       expect(screen.getByText('Leaning').nextElementSibling).toHaveTextContent(/points/);
       await userEvent.click(screen.getByRole('button', { name: 'View details for Siti Rahma' }));
       expect(await screen.findByText('There are no ratios for this role yet.')).toBeInTheDocument();
@@ -666,7 +666,7 @@ describe('the Unit Dashboard (P15-T2)', () => {
     it('P15-T2 AC-3 and D-period say this month under Last 7 days, and pro-rated targets', async () => {
       render(dashboard({ period: '7d' }), { period: '7d' });
       await table();
-      expect(within(rowOf('Dimas Pratama')).getAllByRole('cell')[0]).toHaveTextContent('Rp 65,6 jt of 80 jt · this month');
+      expect(within(rowOf('Dimas Pratama')).getAllByRole('cell')[0]).toHaveTextContent('IDR 65.6M of 80M · this month');
       expect(within(rowOf('Dimas Pratama')).getAllByRole('cell')[3]).toHaveTextContent('85 / 95 pro-rated goal activities');
       const tile = screen.getByText('Direct Group production').parentElement!;
       expect(within(tile).getByText('this month')).toBeInTheDocument();
@@ -814,7 +814,7 @@ describe('Update production (P15-T3)', () => {
     return screen.getByRole('dialog', { name: 'Update production' });
   };
   const box = (dialog: HTMLElement, which: 'Month' | 'Year', name: string) =>
-    within(dialog).getByRole('textbox', { name: `${which} achieved (Rp), ${name}` });
+    within(dialog).getByRole('textbox', { name: `${which} achieved (IDR), ${name}` });
 
   it('P15-T3 AC-3 opens the dialog verbatim, its first box focused', async () => {
     render();
@@ -823,7 +823,7 @@ describe('Update production (P15-T3)', () => {
       'Enter the latest figures from the company report — month and year are updated independently.',
     );
     expect(within(dialog).getAllByRole('columnheader').map((h) => h.textContent))
-      .toEqual(['Name', 'Month achieved (Rp)', 'Year achieved (Rp)']);
+      .toEqual(['Name', 'Month achieved (IDR)', 'Year achieved (IDR)']);
     expect(within(dialog).getByRole('button', { name: 'Close' })).toHaveTextContent('✕');
     expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Save all' })).toBeInTheDocument();
@@ -835,10 +835,10 @@ describe('Update production (P15-T3)', () => {
     const dialog = await open();
     expect(within(dialog).getAllByRole('rowheader').filter((h) => h.getAttribute('scope') === 'rowgroup').map((h) => h.textContent))
       .toEqual(['Your direct agents', 'Arief Wibowo’s unit', 'Dewi Kartika’s unit', 'Sari Wulandari’s unit']);
-    expect(box(dialog, 'Month', 'Dimas Pratama')).toHaveValue('65.600.000');
-    expect(box(dialog, 'Year', 'Dimas Pratama')).toHaveValue('620.000.000');
+    expect(box(dialog, 'Month', 'Dimas Pratama')).toHaveValue('65,600,000');
+    expect(box(dialog, 'Year', 'Dimas Pratama')).toHaveValue('620,000,000');
     expect(box(dialog, 'Month', 'Yanti Puspita')).toHaveValue('');
-    expect(box(dialog, 'Year', 'Yanti Puspita')).toHaveValue('120.000.000');
+    expect(box(dialog, 'Year', 'Yanti Puspita')).toHaveValue('120,000,000');
     // Nested beneath their head, one step further in for each level.
     expect((within(dialog).getByText('Tono Saputra') as HTMLElement).style.paddingLeft).toBe('36px');
   });
@@ -850,7 +850,7 @@ describe('Update production (P15-T3)', () => {
     const dialog = await open();
     await userEvent.clear(box(dialog, 'Month', 'Dimas Pratama'));
     await userEvent.type(box(dialog, 'Month', 'Dimas Pratama'), '70000000');
-    expect(box(dialog, 'Month', 'Dimas Pratama')).toHaveValue('70.000.000');
+    expect(box(dialog, 'Month', 'Dimas Pratama')).toHaveValue('70,000,000');
     await userEvent.type(box(dialog, 'Month', 'Yanti Puspita'), '12500000');
     // Emptied: unchanged, not cleared.
     await userEvent.clear(box(dialog, 'Year', 'Budi Santoso'));
@@ -900,7 +900,7 @@ describe('Update production (P15-T3)', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save all' }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('Okt 2026 is locked.');
     expect(screen.getByRole('dialog')).toBe(dialog);
-    expect(box(dialog, 'Month', 'Yanti Puspita')).toHaveValue('9.000.000');
+    expect(box(dialog, 'Month', 'Yanti Puspita')).toHaveValue('9,000,000');
   });
 
   it('P15-T3 AC-3 marks the box a figure out of bounds names', async () => {
@@ -986,7 +986,7 @@ describe('Update production (P15-T3)', () => {
     await table();
     const button = screen.getByRole('button', { name: 'Update production' });
     expect(button).toHaveAttribute('aria-disabled', 'true');
-    expect(button).toHaveAccessibleDescription('Production for Okt 2026 is locked. The Owner or Admin can reopen it.');
+    expect(button).toHaveAccessibleDescription('Production for Oct 2026 is locked. The Owner or Admin can reopen it.');
     await userEvent.click(button);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
@@ -1168,7 +1168,7 @@ describe('P18.95-T3 — the roster as cards on a phone', () => {
     const dimas = cardOf('Dimas Pratama');
     expect(dimas).toHaveTextContent(goal!);
     expect(dimas).toHaveTextContent(last!);
-    expect(goal).toBe('82% · Rp 14,4 jt shortRp 65,6 jt of 80 jt');
+    expect(goal).toBe('82% · IDR 14.4M shortIDR 65.6M of 80M');
     expect(last).toBe('12 days ago · overdueby Agus Santoso');
     expect(within(dimas).getByText('12 days ago · overdue')).toHaveClass('text-alert');
     expect(within(dimas).getByRole('button', { name: 'Watch closely' })).toHaveAccessibleDescription(
@@ -1178,7 +1178,7 @@ describe('P18.95-T3 — the roster as cards on a phone', () => {
     expect([...dimas.querySelectorAll('dt')].map((dt) => dt.textContent)).toEqual(['Goal progress', 'Last 1:1']);
     // The status rules the table keeps in its heading, beside the pill on a card.
     expect(within(dimas).getByRole('button', { name: 'How is status decided?' })).toBeInTheDocument();
-    expect(cardOf('Siti Rahma')).toHaveTextContent('Not uploaded yetof Rp 80 jt target');
+    expect(cardOf('Siti Rahma')).toHaveTextContent('Not uploaded yetof IDR 80M target');
     expect(cardOf('Siti Rahma')).toHaveTextContent('No 1:1 yet');
   });
 
@@ -1237,13 +1237,13 @@ describe('P18.95-T3 — the roster as cards on a phone', () => {
     // … then the detail's tiles, whole: the gap's sentence wraps in the card rather than running off it.
     expect(within(detail).getAllByRole('heading').map((h) => h.textContent))
       .toEqual(['Gap', 'Activity breakdown', 'Ratios', 'Campaigns they’re chasing', 'Flagged follow-up (system-detected)']);
-    expect(detail).toHaveTextContent('≈ 1 policy needed at their avg case size of Rp 18 jt.');
+    expect(detail).toHaveTextContent('≈ 1 policy needed at their avg case size of IDR 18M.');
     const appointment = within(detail).getByText('Set appointment').parentElement!;
     expect(appointment).toHaveClass('flex-col');
     expect(appointment).toHaveTextContent('Set appointment63/70');
     const rate = (await within(detail).findByText('Selling success rate')).parentElement!;
     expect(rate).toHaveClass('flex-col');
-    expect(within(detail).getByText('70,0% Selling · 30,0% Recruitment')).not.toHaveClass('whitespace-nowrap');
+    expect(within(detail).getByText('70.0% Selling · 30.0% Recruitment')).not.toHaveClass('whitespace-nowrap');
 
     await userEvent.keyboard(' ');
     expect(button).toHaveAttribute('aria-expanded', 'false');
@@ -1284,7 +1284,7 @@ describe('P18.95-T3 — the roster as cards on a phone', () => {
     await cards();
     const total = within(screen.getByRole('list', { name: 'Your Unit' })).getAllByRole('listitem')[0];
     expect([...total.querySelectorAll('dt')].map((dt) => dt.textContent)).toEqual(['Goal progress', 'Leads', 'Activity', 'Status']);
-    expect(total).toHaveTextContent('82% · Rp 57,6 jt short');
+    expect(total).toHaveTextContent('82% · IDR 57.6M short');
     expect(total).toHaveTextContent('Sales: 36 · 16 closingRecruit: 1 potential recruit');
     expect(total).toHaveTextContent('340 / 380 goal activities');
     expect(total).toHaveTextContent('On pace to be active: 3/4');
@@ -1311,13 +1311,13 @@ describe('P18.95-T3 — the roster as cards on a phone', () => {
     const view = dashboard({ yourUnit: { ...dashboard().yourUnit, rows: [own] }, units: [] });
     render(view);
     await table();
-    expect(within(rowOf('You (Agus)')).getAllByRole('cell')[0]).toHaveTextContent(/^No goal setproduced Rp 29 jt$/);
+    expect(within(rowOf('You (Agus)')).getAllByRole('cell')[0]).toHaveTextContent(/^No goal setproduced IDR 29M$/);
     cleanup();
 
     onPhone();
     render(view);
     await cards();
-    expect(cardOf('You (Agus)')).toHaveTextContent('No goal setproduced Rp 29 jt');
+    expect(cardOf('You (Agus)')).toHaveTextContent('No goal setproduced IDR 29M');
   });
 
   it('P18.95-T3 AC-1 never draws the table first on a phone: the width is asked before the roster answers', async () => {
@@ -1432,6 +1432,7 @@ describe('P18.97-T7 AC-1 the roster’s cards from the shared pieces', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     document.removeEventListener('click', stayPut);
+    resetLanguage();
   });
 
   /** The roster's cards on the build before P18.97-T7, two of them opened, from this fixture on 2026-10-28. */
@@ -1442,7 +1443,9 @@ describe('P18.97-T7 AC-1 the roster’s cards from the shared pieces', () => {
     vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
       media: query, matches: query === PHONE_QUERY, addEventListener: () => {}, removeEventListener: () => {},
     })));
-    render();
+    // As a reader with no choice reads them (P18.98-T3, T4): English words and Indonesian figures, the cards as they were.
+    stubFetch({ 'GET /unit/dashboard': { body: dashboard() }, '/activity/ratios': { body: RATIOS } });
+    renderWithLanguage(<UnitDashboardPage />, { me: AGUS_ME }, { live: false });
     const list = await screen.findByRole('list', { name: 'Your Unit' });
     const roster = list.closest('.rounded-lg')!;
     // A person's card and the reader's own opened, so their details are in the markup too.

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { parse, renderable, sourceFiles, SRC } from '@test/copy-scan';
+import { catalogueTexts, parse, renderable, sourceFiles, SRC } from '@test/copy-scan';
 import { NPS } from '@test/events-fixtures';
 import {
   audienceLine, cancelledToast, goingToast, OWN_COPY, pickScoreToast, PROTOTYPE_COPY, refusalOf, scaleHighLine, scaleLowLine,
@@ -108,5 +108,29 @@ describe('the events screens’ own copy (P18.5-T5, T6)', () => {
     expect(composed.filter(offends)).toEqual([]);
     // No internal id or permission code reaches a reader.
     expect(composed.filter((t) => /[a-z_]+:[a-z_]+|EVENT_[A-Z_]+|mem-/.test(t))).toEqual([]);
+  });
+});
+
+/**
+ * **P18.98-T4: the events' words are the catalogue's now** (`i18n/messages/events.ts`, `events-office.ts`), so the rule is
+ * held there too, language by language (P18.98-T1 AC-6, `catalogueTexts`): in English none of the six words beyond the
+ * prototype's verbatim *KPM*; in Indonesian *KPM* is ID mode's word for *office* (§B.9), so only *kantor* is held.
+ */
+describe('P18.98-T4 the events’ catalogue, language by language', () => {
+  const AREAS = ['i18n/messages/events.ts', 'i18n/messages/events-office.ts'];
+  const texts = AREAS.map((area) => catalogueTexts(area, readFileSync(join(SRC, area), 'utf8')));
+  const all = (language: 'en' | 'id') => texts.flatMap((t) => t[language].map((x) => x.text));
+
+  it('reads both languages, so a silent zero cannot pass', () => {
+    expect(all('en')).toEqual(expect.arrayContaining(['Going', 'Roll call']));
+    expect(all('id')).toEqual(expect.arrayContaining(['Ikut', 'Daftar hadir']));
+  });
+
+  it('writes none of OD-39’s six words in English beyond the prototype’s own', () => {
+    expect(all('en').filter((t) => !VERBATIM_KPM.has(t) && SIX_WORDS.test(t) && (/\s/.test(t) || /\bKPM\b/.test(t)))).toEqual([]);
+  });
+
+  it('writes no *kantor* in Indonesian', () => {
+    expect(all('id').filter((t) => /\bkantor\b/i.test(t))).toEqual([]);
   });
 });

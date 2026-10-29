@@ -2,7 +2,7 @@
 
 import { PitchMaterials } from '@/components/recruitment/pitch-materials';
 import { SettingsScreen } from '@/components/settings-screen';
-import { PITCH_COPY } from '@/lib/recruitment-pitch';
+import { kept } from '@/i18n/kept';
 import { useCan } from '@/lib/session';
 
 /**
@@ -25,7 +25,7 @@ export default function RecruitmentPitchPage() {
   const canWrite = useCan('tenant_config:write');
 
   return (
-    <SettingsScreen title={PITCH_COPY.settingsTitle} permission="kpm:read_profile">
+    <SettingsScreen title={kept('Recruitment pitch')} permission="kpm:read_profile">
       <PitchMaterials audience="office" canWrite={canWrite} />
     </SettingsScreen>
   );

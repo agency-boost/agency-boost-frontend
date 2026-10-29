@@ -11,10 +11,14 @@ import {
   Button, Card, Field, FieldRow, Select, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { eventsOfficeMessages } from '@/i18n/messages/events-office';
+import { settingsMessages } from '@/i18n/messages/settings';
+import { settingsEventsMessages } from '@/i18n/messages/settings-events';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { suggestCode } from '@/lib/config-code';
 import { useCan } from '@/lib/session';
-import { ADMIN_COPY, officeInstant, officeWallClock, OWNER_PROTOTYPE_COPY } from '@/lib/events-admin';
+import { officeInstant, officeWallClock } from '@/lib/events-admin';
 import { formatCalendarDay } from '@/lib/format';
 import { byPhaseAndDate } from '@/lib/settings-order';
 import { useHashTab } from '@/lib/use-hash-tab';
@@ -24,36 +28,24 @@ import {
   type EventRow, type EventTypeRow,
 } from '@/lib/tenant-config';
 
+/** The two tabs, by their addresses: §A.3's names, the same in both languages (`settings-events.tsx`). */
 const TABS = [
-  { label: 'Events', href: '#events' },
-  { label: 'Event types', href: '#types' },
+  { label: settingsEventsMessages.en.tabs.events, href: '#events' },
+  { label: settingsEventsMessages.en.tabs.types, href: '#types' },
 ];
 
-/** The issuer and the scope, which the prototype crams into one free-text string. */
-const ISSUERS = [
-  { value: 'kpm', label: 'This office' },
-  { value: 'company', label: 'Your company' },
-  { value: 'group', label: 'A group' },
-];
+/** The issuer and the scope, which the prototype crams into one free-text string — in this order. */
+const ISSUERS = ['kpm', 'company', 'group'] as const;
 /**
  * The two `select_*` scopes carry a list of people, chosen with the picker beneath the field (P18.5-T5
  * AC-10, D-picker). They were *coming soon* until it was built (F-44, amended as built).
  */
-const SCOPES: { value: string; label: string }[] = [
-  { value: 'all_agents', label: 'Everybody in the office' },
-  { value: 'leaders', label: 'Leaders — anybody with somebody under them' },
-  { value: 'select_agents', label: 'Chosen people' },
-  { value: 'select_leaders', label: 'Chosen leaders' },
-];
+const SCOPES = ['all_agents', 'leaders', 'select_agents', 'select_leaders'] as const;
 
-const PHASE: Record<string, { tone: 'won' | 'open'; text: string }> = {
-  upcoming: { tone: 'open', text: 'Upcoming' },
-  running: { tone: 'won', text: 'Happening now' },
-  past: { tone: 'open', text: 'Past' },
-};
+const PHASE_TONE: Record<string, 'won' | 'open'> = { upcoming: 'open', running: 'won', past: 'open' };
 
-const label = (options: { value: string; label: string }[], value: string) =>
-  options.find((o) => o.value === value)?.label ?? value;
+/** A stored value's words, or the value itself for one this screen does not know. */
+const wordFor = (words: Readonly<Record<string, string>>, value: string) => words[value] ?? value;
 
 /** Two invitee lists name the same people, in any order. */
 const sameIds = (a: readonly string[], b: readonly string[]) =>
@@ -63,7 +55,8 @@ const sameIds = (a: readonly string[], b: readonly string[]) =>
 type FieldRefusal = { field: 'dates' | 'audience'; message: string };
 
 /**
- * The events an office runs (P5-T6, ADR-0034).
+ * The events an office runs (P5-T6, ADR-0034). Its words are the catalogue's (`i18n/messages/settings-events.tsx`,
+ * `settings.ts`; P18.98-T4), its day in the reader's figures.
  *
  * **Nothing per-person is edited here.** RSVP, the claim and feedback are each member's own record,
  * written on the agent's Events screen. What the office does with them is behind *View feedback* on a
@@ -78,6 +71,10 @@ type FieldRefusal = { field: 'dates' | 'audience'; message: string };
  * one record *Running* in the list while its own data says past.
  */
 export default function EventsSettingsPage() {
+  const t = useMessages(settingsEventsMessages);
+  const s = useMessages(settingsMessages);
+  const office = useMessages(eventsOfficeMessages);
+  const figures = useFigureLanguage();
   const canWrite = useCan('tenant_config:write');
   const [tab, setTab] = useHashTab(TABS);
   const [types, setTypes] = useState<EventTypeRow[] | null>(null);
@@ -173,7 +170,7 @@ export default function EventsSettingsPage() {
     } catch (err) {
       const shown = toDisplayError(err);
       const about = err instanceof ApiRequestError && err.status === 409 ? refusedField(shown, datesChanged, audienceChanged) : null;
-      if (about === 'dates') setFieldRefusal({ field: 'dates', message: ADMIN_COPY.hasResponses });
+      if (about === 'dates') setFieldRefusal({ field: 'dates', message: office.hasResponses });
       else if (about === 'audience') setFieldRefusal({ field: 'audience', message: shown.message });
       else setError(shown);
     } finally {
@@ -192,8 +189,7 @@ export default function EventsSettingsPage() {
         {active.length === 0 && (
           <Card>
             <p className="text-md text-navy">
-              You have no active event types, so there is nothing to file an event under. Add one on
-              the <strong>Event types</strong> tab first.
+              {t.noActiveTypes({ strong: (words) => <strong>{words}</strong> })}
             </p>
           </Card>
         )}
@@ -206,7 +202,7 @@ export default function EventsSettingsPage() {
           */}
         <Card className="p-0">
           {shown.length === 0 ? (
-            <EmptyState title="No events yet. Anything your office runs goes here — training, launches, recognition nights." />
+            <EmptyState title={t.empty} />
           ) : (
             <ul className="flex flex-col divide-y divide-hairline">
               {shown.map((event) => {
@@ -217,21 +213,21 @@ export default function EventsSettingsPage() {
                       <h2 className="text-md font-semibold text-navy">{event.title}</h2>
                       {event.blurb && <p className="mt-0.5 text-sm text-muted">{event.blurb}</p>}
                       <p className="mt-1 flex flex-wrap items-center gap-2">
-                        <ConfigBadge tone={PHASE[event.phase].tone}>
-                          {PHASE[event.phase].text}
+                        <ConfigBadge tone={PHASE_TONE[event.phase]}>
+                          {wordFor(t.phases, event.phase)}
                         </ConfigBadge>
                         <ConfigBadge tone="open">
                           {types.find((t) => t.code === event.typeCode)?.label ?? event.typeCode}
                         </ConfigBadge>
                         {event.status === 'archived' && (
-                          <ConfigBadge tone="open">Archived</ConfigBadge>
+                          <ConfigBadge tone="open">{s.archivedBadge}</ConfigBadge>
                         )}
                       </p>
                       <p className="mt-1 text-sm text-muted">
-                        {formatCalendarDay(event.startsOn)} · {label(ISSUERS, event.audience.issuer)} ·{' '}
-                        {label(SCOPES, event.audience.scope)}
+                        {formatCalendarDay(event.startsOn, figures)} · {wordFor(t.issuers, event.audience.issuer)} ·{' '}
+                        {wordFor(t.scopes, event.audience.scope)}
                         {event.audience.inviteeMembershipIds.length > 0 && (
-                          <> · {event.audience.inviteeMembershipIds.length} invited</>
+                          <> · {t.invited({ n: event.audience.inviteeMembershipIds.length })}</>
                         )}
                         {event.location && <> · {event.location}</>}
                       </p>
@@ -241,7 +237,7 @@ export default function EventsSettingsPage() {
                       <div className="flex flex-wrap items-center gap-2">
                         {viewable && (
                           <Button variant="inline" onClick={() => setFeedbackFor(event)}>
-                            {OWNER_PROTOTYPE_COPY.viewFeedback}
+                            {office.viewFeedback}
                           </Button>
                         )}
                         {canWrite && (
@@ -257,7 +253,7 @@ export default function EventsSettingsPage() {
                                 setAdding(event.id);
                               }}
                             >
-                              Edit
+                              {s.edit}
                             </Button>
                             <Button
                               variant="inlineDanger"
@@ -266,7 +262,7 @@ export default function EventsSettingsPage() {
                                 ? restoreEvent(event.id)
                                 : archiveEvent(event.id)))}
                             >
-                              {event.status === 'archived' ? 'Restore' : 'Archive'}
+                              {event.status === 'archived' ? s.restore : s.archive}
                             </Button>
                           </>
                         )}
@@ -293,7 +289,7 @@ export default function EventsSettingsPage() {
     return (
       <Card>
         <div className="flex flex-wrap gap-3">
-          <Field label="Title" htmlFor="ev-title" className="min-w-60 flex-1">
+          <Field label={t.fieldTitle} htmlFor="ev-title" className="min-w-60 flex-1">
             <TextInput
               id="ev-title"
               value={draft.title}
@@ -306,9 +302,9 @@ export default function EventsSettingsPage() {
             />
           </Field>
           <Field
-            label="Code"
+            label={s.code}
             htmlFor="ev-code"
-            hint={editing ? 'Permanent — it never changes.' : 'Filled in from the title. Permanent.'}
+            hint={editing ? t.codeHintEditing : t.codeHintNew}
             className="min-w-48"
           >
             <TextInput
@@ -320,7 +316,7 @@ export default function EventsSettingsPage() {
               }))}
             />
           </Field>
-          <Field label="Type" htmlFor="ev-type" className="min-w-48">
+          <Field label={t.type} htmlFor="ev-type" className="min-w-48">
             <Select
               id="ev-type"
               value={draft.typeCode || active[0]?.code}
@@ -332,7 +328,7 @@ export default function EventsSettingsPage() {
           </Field>
         </div>
 
-        <Field label="One line about it" htmlFor="ev-blurb" className="mt-3">
+        <Field label={t.blurb} htmlFor="ev-blurb" className="mt-3">
           <TextInput
             id="ev-blurb"
             value={draft.blurb}
@@ -343,9 +339,9 @@ export default function EventsSettingsPage() {
 
         <div className="mt-3 flex flex-wrap gap-3">
           <Field
-            label="Starts"
+            label={t.starts}
             htmlFor="ev-starts"
-            hint="Your office’s time."
+            hint={t.startsHint}
             className="min-w-56 flex-1"
           >
             <TextInput
@@ -357,9 +353,9 @@ export default function EventsSettingsPage() {
             />
           </Field>
           <Field
-            label="Ends"
+            label={t.ends}
             htmlFor="ev-ends"
-            hint="Required — without it nothing can say whether the event is running now."
+            hint={t.endsHint}
             error={fieldRefusal?.field === 'dates' ? fieldRefusal.message : undefined}
             className="min-w-56 flex-1"
           >
@@ -373,7 +369,7 @@ export default function EventsSettingsPage() {
           </Field>
         </div>
 
-        <Field label="Where" htmlFor="ev-location" className="mt-3">
+        <Field label={t.where} htmlFor="ev-location" className="mt-3">
           <TextInput
             id="ev-location"
             value={draft.location}
@@ -383,24 +379,22 @@ export default function EventsSettingsPage() {
         </Field>
 
         <div className="mt-3 flex flex-wrap gap-3">
-          <Field label="Put on by" htmlFor="ev-issuer" className="min-w-48">
+          <Field label={t.putOnBy} htmlFor="ev-issuer" className="min-w-48">
             <Select
               id="ev-issuer"
               value={draft.issuer}
               disabled={busy}
               onChange={(e) => setDraft((n) => ({ ...n, issuer: e.target.value }))}
             >
-              {ISSUERS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {ISSUERS.map((value) => <option key={value} value={value}>{t.issuers[value]}</option>)}
             </Select>
           </Field>
           <Field
-            label="Who is invited"
+            label={t.whoIsInvited}
             htmlFor="ev-scope"
             // While a chosen audience has nobody in it, the field's one line says why Save waits: a
             // disabled button with no stated reason is hard to recover from.
-            hint={nobodyChosen
-              ? 'Pick at least one person below to save.'
-              : 'A leader is somebody with people under them — not a job title.'}
+            hint={nobodyChosen ? t.pickSomebody : t.leaderMeans}
             error={fieldRefusal?.field === 'audience' ? fieldRefusal.message : undefined}
             className="min-w-64 flex-1"
           >
@@ -410,7 +404,7 @@ export default function EventsSettingsPage() {
               disabled={busy}
               onChange={(e) => setDraft((n) => ({ ...n, scope: e.target.value }))}
             >
-              {SCOPES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              {SCOPES.map((value) => <option key={value} value={value}>{t.scopes[value]}</option>)}
             </Select>
           </Field>
         </div>
@@ -429,9 +423,9 @@ export default function EventsSettingsPage() {
               || !draft.startsAt || !draft.endsAt || nobodyChosen}
             onClick={() => void saveEvent(active[0]?.code)}
           >
-            {editing ? 'Save the event' : 'Add the event'}
+            {editing ? t.saveEvent : t.addEvent}
           </Button>
-          <Button variant="secondary" disabled={busy} onClick={() => { setAdding(null); setFieldRefusal(null); }}>Cancel</Button>
+          <Button variant="secondary" disabled={busy} onClick={() => { setAdding(null); setFieldRefusal(null); }}>{s.cancel}</Button>
         </div>
       </Card>
     );
@@ -446,7 +440,7 @@ export default function EventsSettingsPage() {
         {addingType && (
           <Card>
             <FieldRow>
-              <Field label="Name" htmlFor="et-label" className="min-w-48 flex-1">
+              <Field label={s.name} htmlFor="et-label" className="min-w-48 flex-1">
                 <TextInput
                   id="et-label"
                   value={typeDraft.label}
@@ -458,7 +452,7 @@ export default function EventsSettingsPage() {
                   }))}
                 />
               </Field>
-              <Field label="Code" htmlFor="et-code" hint="Permanent." className="min-w-40">
+              <Field label={s.code} htmlFor="et-code" hint={t.codeHintType} className="min-w-40">
                 <TextInput
                   id="et-code"
                   value={typeDraft.code}
@@ -468,7 +462,7 @@ export default function EventsSettingsPage() {
                   }))}
                 />
               </Field>
-              <Field label="Emoji" htmlFor="et-emoji" hint="The poster is an emoji." className="min-w-24">
+              <Field label={t.emoji} htmlFor="et-emoji" hint={t.emojiHint} className="min-w-24">
                 <TextInput
                   id="et-emoji"
                   value={typeDraft.emoji}
@@ -493,10 +487,10 @@ export default function EventsSettingsPage() {
                     setAddingType(null);
                   })}
                 >
-                  {addingType === 'new' ? 'Add' : 'Save'}
+                  {addingType === 'new' ? s.add : s.save}
                 </Button>
                 <Button variant="secondary" disabled={busy} onClick={() => setAddingType(null)}>
-                  Cancel
+                  {s.cancel}
                 </Button>
               </FieldRow.Actions>
             </FieldRow>
@@ -506,7 +500,7 @@ export default function EventsSettingsPage() {
         {/* One bordered list, a row per type, as the events tab and the other settings screens draw theirs. */}
         <Card className="p-0">
           {shown.length === 0 ? (
-            <EmptyState title="No event types yet." />
+            <EmptyState title={t.noTypes} />
           ) : (
             <ul className="flex flex-col divide-y divide-hairline">
               {shown.map((type) => (
@@ -516,10 +510,10 @@ export default function EventsSettingsPage() {
                     <h2 className="text-md font-semibold text-navy">{type.label}</h2>
                     <p className="mt-1 flex flex-wrap items-center gap-2">
                       <ConfigBadge tone={type.events > 0 ? 'won' : 'open'}>
-                        {type.events} {type.events === 1 ? 'event' : 'events'}
+                        {t.events({ n: type.events })}
                       </ConfigBadge>
                       {type.status === 'archived' && (
-                        <ConfigBadge tone="open">Archived</ConfigBadge>
+                        <ConfigBadge tone="open">{s.archivedBadge}</ConfigBadge>
                       )}
                     </p>
                   </div>
@@ -536,20 +530,17 @@ export default function EventsSettingsPage() {
                           setAddingType(type.id);
                         }}
                       >
-                        Edit
+                        {s.edit}
                       </Button>
                       <Button
                         variant="inlineDanger"
                         disabled={busy}
-                        title={type.status === 'archived'
-                          ? undefined
-                          : `Keeps the ${type.events} event(s) already filed under it readable, and `
-                            + 'stops new ones being added.'}
+                        title={type.status === 'archived' ? undefined : t.archiveTypeTip({ n: type.events })}
                         onClick={() => void run(() => (type.status === 'archived'
                           ? restoreEventType(type.id)
                           : archiveEventType(type.id)))}
                       >
-                        {type.status === 'archived' ? 'Restore' : 'Archive'}
+                        {type.status === 'archived' ? s.restore : s.archive}
                       </Button>
                     </div>
                   )}
@@ -577,7 +568,7 @@ export default function EventsSettingsPage() {
             checked={showArchived}
             onChange={(e) => setShowArchived(e.target.checked)}
           />
-          Show archived
+          {s.showArchived}
         </label>
         {canWrite && (tab === '#types' ? (
           <Button
@@ -587,14 +578,14 @@ export default function EventsSettingsPage() {
               setAddingType('new');
             }}
           >
-            Add an event type
+            {t.addType}
           </Button>
         ) : (
           <Button
             disabled={busy || adding !== null || activeTypes.length === 0}
             onClick={() => { setDraft(emptyDraft()); setOriginal(null); setFieldRefusal(null); setAdding('new'); }}
           >
-            Add an event
+            {t.addAnEvent}
           </Button>
         ))}
       </>
@@ -603,11 +594,11 @@ export default function EventsSettingsPage() {
 
   return (
     <SettingsScreen
-      title="Events"
-      subtitle="What your office is running, and who is invited."
+      title={t.title}
+      subtitle={t.subtitle}
       permission="event_settings:read"
       tabs={TABS}
-      tabsLabel="Events sections"
+      tabsLabel={s.sections({ title: t.title })}
       activeHref={tab}
       onSelectTab={setTab}
       error={types === null ? error : null}

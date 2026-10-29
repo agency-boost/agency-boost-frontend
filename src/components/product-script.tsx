@@ -2,7 +2,10 @@ import {
   BulletList, NextAction, OpeningLine, SayBox, ScriptBlock, ScriptNote, ScriptText, type ScriptSize,
 } from '@/components/plan/script-blocks';
 import { PushBackBox } from '@/components/plan/push-back-box';
-import { hasScript, PROTOTYPE_COPY, type CatalogScript } from '@/lib/product-catalog';
+import { useMessages } from '@/i18n/language-provider';
+import { planMessages } from '@/i18n/messages/plan';
+import { productCatalogMessages } from '@/i18n/messages/product-catalog';
+import { hasScript, type CatalogScript } from '@/lib/product-catalog';
 
 /**
  * **A product's words, in the numbered blocks** — the catalog drawer's *Attack Plan* tab and the Sales
@@ -18,25 +21,31 @@ import { hasScript, PROTOTYPE_COPY, type CatalogScript } from '@/lib/product-cat
  * - in the drawer (`:10332-10348`): *Good fit for*, the benefits, the push-back, and the line saying so.
  *
  * A run-off product's drawer tab shows its note instead (`:10290`), which is the drawer's business.
+ *
+ * **The frame is ours, the words inside it the company's** (P18.98-T4; ADR-0179 §5): the blocks' labels are the two
+ * plans' (`messages/plan.ts`) and the script's own lines the catalog's (`messages/product-catalog.ts`), in the reader's
+ * language; every field of the script is shown as typed.
  */
 export function ProductScript({ script, place }: { script: CatalogScript; place: 'page' | 'drawer' }) {
+  const p = useMessages(planMessages);
+  const t = useMessages(productCatalogMessages);
   const size: ScriptSize = place;
   const pushBack = (
     <PushBackBox
       size={size}
-      theySayLabel={PROTOTYPE_COPY.theySay}
+      theySayLabel={p.theySay}
       theySay={script.objectionTheySay}
-      youSayLabel={PROTOTYPE_COPY.youSay}
+      youSayLabel={p.youSay}
       youSay={script.objectionYouSay}
     />
   );
   const goodFit = (
-    <ScriptBlock n={0} label={PROTOTYPE_COPY.goodFitFor} lead size={size}>
+    <ScriptBlock n={0} label={p.goodFitFor} lead size={size}>
       <ScriptText>{script.goodFit}</ScriptText>
     </ScriptBlock>
   );
   const benefits = (n: number) => (
-    <ScriptBlock n={n} label={PROTOTYPE_COPY.leadWithBenefits} size={size}>
+    <ScriptBlock n={n} label={p.leadWithBenefits} size={size}>
       <BulletList items={script.benefits} />
     </ScriptBlock>
   );
@@ -45,15 +54,15 @@ export function ProductScript({ script, place }: { script: CatalogScript; place:
     return (
       <div data-layout="script">
         {goodFit}
-        <ScriptBlock n={1} label={PROTOTYPE_COPY.openingLine} size={size}>
+        <ScriptBlock n={1} label={p.openingLine} size={size}>
           <OpeningLine text={script.opening} size={size} />
         </ScriptBlock>
         {benefits(2)}
-        <ScriptBlock n={3} label={PROTOTYPE_COPY.fullScript} size={size}>
+        <ScriptBlock n={3} label={t.script.fullScript} size={size}>
           <SayBox text={script.fullScript} size={size} />
         </ScriptBlock>
-        <ScriptBlock n={4} label={PROTOTYPE_COPY.pushBack} size={size}>{pushBack}</ScriptBlock>
-        <ScriptBlock n={5} label={PROTOTYPE_COPY.nextAction} size={size}>
+        <ScriptBlock n={4} label={p.pushBack} size={size}>{pushBack}</ScriptBlock>
+        <ScriptBlock n={5} label={p.nextAction} size={size}>
           <NextAction>{script.nextAction}</NextAction>
         </ScriptBlock>
       </div>
@@ -65,8 +74,8 @@ export function ProductScript({ script, place }: { script: CatalogScript; place:
       <div data-layout="no-script">
         {goodFit}
         {benefits(1)}
-        <ScriptBlock n={2} label={PROTOTYPE_COPY.pushBack} size={size}>{pushBack}</ScriptBlock>
-        <ScriptNote>{PROTOTYPE_COPY.drawerNoScript}</ScriptNote>
+        <ScriptBlock n={2} label={p.pushBack} size={size}>{pushBack}</ScriptBlock>
+        <ScriptNote>{t.script.drawerNoScript}</ScriptNote>
       </div>
     );
   }
@@ -74,13 +83,13 @@ export function ProductScript({ script, place }: { script: CatalogScript; place:
   return (
     <div data-layout="no-script">
       {goodFit}
-      <ScriptBlock n={1} label={PROTOTYPE_COPY.openingLine} size={size}>
+      <ScriptBlock n={1} label={p.openingLine} size={size}>
         <OpeningLine text={script.goodFit} size={size} />
       </ScriptBlock>
       {benefits(2)}
-      <ScriptBlock n={3} label={PROTOTYPE_COPY.pushBack} size={size}>{pushBack}</ScriptBlock>
-      <ScriptBlock n={4} label={PROTOTYPE_COPY.nextAction} size={size}>
-        <NextAction>{PROTOTYPE_COPY.planNoScriptNext}</NextAction>
+      <ScriptBlock n={3} label={p.pushBack} size={size}>{pushBack}</ScriptBlock>
+      <ScriptBlock n={4} label={p.nextAction} size={size}>
+        <NextAction>{t.script.pageNoScriptNext}</NextAction>
       </ScriptBlock>
     </div>
   );

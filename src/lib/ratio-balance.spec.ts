@@ -111,3 +111,29 @@ describe('P18.95-T5 AC-6: the balance says what to do', () => {
       .toBe('Too much Side A — aim for 35%–65%');
   });
 });
+
+/**
+ * **P18.98-T3: a balance in each language** (ADR-0174 §6; the glossary's §E): the same split and band, with a point in
+ * English. Every Indonesian case above is unchanged. The places are chosen on the figures, so both languages carry the
+ * same ones (AC-2); the sentence's words are the catalogue's, and move with the screen (P18.98-T4).
+ */
+describe('P18.98-T3 a balance in each language', () => {
+  it('P18.98-T3 AC-1 writes the split 40.0% · 60.0% and the band 37.5%–62.5% in English', () => {
+    expect(formatBalanceSplit(40, 30, 'success', 'en')).toEqual({ first: '40.0%', second: '60.0%' });
+    expect(formatBalanceBand(25, 'en')).toEqual({ low: '37.5%', high: '62.5%' });
+    expect(formatBalanceBand(30, 'en')).toEqual({ low: '35%', high: '65%' });
+  });
+
+  it('P18.98-T3 AC-2 adds the same second place in both languages where a miss would read as inside the band', () => {
+    expect(formatBalanceSplit(65.04, 30, 'alert', 'id')).toEqual({ first: '65,04%', second: '34,96%' });
+    expect(formatBalanceSplit(65.04, 30, 'alert', 'en')).toEqual({ first: '65.04%', second: '34.96%' });
+    expect(formatBalanceSplit(99.96, 30, 'alert', 'en')).toEqual({ first: '99.96%', second: '0.04%' });
+  });
+
+  it('P18.98-T3 AC-1 writes the advice’s band in the reader’s marks', () => {
+    expect(balanceAdvice(70, 25, 'alert', { numerator: 'Selling', denominator: 'Recruitment' }, 'en'))
+      .toBe('Too much selling — aim for 37.5%–62.5%');
+    expect(balanceAdvice(70, 25, 'alert', { numerator: 'Selling', denominator: 'Recruitment' }))
+      .toBe('Too much selling — aim for 37,5%–62,5%');
+  });
+});

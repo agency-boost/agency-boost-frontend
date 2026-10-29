@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CoachingRoster, ROSTER_CAPTION, ROSTER_COLUMNS } from '@/components/coaching-roster';
+import { CoachingRoster, rosterColumns } from '@/components/coaching-roster';
 import { Page } from '@/components/page';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ButtonLink, Card, ErrorBanner } from '@/components/ui/field';
 import { SkeletonCards, SkeletonTable } from '@/components/ui/skeleton';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { coachingMessages } from '@/i18n/messages/coaching';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { readRoster, type Roster } from '@/lib/coaching';
 import { usePhone } from '@/lib/use-phone';
@@ -22,16 +24,19 @@ import { usePhone } from '@/lib/use-phone';
  * days.
  */
 export default function CoachingRosterPage() {
+  const t = useMessages(coachingMessages);
   return (
     // The prototype's title, and its empty sub-line (`Overall.html:10407`). The body is its own
     // component so that a reader the gate turns away asks the API for nothing.
-    <Page title="Coaching Session" permission="coaching_session:read">
+    <Page title={t.title} permission="coaching_session:read">
       <RosterBody />
     </Page>
   );
 }
 
 function RosterBody() {
+  const language = useLanguage();
+  const t = useMessages(coachingMessages).roster;
   const [roster, setRoster] = useState<Roster | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   // Asked before the roster answers, so a phone draws its cards at once and never the table first (P18.95-T3 AC-3).
@@ -52,17 +57,17 @@ function RosterBody() {
     <div className="mx-auto max-w-[860px]">
       {/* The own-coaching card (`Overall.html:3956-3959`): the reader's own sessions, read-only (ADR-0078). */}
       <Card className="mb-5 flex flex-wrap items-center justify-between gap-4">
-        <p className="text-md font-bold text-navy">Your own coaching</p>
+        <p className="text-md font-bold text-navy">{t.ownCoaching}</p>
         <ButtonLink href="/coaching/me" className="h-auto px-[18px] py-2.5 text-base">
-          My Coaching Notes
+          {t.myNotes}
         </ButtonLink>
       </Card>
 
       {error && <ErrorBanner {...error} />}
       {/* Shaped like what is coming: on a phone, cards (P18.95-T3 AC-3). */}
       {!roster && !error && (phone
-        ? <SkeletonCards count={4} label={`Loading ${ROSTER_CAPTION.toLowerCase()}…`} />
-        : <SkeletonTable caption={ROSTER_CAPTION} columns={ROSTER_COLUMNS} rows={4} />)}
+        ? <SkeletonCards count={4} label={t.loading} />
+        : <SkeletonTable caption={t.caption} columns={rosterColumns(language)} rows={4} />)}
       {nobody && (
         // Ours (L-01). The nav and the landing offer this screen only to a leader, but its gate is
         // `coaching_session:read`, which every active member holds for their own sessions, and the
@@ -70,7 +75,7 @@ function RosterBody() {
         // what an Agent, or an AB or AAB who leads nobody, sees on a typed URL — and a leader whose
         // last report left between the sidebar's read and this one. The route registry says so.
         <Card className="p-0">
-          <EmptyState title="No one to coach yet." />
+          <EmptyState title={t.empty} />
         </Card>
       )}
       {roster && !nobody && <CoachingRoster roster={roster} phone={phone} />}

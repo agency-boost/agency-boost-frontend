@@ -11,18 +11,22 @@ import {
 import {
   BackLink, CoachingTabBar, PersonIdentity, useCoacheeIfAny, useLeadsSomebody,
 } from '@/components/coaching-person';
-import { SummaryCard } from '@/components/personal-summary';
+import { SummaryCard } from '@/components/summary-card';
 import { ButtonLink, Card, ErrorBanner } from '@/components/ui/field';
 import { TAP_HEIGHT, TEXT_TAP } from '@/components/ui/phone';
 import { useRoleShort } from '@/components/ui/role-badge';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { coachingMessages } from '@/i18n/messages/coaching';
+import { coachingRecordMessages } from '@/i18n/messages/coaching-record';
+import { coachingSessionMessages } from '@/i18n/messages/coaching-session';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  agreedVersions, coacheeInitials, coachingArchiveHref, coachingTabHref, firstName, goalHasTarget, myCoachingHref,
-  pastSessionSummary, PRONOUN_FORMS, readMySessions, readSession, readSessionShared, reopenWindowClosed, sessionTabHref,
+  agreedVersions, coacheeInitials, coachingArchiveHref, coachingTabHref, firstName, goalHasTarget, leadActionText,
+  myCoachingHref, pastSessionSummary, readMySessions, readSession, readSessionShared, reopenWindowClosed, sessionTabHref,
   type ActionItem, type Agreement, type CoachingSession, type CoachingTip, type EarlierVersion, type LastWeekItem,
-  type LeadAction, type MySessions, type Pronoun, type SessionSnapshot, type SnapshotGoal,
+  type LeadAction, type MySessions, type SessionSnapshot, type SnapshotGoal,
 } from '@/lib/coaching';
 import { MY_COACHING_ACTIVATION_HREF } from '@/lib/activation';
 import { MY_COACHING_TRAINING_HREF } from '@/lib/training';
@@ -49,7 +53,9 @@ import { useCan, useSession } from '@/lib/session';
  * **The finalized state's idiom** (`Overall.html:1389-1417`): the inputs as text, no add and no remove,
  * the ticks drawn and inert. The archive is a screen the prototype only promised — its rows toasted
  * *"coming next"* (`:10712-10715`) — so its header, the earlier versions and its not-found and draft
- * states are ours, in that idiom (parity L-04). Coaching's own strings use none of ADR-0084's six words.
+ * states are ours, in that idiom (parity L-04). Coaching's own strings use none of ADR-0084's six words. They are the
+ * catalogue's (`messages/coaching-record.tsx`, with what a session agreed from `coaching-session.tsx`; P18.98-T4), and
+ * every figure is written in `useFigureLanguage()`'s.
  */
 
 /*
@@ -72,6 +78,9 @@ function RecordHeader({
   /** The list behind *View past sessions ▾*. */
   past?: ReactNode;
 }) {
+  const figures = useFigureLanguage();
+  const t = useMessages(coachingRecordMessages);
+  const { past: pastWords } = useMessages(coachingSessionMessages);
   const [showPast, setShowPast] = useState(false);
   const listId = useId();
   return (
@@ -79,10 +88,10 @@ function RecordHeader({
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         {date ? (
           <p className="text-base text-muted">
-            {'Session — '}<strong className="text-navy">{formatCalendarDayLong(date)}</strong>
+            {t.session({ day: <strong className="text-navy">{formatCalendarDayLong(date, figures)}</strong> })}
             {' '}
             <span className="ml-1.5 whitespace-nowrap rounded-pill bg-success/10 px-2.5 py-0.5 text-2xs font-semibold text-success">
-              Finalized
+              {t.finalized}
             </span>
           </p>
         ) : (
@@ -96,12 +105,12 @@ function RecordHeader({
             onClick={() => setShowPast((v) => !v)}
             className={cn('rounded-sm text-sm font-semibold text-navy-soft hover:underline', TEXT_TAP)}
           >
-            {showPast ? 'Hide past sessions' : 'View past sessions'}
+            {showPast ? pastWords.hide : pastWords.show}
             <span aria-hidden="true">{showPast ? ' ▴' : ' ▾'}</span>
           </button>
         )}
       </div>
-      {coach && <p className="mt-1 text-sm text-muted">Coached by {coach}</p>}
+      {coach && <p className="mt-1 text-sm text-muted">{t.coachedBy({ name: coach })}</p>}
       {past && (
         <div id={listId} hidden={!showPast} className="mt-3 border-t border-hairline pt-3">
           {past}
@@ -115,6 +124,7 @@ function RecordHeader({
 function HistoryRow({
   href, date, summary, right, current,
 }: { href: string; date: string; summary: string; right: string; current?: boolean }) {
+  const figures = useFigureLanguage();
   return (
     <li>
       <Link
@@ -127,7 +137,7 @@ function HistoryRow({
         )}
       >
         <span>
-          <strong className="text-navy">{formatShortDay(date, { year: true })}</strong> — {summary}
+          <strong className="text-navy">{formatShortDay(date, { year: true }, figures)}</strong> — {summary}
         </span>
         <span className="whitespace-nowrap text-navy-soft">{right}</span>
       </Link>
@@ -164,7 +174,8 @@ function LastWeekRows({ items }: { items: readonly LastWeekItem[] }) {
 }
 
 function TipRows({ tips }: { tips: readonly CoachingTip[] }) {
-  if (tips.length === 0) return <p className={EMPTY_LINE}>No tips were added this session.</p>;
+  const t = useMessages(coachingSessionMessages).agreement;
+  if (tips.length === 0) return <p className={EMPTY_LINE}>{t.noTips}</p>;
   return (
     <ol>
       {tips.map((tip, i) => (
@@ -178,14 +189,16 @@ function TipRows({ tips }: { tips: readonly CoachingTip[] }) {
 }
 
 function LeadActionRows({ actions }: { actions: readonly LeadAction[] }) {
-  if (actions.length === 0) return <p className={EMPTY_LINE}>No leads have a next action date set yet.</p>;
+  const language = useLanguage();
+  const t = useMessages(coachingSessionMessages).agreement;
+  if (actions.length === 0) return <p className={EMPTY_LINE}>{t.noLeadDates}</p>;
   return (
     <ul>
       {actions.map((a) => (
         <li key={a.leadId} className={ROW}>
           <DateTag day={a.dueDate} />
           <FromLeadTag name={a.leadName} />
-          <span className="min-w-[10rem] flex-1 text-md text-navy">{a.text || `Follow up with ${a.leadName}`}</span>
+          <span className="min-w-[10rem] flex-1 text-md text-navy">{leadActionText(a, language)}</span>
         </li>
       ))}
     </ul>
@@ -193,7 +206,8 @@ function LeadActionRows({ actions }: { actions: readonly LeadAction[] }) {
 }
 
 function ActionRows({ items }: { items: readonly ActionItem[] }) {
-  if (items.length === 0) return <p className={EMPTY_LINE}>No other action items were added this session.</p>;
+  const t = useMessages(coachingSessionMessages).agreement;
+  if (items.length === 0) return <p className={EMPTY_LINE}>{t.noOther}</p>;
   return (
     <ol>
       {[...items].sort(byDueDate).map((item, i) => (
@@ -213,19 +227,21 @@ function ActionRows({ items }: { items: readonly ActionItem[] }) {
  * set* by `goalHasTarget`, the condition the print follows too.
  */
 function FrozenGoalCard({ goal }: { goal: SnapshotGoal | null }) {
+  const figures = useFigureLanguage();
+  const t = useMessages(coachingSessionMessages).goal;
   return (
-    <SummaryCard id="record-goal" title="Goal" className="min-w-0">
+    <SummaryCard id="record-goal" title={t.title} className="min-w-0">
       {goalHasTarget(goal) ? (
         <>
           <GoalRow
             figures={goal.monthly}
             period="month"
-            target={goal.monthly.targetMinor === null ? '—' : formatRupiahCompact(goal.monthly.targetMinor)}
+            target={goal.monthly.targetMinor === null ? '—' : formatRupiahCompact(goal.monthly.targetMinor, {}, figures)}
           />
-          <GoalRow figures={goal.yearly} period="year" className="mt-3.5" target={formatRupiahCompact(goal.yearly.targetMinor)} />
+          <GoalRow figures={goal.yearly} period="year" className="mt-3.5" target={formatRupiahCompact(goal.yearly.targetMinor, {}, figures)} />
         </>
       ) : (
-        <p className="font-body text-[1.1875rem] font-bold text-navy">No goal set</p>
+        <p className="font-body text-[1.1875rem] font-bold text-navy">{t.none}</p>
       )}
     </SummaryCard>
   );
@@ -244,6 +260,8 @@ function RecordBody({
   /** The archive draws the Activity card; the reader's own page has none (`Overall.html:4491-4500`). */
   withActivity: boolean;
 }) {
+  const figures = useFigureLanguage();
+  const t = useMessages(coachingSessionMessages).agreement;
   const snapshot: SessionSnapshot | null = session.snapshot ?? null;
   const from = session.lastWeek;
   return (
@@ -251,8 +269,8 @@ function RecordBody({
       {from && agreement.lastWeekItems.length > 0 && (
         <SummaryCard
           id="record-last-week"
-          title="Last week's action items"
-          tag={`From ${formatShortDay(from.date)} session${lastWeekCoach ? ` · ${lastWeekCoach}` : ''}`}
+          title={t.lastWeek}
+          tag={t.fromSession({ day: formatShortDay(from.date, {}, figures), coach: lastWeekCoach ?? null })}
         >
           <LastWeekRows items={agreement.lastWeekItems} />
         </SummaryCard>
@@ -278,19 +296,16 @@ function RecordBody({
         <TipRows tips={agreement.tips} />
       </SummaryCard>
 
-      <SummaryCard id="record-next" title="Next action items">
-        <h3 className={GROUP_LABEL}>From leads (automatic)</h3>
+      <SummaryCard id="record-next" title={t.next}>
+        <h3 className={GROUP_LABEL}>{t.fromLeads}</h3>
         <LeadActionRows actions={agreement.leadActions} />
-        <h3 className={GROUP_LABEL}>Other action items</h3>
+        <h3 className={GROUP_LABEL}>{t.other}</h3>
         <ActionRows items={agreement.actionItems} />
       </SummaryCard>
     </>
   );
 }
 
-/** `formatDay` for an instant, and the name when the server could give one. */
-const byWhom = (when: string, person: { name: string }) =>
-  `${formatDay(when)}${person.name ? ` by ${person.name}` : ''}`;
 
 /**
  * **Every earlier version, with who reopened it, when and why** (ADR-0079, ADR-0042; P11-T10 AC-1). A
@@ -299,9 +314,10 @@ const byWhom = (when: string, person: { name: string }) =>
  * again* left no trace (`Overall.html:11132-11143`); ours to draw, in the record's idiom.
  */
 function EarlierVersions({ versions }: { versions: readonly EarlierVersion[] }) {
+  const t = useMessages(coachingRecordMessages);
   if (versions.length === 0) return null;
   return (
-    <SummaryCard id="record-earlier" title="Earlier versions">
+    <SummaryCard id="record-earlier" title={t.earlier}>
       <ol>
         {versions.map((version, i) => <EarlierVersionRow key={`${version.reopenedAt}-${i}`} version={version} />)}
       </ol>
@@ -310,13 +326,21 @@ function EarlierVersions({ versions }: { versions: readonly EarlierVersion[] }) 
 }
 
 function EarlierVersionRow({ version }: { version: EarlierVersion }) {
+  const figures = useFigureLanguage();
+  const t = useMessages(coachingRecordMessages);
+  const { agreement } = useMessages(coachingSessionMessages);
   const [open, setOpen] = useState(false);
   const bodyId = useId();
+  // An instant on the office's calendar, in the figures' language, and the name when the server could give one.
   return (
     <li className="border-b border-hairline py-3 first:pt-0 last:border-b-0 last:pb-0">
-      <p className="text-md font-semibold text-navy">Finalized {byWhom(version.finalizedAt, version.finalizedBy)}</p>
-      <p className="mt-0.5 text-sm text-muted">Reopened {byWhom(version.reopenedAt, version.reopenedBy)}</p>
-      <p className="mt-1 text-sm text-navy">Reason: {version.reason}</p>
+      <p className="text-md font-semibold text-navy">
+        {t.finalizedOn({ day: formatDay(version.finalizedAt, figures), name: version.finalizedBy.name })}
+      </p>
+      <p className="mt-0.5 text-sm text-muted">
+        {t.reopenedOn({ day: formatDay(version.reopenedAt, figures), name: version.reopenedBy.name })}
+      </p>
+      <p className="mt-1 text-sm text-navy">{t.reason({ reason: version.reason })}</p>
       <button
         type="button"
         aria-expanded={open}
@@ -324,21 +348,21 @@ function EarlierVersionRow({ version }: { version: EarlierVersion }) {
         onClick={() => setOpen((v) => !v)}
         className={cn('mt-1.5 rounded-sm text-sm font-semibold text-navy-soft hover:underline', TEXT_TAP)}
       >
-        {open ? 'Hide what it agreed' : 'View what it agreed'}
+        {open ? t.agreed.hide : t.agreed.show}
         <span aria-hidden="true">{open ? ' ▴' : ' ▾'}</span>
       </button>
       <div id={bodyId} hidden={!open} className="mt-2">
         {version.lastWeekItems.length > 0 && (
           <>
-            <h3 className={GROUP_LABEL}>Last week&apos;s action items</h3>
+            <h3 className={GROUP_LABEL}>{agreement.lastWeek}</h3>
             <LastWeekRows items={version.lastWeekItems} />
           </>
         )}
-        <h3 className={GROUP_LABEL}>Coaching tips</h3>
+        <h3 className={GROUP_LABEL}>{agreement.tips}</h3>
         <TipRows tips={version.tips} />
-        <h3 className={GROUP_LABEL}>From leads (automatic)</h3>
+        <h3 className={GROUP_LABEL}>{agreement.fromLeads}</h3>
         <LeadActionRows actions={version.leadActions} />
-        <h3 className={GROUP_LABEL}>Other action items</h3>
+        <h3 className={GROUP_LABEL}>{agreement.other}</h3>
         <ActionRows items={version.actionItems} />
       </div>
     </li>
@@ -353,8 +377,6 @@ function RecordSkeleton({ label }: { label: string }) {
     </Skeleton>
   );
 }
-
-const ratiosFor = (pronoun: Pronoun) => `There are no ratios for ${PRONOUN_FORMS[pronoun].possessive} role yet.`;
 
 /*
  * ── The archive ─────────────────────────────────────────────────────────────────────────────────
@@ -376,6 +398,9 @@ const ratiosFor = (pronoun: Pronoun) => `There are no ratios for ${PRONOUN_FORMS
  * (`?session=`), where its coach finishes it. A correction already open is reached by the same button.
  */
 export function SessionArchive({ membershipId, sessionId }: { membershipId: string; sessionId: string }) {
+  const figures = useFigureLanguage();
+  const t = useMessages(coachingRecordMessages);
+  const { agreement, ratios, editAgain, opening } = useMessages(coachingSessionMessages);
   const coachee = useCoacheeIfAny();
   const { me } = useSession();
   const canReopen = useCan('coaching_session:reopen');
@@ -404,7 +429,7 @@ export function SessionArchive({ membershipId, sessionId }: { membershipId: stri
   const record = session ? agreedVersions(session) : null;
   const mine = session !== null && session.coach.membershipId === me?.membership?.membershipId;
   const closed = reopenWindowClosed(coachee?.today ?? '', session?.reopenableUntil ?? null);
-  const until = session?.reopenableUntil ? formatShortDay(session.reopenableUntil, { year: true }) : '';
+  const until = session?.reopenableUntil ? formatShortDay(session.reopenableUntil, { year: true }, figures) : '';
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -412,14 +437,14 @@ export function SessionArchive({ membershipId, sessionId }: { membershipId: stri
         <PersonIdentity initials={coacheeInitials(session.coachee.name)} name={session.coachee.name} line={null} />
       )}
       {error && <ErrorBanner {...error} />}
-      {!session && !error && <RecordSkeleton label="Opening the session…" />}
+      {!session && !error && <RecordSkeleton label={opening} />}
 
       {session && !record && (
         <Card>
-          <h2 className="font-display text-lg font-bold text-navy">This session hasn’t been finalized yet.</h2>
-          <p className="mt-1 text-md text-muted">Until it is, it is open on Coaching Session.</p>
+          <h2 className="font-display text-lg font-bold text-navy">{t.notFinalized}</h2>
+          <p className="mt-1 text-md text-muted">{t.notFinalizedLine}</p>
           <ButtonLink href={coachingTabHref(membershipId, 'session')} variant="secondary" className="mt-3">
-            Coaching Session
+            {t.sessionTab}
           </ButtonLink>
         </Card>
       )}
@@ -430,8 +455,8 @@ export function SessionArchive({ membershipId, sessionId }: { membershipId: stri
           <RecordBody
             session={session}
             agreement={record.agreed}
-            tipsTitle="Coaching tips"
-            ratiosEmpty={ratiosFor(coachee?.pronoun ?? 'they')}
+            tipsTitle={agreement.tips}
+            ratiosEmpty={ratios.none({ pronoun: coachee?.pronoun ?? 'they' })}
             withActivity
           />
 
@@ -440,7 +465,7 @@ export function SessionArchive({ membershipId, sessionId }: { membershipId: stri
             <div className="mt-3.5 flex flex-wrap justify-center gap-2.5 empty:hidden">
               {session.status === 'reopened' && mine ? (
                 // Already reopened, by this reader: the correction is open on the tab.
-                <ButtonLink href={sessionTabHref(membershipId, session.sessionId)} variant="secondary">Edit again</ButtonLink>
+                <ButtonLink href={sessionTabHref(membershipId, session.sessionId)} variant="secondary">{editAgain.button}</ButtonLink>
               ) : canReopen && session.reopenableUntil !== null && (
                 <EditAgainButton closed={closed} until={until} onClick={() => setAsking(true)} />
               )}
@@ -477,13 +502,12 @@ export function SessionArchive({ membershipId, sessionId }: { membershipId: stri
  * else the roster is empty, and the way back above goes to their own coaching (F4 of P11's final walk).
  */
 function ArchiveNotFound() {
+  const t = useMessages(coachingRecordMessages);
   const leads = useLeadsSomebody();
   return (
     <Card>
-      <h2 className="font-display text-lg font-bold text-navy">This session isn’t one you can open.</h2>
-      <p className="mt-1 text-md text-muted">
-        The address may be mistyped.{leads && ' Everyone you coach is on Coaching Session.'}
-      </p>
+      <h2 className="font-display text-lg font-bold text-navy">{t.notOpen}</h2>
+      <p className="mt-1 text-md text-muted">{t.notOpenLine({ leads })}</p>
     </Card>
   );
 }
@@ -502,6 +526,7 @@ export type MyCoachingTab = 'session' | 'activation' | 'training';
  */
 export function MyCoachingHeader({ current }: { current: MyCoachingTab }) {
   const { me } = useSession();
+  const { person: t } = useMessages(coachingMessages);
   // The rung by its badge's name, *AB · Your own coaching* (P18.95-T9 AC-1).
   const rung = useRoleShort(me?.membership?.orgLevelCode ?? '');
   const name = me?.user.fullName ?? '';
@@ -509,17 +534,17 @@ export function MyCoachingHeader({ current }: { current: MyCoachingTab }) {
   return (
     <>
       {leads && <BackLink />}
-      <PersonIdentity initials={me?.user.initials ?? coacheeInitials(name)} name={name} line={`${rung} · Your own coaching`} />
+      <PersonIdentity initials={me?.user.initials ?? coacheeInitials(name)} name={name} line={t.ownLine({ rung })} />
       <CoachingTabBar
         items={[
-          { key: 'summary', label: 'Personal Summary', href: '/summary' },
-          { key: 'goal-setting', label: 'Goal Setting', href: '/goals' },
+          { key: 'summary', label: t.tabs.summary, href: '/summary' },
+          { key: 'goal-setting', label: t.tabs.goalSetting, href: '/goals' },
           // P13.1-T9: the person shell's *Activity* tab, mirrored as the two before it are — the reader's own screen.
-          { key: 'activity', label: 'Activity', href: '/activity/dashboard' },
+          { key: 'activity', label: t.tabs.activity, href: '/activity/dashboard' },
           // P18.5-T4 AC-3: the reader's own training, in the coaching renderer's form.
-          { key: 'training', label: 'Training', href: MY_COACHING_TRAINING_HREF, current: current === 'training' },
-          { key: 'activation', label: 'Activation', href: MY_COACHING_ACTIVATION_HREF, current: current === 'activation' },
-          { key: 'session', label: 'Coaching Session', href: myCoachingHref(), current: current === 'session' },
+          { key: 'training', label: t.tabs.training, href: MY_COACHING_TRAINING_HREF, current: current === 'training' },
+          { key: 'activation', label: t.tabs.activation, href: MY_COACHING_ACTIVATION_HREF, current: current === 'activation' },
+          { key: 'session', label: t.tabs.session, href: myCoachingHref(), current: current === 'session' },
         ]}
       />
     </>
@@ -548,6 +573,9 @@ export function MyCoachingHeader({ current }: { current: MyCoachingTab }) {
  *   reason is written for the coachee to read, ADR-0079), and *⬇ Download as PDF*.
  */
 export function MyCoaching({ selected }: { selected?: string }) {
+  const language = useLanguage();
+  const t = useMessages(coachingRecordMessages);
+  const { agreement, ratios, past: pastWords, opening } = useMessages(coachingSessionMessages);
   const [mine, setMine] = useState<MySessions | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [session, setSession] = useState<CoachingSession | null>(null);
@@ -584,14 +612,14 @@ export function MyCoaching({ selected }: { selected?: string }) {
       <MyCoachingHeader current="session" />
 
       {error && <ErrorBanner {...error} />}
-      {!mine && !error && <RecordSkeleton label="Reading your coaching…" />}
+      {!mine && !error && <RecordSkeleton label={t.reading} />}
 
       {mine && (
         <div className="flex min-w-0 flex-col gap-4">
           <RecordHeader
             date={chosen?.date ?? null}
             coach={chosen?.coach.name ?? null}
-            empty="No coaching sessions yet."
+            empty={t.none}
             past={hasPast ? (
               <>
                 {mine.sessions.length > 0 && (
@@ -601,8 +629,8 @@ export function MyCoaching({ selected }: { selected?: string }) {
                         key={past.sessionId}
                         href={myCoachingHref(past.sessionId)}
                         date={past.date}
-                        summary={pastSessionSummary(past)}
-                        right={`Coached by ${past.coach.name}`}
+                        summary={pastSessionSummary(past, language)}
+                        right={t.coachedBy({ name: past.coach.name })}
                         current={past.sessionId === chosenId}
                       />
                     ))}
@@ -610,15 +638,15 @@ export function MyCoaching({ selected }: { selected?: string }) {
                 )}
                 {mine.ledFormerly.length > 0 && (
                   <>
-                    <h3 className={cn(GROUP_LABEL, mine.sessions.length > 0 && 'mt-3.5')}>Sessions you led</h3>
+                    <h3 className={cn(GROUP_LABEL, mine.sessions.length > 0 && 'mt-3.5')}>{t.youLed}</h3>
                     <ul>
                       {mine.ledFormerly.map((led) => (
                         <HistoryRow
                           key={led.sessionId}
                           href={coachingArchiveHref(led.coachee.membershipId, led.sessionId)}
                           date={led.date}
-                          summary={`${led.coachee.name} · ${pastSessionSummary(led)}`}
-                          right="View →"
+                          summary={`${led.coachee.name} · ${pastSessionSummary(led, language)}`}
+                          right={pastWords.view}
                         />
                       ))}
                     </ul>
@@ -629,7 +657,7 @@ export function MyCoaching({ selected }: { selected?: string }) {
           />
 
           {chosen && sessionError && <ErrorBanner {...sessionError} />}
-          {chosen && !session && !sessionError && <RecordSkeleton label="Opening the session…" />}
+          {chosen && !session && !sessionError && <RecordSkeleton label={opening} />}
 
           {session && record && (
             <>
@@ -637,8 +665,8 @@ export function MyCoaching({ selected }: { selected?: string }) {
                 session={session}
                 agreement={record.agreed}
                 lastWeekCoach={session.lastWeek ? coachOf(session.lastWeek.sessionId) : null}
-                tipsTitle={`Coaching tips from ${firstName(session.coach.name)}`}
-                ratiosEmpty="There are no ratios for your role yet."
+                tipsTitle={agreement.tipsFrom({ name: firstName(session.coach.name) })}
+                ratiosEmpty={ratios.noneYours}
                 withActivity={false}
               />
               <div className="rounded-lg border border-hairline bg-card px-[22px] py-[18px] text-center">

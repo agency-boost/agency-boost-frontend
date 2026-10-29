@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, Suspense, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { PageHeader } from '@/components/app-shell';
+import { PageHeader, PageLanguageSwitch, usePageLanguageSwitch } from '@/components/app-shell';
 import { TitledPageContext } from '@/components/require-session';
 import { Card, ErrorBanner } from '@/components/ui/field';
 import { TAB_PHONE, TAB_ROW_PHONE, TAP_HEIGHT, UNDERLINED_ROW_PHONE } from '@/components/ui/phone';
 import { useTabRow } from '@/components/ui/use-tab-row';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { coachingMessages } from '@/i18n/messages/coaching';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
@@ -92,7 +94,8 @@ type View = 'leader' | 'agent';
 
 interface ShellTab {
   tab: CoachingTab;
-  label: string;
+  /** Its name's key in the catalogue (`messages/coaching.ts`): the same words in both languages (§A.3). */
+  name: keyof typeof coachingMessages.en.person.tabs;
   /** In the bar, not followable: the tab's screen is not built yet (P11-T7 AC-7). */
   upcoming?: boolean;
   /** The leader's own tab, which *Agent view* takes away (`Overall.html:3994`, `:11298-11306`). */
@@ -104,17 +107,18 @@ interface ShellTab {
  * Setting* and *Training*: the client's request of 2026-10-07 (P13.1-T9), a coachee's Activity Dashboard.
  */
 const TABS: readonly ShellTab[] = [
-  { tab: 'summary', label: 'Personal Summary' },
-  { tab: 'goal-setting', label: 'Goal Setting' },
-  { tab: 'activity', label: 'Activity' },
+  { tab: 'summary', name: 'summary' },
+  { tab: 'goal-setting', name: 'goalSetting' },
+  { tab: 'activity', name: 'activity' },
   // Live since P18.5-T4 (AC-2): the person's training, read-only, from the learner's own read.
-  { tab: 'training', label: 'Training' },
-  { tab: 'activation', label: 'Activation' },
-  { tab: 'session', label: 'Coaching Session' },
-  { tab: 'leader-notes', label: 'Leader Notes', leaderOnly: true },
+  { tab: 'training', name: 'training' },
+  { tab: 'activation', name: 'activation' },
+  { tab: 'session', name: 'session' },
+  { tab: 'leader-notes', name: 'leaderNotes', leaderOnly: true },
 ];
 
 export function PersonShell({ membershipId, children }: { membershipId: string; children: ReactNode }) {
+  const t = useMessages(coachingMessages);
   const pathname = usePathname();
   const router = useRouter();
   const [coachee, setCoachee] = useState<Coachee | null>(null);
@@ -179,7 +183,7 @@ export function PersonShell({ membershipId, children }: { membershipId: string; 
    * prototype's *Coaching Session* while there is nobody to name — not found, a read that failed, a former coach's
    * archive. Whatever is drawn beneath is under that title (`TitledPageContext`), so a tab's refusal is a section.
    */
-  const untitled = <PageHeader title={COACHING_TITLE} />;
+  const untitled = <PageHeader title={t.title} />;
 
   // A former coach on the archive of a session they led: the archive alone, under the way back.
   if (missing && archive) {
@@ -228,22 +232,23 @@ export function PersonShell({ membershipId, children }: { membershipId: string; 
   );
 }
 
-/** The prototype's title for every coaching view (`Overall.html:10407`): the page's, where there is nobody to name. */
-const COACHING_TITLE = 'Coaching Session';
-
 /** `/coaching/{membershipId}/archive/…`: a past session's record. */
 function isArchivePath(pathname: string | null, membershipId: string): boolean {
   return pathname?.startsWith(`/coaching/${encodeURIComponent(membershipId)}/archive/`) ?? false;
 }
 
-/** `.back-link` (`Overall.html:1080`, `:3970`, `:4385`): back to the roster, or to where `href` names. */
-export function BackLink({ href = '/coaching', to = 'Coaching Session' }: { href?: string; to?: string }) {
+/**
+ * `.back-link` (`Overall.html:1080`, `:3970`, `:4385`): back to the roster, *Coaching Session*, or to where `href`
+ * names, called `to`.
+ */
+export function BackLink({ href = '/coaching', to }: { href?: string; to?: string }) {
+  const t = useMessages(coachingMessages);
   return (
     <Link
       href={href}
       className={cn('mb-3.5 inline-flex items-center gap-1 text-sm font-semibold text-navy-soft hover:underline', TAP_HEIGHT)}
     >
-      ← Back to {to}
+      {t.person.back({ to: to ?? t.title })}
     </Link>
   );
 }
@@ -263,7 +268,8 @@ export function useLeadsSomebody(): boolean {
  * the name the prototype gives the way there, *My Coaching Notes* (`Overall.html:3958`).
  */
 function WayBack() {
-  return useLeadsSomebody() ? <BackLink /> : <BackLink href={myCoachingHref()} to="My Coaching Notes" />;
+  const t = useMessages(coachingMessages).roster;
+  return useLeadsSomebody() ? <BackLink /> : <BackLink href={myCoachingHref()} to={t.myNotes} />;
 }
 
 /**
@@ -276,8 +282,9 @@ function WayBack() {
  * `.person-name` does.
  */
 function PersonHeader({ coachee, view, onView }: { coachee: Coachee; view: View; onView: (view: View) => void }) {
+  const language = useLanguage();
   return (
-    <PersonIdentity initials={coacheeInitials(coachee.name)} name={coachee.name} line={coacheeUnitLine(coachee)} title>
+    <PersonIdentity initials={coacheeInitials(coachee.name)} name={coachee.name} line={coacheeUnitLine(coachee, language)} title>
       <ViewToggle view={view} onView={onView} />
     </PersonIdentity>
   );
@@ -293,6 +300,8 @@ export function PersonIdentity({
   initials, name, line, title = false, children,
 }: { initials: string; name: string; line: string | null; title?: boolean; children?: ReactNode }) {
   const Name = title ? 'h1' : 'h2';
+  // The page's own header (`title`): once the language switch is live, it sits here, before the view toggle (P18.98-T2).
+  const withLanguage = usePageLanguageSwitch() && title;
   return (
     <div className="mb-[22px] flex flex-wrap items-center justify-between gap-4">
       <div className="flex items-center gap-3.5">
@@ -307,7 +316,12 @@ export function PersonIdentity({
           {line && <p className="mt-0.5 text-base text-muted">{line}</p>}
         </div>
       </div>
-      {children}
+      {withLanguage ? (
+        <div className="flex flex-wrap items-center gap-4">
+          <PageLanguageSwitch className="md:my-0" />
+          {children}
+        </div>
+      ) : children}
     </div>
   );
 }
@@ -320,6 +334,7 @@ export function PersonIdentity({
  * the prototype styles one and never renders it.
  */
 function ViewToggle({ view, onView }: { view: View; onView: (view: View) => void }) {
+  const t = useMessages(coachingMessages).person;
   const option = (id: View, label: string) => (
     <button
       type="button"
@@ -334,9 +349,9 @@ function ViewToggle({ view, onView }: { view: View; onView: (view: View) => void
     </button>
   );
   return (
-    <div role="group" aria-label="View" className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
-      {option('leader', 'Leader view')}
-      {option('agent', 'Agent view')}
+    <div role="group" aria-label={t.view} className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
+      {option('leader', t.leaderView)}
+      {option('agent', t.agentView)}
     </div>
   );
 }
@@ -347,11 +362,12 @@ function ViewToggle({ view, onView }: { view: View; onView: (view: View) => void
  * prototype's `display: none` does; *Activity* stays, the coachee's own screen as Personal Summary is.
  */
 function PersonTabs({ membershipId, current, view }: { membershipId: string; current: CoachingTab | null; view: View }) {
+  const names = useMessages(coachingMessages).person.tabs;
   return (
     <CoachingTabBar
       items={TABS.filter((t) => !(t.leaderOnly && view === 'agent')).map((t) => ({
         key: t.tab,
-        label: t.label,
+        label: names[t.name],
         href: t.upcoming ? null : coachingTabHref(membershipId, t.tab),
         current: current === t.tab,
         locked: t.leaderOnly,
@@ -384,41 +400,42 @@ export interface CoachingTabItem {
  * tabs took three lines), the current tab in view. Below 768px only.
  */
 export function CoachingTabBar({ items }: { items: readonly CoachingTabItem[] }) {
+  const t = useMessages(coachingMessages).person;
   const TAB = cn('-mb-px border-b-2 px-0.5 pb-3 text-md font-semibold', TAB_PHONE);
-  const row = useTabRow<HTMLElement>(items.find((t) => t.current)?.key);
+  const row = useTabRow<HTMLElement>(items.find((tab) => tab.current)?.key);
   return (
     <nav
       ref={row.ref}
-      aria-label="Coaching"
+      aria-label={t.nav}
       data-fade={row.fade}
       className={cn('mb-6 flex flex-wrap gap-x-6 gap-y-2 border-b border-hairline', TAB_ROW_PHONE, UNDERLINED_ROW_PHONE)}
     >
-      {items.map((t) => {
-        if (t.href === null) {
+      {items.map((tab) => {
+        if (tab.href === null) {
           return (
             <span
-              key={t.key}
+              key={tab.key}
               role="link"
               aria-disabled="true"
               // Its name says it is there and not yet available, beginning with the words on screen
               // (WCAG 2.5.3). The tooltip says the same to a pointer.
-              aria-label={`${t.label}, upcoming`}
-              title="Upcoming"
+              aria-label={t.upcomingName({ label: tab.label })}
+              title={t.upcoming}
               className={cn(TAB, 'cursor-default border-transparent text-muted/50')}
             >
-              {t.label}
+              {tab.label}
             </span>
           );
         }
         return (
           <Link
-            key={t.key}
-            href={t.href}
-            aria-current={t.current ? 'page' : undefined}
-            className={cn(TAB, 'flex items-center gap-1.5', t.current ? 'border-amber text-navy' : 'border-transparent text-muted')}
+            key={tab.key}
+            href={tab.href}
+            aria-current={tab.current ? 'page' : undefined}
+            className={cn(TAB, 'flex items-center gap-1.5', tab.current ? 'border-amber text-navy' : 'border-transparent text-muted')}
           >
-            {t.locked && <span aria-hidden="true" className="text-xs text-navy-soft">🔒</span>}
-            {t.label}
+            {tab.locked && <span aria-hidden="true" className="text-xs text-navy-soft">🔒</span>}
+            {tab.label}
           </Link>
         );
       })}
@@ -427,8 +444,9 @@ export function CoachingTabBar({ items }: { items: readonly CoachingTabItem[] })
 }
 
 function HeaderSkeleton() {
+  const t = useMessages(coachingMessages).person;
   return (
-    <Skeleton label="Loading this person…" className="mb-6">
+    <Skeleton label={t.loading} className="mb-6">
       <div className="mb-[22px] flex items-center gap-3.5">
         <div className="h-[52px] w-[52px] rounded-full bg-hairline" />
         <div className="flex flex-col gap-2">
@@ -449,16 +467,14 @@ function HeaderSkeleton() {
  * who leads somebody, as the way back to the roster is (F4).
  */
 function CoacheeNotFound() {
+  const t = useMessages(coachingMessages).person;
   const leads = useLeadsSomebody();
   return (
     <div>
       <WayBack />
       <Card>
-        <h2 className="font-display text-lg font-bold text-navy">This person isn’t someone you coach.</h2>
-        <p className="mt-1 text-md text-muted">
-          They may have moved to another leader, or the address may be mistyped.
-          {leads && ' Everyone you coach is on Coaching Session.'}
-        </p>
+        <h2 className="font-display text-lg font-bold text-navy">{t.notFound}</h2>
+        <p className="mt-1 text-md text-muted">{t.notFoundLine({ leads })}</p>
       </Card>
     </div>
   );

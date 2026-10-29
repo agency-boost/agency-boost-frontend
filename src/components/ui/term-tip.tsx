@@ -3,7 +3,8 @@
 import { Fragment } from 'react';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
 import { cn } from '@/lib/cn';
-import { termAt, termQuestion, TERMS, type TermKey } from '@/lib/terms';
+import { useLanguage } from '@/i18n/language-provider';
+import { termAt, termDefinition, termQuestion, type TermKey } from '@/lib/terms';
 
 /**
  * **ⓘ beside a term, holding its one line** (P18.95-T9 AC-3; ADR-0167 §10, OD-205; UI-028).
@@ -16,11 +17,12 @@ import { termAt, termQuestion, TERMS, type TermKey } from '@/lib/terms';
  * that sorts, a `<label>`. There the ⓘ goes beside the control instead, or on the next place the term appears.
  */
 export function TermTip({ term, className }: { term: TermKey; className?: string }) {
+  const language = useLanguage();
   return (
     <TippedGlyph
       glyph="ⓘ"
-      name={termQuestion(term)}
-      tip={TERMS[term].definition}
+      name={termQuestion(term, language)}
+      tip={termDefinition(term, language)}
       align="fit"
       className={cn('-my-1.5 align-middle', className)}
     />

@@ -8,10 +8,11 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { adminAnalyticsMessages } from '@/i18n/messages/admin-analytics';
 import {
-  formatCount, officeState, PLATFORM_ANALYTICS_COPY as COPY, PLATFORM_ANALYTICS_HEADINGS, platformHeadings,
-  readPlatformAnalytics,
-  rungWords, signedInWords, tableRows, type Adoption, type PlatformAnalyticsView,
+  analyticsHeadings, companyTotalWords, formatCount, officeState, platformHeadings, platformTotalWords,
+  readPlatformAnalytics, rungWords, signedInWords, tableRows, type Adoption, type PlatformAnalyticsView,
 } from '@/lib/admin-analytics';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 
@@ -28,8 +29,6 @@ import { toDisplayError, type ApiError } from '@/lib/api-client';
  * The route's own gate (`platform_analytics:read`), inside the console's; the read sits below it, so a
  * reader the gate refuses asks the API for nothing.
  */
-const COLUMNS: readonly Column[] = PLATFORM_ANALYTICS_HEADINGS;
-
 /**
  * **A minimum width, so the table scrolls inside its card** on a phone rather than squashing ten
  * columns into 360px, and the page body never scrolls sideways. The card itself is `relative` as well
@@ -38,6 +37,7 @@ const COLUMNS: readonly Column[] = PLATFORM_ANALYTICS_HEADINGS;
 const TABLE_WIDTH = 'min-w-[64rem]';
 
 export default function PlatformAnalyticsPage() {
+  const COPY = useMessages(adminAnalyticsMessages);
   return (
     <Page title={COPY.title} subtitle={COPY.subtitle} permission="platform_analytics:read">
       <PlatformAnalytics />
@@ -46,6 +46,10 @@ export default function PlatformAnalyticsPage() {
 }
 
 function PlatformAnalytics() {
+  const COPY = useMessages(adminAnalyticsMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const COLUMNS: readonly Column[] = analyticsHeadings(language);
   const [view, setView] = useState<PlatformAnalyticsView | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -80,11 +84,11 @@ function PlatformAnalytics() {
   }
 
   return (
-    <DataTable caption={COPY.caption} columns={platformHeadings(view.month)} className="relative" tableClassName={TABLE_WIDTH}>
+    <DataTable caption={COPY.caption} columns={platformHeadings(view.month, figures, language)} className="relative" tableClassName={TABLE_WIDTH}>
       {tableRows(view).map((row) => {
         if (row.kind === 'office') {
           const { office } = row;
-          const state = officeState(office.state);
+          const state = officeState(office.state, language);
           return (
             <Row key={`office-${office.kpmId}`}>
               <Cell className="font-semibold">
@@ -105,7 +109,7 @@ function PlatformAnalytics() {
           const { company } = row;
           return (
             <Row key={`company-${company.id}`} className="bg-base font-semibold">
-              <Cell colSpan={4}>{COPY.companyTotal(company.name, company.offices)}</Cell>
+              <Cell colSpan={4}>{companyTotalWords(company.name, company.offices, figures, language)}</Cell>
               <Figures figures={company} />
             </Row>
           );
@@ -113,7 +117,7 @@ function PlatformAnalytics() {
         const { platform } = row;
         return (
           <Row key="platform" className="bg-navy/5 font-bold">
-            <Cell colSpan={4}>{COPY.platformTotal(platform.companies, platform.offices)}</Cell>
+            <Cell colSpan={4}>{platformTotalWords(platform.companies, platform.offices, figures, language)}</Cell>
             <Figures figures={platform} />
           </Row>
         );
@@ -123,15 +127,16 @@ function PlatformAnalytics() {
 }
 
 /** The six figures every row carries, an office's or a total's, in the headings' order. */
-function Figures({ figures }: { figures: Adoption }) {
+function Figures({ figures: row }: { figures: Adoption }) {
+  const figures = useFigureLanguage();
   return (
     <>
-      <Cell className="whitespace-nowrap">{formatCount(figures.members)}</Cell>
-      <Cell>{rungWords(figures.byRung)}</Cell>
-      <Cell className="whitespace-nowrap">{formatCount(figures.joinedThisMonth)}</Cell>
-      <Cell className="whitespace-nowrap">{formatCount(figures.leftThisMonth)}</Cell>
-      <Cell className="whitespace-nowrap">{signedInWords(figures.signedIn7d, figures.members)}</Cell>
-      <Cell className="whitespace-nowrap">{signedInWords(figures.signedIn30d, figures.members)}</Cell>
+      <Cell className="whitespace-nowrap">{formatCount(row.members, figures)}</Cell>
+      <Cell>{rungWords(row.byRung, figures)}</Cell>
+      <Cell className="whitespace-nowrap">{formatCount(row.joinedThisMonth, figures)}</Cell>
+      <Cell className="whitespace-nowrap">{formatCount(row.leftThisMonth, figures)}</Cell>
+      <Cell className="whitespace-nowrap">{signedInWords(row.signedIn7d, row.members, figures)}</Cell>
+      <Cell className="whitespace-nowrap">{signedInWords(row.signedIn30d, row.members, figures)}</Cell>
     </>
   );
 }

@@ -3,7 +3,9 @@
 import { Suspense } from 'react';
 import { Page } from '@/components/page';
 import { UnitDashboard } from '@/components/unit/unit-dashboard';
-import { periodFrom, PROTOTYPE_COPY } from '@/lib/unit-dashboard';
+import { useMessages } from '@/i18n/language-provider';
+import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
+import { periodFrom } from '@/lib/unit-dashboard';
 import { useQuery } from '@/lib/use-query';
 
 /**
@@ -26,9 +28,10 @@ export default function UnitDashboardPage() {
 
 function Dashboard() {
   const query = useQuery();
+  const t = useMessages(unitDashboardMessages).prototype;
   return (
-    // The prototype's title, verbatim, and its empty sub-line (`Overall.html:10410`).
-    <Page title={PROTOTYPE_COPY.title} permission="unit_dashboard:read">
+    // The prototype's title, verbatim, and its empty sub-line (`Overall.html:10410`): kept in both languages (§A.2).
+    <Page title={t.title} permission="unit_dashboard:read">
       <UnitDashboard period={periodFrom(query.period)} />
     </Page>
   );

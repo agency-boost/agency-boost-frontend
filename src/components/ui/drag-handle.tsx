@@ -1,5 +1,8 @@
 'use client';
 
+import { useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
+
 /**
  * The grab affordance on a reorderable row — the prototype's `⠿` (`KPM_Owner.html:1506`).
  *
@@ -41,13 +44,14 @@ export function DragHandle({
   disabled?: boolean;
   className?: string;
 }) {
+  const t = useMessages(uiMessages);
   return (
     <button
       id={id}
       type="button"
       draggable={!disabled}
       disabled={disabled}
-      aria-label={`Reorder ${label}. Press the up or down arrow to move it.`}
+      aria-label={t.reorder({ label })}
       className={className ?? DRAG_HANDLE_CLASS}
       onDragStart={(e) => {
         const row = e.currentTarget.closest('li, [data-row]');

@@ -11,11 +11,13 @@ import { FormatIcon, SkillTag, TrainingStatusPill } from '@/components/training/
 import { Card, ErrorBanner } from '@/components/ui/field';
 import { TAP_HEIGHT } from '@/components/ui/phone';
 import { Toast, useToast } from '@/components/ui/toast';
+import { useMessages } from '@/i18n/language-provider';
+import { trainingMessages } from '@/i18n/messages/training';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import { useSession } from '@/lib/session';
 import {
-  OWN_COPY, PROTOTYPE_COPY, STATUS_LABEL, TILE, TRAINING_STATUSES, openTrainingItem, readTrainingModule,
+  TRAINING_STATUSES, openTrainingItem, readTrainingModule,
   setTrainingStatus, trainingCategoryHref, trainingModuleHref,
   type TrainingItemView, type TrainingModulePage, type TrainingStatus,
 } from '@/lib/training';
@@ -40,6 +42,7 @@ import {
  */
 export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: string; moduleCode: string }) {
   const catalog = useTrainingCatalog();
+  const t = useMessages(trainingMessages);
   const router = useRouter();
   const { me, reload: reloadSession } = useSession();
   const { toast, show } = useToast();
@@ -74,7 +77,7 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
 
   if (missing) return <ModuleNotFound />;
   if (error) return <ReadFailed error={error} onRetry={() => setAttempt((n) => n + 1)} />;
-  if (!page) return <CatalogSkeleton label={OWN_COPY.loadingModule} />;
+  if (!page) return <CatalogSkeleton label={t.loadingModule} />;
 
   const offered = catalog.view?.categories.filter((c) => c.offered) ?? [];
 
@@ -86,7 +89,7 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
     try {
       const next = await setTrainingStatus(page.code, status);
       setPage(next);
-      show(PROTOTYPE_COPY.marked(next.title, next.status));
+      show(t.marked({ title: next.title, status: next.status }));
       catalog.reload();
       // A module bound to the reader's open activation completes its item (T3): the nav's check follows.
       if (status === 'done' && me?.activation?.open) void reloadSession();
@@ -102,23 +105,23 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
     setPage((p) => (p ? { ...p, openedItemIds } : p));
     // The prototype's toast says the open is kept: only for a reader whose opens are recorded (`can.update`; never a
     // support session, which records nothing), and only once the record holds it.
-    if (page.can.update && openedItemIds.includes(itemId)) show(PROTOTYPE_COPY.markedOpened);
+    if (page.can.update && openedItemIds.includes(itemId)) show(t.markedOpened);
   };
 
   return (
-    <Page title={page.title} subtitle={PROTOTYPE_COPY.moduleSubtitle}>
+    <Page title={page.title} subtitle={t.moduleSubtitle}>
       {offered.length > 0 && <TrainingSubtabs categories={offered} current={page.category.code} currentAs="location" />}
       <div className="mx-auto max-w-[820px]">
         {/* Back to the list it came from, by that page's title (P18.95-T9 AC-2): *Back to Training Modules*. */}
-        <BackLink href={trainingCategoryHref(page.category.code)} title={OWN_COPY.title} />
+        <BackLink href={trainingCategoryHref(page.category.code)} title={t.title} />
         <Card density="compact">
           <div className="mb-[13px] flex flex-wrap items-center justify-between gap-2.5">
             <h2 className="font-display text-md font-bold text-navy">{page.title}</h2>
-            <SkillTag>{PROTOTYPE_COPY.skillTag(page.skill.label)}</SkillTag>
+            <SkillTag>{t.skillTag({ label: page.skill.label })}</SkillTag>
           </div>
 
           {page.items.length === 0 ? (
-            <p className="mt-4 text-md text-muted">{OWN_COPY.nothingToOpen}</p>
+            <p className="mt-4 text-md text-muted">{t.nothingToOpen}</p>
           ) : (
             <ul className="flex flex-col">
               {page.items.map((item) => (
@@ -140,7 +143,7 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
             <p className="mt-[18px]"><TrainingStatusPill status={page.status} /></p>
           )}
           {saveError && (
-            <p role="alert" className="mt-2 text-sm font-semibold text-alert">{OWN_COPY.notSaved(saveError.message)}</p>
+            <p role="alert" className="mt-2 text-sm font-semibold text-alert">{t.notSaved({ why: saveError.message })}</p>
           )}
         </Card>
       </div>
@@ -151,6 +154,7 @@ export function TrainingModule({ categoryCode, moduleCode }: { categoryCode: str
 
 /** *Back to Training Modules* (`:3734-3737`'s *Back to {category title}* until P18.95-T9 AC-2, `.training-back-btn` `:1811-1816`): the chevron and the words, as the link it is. */
 function BackLink({ href, title }: { href: string; title: string }) {
+  const t = useMessages(trainingMessages);
   return (
     <Link
       href={href}
@@ -159,7 +163,7 @@ function BackLink({ href, title }: { href: string; title: string }) {
       <svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
         <path d="M15 18l-6-6 6-6" />
       </svg>
-      {PROTOTYPE_COPY.back(title)}
+      {t.back({ title })}
     </Link>
   );
 }
@@ -180,7 +184,8 @@ function ResourceTile({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const words = TILE[item.kind];
+  const t = useMessages(trainingMessages);
+  const words = t.tile[item.kind];
   const BUTTON = 'shrink-0 rounded-md border border-hairline bg-card px-3.5 py-2 text-sm font-semibold text-navy hover:border-navy-soft hover:text-navy-soft aria-disabled:opacity-60';
 
   // A link the browser opened from its own anchor, before the server was asked anything.
@@ -223,8 +228,8 @@ function ResourceTile({
         {isOpened && (
           <span
             role="img"
-            aria-label={PROTOTYPE_COPY.opened}
-            title={PROTOTYPE_COPY.opened}
+            aria-label={t.opened}
+            title={t.opened}
             className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success/[0.12] text-success"
           >
             <svg aria-hidden="true" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.6">
@@ -237,7 +242,7 @@ function ResourceTile({
             href={item.url}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label={OWN_COPY.openName(words.button, item.label)}
+            aria-label={t.openName({ button: words.button, label: item.label })}
             onClick={() => { void record(null); }}
             className={BUTTON}
           >
@@ -248,7 +253,7 @@ function ResourceTile({
             type="button"
             onClick={openFile}
             aria-disabled={busy || undefined}
-            aria-label={OWN_COPY.openName(words.button, item.label)}
+            aria-label={t.openName({ button: words.button, label: item.label })}
             className={BUTTON}
           >
             {words.button}
@@ -257,7 +262,7 @@ function ResourceTile({
       </div>
       {error && (
         <div className="mt-2">
-          <p className="mb-1.5 text-base text-alert">{OWN_COPY.openFailed(item.label)}</p>
+          <p className="mb-1.5 text-base text-alert">{t.openFailed({ label: item.label })}</p>
           <ErrorBanner {...error} />
         </div>
       )}
@@ -277,8 +282,9 @@ function StatusToggle({
   title: string;
   onChoose: (status: TrainingStatus) => void;
 }) {
+  const t = useMessages(trainingMessages);
   return (
-    <div role="group" aria-label={OWN_COPY.statusGroup(title)} className="mt-[18px] flex flex-wrap gap-2">
+    <div role="group" aria-label={t.statusGroup({ title })} className="mt-[18px] flex flex-wrap gap-2">
       {TRAINING_STATUSES.map((s) => (
         <button
           key={s}
@@ -290,7 +296,7 @@ function StatusToggle({
             status === s ? 'border-navy bg-navy text-white' : 'border-hairline bg-card text-muted hover:border-navy hover:text-navy',
           )}
         >
-          {STATUS_LABEL[s]}
+          {t.status[s]}
         </button>
       ))}
     </div>
@@ -299,10 +305,11 @@ function StatusToggle({
 
 /** Not offered, or never was (AC-3): the not-found card, under the page's own title. */
 function ModuleNotFound() {
+  const t = useMessages(trainingMessages);
   return (
-    <Page title={OWN_COPY.title}>
+    <Page title={t.title}>
       <div className="mx-auto max-w-[820px]">
-        <NotFoundCard title={OWN_COPY.moduleNotFound} />
+        <NotFoundCard title={t.moduleNotFound} />
       </div>
     </Page>
   );

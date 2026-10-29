@@ -1,3 +1,4 @@
+import { kept } from '@/i18n/kept';
 import { cn } from '@/lib/cn';
 import { useTenantConfig, type OrgLevel } from '@/lib/tenant-config-cache';
 
@@ -31,9 +32,9 @@ export type HierarchyRole = 'ab' | 'aab' | 'agent';
  * the console and the development accounts named a rung one way and the offices another.
  */
 export const SEEDED_LADDER: OrgLevel[] = [
-  { orgLevelId: 'seed-agent', companyId: '', code: 'AGENT', label: 'Agent', displayOrder: 1, leaderTier: null, status: 'active' },
-  { orgLevelId: 'seed-aab', companyId: '', code: 'AAB', label: 'AAB', displayOrder: 2, leaderTier: 'associate', status: 'active' },
-  { orgLevelId: 'seed-ab', companyId: '', code: 'AB', label: 'AB', displayOrder: 3, leaderTier: 'senior', status: 'active' },
+  { orgLevelId: 'seed-agent', companyId: '', code: 'AGENT', label: kept('Agent'), displayOrder: 1, leaderTier: null, status: 'active' },
+  { orgLevelId: 'seed-aab', companyId: '', code: 'AAB', label: kept('AAB'), displayOrder: 2, leaderTier: 'associate', status: 'active' },
+  { orgLevelId: 'seed-ab', companyId: '', code: 'AB', label: kept('AB'), displayOrder: 3, leaderTier: 'senior', status: 'active' },
 ];
 
 /** Senior first. The first rung gets the strongest colour. */

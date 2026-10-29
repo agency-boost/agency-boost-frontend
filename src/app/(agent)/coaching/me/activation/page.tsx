@@ -3,6 +3,7 @@
 import { MyActivationRecord } from '@/components/activation-record';
 import { MyCoachingHeader } from '@/components/coaching-record';
 import { Page } from '@/components/page';
+import { kept } from '@/i18n/kept';
 
 /**
  * The reader's own *Activation* tab on their coaching (`/coaching/me/activation`, `Overall.html:4574-4577`;
@@ -12,7 +13,7 @@ import { Page } from '@/components/page';
  */
 export default function MyCoachingActivationPage() {
   return (
-    <Page title="Coaching Session" permission="coaching_session:read">
+    <Page title={kept('Coaching Session')} permission="coaching_session:read">
       <MyCoachingHeader current="activation" />
       <MyActivationRecord />
     </Page>

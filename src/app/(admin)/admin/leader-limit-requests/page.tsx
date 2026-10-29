@@ -8,18 +8,13 @@ import { Button, Card, ErrorBanner, Field, FieldRow, TextInput } from '@/compone
 import { rungShort } from '@/components/ui/role-badge';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { adminRequestsMessages } from '@/i18n/messages/admin-requests';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
   approveLeaderLimitRequest, declineLeaderLimitRequest, LEADER_LIMIT_QUEUE_CHANGED, readLeaderLimitQueue,
   requestedChange, type LeaderLimitRequestRow,
 } from '@/lib/leader-limit-requests';
-
-const STATUS_WORD: Record<LeaderLimitRequestRow['status'], string> = {
-  pending: 'Pending', approved: 'Approved', declined: 'Declined', cancelled: 'Cancelled',
-};
-
-/** The office as the console names it everywhere: *KPM 0603 · Tangerang Branch*. */
-const officeOf = (row: LeaderLimitRequestRow) => `KPM ${row.kpmCode} · ${row.kpmBranchName}`;
 
 /** *13 / 10*, or the count alone for an office with no limit any more. */
 const countOf = (row: Pick<LeaderLimitRequestRow, 'leadersUsed' | 'maxLeaders'>, used = row.leadersUsed) =>
@@ -38,6 +33,10 @@ const countOf = (row: Pick<LeaderLimitRequestRow, 'leadersUsed' | 'maxLeaders'>,
  * and closed as declined; the queue is re-read so the card goes, and the refusal says why.
  */
 export default function LeaderLimitRequestsPage() {
+  const t = useMessages(adminRequestsMessages);
+  const language = useLanguage();
+  /** The office as the console names it everywhere: *KPM 0603 · Tangerang Branch*. */
+  const officeOf = (row: LeaderLimitRequestRow) => t.limit.office({ code: row.kpmCode, branch: row.kpmBranchName });
   const [rows, setRows] = useState<LeaderLimitRequestRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -80,19 +79,19 @@ export default function LeaderLimitRequestsPage() {
 
   return (
     <Page
-      title="Leaders past the limit"
-      subtitle="Offices asking to add a leader beyond their limit, awaiting AgencyBoost's approval"
+      title={t.limit.title}
+      subtitle={t.limit.subtitle}
       permission="leader_limit_request:decide"
     >
       {error && <ErrorBanner {...error} />}
 
       {rows === null && !error && (
-        <SkeletonCards count={3} label="Loading requests…" className="mb-3" />
+        <SkeletonCards count={3} label={t.limit.loading} className="mb-3" />
       )}
 
       {rows && pending.length === 0 && (
         <Card>
-          <EmptyState title="No office is waiting to add a leader past its limit." />
+          <EmptyState title={t.limit.empty} />
         </Card>
       )}
 
@@ -101,26 +100,26 @@ export default function LeaderLimitRequestsPage() {
           <div className="flex flex-wrap items-start gap-4">
             <span className="min-w-0 flex-1">
               <span className="block font-display text-md font-bold text-navy">
-                {row.subjectName} · {requestedChange(row, label)}
+                {row.subjectName} · {requestedChange(row, label, language)}
               </span>
               <span className="block text-sm text-muted">
-                {officeOf(row)} · asked by <strong>{row.requestedByName}</strong> · leaders {countOf(row)}
+                {t.limit.meta({ office: officeOf(row), name: <strong>{row.requestedByName}</strong>, count: countOf(row) })}
               </span>
               {row.reason && <span className="mt-1 block text-md text-navy">{row.reason}</span>}
             </span>
-            <StatusPill status="alert" label="Pending" />
+            <StatusPill status="alert" label={t.status.pending} />
           </div>
 
           <FieldRow className="mt-3">
             <FieldRow.Actions>
               <Button disabled={busy !== null} onClick={() => void decide(row, 'approve')}>
-                {busy === row.requestId ? 'Approving…' : 'Approve'}
+                {busy === row.requestId ? t.approving : t.approve}
               </Button>
             </FieldRow.Actions>
-            <Field label="Why not?" htmlFor={`why-${row.requestId}`} className="min-w-[16rem] flex-1">
+            <Field label={t.whyNot} htmlFor={`why-${row.requestId}`} className="min-w-[16rem] flex-1">
               <TextInput
                 id={`why-${row.requestId}`}
-                placeholder="Sent back to whoever asked"
+                placeholder={t.sentBack}
                 value={reason[row.requestId] ?? ''}
                 onChange={(e) => setReason({ ...reason, [row.requestId]: e.target.value })}
               />
@@ -131,30 +130,29 @@ export default function LeaderLimitRequestsPage() {
                 disabled={busy !== null || !(reason[row.requestId] ?? '').trim()}
                 onClick={() => void decide(row, 'decline')}
               >
-                Decline
+                {t.decline}
               </Button>
             </FieldRow.Actions>
           </FieldRow>
           {/* Approving makes a leader past the limit, so the card says what it does to the count first. */}
           <p className="mt-2 text-sm text-muted">
-            Approving makes the change now, past the limit: the office&apos;s leaders become{' '}
-            {countOf(row, row.leadersUsed + 1)}. The limit does not change.
+            {t.limit.approvingMeans({ count: countOf(row, row.leadersUsed + 1) })}
           </p>
         </Card>
       ))}
 
       {decided.length > 0 && (
         <>
-          <h2 className="mb-3 mt-6 font-display text-lg font-bold text-navy">Already decided</h2>
+          <h2 className="mb-3 mt-6 font-display text-lg font-bold text-navy">{t.decided}</h2>
           <DataTable
-            caption="Decided requests"
-            columns={['Member', 'Office', 'Change', 'Requested by', 'Status']}
+            caption={t.limit.caption}
+            columns={[t.limit.columns.member, t.limit.columns.office, t.limit.columns.change, t.limit.columns.requestedBy, t.limit.columns.status]}
           >
             {decided.map((row) => (
               <Row key={row.requestId}>
                 <Cell className="font-semibold">{row.subjectName}</Cell>
                 <Cell className="text-muted">{officeOf(row)}</Cell>
-                <Cell className="text-muted">{requestedChange(row, label)}</Cell>
+                <Cell className="text-muted">{requestedChange(row, label, language)}</Cell>
                 <Cell className="text-muted">
                   {row.requestedByName}
                   {row.declineReason && <span className="block text-sm">{row.declineReason}</span>}
@@ -162,7 +160,7 @@ export default function LeaderLimitRequestsPage() {
                 <Cell>
                   <StatusPill
                     status={row.status === 'approved' ? 'success' : 'neutral'}
-                    label={STATUS_WORD[row.status]}
+                    label={t.status[row.status]}
                   />
                 </Cell>
               </Row>

@@ -186,7 +186,7 @@ describe('tenants list', () => {
       const dialog = screen.getByRole('dialog', { name: 'Edit subscription' });
       expect(within(dialog).getByLabelText('Start date')).toHaveValue('2026-01-06');
       expect(within(dialog).getByLabelText('End date')).toHaveValue('2027-01-05');
-      expect(within(dialog).getByLabelText('Price per leader per month')).toHaveValue('350.000');
+      expect(within(dialog).getByLabelText('Price per leader per month')).toHaveValue('350,000');
       expect(within(dialog).getByLabelText('Maximum leaders')).toHaveValue('10');
       expect(within(dialog).getByRole('switch', { name: 'Keep active after the end date' })).not.toBeChecked();
       expect(dialog).toHaveTextContent('Leaders used now: 6');

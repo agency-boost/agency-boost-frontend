@@ -1,4 +1,8 @@
+'use client';
+
 import { Fragment } from 'react';
+import { useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
 import { cn } from '@/lib/cn';
 import { NavIcon, type NavIconName } from './nav-icon';
 import { ConfigBadge } from './config-badge';
@@ -55,6 +59,7 @@ export function CascadeRow({
   links: readonly string[];
   className?: string;
 }) {
+  const t = useMessages(uiMessages);
   return (
     <div className={cn('flex flex-col items-stretch gap-1.5 sm:flex-row', className)}>
       {columns.map((col, i) => (
@@ -106,7 +111,7 @@ export function CascadeRow({
                 */}
               <span className="text-xs font-bold text-navy-soft">
                 <span className="sr-only">
-                  {`${links[i]} from ${columns[i].label.toLowerCase()} to ${columns[i + 1].label.toLowerCase()}`}
+                  {t.cascadeLink({ rate: links[i], from: columns[i].label, to: columns[i + 1].label })}
                 </span>
                 <span aria-hidden="true">{links[i]}</span>
               </span>

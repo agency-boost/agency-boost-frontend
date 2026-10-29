@@ -3,15 +3,17 @@
 import { Fragment, useId, useRef, useState } from 'react';
 import { useMeetingWriter } from '@/components/leader-forum/meeting-writer';
 import { TextInput } from '@/components/ui/field';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { forumStatsMessages } from '@/i18n/messages/forum-stats';
 import { cn } from '@/lib/cn';
 import {
-  asOfText, cellText, changeText, columnHeader, isPartial, ItemWrites, noneWords, numberedFootnotes, OUTLINED_ROWS,
-  partialNotes, rateFromTyped, ROW_STYLE, runWrite, SECTION_BEFORE, statsTitle, TABS_COPY, TABS_OWN_COPY, targetDraftText,
-  targetText, useDraft, withTarget,
+  asOfText, cellText, changeText, chipsIn, columnHeader, footnotesIn, isPartial, ItemWrites, NONE, noneWords,
+  numberedFootnotes, OUTLINED_ROWS, partialNotes, rateExample, rateFromTyped, ROW_STYLE, rowName, runWrite, statsTitle,
+  targetDraftText, targetText, useDraft, withTarget,
 } from '@/lib/leader-meeting-tabs';
 import {
-  COLUMN_KEYS, saveMonthlyTarget, type ColumnKey, type MeetingView, type MonthlyTarget, type Scorecard as ScorecardData,
-  type ScorecardCell, type ScorecardRow, type TargetRowKey,
+  COLUMN_KEYS, saveMonthlyTarget, type ColumnKey, type MeetingView, type MonthlyTarget, type RowKey,
+  type Scorecard as ScorecardData, type ScorecardCell, type ScorecardRow, type TargetRowKey,
 } from '@/lib/leader-meetings';
 import { usePhone } from '@/lib/use-phone';
 
@@ -49,19 +51,21 @@ export function Scorecard({ meeting }: { meeting: MeetingView }) {
 export function StatsTitle({
   meeting, print = false,
 }: { meeting: Pick<MeetingView, 'branch' | 'date' | 'scorecard'>; print?: boolean }) {
-  const asOf = asOfText(meeting.scorecard.asOf);
+  const t = useMessages(forumStatsMessages);
+  const language = useFigureLanguage();
+  const asOf = asOfText(meeting.scorecard.asOf, language);
   const unrecorded = meeting.scorecard.asOf.kind === 'unrecorded';
   // On paper it sits under the print's own *Overview & Stats* heading, a level below.
   const Heading = print ? 'h4' : 'h3';
   return (
     <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-      <Heading className="text-lg font-extrabold text-navy">{statsTitle(meeting.branch, meeting.date)}</Heading>
+      <Heading className="text-lg font-extrabold text-navy">{statsTitle(meeting.branch, meeting.date, language)}</Heading>
       {asOf && (
         <p className="text-sm font-bold tracking-wide text-navy">
           {unrecorded ? (
             <>
               <span aria-hidden="true">{asOf}</span>
-              <span className="sr-only">{TABS_OWN_COPY.asOfUnrecorded}</span>
+              <span className="sr-only">{t.asOfUnrecorded}</span>
             </>
           ) : asOf}
         </p>
@@ -85,9 +89,10 @@ const TILE_TONE: Record<keyof ScorecardData['chips'], string> = {
 };
 
 export function Chips({ chips }: { chips: ScorecardData['chips'] }) {
+  const words = useLanguage();
   return (
     <dl className="mb-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-hairline bg-card md:grid-cols-5">
-      {TABS_COPY.chips.map(({ key, label }) => (
+      {chipsIn(words).map(({ key, label }) => (
         <div
           key={key}
           className={cn(
@@ -139,6 +144,8 @@ const OUTLINE: Partial<Record<ColumnKey, string>> = {
 export function ScorecardTable({
   meeting, print = false, readOnly = true,
 }: { meeting: MeetingView; print?: boolean; readOnly?: boolean }) {
+  const t = useMessages(forumStatsMessages);
+  const sections: Partial<Record<RowKey, string>> = t.sections;
   const { scorecard } = meeting;
   const { marks } = numberedFootnotes(scorecard.rows.map((r) => r.key));
   return (
@@ -153,7 +160,7 @@ export function ScorecardTable({
           <tbody>
             {scorecard.rows.map((row) => (
               <Fragment key={row.key}>
-                {SECTION_BEFORE[row.key] && <SectionRow name={SECTION_BEFORE[row.key]!} />}
+                {sections[row.key] && <SectionRow name={sections[row.key]!} />}
                 <MetricRow meeting={meeting} row={row} mark={marks[row.key]} print={print} editable={!print && !readOnly} />
               </Fragment>
             ))}
@@ -166,21 +173,23 @@ export function ScorecardTable({
 
 /** The two groups with the slide's arrows (decorative), then *Metrics*, each column's name over its period, *Monthly Target*. */
 export function ScorecardHead({ periods }: { periods: ScorecardData['periods'] }) {
+  const t = useMessages(forumStatsMessages);
+  const language = useFigureLanguage();
   const group = cn(TH, 'text-center text-sm');
   return (
     <thead>
       <tr>
-        <th rowSpan={2} scope="col" className={cn(TH, STICKY, 'text-sm')}>{TABS_COPY.metrics}</th>
+        <th rowSpan={2} scope="col" className={cn(TH, STICKY, 'text-sm')}>{t.metrics}</th>
         <th colSpan={3} scope="colgroup" className={cn(group, DASHED)}>
-          <span aria-hidden="true">⟵ </span>{TABS_COPY.groups.year}<span aria-hidden="true"> ⟶</span>
+          <span aria-hidden="true">⟵ </span>{t.groups.year}<span aria-hidden="true"> ⟶</span>
         </th>
         <th colSpan={4} scope="colgroup" className={group}>
-          <span aria-hidden="true">⟵ </span>{TABS_COPY.groups.month}<span aria-hidden="true"> ⟶</span>
+          <span aria-hidden="true">⟵ </span>{t.groups.month}<span aria-hidden="true"> ⟶</span>
         </th>
       </tr>
       <tr>
         {COLUMN_KEYS.map((column) => {
-          const { name, period } = columnHeader(column, periods);
+          const { name, period } = columnHeader(column, periods, language);
           return (
             <th key={column} scope="col" className={cn(TH, 'whitespace-nowrap', column === 'ytd' && DASHED)}>
               <span className="block">{name}</span>
@@ -188,7 +197,7 @@ export function ScorecardHead({ periods }: { periods: ScorecardData['periods'] }
             </th>
           );
         })}
-        <th scope="col" className={cn(TH, 'whitespace-nowrap')}>{TABS_COPY.monthlyTarget}</th>
+        <th scope="col" className={cn(TH, 'whitespace-nowrap')}>{t.monthlyTarget}</th>
       </tr>
     </thead>
   );
@@ -208,6 +217,8 @@ export function SectionRow({ name }: { name: string }) {
 function MetricRow({
   meeting, row, mark, print, editable,
 }: { meeting: MeetingView; row: ScorecardRow; mark: number | undefined; print: boolean; editable: boolean }) {
+  const t = useMessages(forumStatsMessages);
+  const language = useFigureLanguage();
   const style = ROW_STYLE[row.key];
   const ground = style.band ? BAND_BG : undefined;
   return (
@@ -216,19 +227,19 @@ function MetricRow({
         scope="row"
         className={cn(TD, STICKY, ground ?? 'md:max-lg:bg-card', 'text-left', style.indent && 'pl-7', style.bold ? 'font-bold' : 'font-normal')}
       >
-        {TABS_COPY.rows[row.key]}
+        {rowName(row.key, language)}
         {mark !== undefined && <sup className="ml-0.5 text-2xs font-semibold">{mark}</sup>}
       </th>
       {COLUMN_KEYS.map((column) => (
         <FigureCell key={column} row={row} column={column} cell={row.cells[column]} ground={ground} bold={style.bold} />
       ))}
       {row.monthlyTarget === null
-        ? <td className={cn(TD, ground, HATCH)}><span className="sr-only">{TABS_OWN_COPY.notTracked}</span></td>
+        ? <td className={cn(TD, ground, HATCH)}><span className="sr-only">{t.notTracked}</span></td>
         : (
           <td className={cn(TD, ground, editable && 'py-1.5', style.bold ? 'font-bold' : 'font-normal')}>
             {editable
               ? <TargetInput meeting={meeting} row={row as ScorecardRow & { key: TargetRowKey }} target={row.monthlyTarget} />
-              : targetText(row, row.monthlyTarget)}
+              : targetText(row, row.monthlyTarget, language)}
           </td>
         )}
     </tr>
@@ -237,29 +248,33 @@ function MetricRow({
 
 /** A figure over part of its period: *\** to the eye, and a word to a screen reader (AC-12, I-488). */
 function PartialMark() {
+  const t = useMessages(forumStatsMessages);
   return (
     <>
       <span aria-hidden="true">*</span>
-      <span className="sr-only">{`, ${TABS_OWN_COPY.partialMark}`}</span>
+      <span className="sr-only">{`, ${t.partialMark}`}</span>
     </>
   );
 }
 
 /** A cell's figure and its states: *pending data* grey and italic (`:698`), *—* with its reason, *Not tracked* hatched. */
 function CellContent({ row, cell }: { row: ScorecardRow; cell: ScorecardCell }) {
-  if (cell.kind === 'pending') return <span className="italic text-muted">{TABS_COPY.pending}</span>;
+  const t = useMessages(forumStatsMessages);
+  const words = useLanguage();
+  const language = useFigureLanguage();
+  if (cell.kind === 'pending') return <span className="italic text-muted">{t.pending}</span>;
   if (cell.kind === 'none' || cell.kind === 'unrecorded') {
     return (
       <>
-        <span aria-hidden="true">{TABS_COPY.none}</span>
-        <span className="sr-only">{noneWords(row, cell)}</span>
+        <span aria-hidden="true">{NONE}</span>
+        <span className="sr-only">{noneWords(row, cell, words)}</span>
       </>
     );
   }
-  if (cell.kind === 'blocked') return <span className="sr-only">{TABS_OWN_COPY.notTracked}</span>;
+  if (cell.kind === 'blocked') return <span className="sr-only">{t.notTracked}</span>;
   return (
     <span className="whitespace-nowrap tabular-nums">
-      {cellText(row, cell)}
+      {cellText(row, cell, language)}
       {isPartial(cell) && <PartialMark />}
     </span>
   );
@@ -299,16 +314,18 @@ function FigureCell({
 function TargetInput({
   meeting, row, target,
 }: { meeting: MeetingView; row: ScorecardRow & { key: TargetRowKey }; target: MonthlyTarget }) {
+  const t = useMessages(forumStatsMessages);
+  const language = useFigureLanguage();
   const writer = useMeetingWriter();
   const writes = useRef(new ItemWrites());
-  const base = targetDraftText(row, target);
+  const base = targetDraftText(row, target, language);
   const draft = useDraft(base, target.version);
   const [focused, setFocused] = useState(false);
   const [invalid, setInvalid] = useState(false);
   const errorId = useId();
 
   // While focused, a refused text, or a write in flight: what was typed. Otherwise the target as the table draws it.
-  const shown = focused || invalid || draft.value !== base ? draft.value : targetText(row, target);
+  const shown = focused || invalid || draft.value !== base ? draft.value : targetText(row, target, language);
 
   const leave = () => {
     setFocused(false);
@@ -340,10 +357,10 @@ function TargetInput({
       <TextInput
         density="cell"
         inputMode="decimal"
-        aria-label={TABS_OWN_COPY.targetName(TABS_COPY.rows[row.key])}
+        aria-label={t.targetName({ row: rowName(row.key, language) })}
         invalid={invalid}
         aria-describedby={invalid ? errorId : undefined}
-        placeholder={row.key === 'ape' ? TABS_COPY.tbd : undefined}
+        placeholder={row.key === 'ape' ? t.tbd : undefined}
         value={shown}
         maxLength={meeting.limits.targetMax}
         onFocus={() => {
@@ -354,7 +371,7 @@ function TargetInput({
         onBlur={leave}
         className="min-w-[7rem]"
       />
-      {invalid && <p id={errorId} className="mt-1 whitespace-normal text-xs font-semibold text-alert">{TABS_OWN_COPY.notARate}</p>}
+      {invalid && <p id={errorId} className="mt-1 whitespace-normal text-xs font-semibold text-alert">{t.notARate({ example: rateExample(language) })}</p>}
     </>
   );
 }
@@ -382,6 +399,9 @@ function MetricCards({ meeting, readOnly }: { meeting: MeetingView; readOnly: bo
 function MetricCard({
   meeting, row, mark, readOnly,
 }: { meeting: MeetingView; row: ScorecardRow; mark: number | undefined; readOnly: boolean }) {
+  const t = useMessages(forumStatsMessages);
+  const words = useLanguage();
+  const language = useFigureLanguage();
   const titleId = useId();
   const { periods } = meeting.scorecard;
   /*
@@ -389,7 +409,7 @@ function MetricCard({
    * between them — *YTD 2026* over *(Jan-Okt '26)* — never inside either.
    */
   const label = (column: ColumnKey) => {
-    const { name, period } = columnHeader(column, periods);
+    const { name, period } = columnHeader(column, periods, language);
     return (
       <span className="flex flex-wrap items-baseline gap-x-1">
         <span className="whitespace-nowrap">{name}</span>
@@ -403,7 +423,7 @@ function MetricCard({
   return (
     <li aria-labelledby={titleId} className="rounded-lg border border-hairline bg-card px-4 py-3">
       <h4 id={titleId} className="mb-2 text-md font-bold text-navy">
-        {TABS_COPY.rows[row.key]}
+        {rowName(row.key, language)}
         {mark !== undefined && <sup className="ml-0.5 text-2xs font-semibold">{mark}</sup>}
       </h4>
       <dl className="grid grid-cols-[1fr_auto] items-baseline gap-x-3 gap-y-1">
@@ -411,8 +431,8 @@ function MetricCard({
         <dd className={DD}><CellContent row={row} cell={row.cells.ytd} /></dd>
         <dt className={DT}>{label('ytdLastYear')}</dt>
         <dd className={DD}><CellContent row={row} cell={row.cells.ytdLastYear} /></dd>
-        <dt className={DT}>{TABS_OWN_COPY.change}</dt>
-        <dd className={cn(DD, 'tabular-nums')}>{changeText(row.ytdChange)}</dd>
+        <dt className={DT}>{t.change}</dt>
+        <dd className={cn(DD, 'tabular-nums')}>{changeText(row.ytdChange, language, words)}</dd>
         {tracked('thisMonth') && (
           <>
             <dt className={DT}>{label('thisMonth')}</dt>
@@ -434,10 +454,10 @@ function MetricCard({
         */}
       {row.monthlyTarget && (
         <dl className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <dt className={cn(DT, 'shrink-0')}>{TABS_COPY.monthlyTarget}</dt>
+          <dt className={cn(DT, 'shrink-0')}>{t.monthlyTarget}</dt>
           <dd className={cn(DD, 'min-w-[7rem] flex-1')}>
             {readOnly
-              ? targetText(row, row.monthlyTarget)
+              ? targetText(row, row.monthlyTarget, language)
               : <TargetInput meeting={meeting} row={row as ScorecardRow & { key: TargetRowKey }} target={row.monthlyTarget} />}
           </dd>
         </dl>
@@ -456,8 +476,10 @@ function MetricCard({
  * waits with OD-231, so the numbering starts at *Annual Active Agents*.
  */
 export function ScorecardNotes({ scorecard }: { scorecard: ScorecardData }) {
-  const { list } = numberedFootnotes(scorecard.rows.map((r) => r.key));
-  const notes = partialNotes(scorecard);
+  const words = useLanguage();
+  const language = useFigureLanguage();
+  const { list } = numberedFootnotes(scorecard.rows.map((r) => r.key), footnotesIn(words));
+  const notes = partialNotes(scorecard, language, words);
   return (
     <div className="mb-6 mt-2.5 text-xs leading-relaxed text-muted">
       <ol>

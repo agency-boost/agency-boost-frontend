@@ -2,6 +2,9 @@
 
 import { useRouter } from 'next/navigation';
 import { createContext, useContext, useEffect } from 'react';
+import { useMessages } from '@/i18n/language-provider';
+import { pageFrameMessages } from '@/i18n/messages/page-frame';
+import { shellMessages } from '@/i18n/messages/shell';
 import { landingFor } from '@/lib/landing';
 import { useSession } from '@/lib/session';
 import { signInPathFrom } from '@/lib/return-path';
@@ -47,6 +50,7 @@ export function RequireSession({
   const { me, loading, signedOut, expired } = useSession();
   const router = useRouter();
   const titled = useContext(TitledPageContext);
+  const { takingYouToYourWork } = useMessages(shellMessages);
   const Heading = (headingLevel ?? (titled ? 2 : 1)) === 1 ? 'h1' : 'h2';
   const elsewhere = Boolean(me && family && !familyAllows(family, me));
 
@@ -67,15 +71,17 @@ export function RequireSession({
   }, [loading, me, signedOut, expired, elsewhere, router]);
 
   if (loading) {
+    // Every signed-in route is prerendered as this, and nothing in it is words: a page prerendered in another language
+    // than the reader's need not be held back for it (`sessionWait`, P18.98-T2; `pre-paint.ts`).
     return (
-      <PageSkeleton />
+      <PageSkeleton sessionWait />
     );
   }
 
   if (!me || me.mustChangePassword) return null;
 
   // On the way to their own landing: the words the home page's hand-off uses, and no chrome at all.
-  if (elsewhere) return <PageSkeleton label="Taking you to your work…" />;
+  if (elsewhere) return <PageSkeleton label={takingYouToYourWork} />;
 
   /*
    * **The refusal names no permission code** (P11-T6, ADR-0062 §3). It said *"This screen needs
@@ -102,13 +108,11 @@ export function RequireSession({
  */
 export function NotAvailableToYou({ permission, headingLevel = 1 }: { permission?: string; headingLevel?: 1 | 2 }) {
   const Heading = headingLevel === 1 ? 'h1' : 'h2';
+  const t = useMessages(pageFrameMessages).notAvailable;
   return (
     <div role="alert" data-permission={permission} className="px-5 py-10">
-      <Heading className="font-display text-xl font-bold text-navy">Not available to you</Heading>
-      <p className="mt-1 text-md text-muted">
-        Your account does not have access to this screen. If you believe it should, ask
-        whoever manages accounts where you work.
-      </p>
+      <Heading className="font-display text-xl font-bold text-navy">{t.title}</Heading>
+      <p className="mt-1 text-md text-muted">{t.body}</p>
     </div>
   );
 }

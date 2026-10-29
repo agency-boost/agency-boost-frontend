@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Page } from '@/components/page';
 import { Button, Card, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { useMessages } from '@/i18n/language-provider';
+import { supportSessionMessages } from '@/i18n/messages/support-session';
 import { elevateImpersonation } from '@/lib/admin';
 
 const MIN_REASON = 10;
@@ -28,6 +30,7 @@ export default function ElevateSessionPage({
 }) {
   const { sessionId } = use(params);
   const router = useRouter();
+  const t = useMessages(supportSessionMessages).elevate;
   const [reason, setReason] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,30 +54,24 @@ export default function ElevateSessionPage({
 
   return (
     <Page
-      title="Approve a support session to write"
-      subtitle="A second Super Admin — never the one running it."
+      title={t.title}
+      subtitle={t.subtitle}
       permission="impersonation:elevate_to_write"
     >
       <Card className="max-w-xl">
         <ul className="mb-4 flex list-disc flex-col gap-1 pl-5 text-md text-muted">
-          <li>
-            A support session can look at everything and change nothing until somebody
-            approves this.
-          </li>
-          <li>
-            <strong>You cannot approve your own session.</strong> If you started it, find a
-            colleague.
-          </li>
-          <li>The office&apos;s Owner reads your name and your reason.</li>
+          <li>{t.looksOnly}</li>
+          <li>{t.notYourOwn({ strong: (words) => <strong>{words}</strong> })}</li>
+          <li>{t.ownerReads}</li>
         </ul>
 
         {done ? (
           <>
             <p role="status" className="text-md text-navy">
-              Approved. That session can now make changes for the rest of its hour.
+              {t.done}
             </p>
             <Button className="mt-3" variant="secondary" onClick={() => router.push('/admin')}>
-              Back to the console
+              {t.back}
             </Button>
           </>
         ) : (
@@ -82,10 +79,10 @@ export default function ElevateSessionPage({
             {error && <ErrorBanner {...error} />}
 
             <Field
-              label="Why is looking not enough?"
+              label={t.why}
               htmlFor="reason"
-              hint="The Owner of that office reads this. Name the thing that cannot be fixed from a screen."
-              error={tooShort ? `At least ${MIN_REASON} characters.` : undefined}
+              hint={t.whyHint}
+              error={tooShort ? t.atLeast({ min: MIN_REASON }) : undefined}
             >
               <TextInput
                 id="reason"
@@ -97,7 +94,7 @@ export default function ElevateSessionPage({
             </Field>
 
             <Button type="submit" disabled={busy || tooShort || reason.trim().length === 0}>
-              {busy ? 'Approving…' : 'Approve this session to write'}
+              {busy ? t.approving : t.submit}
             </Button>
           </form>
         )}

@@ -2,13 +2,15 @@
 
 import { Fragment, useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useCoacheeNotFound } from '@/components/coaching-person';
-import { SummaryCard } from '@/components/personal-summary';
+import { SummaryCard } from '@/components/summary-card';
 import { ConfigBadge } from '@/components/ui/config-badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ErrorBanner, Textarea } from '@/components/ui/field';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
 import { InlineSaveStatus, useInlineSave, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
 import { Toast, useToast } from '@/components/ui/toast';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { coachingLeaderNotesMessages } from '@/i18n/messages/coaching-leader-notes';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
@@ -33,7 +35,8 @@ import { useCan } from '@/lib/session';
  * *Agent view* unmounts the tab (`coaching-person.tsx`), and what it read goes with it, so turning the
  * screen round leaves no note in the page (ADR-0078, roles §1.7). Coming back reads both again.
  *
- * Coaching's own strings use none of ADR-0084's six words, and none names a phase, an id or a code.
+ * Coaching's own strings use none of ADR-0084's six words, and none names a phase, an id or a code. They are the
+ * catalogue's (`messages/coaching-leader-notes.ts`, P18.98-T4), in the reader's language.
  */
 export function LeaderNotesTab({ coachee }: { coachee: Coachee }) {
   const canReadNotes = useCan('leader_notes:read');
@@ -86,6 +89,8 @@ interface Held {
  * a re-read leaves nothing to retry. The milestone's toast stays.
  */
 function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (message: string) => void }) {
+  const language = useLanguage();
+  const t = useMessages(coachingLeaderNotesMessages);
   const { membershipId } = coachee;
   const gone = useCoacheeNotFound();
   const canTick = useCan('coaching_profile:update');
@@ -159,7 +164,7 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
           mine.saved = sent;
           setStageCode(saved.stageCode);
           setSaveError(null);
-          if (says) onToast('Capability mapping updated.');
+          if (says) onToast(t.updated);
         } catch (err) {
           if (held.current !== mine) return null;
           // Nothing that was waiting goes out after a refusal, so nothing is left to announce.
@@ -190,7 +195,7 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
     };
     inFlight.current = run().finally(() => { inFlight.current = null; });
     return inFlight.current;
-  }, [membershipId, gone, onToast, readAgain]);
+  }, [membershipId, gone, onToast, readAgain, t.updated]);
 
   /** Tick or untick one box, and save; `where` tells apart the same milestone listed under two stages. */
   const toggle = useCallback((part: 'milestone' | 'skill', code: string, on: boolean, where = '') => {
@@ -214,24 +219,24 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
 
   const milestoneTicks = new Set(ticks.milestones);
   const skillTicks = new Set(ticks.skills);
-  const tag = capabilityTag(profile.catalog, stageCode);
+  const tag = capabilityTag(profile.catalog, stageCode, language);
 
   return (
     <>
       {reread && (
         <p role="status" className="rounded-md border border-hairline bg-base px-3.5 py-2.5 text-sm text-navy">
-          The capability mapping was changed somewhere else, so it has been read again.
+          {t.reread}
         </p>
       )}
       {saveError && <ErrorBanner {...saveError} />}
 
-      <SummaryCard id="capability-mapping" title="Capability mapping" tag={tag ?? undefined} className="min-w-0">
+      <SummaryCard id="capability-mapping" title={t.capability} tag={tag ?? undefined} className="min-w-0">
         {/*
           * A catalog with no stage at all. Since ADR-0116 (2026-10-08) an office started Empty is given
           * the platform ladder, so this is no longer reachable from a new office.
           */}
         {profile.catalog.stages.length === 0 && (
-          <EmptyState title="Your office has not set up its capability stages yet." className="py-6" />
+          <EmptyState title={t.noStages} className="py-6" />
         )}
         <ol className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
           {ladderStages(profile.catalog, stageCode).map((stage, i) => (
@@ -250,16 +255,16 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
         </ol>
       </SummaryCard>
 
-      <SummaryCard id="skill-tracker" title="Skill tracker" className="min-w-0">
+      <SummaryCard id="skill-tracker" title={t.tracker} className="min-w-0">
         {profile.catalog.grids.length === 0 && (
-          <EmptyState title="Your office has not set up its skill grids yet." className="py-6" />
+          <EmptyState title={t.noGrids} className="py-6" />
         )}
         <div className="grid grid-cols-1 items-start gap-x-[22px] gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
           {trackerGrids(profile.catalog, skillTicks).map((grid) => (
             <SkillSection
               key={grid.code}
               grid={grid}
-              notApplicable={gridNotApplicable(grid, coachee.downline, coachee.pronoun)}
+              notApplicable={gridNotApplicable(grid, coachee.downline, coachee.pronoun, language)}
               ticked={skillTicks}
               canTick={canTick}
               onTick={(code, on) => toggle('skill', code, on)}
@@ -277,8 +282,9 @@ function CapabilityProfile({ coachee, onToast }: { coachee: Coachee; onToast: (m
  * nowhere (P11-T9 AC-3). The badge the Activity Dashboard puts on a row the office archived.
  */
 function ArchivedBadge() {
+  const t = useMessages(coachingLeaderNotesMessages);
   // The space is the label's, so the name a screen reader hears is *Cold calling Archived*, not one word.
-  return <>{' '}<ConfigBadge tone="navy" className="ml-1 align-middle">Archived</ConfigBadge></>;
+  return <>{' '}<ConfigBadge tone="navy" className="ml-1 align-middle">{t.archived}</ConfigBadge></>;
 }
 
 /**
@@ -303,6 +309,7 @@ function Stage({
   /** Each box's save confirmation (P18.95-T1 AC-5), on the line under it — never inside its label. */
   status: (code: string) => InlineSaveStatusProps;
 }) {
+  const t = useMessages(coachingLeaderNotesMessages);
   const titleId = useId();
   return (
     <li
@@ -354,7 +361,7 @@ function Stage({
       </div>
       {current && (
         <span className="mt-2 inline-block rounded-pill bg-amber/15 px-[9px] py-0.5 text-2xs font-bold uppercase tracking-wide text-navy">
-          Current stage
+          {t.currentStage}
         </span>
       )}
     </li>
@@ -431,8 +438,9 @@ function SkillSection({
 }
 
 function ProfileSkeleton() {
+  const t = useMessages(coachingLeaderNotesMessages);
   return (
-    <Skeleton label="Loading the capability mapping…" className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
+    <Skeleton label={t.loading} className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
       <SkeletonBar className="mb-4 h-4 w-40" />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
         {[0, 1, 2, 3].map((i) => <SkeletonText key={i} lines={3} />)}
@@ -455,6 +463,7 @@ function ProfileSkeleton() {
  * and one line says so.
  */
 function PersonalNotes({ coachee, onToast }: { coachee: Coachee; onToast: (message: string) => void }) {
+  const t = useMessages(coachingLeaderNotesMessages);
   const { membershipId } = coachee;
   const gone = useCoacheeNotFound();
   const canWrite = useCan('leader_notes:write');
@@ -491,7 +500,7 @@ function PersonalNotes({ coachee, onToast }: { coachee: Coachee; onToast: (messa
     try {
       const saved = await saveLeaderNote(membershipId, { version: notes.mine?.version ?? 0, text });
       setNotes({ ...notes, mine: { noteId: saved.noteId, text, version: saved.version, updatedAt: saved.updatedAt } });
-      onToast('Personal notes saved.');
+      onToast(t.saved);
     } catch (err) {
       const shown = toDisplayError(err);
       if (err instanceof ApiRequestError && err.status === 404) {
@@ -514,7 +523,7 @@ function PersonalNotes({ coachee, onToast }: { coachee: Coachee; onToast: (messa
   if (error) return <ErrorBanner {...error} />;
   if (!notes) {
     return (
-      <Skeleton label="Loading the personal notes…" className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
+      <Skeleton label={t.loadingNotes} className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
         <SkeletonBar className="mb-4 h-4 w-32" />
         <SkeletonBar className="h-[110px] w-full" />
       </Skeleton>
@@ -523,10 +532,10 @@ function PersonalNotes({ coachee, onToast }: { coachee: Coachee; onToast: (messa
 
   return (
     <>
-      <SummaryCard id="personal-notes" title="Personal notes" tag={<Wraps>Leader-only, never shown to {coachee.name}</Wraps>} className="min-w-0">
+      <SummaryCard id="personal-notes" title={t.notes} tag={<Wraps>{t.leaderOnly({ name: coachee.name })}</Wraps>} className="min-w-0">
         {reread && (
           <p role="status" className="mb-2.5 rounded-md border border-hairline bg-base px-3.5 py-2.5 text-sm text-navy">
-            Your notes were changed somewhere else, so they have been read again.
+            {t.notesReread}
           </p>
         )}
         {saveError && <div className="mb-2.5"><ErrorBanner {...saveError} /></div>}
@@ -540,7 +549,7 @@ function PersonalNotes({ coachee, onToast }: { coachee: Coachee; onToast: (messa
         />
         {canWrite && (
           <div className="mt-2.5 flex justify-end">
-            <Button onClick={() => void save()} disabled={saving}>Save notes</Button>
+            <Button onClick={() => void save()} disabled={saving}>{t.save}</Button>
           </div>
         )}
       </SummaryCard>
@@ -564,12 +573,13 @@ function Wraps({ children }: { children: ReactNode }) {
  * The heading carries the author for a screen reader too, so no two cards on the page share a name.
  */
 function OtherNote({ note }: { note: LeaderNote }) {
+  const t = useMessages(coachingLeaderNotesMessages);
   const id = useId();
   return (
     <SummaryCard
       id={id}
-      title={<>Personal notes<span className="sr-only"> from {note.author.name}</span></>}
-      tag={<Wraps>From {note.author.name}</Wraps>}
+      title={<>{t.notes}<span className="sr-only">{t.notesFrom({ name: note.author.name })}</span></>}
+      tag={<Wraps>{t.from({ name: note.author.name })}</Wraps>}
       className="min-w-0"
     >
       <p className="min-h-[110px] whitespace-pre-wrap break-words rounded-md border border-hairline px-3.5 py-3 text-md leading-normal text-navy">

@@ -1,6 +1,10 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
-import { atWidth, digestAt, makeMe, renderWithSession, stubFetch, wears } from '@test/harness';
+import {
+  atWidth, browserChose, digestAt, InLanguage, makeMe, renderWithLanguage, renderWithSession, resetLanguage, stubFetch, wears,
+} from '@test/harness';
+import { englishOnly, englishShown } from '@test/english-left';
+import { dataUploadMessages } from '@/i18n/messages/data-upload';
 import { showFigure } from './correction-panel';
 import DataUploadPage from './page';
 
@@ -226,11 +230,11 @@ describe('Data upload — the month table (P9-T1)', () => {
     const rinaRow = rows.find((r) => within(r).queryByText('Rina Wijaya'))!;
     const budiRow = rows.find((r) => within(r).queryByText('Budi Santoso'))!;
     // Rina: a reported zero is a figure.
-    expect(within(rinaRow).getByText('Rp 0')).toBeInTheDocument();
+    expect(within(rinaRow).getByText('IDR 0')).toBeInTheDocument();
     expect(within(rinaRow).getAllByText('3').length).toBeGreaterThan(0);
     // Budi: twelve dashes, none of them a zero.
     expect(within(budiRow).getAllByLabelText('nothing reported')).toHaveLength(12);
-    expect(within(budiRow).queryByText('Rp 0')).not.toBeInTheDocument();
+    expect(within(budiRow).queryByText('IDR 0')).not.toBeInTheDocument();
   });
 
   it('formats money as rupiah in full, not as the file’s Rp M', async () => {
@@ -239,7 +243,7 @@ describe('Data upload — the month table (P9-T1)', () => {
     ));
     renderWithSession(<DataUploadPage />, { me: OWNER });
 
-    expect(await screen.findByText('Rp 150.000.000')).toBeInTheDocument();
+    expect(await screen.findByText('IDR 150,000,000')).toBeInTheDocument();
   });
 
   it('P18.97-T3 AC-2, AC-3 keeps the file’s own figures as filed: money to the rupiah, a persistency’s every place and no ,0', async () => {
@@ -254,18 +258,26 @@ describe('Data upload — the month table (P9-T1)', () => {
     renderWithSession(<DataUploadPage />, { me: OWNER });
 
     const row = (await screen.findAllByRole('row')).find((r) => within(r).queryByText('Rina Wijaya'))!;
-    expect(within(row).getByText('Rp 5.672.500.000')).toBeInTheDocument();
-    expect(within(row).getByText('87,35%')).toBeInTheDocument();
+    expect(within(row).getByText('IDR 5,672,500,000')).toBeInTheDocument();
+    expect(within(row).getByText('87.35%')).toBeInTheDocument();
     expect(within(row).getByText('90%')).toBeInTheDocument();
     expect(within(row).queryByText(/,0%/)).not.toBeInTheDocument();
   });
 
   it('P18.97-T3 AC-2, AC-3 writes the correction panel’s and its confirmation’s figures as the cells do', () => {
-    expect(showFigure('ape', 5_672_500_000_00)).toBe('Rp 5.672.500.000');
-    expect(showFigure('persistency', 87.35)).toBe('87,35%');
-    expect(showFigure('persistency', 87)).toBe('87%');
-    expect(showFigure('policyCount', 3)).toBe('3');
-    expect(showFigure('persistency', null)).toBe('nothing reported');
+    expect(showFigure('ape', 5_672_500_000_00, 'id')).toBe('Rp 5.672.500.000');
+    expect(showFigure('persistency', 87.35, 'id')).toBe('87,35%');
+    expect(showFigure('persistency', 87, 'id')).toBe('87%');
+    expect(showFigure('policyCount', 3, 'id')).toBe('3');
+    expect(showFigure('persistency', null, 'id')).toBe('nothing reported');
+  });
+
+  it('P18.98-T3 AC-4 writes the file’s figures in full in the reader’s language, the same figure in each', () => {
+    expect(showFigure('ape', 5_672_500_000_00, 'en')).toBe('IDR 5,672,500,000');
+    expect(showFigure('persistency', 87.35, 'en')).toBe('87.35%');
+    expect(showFigure('persistency', 87, 'en')).toBe('87%');
+    expect(showFigure('policyCount', 1_250, 'en')).toBe('1,250');
+    expect(showFigure('policyCount', 1_250, 'id')).toBe('1.250');
   });
 
   it('says so when nothing has been uploaded, and still lists everybody', async () => {
@@ -468,9 +480,9 @@ describe('Data upload — reading a filled file (P9-T3)', () => {
     const rinaRow = within(table).getAllByRole('row').find((r) => within(r).queryByText('Rina Wijaya'))!;
     const cellsOf = within(rinaRow).getAllByRole('cell');
     // The month table's order (P13.1-T7): name, code, this month's six from [2], the year's from [8].
-    expect(cellsOf[2]).toHaveTextContent('Rp 1.500.000');
-    expect(cellsOf[8]).toHaveTextContent('Rp 6.000.000');
-    expect(cellsOf[8]).toHaveTextContent('was Rp 1.000.000');
+    expect(cellsOf[2]).toHaveTextContent('IDR 1,500,000');
+    expect(cellsOf[8]).toHaveTextContent('IDR 6,000,000');
+    expect(cellsOf[8]).toHaveTextContent('was IDR 1,000,000');
     expect(cellsOf[3]).toHaveTextContent('✕ 140 — not taken');
     expect(within(cellsOf[9]).getByLabelText('left blank')).toHaveTextContent('—');
     // The row the file could not attribute is in the list, not the table.
@@ -574,7 +586,7 @@ describe('Data upload — confirm, history, revert and the month lock (P9-T4)', 
     it('says a month is open, and until when', async () => {
       stubFetch(everything());
       renderWithSession(<DataUploadPage />, { me: EVERYTHING });
-      expect(await screen.findByText('Open for imports and corrections until 7 Okt 2026, when it locks.')).toBeInTheDocument();
+      expect(await screen.findByText('Open for imports and corrections until 7 Oct 2026, when it locks.')).toBeInTheDocument();
     });
 
     it.each([
@@ -742,7 +754,7 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
     state: state('2026-09', { revision: 4 }), ...over,
   });
   const openApe = async () => {
-    fireEvent.click(await screen.findByRole('button', { name: 'Correct APE this month for Rina Wijaya, now Rp 1.500.000' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Correct APE this month for Rina Wijaya, now IDR 1,500,000' }));
     return screen.getByRole('region', { name: 'Correct APE this month for Rina Wijaya' });
   };
 
@@ -771,12 +783,12 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
     renderWithSession(<DataUploadPage />, { me: CORRECTOR });
     const panel = await openApe();
 
-    expect(panel).toHaveTextContent('PRU-001 · Sep 2026 · Now: Rp 1.500.000 (from the carrier’s file)');
+    expect(panel).toHaveTextContent('PRU-001 · Sep 2026 · Now: IDR 1,500,000 (from the carrier’s file)');
     const input = within(panel).getByLabelText('New figure');
     await waitFor(() => expect(input).toHaveFocus());
-    expect(input).toHaveValue('1.500.000');
+    expect(input).toHaveValue('1,500,000');
     fireEvent.change(input, { target: { value: '2000000' } });
-    expect(input).toHaveValue('2.000.000');
+    expect(input).toHaveValue('2,000,000');
   });
 
   it('sends the figure in sen, with the month’s revision and the reason, and says what changed', async () => {
@@ -788,7 +800,7 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
     fireEvent.change(within(panel).getByLabelText('Why is it being corrected?'), { target: { value: 'Carrier restated it' } });
     fireEvent.click(within(panel).getByRole('button', { name: 'Save correction' }));
 
-    expect(await screen.findByText('Corrected APE this month for Rina Wijaya: Rp 1.500.000 → Rp 2.000.000.')).toBeInTheDocument();
+    expect(await screen.findByText('Corrected APE this month for Rina Wijaya: IDR 1,500,000 → IDR 2,000,000.')).toBeInTheDocument();
     const sent = calls.find((c) => c.url.includes('/kpm/data-upload/cell'))!;
     expect(sent.init.method).toBe('PATCH');
     expect(JSON.parse(sent.init.body as string)).toEqual({
@@ -869,7 +881,7 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('Clear APE this month for Rina Wijaya in Sep 2026?');
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Clear figure' }));
 
-    expect(await screen.findByText('Corrected APE this month for Rina Wijaya: Rp 1.500.000 → nothing reported.')).toBeInTheDocument();
+    expect(await screen.findByText('Corrected APE this month for Rina Wijaya: IDR 1,500,000 → nothing reported.')).toBeInTheDocument();
     expect(JSON.parse(calls.find((c) => c.url.includes('/cell'))!.init.body as string).value).toBeNull();
   });
 
@@ -882,7 +894,7 @@ describe('Data upload — correcting one figure (P9-T5)', () => {
     const panel = await openApe();
     fireEvent.change(within(panel).getByLabelText('Why is it being corrected?'), { target: { value: 'x' } });
     fireEvent.click(within(panel).getByRole('button', { name: 'Save correction' }));
-    expect(await screen.findByText('APE this month for Rina Wijaya already reads Rp 1.500.000 — nothing was changed.')).toBeInTheDocument();
+    expect(await screen.findByText('APE this month for Rina Wijaya already reads IDR 1,500,000 — nothing was changed.')).toBeInTheDocument();
   });
 
   it('puts the form away on Cancel', async () => {
@@ -931,11 +943,11 @@ describe('Data upload — a correction the file would change (ADR-0053)', () => 
 
     const list = (await screen.findByRole('heading', { name: 'Corrected by hand (1)' })).closest('div')!.parentElement!;
     expect(list).toHaveTextContent(
-      'Corrected to Rp 2.000.000 by Maya Halim on 26 Sep 2026 — “Carrier restated it”. '
-      + 'The file says Rp 1.500.000 — the figure the correction replaced, so this is probably the old file.',
+      'Corrected to IDR 2,000,000 by Maya Halim on 26 Sep 2026 — “Carrier restated it”. '
+      + 'The file says IDR 1,500,000 — the figure the correction replaced, so this is probably the old file.',
     );
     expect(choice()).not.toBeChecked();
-    expect(choice()).toHaveAccessibleDescription(/Corrected to Rp 2\.000\.000 by Maya Halim/);
+    expect(choice()).toHaveAccessibleDescription(/Corrected to IDR 2,000,000 by Maya Halim/);
   });
 
   it('keeps it by default: the diff shows the correction, and Confirm sends nothing to replace', async () => {
@@ -944,7 +956,7 @@ describe('Data upload — a correction the file would change (ADR-0053)', () => 
     await choose();
 
     const table = await screen.findByRole('table', { name: 'What “filled.csv” would change' });
-    expect(within(table).getAllByRole('cell')[2]).toHaveTextContent('Rp 2.000.000correction kept');
+    expect(within(table).getAllByRole('cell')[2]).toHaveTextContent('IDR 2,000,000correction kept');
     fireEvent.click(screen.getByRole('button', { name: 'Confirm import' }));
 
     expect(await screen.findByText('Imported 1 agent record for Sep 2026. 1 correction kept.')).toBeInTheDocument();
@@ -960,7 +972,7 @@ describe('Data upload — a correction the file would change (ADR-0053)', () => 
 
     fireEvent.click(choice());
     const table = screen.getByRole('table', { name: 'What “filled.csv” would change' });
-    expect(within(table).getAllByRole('cell')[2]).toHaveTextContent('Rp 1.500.000replaces a correction');
+    expect(within(table).getAllByRole('cell')[2]).toHaveTextContent('IDR 1,500,000replaces a correction');
     fireEvent.click(screen.getByRole('button', { name: 'Confirm import' }));
 
     expect(await screen.findByText('Imported 1 agent record for Sep 2026. 1 correction replaced with the file’s figure.')).toBeInTheDocument();
@@ -1027,10 +1039,10 @@ describe('Data upload — whose each figure is (P9-T6)', () => {
     const row = (await screen.findByText('Rina Wijaya')).closest('tr')!;
     const cells = within(row).getAllByRole('cell');
 
-    expect(cells[2]).toHaveTextContent('Rp 2.000.000✎, corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”');
+    expect(cells[2]).toHaveTextContent('IDR 2,000,000✎, corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”');
     expect(within(cells[2]).getByTitle('corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”')).toBeInTheDocument();
     // A carrier figure is plain.
-    expect(cells[8]).toHaveTextContent('Rp 9.000.000');
+    expect(cells[8]).toHaveTextContent('IDR 9,000,000');
     expect(cells[8]).not.toHaveTextContent('✎');
   });
 
@@ -1047,11 +1059,11 @@ describe('Data upload — whose each figure is (P9-T6)', () => {
     stubFetch(routes(month([withCorrections()], 1)));
     renderWithSession(<DataUploadPage />, { me: CORRECTOR });
     const button = await screen.findByRole('button', {
-      name: 'Correct APE this month for Rina Wijaya, now Rp 2.000.000, corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”',
+      name: 'Correct APE this month for Rina Wijaya, now IDR 2,000,000, corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”',
     });
     fireEvent.click(button);
     expect(screen.getByRole('region', { name: 'Correct APE this month for Rina Wijaya' })).toHaveTextContent(
-      'Now: Rp 2.000.000 (corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”)',
+      'Now: IDR 2,000,000 (corrected by hand by Maya Halim on 26 Sep 2026 — “Carrier restated it”)',
     );
   });
 });
@@ -1162,9 +1174,9 @@ describe('Data upload — the prototype’s order (P13.1-T7)', () => {
     const row = (await screen.findByText('Rina Wijaya')).closest('tr')!;
     const cells = within(row).getAllByRole('cell');
     expect(texts(cells.slice(0, 2))).toEqual(['Rina Wijaya', 'PRU-001']);
-    expect(cells[2]).toHaveTextContent('Rp 150.000.000');
+    expect(cells[2]).toHaveTextContent('IDR 150,000,000');
     expect(headingsOf(cells[2])).toEqual(['This Month', 'APE']);
-    expect(cells[8]).toHaveTextContent('Rp 900.000.000');
+    expect(cells[8]).toHaveTextContent('IDR 900,000,000');
     expect(headingsOf(cells[8])).toEqual(['YTD', 'APE']);
     expect(cells.slice(2, 14).map(headingsOf)).toEqual([
       ...SIX.map((m) => ['This Month', m]), ...SIX.map((m) => ['YTD', m]),
@@ -1330,11 +1342,15 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
   it.each([768, 1280] as const)('P18.97-T7 AC-2 at %ipx draws the month table and its controls as they were, to the byte', async (px) => {
     atWidth(px);
     stubFetch(everything());
-    const { container } = renderWithSession(<DataUploadPage />, { me: ALL });
+    // As a reader who has chosen no language reads it while the switch is not live: the bytes are the page's as it was
+    // before T7, when every figure was written in Indonesian and every word in English. It was rendered in Indonesian
+    // (`InLanguage`) until P18.98-T4 moved the page's words, which an Indonesian screen now writes in Indonesian too.
+    const { container } = renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: false });
     await screen.findByRole('table', { name: 'Data for Sep 2026' });
     await screen.findByRole('link', { name: 'Download template' });
     await screen.findByText(/KPM0417-agent-data-Sep-2026-corrected\.csv/);
     expect(digestAt(container, px)).toBe(BEFORE_T7[px]);
+    resetLanguage();
   });
 
   /** The server's answer to one correction: what was there, what is now, the month one revision on. */
@@ -1374,9 +1390,9 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     expect([...month.querySelectorAll('dt')].map((dt) => dt.textContent))
       .toEqual(['APE', 'Rolling Persistency (%)', 'Recruitment', 'New Active Agents', 'FYP', '# of Policy']);
     expect([...month.querySelectorAll('dd')].map((dd) => dd.textContent))
-      .toEqual(['Rp 1.500.000', '87,35%', '—', '—', '—', '2']);
+      .toEqual(['IDR 1,500,000', '87.35%', '—', '—', '—', '2']);
     const ytd = within(rina).getByRole('group', { name: 'YTD' });
-    expect(within(ytd).getByText('Rp 9.000.000')).toBeInTheDocument();
+    expect(within(ytd).getByText('IDR 9,000,000')).toBeInTheDocument();
     // A figure corrected by hand keeps its ✎ and, for a screen reader, who, when and why.
     expect(ytd).toHaveTextContent('11✎');
     expect(ytd).toHaveTextContent('corrected by hand by Maya Halim on 18 Sep 2026 — “Carrier restated it”');
@@ -1447,9 +1463,9 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     expect(sheet).toHaveFocus();
     expect(within(sheet).getAllByRole('group').map((g) => g.querySelector('legend')!.textContent)).toEqual(['This Month', 'YTD']);
     const ape = within(sheet).getByLabelText('APE this month');
-    expect(ape).toHaveValue('1.500.000');
-    expect(within(sheet).getByLabelText('APE year to date')).toHaveValue('9.000.000');
-    expect(within(sheet).getByLabelText('Rolling persistency this month')).toHaveValue('87,35');
+    expect(ape).toHaveValue('1,500,000');
+    expect(within(sheet).getByLabelText('APE year to date')).toHaveValue('9,000,000');
+    expect(within(sheet).getByLabelText('Rolling persistency this month')).toHaveValue('87.35');
     expect(within(sheet).getByLabelText('# of policy this month')).toHaveValue('2');
     expect(within(sheet).getByLabelText('FYP this month')).toHaveValue('');
     // Whose a corrected figure is, under its field, as the table's ✎ says it.
@@ -1485,7 +1501,7 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save corrections' }));
 
     expect(await screen.findByText(
-      'Corrected 3 figures for Rina Wijaya: APE year to date Rp 9.000.000 → Rp 15.000.000; APE this month Rp 1.500.000 → Rp 12.000.000; Rolling persistency this month 87,35% → 88,5%.',
+      'Corrected 3 figures for Rina Wijaya: APE year to date IDR 9,000,000 → IDR 15,000,000; APE this month IDR 1,500,000 → IDR 12,000,000; Rolling persistency this month 87.35% → 88.5%.',
     )).toBeInTheDocument();
     // Each on the revision the one before it answered: the month's 3, then 4, then 5.
     expect(patches(calls)).toEqual([
@@ -1580,7 +1596,7 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     expect(ask).toHaveTextContent('The figure is emptied, as if nothing had been reported, and your reason is kept with the change.');
     expect(patches(calls)).toEqual([]);
     fireEvent.click(within(ask).getByRole('button', { name: 'Clear figure' }));
-    expect(await screen.findByText('Corrected APE this month for Rina Wijaya: Rp 1.500.000 → nothing reported.')).toBeInTheDocument();
+    expect(await screen.findByText('Corrected APE this month for Rina Wijaya: IDR 1,500,000 → nothing reported.')).toBeInTheDocument();
     expect(patches(calls)).toEqual([
       { month: '2026-09', membershipId: 'mem-rina', metric: 'ape', cadence: 'monthly', value: null, revision: 3, reason: 'Belongs to August' },
     ]);
@@ -1596,7 +1612,7 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     sheet = await openSheet();
     // Opened again, it holds the month's figures, not what was typed before.
-    expect(within(sheet).getByLabelText('APE this month')).toHaveValue('1.500.000');
+    expect(within(sheet).getByLabelText('APE this month')).toHaveValue('1,500,000');
     fireEvent.keyDown(sheet, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(patches(calls)).toEqual([]);
@@ -1622,5 +1638,205 @@ describe('P18.97-T7 AC-2 Data upload on a phone (UI-034, UI-040)', () => {
     for (const name of ['Lock month', 'Revert']) {
       expect(wears(screen.getAllByRole('button', { name })[0], 375).split(' ')).toEqual(expect.arrayContaining(['min-h-11', 'min-w-11']));
     }
+  });
+
+  /**
+   * **P18.98-T3 figures on Data upload** (ADR-0174, ADR-0179 §6), under the app's own provider: written in the
+   * reader's chosen language, and in Indonesian with no choice, whether or not the switch is live. Until it is, a
+   * reader with no choice reads the page exactly as before T3 — its words English, its figures *Rp 1.500.000* and
+   * *87,35%* — never *IDR* beside an unwired screen's *Rp* (the client's UI-019).
+   */
+  describe('P18.98-T3 figures on Data upload', () => {
+    afterEach(() => resetLanguage());
+
+    /** Rina's six figures for this month on her phone card, as read. */
+    const thisMonth = async (list = 'Data for Sep 2026') => {
+      await screen.findByRole('list', { name: list });
+      const month = within(cardOf('Rina Wijaya')).getByRole('group', { name: 'This Month' });
+      return [...month.querySelectorAll('dd')].map((dd) => dd.textContent);
+    };
+
+    it.each([768, 1280] as const)('P18.98-T3 figures, unchosen and not live, at %ipx: the page as before T3, to the byte — English words, Indonesian figures', async (px) => {
+      atWidth(px);
+      stubFetch(everything());
+      const { container } = renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: false });
+      await screen.findByRole('table', { name: 'Data for Sep 2026' });
+      await screen.findByRole('link', { name: 'Download template' });
+      await screen.findByText(/KPM0417-agent-data-Sep-2026-corrected\.csv/);
+
+      const row = screen.getAllByRole('row').find((r) => within(r).queryByText('Rina Wijaya'))!;
+      expect(within(row).getByText('Rp 1.500.000')).toBeInTheDocument();
+      expect(within(row).getByText('87,35%')).toBeInTheDocument();
+      expect(screen.queryByText(/IDR/)).not.toBeInTheDocument();
+      expect(document.documentElement.lang).toBe('en');
+      // The bytes of the page before T7, when every figure was Indonesian and every word English.
+      expect(digestAt(container, px)).toBe(BEFORE_T7[px]);
+    });
+
+    it('P18.98-T3 figures, unchosen and not live, on a phone: Indonesian figures in English words, the sheet’s sum grouped with dots', async () => {
+      atWidth(375);
+      stubFetch(everything());
+      renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: false });
+
+      expect(await thisMonth()).toEqual(['Rp 1.500.000', '87,35%', '—', '—', '—', '2']);
+      expect(screen.getByText('Tap an agent to correct their figures — no need to re-upload for a single fix.')).toBeInTheDocument();
+      expect(within(cardOf('Rina Wijaya')).getByRole('group', { name: 'YTD' })).toHaveTextContent('corrected by hand by Maya Halim on 18 Sep 2026');
+      fireEvent.click(screen.getByRole('button', { name: 'Correct figures for Rina Wijaya' }));
+      const sheet = screen.getByRole('dialog', { name: 'Correct figures for Rina Wijaya' });
+      expect(within(sheet).getByLabelText('APE this month')).toHaveValue('1.500.000');
+    });
+
+    it('P18.98-T3 figures, chosen English by the browser, not live: IDR 1,500,000 and 87.35%, the sheet’s sum grouped with commas', async () => {
+      browserChose('en');
+      atWidth(375);
+      stubFetch(everything());
+      renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: false });
+
+      expect(await thisMonth()).toEqual(['IDR 1,500,000', '87.35%', '—', '—', '—', '2']);
+      fireEvent.click(screen.getByRole('button', { name: 'Correct figures for Rina Wijaya' }));
+      const sheet = screen.getByRole('dialog', { name: 'Correct figures for Rina Wijaya' });
+      expect(within(sheet).getByLabelText('APE this month')).toHaveValue('1,500,000');
+    });
+
+    it('P18.98-T3 figures, chosen Indonesian by the browser, not live: Rp 1.500.000 and 87,35%, the screen in Indonesian', async () => {
+      browserChose('id');
+      atWidth(375);
+      stubFetch(everything());
+      renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: false });
+
+      // Its words Indonesian too since P18.98-T4: the list is *Data untuk Sep 2026*.
+      expect(await thisMonth('Data untuk Sep 2026')).toEqual(['Rp 1.500.000', '87,35%', '—', '—', '—', '2']);
+      expect(document.documentElement.lang).toBe('id');
+    });
+
+    it('P18.98-T3 figures, live and unchosen: Indonesian figures on a screen whose language is Indonesian', async () => {
+      atWidth(375);
+      stubFetch(everything());
+      renderWithLanguage(<DataUploadPage />, { me: ALL }, { live: true });
+
+      // The words' language too (`<html lang>`), and since P18.98-T4 the page's own words: *Data untuk Sep 2026*.
+      expect(await thisMonth('Data untuk Sep 2026')).toEqual(['Rp 1.500.000', '87,35%', '—', '—', '—', '2']);
+      expect(document.documentElement.lang).toBe('id');
+    });
+  });
+});
+
+/**
+ * **P18.98-T4 Data upload in Indonesian** (`i18n/messages/data-upload.ts`; ADR-0179): the page's name and the table's
+ * metric headings kept English — the carrier's file's own names — every other word the approved glossary's, a member's
+ * name and code, a file's name and the server's sentences as sent, and the figures Indonesian.
+ */
+describe('P18.98-T4 Data upload in Indonesian', () => {
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date('2026-09-20T03:00:00Z')); });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  /** Every grant the page has: the template, the upload, the history, the lock, and correcting a figure. */
+  const ALL_GRANTS = makeMe({ membership, permissions: [...EVERYTHING.permissions, 'data_upload:correct_cell'] });
+  const withApe = () => rina({ metrics: { ...blank(), ape: { monthly: cell(150_000_000), ytd: empty } } });
+  const inIndonesian = (me = ALL_GRANTS) => renderWithSession(<InLanguage language="id"><DataUploadPage /></InLanguage>, { me });
+
+  it('P18.98-T4 reads the month in Indonesian: its toolbar, lock, legend, table and history, the headings kept', async () => {
+    stubFetch({
+      ...routes(month([withApe(), budi()], 1)),
+      '/kpm/data-upload/history': { body: { month: '2026-09', batches: [batch(), REVERTED] } },
+    });
+    inIndonesian();
+    const table = await screen.findByRole('table', { name: 'Data untuk Sep 2026' });
+    expect(screen.getByRole('heading', { level: 1, name: /^Data upload/ })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Unduh templat' })).toBeInTheDocument();
+    expect(screen.getByLabelText('+ Unggah templat yang sudah diisi')).toHaveAttribute('type', 'file');
+    expect(screen.getByLabelText('Bulan')).toHaveValue('2026-09');
+    expect(screen.getByText('Terbuka untuk impor dan koreksi sampai 7 Okt 2026, lalu terkunci.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Kunci bulan' })).toBeInTheDocument();
+    expect(screen.getByText('1 dari 2 anggota memiliki angka untuk bulan ini.')).toBeInTheDocument();
+    expect(screen.getByText('Ketuk angka mana pun untuk mengoreksinya secara manual — tidak perlu mengunggah ulang untuk satu perbaikan.'))
+      .toBeInTheDocument();
+    expect(within(table).getAllByRole('columnheader').map((th) => th.textContent)).toEqual([
+      'Agent', 'Kode agen', 'This Month', 'YTD', 'Aktif (MAA)',
+      'APE', 'Rolling Persistency (%)', 'Recruitment', 'New Active Agents', 'FYP', '# of Policy',
+      'APE', 'Rolling Persistency (%)', 'Recruitment', 'New Active Agents', 'FYP', '# of Policy',
+    ]);
+    expect(screen.getByRole('button', { name: 'Koreksi APE bulan ini untuk Rina Wijaya, sekarang Rp 1.500.000' })).toBeInTheDocument();
+    expect(screen.getByText(/= APE atau polis > 0 bulan ini/)).toBeInTheDocument();
+    // The history: who imported and reverted what, in Indonesian, the file's name as it is.
+    expect(await screen.findByRole('heading', { name: 'Impor untuk Sep 2026' })).toBeInTheDocument();
+    expect(screen.getByText('Diimpor oleh Wilson Tanoto pada 26 Sep 2026 · 6 agent, 72 angka')).toBeInTheDocument();
+    expect(screen.getByText('Dikembalikan oleh Maya Halim pada 25 Sep 2026 — 96 angka dipulihkan.')).toBeInTheDocument();
+    expect(screen.getByText('Berlaku')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Kembalikan' })).toBeInTheDocument();
+    // The scan reads the screen at all, so a silent zero cannot pass.
+    expect(englishOnly(dataUploadMessages).length).toBeGreaterThan(40);
+    expect(document.body.textContent).toContain('Berlaku');
+    expect(englishShown(document.body, englishOnly(dataUploadMessages))).toEqual([]);
+  });
+
+  it('P18.98-T4 corrects a figure in Indonesian, and says what changed', async () => {
+    const correction = {
+      membershipId: 'mem-rina', metric: 'ape', cadence: 'monthly', changed: true,
+      before: { value: 150_000_000, provenance: 'imported' }, after: { value: 200_000_000, provenance: 'corrected' },
+      state: state('2026-09', { revision: 4 }),
+    };
+    stubFetch({ ...routes(month([withApe()], 1)), '/kpm/data-upload/cell': { body: correction } });
+    inIndonesian(CORRECTOR);
+    fireEvent.click(await screen.findByRole('button', { name: 'Koreksi APE bulan ini untuk Rina Wijaya, sekarang Rp 1.500.000' }));
+    const panel = screen.getByRole('region', { name: 'Koreksi APE bulan ini untuk Rina Wijaya' });
+    expect(panel).toHaveTextContent('PRU-001 · Sep 2026 · Sekarang: Rp 1.500.000 (dari file perusahaan)');
+    expect(within(panel).getByText('Disimpan bersama angkanya, dan di log audit.')).toBeInTheDocument();
+    // Saved empty, with no reason: both refused on the fields they are about.
+    fireEvent.change(within(panel).getByLabelText('Angka baru'), { target: { value: '' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Simpan koreksi' }));
+    expect(within(panel).getByText('Ketik angka yang baru — untuk mengosongkannya, gunakan Hapus angka.')).toBeInTheDocument();
+    expect(within(panel).getByText('Tuliskan mengapa angka ini dikoreksi.')).toBeInTheDocument();
+    fireEvent.change(within(panel).getByLabelText('Angka baru'), { target: { value: '2.000.000' } });
+    fireEvent.change(within(panel).getByLabelText('Mengapa angka ini dikoreksi?'), { target: { value: 'Dikoreksi perusahaan' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Simpan koreksi' }));
+    expect(await screen.findByText('APE bulan ini untuk Rina Wijaya dikoreksi: Rp 1.500.000 → Rp 2.000.000.')).toBeInTheDocument();
+  });
+
+  it('P18.98-T4 asks before a figure is cleared, in Indonesian', async () => {
+    stubFetch(routes(month([withApe()], 1)));
+    inIndonesian(CORRECTOR);
+    fireEvent.click(await screen.findByRole('button', { name: 'Koreksi APE bulan ini untuk Rina Wijaya, sekarang Rp 1.500.000' }));
+    const panel = screen.getByRole('region', { name: 'Koreksi APE bulan ini untuk Rina Wijaya' });
+    fireEvent.change(within(panel).getByLabelText('Mengapa angka ini dikoreksi?'), { target: { value: 'Salah unggah' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Hapus angka' }));
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('Hapus APE bulan ini untuk Rina Wijaya di Sep 2026? Angkanya dikosongkan');
+    expect(within(dialog).getByRole('button', { name: 'Hapus angka' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Batal' })).toBeInTheDocument();
+  });
+
+  it('P18.98-T4 previews a filled file in Indonesian: the summary, what is not taken, and the diff', async () => {
+    stubFetch({ ...routes(month([rina(), budi()])), '/kpm/data-upload/preview': { body: PREVIEW } });
+    inIndonesian();
+    fireEvent.change(await screen.findByLabelText('+ Unggah templat yang sudah diisi'), { target: { files: [csvFile()] } });
+    expect(await screen.findByRole('heading', { name: '2 agent siap diimpor, 1 baris dilewati.' })).toBeInTheDocument();
+    expect(screen.getByText(/^Dari “filled\.csv”\. Angka: 1 baru · 1 berubah · 0 sudah sama dengan yang tersimpan · 21 dibiarkan kosong/))
+      .toHaveTextContent('4 anggota aktif tidak ada di file dan tetap dengan angkanya.');
+    expect(screen.getByText('Belum ada yang disimpan.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tidak diambil (2)' })).toBeInTheDocument();
+    expect(screen.getByText('Baris 2 · PRU-001 · Rina Wijaya')).toBeInTheDocument();
+    expect(screen.getByText('Baris 4 · PRU-999')).toBeInTheDocument();
+    const diff = screen.getByRole('table', { name: 'Yang akan diubah oleh “filled.csv”' });
+    expect(within(diff).getByText('di file tertulis “Sari D.”')).toBeInTheDocument();
+    expect(within(diff).getByText('dibaca dari “88213”')).toBeInTheDocument();
+    expect(within(diff).getByText('sebelumnya Rp 1.000.000')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Konfirmasi impor' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Batal' })).toBeInTheDocument();
+  });
+
+  it('P18.98-T4 opens an agent’s figures on a phone in Indonesian, each field named as a sentence names it', async () => {
+    atWidth(375);
+    stubFetch(routes(month([withApe(), budi()], 1)));
+    inIndonesian();
+    await screen.findByRole('list', { name: 'Data untuk Sep 2026' });
+    expect(screen.getByText('Ketuk agent untuk mengoreksi angkanya — tidak perlu mengunggah ulang untuk satu perbaikan.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Koreksi angka Rina Wijaya' }));
+    const sheet = screen.getByRole('dialog', { name: 'Koreksi angka Rina Wijaya' });
+    expect(within(sheet).getByLabelText('APE bulan ini')).toHaveValue('1.500.000');
+    expect(within(sheet).getByLabelText('FYP sejak awal tahun')).toHaveValue('');
+    expect(within(sheet).getByRole('button', { name: 'Simpan koreksi' })).toBeDisabled();
+    expect(within(sheet).getByRole('button', { name: 'Batal' })).toBeInTheDocument();
+    expect(within(sheet).getByLabelText('Mengapa angka ini dikoreksi?')).toBeInTheDocument();
   });
 });

@@ -117,7 +117,7 @@ describe('/new-hires: + Add agent, Review requests and Waiting to join (P18.96-T
       expect.stringContaining('Yusuf Hidayat'), expect.stringContaining('Rudi Hartono'), expect.stringContaining('Raka Aditama'),
     ]);
     expect(within(rows[0]).getByText('Invited, waiting to join')).toBeInTheDocument();
-    expect(within(rows[0]).getByText(/80777 · Join date 27 Okt 2026/)).toBeInTheDocument();
+    expect(within(rows[0]).getByText(/80777 · Join date 27 Oct 2026/)).toBeInTheDocument();
     expect(within(rows[0]).getByRole('button', { name: 'Resend' })).toBeInTheDocument();
     expect(within(rows[0]).getByRole('button', { name: 'Cancel invite' })).toBeInTheDocument();
     // Another leader's unit is named; the reader's own is not.

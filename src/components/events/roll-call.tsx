@@ -5,11 +5,13 @@ import { Button, ErrorBanner } from '@/components/ui/field';
 import { shortOfRung } from '@/components/ui/role-badge';
 import { SaveStatus } from '@/components/ui/save-status';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { eventsOfficeMessages } from '@/i18n/messages/events-office';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { refusalOf } from '@/lib/events';
 import { cn } from '@/lib/cn';
 import {
-  ADMIN_COPY, attendedWords, markLabel, readRollCall, saveRollCall, type RollCall, type RollCallRow,
+  attendedWords, markLabel, readRollCall, saveRollCall, type RollCall, type RollCallRow,
 } from '@/lib/events-admin';
 
 const TH = 'border-b border-hairline px-2.5 py-2 text-left text-2xs font-bold uppercase tracking-wide text-muted';
@@ -41,6 +43,8 @@ export function RollCallSection({ eventId, onSaved, tabbed = false }: {
    */
   tabbed?: boolean;
 }) {
+  const t = useMessages(eventsOfficeMessages);
+  const language = useLanguage();
   const [view, setView] = useState<RollCall | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -85,7 +89,7 @@ export function RollCallSection({ eventId, onSaved, tabbed = false }: {
       setSaved(true);
       onSaved();
     } catch (err) {
-      setSaveError(refusalOf(err));
+      setSaveError(refusalOf(err, language));
     } finally {
       setBusy(false);
     }
@@ -93,29 +97,29 @@ export function RollCallSection({ eventId, onSaved, tabbed = false }: {
 
   return (
     <section aria-labelledby={headingId} className={tabbed ? undefined : 'mb-6'} data-part="roll-call">
-      <h3 id={headingId} className={cn('mb-2.5 font-display text-md font-bold text-navy', tabbed && 'sr-only')}>{ADMIN_COPY.rollCall}</h3>
+      <h3 id={headingId} className={cn('mb-2.5 font-display text-md font-bold text-navy', tabbed && 'sr-only')}>{t.rollCall}</h3>
       {error && !view && (
         <div>
           <ErrorBanner {...error} />
-          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{ADMIN_COPY.tryAgain}</Button>
+          <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
         </div>
       )}
       {!view && !error && (
-        <Skeleton label={ADMIN_COPY.loadingRollCall}>
+        <Skeleton label={t.loadingRollCall}>
           {[0, 1, 2].map((i) => <SkeletonBar key={i} className="mb-2.5 h-4 w-full" />)}
         </Skeleton>
       )}
-      {view && view.people.length === 0 && <p className="text-md text-muted">{ADMIN_COPY.nobodyInvited}</p>}
+      {view && view.people.length === 0 && <p className="text-md text-muted">{t.nobodyInvited}</p>}
       {view && view.people.length > 0 && (
         <>
           <div className="overflow-x-auto">
             <table className="relative w-full min-w-[30rem] border-collapse">
               <thead>
                 <tr>
-                  <th scope="col" className={TH}>{ADMIN_COPY.name}</th>
-                  <th scope="col" className={TH}>{ADMIN_COPY.role}</th>
-                  <th scope="col" className={TH}>{ADMIN_COPY.response}</th>
-                  <th scope="col" className={TH}>{ADMIN_COPY.attendance}</th>
+                  <th scope="col" className={TH}>{t.name}</th>
+                  <th scope="col" className={TH}>{t.role}</th>
+                  <th scope="col" className={TH}>{t.response}</th>
+                  <th scope="col" className={TH}>{t.attendance}</th>
                 </tr>
               </thead>
               <tbody>
@@ -123,7 +127,7 @@ export function RollCallSection({ eventId, onSaved, tabbed = false }: {
                   <tr key={row.membershipId} data-member={row.membershipId}>
                     <th scope="row" className={cn(TD, 'text-left font-semibold text-navy')}>{row.name}</th>
                     <td className={cn(TD, 'text-muted')}>{shortOfRung({ code: row.orgLevelCode, label: row.rung })}</td>
-                    <td className={cn(TD, 'text-navy')}>{row.said ? ADMIN_COPY.said[row.said] : '—'}</td>
+                    <td className={cn(TD, 'text-navy')}>{row.said ? t.said[row.said] : '—'}</td>
                     <td className={TD}>
                       <AttendanceCell row={row} value={valueOf(row)} writable={view.can.confirm} onMark={(to) => mark(row, to)} />
                     </td>
@@ -135,9 +139,9 @@ export function RollCallSection({ eventId, onSaved, tabbed = false }: {
           {view.can.confirm && (
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <Button disabled={changed === 0} aria-disabled={busy || undefined} onClick={() => void save()}>
-                {ADMIN_COPY.saveAttendance}
+                {t.saveAttendance}
               </Button>
-              {saved && changed === 0 && <SaveStatus state="saved">{ADMIN_COPY.saved}</SaveStatus>}
+              {saved && changed === 0 && <SaveStatus state="saved">{t.saved}</SaveStatus>}
             </div>
           )}
           {saveError && <div className="mt-3"><ErrorBanner {...saveError} /></div>}
@@ -154,26 +158,28 @@ function AttendanceCell({ row, value, writable, onMark }: {
   writable: boolean;
   onMark: (to: boolean) => void;
 }) {
+  const t = useMessages(eventsOfficeMessages);
+  const language = useLanguage();
   if (row.self) {
     return (
       <span className="block text-sm text-muted">
-        <span className="font-semibold text-navy">{attendedWords(row.attended)}</span>
-        <span className="block">{ADMIN_COPY.ownRow}</span>
+        <span className="font-semibold text-navy">{attendedWords(row.attended, language)}</span>
+        <span className="block">{t.ownRow}</span>
       </span>
     );
   }
-  if (!writable) return <span className="text-navy">{attendedWords(row.attended)}</span>;
+  if (!writable) return <span className="text-navy">{attendedWords(row.attended, language)}</span>;
   const toggle = (on: boolean) => cn(
     'rounded-[5px] px-2.5 py-1 text-sm font-semibold',
     on ? 'bg-navy text-white' : 'text-muted hover:text-navy',
   );
   return (
     <span className="inline-flex rounded-[7px] border border-hairline bg-card p-[2px]">
-      <button type="button" aria-pressed={value === true} aria-label={markLabel('attended', row.name)} className={toggle(value === true)} onClick={() => onMark(true)}>
-        {ADMIN_COPY.attended}
+      <button type="button" aria-pressed={value === true} aria-label={markLabel('attended', row.name, language)} className={toggle(value === true)} onClick={() => onMark(true)}>
+        {t.attended}
       </button>
-      <button type="button" aria-pressed={value === false} aria-label={markLabel('absent', row.name)} className={toggle(value === false)} onClick={() => onMark(false)}>
-        {ADMIN_COPY.absent}
+      <button type="button" aria-pressed={value === false} aria-label={markLabel('absent', row.name, language)} className={toggle(value === false)} onClick={() => onMark(false)}>
+        {t.absent}
       </button>
     </span>
   );

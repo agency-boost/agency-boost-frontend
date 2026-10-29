@@ -1,5 +1,7 @@
 import { RouteTabs } from '@/components/ui/route-tabs';
-import { PRODUCT_CATALOG_HREF, PROTOTYPE_COPY, SALES_ATTACK_PLAN_HREF } from '@/lib/product-catalog';
+import { useMessages } from '@/i18n/language-provider';
+import { productCatalogMessages } from '@/i18n/messages/product-catalog';
+import { PRODUCT_CATALOG_HREF, SALES_ATTACK_PLAN_HREF } from '@/lib/product-catalog';
 
 /**
  * **Sales tools' two screens as tabs** (P18.8-T12, ADR-0161 §5): *Sales Attack Plan | Product Catalog*, over both
@@ -11,15 +13,19 @@ import { PRODUCT_CATALOG_HREF, PROTOTYPE_COPY, SALES_ATTACK_PLAN_HREF } from '@/
  * is current over a product's drawer too**, `/product-catalog/{code}`. Below it the catalog's category pills and
  * the drawer's own tabs keep their idioms — navy chips and a tablist inside a dialog — so the three never read as
  * one row.
+ *
+ * Its words are §A's, kept English in both languages: the strip is named by the nav's group, *Sales tools*, and each
+ * tab is its page's title (`messages/product-catalog.ts`, P18.98-T4).
  */
 export function SalesToolsTabs({ className }: { className?: string }) {
+  const t = useMessages(productCatalogMessages);
   return (
     <RouteTabs
-      label="Sales tools"
+      label={t.tabs.label}
       className={className}
       tabs={[
-        { href: SALES_ATTACK_PLAN_HREF, label: PROTOTYPE_COPY.planTitle },
-        { href: PRODUCT_CATALOG_HREF, label: PROTOTYPE_COPY.catalogTitle, nested: true },
+        { href: SALES_ATTACK_PLAN_HREF, label: t.tabs.plan },
+        { href: PRODUCT_CATALOG_HREF, label: t.tabs.catalog, nested: true },
       ]}
     />
   );

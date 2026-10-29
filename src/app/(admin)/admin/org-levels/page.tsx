@@ -21,6 +21,11 @@ import {
   type OrgLevel,
 } from '@/lib/admin';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
+import type { MessagesOf } from '@/i18n/catalogue';
+import { useMessages } from '@/i18n/language-provider';
+import { adminTemplateOrgLevelsMessages } from '@/i18n/messages/admin-template-org-levels';
+
+type LadderWords = MessagesOf<typeof adminTemplateOrgLevelsMessages.en>;
 
 /** The server's own rule, so the form cannot offer a code the API will refuse. */
 const CODE = /^[A-Za-z][A-Za-z0-9_]{1,31}$/;
@@ -30,32 +35,29 @@ const tierKey = (orgLevelId: string) => `${orgLevelId}\ntier`;
 
 /**
  * The skeleton and the table read the same array, so the placeholder is the width of the
- * ladder it stands in for.
+ * ladder it stands in for. Its words are the catalogue's, in the reader's language.
  */
-const COLUMNS = ['Order', 'Rung', 'Leader tier', 'Status', { label: 'Actions', visuallyHidden: true }] as const;
+const columnsOf = (t: LadderWords['columns']) =>
+  [t.order, t.rung, t.tier, t.status, { label: t.actions, visuallyHidden: true }] as const;
 
 /**
- * The tiers, in the client's words (ADR-0156, 2026-10-26). *Not a leader* is the empty value:
+ * The tiers, in the client's words (ADR-0156, 2026-10-26), kept English. *Not a leader* is the empty value:
  * the wire's `null`, which a `<select>` cannot hold.
  */
-const TIERS: { value: LeaderTier | ''; label: string }[] = [
-  { value: 'senior', label: 'Senior Leader' },
-  { value: 'associate', label: 'Associate Leader' },
-  { value: '', label: 'Not a leader' },
+const tiersOf = (t: LadderWords['tiers']): { value: LeaderTier | ''; label: string }[] => [
+  { value: 'senior', label: t.senior },
+  { value: 'associate', label: t.associate },
+  { value: '', label: t.none },
 ];
 
 /**
  * A refused tier change, in this screen's words: the count from the refusal's details and the rung
  * by its label. The API's own sentence when the details are missing, so a refusal never goes unsaid.
  */
-function tierInUse(error: ApiError, level: OrgLevel | undefined): ApiError {
+function tierInUse(error: ApiError, level: OrgLevel | undefined, t: LadderWords): ApiError {
   const members = Number(error.details?.members);
   if (!level || !Number.isInteger(members) || members < 1) return error;
-  const who = members === 1 ? '1 person stands' : `${members} people stand`;
-  return {
-    ...error,
-    message: `${who} on ${level.label}, so its leader tier cannot change. Move them to another rung first, or add a new rung.`,
-  };
+  return { ...error, message: t.tierInUse({ n: members, rung: level.label }) };
 }
 
 /**
@@ -79,6 +81,9 @@ function tierInUse(error: ApiError, level: OrgLevel | undefined): ApiError {
  * change on it is never refused for members; the server is where that is decided. Registered as an Improve.
  */
 export default function OrgLevelsPage() {
+  const t = useMessages(adminTemplateOrgLevelsMessages);
+  const columns = columnsOf(t.columns);
+  const tiers = tiersOf(t.tiers);
   const [levels, setLevels] = useState<OrgLevel[] | null>(null);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [companyId, setCompanyId] = useState('');
@@ -166,7 +171,7 @@ export default function OrgLevelsPage() {
       return true;
     } catch (err) {
       const shown = toDisplayError(err);
-      setError(shown.code === 'ORG_LEVEL_TIER_IN_USE' ? tierInUse(shown, level) : shown);
+      setError(shown.code === 'ORG_LEVEL_TIER_IN_USE' ? tierInUse(shown, level, t) : shown);
       return err instanceof ApiRequestError && err.status === 409 ? null : false;
     } finally {
       setBusy(null);
@@ -177,14 +182,10 @@ export default function OrgLevelsPage() {
   const libraryChosen = company ? isTemplateLibrary(company) : false;
 
   return (
-    <Page
-      title="Org role ladder"
-      subtitle="The rungs a company promotes people along. An office cannot invent one — this is the company's to define, and only the platform writes it."
-      permission="org_level:crud"
-    >
+    <Page title={t.title} subtitle={t.subtitle} permission="org_level:crud">
       {error && !takenCode && <ErrorBanner {...error} />}
 
-      <Field label="Company" htmlFor="company" className="mb-6">
+      <Field label={t.company} htmlFor="company" className="mb-6">
         {/* The badge `/admin/companies` puts on the library's row, beside the select while it is the one chosen,
             and named by the select's description so a screen reader hears it with the choice (ADR-0168 §3). */}
         <div className="flex items-center gap-3">
@@ -203,7 +204,7 @@ export default function OrgLevelsPage() {
           </Select>
           {libraryChosen && (
             <span id="company-kind">
-              <ConfigBadge tone="navy">Template library</ConfigBadge>
+              <ConfigBadge tone="navy">{t.templateLibrary}</ConfigBadge>
             </span>
           )}
         </div>
@@ -211,33 +212,29 @@ export default function OrgLevelsPage() {
 
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <div>
-          {levels === null && <SkeletonTable caption="Role ladder" columns={COLUMNS} rows={3} />}
+          {levels === null && <SkeletonTable caption={t.ladder} columns={columns} rows={3} />}
 
           {levels !== null && forCompany.length === 0 && (
             <div className="rounded-lg border border-hairline bg-card">
               <EmptyState
-                title={
-                  company
-                    ? `${company.name} has no ladder yet. Add the most junior rung first.`
-                    : 'Create a company before defining a ladder.'
-                }
+                title={company ? t.noLadder({ company: company.name }) : t.noCompany}
               />
             </div>
           )}
 
           {forCompany.length > 0 && (
             <>
-              <DataTable caption="Role ladder, junior first" columns={COLUMNS}>
+              <DataTable caption={t.ladderCaption} columns={columns}>
                 {forCompany.map((l) => (
                   <Row key={l.orgLevelId}>
                     <Cell className="text-muted">{l.displayOrder}</Cell>
                     <Cell className="font-semibold">{l.label}</Cell>
                     <Cell>
                       {/* Its status on the line under it, inside the cell (AC-5), as a lead's cells have theirs. */}
-                      <InlineSaveField status={inline.statusOf(tierKey(l.orgLevelId))} label={`Leader tier, ${l.label}`}>
+                      <InlineSaveField status={inline.statusOf(tierKey(l.orgLevelId))} label={t.tierStatus({ rung: l.label })}>
                         <Select
                           density="cell"
-                          aria-label={`Leader tier of ${l.label}`}
+                          aria-label={t.tierOf({ rung: l.label })}
                           value={l.leaderTier ?? ''}
                           disabled={busy !== null}
                           onChange={(e) => {
@@ -245,9 +242,9 @@ export default function OrgLevelsPage() {
                             void inline.save(tierKey(l.orgLevelId), () => setLeaderTier(l, value));
                           }}
                         >
-                          {TIERS.map((t) => (
-                            <option key={t.value} value={t.value}>
-                              {t.label}
+                          {tiers.map((tier) => (
+                            <option key={tier.value} value={tier.value}>
+                              {tier.label}
                             </option>
                           ))}
                         </Select>
@@ -256,7 +253,7 @@ export default function OrgLevelsPage() {
                     <Cell>
                       <StatusPill
                         status={l.status === 'active' ? 'success' : 'neutral'}
-                        label={l.status === 'active' ? 'Active' : 'Archived'}
+                        label={l.status === 'active' ? t.active : t.archived}
                       />
                     </Cell>
                     <Cell>
@@ -265,7 +262,7 @@ export default function OrgLevelsPage() {
                         disabled={busy !== null}
                         onClick={() => void setStatus(l, l.status === 'active' ? 'archived' : 'active')}
                       >
-                        {l.status === 'active' ? 'Archive' : 'Restore'}
+                        {l.status === 'active' ? t.archive : t.restore}
                       </Button>
                     </Cell>
                   </Row>
@@ -273,28 +270,23 @@ export default function OrgLevelsPage() {
               </DataTable>
 
               <p className="mt-3 text-sm text-muted">
-                Reading order is junior first:{' '}
-                <strong>
-                  {forCompany
-                    .filter((l) => l.status === 'active')
-                    .map((l) => l.label)
-                    .join(' → ') || 'nothing active'}
-                </strong>
-                . Archiving retires a rung without deleting it, so everybody who ever stood on it
-                still renders.
+                {t.readingOrder({
+                  ladder: forCompany.filter((l) => l.status === 'active').map((l) => l.label).join(' → ') || null,
+                  strong: (words) => <strong>{words}</strong>,
+                })}
               </p>
             </>
           )}
         </div>
 
         <Card>
-          <h2 className="font-display text-lg font-bold text-navy">Add a rung</h2>
+          <h2 className="font-display text-lg font-bold text-navy">{t.addTitle}</h2>
           <form onSubmit={add} className="mt-3 flex flex-col gap-4" noValidate>
             <Field
-              label="Code"
+              label={t.code}
               htmlFor="code"
-              hint="Stable and semantic — AGENT, AAB, AB. Upper-cased on the way in, and never changed or reused afterwards."
-              error={badCode ? 'Letters, digits and underscores, starting with a letter.' : takenCode}
+              hint={t.codeHint}
+              error={badCode ? t.codeShape : takenCode}
             >
               <TextInput
                 id="code"
@@ -304,7 +296,7 @@ export default function OrgLevelsPage() {
                 invalid={badCode || Boolean(takenCode)}
               />
             </Field>
-            <Field label="Label" htmlFor="label" hint="What a reader sees. This one you can change.">
+            <Field label={t.label} htmlFor="label" hint={t.labelHint}>
               <TextInput
                 id="label"
                 required
@@ -313,27 +305,25 @@ export default function OrgLevelsPage() {
                 onChange={(e) => setLabel(e.target.value)}
               />
             </Field>
-            <Field label="Leader tier" htmlFor="leader-tier">
+            <Field label={t.tier} htmlFor="leader-tier">
               <Select
                 id="leader-tier"
                 value={tier}
                 onChange={(e) => setTier(e.target.value as LeaderTier | '')}
               >
-                {TIERS.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
+                {tiers.map((tier) => (
+                  <option key={tier.value} value={tier.value}>
+                    {tier.label}
                   </option>
                 ))}
               </Select>
             </Field>
-            <p className="text-xs text-muted">
-              It goes on the end of the ladder, at position {nextOrder}.
-            </p>
+            <p className="text-xs text-muted">{t.position({ n: nextOrder })}</p>
             <Button
               type="submit"
               disabled={busy !== null || badCode || !companyId || !code.trim() || !label.trim()}
             >
-              {busy === 'add' ? 'Adding…' : 'Add rung'}
+              {busy === 'add' ? t.adding : t.add}
             </Button>
           </form>
         </Card>

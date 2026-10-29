@@ -10,9 +10,11 @@ import { SkeletonCards } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
 import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { Toast, useToast } from '@/components/ui/toast';
+import { useMessages } from '@/i18n/language-provider';
+import { userManagementMessages } from '@/i18n/messages/user-management';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
-import { CONFIRMED } from '@/lib/confirmations';
+import { confirmationMessages } from '@/i18n/messages/confirmations';
 import {
   cancelLeaderRequest,
   readJoinState,
@@ -31,11 +33,15 @@ import {
  * The leader-code and invite-link route the prototype offers alongside this is P3-T4;
  * its tile is not drawn yet, because a tile that does nothing is worse than one that is
  * absent.
+ *
+ * Its words are the catalogue's (`user-management.ts`; P18.98-T4) — *Changing leader goes through your office admin.*,
+ * the line a reader who has a leader sees in place of the search (ADR-0170 §6), verbatim among them. A leader's name,
+ * their rung's badge and the office's label are shown as stored.
  */
-/** The line a reader who has a leader sees in place of the search (ADR-0170 §6), verbatim. */
-const CHANGING_LEADER = 'Changing leader goes through your office admin.';
-
 export default function FindLeaderPage() {
+  const words = useMessages(userManagementMessages);
+  const confirmed = useMessages(confirmationMessages);
+  const t = words.leader;
   const ladder = useLadder();
   const [state, setState] = useState<JoinState | null>(null);
   const [q, setQ] = useState('');
@@ -55,6 +61,8 @@ export default function FindLeaderPage() {
   }, [refresh]);
 
   const registered = Boolean(state?.kpmId);
+  /** An office with no leader to find: the company's rungs by their short names (OD-50), as the badges write them. */
+  const noLeaders = t.noLeaders({ ab: rungShort('AB', ladder), aab: rungShort('AAB', ladder) });
   /** Somebody who already reports to a leader is not offered the search (P18.96-T3 AC-6, ADR-0170 §6). */
   const hasLeader = Boolean(state?.leaderMembershipId);
 
@@ -78,7 +86,7 @@ export default function FindLeaderPage() {
     setError(null);
     try {
       setState(await requestLeader(membershipId));
-      show(CONFIRMED.requestSent);
+      show(confirmed.requestSent);
       setLeaders(await searchLeaders(q || undefined));
     } catch (err) {
       setError(toDisplayError(err));
@@ -103,24 +111,21 @@ export default function FindLeaderPage() {
   return (
     <Page
       title={USER_MANAGEMENT_TITLE}
-      subtitle="Search leaders in your KPM and request to be tagged."
+      subtitle={t.subtitle}
     >
       <UserManagementTabs leaderLocked={!registered} />
       {error && <ErrorBanner {...error} />}
 
       {state === null && (
-        <SkeletonCards count={2} label="Loading your leader…" />
+        <SkeletonCards count={2} label={t.loading} />
       )}
 
       {state && !registered && (
         <Card>
-          <h2 className="font-display text-xl font-bold text-navy">Register an office first</h2>
-          <p className="mt-1 text-md text-muted">
-            Finding a leader means searching inside one office, so we need to know which. It is
-            one step, and you can change nothing else until it is done.
-          </p>
+          <h2 className="font-display text-xl font-bold text-navy">{words.registerFirst}</h2>
+          <p className="mt-1 text-md text-muted">{t.registerFirstLine}</p>
           <ButtonLink href="/user-management/kpm" className="mt-4">
-            Go to Register KPM
+            {t.goToRegister}
           </ButtonLink>
         </Card>
       )}
@@ -128,16 +133,11 @@ export default function FindLeaderPage() {
       {state && registered && (
         <>
           <Card className="mb-4">
-            <h2 className="font-display text-lg font-bold text-navy">
-              Have a leader&apos;s code, link or QR?
-            </h2>
+            <h2 className="font-display text-lg font-bold text-navy">{t.haveCode}</h2>
             {/* The client's *Remove* on a phone (P18.95-T7 AC-1, grey text row 1): its words stay from 768px. */}
-            <p className={cn('mt-1 text-md text-muted', REMOVED_ON_PHONE)}>
-              Any of the three does the same thing: it joins you and tags you to them in one step,
-              with no approval. Opening their link or scanning their QR takes you to the same place.
-            </p>
+            <p className={cn('mt-1 text-md text-muted', REMOVED_ON_PHONE)}>{t.haveCodeLine}</p>
             <ButtonLink href="/join" variant="secondary" className="mt-3">
-              Use an invite instead
+              {t.useInvite}
             </ButtonLink>
           </Card>
         </>
@@ -147,9 +147,7 @@ export default function FindLeaderPage() {
         <>
           {state.leaderName && (
             <Card className="mb-4 border-l-4 border-l-amber">
-              <p className="text-sm font-semibold uppercase tracking-wide text-muted">
-                Currently reporting to
-              </p>
+              <p className="text-sm font-semibold uppercase tracking-wide text-muted">{t.reportingTo}</p>
               <p className="mt-1 font-display text-xl font-bold text-navy">{state.leaderName}</p>
             </Card>
           )}
@@ -160,7 +158,7 @@ export default function FindLeaderPage() {
              * already has a leader, and every request they sent was refused. One line in its place, the client's words.
              */
             <Card>
-              <p className="text-md text-navy">{CHANGING_LEADER}</p>
+              <p className="text-md text-navy">{t.changingLeader}</p>
             </Card>
           ) : (
           <Card>
@@ -168,13 +166,13 @@ export default function FindLeaderPage() {
               * The client's words at every size (P18.95-T7 AC-1, grey text rows 3 and 2): *Find a leader*, where it
               * named the office the tabs above already sit in, and the approval in four words.
               */}
-            <h2 className="font-display text-lg font-bold text-navy">Find a leader</h2>
-            <p className="mt-1 text-md text-muted">They&apos;ll need to approve.</p>
+            <h2 className="font-display text-lg font-bold text-navy">{t.findALeader}</h2>
+            <p className="mt-1 text-md text-muted">{t.needApprove}</p>
 
-            <Field label="Search by name" htmlFor="leader-search" className="mt-3">
+            <Field label={t.searchByName} htmlFor="leader-search" className="mt-3">
               <TextInput
                 id="leader-search"
-                placeholder="Name"
+                placeholder={t.nameExample}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
@@ -202,23 +200,21 @@ export default function FindLeaderPage() {
                     <span className="block text-sm text-muted">
                       {/* Said plainly rather than shown as "0 people in unit", which
                           reads as a number they failed to reach. */}
-                      {l.unitSize === 0
-                        ? 'No unit yet — they can still take you on'
-                        : `${l.unitSize} in their unit`}
+                      {l.unitSize === 0 ? t.noUnit : t.inUnit({ n: l.unitSize })}
                     </span>
                   </span>
 
                   {l.isCurrentLeader ? (
-                    <StatusPill status="success" label="Your leader" />
+                    <StatusPill status="success" label={t.yourLeader} />
                   ) : l.requestSent ? (
                     <span className="flex flex-wrap items-center gap-2">
-                      <StatusPill status="neutral" label="Request sent" />
+                      <StatusPill status="neutral" label={t.requestSent} />
                       <Button
                         variant="secondary"
                         disabled={busy !== null}
                         onClick={() => void withdraw()}
                       >
-                        {busy === 'cancel' ? 'Withdrawing…' : 'Withdraw'}
+                        {busy === 'cancel' ? t.withdrawing : t.withdraw}
                       </Button>
                     </span>
                   ) : (
@@ -227,7 +223,7 @@ export default function FindLeaderPage() {
                       disabled={busy !== null}
                       onClick={() => void ask(l.membershipId)}
                     >
-                      {busy === l.membershipId ? 'Sending…' : 'Send request'}
+                      {busy === l.membershipId ? t.sending : t.sendRequest}
                     </Button>
                   )}
                 </li>
@@ -237,21 +233,14 @@ export default function FindLeaderPage() {
             {leaders?.length === 0 && (
               <EmptyState
                 variant={q ? 'filtered' : 'empty'}
-                title={
-                  q
-                    ? 'No leaders match that search.'
-                    : `This office has no ${rungShort('AB', ladder)}s or ${rungShort('AAB', ladder)}s yet.`
-                }
+                title={q ? t.noMatch : noLeaders}
               />
             )}
           </Card>
           )}
 
           {state.pendingRequestTo && (
-            <p className="mt-4 text-md text-muted">
-              One request at a time. Asking somebody else replaces it rather than adding a
-              second — two open requests could both be approved.
-            </p>
+            <p className="mt-4 text-md text-muted">{t.oneAtATime}</p>
           )}
         </>
       )}

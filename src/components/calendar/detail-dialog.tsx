@@ -6,9 +6,11 @@ import { Dialog } from '@/components/ui/dialog';
 import { Modal } from '@/components/ui/modal';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { TippedGlyph } from '@/components/ui/tipped-glyph';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { calendarMessages } from '@/i18n/messages/calendar';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  answerEntry, deleteEntry, initialsOf, notesParts, OWN_COPY, PROTOTYPE_COPY, readEntry, titleOf, TYPE_LABEL,
+  answerEntry, deleteEntry, initialsOf, notesParts, readEntry, titleOf,
   type Answer, type CalendarEntry, type CalendarInvitee,
 } from '@/lib/calendar';
 import { coachingSessionHref } from '@/lib/coaching';
@@ -17,11 +19,11 @@ import { cn } from '@/lib/cn';
 import { TEXT_TAP } from '@/components/ui/phone';
 import { Avatar, BADGE_TONE, CHIP, DETAIL_LABEL } from './calendar-parts';
 
-/** An invitee's answer, as the organiser's chip shows it (ADR-0097, form 2). */
-const ANSWER_GLYPH: Record<Answer, { glyph: string; name: string }> = {
-  accepted: { glyph: '✓', name: OWN_COPY.accepted },
-  declined: { glyph: '✕', name: OWN_COPY.declined },
-  pending: { glyph: '?', name: OWN_COPY.noAnswer },
+/** An invitee's answer, as the organiser's chip shows it (ADR-0097, form 2): its glyph, and its name's message. */
+const ANSWER_GLYPH: Record<Answer, { glyph: string; name: 'accepted' | 'declined' | 'noAnswer' }> = {
+  accepted: { glyph: '✓', name: 'accepted' },
+  declined: { glyph: '✕', name: 'declined' },
+  pending: { glyph: '?', name: 'noAnswer' },
 };
 
 /**
@@ -75,16 +77,19 @@ export function DetailDialog({
   onDeleted: (entry: CalendarEntry) => void;
   onAnswered: (entry: CalendarEntry) => void;
 }) {
+  const t = useMessages(calendarMessages);
+  const words = useLanguage();
+  const language = useFigureLanguage();
   const [entry, setEntry] = useState(opened);
   const [asking, setAsking] = useState(false);
   const [banner, setBanner] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const title = titleOf(entry);
+  const title = titleOf(entry, words);
   const when = entry.allDay
-    ? formatTripWhen(entry.startsOn ?? '', entry.endsOn ?? '')
-    : formatWhen(entry.date ?? '', entry.start ?? '', entry.end ?? '');
+    ? formatTripWhen(entry.startsOn ?? '', entry.endsOn ?? '', language)
+    : formatWhen(entry.date ?? '', entry.start ?? '', entry.end ?? '', language);
 
   async function remove() {
     setAsking(false);
@@ -98,7 +103,7 @@ export function DetailDialog({
       if (error.code === 'VERSION_CONFLICT') {
         try {
           setEntry(await readEntry(entry.entryId));
-          setNotice(OWN_COPY.conflict);
+          setNotice(t.conflict);
         } catch (again) {
           setBanner(toDisplayError(again));
         }
@@ -141,23 +146,23 @@ export function DetailDialog({
         className="max-w-[420px]"
         eyebrow={(
           <span className={cn('mb-[11px] inline-block rounded-pill px-[11px] py-1 text-xs font-bold', BADGE_TONE[entry.type])}>
-            {TYPE_LABEL[entry.type]}
+            {t.types[entry.type]}
           </span>
         )}
       >
         <dl className="flex flex-col gap-4">
           <div>
-            <dt className={DETAIL_LABEL}>{PROTOTYPE_COPY.when}</dt>
+            <dt className={DETAIL_LABEL}>{t.when}</dt>
             <dd className="text-md leading-normal text-navy">{when}</dd>
           </div>
           <div>
-            <dt className={DETAIL_LABEL}>{PROTOTYPE_COPY.where}</dt>
+            <dt className={DETAIL_LABEL}>{t.where}</dt>
             <dd className="whitespace-pre-line break-words text-md leading-normal text-navy">
               {entry.notes.trim() ? <NotesText notes={entry.notes.trim()} /> : '—'}
             </dd>
           </div>
           <div>
-            <dt className={DETAIL_LABEL}>{PROTOTYPE_COPY.invitees}</dt>
+            <dt className={DETAIL_LABEL}>{t.invitees}</dt>
             <dd>
               <People entry={entry} />
             </dd>
@@ -169,19 +174,19 @@ export function DetailDialog({
 
         <div className={cn('mt-5 flex gap-2', canDelete || canAnswer ? 'justify-between' : 'justify-end')}>
           {canDelete && (
-            <Button variant="danger" disabled={busy} onClick={() => setAsking(true)}>{PROTOTYPE_COPY.delete}</Button>
+            <Button variant="danger" disabled={busy} onClick={() => setAsking(true)}>{t.delete}</Button>
           )}
           {canAnswer && (
             <AnswerButton variant="danger" pressed={entry.myAnswer === 'declined'} disabled={busy} onClick={() => answer('declined')}>
-              {OWN_COPY.decline}
+              {t.decline}
             </AnswerButton>
           )}
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={onClose}>{PROTOTYPE_COPY.close}</Button>
-            {canEdit && <Button disabled={busy} onClick={() => onEdit(entry)}>{PROTOTYPE_COPY.edit}</Button>}
+            <Button variant="secondary" onClick={onClose}>{t.close}</Button>
+            {canEdit && <Button disabled={busy} onClick={() => onEdit(entry)}>{t.edit}</Button>}
             {canAnswer && (
               <AnswerButton variant="primary" pressed={entry.myAnswer === 'accepted'} disabled={busy} onClick={() => answer('accepted')}>
-                {OWN_COPY.accept}
+                {t.accept}
               </AnswerButton>
             )}
           </div>
@@ -189,8 +194,8 @@ export function DetailDialog({
       </Modal>
       <Dialog
         open={asking}
-        message={OWN_COPY.deleteQuestion(title)}
-        confirmLabel={PROTOTYPE_COPY.delete}
+        message={t.deleteQuestion({ title })}
+        confirmLabel={t.delete}
         tone="danger"
         onConfirm={() => void remove()}
         onCancel={() => setAsking(false)}
@@ -208,9 +213,11 @@ export function DetailDialog({
  * something a press could run.
  */
 function NotesText({ notes }: { notes: string }) {
+  const t = useMessages(calendarMessages);
+  const words = useLanguage();
   return (
     <>
-      {notesParts(notes).map((part, i) => ('href' in part ? (
+      {notesParts(notes, words).map((part, i) => ('href' in part ? (
         <a
           // The notes are the organiser's words: a part's place in them is its identity.
           // eslint-disable-next-line react/no-array-index-key
@@ -225,7 +232,7 @@ function NotesText({ notes }: { notes: string }) {
           )}
         >
           {part.label}
-          <span className="sr-only">{OWN_COPY.newTab}</span>
+          <span className="sr-only">{t.newTab}</span>
         </a>
       ) : (
         // eslint-disable-next-line react/no-array-index-key
@@ -262,9 +269,10 @@ function AnswerButton({
  * everybody on the entry; *No one else invited* when there is nobody else.
  */
 function People({ entry }: { entry: CalendarEntry }) {
+  const t = useMessages(calendarMessages);
   const organiser = entry.readerIs === 'organiser';
   if (organiser && entry.invitees.length === 0) {
-    return <p className="text-sm text-muted">{PROTOTYPE_COPY.noOneElse}</p>;
+    return <p className="text-sm text-muted">{t.noOneElse}</p>;
   }
   return (
     <>
@@ -273,7 +281,7 @@ function People({ entry }: { entry: CalendarEntry }) {
           <li className={CHIP}>
             <Avatar initials={initialsOf(entry.organiser.name)} />
             {entry.organiser.name}
-            <TippedGlyph glyph="★" name={OWN_COPY.organiser} tip={OWN_COPY.organiser} align="fit" className="-my-1 -mr-1.5" />
+            <TippedGlyph glyph="★" name={t.organiser} tip={t.organiser} align="fit" className="-my-1 -mr-1.5" />
           </li>
         )}
         {entry.invitees.map((person) => (
@@ -281,18 +289,19 @@ function People({ entry }: { entry: CalendarEntry }) {
         ))}
       </ul>
       {!organiser && entry.invitees.length === 0 && (
-        <p className="mt-2 text-sm text-muted">{PROTOTYPE_COPY.noOneElse}</p>
+        <p className="mt-2 text-sm text-muted">{t.noOneElse}</p>
       )}
     </>
   );
 }
 
 function PersonChip({ person, entry }: { person: CalendarInvitee; entry: CalendarEntry }) {
+  const t = useMessages(calendarMessages);
   const face = (
     <>
       <Avatar initials={initialsOf(person.name)} />
       {person.name}
-      {person.placed && <span className="sr-only">{OWN_COPY.placedChip}</span>}
+      {person.placed && <span className="sr-only">{t.placedChip}</span>}
     </>
   );
   // ADR-0099: the chip of a coachee on a 1:1 entry opens their *Coaching Session* tab.
@@ -308,7 +317,7 @@ function PersonChip({ person, entry }: { person: CalendarInvitee; entry: Calenda
           {face}
         </Link>
       ) : face}
-      {answer && <TippedGlyph glyph={answer.glyph} name={answer.name} tip={answer.name} align="fit" className="-my-1 -mr-1.5" />}
+      {answer && <TippedGlyph glyph={answer.glyph} name={t[answer.name]} tip={t[answer.name]} align="fit" className="-my-1 -mr-1.5" />}
     </li>
   );
 }

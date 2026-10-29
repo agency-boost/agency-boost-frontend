@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { parse, renderable, sourceFiles, SRC } from '@test/copy-scan';
+import { catalogueTexts, parse, renderable, sourceFiles, SRC } from '@test/copy-scan';
 
 /**
  * **Training's own strings** (P18.5-T1 AC-10, T4 AC-2; the contract's *Module strings*): none of OD-39's
@@ -69,6 +69,28 @@ describe('training’s own copy', () => {
     const offenders = files.flatMap((f) =>
       offending(f, readFileSync(join(SRC, f), 'utf8'), pattern).map((hit) => `src/${f}: ${hit}`));
     expect(offenders).toEqual([]);
+  });
+});
+
+/**
+ * **P18.98-T4: training's words are the catalogue's now** (`i18n/messages/training.ts`), so the rules are held there,
+ * language by language (P18.98-T1 AC-6, `catalogueTexts`): none of the six words in the English or in the Indonesian —
+ * not *KPM*, ID mode's word for *office* (§B.9), since the learner's words name no office, and not *kantor* — no phase
+ * (*fase*), and no *Skill Tracker* in either language (*Pelacak skill* is its Indonesian, the coaching card's).
+ */
+describe('P18.98-T4 training’s catalogue, language by language', () => {
+  const AREA = 'i18n/messages/training.ts';
+  const texts = catalogueTexts(AREA, readFileSync(join(SRC, AREA), 'utf8'));
+
+  it('reads both languages, so a silent zero cannot pass', () => {
+    expect(texts.en.map((t) => t.text)).toEqual(expect.arrayContaining(['Skills List', 'Nothing to open in this module yet.']));
+    expect(texts.id.map((t) => t.text)).toEqual(expect.arrayContaining(['Belum ada yang bisa dibuka di modul ini.']));
+  });
+
+  it.each(['en', 'id'] as const)('writes none of OD-39’s six words, no phase and no Skill Tracker in %s', (language) => {
+    const held = (t: { text: string }) => SIX_WORDS.test(t.text) || PHASE.test(t.text) || /\bfase\b/i.test(t.text)
+      || SKILL_TRACKER.test(t.text) || /pelacak\s+skill/i.test(t.text) || /\bkantor\b/i.test(t.text);
+    expect(texts[language].filter(held).map((t) => `${t.line}: ${t.text}`)).toEqual([]);
   });
 });
 

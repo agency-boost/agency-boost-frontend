@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { SummaryView } from '@/components/personal-summary';
 import { Select } from '@/components/ui/field';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { summaryMessages } from '@/i18n/messages/summary';
 import { formatMonth } from '@/lib/format';
 import {
   monthsOf, periodSearch, yearsOf, type Summary, type SummaryPeriodQuery,
@@ -63,6 +65,9 @@ export function useSummaryPeriod(address: SummaryPeriodQuery) {
  * `frame` is the last Summary read, so the choices stay on the screen, and in reach of the keyboard, while the
  * next period is read; `asked` says which is chosen meanwhile. Named by `aria-label` (ADR-0062, the smallest
  * footprint): the prototype prints its period as a line, with no label beside it.
+ *
+ * Its name is the catalogue's (P18.98-T4; `i18n/messages/summary.tsx`: *Month* · *Year*, *Bulan* · *Tahun*), and each
+ * month is written in the reader's figures' language (`useFigureLanguage()`): *Aug 2026*, *Agu 2026*.
  */
 export function SummaryPeriodSelect({
   view, frame, asked, onChoose,
@@ -72,18 +77,20 @@ export function SummaryPeriodSelect({
   asked: SummaryPeriodQuery;
   onChoose: (value: string) => void;
 }) {
+  const t = useMessages(summaryMessages);
+  const figures = useFigureLanguage();
   const month = view === 'month';
   const options = month ? monthsOf(frame.period) : yearsOf(frame.period);
   const value = month ? (asked.month ?? frame.period.thisMonth) : (asked.year ?? frame.period.thisMonth.slice(0, 4));
   return (
     <Select
-      aria-label={month ? 'Month' : 'Year'}
+      aria-label={month ? t.month : t.year}
       value={value}
       onChange={(e) => onChoose(e.target.value)}
       className="mb-3 min-w-44 print:hidden"
     >
       {options.map((option) => (
-        <option key={option} value={option}>{month ? formatMonth(option) : option}</option>
+        <option key={option} value={option}>{month ? formatMonth(option, figures) : option}</option>
       ))}
     </Select>
   );

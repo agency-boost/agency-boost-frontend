@@ -1,4 +1,7 @@
 import type { PillTone } from '@/components/ui/status-pill';
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { kpmComplianceMessages } from '@/i18n/messages/kpm-compliance';
 import { api } from './api-client';
 import { officeDay } from './campaigns';
 import { formatShortDay } from './format';
@@ -19,6 +22,10 @@ import { formatShortDay } from './format';
  * Each interface is spelled out with named nested types and no `extends`, so `contract.spec.ts` can read its
  * fields against `backend/openapi.json`: it reads an interface's body up to the first closing brace, so no
  * comment inside one may hold a brace.
+ *
+ * **Its words are the catalogue's** (P18.98-T4; `i18n/messages/kpm-compliance.ts`): a function that writes words takes
+ * the reader's `language`, English when passed none, and one that writes a date takes the figures' language after it
+ * (`figures`; Indonesian when passed none). Its caller passes `useLanguage()` and `useFigureLanguage()`.
  */
 
 /*
@@ -45,62 +52,76 @@ export const NO_STATUS: PillWords = { label: '—', tone: 'neutral' };
 /**
  * Each status code the read serves (the contract's cell codes) → the prototype's words (`CATEGORIES`,
  * `:3013-3020`; the events row `:3716-3722`; the campaigns row `:3895-3900`) and the pill's tone
- * (`STATUS_CLASS`, `:2915`).
+ * (`STATUS_CLASS`, `:2915`), **in a language** — the catalogue's `labels`, the paints the same in both.
  *
  * - *Goal Setting* has no *Draft saved* (ADR-0049: a goal is annual and has no draft) and *Activity Mgmt* no
  *   *Partial* (its own tooltip says there is none).
  * - A past event's *—* is a member awaiting the confirmer (`unconfirmed`); a campaign's *—* is a result not
  *   decided (`in_progress`) or one nothing could decide (`unknown`) — the registry's labels.
  */
-export const COMPLIANCE_LABELS = {
-  training: {
-    done: { label: 'Completed', tone: DONE },
-    in_progress: { label: 'In progress', tone: PROGRESS },
-    not_started: { label: 'Not started', tone: NOT_DONE },
-  },
-  goals: {
-    set: { label: 'Set', tone: DONE },
-    not_set: { label: 'Not set', tone: NOT_DONE },
-  },
-  activity: {
-    logged: { label: 'Logged', tone: DONE },
-    missed: { label: 'Missed', tone: NOT_DONE },
-  },
-  activation: {
-    completed: { label: 'Completed', tone: DONE },
-    in_progress: { label: 'In progress', tone: PROGRESS },
-    overdue: { label: 'Overdue', tone: NOT_DONE },
-  },
-  events: {
-    /** *Joined*: an upcoming or running event's two, then a past event's four. */
-    joined: {
-      registered: { label: 'Registered', tone: DONE },
-      not_registered: { label: 'Not registered', tone: NOT_DONE },
-      attended: { label: 'Attended', tone: DONE },
-      no_show: { label: 'No-show', tone: NOT_DONE },
-      unconfirmed: NO_STATUS,
+function labelsIn(language: Language) {
+  const l = messagesIn(kpmComplianceMessages, language).labels;
+  return {
+    training: {
+      done: { label: l.completed, tone: DONE },
+      in_progress: { label: l.inProgress, tone: PROGRESS },
+      not_started: { label: l.notStarted, tone: NOT_DONE },
     },
-    /** *Feedback*: asked of an attendee of a past event only; anybody else *—*. */
-    feedback: {
-      shared: { label: 'Shared', tone: DONE },
-      not_shared: { label: 'Not shared', tone: NOT_DONE },
+    goals: {
+      set: { label: l.set, tone: DONE },
+      not_set: { label: l.notSet, tone: NOT_DONE },
     },
-  },
-  campaigns: {
-    chasing: {
-      chasing: { label: 'Chasing', tone: DONE },
-      not_chasing: { label: 'Not chasing', tone: NOT_DONE },
+    activity: {
+      logged: { label: l.logged, tone: DONE },
+      missed: { label: l.missed, tone: NOT_DONE },
     },
-    /** *Achieved*: an ended seasonal campaign's only (`:3889`); the registry's labels. */
-    achieved: {
-      qualified: { label: 'Achieved', tone: DONE },
-      not_met: { label: 'Not achieved', tone: NOT_DONE },
-      not_joined: { label: 'Not achieved', tone: NOT_DONE },
-      in_progress: NO_STATUS,
-      unknown: NO_STATUS,
+    activation: {
+      completed: { label: l.completed, tone: DONE },
+      in_progress: { label: l.inProgress, tone: PROGRESS },
+      overdue: { label: l.overdue, tone: NOT_DONE },
     },
-  },
-} as const satisfies Record<string, Record<string, PillWords | Record<string, PillWords>>>;
+    events: {
+      /** *Joined*: an upcoming or running event's two, then a past event's four. */
+      joined: {
+        registered: { label: l.registered, tone: DONE },
+        not_registered: { label: l.notRegistered, tone: NOT_DONE },
+        attended: { label: l.attended, tone: DONE },
+        no_show: { label: l.noShow, tone: NOT_DONE },
+        unconfirmed: NO_STATUS,
+      },
+      /** *Feedback*: asked of an attendee of a past event only; anybody else *—*. */
+      feedback: {
+        shared: { label: l.shared, tone: DONE },
+        not_shared: { label: l.notShared, tone: NOT_DONE },
+      },
+    },
+    campaigns: {
+      chasing: {
+        chasing: { label: l.chasing, tone: DONE },
+        not_chasing: { label: l.notChasing, tone: NOT_DONE },
+      },
+      /** *Achieved*: an ended seasonal campaign's only (`:3889`); the registry's labels. */
+      achieved: {
+        qualified: { label: l.achieved, tone: DONE },
+        not_met: { label: l.notAchieved, tone: NOT_DONE },
+        not_joined: { label: l.notAchieved, tone: NOT_DONE },
+        in_progress: NO_STATUS,
+        unknown: NO_STATUS,
+      },
+    },
+  } as const satisfies Record<string, Record<string, PillWords | Record<string, PillWords>>>;
+}
+
+export type ComplianceLabels = ReturnType<typeof labelsIn>;
+
+/** Built once a language, so a pill's words keep their identity between renders. */
+const LABELS: Readonly<Record<Language, ComplianceLabels>> = { en: labelsIn('en'), id: labelsIn('id') };
+
+/** The pills' words in the reader's language (`useLanguage()`); English when passed none. */
+export const complianceLabels = (language: Language = SOURCE_LANGUAGE): ComplianceLabels => LABELS[language];
+
+/** The pills' words in English, the catalogue's source — what this module's callers and spec have always read. */
+export const COMPLIANCE_LABELS = complianceLabels(SOURCE_LANGUAGE);
 
 /** A code's pill from one of the maps above; *—* for `null`, or a code the map does not hold. */
 export function pillOf(map: Readonly<Record<string, PillWords>>, code: string | null | undefined): PillWords {
@@ -309,112 +330,125 @@ export function complianceSelectionFrom(query: { category?: string | string[]; i
  * ── The prototype's words ───────────────────────────────────────────────────────────────────────
  */
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+/** The module's words in English, the catalogue's source. */
+const EN = messagesIn(kpmComplianceMessages, SOURCE_LANGUAGE);
 
-/** The strings `KPM_Owner.html` draws, verbatim (ADR-0062), its literal counts computed (contradiction 1). */
+/** The sort toggle's label: its arrow, kept apart so it is not read aloud, and its words. */
+const arrowed = (sort: { worst: string; best: string }) => ({ worst: ['↓', sort.worst], best: ['↑', sort.best] }) as const;
+
+/**
+ * **The strings `KPM_Owner.html` draws, in English** (ADR-0062), its literal counts computed (contradiction 1) — the
+ * catalogue's source (`i18n/messages/kpm-compliance.ts`, P18.98-T4), in the shapes this module has always handed its
+ * callers and its spec. **A screen reads the reader's language instead**: `useMessages(kpmComplianceMessages)`.
+ *
+ * `sub` is `:3457`, *"in this KPM"* on the client's list with OD-39, both counts the read's; `chips` the six
+ * (`:3013-3020`); `activityTooltip` the Activity chip's `title` and the note strip under the tabs (`:3016`,
+ * `:3549-3555`); `sort` the toggle's two labels per category (`:3672-3684`), the arrow kept apart; `verb` a card's and
+ * a section's (`:3698`, `:3735`, `:3911`).
+ */
 export const PROTOTYPE_COPY = {
-  title: 'Compliance, Events, and Campaigns',
-  /** `:3457`, *"in this KPM"* on the client's list with OD-39; both counts the read's. */
-  sub: (people: number, units: number) =>
-    `Every AB's unit in this KPM — ${plural(people, 'person', 'people')} across ${plural(units, 'unit', 'units')}`,
-  chips: {
-    training: 'Training',
-    goals: 'Goal Setting',
-    activity: 'Activity Mgmt',
-    activation: 'Activation',
-    events: 'Events',
-    campaigns: 'Campaigns',
-  } satisfies Record<ComplianceCategory, string>,
-  /** The Activity chip's `title` and the note strip under the tabs (`:3016`, `:3549-3555`). */
-  activityTooltip: 'Whether activity was logged at least once in the past 7 days — there\'s no partial state, only Logged or Missed.',
-  comingSoon: (name: string) => `Modules for ${name} are coming soon.`,
-  searchPlaceholder: 'Search agent or leader name…',
-  noMatch: 'No one matches this search.',
-  /** The sort toggle's two labels per category (`:3672-3684`), the arrow kept apart so it is not read aloud. */
+  title: EN.title,
+  sub: (people: number, units: number) => EN.sub({ people, units }),
+  chips: EN.chips satisfies Record<ComplianceCategory, string>,
+  activityTooltip: EN.activityTooltip,
+  comingSoon: (name: string) => EN.comingSoon({ name }),
+  searchPlaceholder: EN.searchPlaceholder,
+  noMatch: EN.noMatch,
   sort: {
-    status: { worst: ['↓', 'Needs attention first'], best: ['↑', 'On track first'] },
-    events: { worst: ['↓', 'Not joined first'], best: ['↑', 'Joined first'] },
-    campaigns: { worst: ['↓', 'Not chasing first'], best: ['↑', 'Chasing first'] },
+    status: arrowed(EN.sort.status),
+    events: arrowed(EN.sort.events),
+    campaigns: arrowed(EN.sort.campaigns),
   },
-  personal: 'Personal',
-  tagAb: 'AB',
-  unitOf: "'s Unit",
-  /** A card's and a section's verb (`:3698`, `:3735`, `:3911`): *done*, *joined*, *chasing*. */
-  verb: { status: 'done', events: 'joined', campaigns: 'chasing' },
-  overall: 'overall',
-  columns: { events: ['Joined', 'Feedback'], campaigns: ['Chasing', 'Achieved'] },
-  eventGroups: { upcoming: 'Upcoming', past: 'Past' },
-  campaignGroups: { structural: 'Structural', ongoing: 'Seasonal — Ongoing', past: 'Seasonal — Past' },
-  tags: { upcoming: 'Upcoming', past: 'Past', structural: 'Structural', ongoing: 'Ongoing' },
-  alwaysOn: 'Always on',
-  since: (date: string) => `Since ${date}`,
-  ended: (date: string) => `Ended ${date}`,
+  personal: EN.personal,
+  tagAb: EN.tagAb,
+  unitOf: EN.unitOf({ name: '' }),
+  verb: { status: EN.verb({ kind: 'status' }), events: EN.verb({ kind: 'events' }), campaigns: EN.verb({ kind: 'campaigns' }) },
+  verbOverall: {
+    status: EN.verbOverall({ kind: 'status' }),
+    events: EN.verbOverall({ kind: 'events' }),
+    campaigns: EN.verbOverall({ kind: 'campaigns' }),
+  },
+  columns: {
+    events: [EN.columns.events.first, EN.columns.events.second],
+    campaigns: [EN.columns.campaigns.first, EN.columns.campaigns.second],
+  },
+  eventGroups: EN.eventGroups,
+  campaignGroups: EN.campaignGroups,
+  tags: EN.tags,
+  alwaysOn: EN.alwaysOn,
+  since: (date: string) => EN.since({ date }),
+  ended: (date: string) => EN.ended({ date }),
 } as const;
 
 /**
- * The module's own strings — the states the prototype lacks and the names a screen reader needs (Fills, L-01).
- * None of OD-39's six words (*office*, *KPM*, *reports to*, *tagged to*, *untagged*, *unassigned*), no phase,
- * no code.
+ * **The module's own strings, in English** — the states the prototype lacks and the names a screen reader needs (Fills,
+ * L-01), from the catalogue's source as `PROTOTYPE_COPY` is. None of OD-39's six words (*office*, *KPM*, *reports to*,
+ * *tagged to*, *untagged*, *unassigned*), no phase, no code.
  */
 export const OWN_COPY = {
-  loading: 'Loading each unit’s statuses…',
-  tryAgain: 'Try again',
-  /** After a `404` on the item in the address: its category's default, which a retry would never reach. */
-  backTo: (category: string) => `Back to ${category}`,
-  /** The chip's dash over nobody (D-chips), named. */
-  noRate: 'No rate: nobody to count',
-  chipsName: 'Categories',
-  trainingCategoriesName: 'Training categories',
-  skillsName: 'Skills',
-  modulesName: 'Modules',
-  eventName: 'Event',
-  campaignName: 'Campaign',
-  searchName: 'Search agent or leader name',
-  noAbTitle: 'There are no ABs yet.',
-  noAbLine: 'Each AB’s agency gets a section here, with a row for each of its people.',
-  noTraining: 'No training has been published yet.',
-  noEvents: 'There are no events this year.',
-  noCampaigns: 'There are no campaigns this year.',
-  /** A running event's tag: the phase word (contradiction 8). */
-  running: 'Running',
-  /** An upcoming seasonal campaign's date: *"Since"* a day still ahead would not be true (contradiction 8). */
-  starts: (date: string) => `Starts ${date}`,
-  /** An expired activation's *Overdue* (OD-159, ADR-0149): its end, the accessible name and the tooltip both. */
-  expiredName: (date: string) => `Overdue: ended on ${date} without being marked complete`,
-  /** A past event's *—* for a member nobody has confirmed yet (D-status), for a screen reader. */
-  awaitingConfirmation: 'awaiting confirmation',
+  loading: EN.loading,
+  tryAgain: EN.tryAgain,
+  backTo: (category: string) => EN.backTo({ category }),
+  noRate: EN.noRate,
+  chipsName: EN.chipsName,
+  trainingCategoriesName: EN.trainingCategoriesName,
+  skillsName: EN.skillsName,
+  modulesName: EN.modulesName,
+  eventName: EN.eventName,
+  campaignName: EN.campaignName,
+  searchName: EN.searchName,
+  noAbTitle: EN.noAbTitle,
+  noAbLine: EN.noAbLine,
+  noTraining: EN.noTraining,
+  noEvents: EN.noEvents,
+  noCampaigns: EN.noCampaigns,
+  running: EN.running,
+  starts: (date: string) => EN.starts({ date }),
+  expiredName: (date: string) => EN.expiredName({ date }),
+  awaitingConfirmation: EN.awaitingConfirmation,
 } as const;
 
 /*
  * ── Days ────────────────────────────────────────────────────────────────────────────────────────
  */
 
-/** An office day as the date column writes it (`:3027-3038`): *Sep 1*, with the year when it is not this one. */
-export function dayWords(day: string, today: string): string {
-  return formatShortDay(day, { year: day.slice(0, 4) !== today.slice(0, 4) });
+/**
+ * An office day as the date column writes it (`:3027-3038`): *Sep 1*, with the year when it is not this one — a
+ * figure, in `figures` (Indonesian when passed none).
+ */
+export function dayWords(day: string, today: string, figures?: Language): string {
+  return formatShortDay(day, { year: day.slice(0, 4) !== today.slice(0, 4) }, figures);
 }
 
-/** A campaign's date label (`CAMPAIGN_ITEMS`, `:3002-3011`). */
-export function campaignDateLabel(campaign: ComplianceCampaign, today: string): string {
-  if (campaign.kind === 'structural') return PROTOTYPE_COPY.alwaysOn;
-  if (campaign.phase === 'ended' && campaign.endsAt) return PROTOTYPE_COPY.ended(dayWords(officeDay(campaign.endsAt), today));
-  const starts = dayWords(officeDay(campaign.startsAt), today);
-  return campaign.phase === 'upcoming' ? OWN_COPY.starts(starts) : PROTOTYPE_COPY.since(starts);
+/** A campaign's date label (`CAMPAIGN_ITEMS`, `:3002-3011`): its words in `language`, its day in `figures`. */
+export function campaignDateLabel(
+  campaign: ComplianceCampaign,
+  today: string,
+  language: Language = SOURCE_LANGUAGE,
+  figures?: Language,
+): string {
+  const t = messagesIn(kpmComplianceMessages, language);
+  if (campaign.kind === 'structural') return t.alwaysOn;
+  if (campaign.phase === 'ended' && campaign.endsAt) return t.ended({ date: dayWords(officeDay(campaign.endsAt), today, figures) });
+  const starts = dayWords(officeDay(campaign.startsAt), today, figures);
+  return campaign.phase === 'upcoming' ? t.starts({ date: starts }) : t.since({ date: starts });
 }
 
 /** A campaign's tag (`:3600-3601`), and an upcoming seasonal one's own (contradiction 8). */
-export function campaignTag(campaign: ComplianceCampaign): { label: string; tone: TagTone } {
-  if (campaign.kind === 'structural') return { label: PROTOTYPE_COPY.tags.structural, tone: 'structural' };
-  if (campaign.phase === 'ended') return { label: PROTOTYPE_COPY.tags.past, tone: 'past' };
-  if (campaign.phase === 'upcoming') return { label: PROTOTYPE_COPY.tags.upcoming, tone: 'upcoming' };
-  return { label: PROTOTYPE_COPY.tags.ongoing, tone: 'ongoing' };
+export function campaignTag(campaign: ComplianceCampaign, language: Language = SOURCE_LANGUAGE): { label: string; tone: TagTone } {
+  const { tags } = messagesIn(kpmComplianceMessages, language);
+  if (campaign.kind === 'structural') return { label: tags.structural, tone: 'structural' };
+  if (campaign.phase === 'ended') return { label: tags.past, tone: 'past' };
+  if (campaign.phase === 'upcoming') return { label: tags.upcoming, tone: 'upcoming' };
+  return { label: tags.ongoing, tone: 'ongoing' };
 }
 
 /** An event's tag: its phase word (`:3586`), a running one's included. */
-export function eventTag(event: ComplianceEvent): { label: string; tone: TagTone } {
-  if (event.phase === 'past') return { label: PROTOTYPE_COPY.tags.past, tone: 'past' };
-  if (event.phase === 'running') return { label: OWN_COPY.running, tone: 'ongoing' };
-  return { label: PROTOTYPE_COPY.tags.upcoming, tone: 'upcoming' };
+export function eventTag(event: ComplianceEvent, language: Language = SOURCE_LANGUAGE): { label: string; tone: TagTone } {
+  const t = messagesIn(kpmComplianceMessages, language);
+  if (event.phase === 'past') return { label: t.tags.past, tone: 'past' };
+  if (event.phase === 'running') return { label: t.running, tone: 'ongoing' };
+  return { label: t.tags.upcoming, tone: 'upcoming' };
 }
 
 export type TagTone = 'upcoming' | 'past' | 'structural' | 'ongoing';

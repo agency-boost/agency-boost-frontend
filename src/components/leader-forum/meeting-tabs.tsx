@@ -1,8 +1,10 @@
 'use client';
 
 import { useId, useRef } from 'react';
+import { useMessages } from '@/i18n/language-provider';
+import { forumMessages } from '@/i18n/messages/forum';
 import { cn } from '@/lib/cn';
-import { FORUM_COPY, type MeetingView } from '@/lib/leader-meetings';
+import type { MeetingView } from '@/lib/leader-meetings';
 import { ActionItems } from './action-items';
 import { Agenda } from './agenda';
 import { Scorecard } from './scorecard';
@@ -32,6 +34,7 @@ export function MeetingTabs({
   active: MeetingTab;
   onSelect: (tab: MeetingTab) => void;
 }) {
+  const t = useMessages(forumMessages);
   const group = useId();
   const refs = useRef<Partial<Record<MeetingTab, HTMLButtonElement | null>>>({});
   const go = (to: number) => {
@@ -71,7 +74,7 @@ export function MeetingTabs({
                   on ? 'border-amber text-navy' : 'border-transparent text-muted hover:text-navy',
                 )}
               >
-                {FORUM_COPY.tabs[tab]}
+                {t.tabs[tab]}
               </button>
             );
           })}

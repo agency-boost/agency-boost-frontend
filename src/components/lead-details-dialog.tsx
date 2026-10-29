@@ -3,6 +3,8 @@
 import { useEffect, useId, useRef } from 'react';
 import { Button, ErrorBanner, Field, TextInput } from '@/components/ui/field';
 import { InlineSaveField, type InlineSaveStatusProps } from '@/components/ui/inline-save-status';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { leadsMessages } from '@/i18n/messages/leads';
 import type { ApiError } from '@/lib/api-client';
 import { formatDay } from '@/lib/format';
 import type { Lead } from '@/lib/leads';
@@ -69,6 +71,8 @@ export function LeadDetailsDialog({
   status?: (field: DetailsField) => InlineSaveStatusProps;
   onClose: () => void;
 }) {
+  const t = useMessages(leadsMessages);
+  const figures = useFigureLanguage();
   const box = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const id = useId();
@@ -133,7 +137,7 @@ export function LeadDetailsDialog({
     </Field>
   );
 
-  const name = lead.name || 'this lead';
+  const name = lead.name || t.thisLead;
 
   return (
     // The backdrop closes; a click inside the box must not, or selecting a number to copy it
@@ -148,19 +152,21 @@ export function LeadDetailsDialog({
         onKeyDown={trap}
         className="flex max-h-full w-full max-w-md flex-col gap-4 overflow-y-auto overscroll-contain rounded-lg bg-card p-6 shadow-modal"
       >
-        <h2 id={titleId} className="text-md font-bold text-navy">
-          Lead details for {name}
-        </h2>
+        <h2 id={titleId} className="text-md font-bold text-navy">{t.details.title({ who: name })}</h2>
 
-        {text('phone', 'Phone', lead.contact.phone, { type: 'tel' })}
-        {text('email', 'Email', lead.contact.email, { type: 'email' })}
-        {text('source', 'Where they came from', lead.source, { placeholder: 'e.g. Referral from Desi' })}
+        {text('phone', t.details.phone, lead.contact.phone, { type: 'tel' })}
+        {text('email', t.details.email, lead.contact.email, { type: 'email' })}
+        {text('source', t.details.source, lead.source, { placeholder: t.details.sourcePlaceholder })}
 
         {/* Grey, as the table's `.registered-cell` had it (`Overall.html:501`): a fact, not a field. */}
         {(lead.dateRegistered || editedBy) && (
           <div className="flex flex-col gap-0.5 text-sm text-muted">
             {lead.dateRegistered && (
-              <p>Registered <time dateTime={lead.dateRegistered}>{formatDay(lead.dateRegistered)}</time></p>
+              <p>
+                {t.details.registered({
+                  day: <time dateTime={lead.dateRegistered}>{formatDay(lead.dateRegistered, figures)}</time>,
+                })}
+              </p>
             )}
             {editedBy && <p>{editedBy}</p>}
           </div>
@@ -169,7 +175,7 @@ export function LeadDetailsDialog({
         {errors.map((error) => <ErrorBanner key={`${error.code} ${error.message}`} {...error} />)}
 
         <div className="flex justify-end">
-          <Button variant="secondary" onClick={close}>Close</Button>
+          <Button variant="secondary" onClick={close}>{t.close}</Button>
         </div>
       </div>
     </div>

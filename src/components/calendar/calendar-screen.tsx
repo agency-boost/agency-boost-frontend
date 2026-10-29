@@ -5,13 +5,15 @@ import { Button, ErrorBanner, Select } from '@/components/ui/field';
 import { shortOfRung } from '@/components/ui/role-badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Toast, useToast } from '@/components/ui/toast';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { calendarMessages } from '@/i18n/messages/calendar';
+import { confirmationMessages } from '@/i18n/messages/confirmations';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import {
-  COMPARE_MAX, entryDate, initialsOf, OWN_COPY, peopleOn, PROTOTYPE_COPY, readCalendar, readDownline, readEntry, viewOf,
+  COMPARE_MAX, entryDate, initialsOf, peopleOn, readCalendar, readDownline, readEntry, viewOf,
   type CalendarDisplay, type CalendarDownlinePerson, type CalendarEntry, type CalendarNow, type CalendarRead,
   type CalendarView,
 } from '@/lib/calendar';
-import { CONFIRMED } from '@/lib/confirmations';
 import { HOUR_PX, nextHalfHour, OPEN_AT_HOUR } from '@/lib/calendar-layout';
 import { DEFAULT_END, DEFAULT_START, type Slot } from '@/lib/calendar-form';
 import { formatMonth, formatWeekRange } from '@/lib/format';
@@ -34,11 +36,6 @@ const TILE = 'overflow-hidden rounded-lg border border-hairline';
 
 /** The phone's three views, in the switch's order: the agenda it opens on, then the prototype's two. */
 const PHONE_VIEWS: readonly CalendarDisplay[] = ['agenda', 'week', 'month'];
-const VIEW_NAME: Record<CalendarDisplay, string> = {
-  agenda: OWN_COPY.agenda,
-  week: PROTOTYPE_COPY.week,
-  month: PROTOTYPE_COPY.month,
-};
 
 /**
  * `/calendar` (`Calendar_Section.html:275-349`; Phase 12).
@@ -104,6 +101,9 @@ export function CalendarScreen({
   /** The address's `with` (P18.96-T6 AC-4): open *New event* as a 1:1 with this member, once the week is read. */
   initialWith?: string;
 }) {
+  const t = useMessages(calendarMessages);
+  const done = useMessages(confirmationMessages);
+  const language = useFigureLanguage();
   const { me } = useSession();
   const phone = usePhone();
   const readOnly = !!me?.isImpersonating && !!me.impersonationReadOnly;
@@ -266,11 +266,13 @@ export function CalendarScreen({
         open({
           mode: 'new', slot,
           preset: person
-            ? { type: 'coaching', title: OWN_COPY.oneOnOneWith(person.name), invitee: { membershipId: person.membershipId, name: person.name } }
+            ? { type: 'coaching', title: t.oneOnOneWith({ name: person.name }), invitee: { membershipId: person.membershipId, name: person.name } }
             : { type: 'coaching', title: '', invitee: null },
         });
       });
     return () => { live = false; };
+    // The title is written once, as the dialog opens, in the writer's words (`oneOnOneWith`); a later switch leaves it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialWith, may.create, shown]);
 
   /** *+ New event*: the office's today when it is in view, else the first day shown (P12-T2 AC-4). */
@@ -287,7 +289,7 @@ export function CalendarScreen({
     setDate(entryDate(entry));
     wrote(peopleOn(entry, before));
     // A create has no entry before it (P18.95-T1 AC-6); a refusal never reaches here, and stays in the dialog.
-    if (before === null) show(CONFIRMED.eventCreated);
+    if (before === null) show(done.eventCreated);
   };
 
   const forget = (membershipId: string) => {
@@ -303,9 +305,9 @@ export function CalendarScreen({
   };
 
   const week = view === 'week';
-  const label = shown ? (shown.view === 'month' ? formatMonth(shown.month ?? '') : formatWeekRange(shown.from, shown.to)) : '';
-  const previousLabel = week ? OWN_COPY.previousWeek : OWN_COPY.previousMonth;
-  const nextLabel = week ? OWN_COPY.nextWeek : OWN_COPY.nextMonth;
+  const label = shown ? (shown.view === 'month' ? formatMonth(shown.month ?? '', language) : formatWeekRange(shown.from, shown.to, language)) : '';
+  const previousLabel = week ? t.previousWeek : t.previousMonth;
+  const nextLabel = week ? t.nextWeek : t.nextMonth;
 
   // The day a phone's month lists: the one tapped, while it is in this month's read; else today, if
   // this month holds it; else the 1st.
@@ -319,7 +321,7 @@ export function CalendarScreen({
     name: shown.subject.name,
     initials: me?.user.initials ?? initialsOf(shown.subject.name),
     // The rung by its badge's name, *AB · You* (P18.95-T9 AC-1; T8 left the ladder's whole label here).
-    role: `${shortOfRung(shown.subject.rung)} · ${PROTOTYPE_COPY.you}`,
+    role: `${shortOfRung(shown.subject.rung)} · ${t.you}`,
     me: true,
   } : null;
 
@@ -349,7 +351,7 @@ export function CalendarScreen({
     <span aria-live="polite" className={cn('font-display font-bold text-navy', className)}>{label}</span>
   );
   const newEventControl = may.create && (
-    <Button ref={newEventButton} onClick={newEvent} className={phone ? 'shrink-0' : undefined}>{PROTOTYPE_COPY.newEvent}</Button>
+    <Button ref={newEventButton} onClick={newEvent} className={phone ? 'shrink-0' : undefined}>{t.newEvent}</Button>
   );
   const hideSwitch = hiding.on !== null && <HideDetailsSwitch on={hiding.on} onChange={hiding.change} status={hiding.status} />;
 
@@ -406,13 +408,13 @@ export function CalendarScreen({
   if (error) {
     body = (
       <div className="rounded-lg border border-hairline bg-card p-4">
-        <ErrorBanner code={error.code} message={OWN_COPY.loadFailed} requestId={error.requestId} />
-        <Button variant="secondary" className="mt-3" onClick={again}>{OWN_COPY.tryAgain}</Button>
+        <ErrorBanner code={error.code} message={t.loadFailed} requestId={error.requestId} />
+        <Button variant="secondary" className="mt-3" onClick={again}>{t.tryAgain}</Button>
       </div>
     );
   } else if (!shown || !ownHead) {
     body = (
-      <Skeleton label={OWN_COPY.loading} className={cn(TILE, 'bg-card')}>
+      <Skeleton label={t.loading} className={cn(TILE, 'bg-card')}>
         {display === 'week' ? <WeekSkeleton /> : display === 'month' ? <MonthSkeleton phone={phone} /> : <AgendaSkeleton />}
       </Skeleton>
     );
@@ -436,7 +438,7 @@ export function CalendarScreen({
           className={TILE}
           read={shown}
           head={compared.length > 0 ? ownHead : undefined}
-          regionLabel={OWN_COPY.region(label)}
+          regionLabel={t.region({ range: label })}
           onOpen={setDetail}
         />
         {comparedPanes}
@@ -449,7 +451,7 @@ export function CalendarScreen({
           className={TILE}
           read={shown}
           head={ownHead}
-          regionLabel={OWN_COPY.region(label)}
+          regionLabel={t.region({ range: label })}
           nowMinute={nowMinute}
           onOpen={setDetail}
           onSlot={may.create ? (slot) => open({ mode: 'new', slot }) : undefined}
@@ -467,15 +469,15 @@ export function CalendarScreen({
           {/* One row at 320px, the content of a 360px phone inside the shell's 20px gutters: each control
               44px tall and as narrow as its words allow. It wraps, rather than clips, on anything narrower. */}
           <div className="flex flex-wrap items-center gap-1">
-            <Button variant="secondary" className="h-11 px-2" onClick={goToday}>{PROTOTYPE_COPY.today}</Button>
+            <Button variant="secondary" className="h-11 px-2" onClick={goToday}>{t.today}</Button>
             {nav('h-11 w-11')}
             <Select
-              aria-label={OWN_COPY.view}
+              aria-label={t.view}
               value={display}
               onChange={(e) => changeView(e.target.value as CalendarDisplay)}
               className="h-11 px-2 font-semibold"
             >
-              {PHONE_VIEWS.map((v) => <option key={v} value={v}>{VIEW_NAME[v]}</option>)}
+              {PHONE_VIEWS.map((v) => <option key={v} value={v}>{t[v]}</option>)}
             </Select>
             <Button
               variant="secondary"
@@ -484,7 +486,7 @@ export function CalendarScreen({
               onClick={() => setFiltersOpen((now) => !now)}
               className={cn('ml-auto h-11 px-2', filtersOpen && 'border-navy')}
             >
-              {OWN_COPY.filters}
+              {t.filters}
             </Button>
           </div>
           <div className="flex items-center justify-between gap-2">
@@ -495,13 +497,13 @@ export function CalendarScreen({
       ) : (
         <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3.5">
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="secondary" className="h-[34px] px-3.5" onClick={goToday}>{PROTOTYPE_COPY.today}</Button>
+            <Button variant="secondary" className="h-[34px] px-3.5" onClick={goToday}>{t.today}</Button>
             {nav('h-[34px] w-8')}
             {rangeLabel('whitespace-nowrap text-xl')}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2.5">
             {hideSwitch}
-            <div role="group" aria-label={OWN_COPY.view} className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
+            <div role="group" aria-label={t.view} className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
               {(['week', 'month'] as const).map((v) => (
                 <button
                   key={v}
@@ -513,7 +515,7 @@ export function CalendarScreen({
                     display === v ? 'bg-navy text-white' : 'text-muted hover:text-navy',
                   )}
                 >
-                  {VIEW_NAME[v]}
+                  {t[v]}
                 </button>
               ))}
             </div>
@@ -536,11 +538,11 @@ export function CalendarScreen({
         </>
       )}
 
-      {gone && <p role="status" className="mb-3 text-md font-semibold text-navy">{OWN_COPY.gone}</p>}
+      {gone && <p role="status" className="mb-3 text-md font-semibold text-navy">{t.gone}</p>}
       {entryError && <div className="mb-3"><ErrorBanner {...entryError} /></div>}
       {hiding.error && (
         <div className="mb-3">
-          <ErrorBanner code={hiding.error.code} message={OWN_COPY.hideDetailsFailed} requestId={hiding.error.requestId} />
+          <ErrorBanner code={hiding.error.code} message={t.hideDetailsFailed} requestId={hiding.error.requestId} />
         </div>
       )}
 
@@ -566,7 +568,7 @@ export function CalendarScreen({
           // invitation's notice, so the badge reads its count again.
           onAnswered={(answered) => {
             setDetail(null);
-            show(answered.myAnswer === 'declined' ? OWN_COPY.answeredDeclined : OWN_COPY.answeredAccepted);
+            show(answered.myAnswer === 'declined' ? t.answeredDeclined : t.answeredAccepted);
             announceInboxChanged();
             again();
           }}
@@ -647,6 +649,7 @@ function ComparedPane({
   onLost: () => void;
   scroll: ScrollGroup;
 }) {
+  const t = useMessages(calendarMessages);
   const view = viewOf(display);
   const slot = `${person.membershipId}:${view}`;
   const key = `${date}:${touched}`;
@@ -683,15 +686,15 @@ function ComparedPane({
   if (error) {
     return (
       <div className={cn(TILE, 'min-w-0 flex-1 bg-card p-4')}>
-        <ErrorBanner code={error.code} message={OWN_COPY.loadFailed} requestId={error.requestId} />
-        <Button variant="secondary" className="mt-3" onClick={() => setAttempt((a) => a + 1)}>{OWN_COPY.tryAgain}</Button>
+        <ErrorBanner code={error.code} message={t.loadFailed} requestId={error.requestId} />
+        <Button variant="secondary" className="mt-3" onClick={() => setAttempt((a) => a + 1)}>{t.tryAgain}</Button>
       </div>
     );
   }
   // A read of the other kind of period is not drawn as this one: until this one's arrives, the skeleton.
   if (!read || read.view !== view) {
     return (
-      <Skeleton label={OWN_COPY.loading} className={cn(TILE, 'min-w-0 flex-1 bg-card')}>
+      <Skeleton label={t.loading} className={cn(TILE, 'min-w-0 flex-1 bg-card')}>
         {display === 'week' ? <WeekSkeleton /> : display === 'month' ? <MonthSkeleton phone={phone} /> : <AgendaSkeleton />}
       </Skeleton>
     );
@@ -705,8 +708,8 @@ function ComparedPane({
       onClick={() => onBlock(blockNow())}
       className="ml-auto shrink-0 rounded-pill bg-success/10 px-[9px] py-[3px] text-xs font-bold text-success hover:bg-success/15"
     >
-      {PROTOTYPE_COPY.dragToBlock}
-      <span className="sr-only">{OWN_COPY.blockPillSuffix(person.name)}</span>
+      {t.dragToBlock}
+      <span className="sr-only">{t.blockPillSuffix({ name: person.name })}</span>
     </button>
   ) : undefined;
 
@@ -717,7 +720,7 @@ function ComparedPane({
   }
   if (display === 'agenda') {
     return (
-      <AgendaPane className={TILE} read={drawn} head={head} pill={pill} regionLabel={OWN_COPY.comparedRegion(person.name, range)} onOpen={onOpen} />
+      <AgendaPane className={TILE} read={drawn} head={head} pill={pill} regionLabel={t.comparedRegion({ name: person.name, range })} onOpen={onOpen} />
     );
   }
   return (
@@ -726,7 +729,7 @@ function ComparedPane({
       read={drawn}
       head={head}
       pill={pill}
-      regionLabel={OWN_COPY.comparedRegion(person.name, range)}
+      regionLabel={t.comparedRegion({ name: person.name, range })}
       hoursWhenStacked
       nowMinute={read.days.some((d) => d.date === today) ? nowMinute : null}
       onOpen={onOpen}

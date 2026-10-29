@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { forumMessages } from '@/i18n/messages/forum';
 import type { ApiError } from '@/lib/api-client';
 import { landingFor } from '@/lib/landing';
-import { FORUM_COPY } from '@/lib/leader-meetings';
 import { useSession } from '@/lib/session';
 
 /**
@@ -15,8 +16,9 @@ import { useSession } from '@/lib/session';
 
 /** The list's wait: the filter, then three cards. */
 export function ListSkeleton() {
+  const t = useMessages(forumMessages);
   return (
-    <Skeleton label={FORUM_COPY.loadingList}>
+    <Skeleton label={t.loadingList}>
       <SkeletonBar className="mb-[18px] h-4 w-3/4" />
       <div className="mb-[22px] flex w-fit gap-1 rounded-[9px] border border-hairline bg-card p-[3px]">
         {[0, 1, 2].map((i) => <SkeletonBar key={i} className="h-8 w-16" />)}
@@ -38,8 +40,9 @@ export function ListSkeleton() {
 
 /** A meeting's wait: the head, then the tab strip and a panel. */
 export function MeetingSkeleton() {
+  const t = useMessages(forumMessages);
   return (
-    <Skeleton label={FORUM_COPY.loadingMeeting}>
+    <Skeleton label={t.loadingMeeting}>
       <SkeletonBar className="mb-4 w-40" />
       <div className="mb-[18px] rounded-[14px] border border-hairline bg-card px-6 py-5">
         <SkeletonBar className="h-5 w-1/3" />
@@ -60,10 +63,11 @@ export function MeetingSkeleton() {
 
 /** A read that failed: the shared banner, and *Try again*. */
 export function LoadError({ error, onRetry }: { error: ApiError; onRetry: () => void }) {
+  const t = useMessages(forumMessages);
   return (
     <div className="mb-4">
       <ErrorBanner {...error} />
-      <Button variant="secondary" className="mt-3" onClick={onRetry}>Try again</Button>
+      <Button variant="secondary" className="mt-3" onClick={onRetry}>{t.tryAgain}</Button>
     </div>
   );
 }
@@ -75,8 +79,9 @@ export function LoadError({ error, onRetry }: { error: ApiError; onRetry: () => 
  * where the reader lands when they sign in.
  */
 export function NotFound({ via }: { via: 'address' | 'list' | 'link' }) {
+  const t = useMessages(forumMessages);
   const { me } = useSession();
-  const copy = via === 'link' ? FORUM_COPY.linkNotFound : FORUM_COPY.notFound;
+  const copy = via === 'link' ? t.linkNotFound : t.notFound;
   const runsOffice = Boolean(me?.membership?.isKpmOwner || me?.membership?.isKpmAdmin);
   const toList = via === 'address' && runsOffice;
   return (
@@ -87,7 +92,7 @@ export function NotFound({ via }: { via: 'address' | 'list' | 'link' }) {
         href={toList ? '/leader-meetings' : landingFor(me)}
         className="mt-4 inline-flex text-sm font-semibold text-navy-soft underline-offset-2 hover:underline"
       >
-        {toList ? FORUM_COPY.back : FORUM_COPY.home}
+        {toList ? t.back : t.home}
       </Link>
     </Card>
   );

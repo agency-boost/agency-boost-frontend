@@ -5,13 +5,18 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button, Card, ErrorBanner, Field, Textarea, TextInput } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { formatNoticeFull } from '@/lib/format';
+import { formatNoticeFull, OFFICE_TIME_ZONE } from '@/lib/format';
 import {
   readRecruitmentPlaybook, saveRecruitmentPlaybook,
   type PlaybookBody, type PlaybookDto, type PlaybookLimits, type PlaybookRead, type RecruitmentVocabulary,
   type Words,
 } from '@/lib/recruitment-playbook';
 import { useCan } from '@/lib/session';
+import { messagesIn } from '@/i18n/catalogue';
+import { SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { adminTemplatePlaybookMessages } from '@/i18n/messages/admin-template-playbook';
+import { planMessages } from '@/i18n/messages/plan';
 
 /** The API's bounds for this read, for every input below the tab (invariant §7: served, not mirrored). */
 const LimitsContext = createContext<PlaybookLimits | null>(null);
@@ -46,9 +51,6 @@ export interface PlaybookForm {
 const PROFILE_TEXTS = ['label', 'tagline', 'goodFitFor'] as const;
 type ProfileText = (typeof PROFILE_TEXTS)[number];
 const SIDES = ['theySay', 'youSay'] as const;
-
-/** What a field left empty says when *Save playbook* is pressed. */
-const WRITE_THIS = 'Write this before saving.';
 
 /**
  * A stored playbook — or the AgencyBoost words, or nothing — as the form the screen edits.
@@ -173,10 +175,14 @@ function errorSlots(form: PlaybookForm, vocab: RecruitmentVocabulary): Set<strin
  * A path naming something smaller than any slot (`profiles.retiree.openings`) lands on the nearest one
  * that holds it — the card, at worst. What names nothing on the screen — the version, the body as a
  * whole, a sentence with no path — is handed back for the banner, so nothing the server said is lost.
+ *
+ * What the server said is shown as it said it, in the reader's language already (P18.98-T5); a violation with no words
+ * at all says *Refused by the server.* in `language`, the reader's (English when none is passed).
  */
 export function placeViolations(
   details: Record<string, unknown> | undefined,
   slots: Set<string>,
+  language: Language = SOURCE_LANGUAGE,
 ): { placed: Record<string, string>; rest: string[] } {
   const violations = Array.isArray(details?.violations) ? (details.violations as unknown[]) : [];
   const placed: Record<string, string> = {};
@@ -193,7 +199,7 @@ export function placeViolations(
       continue;
     }
     const said = named.message.trim();
-    placed[slot] ??= said ? said[0].toUpperCase() + said.slice(1) : 'Refused by the server.';
+    placed[slot] ??= said ? said[0].toUpperCase() + said.slice(1) : messagesIn(adminTemplatePlaybookMessages, language).refused;
   }
   return { placed, rest };
 }
@@ -238,9 +244,15 @@ function cardOf(slot: string): string {
 /** An id for a slot's control: the path, with its dots made dashes. */
 const idOf = (slot: string) => `playbook-${slot.replace(/\./g, '-')}`;
 
-/** ` by Root on 9 Okt 2026, 14.05`, or without the name for the one a company was given. */
-const savedBy = (dto: PlaybookDto) =>
-  `${dto.updatedBy ? ` by ${dto.updatedBy.name}` : ''} on ${formatNoticeFull(dto.updatedAt)}`;
+/**
+ * Who saved a playbook and when, as its sentences take them (`saved`, `conflictDetail`): the name, or `null` for the
+ * one a company was given, and the moment in the reader's figures — *9 Okt 2026, 14.05*, *9 Oct 2026, 14:05*.
+ */
+const savedBy = (dto: PlaybookDto, figures: Language) => ({
+  version: dto.version,
+  name: dto.updatedBy?.name ?? null,
+  when: formatNoticeFull(dto.updatedAt, OFFICE_TIME_ZONE, figures),
+});
 
 /**
  * The Company template's **Recruitment** tab (P17-T8, OD-88 → 5, ADR-0125): the company's recruitment
@@ -276,6 +288,9 @@ export function RecruitmentPlaybookTab({
   // Reading is `company_template:read`; saving is its own grant (ADR-0125), so a reader who may read
   // the playbook but not write it is offered no *Save* the API would refuse.
   const canSave = useCan('recruitment_playbook:write');
+  const t = useMessages(adminTemplatePlaybookMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const [read, setRead] = useState<PlaybookRead | null>(null);
   const [loadError, setLoadError] = useState<ApiError | null>(null);
   /** The stored playbook the edits are pinned to: `null` while the company has none. */
@@ -322,8 +337,8 @@ export function RecruitmentPlaybookTab({
   if (loadError && read === null) {
     return (
       <EmptyState
-        title={`Could not read this company’s recruitment playbook. ${loadError.message}`}
-        action={<Button onClick={() => void load()}>Try again</Button>}
+        title={t.readFailed({ message: loadError.message })}
+        action={<Button onClick={() => void load()}>{t.tryAgain}</Button>}
       />
     );
   }
@@ -370,7 +385,7 @@ export function RecruitmentPlaybookTab({
     const blank = blankFields(form, vocab);
     if (blank.length > 0) {
       setBanner(null);
-      refuse(Object.fromEntries(blank.map((slot) => [slot, WRITE_THIS])));
+      refuse(Object.fromEntries(blank.map((slot) => [slot, t.writeThis])));
       return;
     }
     setBusy(true);
@@ -386,7 +401,7 @@ export function RecruitmentPlaybookTab({
       if (shown.code === 'VERSION_CONFLICT') {
         await readAgain(shown);
       } else if (shown.code === 'VALIDATION_FAILED') {
-        const { placed, rest } = placeViolations(shown.details, errorSlots(form, vocab));
+        const { placed, rest } = placeViolations(shown.details, errorSlots(form, vocab), language);
         const any = Object.keys(placed).length > 0;
         if (any) refuse(placed);
         if (!any) setBanner(shown);
@@ -414,11 +429,11 @@ export function RecruitmentPlaybookTab({
   if (form === null) {
     return (
       <EmptyState
-        title="This company has no recruitment playbook yet, so its agents’ Attack Plan has nothing to build from."
+        title={t.none}
         action={canSave ? (
           <div className="flex flex-wrap justify-center gap-2">
-            <Button onClick={() => start(read.defaults)}>Start from the AgencyBoost words</Button>
-            <Button variant="secondary" onClick={() => start(null)}>Start from nothing</Button>
+            <Button onClick={() => start(read.defaults)}>{t.startFromDefaults}</Button>
+            <Button variant="secondary" onClick={() => start(null)}>{t.startFromNothing}</Button>
           </div>
         ) : undefined}
       />
@@ -446,53 +461,48 @@ export function RecruitmentPlaybookTab({
       <Card>
         {base ? (
           <p className="text-md text-navy">
-            <strong>This playbook is live.</strong>{' '}
-            <span className="text-muted">Each save reaches every agent of this company on their next plan.</span>
+            <strong>{t.live}</strong>{' '}
+            <span className="text-muted">{t.liveDetail}</span>
           </p>
         ) : (
           <p className="text-md text-navy">
-            <strong>Not saved yet.</strong>{' '}
-            <span className="text-muted">Nothing reaches this company’s agents until you save it.</span>
+            <strong>{t.notSaved}</strong>{' '}
+            <span className="text-muted">{t.notSavedDetail}</span>
           </p>
         )}
         {/* Always in the page, so a save that lands is announced rather than merely redrawn. */}
         <p role="status" className={base ? 'mt-2 text-sm text-muted' : 'sr-only'}>
-          {base ? `Version ${base.version} · saved${savedBy(base)}` : ''}
+          {base ? t.saved(savedBy(base, figures)) : ''}
         </p>
         {canSave && <div className="mt-3 flex flex-wrap items-center gap-3">
           <Button disabled={busy || !dirty} onClick={() => void save()}>
-            {busy ? 'Saving…' : 'Save playbook'}
+            {busy ? t.saving : t.save}
           </Button>
           <Button
             variant="secondary"
             disabled={busy || !dirty}
             onClick={() => reset(base ? toForm(base.body, vocab) : null)}
           >
-            Discard changes
+            {t.discard}
           </Button>
         </div>}
         {/* Gone once every marked field has been changed, so it never points at nothing. */}
         {refused && Object.keys(errors).length > 0 && (
-          <p role="alert" className="mt-2 text-sm font-semibold text-alert">
-            Not saved. Each field marked below needs a fix.
-          </p>
+          <p role="alert" className="mt-2 text-sm font-semibold text-alert">{t.refusedFields}</p>
         )}
       </Card>
 
       {conflict && (
         <div role="alert" className="rounded-md border border-amber bg-card p-4">
           <p className="text-md text-navy">
-            <strong>This playbook was changed somewhere else.</strong>{' '}
-            <span className="text-muted">
-              It is now version {conflict.version}, saved{savedBy(conflict)}. Your edits are still here, and
-              saving them replaces that version.
-            </span>
+            <strong>{t.conflict}</strong>{' '}
+            <span className="text-muted">{t.conflictDetail(savedBy(conflict, figures))}</span>
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="secondary" disabled={busy} onClick={() => reset(toForm(conflict.body, vocab))}>
-              Load version {conflict.version}
+              {t.loadVersion({ version: conflict.version })}
             </Button>
-            <Button disabled={busy} onClick={() => setConflict(null)}>Keep my edits</Button>
+            <Button disabled={busy} onClick={() => setConflict(null)}>{t.keepMine}</Button>
           </div>
         </div>
       )}
@@ -518,7 +528,7 @@ export function RecruitmentPlaybookTab({
                 <p className="mt-0.5 break-words text-md text-navy">{p.label}</p>
                 <p className="break-words text-sm text-muted">{p.tagline}</p>
               </>
-            ) : <p className="mt-0.5 text-sm text-muted">Not written yet.</p>}
+            ) : <p className="mt-0.5 text-sm text-muted">{t.notWritten}</p>}
           >
             <ProfileEditor
               type={type}
@@ -567,16 +577,12 @@ export function RecruitmentPlaybookTab({
 
       <PlaybookCard
         id="playbook-objections"
-        title="Objections"
+        title={t.objections}
         open={open.has('objections')}
         onToggle={() => toggle('objections')}
         disabled={busy}
         error={errors.objections}
-        summary={(
-          <p className="mt-0.5 text-sm text-muted">
-            The answer to each hesitation, for every candidate type without its own.
-          </p>
-        )}
+        summary={<p className="mt-0.5 text-sm text-muted">{t.objectionsSummary}</p>}
       >
         {vocab.hesitations.map(({ code, label }, index) => (
           <WordsFields
@@ -597,13 +603,13 @@ export function RecruitmentPlaybookTab({
 
       <PlaybookCard
         id="playbook-next"
-        title="Next action"
+        title={t.nextAction}
         open={open.has('next')}
         onToggle={() => toggle('next')}
         disabled={busy}
         summary={form.nextAction.trim()
           ? <p className="mt-0.5 break-words text-md text-navy">{form.nextAction}</p>
-          : <p className="mt-0.5 text-sm text-muted">Not written yet.</p>}
+          : <p className="mt-0.5 text-sm text-muted">{t.notWritten}</p>}
       >
         <Textarea
           id={idOf('nextAction')}
@@ -646,6 +652,7 @@ function PlaybookCard({
   error?: string;
   children: React.ReactNode;
 }) {
+  const t = useMessages(adminTemplatePlaybookMessages);
   const headingId = `${id}-heading`;
   const panelId = `${id}-panel`;
   return (
@@ -665,7 +672,7 @@ function PlaybookCard({
           aria-describedby={headingId}
           onClick={onToggle}
         >
-          {open ? 'Close' : 'Edit'}
+          {open ? t.close : t.edit}
         </Button>
       </div>
       {open && (
@@ -693,13 +700,14 @@ function WordsFields({
   /** *Remove*, for a candidate type's own. */
   action?: React.ReactNode;
 }) {
+  const t = useMessages(adminTemplatePlaybookMessages);
   const limits = useLimits();
   return (
     // The legend is the fieldset's first child, or it stops naming the group.
     <fieldset className={className}>
       <legend className="text-sm font-bold text-navy">{legend}</legend>
       {errors[slot] && <p role="alert" className="mt-1 text-xs font-semibold text-alert">{errors[slot]}</p>}
-      <Field label="They say" htmlFor={idOf(`${slot}.theySay`)} error={errors[`${slot}.theySay`]} className="mt-2">
+      <Field label={t.theySay} htmlFor={idOf(`${slot}.theySay`)} error={errors[`${slot}.theySay`]} className="mt-2">
         <Textarea
           id={idOf(`${slot}.theySay`)}
           rows={2}
@@ -710,7 +718,7 @@ function WordsFields({
           onChange={(e) => onChange('theySay', e.target.value)}
         />
       </Field>
-      <Field label="You say" htmlFor={idOf(`${slot}.youSay`)} error={errors[`${slot}.youSay`]} className="mt-2">
+      <Field label={t.youSay} htmlFor={idOf(`${slot}.youSay`)} error={errors[`${slot}.youSay`]} className="mt-2">
         <Textarea
           id={idOf(`${slot}.youSay`)}
           rows={3}
@@ -753,8 +761,11 @@ function ProfileEditor({
   onAddOwn: (hesitation: string) => void;
   onRemoveOwn: (hesitation: string) => void;
 }) {
+  const t = useMessages(adminTemplatePlaybookMessages);
+  const plan = useMessages(planMessages);
   const limits = useLimits();
   const at = (key: string) => `profiles.${type}.${key}`;
+  const hidden = (words: string) => <span className="sr-only">{words}</span>;
   const full = profile.benefits.length >= limits.benefitsMax;
   const fullId = `${idOf(at('benefits'))}-full`;
   const addOwnId = `playbook-${type}-add-own`;
@@ -789,13 +800,13 @@ function ProfileEditor({
   return (
     <>
       <div className="flex flex-wrap gap-3">
-        {text('label', 'Label')}
-        {text('tagline', 'Tagline')}
+        {text('label', t.label)}
+        {text('tagline', t.tagline)}
       </div>
-      <div className="mt-3 flex">{text('goodFitFor', 'Good fit for', 2)}</div>
+      <div className="mt-3 flex">{text('goodFitFor', plan.goodFitFor, 2)}</div>
 
       <fieldset className="mt-4">
-        <legend className="text-sm font-semibold text-navy">Benefits</legend>
+        <legend className="text-sm font-semibold text-navy">{t.benefits}</legend>
         {errors[at('benefits')] && (
           <p role="alert" className="mt-1 text-xs font-semibold text-alert">{errors[at('benefits')]}</p>
         )}
@@ -809,7 +820,7 @@ function ProfileEditor({
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
                   <Textarea
                     id={idOf(slot)}
-                    aria-label={`Benefit ${index + 1}`}
+                    aria-label={t.benefit({ n: index + 1 })}
                     aria-describedby={error ? `${idOf(slot)}-error` : undefined}
                     rows={2}
                     maxLength={limits.textMax}
@@ -826,10 +837,10 @@ function ProfileEditor({
                   variant="inlineDanger"
                   className="mt-2"
                   disabled={disabled || profile.benefits.length <= 1}
-                  title={profile.benefits.length <= 1 ? 'A candidate type lists at least one benefit.' : undefined}
+                  title={profile.benefits.length <= 1 ? t.oneBenefit : undefined}
                   onClick={() => onRemoveBenefit(index)}
                 >
-                  Remove<span className="sr-only"> benefit {index + 1}</span>
+                  {t.removeBenefit({ n: index + 1, hidden })}
                 </Button>
               </li>
             );
@@ -842,17 +853,15 @@ function ProfileEditor({
             aria-describedby={full ? fullId : undefined}
             onClick={onAddBenefit}
           >
-            + Add benefit
+            {t.addBenefit}
           </Button>
           {full && (
-            <p id={fullId} className="m-0 text-xs text-muted">
-              A candidate type lists at most {limits.benefitsMax} benefits.
-            </p>
+            <p id={fullId} className="m-0 text-xs text-muted">{t.mostBenefits({ max: limits.benefitsMax })}</p>
           )}
         </div>
       </fieldset>
 
-      <h3 className="mt-5 font-display text-md font-bold text-navy">Opening lines</h3>
+      <h3 className="mt-5 font-display text-md font-bold text-navy">{plan.openingLines}</h3>
       {vocab.motivations.map(({ code, label }) => {
         const slot = at(`openings.${code}`);
         return (
@@ -870,8 +879,8 @@ function ProfileEditor({
         );
       })}
 
-      <h3 className="mt-5 font-display text-md font-bold text-navy">Its own objections</h3>
-      <p className="text-sm text-muted">Said instead of the answer under Objections, for this candidate type only.</p>
+      <h3 className="mt-5 font-display text-md font-bold text-navy">{t.ownObjections}</h3>
+      <p className="text-sm text-muted">{t.ownObjectionsHint}</p>
       {ownCodes.map(({ code, label }) => (
         <WordsFields
           key={code}
@@ -884,14 +893,14 @@ function ProfileEditor({
           onChange={(side, value) => onOwn(code, side, value)}
           action={(
             <Button variant="inlineDanger" disabled={disabled} onClick={() => onRemoveOwn(code)}>
-              Remove<span className="sr-only"> its own objection for {label}</span>
+              {t.removeOwn({ label, hidden })}
             </Button>
           )}
         />
       ))}
       {notOwn.length > 0 && (
         <div className="mt-3">
-          <p id={addOwnId} className="text-sm font-semibold text-navy">Add its own objection for</p>
+          <p id={addOwnId} className="text-sm font-semibold text-navy">{t.addOwnFor}</p>
           <div role="group" aria-labelledby={addOwnId} className="mt-1 flex flex-wrap gap-x-4 gap-y-2">
             {notOwn.map(({ code, label }) => (
               <Button key={code} variant="inline" disabled={disabled} onClick={() => onAddOwn(code)}>

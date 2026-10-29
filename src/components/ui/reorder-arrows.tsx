@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useMessages } from '@/i18n/language-provider';
+import { uiMessages } from '@/i18n/messages/ui';
 import { Button } from './field';
 
 /**
@@ -35,6 +37,7 @@ export function ReorderArrows({
   /** A write is out: both say so and do nothing. */
   disabled?: boolean;
 }) {
+  const t = useMessages(uiMessages);
   const up = useRef<HTMLButtonElement>(null);
   const down = useRef<HTMLButtonElement>(null);
   const pressed = useRef<'up' | 'down' | null>(null);
@@ -60,7 +63,7 @@ export function ReorderArrows({
       <Button
         ref={up}
         variant="icon"
-        aria-label={`Move ${label} up`}
+        aria-label={t.moveUp({ label })}
         aria-disabled={disabled || top || undefined}
         className={ends}
         onClick={() => move(-1)}
@@ -70,7 +73,7 @@ export function ReorderArrows({
       <Button
         ref={down}
         variant="icon"
-        aria-label={`Move ${label} down`}
+        aria-label={t.moveDown({ label })}
         aria-disabled={disabled || bottom || undefined}
         className={ends}
         onClick={() => move(1)}

@@ -3,7 +3,9 @@
 import type { ReactNode } from 'react';
 import { Page } from '@/components/page';
 import { RouteTabs } from '@/components/ui/route-tabs';
-import { ATTACK_PLAN_HREF, OWN_COPY, PITCH_MATERIALS_HREF, PROTOTYPE_COPY } from '@/lib/recruitment';
+import { useMessages } from '@/i18n/language-provider';
+import { recruitmentPlanMessages } from '@/i18n/messages/recruitment-plan';
+import { ATTACK_PLAN_HREF, PITCH_MATERIALS_HREF } from '@/lib/recruitment';
 
 /**
  * **Recruitment** (`/recruitment/*`; `AgencyBoost_Recruitment_Section.html:276-286`; P17-T3 AC-2): the
@@ -17,14 +19,15 @@ import { ATTACK_PLAN_HREF, OWN_COPY, PITCH_MATERIALS_HREF, PROTOTYPE_COPY } from
  * view (ADR-0114). The API answers the reader's own company and office whatever this decides.
  */
 export default function RecruitmentLayout({ children }: { children: ReactNode }) {
+  const t = useMessages(recruitmentPlanMessages);
   return (
     // The sub-line is not drawn on a phone: the client's *Remove* (P18.95-T7 AC-1, grey text row 8).
-    <Page title={PROTOTYPE_COPY.title} subtitle={PROTOTYPE_COPY.subtitle} subtitleOnPhone={false} permission="recruitment:read">
+    <Page title={t.title} subtitle={t.subtitle} subtitleOnPhone={false} permission="recruitment:read">
       <RouteTabs
-        label={OWN_COPY.tabs}
+        label={t.tabs}
         tabs={[
-          { href: ATTACK_PLAN_HREF, label: PROTOTYPE_COPY.tabAttackPlan },
-          { href: PITCH_MATERIALS_HREF, label: PROTOTYPE_COPY.tabPitchMaterials },
+          { href: ATTACK_PLAN_HREF, label: t.tabAttackPlan },
+          { href: PITCH_MATERIALS_HREF, label: t.tabPitchMaterials },
         ]}
       />
       {children}

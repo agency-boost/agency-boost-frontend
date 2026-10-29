@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react';
 import { Cell, DataTable, Row, type Column } from '@/components/ui/data-table';
+import { LoadingWords } from '@/components/ui/loading-words';
 import { cn } from '@/lib/cn';
 
 /**
@@ -18,20 +20,30 @@ import { cn } from '@/lib/cn';
  * assert it (`app/page.spec.tsx`, `admin/page.spec.tsx`, `require-session.spec.tsx`), and
  * a person using a screen reader gets no other signal that a wait began.
  *
- * Not a client component, so `loading.tsx` can render it directly.
+ * Not a client component, so `loading.tsx` can render it directly. **Its label is the caller's, in the caller's
+ * language; with none it says *Loading…* in the reader's** (P18.98-T4, the shared pieces), through `LoadingWords`, a
+ * client component of its own.
  */
 export function Skeleton({
-  label = 'Loading…',
+  label,
   className,
+  sessionWait = false,
   children,
 }: {
-  label?: string;
+  label?: ReactNode;
   className?: string;
+  /**
+   * **The whole page, while the session is read** (P18.98-T2): what a signed-in route is before it hydrates — every
+   * one is prerendered so. It carries `data-session-wait`, which tells `globals.css` that the page has no word to paint
+   * in the wrong language yet, so a reader whose language is not the one the pages are prerendered in is not held back
+   * for it (`data-lang-pending`): the shell arrives with the session, already in theirs.
+   */
+  sessionWait?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div role="status" className={className}>
-      <span className="sr-only">{label}</span>
+    <div role="status" className={className} data-session-wait={sessionWait ? '' : undefined}>
+      <span className="sr-only">{label ?? <LoadingWords />}</span>
       <div aria-hidden="true">{children}</div>
     </div>
   );
@@ -94,7 +106,7 @@ export function SkeletonTable({
   className?: string;
 }) {
   return (
-    <Skeleton label={`Loading ${caption.toLowerCase()}…`} className={className}>
+    <Skeleton label={<LoadingWords caption={caption} />} className={className}>
       <DataTable caption={caption} columns={columns}>
         {Array.from({ length: rows }, (_, r) => (
           <Row key={r}>
@@ -116,7 +128,7 @@ export function SkeletonTable({
  */
 export function SkeletonCards({
   count = 3,
-  label = 'Loading…',
+  label,
   className,
 }: {
   count?: number;
@@ -144,11 +156,11 @@ export function SkeletonCards({
  */
 export function SkeletonPeople({
   count = 3,
-  label = 'Loading people…',
+  label = <LoadingWords kind="people" />,
   className,
 }: {
   count?: number;
-  label?: string;
+  label?: ReactNode;
   className?: string;
 }) {
   return (
@@ -177,11 +189,11 @@ const TREE_INDENT = ['', 'ml-5', 'ml-10', 'ml-5', 'ml-10', 'ml-[3.75rem]'];
 
 export function SkeletonTree({
   rows = 6,
-  label = 'Loading the tree…',
+  label = <LoadingWords kind="tree" />,
   className,
 }: {
   rows?: number;
-  label?: string;
+  label?: ReactNode;
   className?: string;
 }) {
   return (
@@ -207,9 +219,9 @@ export function SkeletonTree({
  * Stage 2. A loading boundary that blanked the sidebar too would be worse than the
  * previous-page-frozen behaviour it replaces.
  */
-export function PageSkeleton({ label = 'Loading…' }: { label?: string }) {
+export function PageSkeleton({ label, sessionWait = false }: { label?: string; sessionWait?: boolean }) {
   return (
-    <Skeleton label={label} className="px-5 py-6">
+    <Skeleton label={label} className="px-5 py-6" sessionWait={sessionWait}>
       <SkeletonBar className="h-6 w-56" />
       <SkeletonBar className="mt-2 h-3 w-80" />
       <div className="mt-8 rounded-lg border border-hairline bg-card p-4">

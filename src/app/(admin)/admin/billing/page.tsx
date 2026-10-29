@@ -2,15 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { PageLanguageSwitch, usePageLanguageSwitch } from '@/components/app-shell';
 import { Page } from '@/components/page';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { billingMessages } from '@/i18n/messages/billing';
 import {
-  BILLING_COPY as COPY, BILLING_OWN_COPY as OWN, defaultDates, officeToday, priceQuote, readBillingPrices,
+  defaultDates, maskAmount, officeToday, priceQuote, readBillingPrices,
   type BillingPrices, type CalculatorInput, type QuoteDetails,
 } from '@/lib/billing';
-import { formatCalendarDay } from '@/lib/format';
 import { printAs, restorePrintTitle } from '@/lib/print';
 import { Estimate, TierCards } from './editor';
 import { QuoteDialog } from './quote-dialog';
@@ -34,13 +36,26 @@ export default function BillingPage() {
   );
 }
 
-/** The page's title and launch line (`:229-232`), on the screen and on the paper, as the prototype prints them. */
+/**
+ * The page's title and launch line (`:229-232`), on the screen and on the paper, as the prototype prints them. On the
+ * screen, once the language switch is live, the switch at its top right as every page header has it (P18.98-T2 AC-3);
+ * never on the paper, which is outside the shell.
+ */
 function Heading() {
-  return (
-    <div className="mb-[18px]">
+  const COPY = useMessages(billingMessages).prototype;
+  const withLanguage = usePageLanguageSwitch();
+  const words = (
+    <>
       <h1 className="font-display text-3xl font-bold text-navy">{COPY.title}</h1>
       {/* Copy only: no date in code reads the cut-off (ADR-0111 §6). Amber-ink, where the prototype's 12.5px amber-dark is about 3:1. */}
       <p className="mt-1.5 text-sm font-semibold text-amber-ink">{COPY.launch}</p>
+    </>
+  );
+  if (!withLanguage) return <div className="mb-[18px]">{words}</div>;
+  return (
+    <div className="mb-[18px] flex flex-wrap items-start justify-between gap-4">
+      <div>{words}</div>
+      <PageLanguageSwitch />
     </div>
   );
 }
@@ -49,6 +64,7 @@ const INITIAL: CalculatorInput = { leaders: '8', period: 'sixMonth', discountTyp
 const NO_NAMES = { kpm: '', pic: '', sales: '' };
 
 function Billing() {
+  const OWN = useMessages(billingMessages).own;
   const [prices, setPrices] = useState<BillingPrices | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -94,8 +110,19 @@ function Billing() {
 }
 
 function QuoteTool({ prices }: { prices: BillingPrices }) {
+  const { prototype: COPY, own: OWN } = useMessages(billingMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   const [input, setInput] = useState<CalculatorInput>(INITIAL);
-  const pricing = useMemo(() => priceQuote(prices, input), [prices, input]);
+  const pricing = useMemo(() => priceQuote(prices, input, figures, language), [prices, input, figures, language]);
+
+  /*
+   * An amount is grouped as it is typed, in the figures' marks: when the reader switches language, what was typed is
+   * grouped again in the new marks, so *25.000* reads *25,000* and is still the amount, never a refused one.
+   */
+  useEffect(() => {
+    setInput((i) => (i.discountType === 'flat' ? { ...i, discount: maskAmount(i.discount, figures) } : i));
+  }, [figures]);
 
   const [discountOpen, setDiscountOpen] = useState(false);
   const [focusDiscount, setFocusDiscount] = useState(0);
@@ -122,7 +149,7 @@ function QuoteTool({ prices }: { prices: BillingPrices }) {
   };
 
   const generate = (details: QuoteDetails) => {
-    setQuote({ pricing, details, generatedOn: formatCalendarDay(officeToday()) });
+    setQuote({ pricing, details, generatedOn: officeToday() });
     setDialog(null);
   };
 
@@ -138,8 +165,8 @@ function QuoteTool({ prices }: { prices: BillingPrices }) {
 
   // Printed once the print view is on the page, and taken off it once the window closes.
   useEffect(() => {
-    if (printing && quote) printAs(OWN.printTitle(quote.details.kpm.trim()), () => setPrinting(false));
-  }, [printing, quote]);
+    if (printing && quote) printAs(OWN.printTitle({ kpm: quote.details.kpm.trim() }), () => setPrinting(false));
+  }, [printing, quote, OWN]);
   // Leaving the page puts the title back, for a browser whose `afterprint` never came.
   useEffect(() => restorePrintTitle, []);
 

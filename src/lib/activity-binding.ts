@@ -1,3 +1,4 @@
+import { kept } from '@/i18n/kept';
 import { api } from './api-client';
 
 /**
@@ -10,11 +11,14 @@ import { api } from './api-client';
 export const BINDING_ROLES = ['leads', 'appointments', 'closings'] as const;
 export type BindingRole = (typeof BINDING_ROLES)[number];
 
-/** The cascade's words (ADR-0160 §4) — the same three stages `/goals` and the Summary name. */
+/**
+ * The cascade's words (ADR-0160 §4) — the same three stages `/goals` and the Summary name: the client's own, and kept
+ * English in both languages (the approved glossary's §A.6; P18.98-T4).
+ */
 export const BINDING_ROLE_LABEL: Record<BindingRole, string> = {
-  leads: 'Set appointment',
-  appointments: 'Sales meeting',
-  closings: 'Submission polis',
+  leads: kept('Set appointment'),
+  appointments: kept('Sales meeting'),
+  closings: kept('Submission polis'),
 };
 
 export interface ActivityBinding {

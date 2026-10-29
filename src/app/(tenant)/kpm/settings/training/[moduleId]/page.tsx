@@ -12,6 +12,9 @@ import {
   Button, Card, CodeField, Field, Select, TextInput,
 } from '@/components/ui/field';
 import { SkeletonCards } from '@/components/ui/skeleton';
+import { useMessages } from '@/i18n/language-provider';
+import { settingsMessages } from '@/i18n/messages/settings';
+import { trainingSettingsMessages } from '@/i18n/messages/training-settings';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { useCan } from '@/lib/session';
 import {
@@ -20,6 +23,9 @@ import {
 import { flattenTraining } from '@/lib/training-view';
 
 const BACK = '/kpm/settings/training#modules';
+
+/** A value with nothing to show: a mark, not a word. */
+const NONE = '—';
 
 interface Form {
   title: string;
@@ -69,6 +75,8 @@ export default function TrainingModulePage({
   params: Promise<{ moduleId: string }>;
 }) {
   const { moduleId } = use(params);
+  const t = useMessages(trainingSettingsMessages);
+  const s = useMessages(settingsMessages);
   const canWrite = useCan('tenant_config:write');
   const [tree, setTree] = useState<TrainingCategoryRow[] | null>(null);
   const [form, setForm] = useState<Form | null>(null);
@@ -91,7 +99,7 @@ export default function TrainingModulePage({
 
   const found = tree ? find(tree, moduleId) : null;
 
-  const title = found?.current.title ?? 'Training module';
+  const title = found?.current.title ?? t.module.fallbackTitle;
   const where = found?.category && found.skill
     ? `${found.category.label} › ${found.skill.label}`
     : undefined;
@@ -105,8 +113,8 @@ export default function TrainingModulePage({
       return (
         <Card>
           <EmptyState
-            title="This module is not in your office's training catalog."
-            action={<Link href={BACK} className="text-md font-semibold text-navy underline">Back to Training</Link>}
+            title={t.module.notInCatalog}
+            action={<Link href={BACK} className="text-md font-semibold text-navy underline">{t.module.back}</Link>}
           />
         </Card>
       );
@@ -149,30 +157,30 @@ export default function TrainingModulePage({
           <Card>
             {archived && (
               <p className="mb-3 text-md text-navy">
-                <strong>This module is archived.</strong>{' '}
+                <strong>{t.module.archived}</strong>{' '}
                 <span className="text-muted">
-                  No agent is offered it. Bring it back from{' '}
-                  <Link href={BACK} className="font-semibold text-navy underline">Training</Link>
-                  {' '}— on Modules, with Show archived on.
+                  {t.module.archivedLine({
+                    link: (label) => <Link href={BACK} className="font-semibold text-navy underline">{label}</Link>,
+                  })}
                 </span>
               </p>
             )}
             <dl className="grid gap-3 sm:grid-cols-2">
               {([
-                ['Title', current.title],
-                ['Skill', found.skill?.label ?? current.skillCode],
-                ['Category', found.category?.label ?? '—'],
+                [t.moduleTitle, current.title],
+                [t.skill, found.skill?.label ?? current.skillCode],
+                [t.category, found.category?.label ?? NONE],
                 /*
                  * A capsule, as `.cfg-badge` has it. Plain text in a `<dl>` read as a caption
                  * rather than as the state it names — and the same word was a badge one screen
                  * away, on the list this page is opened from.
                  */
-                ['Publish state', (
+                [t.module.publishState, (
                   <ConfigBadge key="state" tone={current.publishState === 'published' ? 'won' : 'open'}>
-                    {current.publishState === 'published' ? 'Published' : 'Draft'}
+                    {current.publishState === 'published' ? t.published : t.module.draft}
                   </ConfigBadge>
                 )],
-                ['Code', current.code],
+                [s.code, current.code],
               ] as [string, React.ReactNode][]).map(([term, value]) => (
                 <div key={term}>
                   <dt className="text-sm font-semibold text-muted">{term}</dt>
@@ -184,7 +192,7 @@ export default function TrainingModulePage({
         ) : (
           <Card>
             <div className="flex flex-col gap-3">
-              <Field label="Title" htmlFor="module-title">
+              <Field label={t.moduleTitle} htmlFor="module-title">
                 <TextInput
                   id="module-title"
                   value={form.title}
@@ -192,7 +200,7 @@ export default function TrainingModulePage({
                 />
               </Field>
               <div className="flex flex-wrap items-start gap-3">
-                <Field label="Category" htmlFor="module-category" className="min-w-48 flex-1">
+                <Field label={t.category} htmlFor="module-category" className="min-w-48 flex-1">
                   <Select
                     id="module-category"
                     value={form.categoryCode}
@@ -213,9 +221,9 @@ export default function TrainingModulePage({
                   </Select>
                 </Field>
                 <Field
-                  label="Skill"
+                  label={t.skill}
                   htmlFor="module-skill"
-                  hint={skills.length === 0 ? 'This category has no skills yet. Add one on Training first.' : undefined}
+                  hint={skills.length === 0 ? t.module.noSkillsHint : undefined}
                   className="min-w-48 flex-1"
                 >
                   {/* The chosen category's skills — the prototype offers Sales's whatever (F-13). */}
@@ -224,7 +232,7 @@ export default function TrainingModulePage({
                     value={form.skillCode}
                     onChange={(e) => { setSaved(false); setForm({ ...form, skillCode: e.target.value }); }}
                   >
-                    {skills.length === 0 && <option value="">No skills</option>}
+                    {skills.length === 0 && <option value="">{t.module.noSkills}</option>}
                     {skills.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
                   </Select>
                 </Field>
@@ -232,7 +240,7 @@ export default function TrainingModulePage({
               <CodeField
                 id={`code-current-code-${current.code}`}
                 value={current.code}
-                reason="Permanent. Whatever refers to this module refers to its code, so the title can change and nothing loses track of it."
+                reason={t.module.codeReason}
               />
               <div className="flex flex-wrap items-center gap-3 border-t border-hairline pt-3">
                 {/* The prototype's toggle. Its name stays *Published* while its state changes —
@@ -246,19 +254,17 @@ export default function TrainingModulePage({
                   aria-describedby="module-published-hint"
                   onChange={(e) => { setSaved(false); setForm({ ...form, published: e.target.checked }); }}
                 />
-                <label htmlFor="module-published" className="text-md font-semibold text-navy">Published</label>
+                <label htmlFor="module-published" className="text-md font-semibold text-navy">{t.published}</label>
                 <span id="module-published-hint" className="text-sm text-muted">
-                  {form.published
-                    ? 'Agents are offered it once your office next publishes its changes.'
-                    : 'A draft. No agent is offered it.'}
+                  {form.published ? t.module.offeredOnPublish : t.module.aDraft}
                 </span>
                 <Button className="ml-auto" disabled={!ready || busy} onClick={() => void save()}>
-                  {busy ? 'Saving…' : 'Save changes'}
+                  {busy ? s.saving : s.staged.saveChanges}
                 </Button>
               </div>
               {saved && (
                 <p role="status" className="text-md font-semibold text-success">
-                  Saved to your office.
+                  {t.module.savedToOffice}
                 </p>
               )}
             </div>
@@ -283,7 +289,7 @@ export default function TrainingModulePage({
       title={title}
       subtitle={where}
       permission="training_settings:read"
-      actions={<Link href={BACK} className="text-md font-semibold text-navy underline">Back to Training</Link>}
+      actions={<Link href={BACK} className="text-md font-semibold text-navy underline">{t.module.back}</Link>}
       error={error}
       bars={<PublishBar refreshKey={published} />}
     >

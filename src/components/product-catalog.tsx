@@ -6,11 +6,13 @@ import { Button, ErrorBanner, TextInput } from '@/components/ui/field';
 import { TAB_PHONE, TAB_ROW_PHONE } from '@/components/ui/phone';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { useTabRow } from '@/components/ui/use-tab-row';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { productCatalogMessages } from '@/i18n/messages/product-catalog';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
 import {
-  CATEGORY_TABS, CHANNEL_LABELS, catalogHref, drawerHref, filtersFrom, matchesSearch, OWN_COPY, productCount,
-  PROTOTYPE_COPY, readCatalog, type CatalogCard, type CatalogFilters, type ProductChannel,
+  CATEGORY_TABS, catalogHref, drawerHref, filtersFrom, matchesSearch, productCount, readCatalog,
+  type CatalogCard, type CatalogFilters, type ProductChannel,
 } from '@/lib/product-catalog';
 
 /** What the drawer beneath the grid needs from it: how to close, and where the focus goes back to. */
@@ -41,10 +43,11 @@ const CHANNEL_TAG: Record<ProductChannel, string> = {
  * A `<span>`, never a `<div>`: it sits inside the card's `<button>`, whose content is phrasing content only.
  */
 export function ProductTags({ channel, runOff }: { channel: ProductChannel; runOff: boolean }) {
+  const t = useMessages(productCatalogMessages);
   return (
     <span className="flex flex-wrap gap-1.5">
-      <span className={cn(TAG, CHANNEL_TAG[channel])}>{CHANNEL_LABELS[channel]}</span>
-      {runOff && <span className={cn(TAG, 'bg-alert/[0.08] text-alert')}>{PROTOTYPE_COPY.runOff}</span>}
+      <span className={cn(TAG, CHANNEL_TAG[channel])}>{t.channel[channel]}</span>
+      {runOff && <span className={cn(TAG, 'bg-alert/[0.08] text-alert')}>{t.runOff}</span>}
     </span>
   );
 }
@@ -70,8 +73,13 @@ export function ProductTags({ channel, runOff }: { channel: ProductChannel; runO
  * with the category and the channel, and is held by the grid rather than the address: it stays while a drawer
  * opens and closes over it, as the grid's scroll does. **On a phone the category pills are one row that scrolls
  * sideways** (UI-015: three lines), fading on the side that has more, the chosen one in view (`use-tab-row.ts`).
+ *
+ * **Its words are the catalogue's** (P18.98-T4; ADR-0179 §4), `messages/product-catalog.ts`, in the reader's language:
+ * the categories stay English as §A.3's tabs, the channels and the states are Indonesian in ID mode, and a product's
+ * name and tagline are the company's or the office's, shown as typed (ADR-0179 §5).
  */
 export function ProductCatalog({ children }: { children?: ReactNode }) {
+  const t = useMessages(productCatalogMessages);
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -121,8 +129,8 @@ export function ProductCatalog({ children }: { children?: ReactNode }) {
         <div className="mb-3.5">
           <TextInput
             type="search"
-            aria-label={OWN_COPY.searchName}
-            placeholder={OWN_COPY.searchPlaceholder}
+            aria-label={t.searchName}
+            placeholder={t.searchPlaceholder}
             className="w-full max-w-sm"
             value={term}
             onChange={(e) => setTerm(e.target.value)}
@@ -132,7 +140,7 @@ export function ProductCatalog({ children }: { children?: ReactNode }) {
         {error && (
           <div>
             <ErrorBanner {...error} />
-            <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{OWN_COPY.tryAgain}</Button>
+            <Button variant="secondary" className="mt-3" onClick={() => setAttempt((n) => n + 1)}>{t.tryAgain}</Button>
           </div>
         )}
         {!products && !error && <CatalogSkeleton />}
@@ -145,6 +153,7 @@ export function ProductCatalog({ children }: { children?: ReactNode }) {
 }
 
 function FilterBar({ filters, onChange }: { filters: CatalogFilters; onChange: (next: Partial<CatalogFilters>) => void }) {
+  const t = useMessages(productCatalogMessages);
   const tab = (on: boolean) => cn(
     'rounded-md border px-3.5 py-2 text-base font-semibold',
     on ? 'border-navy bg-navy text-white' : 'border-hairline bg-card text-muted hover:text-navy',
@@ -154,7 +163,7 @@ function FilterBar({ filters, onChange }: { filters: CatalogFilters; onChange: (
     on ? 'bg-navy text-white' : 'text-muted hover:text-navy',
   );
   const channels: ['all' | ProductChannel, string][] = [
-    ['all', PROTOTYPE_COPY.all], ['conventional', CHANNEL_LABELS.conventional], ['syariah', CHANNEL_LABELS.syariah],
+    ['all', t.all], ['conventional', t.channel.conventional], ['syariah', t.channel.syariah],
   ];
   // On a phone the pills are one row that scrolls inside its own box (P18.95-T6 AC-4), the chosen one in view.
   const row = useTabRow<HTMLDivElement>(filters.category);
@@ -163,11 +172,11 @@ function FilterBar({ filters, onChange }: { filters: CatalogFilters; onChange: (
       <div
         ref={row.ref}
         role="group"
-        aria-label={OWN_COPY.categories}
+        aria-label={t.categories}
         data-fade={row.fade}
         className={cn('flex flex-wrap gap-1.5', TAB_ROW_PHONE, 'max-md:w-full max-md:min-w-0')}
       >
-        {[{ value: 'all', label: PROTOTYPE_COPY.allProducts }, ...CATEGORY_TABS].map((c) => (
+        {[{ value: 'all', label: t.allProducts }, ...CATEGORY_TABS].map((c) => (
           <button
             key={c.value}
             type="button"
@@ -179,7 +188,7 @@ function FilterBar({ filters, onChange }: { filters: CatalogFilters; onChange: (
           </button>
         ))}
       </div>
-      <div role="group" aria-label={OWN_COPY.channels} className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
+      <div role="group" aria-label={t.channels} className="inline-flex rounded-[9px] border border-hairline bg-card p-[3px]">
         {channels.map(([value, label]) => (
           <button
             key={value}
@@ -207,6 +216,8 @@ function Shelf({ products, filters, term, onOpen }: {
   term: string;
   onOpen: (code: string) => void;
 }) {
+  const t = useMessages(productCatalogMessages);
+  const language = useLanguage();
   const sections = CATEGORY_TABS
     .filter((c) => filters.category === 'all' || c.value === filters.category)
     .map((c) => ({
@@ -221,7 +232,7 @@ function Shelf({ products, filters, term, onOpen }: {
     return (
       // A status, so a search that empties the shelf is heard as it happens (WCAG 4.1.3), not only seen.
       <p role="status" className="text-md text-muted" data-state="no-match">
-        {term.trim() ? OWN_COPY.noSearchMatch(term) : PROTOTYPE_COPY.noFilterMatch}
+        {term.trim() ? t.noSearchMatch({ term: term.trim() }) : t.noFilterMatch}
       </p>
     );
   }
@@ -232,7 +243,7 @@ function Shelf({ products, filters, term, onOpen }: {
         <section key={section.value} className="mb-[30px]" aria-labelledby={`cat-${section.value}`}>
           <div className="mb-3.5 flex items-baseline gap-2.5 border-b border-hairline pb-2">
             <h2 id={`cat-${section.value}`} className="m-0 text-xl font-bold text-navy">{section.label}</h2>
-            <span className="text-base text-muted">{productCount(section.items.length)}</span>
+            <span className="text-base text-muted">{productCount(section.items.length, language)}</span>
           </div>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,260px),1fr))] gap-3.5">
             {section.items.map((p) => (
@@ -251,7 +262,7 @@ function Shelf({ products, filters, term, onOpen }: {
                 <ProductTags channel={p.channel} runOff={p.lifecycle === 'closed_to_new_business'} />
                 <span className="m-0 text-lg font-bold text-navy">{p.name}</span>
                 <span className="m-0 text-base leading-snug text-muted">{p.tagline}</span>
-                <span className="mt-auto pt-1 text-base font-semibold text-amber-ink">{PROTOTYPE_COPY.viewDetail}</span>
+                <span className="mt-auto pt-1 text-base font-semibold text-amber-ink">{t.viewDetail}</span>
               </button>
             ))}
           </div>
@@ -267,18 +278,20 @@ function Shelf({ products, filters, term, onOpen }: {
  * the same two lines in its brief's place.
  */
 export function EmptyShelf() {
+  const t = useMessages(productCatalogMessages);
   return (
     <div className="rounded-lg border border-hairline bg-card px-6 py-[22px]" data-state="empty-shelf">
-      <p className="m-0 text-md font-semibold text-navy">{OWN_COPY.emptyShelf}</p>
-      <p className="m-0 mt-1 text-base text-muted">{OWN_COPY.emptyShelfHint}</p>
+      <p className="m-0 text-md font-semibold text-navy">{t.emptyShelf}</p>
+      <p className="m-0 mt-1 text-base text-muted">{t.emptyShelfHint}</p>
     </div>
   );
 }
 
 /** Two sections of cards, shaped like the shelf that is coming. */
 export function CatalogSkeleton() {
+  const t = useMessages(productCatalogMessages);
   return (
-    <Skeleton label={OWN_COPY.loadingShelf}>
+    <Skeleton label={t.loadingShelf}>
       {[0, 1].map((s) => (
         <div key={s} className="mb-[30px]">
           <SkeletonBar className="mb-3.5 h-5 w-32" />

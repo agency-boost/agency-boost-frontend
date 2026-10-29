@@ -1,4 +1,5 @@
 import { RouteTabs } from '@/components/ui/route-tabs';
+import { kept } from '@/i18n/kept';
 
 /**
  * Activity management's three sub-tabs (`Overall.html:2712-2716`).
@@ -19,17 +20,20 @@ import { RouteTabs } from '@/components/ui/route-tabs';
  * UI review, UI-027 — *menu labels = page titles*). The prototype titled each tab's page after the tab — *Log
  * Activity*, *Activity Dashboard*, *Activity Ratios* (`PANEL_META`) — under a nav item reading *Activity
  * management*, so the menu said one thing and the page another. The tabs below still name each view.
+ *
+ * **Every word here is kept English in both languages** (P18.98-T4; the glossary's §A.1 to §A.3): the title, the nav
+ * item that names the strip, and the three tabs.
  */
-export const ACTIVITY_TITLE = 'Activity Management';
+export const ACTIVITY_TITLE = kept('Activity Management');
 
 export function ActivityTabs() {
   return (
     <RouteTabs
-      label="Activity management"
+      label={kept('Activity management')}
       tabs={[
-        { href: '/activity/log', label: 'Log Activity' },
-        { href: '/activity/dashboard', label: 'Dashboard' },
-        { href: '/activity/ratio', label: 'Ratio' },
+        { href: '/activity/log', label: kept('Log Activity') },
+        { href: '/activity/dashboard', label: kept('Dashboard') },
+        { href: '/activity/ratio', label: kept('Ratio') },
       ]}
     />
   );

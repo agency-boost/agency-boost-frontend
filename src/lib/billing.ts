@@ -1,3 +1,7 @@
+import { messagesIn } from '@/i18n/catalogue';
+import { DEFAULT_LANGUAGE, SOURCE_LANGUAGE, type Language } from '@/i18n/language';
+import { billingMessages } from '@/i18n/messages/billing';
+import { officeSubscriptionMessages } from '@/i18n/messages/office-subscription';
 import { api } from './api-client';
 import { dayInZone, formatCalendarDay, formatPercent, OFFICE_TIME_ZONE } from './format';
 import { formatRupiah, groupDigits, MINOR_UNITS_PER_MAJOR } from './goals';
@@ -78,100 +82,20 @@ export interface Pricing {
 
 /*
  * ── Words ────────────────────────────────────────────────────────────────────────────────────────
+ *
+ * The catalogue's (`i18n/messages/billing.tsx`, P18.98-T6). The two objects below are its English, the source, in the
+ * shapes the specs read; a screen reads its reader's with `useMessages(billingMessages)`, and every function here that
+ * writes words takes the words' language last, after the figures', English and Indonesian figures when given neither.
  */
 
 /** **The prototype's own strings, verbatim** (`AgencyBoost_Billing_Subscription.html`; ADR-0062). */
-export const BILLING_COPY = {
-  title: 'Billing & subscription',
-  launch: 'Launch pricing — locked in for signups before Mar 2027.',
-  leadersSuffix: ' leaders',
-  perLeaderMonth: ' /leader/mo',
-  perMonth: '/mo',
-  customPricing: "Custom pricing based on your unit's structure.",
-  talkToUs: 'Talk to us',
-  yourTier: 'Your tier',
-  estimate: 'Estimate your price',
-  leaderCount: 'Number of leaders',
-  billingPeriod: 'Billing period',
-  sixMonth: '6-month',
-  annual: 'Annual',
-  standardRow: 'Standard price / leader / mo',
-  offerRow: 'Offering price / leader / mo',
-  offerAfterRow: 'Offering price after discount / leader / mo',
-  monthlyRow: 'Monthly total (all leaders)',
-  sixMonthTotal: '6-month total (all leaders)',
-  annualTotal: 'Annual total (all leaders)',
-  discountsApplied: 'Discounts applied',
-  annualDiscount: 'Annual discount',
-  annualDiscountOn: 'Annual discount (extra 5% off 6-month rate)',
-  manualOverride: 'Manual override',
-  arbitraryDiscount: 'Arbitrary discount (internal, per leader)',
-  percentOption: '%',
-  flatOption: 'Rp/leader',
-  confirmPlan: 'Confirm plan',
-  sendCustomQuote: 'Send custom quote',
-  sendQuote: 'Send quote',
-  finePrint: 'Prices shown in IDR, per leader. Agents under each leader are included at no extra cost.',
-  // The dialog (`:374-415`).
-  dialogLine: 'Fill in the client details to generate a quote page you can send.',
-  kpmName: 'Name of KPM',
-  kpmPlaceholder: 'e.g. Jakarta Selatan',
-  kpmError: 'Enter the KPM name.',
-  picName: 'Name of PIC',
-  picPlaceholder: 'e.g. Andi Wijaya',
-  picError: 'Enter the PIC name.',
-  salesBy: 'Sales input by',
-  salesPlaceholder: 'e.g. your name or teammate',
-  salesError: "Enter who's submitting this quote.",
-  startDate: 'Start date',
-  endDate: 'End date',
-  datePlaceholder: 'DD/MM/YYYY',
-  generate: 'Generate quote',
-  cancel: 'Cancel',
-  // The quote (`:308-372`).
-  quoteTitle: 'Subscription quote',
-  generated: (day: string) => `Generated ${day}`,
-  kpm: 'KPM',
-  pic: 'Person in charge (PIC)',
-  planStart: 'Plan start date',
-  planEnd: 'Plan end date',
-  planDetails: 'Plan details',
-  tier: 'Tier',
-  leadersOnPlan: 'Leaders on plan',
-  sixMonthPlan: '6-month plan',
-  annualPlan: 'Annual plan',
-  custom: ' (custom)',
-  discounts: 'Discounts',
-  manualDiscount: 'Manual discount',
-  finalRow: 'Final price / leader / mo',
-  total: 'Total',
-  footer:
-    'This quote is valid for the plan period shown above. Rate is locked for the duration of the '
-    + "subscription under AgencyBoost's launch pricing, valid for signups before Mar 2027.",
-  print: 'Print / save as PDF',
-  back: 'Back to editor',
-} as const;
+export const BILLING_COPY = billingMessages.en.prototype;
 
 /**
  * **Ours**: the sentences the prototype has no words for, each a registered Fix or Fill
  * (`prototype-parity.md`; `functional/billing.md`).
  */
-export const BILLING_OWN_COPY = {
-  /** The prototype's *"switch to Annual below"* (`:529`), with the toggle above it. */
-  notApplied: 'Not applied — switch to Annual above',
-  percentError: 'Enter a percent from 0 to 100.',
-  flatError: (rateMinor: number) => `Enter an amount from Rp 0 to ${formatRupiah(rateMinor)}.`,
-  startError: 'Enter a valid start date, as DD/MM/YYYY.',
-  endError: 'Enter a valid end date, as DD/MM/YYYY.',
-  endBeforeStart: 'Enter an end date on or after the start date.',
-  /** The select's name: its options say *%* and *Rp/leader*, and the label above names the input. */
-  discountType: 'Discount type',
-  loading: 'Loading prices…',
-  failed: "The prices couldn't be loaded, so nothing can be priced.",
-  retry: 'Try again',
-  /** What the PDF is saved as: the prototype's file would be *AgencyBoost — Billing & Subscription*. */
-  printTitle: (kpm: string) => `Subscription quote – ${kpm}`,
-} as const;
+export const BILLING_OWN_COPY = billingMessages.en.own;
 
 /*
  * ── The arithmetic (ADR-0111 §4) ─────────────────────────────────────────────────────────────────
@@ -218,12 +142,19 @@ function percentOf(text: string): { units: bigint; scale: bigint } | null {
   return { units: BigInt(`${whole || '0'}${fraction}`), scale };
 }
 
-/** Rupiah typed into *Rp/leader*: digits and the grouping the field writes, nothing else. */
-function amountOf(text: string): number | null {
+/** The mark that groups thousands in the figures' `language`: `.` in Indonesian, `,` in English (§E). */
+const groupMark = (language: Language) => groupDigits(1000, language).charAt(1);
+
+/**
+ * Rupiah typed into *Rp/leader*: digits and the grouping the field writes in the figures' `language`, nothing else —
+ * the other language's mark is that language's decimal, and an amount is whole rupiah.
+ */
+function amountOf(text: string, language: Language): number | null {
   const trimmed = text.trim();
   if (trimmed === '') return 0;
-  if (!/^[\d.]+$/.test(trimmed)) return null;
-  const digits = trimmed.replace(/\./g, '');
+  const mark = groupMark(language);
+  if (![...trimmed].every((c) => /\d/.test(c) || c === mark)) return null;
+  const digits = trimmed.split(mark).join('');
   return digits === '' ? null : Number(digits);
 }
 
@@ -248,9 +179,16 @@ function afterPercent(rateMinor: number, pct: { units: bigint; scale: bigint }):
  * - **The rate is rounded once**: after a percent discount, half up to the whole rupiah. Every total is
  *   that rate × the count (× 6 or 12), exactly, so a printed rate × count is always the printed total.
  * - **The manual discount is bounded** (§5): a percent from 0 to 100, an amount from Rp 0 to the period's
- *   rate. Outside that, the rate is priced without it and `discountError` says why.
+ *   rate. Outside that, the rate is priced without it and `discountError` says why — its sums in the `figures`'
+ *   language, its words in the words' (P18.98-T6), and the amount read in the figures' grouping.
  */
-export function priceQuote(prices: Pick<BillingPrices, 'tiers'>, input: CalculatorInput): Pricing {
+export function priceQuote(
+  prices: Pick<BillingPrices, 'tiers'>,
+  input: CalculatorInput,
+  figures: Language = DEFAULT_LANGUAGE,
+  language: Language = SOURCE_LANGUAGE,
+): Pricing {
+  const own = messagesIn(billingMessages, language).own;
   const leaders = leaderCountOf(input.leaders);
   const tier = tierFor(prices.tiers, leaders);
   const months = input.period === 'annual' ? 12 : 6;
@@ -260,11 +198,13 @@ export function priceQuote(prices: Pick<BillingPrices, 'tiers'>, input: Calculat
   let discountError: string | null = null;
   if (input.discountType === 'percent') {
     const pct = percentOf(input.discount);
-    if (pct === null || pct.units > BigInt(100) * pct.scale) discountError = BILLING_OWN_COPY.percentError;
+    if (pct === null || pct.units > BigInt(100) * pct.scale) discountError = own.percentError;
     else finalMinor = afterPercent(baseMinor, pct);
   } else {
-    const amount = amountOf(input.discount);
-    if (amount === null || amount * MINOR_UNITS_PER_MAJOR > baseMinor) discountError = BILLING_OWN_COPY.flatError(baseMinor);
+    const amount = amountOf(input.discount, figures);
+    if (amount === null || amount * MINOR_UNITS_PER_MAJOR > baseMinor) {
+      discountError = own.flatError({ from: formatRupiah(0, figures), to: formatRupiah(baseMinor, figures) });
+    }
     else finalMinor = baseMinor - amount * MINOR_UNITS_PER_MAJOR;
   }
 
@@ -286,17 +226,18 @@ export function priceQuote(prices: Pick<BillingPrices, 'tiers'>, input: Calculat
   };
 }
 
-/** The *Rp/leader* field as it is typed: digits only, in the product's grouping, `25.000` (F-03). */
-export function maskAmount(text: string): string {
+/** The *Rp/leader* field as it is typed: digits only, in the product's grouping, `25.000` (F-03) — `25,000` in English figures. */
+export function maskAmount(text: string, figures: Language = DEFAULT_LANGUAGE): string {
   const digits = text.replace(/\D/g, '');
-  return digits === '' ? '' : groupDigits(Number(digits));
+  return digits === '' ? '' : groupDigits(Number(digits), figures);
 }
 
-/** A money figure as the page prints it, `Rp 400.000` (`fmt`, `:430`, in the one formatter). */
-export const money = (minor: number) => formatRupiah(minor);
+/** A money figure as the page prints it, `Rp 400.000` (`fmt`, `:430`, in the one formatter); `IDR 400,000` in English. */
+export const money = (minor: number, figures: Language = DEFAULT_LANGUAGE) => formatRupiah(minor, figures);
 
 /** A per-leader discount as the page prints it, `-Rp 20.000/leader/mo` (`:525`, `:675`). */
-export const perLeaderDiscount = (minor: number) => `-${formatRupiah(minor)}/leader/mo`;
+export const perLeaderDiscount = (minor: number, figures: Language = DEFAULT_LANGUAGE, language: Language = SOURCE_LANGUAGE) =>
+  messagesIn(billingMessages, language).prototype.perLeaderDiscount({ money: formatRupiah(minor, figures) });
 
 /*
  * ── The dialog's dates (ADR-0111 §5; invariant §9) ───────────────────────────────────────────────
@@ -365,13 +306,24 @@ export function toDmy(day: string): string {
  * The field keeps the typed form; the paper writes the date the way every screen does. What is not a day is printed
  * as it was typed — `validateQuote` refuses it before a quote exists, so that is never on paper.
  */
-export function quoteDay(typed: string): string {
+export function quoteDay(typed: string, figures: Language = DEFAULT_LANGUAGE): string {
   const day = parseDmy(typed);
-  return day ? formatCalendarDay(day) : typed.trim();
+  return day ? formatCalendarDay(day, figures) : typed.trim();
 }
 
-/** The card's *Save 20%*: `savePct`'s whole percent, written whole (ADR-0174 §1, OD-213). */
-export const saveWords = (tier: Pick<BillingTier, 'standardMinor' | 'sixMonthMinor'>) => `Save ${formatPercent(savePct(tier))}`;
+/**
+ * The card's *Save 20%*: `savePct`'s whole percent, written whole (ADR-0174 §1, OD-213) — the percentage in the
+ * `figures`' language, the word in the words' (P18.98-T6).
+ */
+export const saveWordsIn = (
+  tier: Pick<BillingTier, 'standardMinor' | 'sixMonthMinor'>,
+  figures: Language,
+  language: Language,
+) => messagesIn(billingMessages, language).prototype.save({ pct: formatPercent(savePct(tier), {}, figures) });
+
+/** `saveWordsIn` in English with Indonesian figures, one argument, so a list of tiers maps straight onto it. */
+export const saveWords = (tier: Pick<BillingTier, 'standardMinor' | 'sixMonthMinor'>) =>
+  saveWordsIn(tier, DEFAULT_LANGUAGE, SOURCE_LANGUAGE);
 
 /**
  * `DD/MM/YYYY` as a calendar day, or `null` when it is not one — **an impossible date included**, where
@@ -406,18 +358,20 @@ export type QuoteErrors = Partial<Record<keyof QuoteDetails, string>>;
 
 /**
  * *Generate quote*'s checks (`generateQuote`, `:625-650`, and the Fixes): the three names non-empty once
- * trimmed, each date a real `DD/MM/YYYY` day, and the end on or after the start — each refusal a sentence.
+ * trimmed, each date a real `DD/MM/YYYY` day, and the end on or after the start — each refusal a sentence, in the
+ * reader's `language` (P18.98-T6).
  */
-export function validateQuote(details: QuoteDetails): QuoteErrors {
+export function validateQuote(details: QuoteDetails, language: Language = SOURCE_LANGUAGE): QuoteErrors {
+  const { prototype, own } = messagesIn(billingMessages, language);
   const errors: QuoteErrors = {};
-  if (details.kpm.trim() === '') errors.kpm = BILLING_COPY.kpmError;
-  if (details.pic.trim() === '') errors.pic = BILLING_COPY.picError;
-  if (details.sales.trim() === '') errors.sales = BILLING_COPY.salesError;
+  if (details.kpm.trim() === '') errors.kpm = prototype.kpmError;
+  if (details.pic.trim() === '') errors.pic = prototype.picError;
+  if (details.sales.trim() === '') errors.sales = prototype.salesError;
   const start = parseDmy(details.start);
   const end = parseDmy(details.end);
-  if (!start) errors.start = BILLING_OWN_COPY.startError;
-  if (!end) errors.end = BILLING_OWN_COPY.endError;
-  else if (start && end < start) errors.end = BILLING_OWN_COPY.endBeforeStart;
+  if (!start) errors.start = own.startError;
+  if (!end) errors.end = own.endError;
+  else if (start && end < start) errors.end = own.endBeforeStart;
   return errors;
 }
 
@@ -494,10 +448,11 @@ export function subscriptionCosts(input: {
   };
 }
 
-/** *— no price per leader*, *— no maximum leaders and no start and end dates*: a line that cannot be worked out. */
-export function costMissingWords(missing: readonly CostInput[]): string {
-  const WORD: Record<CostInput, string> = {
-    price: 'no price per leader', limit: 'no maximum leaders', dates: 'no start and end dates',
-  };
-  return `— ${missing.map((m) => WORD[m]).join(' and ')}`;
+/**
+ * *— no price per leader*, *— no maximum leaders and no start and end dates*: a line that cannot be worked out — in the
+ * reader's `language` (P18.98-T6; `i18n/messages/office-subscription.ts`).
+ */
+export function costMissingWords(missing: readonly CostInput[], language: Language = SOURCE_LANGUAGE): string {
+  const words = messagesIn(officeSubscriptionMessages, language).costMissing;
+  return words.joined({ parts: missing.map((m) => words[m]) });
 }

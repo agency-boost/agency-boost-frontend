@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { calendarMessages } from '@/i18n/messages/calendar';
 import {
   allDayHeight, BAR_GAP_PX, BAR_PX, DAY_PX, HOUR_PX, layoutDay, OPEN_AT_HOUR, showsTime, slotFromSelection, stackBars,
   timedOn,
 } from '@/lib/calendar-layout';
 import {
-  entryNameSuffix, isBusy, OWN_COPY, titleOf, TYPE_LABEL, type CalendarEntry, type CalendarItem, type CalendarRead,
+  entryName, isBusy, titleOf, type CalendarEntry, type CalendarItem, type CalendarRead,
 } from '@/lib/calendar';
 import type { Slot } from '@/lib/calendar-form';
 import { formatDayHeader, formatHour, formatTimeSpan, formatWeekdayDay } from '@/lib/format';
@@ -71,6 +73,7 @@ export function WeekPane({
   scroll: ScrollGroup;
   className?: string;
 }) {
+  const language = useFigureLanguage();
   const days = read.days.map((d) => d.date);
   const box = useRef<HTMLDivElement>(null);
   const hours = hoursWhenStacked ? 'hidden max-[979.98px]:block' : 'block';
@@ -95,7 +98,7 @@ export function WeekPane({
           <div className="flex">
             <div aria-hidden="true" className={cn('w-[52px] shrink-0 border-r border-hairline', hours)} />
             {days.map((day) => {
-              const { weekday, number } = formatDayHeader(day);
+              const { weekday, number } = formatDayHeader(day, language);
               const today = day === read.today;
               return (
                 <div
@@ -151,7 +154,7 @@ export function WeekPane({
               <div aria-hidden="true" className={cn('w-[52px] shrink-0 border-r border-hairline', hours)}>
                 {HOURS.map((h) => (
                   <div key={h} className="-translate-y-1.5 pr-[7px] text-right text-2xs text-muted" style={{ height: HOUR_PX }}>
-                    {formatHour(h)}
+                    {formatHour(h, language)}
                   </div>
                 ))}
               </div>
@@ -182,11 +185,13 @@ export function WeekPane({
  * detail** (contradiction 6: the prototype's bar had no handler, `:576`); a busy block opens nothing.
  */
 function AllDayBar({ item, style, onOpen }: { item: CalendarItem; style: React.CSSProperties; onOpen: (e: CalendarEntry) => void }) {
+  const t = useMessages(calendarMessages);
+  const words = useLanguage();
   const shape = 'absolute flex items-center overflow-hidden whitespace-nowrap rounded-[6px] border px-2 text-2xs font-bold';
   if (isBusy(item)) {
     return (
       <div data-busy="" style={style} className={cn(shape, 'border-hairline bg-navy/[0.06] text-navy')}>
-        <span className="truncate">{OWN_COPY.busy}</span>
+        <span className="truncate">{t.busy}</span>
       </div>
     );
   }
@@ -195,11 +200,11 @@ function AllDayBar({ item, style, onOpen }: { item: CalendarItem; style: React.C
       type="button"
       data-entry=""
       style={style}
-      aria-label={`${TYPE_LABEL[item.type]}: ${titleOf(item)}${entryNameSuffix(item)}`}
+      aria-label={entryName(item, '', words)}
       onClick={() => onOpen(item)}
       className={cn(shape, 'border-teal/30 bg-teal/[0.14] text-left text-teal-ink hover:brightness-[0.96]')}
     >
-      <span className="truncate">{titleOf(item)}</span>
+      <span className="truncate">{titleOf(item, words)}</span>
     </button>
   );
 }
@@ -237,6 +242,7 @@ function DayColumn({
   onOpen: (entry: CalendarEntry) => void;
   onSlot?: (slot: Slot) => void;
 }) {
+  const language = useFigureLanguage();
   const [selection, setSelection] = useState<Selection | null>(null);
   const drag = useRef<Selection | null>(null);
 
@@ -277,7 +283,7 @@ function DayColumn({
   return (
     <div
       role="group"
-      aria-label={formatWeekdayDay(day)}
+      aria-label={formatWeekdayDay(day, language)}
       data-day={day}
       onPointerDown={begin}
       onPointerMove={move}
@@ -342,7 +348,10 @@ function DayColumn({
 function EntryBlock({
   item, style, withTime, onOpen,
 }: { item: CalendarItem; style: React.CSSProperties; withTime: boolean; onOpen: (e: CalendarEntry) => void }) {
-  const time = formatTimeSpan(item.start ?? '', item.end ?? '');
+  const t = useMessages(calendarMessages);
+  const words = useLanguage();
+  const language = useFigureLanguage();
+  const time = formatTimeSpan(item.start ?? '', item.end ?? '', language);
   const shape = 'absolute flex flex-col justify-start overflow-hidden rounded-[6px] border-l-[3px] px-1.5 py-1 text-left text-xs leading-tight text-navy';
   // `shrink-0`: a line in a column that is too short keeps its height and is never squeezed into itself.
   const line = 'block w-full shrink-0 truncate';
@@ -350,7 +359,7 @@ function EntryBlock({
   if (isBusy(item)) {
     return (
       <div data-busy="" style={style} className={cn(shape, 'cursor-default border-muted bg-navy/[0.06]')}>
-        <span title={`${OWN_COPY.busy}, ${time}`} className={cn(line, 'font-bold')}>{OWN_COPY.busy}</span>
+        <span title={t.busyAt({ time })} className={cn(line, 'font-bold')}>{t.busy}</span>
         <span className="sr-only">, </span>
         <span className={withTime ? timeLine : 'sr-only'}>{time}</span>
       </div>
@@ -363,11 +372,11 @@ function EntryBlock({
       type="button"
       data-entry=""
       style={style}
-      aria-label={`${TYPE_LABEL[item.type]}: ${titleOf(item)}, ${time}${entryNameSuffix(item)}`}
+      aria-label={entryName(item, time, words)}
       onClick={() => onOpen(item)}
       className={cn(shape, 'z-[1] hover:brightness-[0.96]', ENTRY_TONE[item.type])}
     >
-      <span title={`${titleOf(item)}, ${time}`} className={cn(line, 'font-bold')}>{titleOf(item)}</span>
+      <span title={`${titleOf(item, words)}, ${time}`} className={cn(line, 'font-bold')}>{titleOf(item, words)}</span>
       {withTime && <span className={timeLine}>{time}</span>}
     </button>
   );

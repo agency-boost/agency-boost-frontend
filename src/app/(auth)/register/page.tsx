@@ -7,7 +7,9 @@ import { api, toDisplayError, type ApiError } from '@/lib/api-client';
 import { inviteTokenOf, readInviteBanner, type InviteBanner } from '@/lib/invites';
 import { signInPathFrom } from '@/lib/return-path';
 import { listInsurers, type Insurer } from '@/lib/companies';
-import { GENDER_LABEL, WORK_STATUS_LABEL, type Gender, type WorkStatus } from '@/lib/personal';
+import { genderLabels, workStatusLabels, type Gender, type WorkStatus } from '@/lib/personal';
+import { useLanguage, useMessages } from '@/i18n/language-provider';
+import { authMessages } from '@/i18n/messages/auth';
 import { AUTH_PAGE } from '@/components/auth-page';
 import { DateField } from '@/components/ui/date-field';
 import { Button, ButtonLink, Card, ErrorBanner, Field, Select, TextInput } from '@/components/ui/field';
@@ -16,6 +18,7 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { REMOVED_ON_PHONE } from '@/components/ui/phone';
 import { cn } from '@/lib/cn';
 import { heldBecause } from '@/lib/disabled-reason';
+import { PublicTitle } from '@/components/public-title';
 
 /**
  * Self-signup.
@@ -41,18 +44,6 @@ const MIN_LENGTH = 10;
 const PERSONAL_FIELDS = ['dateOfBirth', 'companyJoinMonth', 'workStatus', 'gender'] as const;
 type PersonalField = (typeof PERSONAL_FIELDS)[number];
 
-/** Registration on a leader's invite (P18.96-T3 AC-4, ADR-0170 §3): the banner and the lines around it. Ours. */
-const INVITE_COPY = {
-  banner: (leader: string, kpm: string) => `You're joining ${leader}'s team · KPM ${kpm}`,
-  bannerLine: (branch: string, company: string) => `${branch} · ${company}. Your agent code and join date come with the invite.`,
-  joinDate: 'Join date',
-  existing: 'This invite is for an account that already exists. Sign in to accept it.',
-  signInToAccept: 'Sign in to accept',
-  withoutInvite: 'Create an account without an invite',
-  doneLine: (leader: string) => `Once you have verified it and signed in, you are in ${leader}'s team.`,
-  checking: 'Checking your invite…',
-} as const;
-
 export default function RegisterPage() {
   return (
     // `useSearchParams` needs a boundary: an invite's link carries its token in the query string.
@@ -70,6 +61,13 @@ export default function RegisterPage() {
  */
 function Register() {
   const token = inviteTokenOf(useSearchParams());
+  // The personal details' labels in the reader's language (`lib/personal.ts`, P18.98-T4).
+  const language = useLanguage();
+  const genders = genderLabels(language);
+  const workStatuses = workStatusLabels(language);
+  const all = useMessages(authMessages);
+  const t = all.register;
+  const rules = all.password;
   const [invite, setInvite] = useState<InviteBanner | null>(null);
   const [inviteError, setInviteError] = useState<ApiError | null>(null);
   const [form, setForm] = useState({
@@ -125,22 +123,22 @@ function Register() {
    * **What *Create account* waits for, said under it** (P18.95-T7 AC-3; UI-030): the fields still empty, by their
    * labels and in the form's order, or — once none is — that the password is wrong, which its own field says.
    */
-  const joinedLabel = `Joined ${insurerName ?? 'your insurer'}`;
+  const joinedLabel = t.joined({ insurer: insurerName ?? null });
   const missing = [
-    [!form.fullName.trim(), 'Full name'],
-    [!form.dateOfBirth, 'Date of birth'],
-    [!form.gender, 'Gender'],
-    [!form.companyId, 'Insurer'],
-    [!form.agentCode.trim(), 'Agent code'],
+    [!form.fullName.trim(), t.fullName],
+    [!form.dateOfBirth, t.dateOfBirth],
+    [!form.gender, t.gender],
+    [!form.companyId, t.insurer],
+    [!form.agentCode.trim(), t.agentCode],
     [!form.companyJoinMonth, joinedLabel],
-    [!form.workStatus, 'Status'],
-    [!form.email.trim(), 'Email'],
-    [!form.password, 'Password'],
-    [!form.confirmPassword, 'Confirm password'],
+    [!form.workStatus, t.status],
+    [!form.email.trim(), t.email],
+    [!form.password, t.password],
+    [!form.confirmPassword, t.confirmPassword],
   ].filter(([empty]) => empty).map(([, label]) => label as string);
   const passwordWrong = tooShort || padded || mismatch;
   const held = !busy && (missing.length > 0 || passwordWrong);
-  const heldWhy = held ? heldBecause({ missing, fix: passwordWrong ? 'Fix the password above.' : null }) : null;
+  const heldWhy = held ? heldBecause({ missing, fix: passwordWrong ? t.fixPassword : null }, language) : null;
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -165,18 +163,20 @@ function Register() {
   if (token && !invite) {
     return (
       <main className={AUTH_PAGE}>
-        <h1 className="mb-6 font-display text-3xl font-bold text-navy">Create your account</h1>
+        <PublicTitle>
+          <h1 className="mb-6 font-display text-3xl font-bold text-navy">{t.title}</h1>
+        </PublicTitle>
         <Card>
           {inviteError ? (
             <div className="flex flex-col gap-3">
               <ErrorBanner {...inviteError} />
               <div className="flex flex-wrap gap-2">
-                <ButtonLink href="/login" variant="secondary">Sign in</ButtonLink>
-                <ButtonLink href="/register" variant="secondary">{INVITE_COPY.withoutInvite}</ButtonLink>
+                <ButtonLink href="/login" variant="secondary">{t.signIn}</ButtonLink>
+                <ButtonLink href="/register" variant="secondary">{t.invite.withoutInvite}</ButtonLink>
               </div>
             </div>
           ) : (
-            <Skeleton label={INVITE_COPY.checking}><SkeletonText lines={4} /></Skeleton>
+            <Skeleton label={t.invite.checking}><SkeletonText lines={4} /></Skeleton>
           )}
         </Card>
       </main>
@@ -191,47 +191,45 @@ function Register() {
         * **Never on an invite** (a production walk, 2026-10-27): accepting one places them in the leader's office, so
         * the line would contradict the banner under it. The title keeps its gap at every size then.
         */}
-      <h1 className={cn('font-display text-3xl font-bold text-navy', invite ? 'mb-6' : 'max-md:mb-6')}>Create your account</h1>
+      <PublicTitle>
+        <h1 className={cn('font-display text-3xl font-bold text-navy', invite ? 'mb-6' : 'max-md:mb-6')}>{t.title}</h1>
+      </PublicTitle>
       {!invite && (
         <p className={cn('mb-6 mt-1 text-md text-muted', REMOVED_ON_PHONE)}>
-          Your office is added separately. This is just your login.
+          {t.line}
         </p>
       )}
 
       {invite && (
         <Card className="mb-4 border-l-4 border-l-amber" density="compact">
-          <p className="font-display text-lg font-bold text-navy">{INVITE_COPY.banner(invite.leaderName, invite.kpm.code)}</p>
-          <p className="mt-1 text-md text-muted">{INVITE_COPY.bannerLine(invite.kpm.branchName, invite.companyName)}</p>
+          <p className="font-display text-lg font-bold text-navy">{t.invite.banner({ leader: invite.leaderName, kpm: invite.kpm.code })}</p>
+          <p className="mt-1 text-md text-muted">{t.invite.bannerLine({ branch: invite.kpm.branchName, company: invite.companyName })}</p>
         </Card>
       )}
 
       <Card>
         {invite?.existingAccount ? (
           <div className="flex flex-col gap-3">
-            <p className="text-md text-navy">{INVITE_COPY.existing}</p>
-            <ButtonLink href={signIn} className="self-start">{INVITE_COPY.signInToAccept}</ButtonLink>
+            <p className="text-md text-navy">{t.invite.existing}</p>
+            <ButtonLink href={signIn} className="self-start">{t.invite.signInToAccept}</ButtonLink>
           </div>
         ) : done ? (
           <div>
             {/* The API answers the same way for an address that already exists, so this
                 screen must too — saying "already registered" would let anyone test
                 addresses against it. */}
-            <p className="text-md text-navy">
-              If <strong>{form.email}</strong> can be registered, a verification link is on its way.
-            </p>
-            <p className="mt-2 text-sm text-muted">
-              Open it to finish setting up your account. The link lasts 24 hours and works once.
-            </p>
-            {invite && <p className="mt-2 text-sm text-muted">{INVITE_COPY.doneLine(invite.leaderName)}</p>}
+            <p className="text-md text-navy">{t.sent({ email: <strong>{form.email}</strong> })}</p>
+            <p className="mt-2 text-sm text-muted">{t.sentLine}</p>
+            {invite && <p className="mt-2 text-sm text-muted">{t.invite.doneLine({ leader: invite.leaderName })}</p>}
             <Link href="/login" className="mt-4 inline-block text-sm text-muted underline">
-              Back to sign in
+              {t.backToSignIn}
             </Link>
           </div>
         ) : (
           <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
             {error && !refusedField && <ErrorBanner {...error} />}
 
-            <Field label="Full name" htmlFor="fullName">
+            <Field label={t.fullName} htmlFor="fullName">
               <TextInput
                 id="fullName"
                 name="fullName"
@@ -242,7 +240,7 @@ function Register() {
               />
             </Field>
 
-            <Field label="Date of birth" htmlFor="dateOfBirth" error={fieldError('dateOfBirth')}>
+            <Field label={t.dateOfBirth} htmlFor="dateOfBirth" error={fieldError('dateOfBirth')}>
               <DateField
                 id="dateOfBirth"
                 name="dateOfBirth"
@@ -255,19 +253,19 @@ function Register() {
               />
             </Field>
 
-            <Field label="Gender" htmlFor="gender" error={fieldError('gender')}>
+            <Field label={t.gender} htmlFor="gender" error={fieldError('gender')}>
               <Select id="gender" name="gender" required value={form.gender} onChange={set('gender')}>
-                <option value="">Choose</option>
-                {(Object.keys(GENDER_LABEL) as Gender[]).map((g) => (
-                  <option key={g} value={g}>{GENDER_LABEL[g]}</option>
+                <option value="">{t.choose}</option>
+                {(Object.keys(genders) as Gender[]).map((g) => (
+                  <option key={g} value={g}>{genders[g]}</option>
                 ))}
               </Select>
             </Field>
 
             <Field
-              label="Insurer"
+              label={t.insurer}
               htmlFor="companyId"
-              hint="Whoever issued your agent code."
+              hint={t.insurerHint}
             >
               {invite ? (
                 <TextInput id="companyId" name="companyId" value={invite.companyName} readOnly className="bg-base text-muted" />
@@ -281,7 +279,7 @@ function Register() {
                 disabled={insurers === null}
               >
                 <option value="">
-                  {insurers === null ? 'Loading…' : 'Choose your insurer'}
+                  {insurers === null ? t.loading : t.chooseInsurer}
                 </option>
                 {(insurers ?? []).map((c) => (
                   <option key={c._id} value={c._id}>
@@ -293,10 +291,10 @@ function Register() {
             </Field>
 
             <Field
-              label="Agent code"
+              label={t.agentCode}
               htmlFor="agentCode"
               // The client's words at every size (P18.95-T7 AC-1, grey text row 26).
-              hint="Found on your contract"
+              hint={t.agentCodeHint}
             >
               <TextInput
                 id="agentCode"
@@ -312,7 +310,7 @@ function Register() {
             </Field>
 
             {invite && (
-              <Field label={INVITE_COPY.joinDate} htmlFor="joinDate">
+              <Field label={t.invite.joinDate} htmlFor="joinDate">
                 <DateField id="joinDate" value={invite.joinDate} onChange={() => undefined} readOnly className="w-full" />
               </Field>
             )}
@@ -320,7 +318,7 @@ function Register() {
             <Field
               label={joinedLabel}
               htmlFor="companyJoinMonth"
-              hint="The month and year you joined them."
+              hint={t.joinedHint}
               error={fieldError('companyJoinMonth')}
             >
               <TextInput
@@ -328,23 +326,23 @@ function Register() {
                 name="companyJoinMonth"
                 type="month"
                 required
-                placeholder="YYYY-MM"
+                placeholder={t.monthShape}
                 value={form.companyJoinMonth}
                 onChange={set('companyJoinMonth')}
                 invalid={refusedField === 'companyJoinMonth'}
               />
             </Field>
 
-            <Field label="Status" htmlFor="workStatus" error={fieldError('workStatus')}>
+            <Field label={t.status} htmlFor="workStatus" error={fieldError('workStatus')}>
               <Select id="workStatus" name="workStatus" required value={form.workStatus} onChange={set('workStatus')}>
-                <option value="">Choose</option>
-                {(Object.keys(WORK_STATUS_LABEL) as WorkStatus[]).map((w) => (
-                  <option key={w} value={w}>{WORK_STATUS_LABEL[w]}</option>
+                <option value="">{t.choose}</option>
+                {(Object.keys(workStatuses) as WorkStatus[]).map((w) => (
+                  <option key={w} value={w}>{workStatuses[w]}</option>
                 ))}
               </Select>
             </Field>
 
-            <Field label="Email" htmlFor="email" hint="Your verification link goes here.">
+            <Field label={t.email} htmlFor="email" hint={t.emailHint}>
               <TextInput
                 id="email"
                 name="email"
@@ -357,14 +355,14 @@ function Register() {
             </Field>
 
             <Field
-              label="Password"
+              label={t.password}
               htmlFor="password"
-              hint={`At least ${MIN_LENGTH} characters. Length beats symbols.`}
+              hint={rules.hint({ n: MIN_LENGTH })}
               error={
                 tooShort
-                  ? `Use at least ${MIN_LENGTH} characters.`
+                  ? rules.tooShort({ n: MIN_LENGTH })
                   : padded
-                    ? 'Do not begin or end with a space.'
+                    ? rules.padded
                     : undefined
               }
             >
@@ -380,9 +378,9 @@ function Register() {
             </Field>
 
             <Field
-              label="Confirm password"
+              label={t.confirmPassword}
               htmlFor="confirmPassword"
-              error={mismatch ? 'The two passwords do not match.' : undefined}
+              error={mismatch ? rules.mismatch : undefined}
             >
               <PasswordInput
                 id="confirmPassword"
@@ -397,13 +395,13 @@ function Register() {
 
             <div className="flex flex-col gap-1">
               <Button type="submit" disabled={busy || held} aria-describedby={heldWhy ? 'create-account-held' : undefined}>
-                {busy ? 'Creating…' : 'Create account'}
+                {busy ? t.creating : t.create}
               </Button>
               {heldWhy && <p id="create-account-held" className="text-xs text-muted">{heldWhy}</p>}
             </div>
 
             <Link href={signIn} className="text-center text-sm text-muted underline">
-              Already have an account? Sign in
+              {t.haveAccount}
             </Link>
           </form>
         )}

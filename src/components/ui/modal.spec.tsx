@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import { Dialog } from './dialog';
-import { Modal } from './modal';
+import { inModal, Modal } from './modal';
 
 function Harness({ onClose = vi.fn(), focusLast = false, focusDialog = false }: { onClose?: () => void; focusLast?: boolean; focusDialog?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -244,5 +244,25 @@ describe('Modal (P11-T8)', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(document.body.style.overflow).toBe('');
     });
+  });
+  it('P18.98-T4: draws at the end of the page, so its h2 never breaks the outline it opens in, and says what is inside it', async () => {
+    const { container } = render(
+      <main>
+        <h1>Compliance</h1>
+        <h2>Agents</h2>
+        <h3>Wilson Tanoto</h3>
+        <h4>Agus</h4>
+        <Modal open title="Override a status" onClose={() => {}}><p>Why</p></Modal>
+        <h4>Yanti</h4>
+      </main>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Override a status' });
+    expect(container.contains(dialog)).toBe(false);
+    expect(document.body.lastElementChild?.contains(dialog)).toBe(true);
+    expect(inModal(screen.getByText('Why'))).toBe(true);
+    expect(inModal(screen.getByRole('heading', { name: 'Yanti' }))).toBe(false);
+    expect(inModal(null)).toBe(false);
+    const results = await axe(document.body, { rules: { region: { enabled: false }, 'color-contrast': { enabled: false } } });
+    expect(results.violations.map((v) => v.id)).toEqual([]);
   });
 });

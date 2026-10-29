@@ -373,8 +373,9 @@ describe('a company’s Company template (P4-T8)', () => {
       renderWithSession(<CompanyTemplatePage params={routeParams({ companyId: 'c1' })} />, { me: SUPER_ADMIN });
       await userEvent.click(await screen.findByRole('link', { name: 'Campaigns' }));
       const criterion = (await screen.findByText(/APE achieved/)).closest('p')!;
-      // X-68 (P18.5-T7 AC-10): Rp 1,2 miliar from its sen, where it read 120.000.000.000.
-      expect(criterion).toHaveTextContent('Rp 1,2 M');
+      // X-68 (P18.5-T7 AC-10): Rp 1,2 miliar from its sen, where it read 120.000.000.000 — in the reader's figures since
+      // P18.98-T6, English here as every spec reads.
+      expect(criterion).toHaveTextContent('IDR 1.2B');
       await userEvent.click(within(criterion.closest('li')!).getByRole('button', { name: 'Edit' }));
       const options = [...(screen.getByLabelText('Metric') as HTMLSelectElement).options].map((o) => o.value);
       expect(options).toEqual(expect.arrayContaining(['APE_ACHIEVED', 'NET_APE']));
@@ -1274,7 +1275,7 @@ describe('the Recruitment tab (P17-T8)', () => {
   it('opens the company’s playbook where the address bar says, with no draft bar and no Publish', async () => {
     const stub = open();
     expect(await screen.findByText('This playbook is live.')).toBeInTheDocument();
-    expect(screen.getByText('Version 2 · saved by Root on 9 Okt 2026, 14.05')).toBeInTheDocument();
+    expect(screen.getByText('Version 2 · saved by Root on 9 Oct 2026, 14:05')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Fresh grad' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save draft' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Publish/ })).toBeNull();

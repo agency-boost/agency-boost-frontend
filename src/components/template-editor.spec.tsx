@@ -347,7 +347,8 @@ describe('RatioSetEditor writes benchmarks in their unit (P4-T25)', () => {
     />);
 
     expect(screen.getByText('15%')).toBeInTheDocument();
-    expect(screen.getByText('0,30')).toBeInTheDocument();
+    // In the reader's figures since P18.98-T6 — English here, as every spec reads: *0,30* in Indonesian.
+    expect(screen.getByText('0.30')).toBeInTheDocument();
     expect(screen.getByText('±30 points')).toBeInTheDocument();
   });
 
@@ -1008,11 +1009,12 @@ describe('CampaignKindsEditor (P5-T9)', () => {
       onChange={vi.fn()}
     />);
 
-    // A rule in words, compact where that loses nothing (ADR-0167 §1).
-    expect(screen.getByText(/APE achieved/).closest('p')).toHaveTextContent(/Rp 600 jt$/);
-    expect(screen.getByText(/APE achieved/).closest('p')).not.toHaveTextContent('60.000.000.000');
-    expect(screen.getByText(/New active agents/).closest('p')).toHaveTextContent(/1\.200$/);
-    expect(screen.getByText(/New active agents/).closest('p')).not.toHaveTextContent('Rp');
+    // A rule in words, compact where that loses nothing (ADR-0167 §1) — in the reader's figures since P18.98-T6,
+    // English here as every spec reads (*Rp 600 jt*, *1.200* in Indonesian).
+    expect(screen.getByText(/APE achieved/).closest('p')).toHaveTextContent(/IDR 600M$/);
+    expect(screen.getByText(/APE achieved/).closest('p')).not.toHaveTextContent('60,000,000,000');
+    expect(screen.getByText(/New active agents/).closest('p')).toHaveTextContent(/1,200$/);
+    expect(screen.getByText(/New active agents/).closest('p')).not.toHaveTextContent('IDR');
   });
 
   it('marks only the metric nothing measures, never one the registry has', () => {

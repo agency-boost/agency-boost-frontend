@@ -3,15 +3,17 @@
 import { useEffect, useState } from 'react';
 import { AspectCard } from '@/components/activation-parts';
 import { useCoachee } from '@/components/coaching-person';
-import { SummaryCard } from '@/components/personal-summary';
+import { SummaryCard } from '@/components/summary-card';
 import { Button, Card, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar, SkeletonText } from '@/components/ui/skeleton';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { activationMessages } from '@/i18n/messages/activation';
 import {
-  FIRST_CASE_CLOSED, OWN_COPY, PROTOTYPE_COPY, readMyActivation, readNewHire, type ActivationItemProgress,
-  type ActivationView,
+  FIRST_CASE_CLOSED, readMyActivation, readNewHire, type ActivationItemProgress, type ActivationView,
 } from '@/lib/activation';
 import { ApiRequestError, toDisplayError, type ApiError } from '@/lib/api-client';
 import { cn } from '@/lib/cn';
+import { formatPercent } from '@/lib/format';
 
 /**
  * **The coaching *Activation* tab** (`renderPersonActivationStatus`, `Overall.html:6464-6489`; P13-T9):
@@ -27,19 +29,25 @@ import { cn } from '@/lib/cn';
  * leader's detail print — `GET /new-hires/:membershipId` for a coach, `GET /activation/me` for the
  * reader's own — so the four readers are served one computation, and the prototype's constants, which
  * drew every item done for both people (`:6490-6493`), are gone.
+ *
+ * **Its words are the activation's catalogue** (`messages/activation.ts`, its `record`; P18.98-T4), in the reader's
+ * language, and its percentage in `useFigureLanguage()`'s.
  */
 export function ActivationRecord({ view }: { view: ActivationView }) {
+  const t = useMessages(activationMessages);
+  const figures = useFigureLanguage();
   const width = Math.min(100, Math.max(0, view.pct));
+  const complete = t.pctComplete({ pct: formatPercent(view.pct, {}, figures) });
   return (
     <div className="flex flex-col gap-4">
-      <SummaryCard id="activation-record" title={PROTOTYPE_COPY.cardTitle} tag={PROTOTYPE_COPY.pctComplete(view.pct)}>
+      <SummaryCard id="activation-record" title={t.record.title} tag={complete}>
         <div
           role="progressbar"
           aria-labelledby="activation-record"
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={width}
-          aria-valuetext={PROTOTYPE_COPY.pctComplete(view.pct)}
+          aria-valuetext={complete}
           className="h-1.5 overflow-hidden rounded-sm bg-navy/[0.08]"
         >
           <div className="h-full rounded-sm bg-navy-soft" style={{ width: `${width}%` }} />
@@ -58,9 +66,8 @@ export function ActivationRecord({ view }: { view: ActivationView }) {
 
 /** `.team-row` (`:1568-1570`): the item on the left, its state on the right. */
 function RecordRow({ item }: { item: ActivationItemProgress }) {
-  const words = !item.done
-    ? PROTOTYPE_COPY.notDone
-    : item.code === FIRST_CASE_CLOSED ? PROTOTYPE_COPY.doneNewActiveAgent : PROTOTYPE_COPY.itemDone;
+  const t = useMessages(activationMessages).record;
+  const words = !item.done ? t.notDone : item.code === FIRST_CASE_CLOSED ? t.doneNewActiveAgent : t.done;
   return (
     <li
       data-code={item.code}
@@ -102,6 +109,7 @@ function useActivationRead(read: () => Promise<ActivationView>, key: string) {
 function RecordState({
   read, empty,
 }: { read: ReturnType<typeof useActivationRead>; empty: string }) {
+  const t = useMessages(activationMessages);
   if (read.none) {
     // A Fill (T9 AC-3): somebody with no activation opens on this, not on a disabled tab.
     return <Card><p className="text-center text-md text-muted">{empty}</p></Card>;
@@ -110,13 +118,13 @@ function RecordState({
     return (
       <div>
         <ErrorBanner {...read.error} />
-        <Button variant="secondary" className="mt-3" onClick={read.retry}>{OWN_COPY.tryAgain}</Button>
+        <Button variant="secondary" className="mt-3" onClick={read.retry}>{t.tryAgain}</Button>
       </div>
     );
   }
   if (!read.view) {
     return (
-      <Skeleton label={OWN_COPY.loadingHire}>
+      <Skeleton label={t.record.loading}>
         <div className="flex flex-col gap-4">
           <div className="rounded-lg border border-hairline bg-card px-[22px] py-[18px]">
             <SkeletonBar className="h-4 w-40" />
@@ -136,12 +144,14 @@ function RecordState({
 /** A coachee's tab, inside the person shell (T9 AC-3): the read a leader's detail makes. */
 export function CoacheeActivation() {
   const coachee = useCoachee();
+  const t = useMessages(activationMessages).record;
   const read = useActivationRead(() => readNewHire(coachee.membershipId), coachee.membershipId);
-  return <RecordState read={read} empty={OWN_COPY.coacheeNone(coachee.name)} />;
+  return <RecordState read={read} empty={t.coacheeNone({ name: coachee.name })} />;
 }
 
 /** The reader's own, on `/coaching/me` (T9 AC-4, D-coaching-me): the read the hire's page makes. */
 export function MyActivationRecord() {
+  const t = useMessages(activationMessages).record;
   const read = useActivationRead(readMyActivation, 'me');
-  return <RecordState read={read} empty={OWN_COPY.meNone} />;
+  return <RecordState read={read} empty={t.meNone} />;
 }

@@ -9,6 +9,8 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Button, ButtonLink, ErrorBanner } from '@/components/ui/field';
 import { SkeletonTable } from '@/components/ui/skeleton';
 import { StatusPill } from '@/components/ui/status-pill';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { adminOfficesMessages } from '@/i18n/messages/admin-offices';
 import {
   leadersOver, leadersSaid, leadersWord, listTenants, tenantStatusTone, tenantStatusWord, type TenantRow,
 } from '@/lib/admin';
@@ -25,12 +27,16 @@ import { formatShortDay } from '@/lib/format';
  * AC-7): the subscription is entered *"directly from here"*. The action column has a name nobody sees,
  * so a screen reader moving by column is told what is in it.
  */
-const COLUMNS: readonly Column[] = [
-  'Code', 'Branch', 'Company', 'Owner', 'Status', 'End date', 'Leaders',
-  { label: 'Subscription', visuallyHidden: true },
-];
+function useColumns(): readonly Column[] {
+  const c = useMessages(adminOfficesMessages).list.columns;
+  return [c.code, c.branch, c.company, c.owner, c.status, c.endDate, c.leaders, { label: c.subscription, visuallyHidden: true }];
+}
 
 export default function TenantsPage() {
+  const t = useMessages(adminOfficesMessages);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const COLUMNS = useColumns();
   const [tenants, setTenants] = useState<TenantRow[] | null>(null);
   const [error, setError] = useState<{ code: string; message: string; requestId: string } | null>(null);
   /** The office whose subscription is open in the dialog. */
@@ -52,25 +58,25 @@ export default function TenantsPage() {
 
   return (
     <Page
-      title="All KPMs"
-      subtitle="Every KPM on the platform. One exists only because somebody here created it."
+      title={t.list.title}
+      subtitle={t.list.subtitle}
       actions={
-        <ButtonLink href="/admin/tenants/new">New office</ButtonLink>
+        <ButtonLink href="/admin/tenants/new">{t.list.newOffice}</ButtonLink>
       }
     >
       {error && <ErrorBanner {...error} />}
 
       {tenants === null && (
-        <SkeletonTable caption="Offices on the platform" columns={COLUMNS} rows={5} />
+        <SkeletonTable caption={t.list.caption} columns={COLUMNS} rows={5} />
       )}
 
       {tenants?.length === 0 && !error && (
         <div className="rounded-lg border border-hairline bg-card">
           <EmptyState
-            title="No KPMs yet."
+            title={t.list.empty}
             action={
               <Link href="/admin/tenants/new" className="text-md text-navy underline">
-                Create the first one
+                {t.list.createFirst}
               </Link>
             }
           />
@@ -79,57 +85,57 @@ export default function TenantsPage() {
 
       {tenants && tenants.length > 0 && (
         <DataTable
-          caption="Offices on the platform"
+          caption={t.list.caption}
           columns={COLUMNS}
         >
-          {tenants.map((t) => (
-            <Row key={t._id}>
+          {tenants.map((row) => (
+            <Row key={row._id}>
               <Cell className="font-semibold">
-                <Link href={`/admin/tenants/${t._id}`} className="underline">
-                  {t.code}
+                <Link href={`/admin/tenants/${row._id}`} className="underline">
+                  {row.code}
                 </Link>
               </Cell>
-              <Cell>{t.branchName}</Cell>
-              <Cell>{t.companyName}</Cell>
+              <Cell>{row.branchName}</Cell>
+              <Cell>{row.companyName}</Cell>
               <Cell>
-                {t.ownerName ? (
+                {row.ownerName ? (
                   <>
-                    <span className="block text-navy">{t.ownerName}</span>
-                    {t.ownerEmail && (
-                      <span className="block text-sm text-muted">{t.ownerEmail}</span>
+                    <span className="block text-navy">{row.ownerName}</span>
+                    {row.ownerEmail && (
+                      <span className="block text-sm text-muted">{row.ownerEmail}</span>
                     )}
                   </>
                 ) : (
-                  <Link href={`/admin/tenants/${t._id}/owner`} className="text-alert underline">
-                    Assign an owner
+                  <Link href={`/admin/tenants/${row._id}/owner`} className="text-alert underline">
+                    {t.list.assignOwner}
                   </Link>
                 )}
               </Cell>
               <Cell>
-                <StatusPill status={tenantStatusTone(t)} label={tenantStatusWord(t)} />
+                <StatusPill status={tenantStatusTone(row)} label={tenantStatusWord(row, language)} />
               </Cell>
               <Cell className="whitespace-nowrap">
-                {t.subscription?.endDate ? formatShortDay(t.subscription.endDate, { year: true }) : '—'}
+                {row.subscription?.endDate ? formatShortDay(row.subscription.endDate, { year: true }, figures) : '—'}
               </Cell>
               <Cell className="whitespace-nowrap">
                 {/* ADR-0157 §4: past the limit — AgencyBoost approved leaders beyond it — the count reads above
                     it, and *3 over* says by how much in the warning paint. Said once, whole, to a screen reader. */}
                 <span aria-hidden="true">
-                  {leadersWord(t)}
-                  {leadersOver(t) > 0 && (
-                    <StatusPill status="watch" label={`${leadersOver(t)} over`} className="ml-2" />
+                  {leadersWord(row)}
+                  {leadersOver(row) > 0 && (
+                    <StatusPill status="watch" label={t.list.over({ n: leadersOver(row) })} className="ml-2" />
                   )}
                 </span>
-                <span className="sr-only">{leadersSaid(t)}</span>
+                <span className="sr-only">{leadersSaid(row, language)}</span>
               </Cell>
               <Cell>
                 <Button
                   variant="secondary"
                   className="whitespace-nowrap"
-                  aria-label={`Edit subscription for KPM ${t.code} · ${t.branchName}`}
-                  onClick={() => setEditing(t)}
+                  aria-label={t.list.editSubscriptionFor({ code: row.code, branch: row.branchName })}
+                  onClick={() => setEditing(row)}
                 >
-                  Edit subscription
+                  {t.list.editSubscription}
                 </Button>
               </Cell>
             </Row>
@@ -144,10 +150,10 @@ export default function TenantsPage() {
           row={editing}
           open
           onClose={() => setEditing(null)}
-          onSaved={(row) => {
+          onSaved={(saved) => {
             // The answer is the row as this list reads it, so it is drawn from that, not re-read.
-            setTenants((rows) => rows?.map((r) => (r._id === row._id ? row : r)) ?? rows);
-            setSaved(`Subscription saved for KPM ${row.code}.`);
+            setTenants((rows) => rows?.map((r) => (r._id === saved._id ? saved : r)) ?? rows);
+            setSaved(t.list.savedFor({ code: saved.code }));
             setEditing(null);
           }}
         />

@@ -3,6 +3,7 @@
 import { Suspense } from 'react';
 import { MyCoaching } from '@/components/coaching-record';
 import { Page } from '@/components/page';
+import { kept } from '@/i18n/kept';
 import { useQuery } from '@/lib/use-query';
 
 /**
@@ -28,7 +29,7 @@ function MyCoachingNotes() {
   const query = useQuery();
   const selected = typeof query.session === 'string' && query.session ? query.session : undefined;
   return (
-    <Page title="Coaching Session" permission="coaching_session:read">
+    <Page title={kept('Coaching Session')} permission="coaching_session:read">
       <MyCoaching selected={selected} />
     </Page>
   );

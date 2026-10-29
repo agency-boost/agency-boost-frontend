@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 import { AdminShell } from '@/components/admin-shell';
 import { AgentShell } from '@/components/agent-shell';
+import { PublicLanguageRow } from '@/components/public-title';
 import { TenantShell } from '@/components/tenant-shell';
 import { PageSkeleton } from '@/components/ui/skeleton';
 import { signInPathFrom } from '@/lib/return-path';
@@ -67,10 +68,15 @@ export function RoleShell({
   }, [toSignIn, signedOut, expired, router]);
 
   if (!me) {
-    // The one page that opts in decides for itself, loading or not, as it always has.
-    if (allowSignedOut) return <>{children}</>;
-    // While the session is read, and on the way to sign in: the shape of a page, never a page of failed reads.
-    return <PageSkeleton />;
+    /*
+     * The one page that opts in decides for itself, loading or not, as it always has — and, signed out, it is one of
+     * the six public pages, so once the language switch is live it carries it above its card (P18.98-T2 AC-3). Not
+     * while the session is read: a signed-in reader is about to get a shell, whose header has it.
+     */
+    if (allowSignedOut) return <>{!loading && <PublicLanguageRow />}{children}</>;
+    // While the session is read, and on the way to sign in: the shape of a page, never a page of failed reads. Nothing
+    // in it is words, so a page prerendered in another language than the reader's is not held back for it (pre-paint).
+    return <PageSkeleton sessionWait />;
   }
 
   // Platform first: a Super Admin belongs to no office, so nothing below applies to them.

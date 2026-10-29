@@ -6,6 +6,8 @@ import { Cell, DataTable, Row } from '@/components/ui/data-table';
 import { Button, buttonClass, Card, ErrorBanner, Field, Textarea } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
 import { ConsoleCode } from '@/components/ui/console-code';
+import { useMessages } from '@/i18n/language-provider';
+import { rosterImportMessages } from '@/i18n/messages/roster-import';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
 import { errorReference } from '@/lib/browser-errors';
 import { useSession } from '@/lib/session';
@@ -19,23 +21,36 @@ import {
 } from '@/lib/admin';
 
 /**
+ * **What is typed in a cell** — the import's contract, read by the parser (backend `roster-csv.ts`), so the same in
+ * both languages: never words of the screen's (P18.98-T3 AC-4, *files are not words*).
+ */
+const FILE = {
+  ab: 'AB', aab: 'AAB', agent: 'Agent', day: 'YYYY-MM-DD', month: 'YYYY-MM',
+  fullTime: 'full-time', partTime: 'part-time', male: 'male', female: 'female',
+} as const;
+
+/**
  * **The file's nine columns, in its order, and what each holds** (P18.97-T4 AC-4, ADR-0176 §6; the client's UI-025:
  * the 120 words of instructions above the import, *Remove* at every size, become *"a short table of required columns
  * … and a Download template button"*). The names are the client's; what each holds is the rule the parser applies,
  * which the downloaded template spells out in full (`ROSTER_TEMPLATE`, backend `roster-csv.ts`). A code in a cell is
- * what is typed in the file.
+ * what is typed in the file, in either language.
  */
-const COLUMN_GUIDE: readonly { column: string; holds: React.ReactNode }[] = [
-  { column: 'Name', holds: 'Their full name' },
-  { column: 'Email', holds: 'An address nobody has registered yet' },
-  { column: 'Agent code', holds: 'The code their insurer issued, digits only' },
-  { column: 'Role', holds: <><code>AB</code>, <code>AAB</code> or <code>Agent</code></> },
-  { column: 'Leader’s agent code (optional)', holds: 'Empty for somebody who reports to nobody' },
-  { column: 'Date of birth', holds: <><code>YYYY-MM-DD</code>, at least 18 years ago</> },
-  { column: 'Join month', holds: <><code>YYYY-MM</code>, the month they joined the insurer</> },
-  { column: 'Full/part-time', holds: <><code>full-time</code> or <code>part-time</code></> },
-  { column: 'Gender', holds: <><code>male</code> or <code>female</code></> },
-];
+function columnGuide(t: { columns: typeof rosterImportMessages.en.columns; holds: typeof rosterImportMessages.en.holds })
+  : readonly { column: string; holds: React.ReactNode }[] {
+  const code = (typed: string) => <code>{typed}</code>;
+  return [
+    { column: t.columns.name, holds: t.holds.name },
+    { column: t.columns.email, holds: t.holds.email },
+    { column: t.columns.agentCode, holds: t.holds.agentCode },
+    { column: t.columns.role, holds: t.holds.role({ ab: code(FILE.ab), aab: code(FILE.aab), agent: code(FILE.agent) }) },
+    { column: t.columns.leader, holds: t.holds.leader },
+    { column: t.columns.dateOfBirth, holds: t.holds.dateOfBirth({ shape: code(FILE.day) }) },
+    { column: t.columns.joinMonth, holds: t.holds.joinMonth({ shape: code(FILE.month) }) },
+    { column: t.columns.workStatus, holds: t.holds.either({ a: code(FILE.fullTime), b: code(FILE.partTime) }) },
+    { column: t.columns.gender, holds: t.holds.either({ a: code(FILE.male), b: code(FILE.female) }) },
+  ];
+}
 
 /**
  * Filling an office from a spreadsheet (P3.6-T4).
@@ -58,6 +73,7 @@ const COLUMN_GUIDE: readonly { column: string; holds: React.ReactNode }[] = [
  * says so plainly, and offers them as text to copy in one go rather than one at a time.
  */
 export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: string }) {
+  const t = useMessages(rosterImportMessages);
   // The leader limit's words differ by reader (P13.2-T4 AC-5): the Super Admin can raise it.
   const { me } = useSession();
   const audience = me?.user.platformRole === 'super_admin' ? 'platform' : 'office';
@@ -106,7 +122,7 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
     reader.onload = () => setRows(String(reader.result ?? ''));
     reader.onerror = () => setError({
       code: 'FILE_UNREADABLE',
-      message: `Could not read ${file.name}. Try saving it again as CSV.`,
+      message: t.unreadable({ file: file.name }),
       requestId: 'local',
     });
     reader.readAsText(file);
@@ -173,24 +189,16 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
 
       {created ? (
         <Card>
-          <h2 className="font-display text-lg font-bold text-navy">
-            {`${created.length} ${created.length === 1 ? 'person' : 'people'} created`}
-          </h2>
+          <h2 className="font-display text-lg font-bold text-navy">{t.created({ n: created.length })}</h2>
           <p className="mt-1 text-md text-muted">
-            Send each person their password — <strong>AgencyBoost does not email it for you</strong>.
-            This is the only time it is shown: it is not stored anywhere and cannot be looked up.
-            If you lose one, that person can use <em>Forgot your password</em> on the sign-in
-            page instead.
+            {t.sendPasswords({ strong: (words) => <strong>{words}</strong>, em: (words) => <em>{words}</em> })}
           </p>
-          <p className="mt-2 text-md text-muted">
-            Everybody here is asked to choose their own password the first time they sign in, and
-            can do nothing else until they have.
-          </p>
+          <p className="mt-2 text-md text-muted">{t.firstSignIn}</p>
 
           <DataTable
             className="mt-4"
-            caption="The people created, and the password each one starts on"
-            columns={['Name', 'Email', 'Agent code', 'Temporary password']}
+            caption={t.createdCaption}
+            columns={[t.createdColumns.name, t.createdColumns.email, t.createdColumns.agentCode, t.createdColumns.password]}
           >
             {created.map((person) => (
               <Row key={person.email}>
@@ -203,19 +211,19 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
           </DataTable>
 
           <Link href={backHref} className="mt-4 inline-block text-md font-semibold text-navy underline">
-            Back
+            {t.back}
           </Link>
         </Card>
       ) : (
         <Card>
-          <h2 className="font-display text-lg font-bold text-navy">The file</h2>
+          <h2 className="font-display text-lg font-bold text-navy">{t.file}</h2>
           {/* One row per person, these columns in this order (P18.97-T4 AC-4): the paragraph's every fact, a row each. */}
           <DataTable
             className="mt-3"
-            caption="The file’s columns, in order: one row per person"
-            columns={['Column', 'What it holds']}
+            caption={t.guideCaption}
+            columns={[t.guideColumns.column, t.guideColumns.holds]}
           >
-            {COLUMN_GUIDE.map(({ column, holds }) => (
+            {columnGuide(t).map(({ column, holds }) => (
               <Row key={column}>
                 <Cell className="font-semibold">{column}</Cell>
                 <Cell className="text-muted">{holds}</Cell>
@@ -232,19 +240,19 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
           <div className="mt-4 flex min-h-10 flex-wrap items-center gap-x-2">
             {templateHref ? (
               <a href={templateHref} download="roster-template.csv" className={buttonClass('secondary', 'gap-1')}>
-                <span aria-hidden="true">⬇</span>Download template
+                <span aria-hidden="true">⬇</span>{t.downloadTemplate}
               </a>
             ) : templateError ? (
               <p role="alert" className="flex flex-wrap items-center gap-x-2 text-sm text-alert">
-                <span>The template could not be prepared. {templateError.message}</span>
-                <Button variant="inline" onClick={() => setTemplateAttempt((n) => n + 1)}>Try again</Button>
+                <span>{t.templateFailed({ message: templateError.message })}</span>
+                <Button variant="inline" onClick={() => setTemplateAttempt((n) => n + 1)}>{t.tryAgain}</Button>
                 {/* A server's code and request id for support; none for a failure the browser detected (AC-10). */}
                 {errorReference(templateError) === null
                   ? <ConsoleCode code={templateError.code} message={templateError.message} />
                   : <span className="text-2xs text-muted">{errorReference(templateError)}</span>}
               </p>
             ) : (
-              <Skeleton label="Loading the template…"><SkeletonBar className="h-10 w-48" /></Skeleton>
+              <Skeleton label={t.loadingTemplate}><SkeletonBar className="h-10 w-48" /></Skeleton>
             )}
           </div>
 
@@ -252,11 +260,11 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
               a spreadsheet puts tab-separated text on the clipboard, so somebody can do
               this without meeting a file format at all. */}
           <fieldset className="mt-4">
-            <legend className="text-md font-semibold text-navy">How are you adding them?</legend>
+            <legend className="text-md font-semibold text-navy">{t.how}</legend>
             <div className="mt-2 flex flex-wrap gap-4">
               {([
-                ['paste', 'Paste from a spreadsheet'],
-                ['file', 'Upload a CSV file'],
+                ['paste', t.paste],
+                ['file', t.upload],
               ] as const).map(([value, label]) => (
                 <label key={value} className="flex items-center gap-2 text-md text-navy">
                   <input
@@ -282,12 +290,7 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
           </fieldset>
 
           {how === 'paste' ? (
-            <Field
-              label="Rows from your spreadsheet"
-              htmlFor="rows"
-              hint="Select the rows in Excel, Google Sheets or Numbers, copy them, and paste here. The header row is optional."
-              className="mt-4"
-            >
+            <Field label={t.rows} htmlFor="rows" hint={t.rowsHint} className="mt-4">
               <Textarea
                 id="rows"
                 rows={8}
@@ -299,7 +302,7 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
             </Field>
           ) : (
             <>
-              <Field label="Roster file" htmlFor="roster" className="mt-4">
+              <Field label={t.rosterFile} htmlFor="roster" className="mt-4">
                 <input
                   id="roster"
                   type="file"
@@ -313,7 +316,7 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button onClick={() => void check()} disabled={!rows.trim() || busy !== null}>
-              {busy === 'preview' ? 'Checking…' : 'Check the file'}
+              {busy === 'preview' ? t.checking : t.check}
             </Button>
             <Button
               variant="secondary"
@@ -323,33 +326,25 @@ export function RosterImport({ kpmId, backHref }: { kpmId: string; backHref: str
               // seen coming.
               disabled={busy !== null || !preview || preview.issues.length > 0}
             >
-              {busy === 'commit' ? 'Importing…' : `Import ${preview?.willCreate ?? 0}`}
+              {busy === 'commit' ? t.importing : t.importN({ n: preview?.willCreate ?? 0 })}
             </Button>
             {fileName && <span className="text-sm text-muted">{fileName}</span>}
           </div>
 
           {preview && preview.issues.length === 0 && (
             <p role="status" className="mt-4 text-md font-semibold text-success">
-              {`${preview.willCreate} ${preview.willCreate === 1 ? 'person' : 'people'} ready `
-                + 'to import. Nothing has been created yet.'}
+              {t.ready({ n: preview.willCreate })}
             </p>
           )}
 
           {preview && preview.issues.length > 0 && (
             <div className="mt-4">
-              <h3 className="font-display text-md font-bold text-navy">
-                {`${preview.issues.length} `
-                  + `${preview.issues.length === 1 ? 'problem' : 'problems'} `
-                  + '— nothing will be created'}
-              </h3>
-              <p className="mt-1 text-sm text-muted">
-                The import is all or nothing, so every one of these has to be fixed before any of
-                the file lands. Line numbers count the header, the way a spreadsheet does.
-              </p>
+              <h3 className="font-display text-md font-bold text-navy">{t.problems({ n: preview.issues.length })}</h3>
+              <p className="mt-1 text-sm text-muted">{t.allOrNothing}</p>
               <DataTable
                 className="mt-3"
-                caption="What is wrong with the file"
-                columns={['Line', 'Column', 'Problem']}
+                caption={t.problemsCaption}
+                columns={[t.problemColumns.line, t.problemColumns.column, t.problemColumns.problem]}
               >
                 {preview.issues.map((issue) => (
                   <Row key={`${issue.line}-${issue.column}-${issue.message}`}>

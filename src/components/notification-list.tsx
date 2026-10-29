@@ -4,12 +4,17 @@ import Link from 'next/link';
 import { useId, useState } from 'react';
 import { Button } from '@/components/ui/field';
 import { Modal } from '@/components/ui/modal';
+import { useFigureLanguage, useMessages } from '@/i18n/language-provider';
+import { notificationMessages } from '@/i18n/messages/notifications';
 import { cn } from '@/lib/cn';
-import { formatNoticeFull, formatNoticeShort } from '@/lib/format';
+import { formatNoticeFull, formatNoticeShort, OFFICE_TIME_ZONE } from '@/lib/format';
 import { groupRepeats, type InboxItem, type NoticeRun } from '@/lib/notifications';
 
-/** Said when there is nothing to show, in the bell's popover and on `/notifications` alike. */
-export const INBOX_EMPTY = 'Nothing yet. This is where you will hear about your unit.';
+/**
+ * Said when there is nothing to show, in the bell's popover and on `/notifications` alike: the catalogue's English
+ * (`notificationMessages.empty`), which both write in the reader's language (P18.98-T4).
+ */
+export const INBOX_EMPTY = notificationMessages.en.empty;
 
 /**
  * The toggle's two glyphs, drawn as the sidebar's are (24×24, a 1.7 stroke, `currentColor`): an
@@ -77,6 +82,8 @@ export function NotificationRow({
   onActivate: (item: InboxItem) => void;
   onToggle?: (item: InboxItem) => void;
 }) {
+  const language = useFigureLanguage();
+  const t = useMessages(notificationMessages);
   const unread = item.readAt === null;
   const stateId = useId();
   const titleId = useId();
@@ -87,7 +94,7 @@ export function NotificationRow({
     'aria-describedby': item.detail ? `${detailId} ${whenId}` : whenId,
   };
   const control = 'flex min-w-0 flex-1 items-start gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-navy/[0.04]';
-  const toggle = unread ? 'Mark as read' : 'Mark as unread';
+  const toggle = unread ? t.markRead : t.markUnread;
 
   const body = (
     <>
@@ -97,7 +104,7 @@ export function NotificationRow({
       />
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">
-          {unread && <span id={stateId} className="sr-only">Unread:</span>}
+          {unread && <span id={stateId} className="sr-only">{t.unread}</span>}
           <span
             id={titleId}
             className={cn('min-w-0 flex-1 break-words text-md text-navy md:truncate', unread ? 'font-semibold' : 'font-normal')}
@@ -105,7 +112,7 @@ export function NotificationRow({
             {item.title}
           </span>
           <time id={whenId} dateTime={item.createdAt} className="shrink-0 text-xs text-muted">
-            {formatNoticeShort(item.createdAt)}
+            {formatNoticeShort(item.createdAt, undefined, OFFICE_TIME_ZONE, language)}
           </time>
         </span>
         {item.detail && (
@@ -152,15 +159,17 @@ export function NotificationRow({
  * it, and focus goes back to the row that opened it.
  */
 export function NotificationModal({ item, onClose }: { item: InboxItem | null; onClose: () => void }) {
+  const language = useFigureLanguage();
+  const t = useMessages(notificationMessages);
   if (!item) return null;
   return (
     <Modal open title={item.title} onClose={onClose} focusDialog>
       {item.detail && <p className="text-md text-navy">{item.detail}</p>}
       <p className={cn('text-sm text-muted', item.detail && 'mt-3')}>
-        <time dateTime={item.createdAt}>{formatNoticeFull(item.createdAt)}</time>
+        <time dateTime={item.createdAt}>{formatNoticeFull(item.createdAt, OFFICE_TIME_ZONE, language)}</time>
       </p>
       <div className="mt-5 flex justify-end">
-        <Button variant="secondary" onClick={onClose}>Close</Button>
+        <Button variant="secondary" onClick={onClose}>{t.close}</Button>
       </div>
     </Modal>
   );
@@ -245,6 +254,8 @@ function RepeatedNotice({
   onToggle?: (item: InboxItem) => void;
   onToggleAll?: (items: readonly InboxItem[], read: boolean) => void;
 }) {
+  const language = useFigureLanguage();
+  const t = useMessages(notificationMessages);
   const [open, setOpen] = useState(false);
   const listId = useId();
   const detailId = useId();
@@ -252,7 +263,7 @@ function RepeatedNotice({
   const [newest] = run.items;
   const count = run.items.length;
   const unread = run.items.some((item) => item.readAt === null);
-  const toggle = unread ? `Mark all ${count} as read` : `Mark all ${count} as unread`;
+  const toggle = t.markAllOf({ n: count, read: unread });
 
   return (
     <li data-unread={unread || undefined} data-repeats={count}>
@@ -262,7 +273,7 @@ function RepeatedNotice({
           aria-expanded={open}
           aria-controls={listId}
           // Named in one string: the *×* is drawn and not said, and a name joined from spans gains stray spaces.
-          aria-label={`${unread ? 'Unread: ' : ''}${newest.title}, ${count} notices`}
+          aria-label={t.repeated({ title: newest.title, n: count, unread })}
           aria-describedby={newest.detail ? `${detailId} ${whenId}` : whenId}
           onClick={() => setOpen((was) => !was)}
           className="flex min-w-0 flex-1 items-start gap-2.5 rounded-md px-2.5 py-2 text-left hover:bg-navy/[0.04]"
@@ -280,7 +291,7 @@ function RepeatedNotice({
                 <span className="text-muted"> · {count}×</span>
               </span>
               <time id={whenId} dateTime={newest.createdAt} className="shrink-0 text-xs text-muted">
-                {formatNoticeShort(newest.createdAt)}
+                {formatNoticeShort(newest.createdAt, undefined, OFFICE_TIME_ZONE, language)}
               </time>
               <span aria-hidden="true" className="shrink-0 text-xs text-muted">{open ? '▴' : '▾'}</span>
             </span>

@@ -2,8 +2,11 @@
 
 import { pillClass, TD as TRACKER_TD, TrackerHeaders } from '@/components/leader-forum/action-items';
 import { Chips, ScorecardNotes, ScorecardTable, StatsTitle } from '@/components/leader-forum/scorecard';
-import { TABS_COPY } from '@/lib/leader-meeting-tabs';
-import { AGENDA_SECTIONS, FORUM_COPY, type MeetingView } from '@/lib/leader-meetings';
+import { useMessages } from '@/i18n/language-provider';
+import { forumMessages } from '@/i18n/messages/forum';
+import { forumMinutesMessages } from '@/i18n/messages/forum-minutes';
+import { NONE } from '@/lib/leader-meeting-tabs';
+import { AGENDA_SECTIONS, type MeetingView } from '@/lib/leader-meetings';
 
 /**
  * **A4, landscape** (P18.97-T1 AC-18, I-494): the slide's seven columns fit across without clipping. While a meeting's
@@ -23,37 +26,39 @@ const LANDSCAPE = '@media print { @page { size: A4 landscape; margin: 10mm; } }'
  *
  * Off the screen and on the paper (`hidden print:block`, `:744`, `:762-764`); the page around it hides its own
  * chrome. **It draws what the page holds**, so it is never stale (the prototype's can be, flow doc §2.9). It writes
- * nothing.
+ * nothing. **In the screen's language** (P18.98-T4): the words the reader reads, the figures the reader's.
  */
 export function PrintLayout({ meeting }: { meeting: MeetingView }) {
+  const tabs = useMessages(forumMessages).tabs;
+  const t = useMessages(forumMinutesMessages);
   const { scorecard } = meeting;
   const h3 = 'mb-3 mt-6 text-lg font-extrabold text-navy first:mt-0';
   return (
     <section className="hidden font-body text-navy print:block">
       <style>{LANDSCAPE}</style>
-      <h3 className={h3}>{FORUM_COPY.tabs.overview}</h3>
+      <h3 className={h3}>{tabs.overview}</h3>
       <StatsTitle meeting={meeting} print />
       <Chips chips={scorecard.chips} />
       <ScorecardTable meeting={meeting} print />
       <ScorecardNotes scorecard={scorecard} />
 
-      <h3 className={h3}>{FORUM_COPY.tabs.agenda}</h3>
+      <h3 className={h3}>{tabs.agenda}</h3>
       {/* `.agenda-cols` in print (`:765`): the three side by side. */}
       <div className="grid grid-cols-3 items-start gap-4">
         {AGENDA_SECTIONS.map((section) => (
           <div key={section} className="break-inside-avoid rounded-lg border border-hairline bg-card px-4 pb-3 pt-4">
-            <h4 className="mb-3 text-md font-extrabold text-navy">{TABS_COPY.sections[section]}</h4>
+            <h4 className="mb-3 text-md font-extrabold text-navy">{t.sections[section]}</h4>
             {meeting.agenda[section].map((item) => (
               <div key={item.id} className="mb-3">
                 <div className="text-base leading-[1.4] text-navy">{item.text}</div>
-                <div className="mt-0.5 text-xs text-muted">{`${TABS_COPY.pic} ${item.pic || '—'}`}</div>
+                <div className="mt-0.5 text-xs text-muted">{`${t.pic}: ${item.pic || NONE}`}</div>
               </div>
             ))}
           </div>
         ))}
       </div>
 
-      <h3 className={h3}>{FORUM_COPY.tabs.actions}</h3>
+      <h3 className={h3}>{tabs.actions}</h3>
       <div className="overflow-hidden rounded-lg border border-hairline bg-card">
         <table className="relative w-full border-collapse text-left text-base">
           <thead>
@@ -66,7 +71,7 @@ export function PrintLayout({ meeting }: { meeting: MeetingView }) {
                 <td className={TRACKER_TD}>{a.metric}</td>
                 <td className={TRACKER_TD}>{a.action}</td>
                 <td className={TRACKER_TD}>{a.pic}</td>
-                <td className={TRACKER_TD}><span className={pillClass(a.status)}>{TABS_COPY.statuses[a.status]}</span></td>
+                <td className={TRACKER_TD}><span className={pillClass(a.status)}>{t.statuses[a.status]}</span></td>
                 <td className={TRACKER_TD}>{a.remarks}</td>
               </tr>
             ))}

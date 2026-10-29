@@ -4,6 +4,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { browserChose, InLanguage, resetLanguage } from '@test/harness';
+import { LanguageProvider } from '@/i18n/language-provider';
 import { DATE_FIELD_EMPTY, DateField } from './date-field';
 import { Field } from './field';
 
@@ -30,9 +32,9 @@ describe('DateField (P18.96-T2 AC-4)', () => {
     expect(face).toHaveTextContent('22 Jul 2026');
     expect(face).toHaveAttribute('aria-hidden', 'true');
     expect(face.textContent).not.toMatch(/\d{2}\/\d{2}\/\d{4}/);
-    // Indonesian months, as every date the app writes (ADR-0167 §1).
+    // The reader's months, as every date the app writes (ADR-0167 §1; P18.98-T3): English, the specs' default.
     render(<Field label="Other" htmlFor="o"><DateField id="o" value="2026-10-05" onChange={() => undefined} /></Field>);
-    expect(faceOf('Other')).toHaveTextContent('5 Okt 2026');
+    expect(faceOf('Other')).toHaveTextContent('5 Oct 2026');
   });
 
   it('P18.96-T2 AC-4 the native field is the control: labelled, typed date, holding the office date as YYYY-MM-DD', () => {
@@ -98,7 +100,7 @@ describe('DateField (P18.96-T2 AC-4)', () => {
     render(<Controlled initial="2026-07-22" onChange={onChange} />);
     fireEvent.change(screen.getByLabelText('Join date'), { target: { value: '2026-08-03' } });
     expect(onChange).toHaveBeenCalledWith('2026-08-03');
-    expect(faceOf('Join date')).toHaveTextContent('3 Agu 2026');
+    expect(faceOf('Join date')).toHaveTextContent('3 Aug 2026');
     // The picker's *Clear* empties it.
     fireEvent.change(screen.getByLabelText('Join date'), { target: { value: '' } });
     expect(onChange).toHaveBeenLastCalledWith('');
@@ -158,5 +160,59 @@ describe('every date field goes through DateField', () => {
       .filter((f) => /type=["']date["']|type:\s*["']date["']/.test(readFileSync(f, 'utf8')))
       .map((f) => f.slice(SRC.length + 1));
     expect(offenders).toEqual([]);
+  });
+});
+
+/** P18.98-T3 AC-1: the face in the reader's language; the value the field holds and answers is ISO in both. */
+describe('P18.98-T3 DateField in each language', () => {
+  it('P18.98-T3 AC-1 writes the face 5 Okt 2026 in Indonesian and 5 Oct 2026 in English, the value ISO in both', () => {
+    render(<InLanguage language="id"><Field label="Hari" htmlFor="h"><DateField id="h" value="2026-10-05" onChange={() => undefined} /></Field></InLanguage>);
+    render(<InLanguage language="en"><Field label="Day" htmlFor="d"><DateField id="d" value="2026-10-05" onChange={() => undefined} /></Field></InLanguage>);
+    expect(faceOf('Hari')).toHaveTextContent('5 Okt 2026');
+    expect(faceOf('Day')).toHaveTextContent('5 Oct 2026');
+    expect(screen.getByLabelText('Hari')).toHaveValue('2026-10-05');
+    expect(screen.getByLabelText('Day')).toHaveValue('2026-10-05');
+  });
+});
+
+/**
+ * **P18.98-T3 figures: the face in the figures' language** — the reader's chosen language, and Indonesian with no
+ * choice, whether or not the switch is live (`useFigureLanguage`). Until it is, a reader with no choice reads *5 Okt
+ * 2026* beside English words, as every date field read before T3. Under the app's own provider.
+ */
+describe('P18.98-T3 figures DateField', () => {
+  afterEach(() => resetLanguage());
+
+  const fields = (live: boolean) => render(
+    <LanguageProvider live={live}>
+      <Field label="Join date" htmlFor="jd"><DateField id="jd" value="2026-10-05" onChange={() => undefined} /></Field>
+      <Field label="Start date" htmlFor="sd"><DateField id="sd" value="" onChange={() => undefined} /></Field>
+    </LanguageProvider>,
+  );
+
+  it('P18.98-T3 figures, unchosen and not live: 5 Okt 2026 beside English words, the value ISO', () => {
+    fields(false);
+    expect(faceOf('Join date')).toHaveTextContent('5 Okt 2026');
+    expect(faceOf('Start date')).toHaveTextContent(DATE_FIELD_EMPTY);
+    expect(DATE_FIELD_EMPTY).toBe('Choose a date');
+    expect(screen.getByLabelText('Join date')).toHaveValue('2026-10-05');
+  });
+
+  it('P18.98-T3 figures, chosen English by the browser, not live: 5 Oct 2026', () => {
+    browserChose('en');
+    fields(false);
+    expect(faceOf('Join date')).toHaveTextContent('5 Oct 2026');
+  });
+
+  it('P18.98-T3 figures, chosen Indonesian by the browser, not live: 5 Okt 2026', () => {
+    browserChose('id');
+    fields(false);
+    expect(faceOf('Join date')).toHaveTextContent('5 Okt 2026');
+  });
+
+  it('P18.98-T3 figures, live and unchosen: 5 Okt 2026, in a screen whose language is Indonesian', () => {
+    fields(true);
+    expect(faceOf('Join date')).toHaveTextContent('5 Okt 2026');
+    expect(document.documentElement.lang).toBe('id');
   });
 });

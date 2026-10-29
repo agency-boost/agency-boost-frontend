@@ -4,16 +4,16 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { ChaseChips } from '@/components/campaigns/chasing-card';
 import { Button, ErrorBanner } from '@/components/ui/field';
 import { Skeleton, SkeletonBar } from '@/components/ui/skeleton';
+import { useFigureLanguage, useLanguage, useMessages } from '@/i18n/language-provider';
+import { unitDashboardMessages } from '@/i18n/messages/unit-dashboard';
+import { campaignChasingMessages } from '@/i18n/messages/campaign-chasing';
 import type { ActivityRatio, ActivityRatios } from '@/lib/activity';
 import { toDisplayError, type ApiError } from '@/lib/api-client';
-import { PROTOTYPE_COPY as CAMPAIGN_COPY } from '@/lib/campaigns';
 import { cn } from '@/lib/cn';
 import { formatShortDay } from '@/lib/format';
 import { balanceSideNames, formatBalanceSplit } from '@/lib/ratio-balance';
 import { formatRatioForStatus } from '@/lib/ratio-format';
-import {
-  ACTIVITY_LABEL, countWords, gapWords, OWN_COPY, overdueTag, PROTOTYPE_COPY, type UnitPeriod, type UnitRow,
-} from '@/lib/unit-dashboard';
+import { countWords, gapWords, overdueTag, type UnitPeriod, type UnitRow } from '@/lib/unit-dashboard';
 
 /** Reads a row's ratios — the screen's, which keeps each answer so a row opened twice is read once. */
 export type ReadRatios = (row: UnitRow) => Promise<ActivityRatios>;
@@ -31,6 +31,9 @@ export type ReadRatios = (row: UnitRow) => Promise<ActivityRatios>;
  * **The ratios are read when the row opens** (D-ratios), the person's as `GET /activity/ratios?for=`
  * answers them — the office's ratios on their rung, its labels, the last 30 days — and the tile waits and
  * fails on its own, the rest of the detail drawn already from the roster's read.
+ *
+ * **Its words are the catalogue's** (`messages/unit-dashboard.ts`, P18.98-T4), its figures in `useFigureLanguage()`'s;
+ * *Campaigns they're chasing* and its empty line are the campaigns' (`lib/campaigns.ts`).
  */
 export function UnitDetail({
   row, period, readRatios, id,
@@ -55,18 +58,23 @@ export function UnitDetail({
 export function DetailTiles({
   row, period, readRatios, stacked = false, className,
 }: { row: UnitRow; period: UnitPeriod; readRatios: ReadRatios; stacked?: boolean; className?: string }) {
-  const gap = gapWords(row.goal);
+  const language = useLanguage();
+  const figures = useFigureLanguage();
+  const t = useMessages(unitDashboardMessages);
+  // *Campaigns they're chasing*: the campaigns' words (`campaign-chasing.ts`), in the reader's language.
+  const chasing = useMessages(campaignChasingMessages);
+  const gap = gapWords(row.goal, language, figures);
   return (
     <div className={className ?? 'grid grid-cols-1 gap-3.5 px-6 pb-[22px] pt-[18px] md:grid-cols-4'}>
-      <Tile title={PROTOTYPE_COPY.gap}>
+      <Tile title={t.prototype.gap}>
         <p className="mb-1 font-body text-[1.0625rem] font-bold text-navy">{gap.value}</p>
         {gap.note && <p className="text-sm leading-normal text-muted">{gap.note}</p>}
       </Tile>
-      <Tile title={PROTOTYPE_COPY.activityBreakdown}>
+      <Tile title={t.prototype.activityBreakdown}>
         {(['leads', 'appointments', 'closings'] as const).map((key) => (
           <p key={key} className={stacked ? cn('mb-1.5 text-sm last:mb-0', STACKED) : 'mb-1.5 flex items-center justify-between text-sm last:mb-0'}>
-            <span className="text-navy">{ACTIVITY_LABEL[key]}</span>
-            <span className="font-bold text-navy">{countWords(row.activity[key], period)}</span>
+            <span className="text-navy">{t.activity[key]}</span>
+            <span className="font-bold text-navy">{countWords(row.activity[key], period, language)}</span>
           </p>
         ))}
       </Tile>
@@ -75,20 +83,20 @@ export function DetailTiles({
           draws the rest of the detail without it. */}
       {(row.coached || row.isReader) && <RatiosTile row={row} readRatios={readRatios} stacked={stacked} />}
       {row.campaigns !== null ? (
-        <Tile title={CAMPAIGN_COPY.theyreChasing}>
+        <Tile title={chasing.theyreChasing}>
           {row.campaigns.length > 0
             ? <ChaseChips campaigns={row.campaigns} />
-            : <p className="text-sm italic text-muted">{CAMPAIGN_COPY.notChasingAny}</p>}
+            : <p className="text-sm italic text-muted">{chasing.notChasingAny}</p>}
           {row.followUp && (
             // `.detail-followup` (`:1763-1764`): beneath the chips, over a hairline.
             <div className="mt-2.5 border-t border-hairline pt-2.5">
-              <h3 className="mb-1.5 text-2xs font-bold uppercase tracking-wide text-muted">{PROTOTYPE_COPY.followUp}</h3>
+              <h3 className="mb-1.5 text-2xs font-bold uppercase tracking-wide text-muted">{t.prototype.followUp}</h3>
               <FollowUpLine followUp={row.followUp} />
             </div>
           )}
         </Tile>
       ) : row.followUp && (
-        <Tile title={PROTOTYPE_COPY.followUp}>
+        <Tile title={t.prototype.followUp}>
           <FollowUpLine followUp={row.followUp} />
         </Tile>
       )}
@@ -101,15 +109,17 @@ const STACKED = 'flex flex-col gap-0.5';
 
 /** The follow-up's line (`.detail-followup-item`, `:1765-1768`): its date or how overdue, and the item. */
 function FollowUpLine({ followUp }: { followUp: NonNullable<UnitRow['followUp']> }) {
+  const language = useLanguage();
+  const figures = useFigureLanguage();
   return (
     <p className="text-base text-navy">
       {followUp.overdueDays !== null ? (
         <span className="mr-1.5 inline-block rounded-pill bg-alert/10 px-2 py-0.5 text-2xs font-bold text-alert">
-          {overdueTag(followUp.overdueDays)}
+          {overdueTag(followUp.overdueDays, language)}
         </span>
       ) : followUp.dueDate && (
         <span className="mr-1.5 inline-block rounded-pill bg-navy/[0.06] px-2 py-0.5 text-2xs font-bold text-muted">
-          {formatShortDay(followUp.dueDate)}
+          {formatShortDay(followUp.dueDate, {}, figures)}
         </span>
       )}
       {followUp.text}
@@ -143,22 +153,26 @@ const SELLING = /^(sell|sales)/i;
  * the prototype's words for somebody with no recruitment.
  */
 function RatioChip({ ratio, stacked = false }: { ratio: ActivityRatio; stacked?: boolean }) {
+  const words = useLanguage();
+  const figures = useFigureLanguage();
+  const t = useMessages(unitDashboardMessages).prototype;
   let value: string;
   let tone = RATIO_TONE[ratio.status];
   const band = ratio.comparison === 'band';
   if (ratio.value === null) {
     value = '–';
   } else if (band && ratio.sides && ratio.share !== null) {
-    const names = balanceSideNames(ratio.sides);
+    // A side's name is the office's section, as typed; *Side A* and *Side B* are the catalogue's.
+    const names = balanceSideNames(ratio.sides, words);
     if (ratio.denominatorCount === 0 && ratio.numeratorCount > 0 && SELLING.test(names.first)) {
-      value = PROTOTYPE_COPY.salesOnly;
+      value = t.salesOnly;
       tone = RATIO_TONE.neutral;
     } else {
-      const split = formatBalanceSplit(ratio.share, ratio.benchmark, ratio.status);
+      const split = formatBalanceSplit(ratio.share, ratio.benchmark, ratio.status, figures);
       value = `${split.first} ${names.first} · ${split.second} ${names.second}`;
     }
   } else {
-    value = formatRatioForStatus(ratio.value, band ? 'points' : ratio.displayUnit, ratio.benchmark, ratio.status);
+    value = formatRatioForStatus(ratio.value, band ? 'points' : ratio.displayUnit, ratio.benchmark, ratio.status, figures, words);
   }
   return (
     <li className={stacked ? cn('text-sm', STACKED) : 'flex items-center justify-between gap-2 text-sm'}>
@@ -169,6 +183,7 @@ function RatioChip({ ratio, stacked = false }: { ratio: ActivityRatio; stacked?:
 }
 
 function RatiosTile({ row, readRatios, stacked }: { row: UnitRow; readRatios: ReadRatios; stacked: boolean }) {
+  const t = useMessages(unitDashboardMessages);
   const [ratios, setRatios] = useState<ActivityRatios | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -183,22 +198,22 @@ function RatiosTile({ row, readRatios, stacked }: { row: UnitRow; readRatios: Re
   }, [row, readRatios, attempt]);
 
   return (
-    <Tile title={PROTOTYPE_COPY.ratios}>
+    <Tile title={t.prototype.ratios}>
       {error && (
         <div>
           <ErrorBanner {...error} />
           <Button variant="secondary" className="mt-2 h-auto px-3 py-1.5 text-sm" onClick={() => setAttempt((n) => n + 1)}>
-            {OWN_COPY.tryAgain}
+            {t.own.tryAgain}
           </Button>
         </div>
       )}
       {!ratios && !error && (
-        <Skeleton label={OWN_COPY.loadingRatios}>
+        <Skeleton label={t.own.loadingRatios}>
           {[0, 1, 2, 3].map((i) => <SkeletonBar key={i} className="mb-2 h-3.5 w-full" />)}
         </Skeleton>
       )}
       {ratios && (ratios.ratios.length === 0 ? (
-        <p className="text-sm text-navy">{OWN_COPY.ratiosEmpty}</p>
+        <p className="text-sm text-navy">{t.own.ratiosEmpty}</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {ratios.ratios.map((ratio) => <RatioChip key={ratio.code} ratio={ratio} stacked={stacked} />)}
