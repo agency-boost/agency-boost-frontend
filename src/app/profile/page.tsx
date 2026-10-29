@@ -201,7 +201,8 @@ function ProfileForm({ onSaved }: { onSaved: () => Promise<void> }) {
 
         {/*
           * *Language* (P18.98-T2 AC-4): saves itself, as the header's switch does, so *Save* below is not for it. Shown
-          * and not offered in a support session, as the rest of the card is. Nothing until the switch is live.
+          * and not offered in a support session, as the rest of the card is. Drawn while the switch is live — since
+          * 2026-10-29; nothing before it went live.
           */}
         <LanguageField disabled={personalLocked} hint={lockedHint} />
 

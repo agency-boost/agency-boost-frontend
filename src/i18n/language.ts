@@ -8,7 +8,7 @@
 export const LANGUAGES = ['id', 'en'] as const;
 export type Language = (typeof LANGUAGES)[number];
 
-/** A person who has chosen no language reads Bahasa Indonesia (ADR-0179 §1) — once they can choose (below). */
+/** A person who has chosen no language reads Bahasa Indonesia (ADR-0179 §1) — live since 2026-10-29 (below). */
 export const DEFAULT_LANGUAGE: Language = 'id';
 
 /**
@@ -20,32 +20,24 @@ export const SOURCE_LANGUAGE: Language = 'en';
 
 /**
  * **Whether the language switch and the Indonesian default are live** — the one constant that turns ID mode on for
- * everybody (P18.98-T2; ADR-0179's dated note of 2026-10-29). **`false` until P18.98-T4's exit**, when the Owner's and
- * the AB's screens read Indonesian, so that no reader is offered an Indonesian page that is mostly English words under
- * `lang="id"`. Everything behind it is built and tested; the harness turns it on for a spec (`test/harness.tsx`,
- * `LanguageProvider live`).
+ * everybody (P18.98-T2; ADR-0179's dated notes of 2026-10-29). **`true` since P18.98-T4's exit (2026-10-29)**, flipped
+ * with the backend's (`backend/src/domain/constants/language.ts`), whose `language.spec.ts` reads this one and fails when
+ * they differ. The harness can still render either state for a spec (`test/harness.tsx`, `LanguageProvider live`).
  *
- * **While `false`:**
+ * **Live**, the switch is drawn in every shell's header, on the phone's bar and on the six public pages, with
+ * *Language* on *Your account*; a reader who has chosen nothing reads **Bahasa Indonesia**, words and figures; and a
+ * choice — an account's saved `users.locale` or the browser's `ab_lang` cookie — is honoured, words and figures alike.
  *
- * - **the switch is not drawn** — not in any shell's header, not on the phone's bar, not on the six public pages —
- *   and **neither is *Language* on *Your account***, which is the same choice (ADR-0179 §2): the product offers no way
- *   to choose, so nobody stumbles on a half-translated screen;
- * - **a reader who has chosen nothing reads English words** (`LANGUAGE_UNCHOSEN`), as every screen read before the
- *   phase — **and Indonesian figures** (`figureLanguage`, below), as every figure was written before it (ADR-0174);
- * - **a choice already made is honoured all the same** — an account's saved `users.locale` (set through the API) or a
- *   browser's `ab_lang` cookie (set by hand), words and figures alike. Only someone who asked for Indonesian outside
- *   the product reads it, which is how P18.98-T4 to T6 check their translations on staging, and nothing they set needs
- *   moving when this turns on.
- *
- * Flipping it is the whole release: the switch appears everywhere, and a reader with no choice and no cookie reads
- * Bahasa Indonesia from their next visit.
- *
- * **Live since P18.98-T4's exit, 2026-10-29**, with the backend's (ADR-0179's dated note): the Owner's, the AB's and the
- * Super Admin's screens read the approved Indonesian, and the product owner approved every word the areas proposed.
+ * **Before it went live** (`false`, P18.98-T2 to T4's exit) no switch and no *Language* were drawn, so nobody was
+ * offered a half-translated screen; a reader who had chosen nothing read English words (`LANGUAGE_UNCHOSEN`) and
+ * Indonesian figures (`figureLanguage`), every screen as it was before the phase; and a choice made outside the product
+ * was honoured, which is how T4 to T6 checked their translations on staging. `unchosenLanguage(false)` still answers
+ * that state, and its specs pin it.
  */
 export const LANGUAGE_LIVE: boolean = true;
 
-/** **The words a reader who has chosen nothing reads**: Bahasa Indonesia once the switch is live, English until then. */
+/** **The words a reader who has chosen nothing reads**: Bahasa Indonesia when the switch is live — as it is since
+ * P18.98-T4's exit — and English when it is not. */
 export function unchosenLanguage(live: boolean): Language {
   return live ? DEFAULT_LANGUAGE : SOURCE_LANGUAGE;
 }
@@ -56,10 +48,10 @@ export function unchosenLanguage(live: boolean): Language {
  * or not the switch is live.** `chosen` is the language the reader chose, by the cookie, on the switch or on their
  * account, or `null` for none. It takes no `live`, because nothing about a figure waits for the switch.
  *
- * A reader's **words** with no choice are `unchosenLanguage(LANGUAGE_LIVE)`: English until the switch is live. So **until
- * then such a reader reads English words and Indonesian figures** — every screen as it was before the phase, never a
- * wired screen's *IDR 5.8B* beside an unwired one's *Rp 5,8 M* (the client's UI-019). **Once live the two agree in every
- * state**: with no choice both are Indonesian, and with one both are the one chosen. A screen reads it through
+ * A reader's **words** with no choice are `unchosenLanguage(LANGUAGE_LIVE)`: Bahasa Indonesia, live since 2026-10-29.
+ * **Live, the two agree in every state**: with no choice both are Indonesian, and with one both are the one chosen.
+ * Before the release such a reader read English words and Indonesian figures — every screen as it was before the
+ * phase, never a wired screen's *IDR 5.8B* beside an unwired one's *Rp 5,8 M* (the client's UI-019). A screen reads it through
  * `useFigureLanguage()` (`language-provider.tsx`).
  */
 export function figureLanguage(chosen: Language | null): Language {
@@ -67,12 +59,12 @@ export function figureLanguage(chosen: Language | null): Language {
 }
 
 /**
- * **The words a reader who has chosen no language reads: English, until `LANGUAGE_LIVE`; Bahasa Indonesia from then** —
- * from 2026-10-29, when it went live.
+ * **The words a reader who has chosen no language reads today: `unchosenLanguage(LANGUAGE_LIVE)` — Bahasa Indonesia**,
+ * `'id'`, live since 2026-10-29.
  *
- * The product's default is Indonesian (`DEFAULT_LANGUAGE`), and it becomes the answer here when the *ID | EN* switch
- * goes live (above). Until then almost every screen's words are still English literals, so nobody reads Indonesian
- * words unless they chose them: in EN mode no screen changes. Their figures are Indonesian meanwhile (`figureLanguage`).
+ * The product's default is Indonesian (`DEFAULT_LANGUAGE`), and it has been the answer here since the *ID | EN* switch
+ * went live (above). Before then it was English, while the screens' words were still being moved, so nobody read
+ * Indonesian words unless they chose them; their figures were Indonesian meanwhile (`figureLanguage`).
  *
  * It is also **the language the prerendered pages are written in**: the server renders in it, the first client render
  * matches it, and `<html lang>` starts from it (`app/layout.tsx`).

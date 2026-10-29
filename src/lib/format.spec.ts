@@ -1004,7 +1004,7 @@ describe('P18.98-T3 AC-6 the guard: one module writes figures', () => {
 /**
  * **P18.98-T3 figures: a formatter is handed the figures' language, never the words'.** A figure is written in
  * `useFigureLanguage()`'s language — the reader's choice, Indonesian with none, whether or not the switch is live — and
- * `useLanguage()` is the words', English for a reader with no choice until the switch is live: handed to a formatter it
+ * `useLanguage()` is the words', English for a reader with no choice whenever the switch is not live (so until 2026-10-29): handed to a formatter it
  * writes *IDR 5.8B* on a staging of *Rp 5,8 M* (the client's UI-019). Read from the source, as the guard above is: a
  * call to a function of `lib/format.ts`, or to `groupDigits`, whose arguments hold `useLanguage()` or a name bound to it.
  * A file that needs both names them apart. What a helper does with a language it is handed is its own spec's.

@@ -9,6 +9,7 @@ import { messagesIn, type MessageArea, type MessagesOf, type MessageTree } from 
 import {
   figureLanguage, isLanguage, LANGUAGE_LIVE, LANGUAGE_PENDING, SOURCE_LANGUAGE, unchosenLanguage, type Language,
 } from './language';
+import { watchKeptTerms } from './kept-lang';
 import { readLanguageCookie, writeLanguageCookie } from './language-cookie';
 
 /**
@@ -38,10 +39,10 @@ export const FigureLanguageContext = createContext<Language | null>(null);
  * **The language a figure is written in** — what a screen hands every formatter (`lib/format.ts`):
  * `formatCalendarDay(day, language)`, `formatRupiahCompact(minor, {}, language)`, `moneyPrefix(language)` (P18.98-T3;
  * ADR-0174, ADR-0179 §6). **The reader's chosen language, and with no choice `DEFAULT_LANGUAGE`, Bahasa Indonesia, in
- * every state of `LANGUAGE_LIVE`** (`figureLanguage`). A reader with no choice reads English words until the switch is
- * live (`useLanguage`), so until then they read English words and Indonesian figures — every screen as it was before
- * the phase; a reader who chose a language, by the cookie or on their account, reads both in it; once live the two
- * always agree.
+ * every state of `LANGUAGE_LIVE`** (`figureLanguage`). Live, as it is since 2026-10-29, the two always agree: a reader
+ * with no choice reads Indonesian words (`useLanguage`) and figures, and a reader who chose a language, by the cookie or
+ * on their account, reads both in it. Before the release a reader with no choice read English words and Indonesian
+ * figures — every screen as it was before the phase.
  *
  * **Outside a provider it is the words' language**: English in every spec that does not ask, Indonesian under
  * `InLanguage`. A spec's language counts as a language the reader chose, so a spec reads its figures as it reads its
@@ -64,7 +65,7 @@ export function useMessages<E extends MessageTree>(area: MessageArea<E>): Messag
  * **Choosing the language, and following an account's** (ADR-0179 §2; P18.98-T2 AC-3, AC-5).
  *
  * - **`live`** — whether the product offers the choice: the switch and *Language* on *Your account* are drawn only
- *   while it is true (`LANGUAGE_LIVE`).
+ *   while it is true (`LANGUAGE_LIVE`, `true` since P18.98-T4's exit, 2026-10-29).
  * - **`choose(language)`** — the reader chose, on the switch or on *Your account*: the screen is written in it at once,
  *   with no reload and no remount, so an open form keeps what was typed; the cookie keeps it for the browser, and the
  *   API is told it from the next request. Saving it on the account is the caller's (`useChooseLanguage`), which knows
@@ -121,6 +122,8 @@ function sessionKey(me: Me): string {
  *   this first commit, so a field that keeps the text of its first frame (`DecimalInput`, a money field's draft) starts
  *   in the figures' language the reader reads.
  *
+ * - **The kept-English terms**, in ID mode, carry `lang="en"` (`watchKeptTerms`, P18.98-T7 AC-2).
+ *
  * `live` is `LANGUAGE_LIVE`; a spec passes `live` to exercise the switch as it will be once released.
  */
 export function LanguageProvider({ live = LANGUAGE_LIVE, children }: { live?: boolean; children: ReactNode }) {
@@ -151,6 +154,10 @@ export function LanguageProvider({ live = LANGUAGE_LIVE, children }: { live?: bo
     root.removeAttribute(LANGUAGE_PENDING);
     setRequestLanguage(language);
   }, [language, unchosen]);
+
+  // In ID mode every kept-English term the screen shows says it is English (WCAG 3.1.2; P18.98-T7 AC-2): one pass over
+  // the document, kept up as React writes it, undone the moment the words are English (`kept-lang.ts` says why).
+  useEffect(() => (language === 'id' ? watchKeptTerms(document.body) : undefined), [language]);
 
   /** Into force at once: the API's next request, the cookie, and the screen, in that order. */
   const apply = useCallback((next: Language) => {

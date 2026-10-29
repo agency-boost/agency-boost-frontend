@@ -29,7 +29,7 @@ afterEach(() => {
 
 /**
  * **P18.98-T2 AC-4: *Language* on *Your account*** (ADR-0179 §2; UI-041) — *Bahasa Indonesia* or *English*, the same
- * preference as the switch, saving by itself with *Saving… → Saved ✓* (OD-200). Held back until `LANGUAGE_LIVE`.
+ * preference as the switch, saving by itself with *Saving… → Saved ✓* (OD-200). Drawn while `LANGUAGE_LIVE` (live since 2026-10-29).
  */
 describe('P18.98-T2 Language on Your account', () => {
   it('AC-4 is not drawn while the switch is not live', () => {

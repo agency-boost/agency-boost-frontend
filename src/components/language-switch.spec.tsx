@@ -144,7 +144,7 @@ describe('P18.98-T2 the switch, live, in every shell’s header', () => {
     expect(hiddenAt(inBar, 1280)).toBe(true);
   });
 
-  it.each([768, 1024, 1280])('AC-3 at %ipx sits at the page header’s top right, before the page’s own actions', (px) => {
+  it.each([768, 1024, 1280])('AC-3 at %ipx sits at the page header’s top right, after the page’s own actions: the right-most thing in it', (px) => {
     atWidth(px);
     stubFetch({});
     renderLive(shell());
@@ -153,11 +153,14 @@ describe('P18.98-T2 the switch, live, in every shell’s header', () => {
     expect(switchesIn(main())).toHaveLength(1);
     const heading = screen.getByRole('heading', { level: 1, name: 'Log Activity' });
     const action = screen.getByRole('button', { name: 'Log today' });
-    // The header's row: the title on the left; on the right the switch, then the page's actions, in that order.
-    const row = heading.parentElement!.parentElement!;
-    const cluster = inHeader.parentElement!;
-    expect(Array.from(row.children)).toEqual([heading.parentElement, cluster]);
-    expect(Array.from(cluster.children)).toEqual([inHeader, action]);
+    // The header's row: the title and the page's actions, which wrap among themselves; then the switch, a column of its
+    // own at the top-right corner that never wraps (2026-10-29: right of every action, on every page).
+    const titleAndActions = heading.parentElement!.parentElement!;
+    const row = inHeader.parentElement!;
+    expect(Array.from(titleAndActions.children)).toEqual([heading.parentElement, action]);
+    expect(Array.from(row.children)).toEqual([titleAndActions, inHeader]);
+    expect(row).not.toHaveClass('flex-wrap');
+    expect(inHeader).toHaveClass('shrink-0');
     // Shown here from 768px, its 44px targets centred on the title's line; the bar's is hidden by its class.
     expect(hiddenAt(inHeader, px)).toBe(false);
     expect(wears(inHeader, px)).toContain('-my-[5px]');
@@ -172,9 +175,9 @@ describe('P18.98-T2 the switch, live, in every shell’s header', () => {
     renderLive(<PageHeaderInShell />);
 
     const [inHeader] = switchesIn(main());
-    const row = screen.getByRole('heading', { level: 1 }).parentElement!.parentElement!;
-    expect(row.lastElementChild).toBe(inHeader.parentElement);
-    expect(Array.from(inHeader.parentElement!.children)).toEqual([inHeader]);
+    const titleAndActions = screen.getByRole('heading', { level: 1 }).parentElement!.parentElement!;
+    expect(Array.from(titleAndActions.children)).toHaveLength(1);
+    expect(Array.from(inHeader.parentElement!.children)).toEqual([titleAndActions, inHeader]);
   });
 
   it('AC-3 is named Language, the current option pressed, each option its code and its language’s own name', () => {
@@ -339,7 +342,9 @@ describe('P18.98-T2 the switch, live, in each of the three shells', () => {
 
     width.resize(1280);
     expect(switchesIn(main())).toHaveLength(1);
-    expect(screen.getByRole('heading', { level: 1 }).parentElement!.parentElement!.lastElementChild)
-      .toBe(switchesIn(main())[0].parentElement);
+    // The header's top-right corner: the row's last child, right of the title and the page's actions (2026-10-29).
+    const [inHeader] = switchesIn(main());
+    expect(inHeader.parentElement!.lastElementChild).toBe(inHeader);
+    expect(inHeader.parentElement!.firstElementChild).toBe(screen.getByRole('heading', { level: 1 }).parentElement!.parentElement);
   });
 });

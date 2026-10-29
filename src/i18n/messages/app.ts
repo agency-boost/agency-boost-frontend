@@ -6,7 +6,7 @@ import { kept } from '@/i18n/kept';
  * link's preview shows (P18.98-T4, public and account). It is written into every prerendered page's `<head>`, before
  * any reader's language is known, so it is written **in the language the pages are prerendered in,
  * `LANGUAGE_UNCHOSEN`** — the language `<html lang>` starts in, and the one a reader who has chosen nothing reads:
- * English until the switch is live, Bahasa Indonesia from then (ADR-0179 §1). No route reads the cookie on the server
+ * Bahasa Indonesia, since the switch went live on 2026-10-29, and English before it (ADR-0179 §1). No route reads the cookie on the server
  * for it (P18.98-T1 AC-3). The product's name, the page's title, is kept (§A.5).
  *
  * **English is the source**, as the layout wrote it. *Office* is *KPM* (§B.9); *leads* and *coaching* are kept (§A.6).

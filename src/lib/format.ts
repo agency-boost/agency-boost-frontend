@@ -13,7 +13,8 @@ import { DEFAULT_LANGUAGE, type Language } from '@/i18n/language';
  * caller that passes none gets **Indonesian** (`DEFAULT_LANGUAGE`), the forms every screen wrote before — so nothing
  * changes until a screen passes `useFigureLanguage()`: the reader's chosen language, and Indonesian with no choice,
  * whether or not the switch is live. **Never `useLanguage()`**, the words' language, which for a reader with no choice
- * is English until the switch is live (`figureLanguage`, `i18n/language.ts`):
+ * was English until the switch went live on 2026-10-29, and can differ again whenever it is not
+ * (`figureLanguage`, `i18n/language.ts`):
  *
  * | | ID (ADR-0167 §1, ADR-0174) | EN (§E) |
  * |---|---|---|

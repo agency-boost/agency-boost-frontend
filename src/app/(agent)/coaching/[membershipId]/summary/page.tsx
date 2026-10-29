@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useCoachee } from '@/components/coaching-person';
 import { Page } from '@/components/page';
-import { SUMMARY_VIEWS, SummaryCards, type SummaryView } from '@/components/personal-summary';
+import { SummaryCards, useSummaryViews, type SummaryView } from '@/components/personal-summary';
 import { SummaryPeriodSelect, useSummaryPeriod } from '@/components/summary-period';
 import { ErrorBanner } from '@/components/ui/field';
 import { Segmented } from '@/components/ui/segmented';
@@ -62,6 +62,8 @@ function SummaryTab() {
 
 function CoacheeSummary({ coachee, address }: { coachee: Coachee; address: SummaryPeriodQuery }) {
   const t = useMessages(coachingMessages).pages;
+  // *Bulanan* · *Tahunan* in ID mode, as `/summary` draws them (found English by P18.98-T7 AC-1).
+  const views = useSummaryViews();
   const { asked, view, chooseView, choose, key } = useSummaryPeriod(address);
   /** The last Summary read: whose, for which period, and what it said. */
   const [held, setHeld] = useState<{ membershipId: string; key: string; summary: Summary } | null>(null);
@@ -104,7 +106,7 @@ function CoacheeSummary({ coachee, address }: { coachee: Coachee; address: Summa
       {frame && (
         <Segmented
           label={t.period}
-          tabs={SUMMARY_VIEWS}
+          tabs={views}
           active={view}
           onSelect={(id) => chooseView(id as SummaryView)}
           className="w-fit [&_button]:whitespace-nowrap [&_button]:px-3.5"

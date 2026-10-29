@@ -46,7 +46,7 @@ afterEach(() => {
 
 /**
  * **P18.98-T2 AC-3: the switch on the six public pages' card** (ADR-0179 §2). No shell, no bar: it sits on the
- * page's own column, on the title's line, at every size. Held back until `LANGUAGE_LIVE`.
+ * page's own column, on the title's line, at every size. Drawn while `LANGUAGE_LIVE` (live since 2026-10-29).
  */
 describe('P18.98-T2 the switch on the public pages', () => {
   it.each(TITLED)('AC-3 draws nothing on %s while it is not live: the title is the page’s, as it was', async (_, page, title) => {

@@ -1,6 +1,6 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { axe } from 'vitest-axe';
 import AdminLayout from '@/app/(admin)/layout';
 import KpmRequestsPage from './(admin)/admin/kpm-requests/page';
@@ -10,6 +10,8 @@ import NotificationsPage from './notifications/page';
 import TenantLayout from '@/app/(tenant)/layout';
 import AgentLayout from '@/app/(agent)/layout';
 import { atWidth, InLanguage, makeMe, renderInLayout, renderWithSession, routeParams, stubFetch } from '@test/harness';
+import { englishShown, everyAreasEnglish } from '@test/english-left';
+import { watchKeptTerms } from '@/i18n/kept-lang';
 import LoginPage from './(auth)/login/page';
 import RegisterPage from './(auth)/register/page';
 import ForgotPasswordPage from './(auth)/forgot-password/page';
@@ -52,6 +54,9 @@ import CoachingPersonLayout from './(agent)/coaching/[membershipId]/layout';
 import CoacheeSummaryTab from './(agent)/coaching/[membershipId]/summary/page';
 import CoacheeGoalSettingTab from './(agent)/coaching/[membershipId]/goal-setting/page';
 import CoacheeTrainingTab from './(agent)/coaching/[membershipId]/training/page';
+import CoacheeActivityTab from './(agent)/coaching/[membershipId]/activity/page';
+import CoachingPersonIndex from './(agent)/coaching/[membershipId]/page';
+import Home from './page';
 import CoachingSessionTabPage from './(agent)/coaching/[membershipId]/session/page';
 import CoacheeLeaderNotesTab from './(agent)/coaching/[membershipId]/leader-notes/page';
 import CoachingArchivePage from './(agent)/coaching/[membershipId]/archive/[sessionId]/page';
@@ -204,12 +209,38 @@ const treeNode = (over: Record<string, unknown>) => ({
   isLeader: false, isSelf: false, ...over,
 });
 
+/**
+ * What these fixtures type that a message also writes in English: an office's or a company's words, shown as typed in
+ * both languages — the library company named *Template*, a request's branch *Surabaya Branch* (the register form's
+ * English example) — and the roster file's month column, `YYYY-MM`, a machine format and not a word.
+ */
+const TYPED_LIKE_A_MESSAGE = new Set(['Template', 'Surabaya Branch', 'YYYY-MM']);
+
+/** Every area's English-only words: what no screen in ID mode may show (P18.98-T7 AC-1). */
+const EVERY_ENGLISH = (await everyAreasEnglish()).filter((word) => !TYPED_LIKE_A_MESSAGE.has(word));
+
+/** A case that renders its screen in ID mode says so in its name: `(id)`, `(id, …)`, `(…, id)` or *in Indonesian*. */
+const IN_INDONESIAN = /(?:\(|, )id[,)]|Indonesian/;
+
+/** How many kept terms axe met marked `lang="en"`, over every case in ID mode: none would mean axe never saw a mark. */
+let keptTermsMarked = 0;
+afterAll(() => expect(keptTermsMarked).toBeGreaterThan(0));
+
+/**
+ * axe over the screen as rendered. **In ID mode** (P18.98-T7 AC-1, AC-2) the screen is also read for a message
+ * missing or an English word the glossary does not keep — every area's, not only the screen's own — and axe runs
+ * with the kept terms marked `lang="en"`, as the app's provider marks them (`watchKeptTerms`).
+ */
 async function expectClean(name: string) {
+  const indonesian = IN_INDONESIAN.test(name);
+  if (indonesian) expect(englishShown(document.body, EVERY_ENGLISH), `${name}: English left`).toEqual([]);
+  const stop = indonesian ? watchKeptTerms(document.body) : undefined;
+  if (indonesian) keptTermsMarked += document.body.querySelectorAll('[lang="en"]').length;
   const results = await axe(document.body, {
     // jsdom cannot sample rendered pixels, so contrast is checked from the tokens
     // themselves in a11y.spec.tsx rather than pretended at here.
     rules: { 'color-contrast': { enabled: false } },
-  });
+  }).finally(() => stop?.());
   const violations = results.violations ?? [];
   if (violations.length) {
     throw new Error(
@@ -1051,8 +1082,15 @@ describe('screens have no axe violations', () => {
       <CoachingPersonLayout params={routeParams({ membershipId })}>{tab}</CoachingPersonLayout>,
       { me: coachLeader },
     );
+    /** A person's tab in ID mode (P18.98-T7 AC-1): the shell, the person's shell and the tab, in Indonesian. */
+    const inShellInIndonesian = (tab: React.ReactNode, me = coachLeader) => renderWithSession(
+      <InLanguage language="id">
+        <AgentLayout><CoachingPersonLayout params={routeParams({ membershipId: 'mem-rina' })}>{tab}</CoachingPersonLayout></AgentLayout>
+      </InLanguage>,
+      { me },
+    );
 
-    it('a person’s Personal Summary tab, populated: the shell, the toggle, the tabs and her cards (P11-T7)', async () => {
+    const summaryTabRoutes = () => {
       const M = 1_000_000 * 100;
       const figures = { targetMinor: 75 * M, actualMinor: 30 * M, attainmentPct: 40, gapMinor: 45 * M, overMinor: 0, policiesNeeded: 3, targetMet: false };
       const activity = {
@@ -1063,7 +1101,7 @@ describe('screens have no axe violations', () => {
           { key: 'closings', code: 'SELL_SUBMISSION', logged: 2, target: 5, attainmentPct: 40, targetMet: false },
         ],
       };
-      stubFetch({
+      return {
         ...shell,
         '/coaching/coachees/': { body: rina },
         '/summary': {
@@ -1084,15 +1122,18 @@ describe('screens have no axe violations', () => {
         '/activity/ratios': { body: sessionRatios },
         // P18.5-T9: *Campaigns she's chasing*, as chips.
         'GET /campaigns/chasing': { body: CAMPAIGNS_RINA_CHASING },
-      });
+      };
+    };
+
+    it('a person’s Personal Summary tab, populated: the shell, the toggle, the tabs and her cards (P11-T7)', async () => {
+      stubFetch(summaryTabRoutes());
       inShell(<CoacheeSummaryTab />);
       await screen.findByRole('region', { name: 'Leads that need her' });
       await within(await screen.findByRole('region', { name: "Campaigns she's chasing" })).findByText('Q4 APE Sprint');
       await expectClean('coaching/[membershipId]/summary');
     });
 
-    it('a person’s Goal Setting tab, populated (P11-T7)', async () => {
-      stubFetch({
+    const goalTabRoutes = () => ({
         '/kpm/config': { body: { activity: GOAL_CASCADE_CONFIG, ratios: [], leadPipelines: [], version: 1 } },
         '/kpm/org-levels': { body: [] },
         '/coaching/coachees/': { body: rina },
@@ -1114,7 +1155,10 @@ describe('screens have no axe violations', () => {
             measured: null, savedAt: '2026-09-13T04:00:00.000Z', savedByMembershipId: 'mem-ab',
           },
         },
-      });
+    });
+
+    it('a person’s Goal Setting tab, populated (P11-T7)', async () => {
+      stubFetch(goalTabRoutes());
       inShell(<CoacheeGoalSettingTab />);
       await screen.findByRole('button', { name: 'Save goal' });
       await expectClean('coaching/[membershipId]/goal-setting');
@@ -1130,6 +1174,55 @@ describe('screens have no axe violations', () => {
       inShell(<CoacheeTrainingTab />);
       await screen.findByRole('heading', { level: 2, name: 'Sales (4/10)' });
       await expectClean('coaching/[membershipId]/training');
+    });
+
+    /**
+     * **P18.98-T7 AC-1: the person's tabs no Indonesian case rendered** — *Personal Summary*, *Goal Setting*, *Activity*
+     * and *Training*, each populated as above, read in ID mode by `expectClean`: no message missing, no English the
+     * glossary does not keep, axe with the kept terms marked.
+     */
+    it('P18.98-T7 a person’s Personal Summary tab, in Indonesian', async () => {
+      stubFetch(summaryTabRoutes());
+      inShellInIndonesian(<CoacheeSummaryTab />);
+      await screen.findAllByText('Desi Pratama');
+      await screen.findByText('Q4 APE Sprint');
+      await expectClean('coaching/[membershipId]/summary (id)');
+    });
+
+    it('P18.98-T7 a person’s Goal Setting tab, in Indonesian', async () => {
+      stubFetch(goalTabRoutes());
+      inShellInIndonesian(<CoacheeGoalSettingTab />);
+      await screen.findByRole('button', { name: 'Simpan goal' });
+      await expectClean('coaching/[membershipId]/goal-setting (id)');
+    });
+
+    it('P18.98-T7 a person’s Activity tab, populated, in Indonesian', async () => {
+      const counts = [3, 0, 1, 0, 2, 0, 0];
+      stubFetch({
+        ...shell,
+        '/coaching/coachees/': { body: rina },
+        '/activity/dashboard': {
+          body: {
+            range: 'ROLLING_7D', from: '2026-09-08', to: '2026-09-14', days: 7, today: '2026-09-14',
+            buckets: ['14', '13', '12', '11', '10', '09', '08'].map((d) => ({ from: `2026-09-${d}`, to: `2026-09-${d}`, days: 1, kind: 'day' })),
+            sections: [{
+              code: 'SELLING', label: 'Selling', standing: 'shown', total: 6, counts,
+              types: [{ code: 'SELL_SUBMISSION', label: 'Submission polis', description: null, displayOrder: 6, standing: 'shown', total: 6, counts }],
+            }],
+            total: 6, counts, daysLogged: 3, correctedDays: 0,
+          },
+        },
+      });
+      inShellInIndonesian(<CoacheeActivityTab />, makeMe({ ...coachLeader, permissions: [...coachLeader.permissions, 'activity_log:read_raw'] }));
+      await screen.findByText('Submission polis');
+      await expectClean('coaching/[membershipId]/activity (id)');
+    });
+
+    it('P18.98-T7 a person’s Training tab, in Indonesian', async () => {
+      stubFetch({ ...shell, '/coaching/coachees/': { body: rina }, 'GET /training/progress': { body: trainingProgressView([TRAINING_SALES, TRAINING_PRODUCT]) } });
+      inShellInIndonesian(<CoacheeTrainingTab />);
+      await screen.findByText(TRAINING_SALES.skills[0].modules[0].title);
+      await expectClean('coaching/[membershipId]/training (id)');
     });
 
     const archiveLeader = makeMe({
@@ -3350,6 +3443,17 @@ describe('screens have no axe violations', () => {
       renderInLayout(AgentLayout, <RecruitmentLayout><PitchMaterialsPage /></RecruitmentLayout>, { me: RECRUITMENT_ME });
       await screen.findByRole('article', { name: 'Agency Profile' });
       await expectClean(`recruitment/pitch-materials (${state})`);
+    });
+
+    it.each(Object.keys(PITCH) as (keyof typeof PITCH)[])('P18.98-T7 Recruitment › Pitch Materials in Indonesian, %s', async (state) => {
+      nav.pathname = '/recruitment/pitch-materials';
+      stubFetch({ ...PITCH_SHELL, 'GET /recruitment/pitch-materials': { body: PITCH[state] } });
+      renderWithSession(
+        <InLanguage language="id"><AgentLayout><RecruitmentLayout><PitchMaterialsPage /></RecruitmentLayout></AgentLayout></InLanguage>,
+        { me: RECRUITMENT_ME },
+      );
+      await screen.findByRole('article', { name: 'Agency Profile' });
+      await expectClean(`recruitment/pitch-materials (${state}, id)`);
     });
 
     it('Recruitment › Pitch Materials, its read failed', async () => {
@@ -6810,5 +6914,31 @@ describe('P18.98-T6 the company templates in Indonesian', () => {
     inIndonesian('/admin/org-levels', <OrgLevelsPage />);
     await screen.findByRole('table', { name: 'Susunan jenjang, dari yang paling junior' });
     await expectClean('admin/org-levels (id)');
+  });
+});
+
+/**
+ * **P18.98-T7 AC-1: every page in ID mode.** The cases above render every screen populated, and `expectClean` reads
+ * each one in Indonesian for a message missing or English the glossary does not keep. These are the pages no case
+ * rendered in Indonesian yet: the two that only send the reader on, shown while they do.
+ * `every-page-in-indonesian.spec.ts` holds the list to every route.
+ */
+describe('P18.98-T7 the pages that only send the reader on, in Indonesian', () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('/ while it finds where the reader belongs', async () => {
+    renderWithSession(<InLanguage language="id"><Home /></InLanguage>, { me: null, loading: true });
+    await expectClean('/ (id, the wait)');
+  });
+
+  it('coaching/[membershipId] while it opens the person on their session', async () => {
+    renderWithSession(
+      <InLanguage language="id"><CoachingPersonIndex params={routeParams({ membershipId: 'mem-rina' })} /></InLanguage>,
+      { me: makeMe() },
+    );
+    await expectClean('coaching/[membershipId] (id, the wait)');
   });
 });

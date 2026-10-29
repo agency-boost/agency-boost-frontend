@@ -67,7 +67,7 @@ describe('P18.98-T2 the switch on a page that draws its own header', () => {
     expect(switchIn(document.body)).toBeNull();
   });
 
-  it('AC-3 sits before a coachee’s view toggle when their name is the page’s title, and not under another title', () => {
+  it('AC-3 sits right of a coachee’s view toggle, at the corner, when their name is the page’s title, and not under another title', () => {
     atWidth(1280);
     stubFetch({});
     renderLive(inShell(
@@ -83,7 +83,10 @@ describe('P18.98-T2 the switch on a page that draws its own header', () => {
 
     const toggle = screen.getByRole('button', { name: 'Leader view' });
     const group = switchIn(document.querySelector('main')!)!;
-    expect(Array.from(toggle.parentElement!.children)).toEqual([group, toggle]);
+    // The toggle with the name, then the switch in a column of its own at the top-right corner (2026-10-29).
+    expect(toggle.parentElement!.lastElementChild).toBe(toggle);
+    expect(group.parentElement!.lastElementChild).toBe(group);
+    expect(group.parentElement!.firstElementChild).toBe(toggle.parentElement);
     // The second, an `<h2>` under the page's own title, has no switch of its own.
     expect(within(document.querySelector('main')!).getAllByRole('group', { name: /^(Language|Bahasa)$/ })).toHaveLength(1);
   });

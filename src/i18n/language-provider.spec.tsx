@@ -74,7 +74,8 @@ describe('P18.98-T1 LanguageProvider', () => {
 
     render(<LanguageProvider><Screen /></LanguageProvider>);
 
-    expect(screen.getByText('Leads management: Tersimpan ✓ 3 leads perlu di-follow up')).toBeInTheDocument();
+    // The sentence's text, read whole: in ID mode its kept terms are their own `<span lang="en">` (P18.98-T7 AC-2).
+    expect(document.querySelector('p')).toHaveTextContent('Leads management: Tersimpan ✓ 3 leads perlu di-follow up');
     expect(root.lang).toBe('id');
     expect(root.hasAttribute(LANGUAGE_PENDING)).toBe(false);
   });

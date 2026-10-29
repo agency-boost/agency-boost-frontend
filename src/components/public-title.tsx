@@ -27,7 +27,8 @@ export function PublicTitle({ children }: { children: ReactNode }) {
 
 /**
  * **The switch on a public page with no title of its own** — `/join`'s invite card, signed out (`RoleShell`): at the
- * top right of the card's column, above it. Nothing until the switch is live.
+ * top right of the card's column, above it. Drawn while the switch is live — since 2026-10-29; nothing before it went
+ * live.
  */
 export function PublicLanguageRow() {
   const { live } = useLanguageChoice();

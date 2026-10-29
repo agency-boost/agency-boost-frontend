@@ -65,7 +65,7 @@ export function defineMessages<E extends MessageTree>(area: MessageArea<E>): Mes
  * **An area's messages in a language**, for a function outside React that writes words: it takes the reader's
  * `language` as its last parameter, defaulting to the source (`SOURCE_LANGUAGE`), which its spec reads, and its
  * caller passes `useLanguage()` — **never `useFigureLanguage()`**, which differs from it for a reader with no choice
- * until the switch is live (P18.98-T3). A figure inside a message is written by its caller, in the figures' language,
+ * whenever the switch is not live, as it was not until 2026-10-29 (P18.98-T3). A figure inside a message is written by its caller, in the figures' language,
  * and passed in as a value.
  */
 export function messagesIn<E extends MessageTree>(area: MessageArea<E>, language: Language): MessagesOf<E> {

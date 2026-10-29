@@ -257,26 +257,41 @@ export function PageHeader({
   const fromPage = useContext(SubtitleOnPhone);
   const onPhone = subtitleOnPhone ?? fromPage;
   const withLanguage = usePageLanguageSwitch();
-  return (
-    <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <h1 className="font-display text-3xl font-bold text-navy">{title}</h1>
-        {subtitle && <p className={cn('mt-1 text-md text-muted', !onPhone && REMOVED_ON_PHONE)}>{subtitle}</p>}
+  const heading = (
+    <div>
+      <h1 className="font-display text-3xl font-bold text-navy">{title}</h1>
+      {subtitle && <p className={cn('mt-1 text-md text-muted', !onPhone && REMOVED_ON_PHONE)}>{subtitle}</p>}
+    </div>
+  );
+  if (!withLanguage) {
+    return (
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+        {heading}
+        {actions}
       </div>
-      {/* The switch at the header's top right, before the page's own actions (P18.98-T2 AC-3); nothing changes until it is live. */}
-      {withLanguage ? (
-        <div className="flex flex-wrap items-start gap-4">
-          <PageLanguageSwitch />
-          {actions}
-        </div>
-      ) : actions}
+    );
+  }
+  /*
+   * **The switch is the header's top-right corner, on every page** (P18.98-T2 AC-3; 2026-10-29, the product owner: on
+   * `/admin/tenants` and `/admin/audit` a button and a filter sat to its right, and where the actions wrapped under the
+   * title the switch went with them, to the left). It is a column of its own that never wraps; the title and the page's
+   * actions share the rest of the row and wrap within it, as they did before the switch.
+   */
+  return (
+    <div className="mb-5 flex items-start gap-4">
+      <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-4">
+        {heading}
+        {actions}
+      </div>
+      <PageLanguageSwitch className="shrink-0" />
     </div>
   );
 }
 
 /**
  * **Whether a page's header draws the *ID | EN* switch** (P18.98-T2 AC-3): a shell's page, from 768px — on a phone the
- * switch is on the bar — once the switch is live. `AppShell` says the first two; `PageHeader` is always in a shell.
+ * switch is on the bar — while the switch is live, as it is since P18.98-T4's exit (2026-10-29). `AppShell` says the
+ * first two; `PageHeader` is always in a shell.
  */
 const PageHeaderLanguage = createContext(false);
 
@@ -288,7 +303,7 @@ export function usePageLanguageSwitch(): boolean {
 }
 
 /**
- * **The *ID | EN* switch at a page header's top right** (P18.98-T2 AC-3), before the page's own actions: at the head of
+ * **The *ID | EN* switch at a page header's top-right corner** (P18.98-T2 AC-3), right of the page's own actions: at the head of
  * every shell's page from 768px, where the title is. Its 44px targets sit centred on the title's line (`-my-[5px]`),
  * so the header is no taller for it. Hidden by its class below 768px as well, so a phone's first frame — before the
  * width is read — never shows it twice. A page that draws its own heading block (*Billing*, a coachee's name) puts this
@@ -399,7 +414,7 @@ function SidebarFoot({
    * **The *ID | EN* switch, on a phone's bar between the brand and the avatar** (P18.98-T2 AC-3; the client's
    * *visible in the mobile header*, UI-041). Hidden by its class from 768px, as ☰ is shown by its own, so a phone's
    * first frame already has it and nothing wider ever shows it: there the page header carries it (`PageHeader`).
-   * Nothing at all until the switch is live (`LANGUAGE_LIVE`).
+   * Drawn while the switch is live (`LANGUAGE_LIVE`, `true` since 2026-10-29); nothing at all before it went live.
    */
   const language = <LanguageSwitch tone="bar" className="md:hidden" />;
 

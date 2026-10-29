@@ -33,3 +33,11 @@ export function kept<const T extends KeptTerm>(term: T): Kept<T> {
 export function isKept(text: unknown): text is Kept {
   return typeof text === 'string' && named.has(text);
 }
+
+/**
+ * Every kept term the app has named so far — what `kept-lang.ts` looks for in an Indonesian screen. It grows as a
+ * route's chunk loads and its areas call `kept()`, so a reader compares its `size` to know when to look again.
+ */
+export function keptTerms(): ReadonlySet<string> {
+  return named;
+}

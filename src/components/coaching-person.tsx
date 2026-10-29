@@ -302,8 +302,8 @@ export function PersonIdentity({
   const Name = title ? 'h1' : 'h2';
   // The page's own header (`title`): once the language switch is live, it sits here, before the view toggle (P18.98-T2).
   const withLanguage = usePageLanguageSwitch() && title;
-  return (
-    <div className="mb-[22px] flex flex-wrap items-center justify-between gap-4">
+  const row = (
+    <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-4">
       <div className="flex items-center gap-3.5">
         <span
           aria-hidden="true"
@@ -316,12 +316,15 @@ export function PersonIdentity({
           {line && <p className="mt-0.5 text-base text-muted">{line}</p>}
         </div>
       </div>
-      {withLanguage ? (
-        <div className="flex flex-wrap items-center gap-4">
-          <PageLanguageSwitch className="md:my-0" />
-          {children}
-        </div>
-      ) : children}
+      {children}
+      </div>
+  );
+  if (!withLanguage) return <div className="mb-[22px]">{row}</div>;
+  // The switch at the top-right corner, a column of its own, as on every page header (`PageHeader`, 2026-10-29).
+  return (
+    <div className="mb-[22px] flex items-center gap-4">
+      {row}
+      <PageLanguageSwitch className="shrink-0 md:my-0" />
     </div>
   );
 }
