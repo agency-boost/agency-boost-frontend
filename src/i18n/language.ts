@@ -39,8 +39,11 @@ export const SOURCE_LANGUAGE: Language = 'en';
  *
  * Flipping it is the whole release: the switch appears everywhere, and a reader with no choice and no cookie reads
  * Bahasa Indonesia from their next visit.
+ *
+ * **Live since P18.98-T4's exit, 2026-10-29**, with the backend's (ADR-0179's dated note): the Owner's, the AB's and the
+ * Super Admin's screens read the approved Indonesian, and the product owner approved every word the areas proposed.
  */
-export const LANGUAGE_LIVE: boolean = false;
+export const LANGUAGE_LIVE: boolean = true;
 
 /** **The words a reader who has chosen nothing reads**: Bahasa Indonesia once the switch is live, English until then. */
 export function unchosenLanguage(live: boolean): Language {
@@ -64,7 +67,8 @@ export function figureLanguage(chosen: Language | null): Language {
 }
 
 /**
- * **The words a reader who has chosen no language reads: English, until `LANGUAGE_LIVE`; Bahasa Indonesia from then.**
+ * **The words a reader who has chosen no language reads: English, until `LANGUAGE_LIVE`; Bahasa Indonesia from then** —
+ * from 2026-10-29, when it went live.
  *
  * The product's default is Indonesian (`DEFAULT_LANGUAGE`), and it becomes the answer here when the *ID | EN* switch
  * goes live (above). Until then almost every screen's words are still English literals, so nobody reads Indonesian

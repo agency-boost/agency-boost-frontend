@@ -180,7 +180,8 @@ const id: MessagesOf<typeof en> = {
     campaigns: kept('Campaigns'),
   },
   activityTooltip: 'Apakah aktivitas tercatat setidaknya sekali dalam 7 hari terakhir — tidak ada status sebagian, hanya Tercatat atau Terlewat.',
-  comingSoon: ({ name }) => `${kept('Modules')} untuk ${name} segera hadir.`,
+  // *module* in a sentence is *modul* (§B.10, approved 2026-10-29); the tab's name stays kept.
+  comingSoon: ({ name }) => `Modul untuk ${name} segera hadir.`,
   searchPlaceholder: `Cari nama agent atau ${kept('leader')}…`,
   noMatch: 'Tidak ada yang cocok dengan pencarian ini.',
   sort: {

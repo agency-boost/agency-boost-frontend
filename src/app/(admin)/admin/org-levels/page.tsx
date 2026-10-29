@@ -210,7 +210,9 @@ export default function OrgLevelsPage() {
         </div>
       </Field>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
+      {/* `minmax(0, 1fr)`, not `1fr`: a column is otherwise at least as wide as its table, which pushed the page sideways
+          at every size; the table scrolls in its own frame instead (P18.98-T4 AC-6, the walk of 2026-10-29). */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div>
           {levels === null && <SkeletonTable caption={t.ladder} columns={columns} rows={3} />}
 

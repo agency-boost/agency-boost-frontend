@@ -1,7 +1,7 @@
 /**
  * **The approved glossary's lists, as code reads them** (P18.98-T1 AC-7; OD-237, approved as proposed 2026-10-28).
  *
- * The words themselves are [the glossary for approval](../../../docs/05-delivery/phases/phase-18.98-glossary-for-approval.md):
+ * The words themselves are [the glossary approved 2026-10-29](../../../docs/05-delivery/phases/phase-18.98-glossary-for-approval.md):
  * this file holds the two lists a program has to check against, each section citing its part of that document.
  *
  * - **`KEPT_ENGLISH` — §A, the terms that read in English in both languages** (UI-041's five groups, made concrete).
@@ -170,7 +170,7 @@ export const KEPT_ENGLISH = {
     'SUPERADMIN', 'Agency Builder', 'Associate Agency Builder', 'Core Leader', 'MDRT', 'Star Club', 'Elite Club',
     'Chairman’s Club', "Chairman's Club", 'MOC', 'Maintenance of Contract', 'Strategic Leader Forum',
     'Sales Attack Plan', 'AgencyBoost', 'New hire', '3M activation', '90-day activation',
-    // For approval (the glossary for approval's §B.10, P18.98-T4): *Agent*'s English plural, §B.0 rule 8.
+    // Approved 2026-10-29 (the glossary approved 2026-10-29's §B.10, P18.98-T4): *Agent*'s English plural, §B.0 rule 8.
     'Agents',
     // For approval (§B.10, P18.98-T4): *New hire* as a sentence writes it — *untuk new hire* — as §A.6's jargon is listed.
     'new hire',
@@ -254,7 +254,7 @@ export const SAME_IN_INDONESIAN = [
 /**
  * **The words §B translates where §A keeps the same spelling elsewhere** (P18.98-T4): *Pending* is a status chip in
  * §B.3 (*Menunggu*) and a tab of *All members* in §A.3; *Removed* likewise (*Dikeluarkan*); *Groups* is that tab and a
- * field's legend (*Grup*); *Owner* is the KPM's role (§A.5) and a group's owner (*Pemilik*) — the last two for approval
+ * field's legend (*Grup*); *Owner* is the KPM's role (§A.5) and a group's owner (*Pemilik*) — the last two approved 2026-10-29
  * in §B.10. The characters cannot tell the two apart, so a message whose English is one of these may be translated
  * (`catalogue.spec.ts`); **where it is the kept term it is written `kept('…')`**, which `tsc` holds to the same term in
  * both languages (`MessagesOf`).
@@ -265,7 +265,7 @@ export const KEPT_ELSEWHERE = [
   // *Categories* is §B.4's word for a group of chips (*Kategori*, the compliance tree's) and §A.3's Training tab.
   'Month', 'Categories',
   // P18.98-T4, new hires and activation: *Your team* is §A.4's Unit Dashboard KPI and *Add New Agents*' card of the
-  // people who report to the reader (*Tim Anda*, for approval in §B.10).
+  // people who report to the reader (*Tim Anda*, approved in §B.10, 2026-10-29).
   'Your team',
   // P18.98-T4, field selling: *Activity* is §A.3's coaching tab and the Activity Dashboard's first column, a header
   // (*Aktivitas*, §B bucket 2).

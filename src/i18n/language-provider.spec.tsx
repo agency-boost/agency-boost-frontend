@@ -51,6 +51,9 @@ describe('P18.98-T1 a screen’s words', () => {
   });
 });
 
+/** *Saved ✓* in the language a reader who has chosen nothing reads: Indonesian since T4's exit, when it went live. */
+const SAVED_UNCHOSEN = ({ en: 'Saved ✓', id: 'Tersimpan ✓' } as const)[LANGUAGE_UNCHOSEN];
+
 describe('P18.98-T1 LanguageProvider', () => {
   afterEach(() => {
     root.lang = '';
@@ -60,7 +63,7 @@ describe('P18.98-T1 LanguageProvider', () => {
   it('AC-3 writes a page with no language read before it in the language the prerender used, and says so on <html>', () => {
     render(<LanguageProvider><Screen /></LanguageProvider>);
 
-    expect(screen.getByText(/Saved ✓/)).toHaveAttribute('data-language', LANGUAGE_UNCHOSEN);
+    expect(screen.getByText(new RegExp(SAVED_UNCHOSEN))).toHaveAttribute('data-language', LANGUAGE_UNCHOSEN);
     expect(root.lang).toBe(LANGUAGE_UNCHOSEN);
   });
 
@@ -82,7 +85,7 @@ describe('P18.98-T1 LanguageProvider', () => {
     render(<LanguageProvider><Screen /></LanguageProvider>);
 
     // Not one of ours: the page's own language stands, and `<html lang>` says it.
-    expect(screen.getByText(/Saved ✓/)).toHaveAttribute('data-language', LANGUAGE_UNCHOSEN);
+    expect(screen.getByText(new RegExp(SAVED_UNCHOSEN))).toHaveAttribute('data-language', LANGUAGE_UNCHOSEN);
     expect(root.lang).toBe(LANGUAGE_UNCHOSEN);
   });
 
@@ -92,7 +95,7 @@ describe('P18.98-T1 LanguageProvider', () => {
 
     const html = renderToString(<LanguageProvider><Screen /></LanguageProvider>);
 
-    expect(html).toContain('Saved ✓');
+    expect(html).toContain(SAVED_UNCHOSEN);
     expect(html).toContain(`data-language="${LANGUAGE_UNCHOSEN}"`);
   });
 });
@@ -134,11 +137,11 @@ describe('P18.98-T2 LanguageProvider: choosing, and following the account', () =
     expect(languageCookie()).toBeNull();
   });
 
-  it('AC-3 is not live by default: the app’s provider offers the switch only once LANGUAGE_LIVE says so', () => {
+  it('AC-3 is live as shipped since T4’s exit: the app’s provider offers the switch, and a reader with no choice reads the default', () => {
     render(<LanguageProvider><Chooser /></LanguageProvider>);
 
     expect(screen.getByTestId('live').textContent).toBe(String(LANGUAGE_LIVE));
-    expect(shown()).toBe('en');
+    expect(shown()).toBe(LANGUAGE_UNCHOSEN);
   });
 
   it('AC-3 live, gives a reader who has chosen nothing and has no cookie Bahasa Indonesia, and says so on <html>', () => {
@@ -324,8 +327,8 @@ describe('P18.98-T3 figures useFigureLanguage', () => {
   });
 
   it('P18.98-T3 figures, unchosen and not live: English words and Indonesian figures, the screen as it was before T3', () => {
-    // As the prerender leaves the page: `<html lang>` its own language, and no cookie.
-    root.lang = LANGUAGE_UNCHOSEN;
+    // As the prerender left the page before it went live: `<html lang>` English, and no cookie.
+    root.lang = 'en';
     render(<LanguageProvider live={false}><Figures /></LanguageProvider>);
 
     expect(line()).toBe(ENGLISH_WORDS_INDONESIAN_FIGURES);

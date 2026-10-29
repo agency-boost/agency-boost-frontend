@@ -22,8 +22,8 @@ describe('P18.98-T1 the languages', () => {
    * *Changed 2026-10-29 (P18.98-T2):* T2 built the way back, and holds it behind `LANGUAGE_LIVE` until P18.98-T4's exit
    * (below), so a reader who has chosen nothing still reads English: `LANGUAGE_UNCHOSEN` follows the constant.
    */
-  it('AC-3 gives a reader who has chosen nothing English until the switch goes live: nobody reads Indonesian unasked', () => {
-    expect(LANGUAGE_UNCHOSEN).toBe('en');
+  it('AC-3 gives a reader who has chosen nothing Bahasa Indonesia, now the switch is live (T4’s exit, 2026-10-29)', () => {
+    expect(LANGUAGE_UNCHOSEN).toBe('id');
     expect(LANGUAGE_UNCHOSEN).toBe(unchosenLanguage(LANGUAGE_LIVE));
   });
 
@@ -46,8 +46,8 @@ describe('P18.98-T1 the languages', () => {
  * this spec fails the day it changes, and the change comes with T4's exit and the phase file's note.
  */
 describe('P18.98-T2 the live constant', () => {
-  it('AC-3 holds the switch back until the Owner’s and the AB’s screens read Indonesian (T4’s exit)', () => {
-    expect(LANGUAGE_LIVE).toBe(false);
+  it('AC-3 is live from T4’s exit, when the Owner’s and the AB’s screens read Indonesian (2026-10-29)', () => {
+    expect(LANGUAGE_LIVE).toBe(true);
   });
 
   it('AC-3 gives a reader who has chosen nothing Indonesian once live, and English until then', () => {
@@ -81,11 +81,12 @@ describe('P18.98-T3 figures the rule', () => {
   });
 
   it('P18.98-T3 figures wait for no switch: with no choice, words follow LANGUAGE_LIVE and figures do not', () => {
-    // Not live: English words, Indonesian figures — the product as it was before the phase.
+    // Not live (before T4's exit): English words, Indonesian figures — the product as it was before the phase.
     expect(unchosenLanguage(false)).toBe('en');
     expect(figureLanguage(null)).toBe('id');
+    // Live: the two agree.
     expect(LANGUAGE_UNCHOSEN).toBe(unchosenLanguage(LANGUAGE_LIVE));
-    expect(figureLanguage(null)).not.toBe(LANGUAGE_UNCHOSEN);
+    expect(figureLanguage(null)).toBe(LANGUAGE_UNCHOSEN);
   });
 
   it('P18.98-T3 figures agree with the words once live, in every state: none chosen, or either language chosen', () => {
